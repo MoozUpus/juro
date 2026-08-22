@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   turnstileClientFailure,
+  turnstileClientLanguage,
   turnstileClientRetryMode,
 } from "../../lib/auth/turnstile-client";
 
@@ -61,7 +62,7 @@ export function TurnstileWidget({
           {
             sitekey: siteKey,
             action,
-            language: locale,
+            language: turnstileClientLanguage(locale),
             theme: "light",
             size: "flexible",
             appearance: "interaction-only",

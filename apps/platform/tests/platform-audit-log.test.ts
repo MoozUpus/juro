@@ -171,10 +171,21 @@ test("audit filters are strict and CSV neutralizes spreadsheet formulas", () => 
   assert.match(csv, /"'=CMD\(\)"/);
 });
 
+test("0155 uses a D1-safe bounded uppercase hex constraint", () => {
+  const migration = readFileSync(
+    new URL("../drizzle/0155_platform_audit_hash_constraints.sql", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(migration, /replace\(hex\(zeroblob\(32\)\)/i);
+  assert.equal((migration.match(/length\(`(?:filters_hash|result_digest|previous_hash|event_hash)`\)=64/g) ?? []).length, 4);
+  assert.equal((migration.match(/NOT GLOB '\*\[\^A-F0-9\]\*'/g) ?? []).length, 4);
+});
+
 test("audit-log route is POST-only, CSRF/fresh-MFA protected and UI is metadata-safe", () => {
   const route = readFileSync(new URL("../app/api/platform/admin/audit-log/route.ts", import.meta.url), "utf8");
   const page = readFileSync(new URL("../app/[locale]/admin/audit-log/page.tsx", import.meta.url), "utf8");
   const client = readFileSync(new URL("../app/_staff/AuditLogConsole.tsx", import.meta.url), "utf8");
+  const service = readFileSync(new URL("../lib/operations/platform-audit-log.ts", import.meta.url), "utf8");
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.match(route, /staff\.security\.audit/);
   assert.match(route, /freshMfaWithinMs:\s*15 \* 60 \* 1_000/);
@@ -182,7 +193,10 @@ test("audit-log route is POST-only, CSRF/fresh-MFA protected and UI is metadata-
   assert.match(page, /index: false/);
   assert.match(page, /staff\.security\.audit/);
   assert.match(client, /x-juro-csrf/);
+  assert.match(client, /readAuditJson/);
   assert.match(client, /aria-live="polite"/);
   assert.match(client, /staff-skip/);
   assert.doesNotMatch(client, /dangerouslySetInnerHTML|metadataJson|ipHash|provider_message|message_ru/);
+  assert.match(service, /db\.batch/);
+  assert.doesNotMatch(service, /UNION ALL/);
 });

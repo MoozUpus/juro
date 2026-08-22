@@ -36,7 +36,7 @@ test("lawyer directory projects only moderation-approved review aggregates", () 
     ],
   );
   assert.deepEqual(directory, [{
-    id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика",
+    id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", consultationDurationMinutes: 60, additionalServices: [], availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика",
     rating: { reviewCount: 3, overallAverage: 4.67, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 },
     reviews: [
       { id: "review-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z", reply: { body: "Одобренный ответ", createdAt: "2026-08-03T00:00:00.000Z" } },
@@ -56,7 +56,7 @@ test("public lawyer rating waits for the minimum approved-review threshold", () 
 });
 
 test("lawyer professional profile accepts only bounded self-declared directory data", async () => {
-  const valid = { displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика", locale: "ru" };
+  const valid = { displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", consultationDurationMinutes: 60, additionalServices: ["Письменное заключение"], availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика", locale: "ru" };
   assert.equal(lawyerProfileCreateSchema.safeParse(valid).success, true);
   assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, advocateStatus: "verified" }).success, false);
   assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, experienceYears: 100 }).success, false);
@@ -70,7 +70,8 @@ test("lawyer professional profile accepts only bounded self-declared directory d
   ]);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "development", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
-  for (const environment of [undefined, "production", "preview"]) assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: environment, LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), false);
+  assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "production", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
+  for (const environment of [undefined, "preview"]) assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: environment, LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), false);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "false", DB: {} }), false);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true" }), false);
   assert.match(route, /account_type='lawyer'/); assert.match(route, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_draft_saved/); assert.match(route, /meta\.changes/); assert.match(route, /WHERE EXISTS/);
@@ -93,7 +94,42 @@ test("lawyer-profile approval is staff-capability and revision gated", async () 
   assert.match(decisionRoute, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(decisionRoute, /moderateLawyerProfile/);
   assert.match(service, /lawyer_profile_moderation/); assert.match(service, /profileSha256/); assert.match(service, /lawyer_profile_moderated/); assert.match(service, /meta\.changes/); assert.match(service, /WHERE EXISTS/);
   assert.match(page, /lawyer\.profiles\.moderate/);
+  assert.match(page, /AdminConsoleAccess/);
+  assert.match(page, /returnTo=\{`\/\$\{locale\}\/admin\/lawyer-profiles`\}/);
+  assert.doesNotMatch(page, /catch\s*\{\s*notFound\(\)/u);
   assert.match(migration, /lawyer_profile_moderation_revision_uidx/); assert.match(migration, /lawyer_profiles_status_requires_moderation/); assert.match(migration, /append-only/);
+});
+
+test("known admin pages render a protected re-auth screen instead of a session-expiry 404", async () => {
+  const protectedAdminPages = [
+    ["ai-quality/page.tsx", "ai-quality"],
+    ["ai-settings/page.tsx", "ai-settings"],
+    ["audit-log/page.tsx", "audit-log"],
+    ["billing/page.tsx", "billing"],
+    ["costs/page.tsx", "costs"],
+    ["feature-flags/page.tsx", "feature-flags"],
+    ["jobs/page.tsx", "jobs"],
+    ["knowledge-base/page.tsx", "knowledge-base"],
+    ["lawyer-review-replies/page.tsx", "lawyer-review-replies"],
+    ["lawyer-reviews/page.tsx", "lawyer-reviews"],
+    ["legal-sources/page.tsx", "legal-sources"],
+    ["legal-sources/reviews/page.tsx", "legal-sources/reviews"],
+    ["support/page.tsx", "support"],
+    ["system-status/page.tsx", "system-status"],
+  ] as const;
+  const pages = await Promise.all(protectedAdminPages.map(async ([relativePath, returnPath]) => ({
+    page: await readFile(new URL(`../app/[locale]/admin/${relativePath}`, import.meta.url), "utf8"),
+    returnPath,
+  })));
+  for (const { page, returnPath } of pages) {
+    assert.match(page, /AdminConsoleAccess/);
+    assert.ok(page.includes(`returnTo={\`/\${locale}/admin/${returnPath}\`}`));
+    assert.doesNotMatch(page, /catch\s*\{\s*notFound\(\)/u);
+  }
+
+  const accessScreen = await readFile(new URL("../app/_staff/AdminConsoleAccess.tsx", import.meta.url), "utf8");
+  assert.match(accessScreen, /fontFamily:\s*"Manrope,/u);
+  assert.doesNotMatch(accessScreen, /fontFamily:\s*["']Inter/u);
 });
 
 test("builder navigation preserves canonical locale and account context", () => {
@@ -1151,6 +1187,10 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(comparison, /max-width:560px/);
   assert.match(comparison, /prefers-reduced-motion:reduce/);
   assert.match(monitoring, /max-width:700px/);
+  assert.match(monitoring, /\.monitoring-settings,\.monitoring-feed,\.monitoring-section-heading>div,[\s\S]*?\.monitoring-updates,\.monitoring-update\{min-width:0\}/);
+  assert.match(monitoring, /\.monitoring-feed,\.monitoring-updates,\.monitoring-update\{grid-template-columns:minmax\(0,1fr\);max-width:100%\}/);
+  assert.match(monitoring, /\.monitoring-update>\*\{min-width:0;max-width:100%\}/);
+  assert.match(monitoring, /\.monitoring-update h3,\.monitoring-update p,\.monitoring-source small\{overflow-wrap:anywhere\}/);
   assert.match(readability, /font-size:14px/);
   assert.match(readability, /min-height:44px/);
   for (const source of [dashboard, comparison, monitoring]) {
@@ -1195,11 +1235,15 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
     caseId,
     lawyerProfileId,
     anonymizedSummary: "Нужна проверка договорного спора без раскрытия персональных данных.",
+    serviceCode: "document_review",
+    preferredFormat: "video",
+    proposedStartsAt: "2026-08-24T10:00:00+05:00",
     consent: true,
     locale: "ru",
   }).success, true);
   assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "слишком коротко", consent: true, locale: "ru" }).success, false);
   assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "Достаточно длинное нейтральное описание ситуации для проверки конфликта.", consent: false, locale: "ru" }).success, false);
+  assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "Достаточно длинное нейтральное описание ситуации для проверки конфликта.", serviceCode: "invented", consent: true, locale: "ru" }).success, false);
   assert.equal(conflictCheckDecisionSchema.safeParse({ decision: "clear", locale: "uz" }).success, true);
   assert.equal(conflictCheckDecisionSchema.safeParse({ decision: "approve", locale: "uz" }).success, false);
   assert.equal(lawyerAccessGrantSchema.safeParse({ consent: true, locale: "ru" }).success, true);
@@ -1213,6 +1257,8 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
   assert.match(requestRoute, /workspaceEntitlements\(db, workspace\.id\)/);
   assert.match(requestRoute, /WHERE id=\? AND workspace_id=\? AND archived_at IS NULL/);
   assert.match(requestRoute, /anonymized_summary/);
+  assert.match(requestRoute, /serviceCode: parsed\.data\.serviceCode/);
+  assert.match(requestRoute, /json_extract\(r\.requested_scope_json,'\$\.preferredFormat'\)/);
   assert.match(conflictRoute, /anonymized summary/);
   assert.match(conflictRoute, /p\.user_id=\? AND p\.status='public_approved'/);
   assert.match(grantRoute, /c\.status='clear'/);
@@ -1493,7 +1539,7 @@ test("staff support inbox requires capability, fresh MFA, and private ticket det
     readFile(new URL("../app/api/platform/admin/support-tickets/[ticketId]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_staff/SupportInbox.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /support\.tickets\.manage/); assert.match(page, /freshMfaWithinMs:15\*60\*1_000/);
+  assert.match(page, /support\.tickets\.manage/); assert.match(page, /freshMfaWithinMs:\s*15\s*\*\s*60\s*\*\s*1_000/);
   assert.match(route, /support\.tickets\.manage/); assert.match(detail, /export const GET = withPlatformStaffErrors/); assert.match(detail, /support\.tickets\.manage/); assert.match(detail, /ORDER BY created_at ASC,id ASC LIMIT 200/); assert.match(detail, /support_ticket_viewed/); assert.match(detail, /private, no-store/);
   assert.match(client, /admin\/support-tickets/); assert.match(client, /x-juro-csrf/); assert.match(client, /waiting_user/); assert.match(client, /aria-live="polite"/); assert.match(client, /t\[ticket\.status\]/); assert.match(client, /t\.requester/);
 });

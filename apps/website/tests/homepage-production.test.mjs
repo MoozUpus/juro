@@ -3,7 +3,10 @@ import fs from "node:fs";
 import test from "node:test";
 
 const rootPage = fs.readFileSync("app/page.tsx", "utf8");
+const rootLawyersPage = fs.readFileSync("app/lawyers/page.tsx", "utf8");
+const rootLawyerProfilePage = fs.readFileSync("app/lawyers/[profileId]/page.tsx", "utf8");
 const localizedPage = fs.readFileSync("app/[locale]/page.tsx", "utf8");
+const legacyLegalPage = fs.readFileSync("app/[locale]/[legalSlug]/page.tsx", "utf8");
 const adapter = fs.readFileSync("app/components/cinematic/CinematicLandingPage.tsx", "utf8");
 const homepage = fs.readFileSync("app/components/public/JuroHomepage.tsx", "utf8");
 const homepageStyles = fs.readFileSync("app/components/public/juro-home.module.css", "utf8");
@@ -20,6 +23,11 @@ const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-ta
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
+const lawyerCard = fs.readFileSync("app/[locale]/lawyers/LawyerCard.tsx", "utf8");
+const lawyerCataloguePage = fs.readFileSync("app/[locale]/lawyers/page.tsx", "utf8");
+const lawyerProfile = fs.readFileSync("app/[locale]/lawyers/[profileId]/page.tsx", "utf8");
+const worker = fs.readFileSync("worker/index.ts", "utf8");
+const productionDeploy = fs.readFileSync("scripts/deploy-production.mjs", "utf8");
 
 test("selected JURO direction is the only public homepage implementation", () => {
   assert.match(rootPage, /CinematicLandingPage language="ru"/);
@@ -79,6 +87,25 @@ test("public chrome exposes every primary public destination in all three locale
   assert.match(chrome, /app\.juro\.uz/);
   assert.match(sitemap, /\/lawyers/);
   assert.doesNotMatch(sitemap, /prototype/);
+});
+
+test("unlocalized lawyer catalogue and profile entries redirect to canonical RU routes", () => {
+  assert.match(rootLawyersPage, /redirect\("\/ru\/lawyers"\)/);
+  assert.match(rootLawyerProfilePage, /redirect\(`\/ru\/lawyers\/\$\{encodeURIComponent\(profileId\)\}`\)/);
+  assert.match(localizedPage, /rawLocale === "lawyers"\) redirect\("\/ru\/lawyers"\)/);
+  assert.match(legacyLegalPage, /locale === "lawyers"\) permanentRedirect\(`\/ru\/lawyers\/\$\{encodeURIComponent\(legalSlug\)\}`\)/);
+  assert.match(worker, /url\.pathname === "\/lawyers" \|\| url\.pathname\.startsWith\("\/lawyers\/"\)/);
+  assert.match(worker, /new URL\(`\/ru\$\{url\.pathname\}`/);
+  assert.match(worker, /Response\.redirect\(destination, 308\)/);
+  assert.match(worker, /destination\.search = url\.search/);
+  assert.match(productionDeploy, /run_worker_first: true/);
+});
+
+test("the www host permanently redirects to the canonical apex before app routing", () => {
+  assert.match(worker, /url\.hostname === "www\.juro\.uz"/);
+  assert.match(worker, /destination\.hostname = "juro\.uz"/);
+  assert.match(worker, /Response\.redirect\(destination, 308\)/);
+  assert.match(productionDeploy, /pattern: "www\.juro\.uz\/\*", zone_name: "juro\.uz"/);
 });
 
 test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
@@ -264,4 +291,11 @@ test("English marketplace presentation localizes published taxonomy and tolerate
   assert.match(lawyerCatalog, /Unknown future values intentionally fall back/);
   assert.match(lawyerAvatar, /onError=\{\(\) => setFailed\(true\)\}/);
   assert.match(lawyerAvatar, /if \(!src \|\| failed\)/);
+});
+
+test("auto-published lawyer profiles do not imply a JURO verification that did not occur", () => {
+  assert.match(lawyerCard, /newProfile: "New profile"/);
+  assert.match(lawyerProfile, /newProfile: "НОВЫЙ ПРОФИЛЬ"/);
+  assert.match(lawyerCataloguePage, /каталог пополняется автоматически после заполнения обязательных сведений и согласия на публикацию/);
+  assert.doesNotMatch(lawyerCard + lawyerCataloguePage + lawyerProfile, /Approved by JURO|Одобрен JURO|ОДОБРЕН JURO|JURO tasdiqlagan|JURO TASDIQLAGAN|under JURO review|проверке JURO|проверяется JURO|JURO tekshiruvi/);
 });

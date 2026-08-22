@@ -236,7 +236,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     assert.equal(
       config.d1_databases[0]?.migrations_pattern,
       environment === "production"
-        ? "./drizzle/{0121,012[4-9],013[0-9],014[0-4]}_*.sql"
+        ? "./drizzle/{0121,012[4-9],013[0-9],014[0-9],015[0-5]}_*.sql"
         : undefined,
     );
     assert.deepEqual(
@@ -575,6 +575,8 @@ test("pins verified D1 identifiers for every isolated environment and excludes s
   for (const secretBinding of [
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
+    "CLOUDFLARE_TURN_KEY_API_TOKEN",
+    "CLOUDFLARE_TURN_KEY_ID",
     "RESEND_API_KEY",
     "SESSION_SECRET",
     "ENCRYPTION_KEY",
@@ -812,6 +814,8 @@ test("production deployment cannot activate a development-bound container follow
     deployment,
     /"deploy",\s*"--config",\s*configPath,\s*"--containers-rollout",\s*"none"/s,
   );
+  assert.match(deployment, /"CLOUDFLARE_TURN_KEY_ID"/);
+  assert.match(deployment, /"CLOUDFLARE_TURN_KEY_API_TOKEN"/);
   assert.deepEqual(router.routes, []);
   assert.deepEqual(router.services, [
     { binding: "PLATFORM", service: "juro", environment: "production" },

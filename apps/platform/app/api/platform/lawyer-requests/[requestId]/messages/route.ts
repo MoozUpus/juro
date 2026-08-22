@@ -251,14 +251,15 @@ export const POST = withApiErrors(async function POST(
     ),
     db.prepare(
       `INSERT INTO notifications
-        (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
-       VALUES (?,(SELECT default_workspace_id FROM user_profiles WHERE id=?),?,?,
+        (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
+       VALUES (?,(SELECT default_workspace_id FROM user_profiles WHERE id=?),?,?,'lawyer_request_message',?,
          'lawyer_request_message_received',?,?,NULL,?)`,
     ).bind(
       crypto.randomUUID(),
       recipientUserId,
       recipientUserId,
       document?.id ?? null,
+      requestId,
       locale === "ru" ? "Новое сообщение по делу" : "Ish bo‘yicha yangi xabar",
       parsed.data.body || document?.title || "",
       now,

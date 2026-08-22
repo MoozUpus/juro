@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { AdminConsoleAccess } from "../../../_staff/AdminConsoleAccess";
 import { AiQualityConsole } from "../../../_staff/AiQualityConsole";
 import "../../../_staff/legal-source-reviews.css";
 import { requirePlatformStaffAccess } from "../../../../lib/auth/staff-access";
@@ -29,7 +30,11 @@ export default async function AiQualityPage({ params }: { params: Promise<{ loca
     });
     reviewerName = session.fullName || session.email;
   } catch {
-    notFound();
+    return <AdminConsoleAccess
+      locale={locale}
+      environment={runtime.APP_ENV === "production" ? "production" : "staging"}
+      returnTo={`/${locale}/admin/ai-quality`}
+    />;
   }
   return <AiQualityConsole locale={locale} reviewerName={reviewerName}/>;
 }

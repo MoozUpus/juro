@@ -2,7 +2,9 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- consultation state is loaded from the authenticated API */
 
-import { CalendarClock, LoaderCircle } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { CalendarClock, LoaderCircle, Video } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
@@ -28,6 +30,7 @@ export function LawyerConsultationPanel({
   role: "client" | "lawyer";
 }) {
   const ru = locale === "ru";
+  const pathname = usePathname();
   const [consultation, setConsultation] = useState<Consultation | null>(null);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
@@ -180,28 +183,18 @@ export function LawyerConsultationPanel({
             </div>
           )}
           {consultation?.status === "confirmed" && (
-            <button
-              className="secondary"
-              type="button"
-              disabled={busy}
-              onClick={() => void mutate({ action: "cancel" })}
-            >
-              {ru ? "Отменить консультацию" : "Konsultatsiyani bekor qilish"}
-            </button>
+            <div className="lawyer-consultation-actions">
+              {consultation.format === "video" && <Link className="call-room-link" href={`${pathname.replace(/\/+$/, "")}/call/${encodeURIComponent(consultation.id)}`}><Video />{ru ? "Войти в видеокомнату" : "Video xonaga kirish"}</Link>}
+              <button className="secondary" type="button" disabled={busy} onClick={() => void mutate({ action: "cancel" })}>{ru ? "Отменить консультацию" : "Konsultatsiyani bekor qilish"}</button>
+            </div>
           )}
+          {consultation?.status === "in_progress" && consultation.format === "video" && <Link className="call-room-link" href={`${pathname.replace(/\/+$/, "")}/call/${encodeURIComponent(consultation.id)}`}><Video />{ru ? "Вернуться в видеокомнату" : "Video xonaga qaytish"}</Link>}
         </>
       ) : (
         <>
           {consultation?.status === "confirmed" && (
             <div className="lawyer-consultation-actions">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void mutate({ action: "start" })}
-              >
-                {busy && <LoaderCircle className="spin" />}
-                {ru ? "Начать консультацию" : "Konsultatsiyani boshlash"}
-              </button>
+              {consultation.format === "video" ? <Link className="call-room-link" href={`${pathname.replace(/\/+$/, "")}/call/${encodeURIComponent(consultation.id)}`}><Video />{ru ? "Начать видеозвонок" : "Video qo‘ng‘iroqni boshlash"}</Link> : <button type="button" disabled={busy} onClick={() => void mutate({ action: "start" })}>{busy && <LoaderCircle className="spin" />}{ru ? "Начать консультацию" : "Konsultatsiyani boshlash"}</button>}
               <button
                 className="secondary"
                 type="button"
@@ -214,6 +207,7 @@ export function LawyerConsultationPanel({
           )}
           {consultation?.status === "in_progress" && (
             <div className="lawyer-consultation-completion">
+              {consultation.format === "video" && <Link className="call-room-link" href={`${pathname.replace(/\/+$/, "")}/call/${encodeURIComponent(consultation.id)}`}><Video />{ru ? "Вернуться в видеокомнату" : "Video xonaga qaytish"}</Link>}
               <label>
                 {ru ? "Итоговый комментарий клиенту" : "Mijoz uchun yakuniy izoh"}
                 <textarea

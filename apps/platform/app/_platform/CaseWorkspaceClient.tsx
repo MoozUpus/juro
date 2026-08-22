@@ -12,6 +12,7 @@ import {
   FilePenLine,
   FileSearch2,
   FileText,
+  ExternalLink,
   History,
   ListChecks,
   LoaderCircle,
@@ -34,7 +35,7 @@ import { usePlatformBasePath } from "./PlatformRouteContext";
 type Step = { id: string; title: string; status: string; dueAt?: string | null };
 type CaseRecord = { id: string; title: string; description?: string | null; legalArea: string; status: string; nextDeadlineAt?: string | null; archivedAt?: string | null; completedAt?: string | null; lifecycleRevision?: number; progressPercent?: number; steps?: Step[] };
 type TaskComment = { id: string; taskId: string; body: string; createdAt: string; authorName?: string | null };
-type Task = { id: string; title: string; description?: string | null; status: string; dueAt?: string | null; safeDueAt?: string | null; comments?: TaskComment[] };
+type Task = { id: string; title: string; description?: string | null; status: string; dueAt?: string | null; safeDueAt?: string | null; legalBasis?: string | null; comments?: TaskComment[] };
 type CaseDocument = { id: string; title: string; status: string; language: string; planStepId?: string | null; updatedAt: string };
 type CaseActivity = { eventType: string; createdAt: string; metadata: Record<string, unknown> };
 type CaseConversation = { id: string; title: string; status: string; locale: string; updatedAt: string };
@@ -263,7 +264,23 @@ function PlanSteps({ item, locale, base, embedded = false }: { item: CaseRecord;
 
 function TaskList({ tasks, locale, embedded = false }: { tasks: Task[]; locale: PlatformLocale; embedded?: boolean }) {
   const ru = locale === "ru";
-  return <section className={embedded ? "case-workspace-embedded" : undefined}><PanelHeading icon={ListChecks} title={ru ? "Задачи" : "Vazifalar"} />{tasks.length ? <ul className="case-workspace-tasks">{tasks.map((task) => <li key={task.id}><div className="case-workspace-task-copy"><strong>{task.title}</strong>{task.description && <p>{task.description}</p>}<span>{date(task.dueAt, locale)}</span>{Boolean(task.comments?.length) && <ol className="case-workspace-task-comments" aria-label={ru ? "Комментарии юриста" : "Yurist izohlari"}>{task.comments?.map((comment) => <li key={comment.id}><MessageSquareText aria-hidden="true" /><div><strong>{comment.authorName || (ru ? "Юрист" : "Yurist")}</strong><p>{comment.body}</p><time>{date(comment.createdAt, locale)}</time></div></li>)}</ol>}</div><b>{statusLabel(task.status, ru)}</b></li>)}</ul> : <p className="case-workspace-muted">{ru ? "Подтвердите план, чтобы создать задачи и напоминания." : "Vazifalar va eslatmalar yaratish uchun rejani tasdiqlang."}</p>}</section>;
+  return <section className={embedded ? "case-workspace-embedded" : undefined}><PanelHeading icon={ListChecks} title={ru ? "Задачи" : "Vazifalar"} />{tasks.length ? <ul className="case-workspace-tasks">{tasks.map((task) => { const sourceHref = officialLexHref(task.legalBasis); return <li key={task.id}><div className="case-workspace-task-copy"><strong>{task.title}</strong>{task.description && <p>{task.description}</p>}{sourceHref && <a className="case-workspace-task-source" href={sourceHref} target="_blank" rel="noopener noreferrer"><ExternalLink />{ru ? "Официальный источник Lex.uz" : "Lex.uz rasmiy manbasi"}</a>}<span>{date(task.dueAt, locale)}</span>{Boolean(task.comments?.length) && <ol className="case-workspace-task-comments" aria-label={ru ? "Комментарии юриста" : "Yurist izohlari"}>{task.comments?.map((comment) => <li key={comment.id}><MessageSquareText aria-hidden="true" /><div><strong>{comment.authorName || (ru ? "Юрист" : "Yurist")}</strong><p>{comment.body}</p><time>{date(comment.createdAt, locale)}</time></div></li>)}</ol>}</div><b>{statusLabel(task.status, ru)}</b></li>; })}</ul> : <p className="case-workspace-muted">{ru ? "Подтвердите план, чтобы создать задачи и напоминания." : "Vazifalar va eslatmalar yaratish uchun rejani tasdiqlang."}</p>}</section>;
+}
+
+function officialLexHref(value?: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && !url.port
+      && (url.hostname === "lex.uz" || url.hostname === "www.lex.uz")
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function sectionLabel(section: CaseSection, ru: boolean) {

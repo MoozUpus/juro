@@ -45,6 +45,8 @@ export interface BuilderRuntimeEnv {
   STATUS_HOSTNAME?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
+  CLOUDFLARE_TURN_KEY_ID?: string;
+  CLOUDFLARE_TURN_KEY_API_TOKEN?: string;
   GUEST_AI_ENABLED?: string;
   STAGING_LEGAL_EVALUATION_ENABLED?: string;
   STAGING_LEGAL_EVALUATION_TOKEN?: string;

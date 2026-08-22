@@ -1,5 +1,9 @@
 const lawyerPageMap: Record<string, { module: string; view?: string }> = {
   dashboard: { module: "dashboard" },
+  "ai-chat": { module: "ai-chat" },
+  "document-builder": { module: "document-builder" },
+  "document-review": { module: "document-review" },
+  monitoring: { module: "monitoring" },
   requests: { module: "consultations", view: "requests" },
   consultations: { module: "consultations", view: "schedule" },
   clients: { module: "consultations", view: "clients" },
@@ -8,9 +12,14 @@ const lawyerPageMap: Record<string, { module: string; view?: string }> = {
   messages: { module: "consultations", view: "messages" },
   documents: { module: "consultations", view: "documents" },
   tasks: { module: "consultations", view: "tasks" },
+  knowledge: { module: "knowledge" },
+  billing: { module: "billing" },
+  "demo-payments": { module: "demo-payments" },
   application: { module: "profile" },
   status: { module: "profile" },
   profile: { module: "profile" },
+  security: { module: "security" },
+  help: { module: "help" },
   settings: { module: "settings" },
 };
 

@@ -13,9 +13,13 @@ import {
 import { missingLawyerMarketplaceFields } from "../../../../../lib/platform/lawyer-marketplace";
 import { localizedLawyerProfileStatusNotification } from "../../../../../lib/platform/lawyer-profile-notifications";
 import { isLawyerProfileDirectoryPreviewEnabled } from "../../../../../lib/platform/lawyer-profile-preview";
+import { lawyerTrialEndsAt } from "../../../../../lib/platform/lawyer-trial";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
 
-const input = z.object({ locale: z.enum(["ru", "uz"]) }).strict();
+const input = z.object({
+  locale: z.enum(["ru", "uz"]),
+  publicationConsent: z.literal(true),
+}).strict();
 
 type SubmissionProfile = {
   id: string;
@@ -32,6 +36,7 @@ type SubmissionProfile = {
   availabilityStatus: string;
   profilePhotoKey: string | null;
   hasPhone: number;
+  status: string;
   marketplaceStatus: string;
   profileRevision: number;
 };
@@ -75,7 +80,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       p.languages_json AS languagesJson,p.experience_years AS experienceYears,p.education,
       p.firm_name AS firmName,p.city,p.region,p.price_description AS priceDescription,
       p.consultation_formats_json AS consultationFormatsJson,p.availability_status AS availabilityStatus,
-      p.profile_photo_key AS profilePhotoKey,p.marketplace_status AS marketplaceStatus,
+      p.profile_photo_key AS profilePhotoKey,p.status,p.marketplace_status AS marketplaceStatus,
       p.profile_revision AS profileRevision,
       CASE WHEN u.phone IS NOT NULL AND length(trim(u.phone))>0 THEN 1 ELSE 0 END AS hasPhone
      FROM lawyer_profiles p JOIN user_profiles u ON u.id=p.user_id
@@ -91,9 +96,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       },
       404,
     );
-  if (
-    ["pending_review", "public_approved"].includes(profile.marketplaceStatus)
-  ) {
+  if (profile.marketplaceStatus === "public_approved") {
     return response({
       ok: true,
       marketplaceStatus: profile.marketplaceStatus,
@@ -140,28 +143,77 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
   const workspace = await workspaceForUser(user);
   const now = isoNow();
+  const trialEndsAt = lawyerTrialEndsAt(now);
   const notification = localizedLawyerProfileStatusNotification(
     parsed.data.locale,
-    "pending_review",
+    "public_approved",
   );
   const results = await db.batch([
     db
       .prepare(
-        `UPDATE lawyer_profiles SET status='pending',marketplace_status='pending_review',public_approved_at=NULL,updated_at=?
-       WHERE id=? AND user_id=? AND profile_revision=? AND marketplace_status IN ('profile_incomplete','changes_requested','rejected')`,
+        `UPDATE lawyer_profiles SET status='public_approved',marketplace_status='public_approved',
+          public_approved_at=COALESCE(public_approved_at,?),
+          publication_consent_at=COALESCE(publication_consent_at,?),updated_at=?
+       WHERE id=? AND user_id=? AND profile_revision=?
+         AND marketplace_status IN ('profile_incomplete','pending_review','changes_requested','rejected')`,
       )
-      .bind(now, profile.id, user.id, profile.profileRevision),
+      .bind(now, now, now, profile.id, user.id, profile.profileRevision),
     db
       .prepare(
-        `INSERT INTO notifications (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
-       SELECT ?,?,?,NULL,'lawyer_profile_status',?,?,NULL,?
-       WHERE EXISTS (SELECT 1 FROM lawyer_profiles WHERE id=? AND user_id=? AND profile_revision=?
-         AND marketplace_status='pending_review' AND updated_at=?)`,
+        `INSERT INTO lawyer_trials
+          (id,lawyer_profile_id,starts_at,ends_at,status,post_expiry_mode,created_at,updated_at)
+         SELECT ?,p.id,?,?,'active','stay_published',?,?
+         FROM lawyer_profiles p
+         WHERE p.id=? AND p.user_id=? AND p.profile_revision=?
+           AND p.status='public_approved' AND p.marketplace_status='public_approved'
+         ON CONFLICT(lawyer_profile_id) DO NOTHING`,
+      )
+      .bind(
+        crypto.randomUUID(),
+        now,
+        trialEndsAt,
+        now,
+        now,
+        profile.id,
+        user.id,
+        profile.profileRevision,
+      ),
+    db
+      .prepare(
+        `INSERT INTO lawyer_profile_publication_events
+          (id,lawyer_profile_id,actor_user_id,profile_revision,previous_profile_status,
+           previous_marketplace_status,publication_consent_at,created_at)
+         SELECT ?,p.id,?,?,?,?,?,?
+         FROM lawyer_profiles p
+         WHERE p.id=? AND p.user_id=? AND p.profile_revision=?
+           AND p.status='public_approved' AND p.marketplace_status='public_approved'
+           AND p.updated_at=?`,
+      )
+      .bind(
+        crypto.randomUUID(),
+        user.id,
+        profile.profileRevision,
+        profile.status,
+        profile.marketplaceStatus,
+        now,
+        now,
+        profile.id,
+        user.id,
+        profile.profileRevision,
+        now,
+      ),
+    db
+      .prepare(
+        `INSERT INTO notifications (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
+        SELECT ?,?,?,NULL,'lawyer_profile',?,'lawyer_profile_status',?,?,NULL,?
+        WHERE EXISTS (SELECT 1 FROM lawyer_profiles WHERE id=? AND user_id=? AND profile_revision=?
+          AND marketplace_status='public_approved' AND publication_consent_at IS NOT NULL AND updated_at=?)`,
       )
       .bind(
         crypto.randomUUID(),
         workspace.id,
         user.id,
+        profile.id,
         notification.title,
         notification.body,
         now,
@@ -174,16 +226,22 @@ export const POST = withApiErrors(async function POST(request: Request) {
       .prepare(
         `INSERT INTO workspace_audit_events
        (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
-       SELECT ?,?,?,'lawyer_profile',?,'lawyer_profile_submitted',?,?
+       SELECT ?,?,?,'lawyer_profile',?,'lawyer_profile_auto_published',?,?
        WHERE EXISTS (SELECT 1 FROM lawyer_profiles WHERE id=? AND user_id=? AND profile_revision=?
-         AND marketplace_status='pending_review' AND updated_at=?)`,
+          AND marketplace_status='public_approved' AND publication_consent_at IS NOT NULL AND updated_at=?)`,
       )
       .bind(
         crypto.randomUUID(),
         workspace.id,
         user.id,
         profile.id,
-        JSON.stringify({ profileRevision: profile.profileRevision }),
+        JSON.stringify({
+          profileRevision: profile.profileRevision,
+          publicationConsent: true,
+          trialStartsAt: now,
+          trialEndsAt,
+          juroVerificationGranted: false,
+        }),
         now,
         profile.id,
         user.id,
@@ -191,7 +249,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
         now,
       ),
   ]);
-  if (results.some((result) => Number(result?.meta.changes ?? 0) !== 1)) {
+  if (
+    Number(results[0]?.meta.changes ?? 0) !== 1 ||
+    ![0, 1].includes(Number(results[1]?.meta.changes ?? 0)) ||
+    results.slice(2).some((result) => Number(result?.meta.changes ?? 0) !== 1)
+  ) {
     return response(
       {
         code: "PROFILE_UNAVAILABLE",
@@ -202,7 +264,14 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
   return response({
     ok: true,
-    marketplaceStatus: "pending_review",
+    marketplaceStatus: "public_approved",
     missingRequiredFields: [],
+    updatedAt: now,
+    trial: {
+      startsAt: now,
+      endsAt: trialEndsAt,
+      daysRemaining: 90,
+      effectiveStatus: "active",
+    },
   });
 });

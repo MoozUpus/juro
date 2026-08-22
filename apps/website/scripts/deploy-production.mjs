@@ -53,10 +53,16 @@ delete config.legacy_env;
 config.name = "juro-legaltech";
 config.workers_dev = false;
 config.preview_urls = false;
-config.routes = [{ pattern: "juro.uz/*", zone_name: "juro.uz" }];
+config.routes = [
+  { pattern: "juro.uz/*", zone_name: "juro.uz" },
+  { pattern: "www.juro.uz/*", zone_name: "juro.uz" },
+];
 config.assets = {
   ...config.assets,
   binding: "ASSETS",
+  // The App Router and the canonical /lawyers edge redirect must run before
+  // the asset router. Static files remain available through env.ASSETS.
+  run_worker_first: true,
 };
 config.images = { binding: "IMAGES" };
 

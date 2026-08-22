@@ -20,6 +20,7 @@ import { ArchiveClient } from "./ArchiveClient";
 import { HelpClient } from "./HelpClient";
 import { MonitoringClient } from "./MonitoringClient";
 import { CalendarClient } from "./CalendarClient";
+import { LawyerKnowledgeClient } from "./LawyerKnowledgeClient";
 import {
   LawyerDashboardClient,
   LawyerHubClient,
@@ -38,6 +39,7 @@ const titles: Record<PlatformModule, { ru: string; uz: string }> = {
   "action-plan": { ru: "План действий", uz: "Harakatlar rejasi" },
   calendar: { ru: "Календарь", uz: "Kalendar" },
   consultations: { ru: "Консультации", uz: "Maslahatlar" },
+  knowledge: { ru: "База знаний", uz: "Bilimlar bazasi" },
   history: { ru: "История", uz: "Tarix" },
   archive: { ru: "Архив", uz: "Arxiv" },
   team: { ru: "Команда", uz: "Jamoa" },
@@ -71,6 +73,8 @@ export function ModuleContent({
     return <LawyerHubClient locale={locale} />;
   if (accountType === "lawyer" && module === "calendar")
     return <LawyerScheduleClient locale={locale} />;
+  if (accountType === "lawyer" && module === "knowledge")
+    return <LawyerKnowledgeClient locale={locale} />;
   if (module === "action-plan")
     return <ActionPlanClient locale={locale} accountType={accountType} />;
   if (module === "calendar") return <CalendarClient locale={locale} />;
@@ -159,6 +163,9 @@ export function ModuleContent({
     consultations: ru
       ? "Передавайте специалисту только выбранный вами контекст."
       : "Mutaxassisga faqat siz tanlagan kontekstni topshiring.",
+    knowledge: ru
+      ? "Личная рабочая база знаний юриста."
+      : "Yuristning shaxsiy ish bilimlar bazasi.",
     history: ru
       ? "История формируется из реальных действий в делах и документах."
       : "Tarix ishlar va hujjatlardagi haqiqiy harakatlardan tuziladi.",

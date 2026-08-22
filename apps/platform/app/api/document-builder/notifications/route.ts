@@ -8,6 +8,14 @@ import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 export const dynamic = "force-dynamic";
 
+const investorDemoVisibilitySql = `AND (
+  NOT EXISTS (
+    SELECT 1 FROM investor_demo_accounts demo
+    WHERE demo.user_id=? AND demo.workspace_id=? AND demo.status='active'
+  )
+  OR (target_type IS NOT NULL AND target_id IS NOT NULL)
+)`;
+
 const notificationReadSchema = z.object({
   id: z.string().uuid().optional(),
   all: z.literal(true).optional(),
@@ -20,8 +28,12 @@ export async function GET(): Promise<Response> {
     const user = await requireApiUser();
     const workspace = await workspaceForUser(user);
     const result = await requireD1().prepare(
-      "SELECT id, document_id AS documentId, type, title, body, read_at AS readAt, created_at AS createdAt FROM notifications WHERE user_id = ? AND workspace_id = ? ORDER BY created_at DESC LIMIT 200",
-    ).bind(user.id, workspace.id).all();
+      `SELECT id,document_id AS documentId,target_type AS targetType,target_id AS targetId,
+        type,title,body,read_at AS readAt,created_at AS createdAt
+       FROM notifications
+       WHERE user_id=? AND workspace_id=? ${investorDemoVisibilitySql}
+       ORDER BY created_at DESC LIMIT 200`,
+    ).bind(user.id, workspace.id, user.id, workspace.id).all();
     return jsonResponse({ notifications: result.results });
   } catch (error) {
     return apiError(error);
@@ -38,7 +50,10 @@ export async function PATCH(request: Request): Promise<Response> {
     const body = parsed.data;
     const db = requireD1();
     if (body.all) {
-      await db.prepare("UPDATE notifications SET read_at = ? WHERE user_id = ? AND workspace_id = ? AND read_at IS NULL").bind(isoNow(), user.id, workspace.id).run();
+      await db.prepare(
+        `UPDATE notifications SET read_at = ?
+         WHERE user_id = ? AND workspace_id = ? AND read_at IS NULL ${investorDemoVisibilitySql}`,
+      ).bind(isoNow(), user.id, workspace.id, user.id, workspace.id).run();
       return jsonResponse({ updated: true });
     }
     if (!body.id) return badRequest("Не указано уведомление.");

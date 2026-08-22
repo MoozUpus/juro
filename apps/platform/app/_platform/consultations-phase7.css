@@ -84,11 +84,11 @@
 .lawyer-handoff-heading p { margin: 6px 0 0; max-width: 760px; color: #4f5660; line-height: 1.55; }
 .lawyer-handoff form { display: grid; gap: 14px; margin-top: 20px; }
 .lawyer-handoff form > label:not(.consult-consent) { display: grid; gap: 7px; color: #263746; font-weight: 750; }
-.lawyer-handoff select,.lawyer-handoff textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #abb4bc; border-radius: 10px; background: #fff; color: #172633; font: inherit; }
+.lawyer-handoff input,.lawyer-handoff select,.lawyer-handoff textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #abb4bc; border-radius: 10px; background: #fff; color: #172633; font: inherit; }
 .lawyer-handoff textarea { min-height: 112px; resize: vertical; }
 .lawyer-handoff button { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 44px; width: fit-content; padding: 0 16px; border: 0; border-radius: 10px; background: #062844; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
 .lawyer-handoff button:disabled { opacity: .58; cursor: not-allowed; }
-.lawyer-handoff select:focus-visible,.lawyer-handoff textarea:focus-visible,.lawyer-handoff button:focus-visible { outline: 3px solid #87631f; outline-offset: 3px; }
+.lawyer-handoff input:focus-visible,.lawyer-handoff select:focus-visible,.lawyer-handoff textarea:focus-visible,.lawyer-handoff button:focus-visible { outline: 3px solid #87631f; outline-offset: 3px; }
 .lawyer-handoff-success { margin: 16px 0 0; padding: 12px; border-radius: 10px; background: #edf8f1; color: #174b35; line-height: 1.45; }
 .lawyer-handoff-list { display: grid; gap: 8px; margin-top: 24px; }
 .lawyer-handoff-list > div { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #e2ddd4; color: #4f5660; }

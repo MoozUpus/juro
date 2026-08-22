@@ -66,10 +66,29 @@ export const demoPaymentInputSchema = z.discriminatedUnion("action", [
     flowType: z.enum(DEMO_PAYMENT_FLOW_TYPES),
     amountMinor: z.number().int().positive().max(100_000_000_000),
     installmentCount: z.union([z.literal(3), z.literal(6), z.literal(12)]).optional(),
+    serviceKind: z.enum(["subscription", "consultation", "case_transfer"]).optional(),
+    legalArea: z.string().trim().min(2).max(120).optional(),
+    caseType: z.string().trim().min(2).max(120).optional(),
   }).strict(),
   demoBaseSchema.extend({
     action: z.literal("transition"),
     runId: z.uuid(),
     outcome: z.enum(DEMO_PAYMENT_ACTIONS),
   }).strict(),
-]);
+]).superRefine((value, context) => {
+  if (value.action !== "create") return;
+  if (value.flowType === "subscription" && value.serviceKind && value.serviceKind !== "subscription") {
+    context.addIssue({ code: "custom", message: "SUBSCRIPTION_SERVICE_KIND_INVALID", path: ["serviceKind"] });
+  }
+  if (value.flowType === "lawyer_service") {
+    if (value.serviceKind === "subscription") {
+      context.addIssue({ code: "custom", message: "LAWYER_SERVICE_KIND_INVALID", path: ["serviceKind"] });
+    }
+    if (value.serviceKind === "case_transfer" && !value.legalArea && !value.caseType) {
+      context.addIssue({ code: "custom", message: "CASE_TRANSFER_MATCH_REQUIRED", path: ["legalArea"] });
+    }
+  }
+  if (value.flowType !== "uzum_installment" && value.installmentCount !== undefined) {
+    context.addIssue({ code: "custom", message: "INSTALLMENT_COUNT_INVALID", path: ["installmentCount"] });
+  }
+});

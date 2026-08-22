@@ -23,6 +23,7 @@ const outboxRowSchema = z.object({
   enqueued_at: z.string(),
   dispatch_attempts: z.number().int().positive(),
   lease_owner: z.string().min(1),
+  redrive_version: z.number().int().min(0),
 }).strict();
 
 type OutboxRow = z.infer<typeof outboxRowSchema>;
@@ -83,7 +84,12 @@ async function claimNextOutbox(
     RETURNING
       id, queue_binding, job_type, schema_version, idempotency_key,
       subject_id, workspace_id, correlation_id, enqueued_at,
-      dispatch_attempts, lease_owner
+      dispatch_attempts, lease_owner,
+      COALESCE((
+        SELECT MAX(redrive.version)
+        FROM operational_job_redrive_events AS redrive
+        WHERE redrive.source_job_id=job_outbox.id
+      ),0) AS redrive_version
   `).bind(
     leaseOwner,
     leaseExpiresAt,
@@ -253,6 +259,7 @@ export async function dispatchOutbox(
       workspaceId: row.workspace_id,
       correlationId: row.correlation_id,
       enqueuedAt: row.enqueued_at,
+      redriveVersion: row.redrive_version,
     });
     if (
       !envelope.success ||

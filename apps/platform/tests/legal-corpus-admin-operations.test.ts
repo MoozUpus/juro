@@ -289,8 +289,8 @@ test("isolated admin domain owns the corpus surface and rechecks CSRF plus super
   assert.match(worker, /\.pdf,\.docx,\.txt,\.html,\.htm,\.json,\.zip/u);
   assert.match(internal, /\/api\/internal\/admin\/legal-corpus\/uploads/u);
   assert.match(internal, /createOwnerCorpusUpload/u);
-  assert.match(worker, /name="reason" value="Автоматический первичный seed из защищённой панели\."/u);
-  assert.match(worker, /Причина первичного запуска записывается в защищённый журнал автоматически/u);
+  assert.match(worker, /name="reason" value="Автоматическое первичное обнаружение из защищённой панели\."/u);
+  assert.match(worker, /Причина первичного запуска записывается в защищённый журнал/u);
   const seedFormSource = worker.slice(worker.indexOf("const seed ="), worker.indexOf("const checkpointForms"));
   assert.doesNotMatch(seedFormSource, /\$\{reason\}|textarea name="reason"/u);
 });

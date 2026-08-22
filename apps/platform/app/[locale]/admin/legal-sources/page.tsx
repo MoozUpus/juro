@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
+import { AdminConsoleAccess } from "../../../_staff/AdminConsoleAccess";
 import { DirectLegalSourceHealthPanel } from "../../../_staff/DirectLegalSourceHealthPanel";
 import "../../../_staff/legal-source-reviews.css";
 import { requirePlatformStaffAccess } from "../../../../lib/auth/staff-access";
@@ -21,6 +22,12 @@ export default async function DirectLegalSourcesAdminPage({ params }: { params: 
     const now = new Date();
     const session = await localSessionForRequest(new Request("https://app.juro.local/staff-access", { headers: new Headers(incoming) }), { now });
     await requirePlatformStaffAccess(runtime.DB, session, "staff.operations.manage", { now, freshMfaWithinMs: 15 * 60 * 1_000 });
-  } catch { notFound(); }
+  } catch {
+    return <AdminConsoleAccess
+      locale={locale}
+      environment={runtime.APP_ENV === "production" ? "production" : "staging"}
+      returnTo={`/${locale}/admin/legal-sources`}
+    />;
+  }
   return <DirectLegalSourceHealthPanel locale={locale}/>;
 }

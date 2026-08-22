@@ -26,6 +26,8 @@ import {
 import {
   DocumentAnalysisProcessingError,
   executeDocumentAnalysisJob,
+  type DocumentAnalysisDiagnosticDetail,
+  type DocumentAnalysisDiagnosticStage,
 } from "../lib/document-analysis/processor";
 import {
   executeUserDocumentIndexJob,
@@ -121,6 +123,9 @@ export const jobEnvelopeSchema = z.object({
   workspaceId: identifierSchema.nullable().optional(),
   correlationId: identifierSchema,
   enqueuedAt: z.iso.datetime({ offset: true }),
+  // A redrive keeps the original durable job identity and payload hash. This
+  // monotonic audit-chain version only fences superseded DLQ deliveries.
+  redriveVersion: z.number().int().min(0).optional(),
 }).strict().superRefine((value, context) => {
   if (tenantJobKinds.has(value.kind) && !value.workspaceId) {
     context.addIssue({
@@ -213,12 +218,16 @@ type JobErrorCode =
 type OperationalError = {
   code: JobErrorCode;
   retryable: boolean;
+  diagnosticStage?: DocumentAnalysisDiagnosticStage;
+  diagnosticDetail?: DocumentAnalysisDiagnosticDetail;
 };
 
 class SafeJobError extends Error {
   constructor(
     readonly code: JobErrorCode,
     readonly retryable: boolean,
+    readonly diagnosticStage?: DocumentAnalysisDiagnosticStage,
+    readonly diagnosticDetail?: DocumentAnalysisDiagnosticDetail,
   ) {
     super(code);
     this.name = "SafeJobError";
@@ -424,7 +433,12 @@ function terminalizableDlqKindsForQueue(
 
 function operationalError(error: unknown): OperationalError {
   if (error instanceof SafeJobError) {
-    return { code: error.code, retryable: error.retryable };
+    return {
+      code: error.code,
+      retryable: error.retryable,
+      diagnosticStage: error.diagnosticStage,
+      diagnosticDetail: error.diagnosticDetail,
+    };
   }
   return { code: "JOB_TRANSIENT_FAILURE", retryable: true };
 }
@@ -483,6 +497,31 @@ function isoAfter(iso: string, milliseconds: number): string {
 
 export function retryDelay(attempts: number): number {
   return Math.min(3_600, 15 * (2 ** Math.max(0, attempts - 1)));
+}
+
+const DEFAULT_JOB_LEASE_DURATION_MS = 5 * 60_000;
+const DOCUMENT_ANALYSIS_JOB_LEASE_DURATION_MS = 12 * 60_000;
+
+/**
+ * Production quick analyses can legitimately spend several minutes on one
+ * bounded primary-plus-fallback attempt. Give only this job kind a longer D1
+ * lease while retaining headroom below the Queue consumer wall-time for
+ * terminal persistence and acknowledgement.
+ */
+export function jobLeaseDurationMs(kind: JobKind): number {
+  return kind === "document.analyze"
+    ? DOCUMENT_ANALYSIS_JOB_LEASE_DURATION_MS
+    : DEFAULT_JOB_LEASE_DURATION_MS;
+}
+
+export function redriveVersionDisposition(
+  messageVersion: number,
+  latestVersion: number,
+): "current" | "superseded" | "invalid" {
+  if (!Number.isSafeInteger(messageVersion) || messageVersion < 0
+    || !Number.isSafeInteger(latestVersion) || latestVersion < 0) return "invalid";
+  if (messageVersion < latestVersion) return "superseded";
+  return messageVersion === latestVersion ? "current" : "invalid";
 }
 
 async function envelopeHash(envelope: JobEnvelope): Promise<string> {
@@ -548,7 +587,10 @@ async function claimJob(
   },
 ): Promise<ClaimResult> {
   const leaseOwner = crypto.randomUUID();
-  const leaseExpiresAt = isoAfter(input.now, 5 * 60 * 1_000);
+  const leaseExpiresAt = isoAfter(
+    input.now,
+    jobLeaseDurationMs(input.envelope.kind),
+  );
   let result: D1Result<unknown>;
   try {
     result = await env.DB.prepare(`
@@ -756,7 +798,12 @@ async function executeJob(
             startedAt,
           });
         }
-        throw new SafeJobError(error.code, error.retryable);
+        throw new SafeJobError(
+          error.code,
+          error.retryable,
+          error.diagnosticStage,
+          error.diagnosticDetail,
+        );
       }
       throw error;
     }
@@ -1096,8 +1143,21 @@ async function executeJob(
 type DlqTerminalization =
   | "terminalized"
   | "already_terminal"
+  | "superseded_redrive"
   | "busy"
   | "unmatched";
+
+async function latestOperationalRedriveVersion(
+  db: D1Database,
+  sourceJobId: string,
+): Promise<number> {
+  const row = await db.prepare(
+    `SELECT COALESCE(MAX(version),0) AS version
+     FROM operational_job_redrive_events
+     WHERE source_job_id=?`,
+  ).bind(sourceJobId).first<{ version: number }>();
+  return Number(row?.version ?? 0);
+}
 
 /**
  * Cloudflare has already exhausted the source queue retries before a message
@@ -1114,6 +1174,13 @@ async function terminalizeDlqJob(
   now: string,
 ): Promise<DlqTerminalization> {
   if (!isTerminalizableDlqJobKind(envelope.kind)) return "unmatched";
+
+  const redriveDisposition = redriveVersionDisposition(
+    envelope.redriveVersion ?? 0,
+    await latestOperationalRedriveVersion(env.DB, envelope.jobId),
+  );
+  if (redriveDisposition === "superseded") return "superseded_redrive";
+  if (redriveDisposition === "invalid") return "unmatched";
 
   const envelopeDigest = await envelopeHash(envelope);
   const sourceQueue = expectedQueueName(envelope.kind, env.APP_ENV);
@@ -1335,7 +1402,9 @@ async function processDlqMessage(
   logEvent(outcome === "terminalized" ? "error" : "info", {
     event: outcome === "terminalized"
       ? "queue.dlq_terminalized"
-      : "queue.dlq_already_terminal",
+      : outcome === "superseded_redrive"
+        ? "queue.dlq_superseded_redrive"
+        : "queue.dlq_already_terminal",
     environment: env.APP_ENV,
     queue: queueName,
     messageId: message.id,
@@ -1498,6 +1567,8 @@ async function processMessage(
         jobId: envelope.jobId,
         jobKind: envelope.kind,
         errorCode: failure.code,
+        ...(failure.diagnosticStage ? { diagnosticStage: failure.diagnosticStage } : {}),
+        ...(failure.diagnosticDetail ? { diagnosticDetail: failure.diagnosticDetail } : {}),
       });
       message.ack();
       return;
@@ -1545,6 +1616,8 @@ async function processMessage(
       jobKind: envelope.kind,
       errorCode: failure.code,
       attempt: message.attempts,
+      ...(failure.diagnosticStage ? { diagnosticStage: failure.diagnosticStage } : {}),
+      ...(failure.diagnosticDetail ? { diagnosticDetail: failure.diagnosticDetail } : {}),
     });
     message.retry({ delaySeconds });
   }

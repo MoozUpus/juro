@@ -88,13 +88,56 @@ test("lawyer payout is simulation-only and tenant scoped", async () => {
   }
 });
 
+test("demo fee snapshots show 1%, configured 2% and no duplicate installment transfer fee", async () => {
+  const { sqlite, d1 } = fixture();
+  try {
+    const actor = { userId: ids.user, workspaceId: ids.workspace };
+    sqlite.prepare(`INSERT INTO billing_case_transfer_fee_rules
+      (id,version,label_ru,label_uz,legal_area,case_type,fee_basis_points,priority,effective_from,effective_to,created_by_user_id,reason,created_at)
+      VALUES ('rule-contracts-2',1,'Договорные дела','Shartnoma ishlari','contracts',NULL,200,100,'2020-01-01T00:00:00.000Z',NULL,?,'Explicit test rule','2020-01-01T00:00:00.000Z')`).run(ids.user);
+    const consultation = await createDemoPaymentRun(d1, actor, {
+      requestId: "77777777-7777-4777-8777-777777777777",
+      flowType: "lawyer_service",
+      serviceKind: "consultation",
+      amountMinor: 10_000_000,
+    });
+    assert.equal(consultation.breakdown?.consultationFeeAmountMinor, 100_000);
+    assert.equal(consultation.breakdown?.lawyerPayoutMinor, 9_900_000);
+    const transfer = await createDemoPaymentRun(d1, actor, {
+      requestId: "88888888-8888-4888-8888-888888888888",
+      flowType: "lawyer_service",
+      serviceKind: "case_transfer",
+      legalArea: "contracts",
+      amountMinor: 10_000_000,
+    });
+    assert.equal(transfer.breakdown?.caseTransferFeeBasisPoints, 200);
+    assert.equal(transfer.breakdown?.caseTransferFeeAmountMinor, 200_000);
+    assert.equal(transfer.breakdown?.appliedCaseTransferRule?.id, "rule-contracts-2");
+    const installment = await createDemoPaymentRun(d1, actor, {
+      requestId: "99999999-9999-4999-8999-999999999999",
+      flowType: "uzum_installment",
+      installmentCount: 6,
+      legalArea: "contracts",
+      amountMinor: 10_000_000,
+    });
+    assert.equal(installment.breakdown?.caseTransferFeeAmountMinor, 0);
+    assert.equal(installment.breakdown?.lawyerPayoutMinor, 10_000_000);
+    assert.equal(installment.breakdown?.installmentCount, 6);
+    assert.throws(() => sqlite.prepare("UPDATE demo_payment_runs SET case_transfer_fee_amount_minor=1 WHERE id=?").run(transfer.id), /DEMO_PAYMENT_FEE_SNAPSHOT_IMMUTABLE/);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("demo payment route and UI retain auth, CSRF, tenant and truthful-label contracts", async () => {
-  const [route, ui, billing, migration, config] = await Promise.all([
+  const [route, ui, billing, migration, config, adminRoute, adminUi] = await Promise.all([
     readFile(new URL("../app/api/platform/demo-payments/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/DemoPaymentsClient.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/BillingClient.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0111_production_demo_payments.sql", import.meta.url), "utf8"),
     readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/admin/billing-fees/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_staff/BillingFeeMatrixAdmin.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(route, /requireApiUser/);
   assert.match(route, /assertSafeWrite/);
@@ -109,4 +152,9 @@ test("demo payment route and UI retain auth, CSRF, tenant and truthful-label con
   assert.match(migration, /`is_simulation` integer DEFAULT 1/);
   assert.match(migration, /DEMO_PAYMENT_EVENT_IMMUTABLE/);
   assert.match(config, /"PAYMENT_PRODUCTION_DEMO_ENABLED": "true"/);
+  assert.match(adminRoute, /requirePlatformStaffRequest/);
+  assert.match(adminRoute, /run\.provider='demo' AND run\.is_simulation=1/);
+  assert.match(adminRoute, /investor_demo_accounts/);
+  assert.match(adminUi, /Demo-транзакции/);
+  assert.match(adminUi, /Неизменяемый audit log/);
 });

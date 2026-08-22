@@ -361,7 +361,7 @@ test("restricted lawyer lifecycle is append-only, blocks work, and restores only
     assert.equal(profile.publicApprovedAt, null);
     assert.throws(
       () => sqlite.prepare("UPDATE lawyer_profiles SET status='public_approved',marketplace_status='public_approved' WHERE id='pending-lawyer-profile'").run(),
-      /lifecycle evidence required/u,
+      /moderation or publication consent evidence required/u,
     );
     assert.throws(
       () => sqlite.prepare("UPDATE lawyer_profile_lifecycle_events SET reason='tampered' WHERE lawyer_profile_id='pending-lawyer-profile'").run(),
@@ -423,7 +423,8 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.doesNotMatch(launchPage, /catch\s*\{\s*notFound\(\)/u);
   assert.match(accessPage, /15 минут/u);
   assert.match(accessPage, /auth\/login\?reauth=1&returnTo=/u);
-  assert.match(authPage, /authenticated && !\(mode === "login" && reauth\)/u);
+  assert.match(authPage, /authenticatedAuthRedirect/u);
+  assert.match(authPage, /mode,\s*reauth,/u);
   assert.match(localizedLogin, /reauth=\{query\.reauth === "1"\}/u);
   assert.match(accessPage, /environment === "production" \? "JURO · ADMIN" : "JURO · STAGING ADMIN"/u);
   assert.match(migration, /admin_handoff_tickets/u);
@@ -441,6 +442,21 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(adminWorker, /\/lifecycle/u);
   assert.match(adminWorker, /RESTRICTED_LAWYER_MARKETPLACE_STATUSES/u);
   assert.match(adminWorker, /action !== "suspend"/u);
+  assert.match(adminWorker, /@font-face\{font-family:Manrope/u);
+  assert.match(adminWorker, /font-src 'self'/u);
+  assert.match(adminWorker, /fontAsset\(url\.pathname\)/u);
+  assert.match(adminWorker, /<div class="scroll"><table>/u);
+  assert.match(adminWorker, /\.panel\{min-width:0;overflow:hidden/u);
+  assert.match(adminWorker, /События аудита/u);
+  assert.match(adminWorker, /Ожидают самопубликации/u);
+  assert.match(adminWorker, /Опубликованные профили/u);
+  assert.match(adminWorker, /Правовой корпус/u);
+  assert.match(adminWorker, /Функциональные флаги/u);
+  assert.match(adminWorker, /Состояние повтора/u);
+  assert.doesNotMatch(adminWorker, /"Legal Corpus"|>Feature flags<|>Retry state<|>Actor</u);
+  assert.doesNotMatch(adminWorker, /Профили на проверке|Одобренные профили/u);
+  assert.doesNotMatch(adminWorker, />Audit events</u);
+  assert.doesNotMatch(adminWorker, /font-family:Inter/iu);
   assert.match(internal, /lawyer\.profiles\.block/u);
   assert.match(internal, /lawyer\.reviews\.moderate/u);
   assert.match(internal, /changes_requested/u);
@@ -453,6 +469,8 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(platformConfig, /"binding": "ADMIN_CONSOLE"/u);
   assert.match(platformConfig, /"service": "juro-admin"/u);
   assert.match(adminConfig, /"name": "juro-admin"/u);
+  assert.match(adminConfig, /"type": "Data"/u);
+  assert.match(adminConfig, /"globs": \["\*\*\/\*\.woff2"\]/u);
   assert.match(adminConfig, /"PLATFORM_ORIGIN": "https:\/\/staging\.app\.juro\.uz"/u);
   assert.match(adminConfig, /"APP_ENV": "production"/u);
   assert.match(adminConfig, /"service": "juro"/u);

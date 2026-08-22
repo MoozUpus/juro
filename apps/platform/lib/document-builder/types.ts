@@ -250,6 +250,8 @@ export interface FileRecord {
 export interface NotificationRecord {
   id: string;
   documentId: string | null;
+  targetType: string | null;
+  targetId: string | null;
   type: string;
   title: string;
   body: string;

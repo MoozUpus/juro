@@ -72,6 +72,16 @@ async function requestAudit(action: "query" | "export", filters: Record<string, 
   });
 }
 
+async function readAuditJson(response: Response): Promise<AuditResponse & { code?: string }> {
+  const text = await response.text();
+  if (!text) throw new Error(response.ok ? "PLATFORM_AUDIT_EMPTY_RESPONSE" : `HTTP_${response.status}`);
+  try {
+    return JSON.parse(text) as AuditResponse & { code?: string };
+  } catch {
+    throw new Error(response.ok ? "PLATFORM_AUDIT_INVALID_RESPONSE" : `HTTP_${response.status}`);
+  }
+}
+
 function subscribeOnline(callback: () => void): () => void {
   window.addEventListener("online", callback);
   window.addEventListener("offline", callback);
@@ -94,7 +104,7 @@ export function AuditLogConsole({ locale, staffName }: { locale: OperationalLoca
     const controller = new AbortController();
     void requestAudit("query", { limit: 200 }, controller.signal)
       .then(async (response) => {
-        const body = await response.json() as AuditResponse & { code?: string };
+        const body = await readAuditJson(response);
         if (!response.ok) throw new Error(body.code ?? `HTTP_${response.status}`);
         setRows(body.rows);
         setAccessEventId(body.accessEventId);
@@ -116,7 +126,7 @@ export function AuditLogConsole({ locale, staffName }: { locale: OperationalLoca
     setError("");
     try {
       const response = await requestAudit("query", filtersFromForm(form));
-      const body = await response.json() as AuditResponse & { code?: string };
+      const body = await readAuditJson(response);
       if (!response.ok) throw new Error(body.code ?? `HTTP_${response.status}`);
       setRows(body.rows);
       setAccessEventId(body.accessEventId);
@@ -133,7 +143,7 @@ export function AuditLogConsole({ locale, staffName }: { locale: OperationalLoca
     try {
       const response = await requestAudit("export", filtersFromForm(form));
       if (!response.ok) {
-        const body = await response.json() as { code?: string };
+        const body = await readAuditJson(response);
         throw new Error(body.code ?? `HTTP_${response.status}`);
       }
       const blob = await response.blob();

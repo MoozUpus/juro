@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { AdminConsoleAccess } from "../../../_staff/AdminConsoleAccess";
 import { CostConsole } from "../../../_staff/CostConsole";
 import "../../../_staff/legal-source-reviews.css";
 import { readAiCostDashboard } from "../../../../lib/ai/provider-usage";
@@ -29,7 +30,11 @@ export default async function CostsPage({ params }: { params: Promise<{ locale: 
     await requirePlatformStaffAccess(runtime.DB, session, "staff.operations.manage", { now, freshMfaWithinMs: 15 * 60 * 1000 });
     staffName = session.fullName || session.email;
   } catch {
-    notFound();
+    return <AdminConsoleAccess
+      locale={locale}
+      environment={appEnv === "production" ? "production" : "staging"}
+      returnTo={`/${locale}/admin/costs`}
+    />;
   }
   const initial = await readAiCostDashboard({
     db: runtime.DB,

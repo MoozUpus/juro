@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   turnstileClientFailure,
+  turnstileClientLanguage,
   turnstileClientRetryMode,
 } from "../lib/auth/turnstile-client";
 import { validateAuthTurnstile, validateTurnstile } from "../lib/auth/turnstile";
 
 test("Turnstile client failures are bounded and distinguish configuration errors", () => {
   assert.equal(turnstileClientRetryMode, "never");
+  assert.equal(turnstileClientLanguage("ru"), "ru");
+  assert.equal(turnstileClientLanguage("uz"), "auto");
   assert.deepEqual(turnstileClientFailure("110200", "ru"), {
     code: "110200",
     retryable: false,

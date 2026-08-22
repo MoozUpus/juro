@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { isLocalDevelopmentSession } from "../../lib/auth/development-auth";
 import { getSessionUser } from "../../lib/auth/session";
 import { requireChatGPTUser } from "../chatgpt-auth";
@@ -10,6 +11,11 @@ import {
   type AccountPersona,
 } from "../../lib/platform/onboarding";
 import "./onboarding.css";
+import { workspaceProfile } from "../../lib/platform/profile";
+import {
+  isLawyerHostRequest,
+  lawyerLandingDestination,
+} from "../../lib/platform/lawyer-entry-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +53,18 @@ export async function OnboardingScreen({ locale: requestedLocale }: {
     )
     ? profile?.accountType as AccountPersona
     : "individual";
-  if (profile?.completedAt) redirect(`/${locale}/${accountPersona}/dashboard`);
+  if (profile?.completedAt) {
+    const routingProfile = await workspaceProfile(authUser.email);
+    if (routingProfile?.accountType === "lawyer") {
+      const requestHeaders = await headers();
+      redirect(lawyerLandingDestination(
+        routingProfile,
+        isLawyerHostRequest(requestHeaders),
+        requestHeaders.get("host"),
+      ));
+    }
+    redirect(`/${locale}/${accountPersona}/dashboard`);
+  }
   return (
     <OnboardingForm
       initialLocale={locale}

@@ -1,5 +1,6 @@
 import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { lawyerTrialView, type LawyerTrialRow } from "../../../../lib/platform/lawyer-trial";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
@@ -28,12 +29,18 @@ export const GET = withApiErrors(async function GET() {
     nextAvailableAt: string | null;
     profileRevision: number;
   }>();
-  if (!profile) return response({ profile: null, operational: false, unreadMessageCount: 0, requests: [], matters: [], messages: [], documents: [], ownDocuments: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
+  if (!profile) return response({ profile: null, trial: null, operational: false, unreadMessageCount: 0, requests: [], matters: [], messages: [], documents: [], ownDocuments: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
+
+  const trialRow = await db.prepare(
+    `SELECT id,starts_at AS startsAt,ends_at AS endsAt,status,post_expiry_mode AS postExpiryMode
+     FROM lawyer_trials WHERE lawyer_profile_id=? LIMIT 1`,
+  ).bind(profile.id).first<LawyerTrialRow>();
+  const trial = trialRow ? lawyerTrialView(trialRow) : null;
 
   const operational = profile.status === "public_approved" && profile.marketplaceStatus === "public_approved";
-  if (!operational) return response({ profile, operational, unreadMessageCount: 0, requests: [], matters: [], messages: [], documents: [], ownDocuments: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
+  if (!operational) return response({ profile, trial, operational, unreadMessageCount: 0, requests: [], matters: [], messages: [], documents: [], ownDocuments: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
   const now = new Date().toISOString();
-  const [requests, matters, messages, unreadMessages, documents, ownDocuments, tasks, taskComments, consultations, caseEvents] = await Promise.all([
+  const [requests, matters, messages, unreadMessages, documents, tasks, taskComments, ownDocuments, consultations, caseEvents] = await Promise.all([
     db.prepare(
       `SELECT r.id,r.status,r.anonymized_summary AS anonymizedSummary,r.created_at AS createdAt,r.updated_at AS updatedAt,
         CASE WHEN g.id IS NOT NULL THEN cs.id END AS caseId,
@@ -86,7 +93,7 @@ export const GET = withApiErrors(async function GET() {
        ORDER BY d.updated_at DESC LIMIT 100`,
     ).bind(profile.id, user.id, now).all(),
     db.prepare(
-      `SELECT DISTINCT t.id,t.title,t.description,t.status,t.due_at AS dueAt,t.case_id AS caseId,
+      `SELECT DISTINCT t.id,t.title,t.description,t.legal_basis AS legalBasis,t.status,t.due_at AS dueAt,t.case_id AS caseId,
         t.updated_at AS updatedAt,r.id AS requestId,
         CASE WHEN t.owner_user_id=? AND t.plan_step_id IS NULL THEN 1 ELSE 0 END AS isEditable
        FROM tasks t JOIN lawyer_access_grants g ON g.case_id=t.case_id
@@ -125,6 +132,7 @@ export const GET = withApiErrors(async function GET() {
   ]);
   return response({
     profile,
+    trial,
     operational,
     unreadMessageCount: Number(unreadMessages?.count ?? 0),
     requests: requests.results,

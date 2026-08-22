@@ -26,6 +26,7 @@ export const PLATFORM_MODULES = [
   "action-plan",
   "calendar",
   "consultations",
+  "knowledge",
   "history",
   "archive",
   "team",

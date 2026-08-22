@@ -49,6 +49,8 @@ type FrameworkEnv = PlatformJobEnv & {
   STATUS_HOSTNAME?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
+  CLOUDFLARE_TURN_KEY_ID?: string;
+  CLOUDFLARE_TURN_KEY_API_TOKEN?: string;
   GUEST_AI_ENABLED?: string;
   APP_URL?: string;
   PUBLIC_SITE_URL?: string;
@@ -85,9 +87,17 @@ function isSupportedImageOutputFormat(
 
 function withSecurityHeaders(response: Response, url: URL): Response {
   const headers = new Headers(response.headers);
+  const mediaEnabledCallPage =
+    /^\/(?:ru|uz)\/(?:individual|entrepreneur|lawyer)\/consultations\/call\/[^/]+\/?$/u.test(url.pathname) ||
+    /^\/(?:ru|uz)\/business\/[^/]+\/consultations\/call\/[^/]+\/?$/u.test(url.pathname);
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  headers.set("Permissions-Policy", "camera=(), geolocation=(), payment=(), usb=(), microphone=(self)");
+  headers.set(
+    "Permissions-Policy",
+    mediaEnabledCallPage
+      ? "camera=(self), display-capture=(self), geolocation=(), payment=(), usb=(), microphone=(self)"
+      : "camera=(), display-capture=(), geolocation=(), payment=(), usb=(), microphone=()",
+  );
   headers.set("X-Frame-Options", "DENY");
   headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   headers.set(

@@ -59,6 +59,12 @@ test("document review mode tabs remain usable at the narrowest supported width",
   assert.match(styles, /\.review-mode-tabs button svg\{flex:none\}/);
 });
 
+test("document comparison and redline inherit the shared JURO UI font", async () => {
+  const styles = await source("../app/_platform/document-comparison.css");
+  assert.match(styles, /\.comparison-redline-row mark>span\{font-family:var\(--font-ui\)/);
+  assert.doesNotMatch(styles, /font-family:(?:Arial|Helvetica|system-ui)/i);
+});
+
 test("document workspace search fields expose localized accessible names", async () => {
   const [library, documents, contacts] = await Promise.all([
     source("../app/_document-builder/_components/DocumentLibraryClient.tsx"),
