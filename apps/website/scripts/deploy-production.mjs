@@ -53,7 +53,10 @@ delete config.legacy_env;
 config.name = "juro-legaltech";
 config.workers_dev = false;
 config.preview_urls = false;
-config.routes = [{ pattern: "juro.uz/*", zone_name: "juro.uz" }];
+config.routes = [
+  { pattern: "juro.uz/*", zone_name: "juro.uz" },
+  { pattern: "www.juro.uz/*", zone_name: "juro.uz" },
+];
 config.assets = {
   ...config.assets,
   binding: "ASSETS",

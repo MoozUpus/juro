@@ -98,6 +98,13 @@ test("unlocalized lawyer catalogue and profile entries redirect to canonical RU 
   assert.match(productionDeploy, /run_worker_first: true/);
 });
 
+test("the www host permanently redirects to the canonical apex before app routing", () => {
+  assert.match(worker, /url\.hostname === "www\.juro\.uz"/);
+  assert.match(worker, /destination\.hostname = "juro\.uz"/);
+  assert.match(worker, /Response\.redirect\(destination, 308\)/);
+  assert.match(productionDeploy, /pattern: "www\.juro\.uz\/\*", zone_name: "juro\.uz"/);
+});
+
 test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(chromeStyles, /safe-area-inset-top/);
   assert.match(chromeStyles, /safe-area-inset-bottom/);
