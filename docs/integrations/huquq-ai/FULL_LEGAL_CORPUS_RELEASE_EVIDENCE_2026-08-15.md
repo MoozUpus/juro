@@ -184,6 +184,21 @@ rows and dead-letter jobs are both zero. Discovery remains 21/44 completed
 and the queue is not frozen, so release floors and all post-ingestion gates
 remain open; production is untouched.
 
+## Clean sequential continuation (2026-08-22, 20:04–20:10Z)
+
+Run `6ff55e65-3b80-4ef4-af0b-d0d7017e8ae2` completed at
+`2026-08-22T20:10:24.918Z` with `error_code=NULL`. The single distributed
+lease, source pacing and bounded retry behavior were preserved; no terminal
+or dead-letter ingestion row was created.
+
+The post-run read-only boundary is 221 canonical documents, 248 language
+variants, 12,747 distinct current provisions and 34,720 indexed chunks. The
+ingestion ledger contains 1,229 completed and 13,116 queued jobs. Failure
+rows remain retrying-only (9); unresolved terminal/technically-unavailable
+rows and dead-letter jobs are both zero. Discovery remains 21/44 completed
+and the queue is not frozen, so release floors and all post-ingestion gates
+remain open; production is untouched.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
