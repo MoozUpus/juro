@@ -25,6 +25,27 @@ variants, 11,387 distinct current provisions, 29,996 indexed chunks and
 rehydrating the bounded catalogue and is not presented as the old 3,575-row
 corpus. No production binding, migration, feature flag or DNS record changed.
 
+## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
+
+The sequential v2 worker recorded two source-condition runs while continuing
+the bounded stream: run `222811f0-40c5-46b1-a437-d6adf6f9bddd` ended at
+13:51:39Z with `LEX_CATALOG_UPSTREAM_UNAVAILABLE`, and run
+`da812784-7517-46be-995e-c15e027ca2cc` ended at 13:59:30Z with the
+allow-listed `LEX_CATALOG_TIMEOUT`. The next run
+`80cfe197-32d7-4511-92fe-1220b1c9090e` was still running at the 14:05Z
+boundary with its scheduler lease renewed; no parallel crawler was started.
+
+The ministries/uz-Cyrl checkpoint was observed in `dead_letter` at attempt 2
+with `LEX_CATALOG_UPSTREAM_UNAVAILABLE`, while the ingestion-job ledger had
+**0 dead-letter jobs** and the failure ledger had **0 terminal or technically
+unavailable failures**. The existing seed recovery path reopens this exact
+upstream code while attempts remain below five; the focused catalogue suite
+passed **20/20**, including the regression that old terminal upstream rows
+self-heal. No code or deployment change is justified yet because the source
+condition remains allow-listed and retryable; the next read-only boundary must
+prove whether the checkpoint reopens. Release thresholds and the checkpoint
+freeze gate remain open.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
