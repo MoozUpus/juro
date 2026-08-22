@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   accountModuleRedirect,
   authenticatedAuthRedirect,
+  lawyerHubViewForPathname,
   lawyerLandingDestination,
   lawyerPublicOrigin,
   operationalLawyer,
@@ -60,6 +61,25 @@ test("lawyer landing routes onboarding, application, and approved workspace sepa
   assert.equal(lawyerLandingDestination({ ...pendingLawyer, onboardingCompleted: false }, true, "lawyer.juro.uz"), "/ru/onboarding");
   assert.equal(lawyerLandingDestination(pendingLawyer, true, "lawyer.juro.uz"), "/ru/application");
   assert.equal(lawyerLandingDestination(approvedLawyer, false, "app.juro.uz"), "https://lawyer.juro.uz/ru/dashboard");
+});
+
+test("clean lawyer hub paths preserve their selected view after hydration", () => {
+  const views = {
+    requests: "requests",
+    consultations: "schedule",
+    clients: "clients",
+    matters: "matters",
+    messages: "messages",
+    documents: "documents",
+    tasks: "tasks",
+  } as const;
+  for (const locale of ["ru", "uz"] as const) {
+    for (const [path, view] of Object.entries(views)) {
+      assert.equal(lawyerHubViewForPathname(`/${locale}/${path}`), view);
+    }
+  }
+  assert.equal(lawyerHubViewForPathname("/ru/lawyer/consultations"), null);
+  assert.equal(lawyerHubViewForPathname("/ru/not-a-lawyer-view"), null);
 });
 
 test("account module guard rejects URL role spoofing on the lawyer host", () => {

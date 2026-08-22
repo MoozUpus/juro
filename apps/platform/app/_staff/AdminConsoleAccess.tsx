@@ -12,7 +12,7 @@ export function AdminConsoleAccess({
   const ru = locale === "ru";
   const label = environment === "production" ? "JURO · ADMIN" : "JURO · STAGING ADMIN";
   const protectedReturnTo = returnTo ?? `/${locale}/admin/console`;
-  return <main style={{ maxWidth: "44rem", margin: "4rem auto", padding: "1.5rem", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}>
+  return <main style={{ maxWidth: "44rem", margin: "4rem auto", padding: "1.5rem", fontFamily: "Manrope, ui-sans-serif, system-ui, sans-serif" }}>
     <p style={{ color: "#6b541f", fontWeight: 700, letterSpacing: ".08em" }}>{label}</p>
     <h1 style={{ color: "#062844" }}>{ru ? "Требуется защищённый вход" : "Himoyalangan kirish talab qilinadi"}</h1>
     <p style={{ lineHeight: 1.6, color: "#334e68" }}>

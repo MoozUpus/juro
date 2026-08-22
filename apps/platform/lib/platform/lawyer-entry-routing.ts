@@ -34,6 +34,23 @@ const pendingLawyerModules = new Set<PlatformModule>([
   "security",
 ]);
 
+const cleanLawyerHubViews: Record<string, string> = {
+  requests: "requests",
+  consultations: "schedule",
+  clients: "clients",
+  matters: "matters",
+  messages: "messages",
+  documents: "documents",
+  tasks: "tasks",
+};
+
+export function lawyerHubViewForPathname(pathname: string): string | null {
+  const clean = pathname.match(
+    /^\/(?:ru|uz)\/(requests|consultations|clients|matters|messages|documents|tasks)\/?$/u,
+  );
+  return clean ? cleanLawyerHubViews[clean[1]] ?? null : null;
+}
+
 export function isLawyerHostRequest(headers: Pick<Headers, "get">): boolean {
   return headers.get("x-juro-lawyer-host") === "1";
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { AdminConsoleAccess } from "../../../../_staff/AdminConsoleAccess";
 import { LegalSourceHealthPanel } from "../../../../_staff/LegalSourceHealthPanel";
 import { LegalSourceReviewInbox } from "../../../../_staff/LegalSourceReviewInbox";
 import "../../../../_staff/legal-source-reviews.css";
@@ -39,7 +40,11 @@ export default async function LegalSourceReviewsPage({
     );
     reviewerName = session.fullName || session.email;
   } catch {
-    notFound();
+    return <AdminConsoleAccess
+      locale={locale}
+      environment={runtime.APP_ENV === "production" ? "production" : "staging"}
+      returnTo={`/${locale}/admin/legal-sources/reviews`}
+    />;
   }
   return <><LegalSourceHealthPanel locale={locale}/><LegalSourceReviewInbox locale={locale} reviewerName={reviewerName}/></>;
 }

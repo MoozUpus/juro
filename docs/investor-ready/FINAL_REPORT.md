@@ -201,9 +201,12 @@ Windows scale was also exercised directly rather than inferred from viewport
 emulation. Settings changed 125% to the recommended 150%, the authenticated
 Client dashboard rendered at DPR 1.5 with a 1280×665 viewport and 1265-pixel
 document width without horizontal overflow, and Settings was then visibly
-restored to 125%. The Chrome extension disconnected after the scale change and
-failed again after one bounded reconnect, so Lawyer/Admin 150% evidence remains
-open instead of being promoted from the Client result.
+restored to 125%. A later stable connection repeated the system-scale transition
+and exercised 19 authenticated Lawyer routes at DPR 1.5 and a 1536×769 viewport.
+Every route stayed within the root width and the dashboard screenshot showed no
+clipping. The protected Admin re-auth screen and isolated-host handoff also fit
+a 1280×609 viewport at DPR 1.5; a fresh-MFA Admin data-screen pass at 150%
+remains open. Settings was again visibly restored to 125%.
 
 Reduced motion was exercised through the real Windows preference rather than a
 browser override. With Animation effects temporarily disabled, the authenticated
@@ -291,10 +294,11 @@ records during the presentation.
   visibly unfilled operator identity/address fields. Commercial production still
   requires owner-approved operator details and final RU/UZ legal editions; this
   report does not invent them or represent the draft as legal approval.
-- Lawyer/Admin Windows-scale 150%, screen-share source selection and forced
-  reconnect remain open. Native Chrome page zoom is intentionally `NOT TESTED`
-  by the latest explicit user instruction. The Client
-  dashboard passed Windows-scale 150% and the host was restored to 125%. The
+- Fresh-MFA Admin data screens at Windows scale 150%, screen-share source
+  selection and forced reconnect remain open. Native Chrome page zoom is
+  intentionally `NOT TESTED` by the latest explicit user instruction. The
+  Client dashboard, 19-route Lawyer suite and protected Admin re-auth surface
+  passed Windows-scale 150%, and the host was restored to 125%. The
   forced-reconnect and capture-cleanup source,
   focused tests, full CI and production asset are verified, but no live network
   interruption or selected-source remote rendering is inferred from them. The

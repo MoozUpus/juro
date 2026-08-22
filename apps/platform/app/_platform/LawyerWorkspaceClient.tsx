@@ -3,10 +3,11 @@
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated lawyer data is loaded after hydration */
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { BriefcaseBusiness, CalendarClock, CheckCircle2, CircleAlert, Clock3, ExternalLink, FileText, LoaderCircle, MessageSquareText, Plus, Save, Send, Trash2, UserRound, UsersRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
+import { lawyerHubViewForPathname } from "../../lib/platform/lawyer-entry-routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 import { LawyerRequestsClient } from "./LawyerRequestsClient";
 import { LawyerProfessionalTools } from "./LawyerProfessionalTools";
@@ -84,7 +85,8 @@ export function LawyerDashboardClient({ locale, userName }: { locale: PlatformLo
 }
 
 export function LawyerHubClient({ locale }: { locale: PlatformLocale }) {
-  const view = useSearchParams().get("view") ?? "requests";
+  const pathname = usePathname();
+  const view = useSearchParams().get("view") ?? lawyerHubViewForPathname(pathname) ?? "requests";
   if (view === "requests") return <LawyerRequestsClient locale={locale} />;
   if (view === "schedule") return <LawyerScheduleClient locale={locale} />;
   return <LawyerRecordsClient locale={locale} view={view} />;

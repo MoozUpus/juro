@@ -100,6 +100,38 @@ test("lawyer-profile approval is staff-capability and revision gated", async () 
   assert.match(migration, /lawyer_profile_moderation_revision_uidx/); assert.match(migration, /lawyer_profiles_status_requires_moderation/); assert.match(migration, /append-only/);
 });
 
+test("known admin pages render a protected re-auth screen instead of a session-expiry 404", async () => {
+  const protectedAdminPages = [
+    ["ai-quality/page.tsx", "ai-quality"],
+    ["ai-settings/page.tsx", "ai-settings"],
+    ["audit-log/page.tsx", "audit-log"],
+    ["billing/page.tsx", "billing"],
+    ["costs/page.tsx", "costs"],
+    ["feature-flags/page.tsx", "feature-flags"],
+    ["jobs/page.tsx", "jobs"],
+    ["knowledge-base/page.tsx", "knowledge-base"],
+    ["lawyer-review-replies/page.tsx", "lawyer-review-replies"],
+    ["lawyer-reviews/page.tsx", "lawyer-reviews"],
+    ["legal-sources/page.tsx", "legal-sources"],
+    ["legal-sources/reviews/page.tsx", "legal-sources/reviews"],
+    ["support/page.tsx", "support"],
+    ["system-status/page.tsx", "system-status"],
+  ] as const;
+  const pages = await Promise.all(protectedAdminPages.map(async ([relativePath, returnPath]) => ({
+    page: await readFile(new URL(`../app/[locale]/admin/${relativePath}`, import.meta.url), "utf8"),
+    returnPath,
+  })));
+  for (const { page, returnPath } of pages) {
+    assert.match(page, /AdminConsoleAccess/);
+    assert.ok(page.includes(`returnTo={\`/\${locale}/admin/${returnPath}\`}`));
+    assert.doesNotMatch(page, /catch\s*\{\s*notFound\(\)/u);
+  }
+
+  const accessScreen = await readFile(new URL("../app/_staff/AdminConsoleAccess.tsx", import.meta.url), "utf8");
+  assert.match(accessScreen, /fontFamily:\s*"Manrope,/u);
+  assert.doesNotMatch(accessScreen, /fontFamily:\s*["']Inter/u);
+});
+
 test("builder navigation preserves canonical locale and account context", () => {
   const caseId = "11111111-1111-4111-8111-111111111111";
   const stepId = "22222222-2222-4222-8222-222222222222";
@@ -1507,7 +1539,7 @@ test("staff support inbox requires capability, fresh MFA, and private ticket det
     readFile(new URL("../app/api/platform/admin/support-tickets/[ticketId]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_staff/SupportInbox.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /support\.tickets\.manage/); assert.match(page, /freshMfaWithinMs:15\*60\*1_000/);
+  assert.match(page, /support\.tickets\.manage/); assert.match(page, /freshMfaWithinMs:\s*15\s*\*\s*60\s*\*\s*1_000/);
   assert.match(route, /support\.tickets\.manage/); assert.match(detail, /export const GET = withPlatformStaffErrors/); assert.match(detail, /support\.tickets\.manage/); assert.match(detail, /ORDER BY created_at ASC,id ASC LIMIT 200/); assert.match(detail, /support_ticket_viewed/); assert.match(detail, /private, no-store/);
   assert.match(client, /admin\/support-tickets/); assert.match(client, /x-juro-csrf/); assert.match(client, /waiting_user/); assert.match(client, /aria-live="polite"/); assert.match(client, /t\[ticket\.status\]/); assert.match(client, /t\.requester/);
 });
