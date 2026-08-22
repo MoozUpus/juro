@@ -15,7 +15,7 @@ This is a current-state release record, not a blanket completion claim. Browser 
 - `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` were transmitted directly to Worker `juro` as secrets. Values were not printed, written to disk or committed.
 - Platform Worker production version: `82293dc7-f208-4142-9ccf-8bec75fb6432`.
 - Public routing Worker production version: `b87fb3e5-65f3-45ea-9d73-c4ff31d57116`.
-- Sites version 70 is live. Sites version 72 contains the canonical unlocalized lawyer-profile route and is saved but not yet published.
+- Sites version 72 is live. It contains the canonical unlocalized lawyer catalogue and profile redirects.
 
 ## Production URL smoke
 
@@ -24,7 +24,7 @@ This is a current-state release record, not a blanket completion claim. Browser 
 | `https://juro.uz/` | 200 |
 | `https://www.juro.uz/` | 308 to canonical `juro.uz`; path and query are retained |
 | `https://juro.uz/lawyers` | 308 to `/ru/lawyers`, then 200 |
-| `https://juro.uz/lawyers/{profileId}` | 404 on Sites 70; fixed and validated in saved Sites 72, public verification pending |
+| `https://juro.uz/lawyers/{profileId}` | Sites 72: 308 to `/ru/lawyers/{profileId}` with the query string retained, then 200 |
 | `https://app.juro.uz/` | 307 to localized authentication for an unauthenticated request |
 | `https://lawyer.juro.uz/` | 200; protected professional routes enforce authentication |
 | `https://admin.juro.uz/` | 303 to the isolated app admin handoff surface |
@@ -49,7 +49,6 @@ A later read at `2026-08-22T11:01:37.131Z` again returned `overallStatus=operati
 
 ## Remaining release evidence
 
-- Publish Sites version 72 and verify the unlocalized public lawyer profile in production.
 - Reconnect the user-approved Chrome extension and establish fresh client, lawyer and admin sessions for the authenticated role suite.
 - Complete responsive, theme, zoom, reduced-motion, call preflight/two-participant media and scripted investor rehearsal checks in Chrome.
 - Edge, Firefox, Safari/WebKit and physical iPhone/iPad/Android remain intentionally `NOT TESTED` by explicit user instruction.
