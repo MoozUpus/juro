@@ -116,9 +116,9 @@ export const GET = withApiErrors(async function GET(
       ? db.prepare(
         `SELECT n.id,n.body,n.document_id AS documentId,d.title AS documentTitle,
           n.converted_task_id AS convertedTaskId,n.created_at AS createdAt,
-          COALESCE(p.display_name,p.email) AS authorName
+          p.display_name AS authorName
          FROM lawyer_request_internal_notes n
-         JOIN user_profiles p ON p.id=n.author_user_id
+         JOIN lawyer_profiles p ON p.user_id=n.author_user_id
          LEFT JOIN documents d ON d.id=n.document_id
          WHERE n.lawyer_request_id=? AND n.author_user_id=?
          ORDER BY n.created_at DESC LIMIT 100`,
@@ -288,7 +288,7 @@ export const POST = withApiErrors(async function POST(
     }
     const id = crypto.randomUUID();
     const author = await db.prepare(
-      "SELECT COALESCE(display_name,email) AS authorName FROM user_profiles WHERE id=? LIMIT 1",
+      "SELECT display_name AS authorName FROM lawyer_profiles WHERE user_id=? LIMIT 1",
     ).bind(user.id).first<{ authorName: string }>();
     await db.batch([
       db.prepare(

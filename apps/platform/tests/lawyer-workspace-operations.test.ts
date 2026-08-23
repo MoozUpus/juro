@@ -231,6 +231,9 @@ test("lawyer task and document request routes stay CSRF, grant, tenant and audit
   assert.match(messageRoute, /reply_to_message_id/u);
   assert.match(messageRoute, /lawyer_request_message_typing/u);
   assert.match(messageRoute, /lawyer_request_internal_notes/u);
+  assert.match(messageRoute, /JOIN lawyer_profiles p ON p\.user_id=n\.author_user_id/u);
+  assert.match(messageRoute, /SELECT display_name AS authorName FROM lawyer_profiles WHERE user_id=\?/u);
+  assert.doesNotMatch(messageRoute, /user_profiles p ON p\.id=n\.author_user_id/u);
   assert.match(messageRoute, /participant\.role !== "lawyer"/u);
   assert.match(messageRoute, /lawyer_internal_note_converted_to_task/u);
   assert.match(messageRoute, /lawyer_request_message_attachments/u);
