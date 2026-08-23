@@ -116,8 +116,15 @@ Lawyer load exposed a schema mismatch confined to the new private-note query:
 passed, and Worker `00e80afc-a659-4158-827b-1b73228cf862` deployed at 100%.
 Two-profile Chrome then loaded the same synthetic request history, verified
 search and local reply preview, kept the Client free of private AI/notes, and
-rendered both 1536-pixel pages at 1521/1521 without overflow. Synthetic
-send/pin/AI/note-to-task mutations remain pending exact action-time confirmation.
+rendered both 1536-pixel pages at 1521/1521 without overflow. After the exact
+action-time confirmation, a bounded replay then proved Client→Lawyer send,
+Lawyer reply, both typing indicators, delivery/read timestamps and pin/unpin.
+One private Lawyer AI summary completed through OpenAI, and one lawyer-only note
+was converted to a case task without exposing the note or AI panel to Client.
+Only the replay's mutable messages, note/task, notifications, case events and AI
+conversation were removed; six workspace audit events and the completed AI run
+remain. The original two-message seed state and read timestamps were unchanged,
+and the live foreign-key check remained empty.
 
 The follow-up `0157` release passed rendered HTML 33/33, core 1069/1069,
 Cloudflare 201/201, production artifact/performance budgets, dependency audit and
@@ -365,10 +372,13 @@ records during the presentation.
   no synthetic row is represented as a settled real payment.
 - Full local legal-corpus and dense/vector flags are off. The live release uses
   direct official Lex.uz retrieval/metadata and labels monitoring accordingly.
-- App registration policies remain a versioned pre-incorporation preview with
-  visibly unfilled operator identity/address fields. Commercial production still
-  requires owner-approved operator details and final RU/UZ legal editions; this
-  report does not invent them or represent the draft as legal approval.
+- The owner has designated himself as JURO's sole current operator. App
+  registration policies nevertheless remain a versioned pre-incorporation
+  preview with visibly unfilled publishable operator identity/address fields.
+  Commercial publication still requires the owner's exact legal name, contact
+  email, postal/legal address, effective date/version and explicit RU/UZ
+  approvals; this report does not infer those particulars or represent the draft
+  as legal approval.
 - Native Chrome page zoom is intentionally `NOT TESTED` by the latest explicit
   user instruction. The Client dashboard, 19-route Lawyer suite and fresh-MFA
   Admin data screens passed Windows-scale 150%, and the host was restored to
@@ -378,20 +388,18 @@ records during the presentation.
   direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - `/api/status` was fully operational immediately after migration `0157` and
-  Worker `ecabef2f-cd37-40f0-9e20-66803b753f3b`: app and status-host reads at
-  `2026-08-23T02:23:40.568Z` and `2026-08-23T02:23:40.997Z` reported 8/8
-  components operational. The later independent reads at
-  `2026-08-23T09:33:20.009Z` and `2026-08-23T09:33:20.641Z` are both
-  `degraded`: Anthropic reports `PROVIDER_UNAVAILABLE` and document analysis
-  reports `ANALYSIS_JOB_FAILED`, while OpenAI, D1, queues, private R2, malware
-  scanning and Lawyer area remain operational. Production D1 records 71 failed
-  observations for each dependency since `03:41Z`; their last successful
-  observations were `03:25Z` and `03:11Z`. The public Anthropic status page is
-  operational with no incident reported today, so the exact JURO account/key/
-  quota cause still requires Anthropic Console access and is not inferred here.
-  The live content-hashed Admin launch asset contains Manrope and no previous
-  inline Inter declaration.
+  Worker `ecabef2f-cd37-40f0-9e20-66803b753f3b`. It later recorded a real
+  Anthropic/document-analysis regression, while the other six published
+  components remained operational. After the owner reported replenishing the
+  Anthropic account, independent app and status-host reads generated at
+  `2026-08-23T10:19:31.876Z` and `2026-08-23T10:19:33.061Z` both returned
+  `overallStatus=operational` with all 8/8 components operational. The current
+  Anthropic synthetic probe is operational with 4,957 ms latency and no safe
+  error; the document-analysis probe is operational with 7,923 ms latency and no
+  safe error. This proves recovery without retroactively asserting an unobserved
+  account-side root cause. The live content-hashed Admin launch asset contains
+  Manrope and no previous inline Inter declaration.
 
-Until the owner-supplied legal-publication items and the Anthropic/document-
-analysis production health regression are closed, this document is a
-release-candidate report rather than a blanket Definition-of-Done claim.
+Until the exact owner-supplied legal-publication particulars and approvals are
+closed, this document remains a release-candidate report rather than a blanket
+Definition-of-Done claim.
