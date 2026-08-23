@@ -338,6 +338,9 @@ test("lawyer workspace UI exposes real task actions, document requests and docum
   assert.match(workspace, /data\?\.ownDocuments\.map/u);
   assert.match(workspace, /conflict_check_pending: \["Требуется проверка конфликта"/u);
   assert.match(workspace, /awaiting_user_consent: \["Ожидается решение клиента"/u);
+  assert.match(workspace, /accepted: \["Заявка принята"/u);
+  assert.match(assigned, /accepted: \["Заявка принята"/u);
+  assert.match(client, /accepted: \["Заявка принята"/u);
   assert.doesNotMatch(workspace, /demo(?:Client|Task|Matter)|fake(?:Client|Task|Matter)/iu);
 });
 

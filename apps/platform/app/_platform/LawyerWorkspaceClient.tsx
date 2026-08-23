@@ -60,6 +60,7 @@ function statusCopy(status: string, ru: boolean) {
     offer_proposed: ["Условия направлены клиенту", "Shartlar mijozga yuborildi"],
     offer_accepted: ["Условия приняты", "Shartlar qabul qilindi"],
     offer_declined: ["Условия отклонены", "Shartlar rad etildi"],
+    accepted: ["Заявка принята", "So‘rov qabul qilindi"],
     completed: ["Работа завершена", "Ish yakunlandi"],
   };
   return values[status]?.[ru ? 0 : 1] ?? status;

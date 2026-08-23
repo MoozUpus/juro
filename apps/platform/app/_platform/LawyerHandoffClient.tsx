@@ -731,6 +731,7 @@ function handoffStatus(status: string, ru: boolean) {
     access_granted: ["Доступ предоставлен", "Ruxsat berildi"],
     access_revoked: ["Доступ отозван", "Ruxsat bekor qilindi"],
     conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi"],
+    accepted: ["Заявка принята", "So‘rov qabul qilindi"],
   };
   return labels[status]?.[ru ? 0 : 1] || status;
 }
