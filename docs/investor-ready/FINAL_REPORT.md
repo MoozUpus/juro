@@ -377,13 +377,21 @@ records during the presentation.
   The platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
   direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
-- `/api/status` remained fully operational after migration `0157` and Worker
-  `ecabef2f-cd37-40f0-9e20-66803b753f3b`. Fresh app and status-host reads
-  generated at `2026-08-23T02:23:40.568Z` and `2026-08-23T02:23:40.997Z`
-  reported all eight components operational, no non-operational component and
-  zero active incidents.
+- `/api/status` was fully operational immediately after migration `0157` and
+  Worker `ecabef2f-cd37-40f0-9e20-66803b753f3b`: app and status-host reads at
+  `2026-08-23T02:23:40.568Z` and `2026-08-23T02:23:40.997Z` reported 8/8
+  components operational. The later independent reads at
+  `2026-08-23T09:33:20.009Z` and `2026-08-23T09:33:20.641Z` are both
+  `degraded`: Anthropic reports `PROVIDER_UNAVAILABLE` and document analysis
+  reports `ANALYSIS_JOB_FAILED`, while OpenAI, D1, queues, private R2, malware
+  scanning and Lawyer area remain operational. Production D1 records 71 failed
+  observations for each dependency since `03:41Z`; their last successful
+  observations were `03:25Z` and `03:11Z`. The public Anthropic status page is
+  operational with no incident reported today, so the exact JURO account/key/
+  quota cause still requires Anthropic Console access and is not inferred here.
   The live content-hashed Admin launch asset contains Manrope and no previous
   inline Inter declaration.
 
-Until the owner-supplied legal-publication items are closed, this document is a
+Until the owner-supplied legal-publication items and the Anthropic/document-
+analysis production health regression are closed, this document is a
 release-candidate report rather than a blanket Definition-of-Done claim.
