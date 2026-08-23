@@ -206,6 +206,30 @@ test("0156 scopes replies, keeps one persisted pin and bounds typing identity", 
   }
 });
 
+test("0157 records an explicit no-show outcome without weakening call-room foreign keys", () => {
+  const { sqlite } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    sqlite.prepare(`INSERT INTO lawyer_consultations
+      (id,lawyer_request_id,lawyer_profile_id,client_user_id,case_id,starts_at,ends_at,timezone,format,status,created_at,updated_at)
+      VALUES ('consultation-0157','request-ops','profile-ops','owner-ops','case-ops','2026-08-20T11:00:00.000Z','2026-08-20T11:30:00.000Z','Asia/Tashkent','video','confirmed',?,?)`).run(now, now);
+    sqlite.prepare(
+      "UPDATE lawyer_consultations SET status='completed',attendance_outcome='no_show',updated_at=? WHERE id='consultation-0157'",
+    ).run(now);
+    const saved = sqlite.prepare(
+      "SELECT status,attendance_outcome AS attendanceOutcome FROM lawyer_consultations WHERE id='consultation-0157'",
+    ).get() as { status: string; attendanceOutcome: string } | undefined;
+    assert.equal(saved?.status, "completed");
+    assert.equal(saved?.attendanceOutcome, "no_show");
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_consultations SET attendance_outcome='unknown' WHERE id='consultation-0157'",
+    ).run(), /CHECK constraint failed/u);
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("lawyer task and document request routes stay CSRF, grant, tenant and audit scoped", () => {
   const taskRoute = readFileSync(new URL("../app/api/platform/lawyer-tasks/route.ts", import.meta.url), "utf8");
   const documentRoute = readFileSync(new URL("../app/api/platform/lawyer-document-requests/route.ts", import.meta.url), "utf8");
@@ -237,11 +261,16 @@ test("lawyer task and document request routes stay CSRF, grant, tenant and audit
   assert.match(messageRoute, /participant\.role !== "lawyer"/u);
   assert.match(messageRoute, /lawyer_internal_note_converted_to_task/u);
   assert.match(messageRoute, /lawyer_request_message_attachments/u);
+  assert.match(messageRoute, /FROM legal_service_proposals WHERE lawyer_request_id=\?/u);
+  assert.match(messageRoute, /FROM lawyer_consultations WHERE lawyer_request_id=\?/u);
+  assert.match(messageRoute, /FROM lawyer_document_requests WHERE lawyer_request_id=\?/u);
   assert.match(messageRoute, /owner_user_id=\? AND workspace_id=\? AND case_id=\?/u);
   assert.match(messageRoute, /recipient_user_id=\?/u);
   assert.match(messageRoute, /workspace_audit_events/u);
   assert.match(messageRoute, /case_events/u);
   assert.match(consultationRoute, /transition === "start"/u);
+  assert.match(consultationRoute, /transition === "no_show"/u);
+  assert.match(consultationRoute, /attendance_outcome/u);
   assert.match(consultationRoute, /\? "in_progress"/u);
   assert.match(consultationRoute, /case_events/u);
   assert.match(consultationRoute, /INSERT INTO notifications/u);
@@ -290,7 +319,12 @@ test("lawyer workspace UI exposes real task actions, document requests and docum
   assert.match(messages, /никогда не отправляется автоматически/u);
   assert.match(messages, /note_create/u);
   assert.match(messages, /note_to_task/u);
+  assert.match(messages, /lawyer-chat-context/u);
+  assert.match(messages, /Открыть звонок/u);
+  assert.match(messages, /Перейти к оплате/u);
   assert.match(consultation, /action: "start"/u);
+  assert.match(consultation, /action: "no_show"/u);
+  assert.match(consultation, /Не состоялась · неявка/u);
   assert.match(workspace, /document-builder/u);
   assert.match(workspace, /data\?\.ownDocuments\.map/u);
   assert.doesNotMatch(workspace, /demo(?:Client|Task|Matter)|fake(?:Client|Task|Matter)/iu);

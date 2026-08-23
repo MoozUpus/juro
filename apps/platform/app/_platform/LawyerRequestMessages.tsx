@@ -4,19 +4,23 @@
 
 import {
   Bot,
+  CalendarClock,
   CheckSquare2,
   Copy,
+  FileQuestion,
   LoaderCircle,
   LockKeyhole,
   NotebookPen,
   Paperclip,
   Pin,
   PinOff,
+  PhoneCall,
   Reply,
   RotateCcw,
   Search,
   Send,
   Sparkles,
+  WalletCards,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -70,6 +74,44 @@ type InternalNote = {
   authorName: string;
 };
 
+type ChatContext = {
+  requestId: string;
+  caseId: string;
+  consultation: null | {
+    id: string;
+    startsAt: string;
+    endsAt: string;
+    timezone: string;
+    format: "video" | "phone" | "office";
+    status: string;
+    attendanceOutcome: "no_show" | null;
+  };
+  proposal: null | {
+    id: string;
+    status: string;
+    titleRu: string;
+    titleUz: string;
+    scopeRu: string;
+    scopeUz: string;
+    durationDescription: string;
+    lawyerBaseAmountMinor: number;
+    currency: string;
+  };
+  externalOffer: null | {
+    id: string;
+    status: string;
+    scopeDescription: string;
+    priceDescription: string;
+    durationDescription: string;
+  };
+  documentRequests: Array<{
+    id: string;
+    title: string;
+    status: "requested" | "provided" | "cancelled";
+    providedDocumentId: string | null;
+  }>;
+};
+
 type AiAssistKind =
   | "draft"
   | "summary"
@@ -104,6 +146,7 @@ export function LawyerRequestMessages({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [notes, setNotes] = useState<InternalNote[]>([]);
+  const [chatContext, setChatContext] = useState<ChatContext | null>(null);
   const [noteBody, setNoteBody] = useState("");
   const [noteDocumentId, setNoteDocumentId] = useState("");
   const [noteBusyId, setNoteBusyId] = useState("");
@@ -125,6 +168,7 @@ export function LawyerRequestMessages({
       role?: "client" | "lawyer";
       typing?: { role: "client" | "lawyer"; expiresAt: string } | null;
       notes?: InternalNote[];
+      context?: ChatContext;
       error?: string;
     };
     if (!response.ok) throw new Error(payload.error || "Ошибка");
@@ -139,6 +183,7 @@ export function LawyerRequestMessages({
     setDocuments(payload.documents || []);
     setOtherTyping(Boolean(payload.typing));
     setNotes(payload.notes || []);
+    setChatContext(payload.context || null);
     if ((payload.unreadCount ?? 0) > 0) {
       const readResponse = await fetch(
         `/api/platform/lawyer-requests/${encodeURIComponent(requestId)}/messages`,
@@ -449,6 +494,48 @@ export function LawyerRequestMessages({
           />
         </label>
       </header>
+      {chatContext && (
+        <aside className="lawyer-chat-context" aria-label={ru ? "Контекст переписки" : "Yozishma konteksti"}>
+          {(chatContext.proposal || chatContext.externalOffer) && (
+            <article>
+              <WalletCards aria-hidden="true" />
+              <div>
+                <strong>{ru ? "Предложение" : "Taklif"}</strong>
+                {chatContext.proposal ? (
+                  <>
+                    <span>{ru ? chatContext.proposal.titleRu : chatContext.proposal.titleUz}</span>
+                    <small>{new Intl.NumberFormat(ru ? "ru-RU" : "uz-UZ").format(chatContext.proposal.lawyerBaseAmountMinor)} {ru ? "сум" : "so‘m"} · {proposalStatus(chatContext.proposal.status, ru)}</small>
+                  </>
+                ) : chatContext.externalOffer ? (
+                  <>
+                    <span>{chatContext.externalOffer.scopeDescription}</span>
+                    <small>{chatContext.externalOffer.priceDescription} · {chatContext.externalOffer.durationDescription}</small>
+                  </>
+                ) : null}
+              </div>
+              {chatContext.proposal && <Link href={`${base}/cases/${encodeURIComponent(chatContext.caseId)}`}>{chatContext.proposal.status === "ACCEPTED" ? (ru ? "Перейти к оплате" : "To‘lovga o‘tish") : (ru ? "Открыть условия" : "Shartlarni ochish")}</Link>}
+            </article>
+          )}
+          {chatContext.consultation && (
+            <article>
+              <CalendarClock aria-hidden="true" />
+              <div>
+                <strong>{ru ? "Консультация" : "Konsultatsiya"}</strong>
+                <span>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(chatContext.consultation.startsAt))}</span>
+                <small>{consultationStatus(chatContext.consultation, ru)}</small>
+              </div>
+              {chatContext.consultation.format === "video" && ["confirmed", "in_progress"].includes(chatContext.consultation.status) && <Link href={`${base}/consultations/call/${encodeURIComponent(chatContext.consultation.id)}`}><PhoneCall aria-hidden="true" />{ru ? "Открыть звонок" : "Qo‘ng‘iroqni ochish"}</Link>}
+            </article>
+          )}
+          {chatContext.documentRequests.slice(0, 2).map((item) => (
+            <article key={item.id}>
+              <FileQuestion aria-hidden="true" />
+              <div><strong>{ru ? "Запрос документа" : "Hujjat so‘rovi"}</strong><span>{item.title}</span><small>{documentRequestStatus(item.status, ru)}</small></div>
+              {item.providedDocumentId && <Link href={`${base}/documents/${encodeURIComponent(item.providedDocumentId)}`}>{ru ? "Открыть" : "Ochish"}</Link>}
+            </article>
+          ))}
+        </aside>
+      )}
       {pinnedMessage && (
         <button
           type="button"
@@ -678,4 +765,36 @@ export function LawyerRequestMessages({
       </form>
     </section>
   );
+}
+
+function proposalStatus(status: string, ru: boolean) {
+  const labels: Record<string, [string, string]> = {
+    PROPOSED: ["Ожидает решения", "Qaror kutilmoqda"],
+    ACCEPTED: ["Условия приняты", "Shartlar qabul qilingan"],
+    FUNDED: ["Демо-оплата подтверждена", "Demo to‘lov tasdiqlangan"],
+    DECLINED: ["Отклонено", "Rad etilgan"],
+    SUPERSEDED: ["Заменено новой версией", "Yangi versiya bilan almashtirilgan"],
+  };
+  return labels[status]?.[ru ? 0 : 1] || status;
+}
+
+function consultationStatus(consultation: NonNullable<ChatContext["consultation"]>, ru: boolean) {
+  if (consultation.attendanceOutcome === "no_show") return ru ? "Не состоялась · неявка" : "O‘tkazilmadi · kelmadi";
+  const labels: Record<string, [string, string]> = {
+    proposed: ["Время предложено", "Vaqt taklif qilingan"],
+    confirmed: ["Подтверждена", "Tasdiqlangan"],
+    in_progress: ["Идёт", "Davom etmoqda"],
+    completed: ["Завершена", "Yakunlangan"],
+    cancelled: ["Отменена", "Bekor qilingan"],
+  };
+  return labels[consultation.status]?.[ru ? 0 : 1] || consultation.status;
+}
+
+function documentRequestStatus(status: ChatContext["documentRequests"][number]["status"], ru: boolean) {
+  const labels: Record<ChatContext["documentRequests"][number]["status"], [string, string]> = {
+    requested: ["Ожидается", "Kutilmoqda"],
+    provided: ["Предоставлен", "Taqdim etilgan"],
+    cancelled: ["Отменён", "Bekor qilingan"],
+  };
+  return labels[status][ru ? 0 : 1];
 }

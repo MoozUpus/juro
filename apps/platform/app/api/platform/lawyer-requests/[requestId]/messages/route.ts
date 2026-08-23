@@ -76,7 +76,7 @@ export const GET = withApiErrors(async function GET(
   }
   const db = requireD1();
   const now = isoNow();
-  const [messages, unread, documents, typing, notes] = await Promise.all([
+  const [messages, unread, documents, typing, notes, consultation, proposal, externalOffer, documentRequests] = await Promise.all([
     db.prepare(
       `SELECT m.id,m.author_role AS authorRole,m.body,m.read_at AS readAt,
         m.created_at AS createdAt,m.reply_to_message_id AS replyToMessageId,
@@ -124,6 +124,29 @@ export const GET = withApiErrors(async function GET(
          ORDER BY n.created_at DESC LIMIT 100`,
       ).bind(requestId, user.id).all()
       : Promise.resolve({ results: [] }),
+    db.prepare(
+      `SELECT id,starts_at AS startsAt,ends_at AS endsAt,timezone,format,status,
+        attendance_outcome AS attendanceOutcome
+       FROM lawyer_consultations WHERE lawyer_request_id=? LIMIT 1`,
+    ).bind(requestId).first(),
+    db.prepare(
+      `SELECT id,status,title_ru AS titleRu,title_uz AS titleUz,
+        scope_ru AS scopeRu,scope_uz AS scopeUz,duration_description AS durationDescription,
+        lawyer_base_amount_minor AS lawyerBaseAmountMinor,currency
+       FROM legal_service_proposals WHERE lawyer_request_id=?
+       ORDER BY version DESC LIMIT 1`,
+    ).bind(requestId).first(),
+    db.prepare(
+      `SELECT id,status,scope_description AS scopeDescription,
+        price_description AS priceDescription,duration_description AS durationDescription
+       FROM lawyer_offers WHERE lawyer_request_id=?
+       ORDER BY version DESC LIMIT 1`,
+    ).bind(requestId).first(),
+    db.prepare(
+      `SELECT id,title,status,provided_document_id AS providedDocumentId
+       FROM lawyer_document_requests WHERE lawyer_request_id=?
+       ORDER BY created_at DESC LIMIT 6`,
+    ).bind(requestId).all(),
   ]);
   return response({
     messages: messages.results,
@@ -132,7 +155,14 @@ export const GET = withApiErrors(async function GET(
     role: participant.role,
     typing: typing ? { role: typing.role, expiresAt: typing.expiresAt } : null,
     notes: notes.results,
-    context: { requestId, caseId: participant.caseId },
+    context: {
+      requestId,
+      caseId: participant.caseId,
+      consultation,
+      proposal,
+      externalOffer,
+      documentRequests: documentRequests.results,
+    },
   });
 });
 

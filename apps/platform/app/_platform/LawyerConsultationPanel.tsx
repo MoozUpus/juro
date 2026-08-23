@@ -16,6 +16,7 @@ type Consultation = {
   timezone: string;
   format: "video" | "phone" | "office";
   status: "proposed" | "confirmed" | "in_progress" | "completed" | "cancelled";
+  attendanceOutcome?: "no_show" | null;
   internalNote?: string | null;
   resultNote?: string | null;
 };
@@ -40,6 +41,7 @@ export function LawyerConsultationPanel({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [observedAt, setObservedAt] = useState(0);
 
   const load = useCallback(async () => {
     const response = await fetch(
@@ -53,6 +55,7 @@ export function LawyerConsultationPanel({
     if (!response.ok) throw new Error(body.error || "Ошибка");
     const next = body.consultations?.[0] || null;
     setConsultation(next);
+    setObservedAt(Date.now());
     if (next && role === "lawyer") {
       setStartsAt(toLocalInput(next.startsAt));
       setEndsAt(toLocalInput(next.endsAt));
@@ -126,7 +129,7 @@ export function LawyerConsultationPanel({
         </div>
         {consultation && (
           <span data-status={consultation.status}>
-            {statusLabel(consultation.status, ru)}
+            {statusLabel(consultation, ru, observedAt)}
           </span>
         )}
       </header>
@@ -147,7 +150,7 @@ export function LawyerConsultationPanel({
           </span>
         </div>
       )}
-      {consultation?.status === "completed" && consultation.resultNote && (
+      {consultation?.status === "completed" && !consultation.attendanceOutcome && consultation.resultNote && (
         <div className="lawyer-consultation-result">
           <strong>{ru ? "Итог консультации" : "Konsultatsiya yakuni"}</strong>
           <p>{consultation.resultNote}</p>
@@ -203,6 +206,16 @@ export function LawyerConsultationPanel({
               >
                 {ru ? "Отменить" : "Bekor qilish"}
               </button>
+              {Date.parse(consultation.startsAt) <= observedAt && (
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void mutate({ action: "no_show" })}
+                >
+                  {ru ? "Отметить неявку" : "Kelmaganini belgilash"}
+                </button>
+              )}
             </div>
           )}
           {consultation?.status === "in_progress" && (
@@ -230,7 +243,8 @@ export function LawyerConsultationPanel({
           )}
           {(!consultation ||
             consultation.status === "proposed" ||
-            consultation.status === "cancelled") && (
+            consultation.status === "cancelled" ||
+            (consultation.status === "completed" && consultation.attendanceOutcome === "no_show")) && (
             <form onSubmit={(event) => void propose(event)}>
               <div>
                 <label>
@@ -310,7 +324,13 @@ function formatTime(value: string, locale: PlatformLocale) {
     timeZone: "Asia/Tashkent",
   }).format(new Date(value));
 }
-function statusLabel(status: Consultation["status"], ru: boolean) {
+function statusLabel(consultation: Consultation, ru: boolean, observedAt: number) {
+  if (consultation.attendanceOutcome === "no_show") {
+    return ru ? "Не состоялась · неявка" : "O‘tkazilmadi · kelmadi";
+  }
+  if (consultation.status === "confirmed" && Date.parse(consultation.startsAt) > observedAt) {
+    return ru ? "Предстоящая" : "Kutilayotgan";
+  }
   const labels: Record<Consultation["status"], [string, string]> = {
     proposed: ["Ожидает подтверждения", "Tasdiq kutilmoqda"],
     confirmed: ["Подтверждена", "Tasdiqlangan"],
@@ -318,7 +338,7 @@ function statusLabel(status: Consultation["status"], ru: boolean) {
     completed: ["Завершена", "Yakunlangan"],
     cancelled: ["Отменена", "Bekor qilingan"],
   };
-  return labels[status][ru ? 0 : 1];
+  return labels[consultation.status][ru ? 0 : 1];
 }
 function formatLabel(format: Consultation["format"], ru: boolean) {
   const labels: Record<Consultation["format"], [string, string]> = {

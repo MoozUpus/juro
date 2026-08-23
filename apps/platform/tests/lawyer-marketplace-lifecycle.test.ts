@@ -106,7 +106,9 @@ test("consultation transitions are participant-scoped, audited and return a real
   assert.match(route, /!isClient \|\| existing\.status !== "proposed"/);
   assert.match(route, /!isLawyer \|\| !\["confirmed", "in_progress"\]\.includes/);
   assert.match(route, /resultNote: z\.string\(\)\.trim\(\)\.min\(1\)\.max\(4_000\)/);
-  assert.match(route, /lawyer_consultation_\$\{status\}/);
+  assert.match(route, /lawyer_consultation_\$\{eventStatus\}/);
+  assert.match(route, /transition === "no_show"/);
+  assert.match(route, /attendance_outcome/);
   assert.match(route, /CASE WHEN \?='completed' THEN \? ELSE result_note END/);
 });
 

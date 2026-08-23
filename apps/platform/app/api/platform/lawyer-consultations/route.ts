@@ -16,7 +16,7 @@ const consultationInput = z.discriminatedUnion("action", [
     internalNote: z.string().trim().max(1_000).optional(),
   }),
   z.object({
-    action: z.enum(["confirm", "start", "cancel"]),
+    action: z.enum(["confirm", "start", "cancel", "no_show"]),
     requestId: z.string().uuid(),
   }),
   z.object({
@@ -84,7 +84,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
   const rows = await requireD1()
     .prepare(
       `SELECT c.id,c.lawyer_request_id AS requestId,c.case_id AS caseId,c.starts_at AS startsAt,
-      c.ends_at AS endsAt,c.timezone,c.format,c.status,
+      c.ends_at AS endsAt,c.timezone,c.format,c.status,c.attendance_outcome AS attendanceOutcome,
       CASE WHEN ?=1 THEN c.internal_note ELSE NULL END AS internalNote,
       c.result_note AS resultNote,p.display_name AS lawyerName,u.full_name AS clientName,
       cs.title AS caseTitle,c.updated_at AS updatedAt
@@ -151,10 +151,10 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const db = requireD1();
   const existing = await db
     .prepare(
-      "SELECT id,status FROM lawyer_consultations WHERE lawyer_request_id=? LIMIT 1",
+      "SELECT id,status,starts_at AS startsAt FROM lawyer_consultations WHERE lawyer_request_id=? LIMIT 1",
     )
     .bind(parsed.data.requestId)
-    .first<{ id: string; status: string }>();
+    .first<{ id: string; status: string; startsAt: string }>();
 
   if (parsed.data.action === "propose") {
     if (
@@ -214,7 +214,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
          VALUES (?,?,?,?,?,?,?,'Asia/Tashkent',?,'proposed',?,?,?)
          ON CONFLICT(lawyer_request_id) DO UPDATE SET starts_at=excluded.starts_at,ends_at=excluded.ends_at,
            timezone=excluded.timezone,format=excluded.format,status='proposed',internal_note=excluded.internal_note,
-           result_note=NULL,updated_at=excluded.updated_at`,
+           result_note=NULL,attendance_outcome=NULL,updated_at=excluded.updated_at`,
         )
         .bind(
           id,
@@ -334,6 +334,18 @@ export const POST = withApiErrors(async function POST(request: Request) {
       409,
     );
   }
+  if (
+    transition === "no_show" &&
+    (!isLawyer || existing.status !== "confirmed" || existing.startsAt > now)
+  ) {
+    return response(
+      {
+        code: "INVALID_CONSULTATION_TRANSITION",
+        error: "Отметить неявку можно только после начала подтверждённой консультации.",
+      },
+      409,
+    );
+  }
   const status =
     transition === "confirm"
       ? "confirmed"
@@ -342,15 +354,17 @@ export const POST = withApiErrors(async function POST(request: Request) {
         : transition === "cancel"
           ? "cancelled"
           : "completed";
+  const eventStatus = transition === "no_show" ? "no_show" : status;
   const recipientUserId = isLawyer ? handoff.clientUserId : handoff.lawyerUserId;
   await db.batch([
     db
       .prepare(
-        "UPDATE lawyer_consultations SET status=?,result_note=CASE WHEN ?='completed' THEN ? ELSE result_note END,updated_at=? WHERE id=?",
+        "UPDATE lawyer_consultations SET status=?,attendance_outcome=CASE WHEN ?='no_show' THEN 'no_show' ELSE attendance_outcome END,result_note=CASE WHEN ?='completed' THEN ? ELSE result_note END,updated_at=? WHERE id=?",
       )
       .bind(
         status,
-        status,
+        transition,
+        transition,
         parsed.data.action === "complete" ? parsed.data.resultNote : null,
         now,
         existing.id,
@@ -366,7 +380,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         handoff.workspaceId,
         user.id,
         existing.id,
-        `lawyer_consultation_${status}`,
+        `lawyer_consultation_${eventStatus}`,
         JSON.stringify({ requestId: parsed.data.requestId }),
         now,
       ),
@@ -378,7 +392,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       crypto.randomUUID(),
       handoff.caseId,
       user.id,
-      `lawyer_consultation_${status}`,
+      `lawyer_consultation_${eventStatus}`,
       JSON.stringify({ requestId: parsed.data.requestId, consultationId: existing.id }),
       now,
     ),
@@ -391,11 +405,18 @@ export const POST = withApiErrors(async function POST(request: Request) {
       recipientUserId,
       recipientUserId,
       existing.id,
-      `lawyer_consultation_${status}`,
-      `Консультация: ${status} / Konsultatsiya: ${status}`,
+      `lawyer_consultation_${eventStatus}`,
+      eventStatus === "no_show"
+        ? "Консультация не состоялась: неявка / Konsultatsiya o‘tkazilmadi: ishtirokchi kelmadi"
+        : `Консультация: ${status} / Konsultatsiya: ${status}`,
       parsed.data.action === "complete" ? parsed.data.resultNote : "",
       now,
     ),
   ]);
-  return response({ ok: true, id: existing.id, status });
+  return response({
+    ok: true,
+    id: existing.id,
+    status,
+    attendanceOutcome: transition === "no_show" ? "no_show" : null,
+  });
 });

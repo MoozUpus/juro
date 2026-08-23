@@ -58,6 +58,13 @@ test("call room is participant-scoped, ephemeral, audited and never records medi
   assert.match(ui, /createOffer\(\{ iceRestart \}\)/);
   assert.match(ui, /peer\.current !== connection/);
   assert.match(ui, /action: "prepare", deviceReadiness: deviceReadiness\.current/);
+  assert.match(ui, /navigator\.mediaDevices\.enumerateDevices\(\)/);
+  assert.match(ui, /deviceId: \{ exact: nextDeviceId \}/);
+  assert.match(ui, /sender\.replaceTrack\(nextTrack\)/);
+  assert.match(ui, /setSinkId\?/);
+  assert.match(ui, /connection\.getStats\(\)/);
+  assert.match(ui, /networkQualityLabel/);
+  assert.match(ui, /Только аудио/);
   assert.doesNotMatch(ui, /MediaRecorder|recording/i);
   assert.match(migration, /FOREIGN KEY \(`consultation_id`\)/);
   assert.match(migration, /CHECK \(`signal_type` IN \('offer','answer','ice','restart'\)\)/);
@@ -83,6 +90,8 @@ test("call reconnect and screen sharing fail closed without leaving capture acti
   assert.match(ui, /Автоматическое переподключение не удалось/);
   assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.lawyer-call-room \.spin\{animation:none\}/);
+  assert.match(styles, /\.lawyer-call-device-controls\{/);
+  assert.match(styles, /@media\(max-width:900px\)\{\.lawyer-call-device-controls/);
 });
 
 test("call room converts browser media failures into actionable RU and UZ guidance", () => {
