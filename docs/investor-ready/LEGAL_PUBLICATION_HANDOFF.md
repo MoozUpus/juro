@@ -1,65 +1,61 @@
 # Legal publication handoff
 
-Status: **owner particulars supplied; explicit RU/UZ content approval pending**.
-This document is an execution checklist, not legal approval and not a
-substitute for review by the project owner's qualified counsel.
+Status: **owner-approved and published in production**. The first genuine
+production registration under this version remains to be observed; no fake
+user was created merely to manufacture acceptance evidence.
 
-## Owner-supplied inputs
+## Owner-approved inputs
 
-The owner supplied the following publication candidate values on 23 August
-2026. They are now present in the repository candidate, but that candidate
-remains `draft` until the owner explicitly approves all five RU and UZ editions:
+On 23 August 2026 the owner supplied the publication particulars and then
+explicitly approved the RU and UZ editions of Terms, Privacy Policy, Cookies
+Policy, AI Usage Rules and Personal Data Processing Notice version
+`2026-08-23.1` for publication:
 
 1. Public operator designations — `ООО «JURO»`, `«JURO» MChJ` and `«JURO» LLC`.
 2. Public contact — `admin@juro.uz`.
 3. Public address — `Tashkent, Uzbekistan`.
-4. Candidate effective/publication date — 23 August 2026 (`23 августа 2026` /
+4. Effective date — 23 August 2026 (`23 августа 2026` /
    `2026-yil 23-avgust`).
-5. Candidate version label — `2026-08-23.1`.
-6. Still required: explicit approval of both the RU and UZ editions of each
-   document:
-   - Terms;
-   - Privacy Policy;
-   - Cookies Policy;
-   - AI Usage Rules;
-   - Personal Data Processing Notice.
+5. Policy version — `2026-08-23.1`.
 
-## Repository publication procedure
+This record identifies the project owner's approval; it is not independent
+legal advice or a substitute for review by qualified counsel.
 
-1. Completed for the candidate: replace every `{OPERATOR_*}` placeholder in
-   `apps/platform/content/app-legal.ts` with the supplied values.
-2. Completed for the candidate: update each document's visible `updated` value
-   in both locales.
-3. Completed for the candidate: issue `POLICY_VERSION=2026-08-23.1` and set the
-   ten RU/UZ SHA-256 values to the candidate canonical-content digests. The
-   definitions intentionally remain `draft` until explicit approval. After
-   approval, change only this new version to `approved`, recompute its digests
-   because status is canonical content, and never rewrite or relabel an already
-   accepted historical version.
-4. Completed for the candidate: update policy and rendered-HTML tests for the
-   new draft version while preserving assertions that registration records the
-   exact locale, content digest, acceptance method and auth evidence.
-5. Verify that the protected policy registry creates a new versioned row while
-   existing `user_acceptances` continue to reference the historical document
-   version and digest.
-6. Run the focused policy tests, full Platform suite, type-check, lint,
-   production build and artifact validation before deployment.
-7. Deploy only after green CI, then inspect all ten RU/UZ policy renderings in
-   authenticated Chrome and record the deployed Worker version.
+## Publication execution
 
-## Completion evidence
+1. Commit `eb93badc` replaced the shipped `{OPERATOR_*}` placeholders, updated
+   both visible dates and prepared the ten RU/UZ candidate digests.
+2. After the explicit approval, commit `b15e3ea7` changed only the new version
+   to `approved`, recomputed all ten canonical-content SHA-256 values and
+   replaced the visible draft disclosure with an approved-version disclosure.
+3. Focused policy tests passed 3/3; type-check, lint, rendered HTML 33/33, core
+   1070/1070, Cloudflare 201/201 and the production artifact/performance budgets
+   passed locally.
+4. GitHub CI `32637355533` passed Website in 57 seconds and Platform in 5 minutes
+   52 seconds for approved commit `b15e3ea7`.
+5. The reviewed production deploy script passed dry-run and deployed Platform
+   Worker `c90f5dd6-459c-4358-9ccd-3316a45e6aab` at 100% traffic. The immediate
+   rollback is `ecabef2f-cd37-40f0-9e20-66803b753f3b`.
+6. All ten live RU/UZ routes returned HTTP 200 with `noindex`, version
+   `2026-08-23.1`, the approved badge and their exact digest. Chrome rendered
+   each locale without horizontal overflow and without the retired placeholder
+   disclosure.
+7. A single atomic production D1 insert published exactly ten append-only
+   `policy_documents` rows with `status=approved`, effective start
+   `2026-08-22T19:00:00.000Z` (23 August in Tashkent) and publication timestamp
+   `2026-08-23T11:58:04.643Z`. Pre/post Time Travel bookmarks are retained in
+   the production evidence record.
+8. Existing `user_acceptances` were unchanged: version `2026-07-24` RU remains
+   4 rows, and `2026-07-26.draft.1` remains 18 RU plus 18 UZ rows. New
+   registrations will reference the pre-published approved rows by exact ID,
+   locale, version, status and digest.
 
-The legal-publication gate is closed only when all of the following are true:
+## Remaining live acceptance observation
 
-- repository search returns no `{OPERATOR_LEGAL_NAME}`, `{OPERATOR_EMAIL}` or
-  `{OPERATOR_ADDRESS}` placeholder in shipped policy content;
-- all ten final RU/UZ policy documents have a new immutable version and matching
-  canonical SHA-256 digest;
-- the visible draft/pre-incorporation disclosure has been replaced only after
-  owner approval;
-- a new registration records the approved mandatory Terms, Privacy and Personal
-  Data versions without changing older acceptance evidence;
-- local validation, GitHub CI, production deployment, HTTP smoke and Chrome
-  rendering evidence pass;
-- the final evidence record identifies who supplied/approved the public values
-  without placing private credentials or unrelated personal data in the repo.
+The registration-path regression test proves that a new email-OTP registration
+records the approved mandatory Terms, Privacy and Personal Data versions with
+their exact digests and separate marketing consent. A genuine production signup
+must still be observed before that browser-level acceptance row is marked
+`VERIFIED`; it must use a real owner-accessible mailbox and remain explicitly
+synthetic/demo if created for QA. Historical acceptance evidence must not be
+rewritten, relabelled or deleted.

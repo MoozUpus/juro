@@ -136,14 +136,27 @@ AI/note boundaries at 1521/1521 pixels without overflow. Chrome itself blocked
 the Client profile and protected call-route navigation with
 `ERR_BLOCKED_BY_CLIENT`; the deployed hashed call asset proves device enumeration,
 speaker switching, WebRTC stats, network-quality and audio-only code, but this
-release does not mislabel that artifact check as a new live device-selector pass.
+release did not mislabel that artifact check as a new live device-selector pass.
+A later authenticated Client replay opened the same protected production room,
+enabled the real ASUS FHD webcam and Realtek microphone, rendered the camera,
+microphone and speaker selectors, switched and restored the microphone, switched
+the speaker, and exposed the localized network-quality state. Leaving the room
+released media without submitting an end or no-show mutation.
 
-The later legal-candidate head `eb93badc` passed type-check, lint, rendered HTML
-33/33, core 1070/1070, Cloudflare 201/201 and the production artifact locally.
-Its first full run correctly caught one rendered-HTML assertion pinned to the
-old draft version; the assertion was updated and the full suite then passed.
-GitHub CI `32635956989` passed Website in 51 seconds and Platform in 8 minutes
-21 seconds. The candidate is not deployed while its legal status is `draft`.
+Legal candidate head `eb93badc` passed type-check, lint, rendered HTML 33/33,
+core 1070/1070, Cloudflare 201/201 and the production artifact locally. Its
+first full run correctly caught one rendered-HTML assertion pinned to the old
+draft version; the assertion was updated and the full suite then passed. After
+the owner explicitly approved all five RU and UZ editions, commit `b15e3ea7`
+marked version `2026-08-23.1` approved and issued ten recomputed canonical
+digests. The full local release suite, production artifact and GitHub CI
+`32637355533` passed. Worker `c90f5dd6-459c-4358-9ccd-3316a45e6aab` then took
+100% Platform traffic with `ecabef2f-cd37-40f0-9e20-66803b753f3b` as the
+immediate rollback. All ten live policy routes passed HTTP and Chrome rendering,
+and one atomic D1 insert published exactly ten append-only approved policy rows.
+Existing acceptance counts were unchanged. The first genuine new registration
+under the approved version still needs observation through an owner-accessible
+mailbox; no fake user was created for evidence.
 
 Representative Lawyer production widths passed at 360, 390, 768, 1366 and 1440
 pixels. The public catalogue, Client dashboard and final Admin overview later
@@ -363,8 +376,8 @@ records during the presentation.
    flow from the investor path while its API remains deny-by-default; file upload
    and analysis remain the complete working route. No empty/placeholder CTA or
    unlabelled coming-soon route remains in the scripted demo. Registration
-   policies remain an explicitly versioned preview and cannot be truthfully
-   published without owner approval of the final RU/UZ content.
+   policies were still an explicitly versioned preview at that checkpoint; the
+   later owner-approved production publication is recorded in section 4.
 2. **Investor-doubt pass.** Production D1 confirms one active synthetic trial,
    one pending synthetic profile-deletion request, 12 explicitly simulated demo
    payment runs and two immutable post-`0155` audit-access events. After the
@@ -391,14 +404,14 @@ Worker is live; only its authenticated production Chrome replay remains open.
   no synthetic row is represented as a settled real payment.
 - Full local legal-corpus and dense/vector flags are off. The live release uses
   direct official Lex.uz retrieval/metadata and labels monitoring accordingly.
-- The owner has designated himself as JURO's sole current operator and supplied
-  the publication candidate designations `ООО «JURO»`, `«JURO» MChJ` and
-  `«JURO» LLC`, public contact `admin@juro.uz` and public address
-  `Tashkent, Uzbekistan`. The repository candidate uses 23 August 2026 and
-  version `2026-08-23.1`; all ten RU/UZ digests are locked and placeholder-free.
-  It deliberately remains `draft` because the owner has not yet explicitly
-  approved all five RU and UZ editions. This report does not treat supplied
-  particulars as approval of their legal content.
+- The owner has designated himself as JURO's sole current operator, supplied the
+  public operator particulars, and explicitly approved all five RU and UZ legal
+  editions dated 23 August 2026 under version `2026-08-23.1`. Commit `b15e3ea7`,
+  GitHub CI `32637355533`, Platform Worker
+  `c90f5dd6-459c-4358-9ccd-3316a45e6aab`, ten exact live-page checks and ten
+  append-only production D1 rows establish the approved publication. This is
+  owner approval, not an independent qualified-counsel opinion. A first genuine
+  new-registration acceptance under this version remains to be observed.
 - Native Chrome page zoom is intentionally `NOT TESTED` by the latest explicit
   user instruction. The Client dashboard, 19-route Lawyer suite and fresh-MFA
   Admin data screens passed Windows-scale 150%, and the host was restored to
@@ -417,10 +430,12 @@ Worker is live; only its authenticated production Chrome replay remains open.
   Anthropic synthetic probe is operational with 4,957 ms latency and no safe
   error; the document-analysis probe is operational with 7,923 ms latency and no
   safe error. This proves recovery without retroactively asserting an unobserved
-  account-side root cause. The live content-hashed Admin launch asset contains
-  Manrope and no previous inline Inter declaration.
+  account-side root cause. After the approved-policy deployment, independent app
+  and status-host reads generated at `2026-08-23T11:53:29.582Z` and
+  `2026-08-23T11:53:30.081Z` again returned operational 8/8 with zero active
+  incidents. The live content-hashed Admin launch asset contains Manrope and no
+  previous inline Inter declaration.
 
-Until explicit owner approval of all five RU/UZ legal editions, their gated
-Platform publication, and the pending fresh-MFA Admin-theme Chrome replay are
-closed, this document remains a release-candidate report rather than a blanket
-Definition-of-Done claim.
+Until the first genuine new-registration acceptance under `2026-08-23.1` and
+the pending fresh-MFA Admin-theme Chrome replay are closed, this document remains
+a release-candidate report rather than a blanket Definition-of-Done claim.
