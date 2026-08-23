@@ -6,6 +6,21 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 19:37Z)
+
+The following run `5b52f4c5-94d4-46b2-a13d-ffbd6c3b0904` remained `running`
+after the prior run's retryable catalogue timeout. Current materialized totals
+were 505 canonical documents, 931 language variants, 15,290 distinct current
+provisions and 55,309 indexed current chunks. The checkpoint ledger showed 41
+completed and three queued checkpoints; the ingestion aggregate probe recorded
+2,463 completed, 26,817 queued and one running job while the worker finalized
+its bounded cycle. The failure ledger remained 15 `retrying` and two
+`technically_unavailable` English official-text rows; terminal/dead-letter
+ingestion jobs remained zero. The run lock remained held by the same holder
+and no terminal condition was observed. No transient retry was
+force-completed and no code change or staging redeploy was justified. Release
+floors, queue freeze and all post-ingestion gates remain open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 19:31–19:34Z)
 
 Run `322ca38f-144b-4a21-a806-43871568bdbc` completed at
