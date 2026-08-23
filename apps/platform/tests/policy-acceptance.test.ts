@@ -32,7 +32,7 @@ test("every displayed RU/UZ policy has a locked version and content digest", asy
     );
     for (const policy of registry) {
       assert.equal(policy.documentVersion, "2026-08-23.1");
-      assert.equal(policy.status, "draft");
+      assert.equal(policy.status, "approved");
       assert.match(policy.contentSha256, /^[a-f0-9]{64}$/);
       assert.deepEqual(
         await verifiedPolicyDocument(locale, policy.slug),
@@ -74,7 +74,7 @@ test("registration records exact policy evidence and separates marketing consent
     ).all() as Array<Record<string, unknown>>;
     assert.equal(policies.length, 5);
     assert.ok(policies.every(({ locale }) => locale === "ru"));
-    assert.ok(policies.every(({ status }) => status === "draft"));
+    assert.ok(policies.every(({ status }) => status === "approved"));
     assert.ok(policies.every(({ contentSha256 }) =>
       typeof contentSha256 === "string"
       && /^[a-f0-9]{64}$/.test(contentSha256)

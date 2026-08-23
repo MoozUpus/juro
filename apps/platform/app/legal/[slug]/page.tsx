@@ -51,9 +51,13 @@ export default async function AppLegalPage({
         <p className="app-legal-description">{document.description}</p>
         <div className="app-legal-version">
           <strong>
-            {locale === "ru"
-              ? "Проект для юридического утверждения"
-              : "Yuridik tasdiqlash uchun loyiha"}
+            {policy.status === "approved"
+              ? locale === "ru"
+                ? "Утверждённая редакция"
+                : "Tasdiqlangan tahrir"
+              : locale === "ru"
+                ? "Проект для юридического утверждения"
+                : "Yuridik tasdiqlash uchun loyiha"}
           </strong>
           <span>
             {locale === "ru" ? "Версия" : "Versiya"}:{" "}
@@ -76,9 +80,13 @@ export default async function AppLegalPage({
       </article>
       <footer>
         <p>
-          {locale === "ru"
-            ? "Эта версия технически зафиксирована, но содержит реквизиты-заглушки и не считается юридически утверждённой. Документы публичного сайта размещены отдельно на juro.uz."
-            : "Ushbu versiya texnik jihatdan qayd etilgan, ammo rekvizit o‘rinbosarlarini o‘z ichiga oladi va yuridik tasdiqlangan hisoblanmaydi. Ommaviy sayt hujjatlari juro.uz saytida alohida joylashtirilgan."}
+          {policy.status === "approved"
+            ? locale === "ru"
+              ? "Эта утверждённая версия технически зафиксирована контрольной суммой SHA-256. Документы публичного сайта размещены отдельно на juro.uz."
+              : "Ushbu tasdiqlangan versiya SHA-256 nazorat summasi bilan texnik jihatdan qayd etilgan. Ommaviy sayt hujjatlari juro.uz saytida alohida joylashtirilgan."
+            : locale === "ru"
+              ? "Эта версия технически зафиксирована, но не считается юридически утверждённой. Документы публичного сайта размещены отдельно на juro.uz."
+              : "Ushbu versiya texnik jihatdan qayd etilgan, ammo yuridik tasdiqlangan hisoblanmaydi. Ommaviy sayt hujjatlari juro.uz saytida alohida joylashtirilgan."}
         </p>
       </footer>
     </main>
