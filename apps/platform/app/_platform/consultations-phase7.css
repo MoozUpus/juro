@@ -149,7 +149,21 @@
 .lawyer-case-access { padding: 13px; border: 1px solid #b9d7c1; border-radius: 11px; background: #edf8f1; color: #174b35; }
 .lawyer-case-access p { margin: 5px 0 0; line-height: 1.5; }
 .lawyer-request-privacy { margin: 0; color: #5d4d2d; font-size: 13px; line-height: 1.5; }
-@media (max-width: 620px) { .lawyer-requests > header { padding: 18px; } .lawyer-conflict-actions button { width: 100%; justify-content: center; } }
+.lawyer-request-decision { display:grid; gap:.85rem; padding:1rem; border:1px solid color-mix(in srgb,var(--brand-gold,#be974f) 42%,var(--border-default,#d7dde4)); border-radius:.85rem; background:color-mix(in srgb,var(--brand-gold,#be974f) 7%,var(--surface-raised,#fff)); color:var(--text-primary,#172633); }
+.lawyer-request-decision small { color:var(--brand-gold-text,#87631f); font-size:.7rem; font-weight:850; letter-spacing:.06em; text-transform:uppercase; }
+.lawyer-request-decision h2 { margin:.2rem 0 0; font-size:1rem; }
+.lawyer-request-decision p { margin:.3rem 0 0; color:var(--text-muted,#52616f); font-size:.82rem; line-height:1.5; }
+.lawyer-request-decision>label { display:grid; gap:.35rem; color:var(--text-primary,#172633); font-size:.78rem; font-weight:780; }
+.lawyer-request-decision textarea { min-height:5rem; width:100%; padding:.65rem .7rem; border:1px solid var(--border-strong,#abb4bc); border-radius:.6rem; background:var(--surface-raised,#fff); color:var(--text-primary,#172633); resize:vertical; font:inherit; }
+.lawyer-request-decision-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.55rem; }
+.lawyer-request-decision-actions button { display:inline-flex; min-height:44px; align-items:center; justify-content:center; gap:.4rem; padding:0 .8rem; border:0; border-radius:.6rem; background:var(--brand-navy,#062844); color:#fff; font:inherit; font-weight:800; cursor:pointer; }
+.lawyer-request-decision-actions button.secondary { border:1px solid var(--border-strong,#9ba8b2); background:var(--surface-raised,#fff); color:var(--text-primary,#172633); }
+.lawyer-request-decision-actions button.danger { border:1px solid color-mix(in srgb,#9b3131 70%,var(--border-default,#d7dde4)); background:var(--surface-raised,#fff); color:#9b3131; }
+.lawyer-request-decision-actions button:disabled { cursor:not-allowed; opacity:.55; }
+.lawyer-request-decision textarea:focus-visible,.lawyer-request-decision-actions button:focus-visible { outline:3px solid var(--brand-gold-text,#87631f); outline-offset:3px; }
+.lawyer-request-decline-confirm { display:flex; flex-wrap:wrap; align-items:center; gap:.55rem; flex-basis:100%; padding:.65rem; border-radius:.6rem; background:color-mix(in srgb,#9b3131 8%,var(--surface-raised,#fff)); }
+.lawyer-request-decline-confirm strong { margin-inline-end:auto; font-size:.78rem; }
+@media (max-width: 620px) { .lawyer-requests > header { padding: 18px; } .lawyer-conflict-actions button,.lawyer-request-decision-actions>button,.lawyer-request-decline-confirm button { width: 100%; justify-content: center; } .lawyer-request-decline-confirm strong { width:100%; } }
 
 .lawyer-offer-card { display: grid; gap: 5px; width: min(100%, 680px); padding: 14px; border: 1px solid #d8c497; border-radius: 12px; background: #fff8e9; color: #4e3e21; }
 .lawyer-offer-card p { margin: 0; line-height: 1.5; }

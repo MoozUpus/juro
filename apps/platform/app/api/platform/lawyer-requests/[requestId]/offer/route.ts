@@ -51,7 +51,7 @@ export const POST = withApiErrors(async function POST(request: Request, context:
      FROM lawyer_requests r
      JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved' AND p.marketplace_status='public_approved'
      JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
-     WHERE r.id=? AND r.status IN ('access_granted','offer_proposed') LIMIT 1`,
+     WHERE r.id=? AND r.status IN ('accepted','offer_proposed','offer_declined') LIMIT 1`,
   ).bind(user.id, user.id, new Date().toISOString(), requestId).first<{ id: string; workspaceId: string }>();
   if (!handoff) return response({ code: "REQUEST_UNAVAILABLE", error: lawyerOfferError(locale, "REQUEST_UNAVAILABLE") }, 404);
 
@@ -62,7 +62,7 @@ export const POST = withApiErrors(async function POST(request: Request, context:
     db.prepare(
       "INSERT INTO lawyer_offers (id,lawyer_request_id,version,status,scope_description,price_description,duration_description,created_by_user_id,created_at,updated_at) VALUES (?, ?, COALESCE((SELECT MAX(version)+1 FROM lawyer_offers WHERE lawyer_request_id=?),1), 'proposed', ?, ?, ?, ?, ?, ?)",
     ).bind(offerId, handoff.id, handoff.id, parsed.data.scopeDescription, parsed.data.priceDescription, parsed.data.durationDescription, user.id, now, now),
-    db.prepare("UPDATE lawyer_requests SET status='offer_proposed',updated_at=? WHERE id=? AND status IN ('access_granted','offer_proposed','offer_accepted')").bind(now, handoff.id),
+    db.prepare("UPDATE lawyer_requests SET status='offer_proposed',updated_at=? WHERE id=? AND status IN ('accepted','offer_proposed','offer_declined')").bind(now, handoff.id),
     db.prepare(
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_offer',?,'lawyer_offer_proposed',?,?)",
     ).bind(crypto.randomUUID(), handoff.workspaceId, user.id, offerId, JSON.stringify({ requestId: handoff.id }), now),

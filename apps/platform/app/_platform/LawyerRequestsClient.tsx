@@ -4,6 +4,7 @@
 
 import {
   LoaderCircle,
+  MessageSquareText,
   ShieldCheck,
   ShieldX,
   UserRoundCheck,
@@ -59,6 +60,8 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
   const [actionId, setActionId] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [informationDrafts, setInformationDrafts] = useState<Record<string, string>>({});
+  const [declineConfirmId, setDeclineConfirmId] = useState("");
   const [offerDrafts, setOfferDrafts] = useState<
     Record<
       string,
@@ -143,6 +146,47 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
     }
   }
 
+  async function reviewRequest(
+    item: AssignedRequest,
+    decision: "accept" | "request_information" | "decline",
+  ) {
+    setActionId(item.id);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/platform/lawyer-requests/${encodeURIComponent(item.id)}/decision`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+          body: JSON.stringify({
+            decision,
+            locale,
+            ...(decision === "request_information"
+              ? { message: informationDrafts[item.id]?.trim() }
+              : {}),
+          }),
+        },
+      );
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Ошибка");
+      setMessage(decision === "accept"
+        ? (ru ? "Заявка принята. Рабочие инструменты открыты." : "So‘rov qabul qilindi. Ish vositalari ochildi.")
+        : decision === "request_information"
+          ? (ru ? "Запрос сведений отправлен клиенту в защищённый чат." : "Ma’lumot so‘rovi mijozga himoyalangan chatda yuborildi.")
+          : (ru ? "Заявка отклонена, доступ к материалам закрыт." : "So‘rov rad etildi, materiallarga kirish yopildi."));
+      setDeclineConfirmId("");
+      if (decision === "request_information") {
+        setInformationDrafts((current) => ({ ...current, [item.id]: "" }));
+      }
+      await load();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setActionId("");
+    }
+  }
+
   async function submitOffer(
     event: FormEvent<HTMLFormElement>,
     item: AssignedRequest,
@@ -211,7 +255,10 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
         <LoaderCircle className="spin" />
       ) : requests.length ? (
         <div className="lawyer-request-list">
-          {requests.map((item) => (
+          {requests.map((item) => {
+            const professionalWorkflow = professionalWorkflowOpen(item.status);
+            const decisionPending = ["access_granted", "needs_information"].includes(item.status);
+            return (
             <article id={`request-${item.id}`} key={item.id}>
               <div className="lawyer-request-summary">
                 <strong>{lawyerRequestStatus(item.status, ru)}</strong>
@@ -278,14 +325,76 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                     </p>
                     {item.caseDescription && <p>{item.caseDescription}</p>}
                   </div>
-                  <LawyerConsultationPanel
+                  {decisionPending && (
+                    <section className="lawyer-request-decision" aria-labelledby={`decision-${item.id}`}>
+                      <div>
+                        <small>JURO · {ru ? "решение юриста" : "yurist qarori"}</small>
+                        <h2 id={`decision-${item.id}`}>
+                          {item.status === "needs_information"
+                            ? (ru ? "Ожидаются сведения клиента" : "Mijoz ma’lumoti kutilmoqda")
+                            : (ru ? "Примите решение по заявке" : "So‘rov bo‘yicha qaror qiling")}
+                        </h2>
+                        <p>
+                          {ru
+                            ? "Принятие откроет рабочие инструменты. Если данных недостаточно, задайте конкретный вопрос; отклонение немедленно закроет ваш доступ к делу."
+                            : "Qabul qilish ish vositalarini ochadi. Ma’lumot yetarli bo‘lmasa, aniq savol bering; rad etish ishga kirishni darhol yopadi."}
+                        </p>
+                      </div>
+                      <label>
+                        {ru ? "Какие сведения нужны" : "Qanday ma’lumot kerak"}
+                        <textarea
+                          minLength={3}
+                          maxLength={2000}
+                          value={informationDrafts[item.id] || ""}
+                          placeholder={ru ? "Например: уточните дату и срок исполнения обязательства" : "Masalan: majburiyat sanasi va muddatini aniqlashtiring"}
+                          onChange={(event) => setInformationDrafts((current) => ({
+                            ...current,
+                            [item.id]: event.target.value,
+                          }))}
+                        />
+                      </label>
+                      <div className="lawyer-request-decision-actions">
+                        <button type="button" disabled={actionId === item.id} onClick={() => void reviewRequest(item, "accept")}>
+                          {actionId === item.id ? <LoaderCircle className="spin" /> : <ShieldCheck aria-hidden="true" />}
+                          {ru ? "Принять заявку" : "So‘rovni qabul qilish"}
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={actionId === item.id || (informationDrafts[item.id]?.trim().length || 0) < 3}
+                          onClick={() => void reviewRequest(item, "request_information")}
+                        >
+                          <MessageSquareText aria-hidden="true" />
+                          {ru ? "Запросить сведения" : "Ma’lumot so‘rash"}
+                        </button>
+                        {declineConfirmId === item.id ? (
+                          <span className="lawyer-request-decline-confirm">
+                            <strong>{ru ? "Точно отклонить и закрыть доступ?" : "Rad etib, kirishni yopasizmi?"}</strong>
+                            <button type="button" className="danger" disabled={actionId === item.id} onClick={() => void reviewRequest(item, "decline")}>
+                              <ShieldX aria-hidden="true" />
+                              {ru ? "Да, отклонить" : "Ha, rad etish"}
+                            </button>
+                            <button type="button" className="secondary" disabled={actionId === item.id} onClick={() => setDeclineConfirmId("")}>
+                              {ru ? "Отмена" : "Bekor qilish"}
+                            </button>
+                          </span>
+                        ) : (
+                          <button type="button" className="danger" disabled={actionId === item.id} onClick={() => setDeclineConfirmId(item.id)}>
+                            <ShieldX aria-hidden="true" />
+                            {ru ? "Отклонить заявку" : "So‘rovni rad etish"}
+                          </button>
+                        )}
+                      </div>
+                    </section>
+                  )}
+                  <LawyerPhoneContact requestId={item.id} locale={locale} />
+                  {professionalWorkflow && <LawyerConsultationPanel
                     requestId={item.id}
                     locale={locale}
                     role="lawyer"
-                  />
-                  <LawyerDocumentRequests requestId={item.id} locale={locale} role="lawyer" />
-                  <LawyerPhoneContact requestId={item.id} locale={locale} />
-                  {item.caseId && (
+                  />}
+                  {professionalWorkflow && <LawyerDocumentRequests requestId={item.id} locale={locale} role="lawyer" />}
+                  {professionalWorkflow && item.caseId && (
                     <LawyerServiceProposalForm
                       locale={locale}
                       requestId={item.id}
@@ -307,7 +416,7 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                       </p>
                     </div>
                   )}
-                  {(!item.offerId || item.offerStatus === "declined") && (
+                  {professionalWorkflow && (!item.offerId || item.offerStatus === "declined") && (
                     <form
                       className="lawyer-offer-form"
                       onSubmit={(event) => void submitOffer(event, item)}
@@ -428,7 +537,7 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                 />
               )}
             </article>
-          ))}
+          );})}
         </div>
       ) : (
         <div className="consult-empty">
@@ -469,9 +578,27 @@ function lawyerRequestStatus(status: string, ru: boolean) {
       "Ish egasining qarori kutilmoqda",
     ],
     access_granted: ["Доступ к делу предоставлен", "Ishga ruxsat berildi"],
+    needs_information: ["Запрошены сведения клиента", "Mijoz ma’lumoti so‘raldi"],
+    declined: ["Заявка отклонена", "So‘rov rad etildi"],
     access_revoked: ["Доступ отозван", "Ruxsat bekor qilindi"],
     conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi"],
     accepted: ["Заявка принята", "So‘rov qabul qilindi"],
+    offer_proposed: ["Условия направлены клиенту", "Shartlar mijozga yuborildi"],
+    offer_accepted: ["Условия приняты", "Shartlar qabul qilindi"],
+    offer_declined: ["Условия отклонены", "Shartlar rad etildi"],
+    service_proposal_proposed: ["Предложение услуги направлено", "Xizmat taklifi yuborildi"],
+    completed: ["Работа завершена", "Ish yakunlandi"],
   };
   return labels[status]?.[ru ? 0 : 1] || status;
+}
+
+function professionalWorkflowOpen(status: string) {
+  return [
+    "accepted",
+    "offer_proposed",
+    "offer_accepted",
+    "offer_declined",
+    "service_proposal_proposed",
+    "completed",
+  ].includes(status);
 }

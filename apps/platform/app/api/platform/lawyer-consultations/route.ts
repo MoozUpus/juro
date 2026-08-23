@@ -32,6 +32,7 @@ type Handoff = {
   clientUserId: string;
   lawyerProfileId: string;
   lawyerUserId: string;
+  requestStatus: string;
   profileStatus: string;
   marketplaceStatus: string;
   grantId: string | null;
@@ -49,6 +50,7 @@ async function handoffForRequest(requestId: string): Promise<Handoff | null> {
   return requireD1()
     .prepare(
       `SELECT r.workspace_id AS workspaceId,r.case_id AS caseId,r.requester_user_id AS clientUserId,
+      r.status AS requestStatus,
       p.id AS lawyerProfileId,p.user_id AS lawyerUserId,p.status AS profileStatus,
       p.marketplace_status AS marketplaceStatus,g.id AS grantId
      FROM lawyer_requests r
@@ -160,6 +162,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     if (
       !isLawyer ||
       !handoff.grantId ||
+      !["accepted", "offer_proposed", "offer_accepted", "offer_declined", "service_proposal_proposed"].includes(handoff.requestStatus) ||
       handoff.profileStatus !== "public_approved" ||
       handoff.marketplaceStatus !== "public_approved"
     ) {

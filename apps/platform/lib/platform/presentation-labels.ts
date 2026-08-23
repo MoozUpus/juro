@@ -20,11 +20,14 @@ const platformStatusLabels: Record<string, LocalizedValue> = {
   conflict_check_pending: ["Требуется проверка конфликта", "Manfaatlar to‘qnashuvini tekshirish kerak"],
   awaiting_user_consent: ["Ожидается решение клиента", "Mijozning qarori kutilmoqda"],
   access_granted: ["Доступ предоставлен", "Ruxsat berilgan"],
+  needs_information: ["Ожидаются сведения клиента", "Mijoz ma’lumoti kutilmoqda"],
+  declined: ["Заявка отклонена", "So‘rov rad etilgan"],
   access_revoked: ["Доступ отозван", "Ruxsat bekor qilingan"],
   conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi"],
   offer_proposed: ["Условия направлены клиенту", "Shartlar mijozga yuborilgan"],
   offer_accepted: ["Условия приняты", "Shartlar qabul qilingan"],
   offer_declined: ["Условия отклонены", "Shartlar rad etilgan"],
+  service_proposal_proposed: ["Предложение услуги направлено", "Xizmat taklifi yuborilgan"],
 };
 
 const documentStatusLabels: Record<string, LocalizedValue> = {

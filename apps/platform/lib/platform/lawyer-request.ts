@@ -33,6 +33,20 @@ export const lawyerAccessGrantSchema = z.object({
   locale: localizedLocale,
 }).strict();
 
+export const lawyerRequestDecisionSchema = z.object({
+  decision: z.enum(["accept", "request_information", "decline"]),
+  message: z.string().trim().min(3).max(2_000).optional(),
+  locale: localizedLocale,
+}).strict().superRefine((value, context) => {
+  if (value.decision === "request_information" && !value.message) {
+    context.addIssue({
+      code: "custom",
+      path: ["message"],
+      message: "INFORMATION_REQUEST_MESSAGE_REQUIRED",
+    });
+  }
+});
+
 export function localizedHandoffError(locale: "ru" | "uz", code: string) {
   const ru = locale === "ru";
   const messages: Record<string, string> = {
@@ -42,6 +56,8 @@ export function localizedHandoffError(locale: "ru" | "uz", code: string) {
     REQUEST_UNAVAILABLE: ru ? "Заявка недоступна." : "So‘rov mavjud emas.",
     CONFLICT_REQUIRED: ru ? "Сначала необходим положительный conflict check." : "Avval ijobiy manfaatlar to‘qnashuvi tekshiruvi talab qilinadi.",
     GRANT_EXISTS: ru ? "Доступ к этому делу уже предоставлен." : "Bu ishga kirish huquqi allaqachon berilgan.",
+    DECISION_UNAVAILABLE: ru ? "Решение по этой заявке уже недоступно." : "Bu so‘rov bo‘yicha qaror endi mavjud emas.",
+    DECISION_LOCKED: ru ? "Заявку нельзя отклонить после предложения или назначения консультации." : "Taklif yoki maslahat tayinlangandan keyin so‘rovni rad etib bo‘lmaydi.",
     INVALID_INPUT: ru ? "Проверьте введённые данные." : "Kiritilgan ma’lumotlarni tekshiring.",
   };
   return messages[code] ?? (ru ? "Не удалось выполнить действие." : "Amalni bajarib bo‘lmadi.");

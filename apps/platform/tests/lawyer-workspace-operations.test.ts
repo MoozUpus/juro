@@ -244,6 +244,10 @@ test("lawyer task and document request routes stay CSRF, grant, tenant and audit
   const documentRoute = readFileSync(new URL("../app/api/platform/lawyer-document-requests/route.ts", import.meta.url), "utf8");
   const messageRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/[requestId]/messages/route.ts", import.meta.url), "utf8");
   const consultationRoute = readFileSync(new URL("../app/api/platform/lawyer-consultations/route.ts", import.meta.url), "utf8");
+  const decisionRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/[requestId]/decision/route.ts", import.meta.url), "utf8");
+  const accessGrantRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/[requestId]/access-grant/route.ts", import.meta.url), "utf8");
+  const offerRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/[requestId]/offer/route.ts", import.meta.url), "utf8");
+  const serviceProposalRoute = readFileSync(new URL("../app/api/cases/[caseId]/proposals/route.ts", import.meta.url), "utf8");
   const workspaceRoute = readFileSync(new URL("../app/api/platform/lawyer-workspace/route.ts", import.meta.url), "utf8");
   const caseTasksRoute = readFileSync(new URL("../app/api/platform/cases/[caseId]/tasks/route.ts", import.meta.url), "utf8");
   const permissions = readFileSync(new URL("../lib/document-builder/permissions/index.ts", import.meta.url), "utf8");
@@ -283,6 +287,18 @@ test("lawyer task and document request routes stay CSRF, grant, tenant and audit
   assert.match(consultationRoute, /\? "in_progress"/u);
   assert.match(consultationRoute, /case_events/u);
   assert.match(consultationRoute, /INSERT INTO notifications/u);
+  assert.match(consultationRoute, /handoff\.requestStatus/u);
+  assert.match(consultationRoute, /"accepted", "offer_proposed"/u);
+  assert.match(decisionRoute, /assertSafeWrite\(request\)/u);
+  assert.match(decisionRoute, /decideLawyerRequest/u);
+  assert.match(decisionRoute, /LawyerRequestDecisionError/u);
+  assert.match(accessGrantRoute, /'access_granted','needs_information','accepted'/u);
+  assert.match(accessGrantRoute, /status NOT IN \('access_revoked','conflict_declined','declined'\)/u);
+  assert.doesNotMatch(offerRoute, /r\.status IN \('access_granted','offer_proposed'\)/u);
+  assert.match(offerRoute, /r\.status IN \('accepted','offer_proposed','offer_declined'\)/u);
+  assert.match(serviceProposalRoute, /r\.status IN \('accepted','service_proposal_proposed'\)/u);
+  assert.match(serviceProposalRoute, /lp\.status='public_approved'/u);
+  assert.match(serviceProposalRoute, /g\.expires_at IS NULL OR g\.expires_at>\?/u);
   assert.match(workspaceRoute, /CASE WHEN t\.owner_user_id=\? AND t\.plan_step_id IS NULL/u);
   assert.match(workspaceRoute, /lawyer_task_comments/u);
   assert.match(workspaceRoute, /ownDocuments/u);
@@ -311,6 +327,11 @@ test("lawyer workspace UI exposes real task actions, document requests and docum
   assert.match(documentRequests, /action: "provide"/u);
   assert.match(documentRequests, /action: "cancel"/u);
   assert.match(assigned, /role="lawyer"/u);
+  assert.match(assigned, /\/decision/u);
+  assert.match(assigned, /request_information/u);
+  assert.match(assigned, /Принять заявку/u);
+  assert.match(assigned, /Точно отклонить и закрыть доступ/u);
+  assert.match(assigned, /professionalWorkflowOpen/u);
   assert.match(client, /role="client"/u);
   assert.match(workspace, /type="datetime-local"/u);
   assert.match(clientCase, /case-workspace-task-comments/u);
@@ -341,6 +362,8 @@ test("lawyer workspace UI exposes real task actions, document requests and docum
   assert.match(workspace, /accepted: \["Заявка принята"/u);
   assert.match(assigned, /accepted: \["Заявка принята"/u);
   assert.match(client, /accepted: \["Заявка принята"/u);
+  assert.match(client, /needs_information: \["Юрист запросил сведения"/u);
+  assert.match(client, /professionalWorkflowOpen/u);
   assert.doesNotMatch(workspace, /demo(?:Client|Task|Matter)|fake(?:Client|Task|Matter)/iu);
 });
 

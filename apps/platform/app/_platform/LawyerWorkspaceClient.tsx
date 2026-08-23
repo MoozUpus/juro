@@ -60,11 +60,14 @@ function statusCopy(status: string, ru: boolean) {
     conflict_check_pending: ["Требуется проверка конфликта", "Manfaatlar to‘qnashuvini tekshirish kerak"],
     awaiting_user_consent: ["Ожидается решение клиента", "Mijozning qarori kutilmoqda"],
     access_granted: ["Доступ к делу предоставлен", "Ishga ruxsat berildi"],
+    needs_information: ["Ожидаются сведения клиента", "Mijoz ma’lumoti kutilmoqda"],
+    declined: ["Заявка отклонена", "So‘rov rad etildi"],
     access_revoked: ["Доступ к делу отозван", "Ishga ruxsat bekor qilindi"],
     conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi"],
     offer_proposed: ["Условия направлены клиенту", "Shartlar mijozga yuborildi"],
     offer_accepted: ["Условия приняты", "Shartlar qabul qilindi"],
     offer_declined: ["Условия отклонены", "Shartlar rad etildi"],
+    service_proposal_proposed: ["Предложение услуги направлено", "Xizmat taklifi yuborildi"],
     accepted: ["Заявка принята", "So‘rov qabul qilindi"],
     completed: ["Работа завершена", "Ish yakunlandi"],
   };
@@ -75,7 +78,7 @@ export function LawyerDashboardClient({ locale, userName }: { locale: PlatformLo
   const ru = locale === "ru";
   const base = usePlatformBasePath();
   const { data, loading, error, referenceTime } = useLawyerWorkspace();
-  const openRequests = data?.requests.filter((item) => !["completed", "conflict_declined", "access_revoked"].includes(item.status)) ?? [];
+  const openRequests = data?.requests.filter((item) => !["completed", "conflict_declined", "access_revoked", "declined"].includes(item.status)) ?? [];
   const nextConsultation = data?.consultations.filter((item) => new Date(item.endsAt).getTime() >= referenceTime && item.status !== "cancelled")[0];
   const dueTasks = data?.tasks.filter((item) => item.dueAt && new Date(item.dueAt).getTime() <= referenceTime + 86_400_000) ?? [];
   return <section className="lawyer-workspace lawyer-dashboard" aria-labelledby="lawyer-dashboard-title">

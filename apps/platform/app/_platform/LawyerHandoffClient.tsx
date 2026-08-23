@@ -629,18 +629,24 @@ export function LawyerHandoffClient({
                       ? "У юриста есть доступ к материалам этого дела."
                       : "Yurist ushbu ish materiallariga ruxsatga ega."}
                   </p>
-                  <LawyerConsultationPanel
+                  {item.status === "access_granted" && <p className="lawyer-request-privacy">
+                    {ru ? "Юрист изучает заявку и ещё не принял её в работу." : "Yurist so‘rovni ko‘rib chiqmoqda va hali ishga qabul qilmagan."}
+                  </p>}
+                  {item.status === "needs_information" && <p className="lawyer-request-privacy">
+                    {ru ? "Юрист запросил дополнительные сведения. Ответьте в защищённом чате ниже." : "Yurist qo‘shimcha ma’lumot so‘radi. Quyidagi himoyalangan chatda javob bering."}
+                  </p>}
+                  {professionalWorkflowOpen(item.status) && <LawyerConsultationPanel
                     requestId={item.id}
                     locale={locale}
                     role="client"
-                  />
-                  <LawyerDocumentRequests requestId={item.id} locale={locale} role="client" />
-                  <ClientServiceProposals
+                  />}
+                  {professionalWorkflowOpen(item.status) && <LawyerDocumentRequests requestId={item.id} locale={locale} role="client" />}
+                  {professionalWorkflowOpen(item.status) && <ClientServiceProposals
                     locale={locale}
                     accountType={accountType}
                     workspaceId={workspaceId}
                     caseId={item.caseId}
-                  />
+                  />}
                   {item.offerId && (
                     <div className="lawyer-offer-card">
                       <strong>{offerLabel(item.offerStatus, ru)}</strong>
@@ -729,9 +735,27 @@ function handoffStatus(status: string, ru: boolean) {
       "Sizning tasdig‘ingiz kerak",
     ],
     access_granted: ["Доступ предоставлен", "Ruxsat berildi"],
+    needs_information: ["Юрист запросил сведения", "Yurist ma’lumot so‘radi"],
+    declined: ["Юрист отклонил заявку", "Yurist so‘rovni rad etdi"],
     access_revoked: ["Доступ отозван", "Ruxsat bekor qilindi"],
     conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi"],
     accepted: ["Заявка принята", "So‘rov qabul qilindi"],
+    offer_proposed: ["Условия направлены", "Shartlar yuborildi"],
+    offer_accepted: ["Условия приняты", "Shartlar qabul qilindi"],
+    offer_declined: ["Условия отклонены", "Shartlar rad etildi"],
+    service_proposal_proposed: ["Предложение услуги получено", "Xizmat taklifi olindi"],
+    completed: ["Работа завершена", "Ish yakunlandi"],
   };
   return labels[status]?.[ru ? 0 : 1] || status;
+}
+
+function professionalWorkflowOpen(status: string) {
+  return [
+    "accepted",
+    "offer_proposed",
+    "offer_accepted",
+    "offer_declined",
+    "service_proposal_proposed",
+    "completed",
+  ].includes(status);
 }

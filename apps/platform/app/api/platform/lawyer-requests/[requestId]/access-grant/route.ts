@@ -80,7 +80,10 @@ export const DELETE = withApiErrors(async function DELETE(request: Request, cont
   await db.batch([
     db.prepare("UPDATE lawyer_access_grants SET revoked_at=?,revoke_reason='user_revoked' WHERE id=? AND revoked_at IS NULL")
       .bind(now, grant.id),
-    db.prepare("UPDATE lawyer_requests SET status='access_revoked',updated_at=? WHERE id=? AND status='access_granted'")
+    db.prepare(`UPDATE lawyer_requests
+      SET status=CASE WHEN status IN ('access_granted','needs_information','accepted') THEN 'access_revoked' ELSE status END,
+        updated_at=?
+      WHERE id=? AND status NOT IN ('access_revoked','conflict_declined','declined')`)
       .bind(now, requestId),
     db.prepare(
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_access_grant',?,'lawyer_case_access_revoked',?,?)",
