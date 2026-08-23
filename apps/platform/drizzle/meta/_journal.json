@@ -1093,6 +1093,13 @@
       "when": 1787418000000,
       "tag": "0155_platform_audit_hash_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1787443200000,
+      "tag": "0156_lawyer_message_workspace",
+      "breakpoints": true
     }
   ]
 }

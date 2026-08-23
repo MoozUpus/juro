@@ -52,8 +52,9 @@ The dedicated host resolves clean routes to existing role-aware platform modules
 | `0153_investor_demo_document_content.sql` | Populated synthetic investor document content |
 | `0154_monitoring_task_sources.sql` | Official-source retention for monitoring-created tasks |
 | `0155_platform_audit_hash_constraints.sql` | D1-safe immutable audit hash constraints |
+| `0156_lawyer_message_workspace.sql` | Request-scoped replies, one persisted pin and bounded typing presence |
 
-The production platform D1 migration pattern includes `0146` through `0155`. The separate legal-corpus Worker intentionally remains bounded through `0145` because these application tables are outside its runtime.
+The production platform D1 migration pattern includes `0146` through `0156`. The separate legal-corpus Worker intentionally remains bounded through `0145` because these application tables are outside its runtime.
 
 ## Verification contract
 

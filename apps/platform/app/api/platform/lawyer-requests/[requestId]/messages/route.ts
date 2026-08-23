@@ -75,13 +75,18 @@ export const GET = withApiErrors(async function GET(
     }, 404);
   }
   const db = requireD1();
-  const [messages, unread, documents] = await Promise.all([
+  const now = isoNow();
+  const [messages, unread, documents, typing] = await Promise.all([
     db.prepare(
       `SELECT m.id,m.author_role AS authorRole,m.body,m.read_at AS readAt,
-        m.created_at AS createdAt,a.document_id AS documentId,
+        m.created_at AS createdAt,m.reply_to_message_id AS replyToMessageId,
+        parent.author_role AS replyAuthorRole,parent.body AS replyBody,
+        m.pinned_at AS pinnedAt,m.pinned_by_user_id AS pinnedByUserId,
+        a.document_id AS documentId,
         d.title AS documentTitle,d.status AS documentStatus,
         a.status AS attachmentStatus
        FROM lawyer_request_messages m
+       LEFT JOIN lawyer_request_messages parent ON parent.id=m.reply_to_message_id
        LEFT JOIN lawyer_request_message_attachments a ON a.message_id=m.id
        LEFT JOIN documents d ON d.id=a.document_id
        WHERE m.lawyer_request_id=? ORDER BY m.created_at ASC,m.id ASC LIMIT 200`,
@@ -101,12 +106,19 @@ export const GET = withApiErrors(async function GET(
          WHERE owner_user_id=? AND workspace_id=? AND archived_at IS NULL
          ORDER BY updated_at DESC LIMIT 100`,
       ).bind(user.id, ownWorkspace.id).all(),
+    db.prepare(
+      `SELECT role,expires_at AS expiresAt
+       FROM lawyer_request_message_typing
+       WHERE lawyer_request_id=? AND user_id<>? AND expires_at>?
+       ORDER BY updated_at DESC LIMIT 1`,
+    ).bind(requestId, user.id, now).first<{ role: "client" | "lawyer"; expiresAt: string }>(),
   ]);
   return response({
     messages: messages.results,
     unreadCount: Number(unread?.count ?? 0),
     documents: documents.results,
     role: participant.role,
+    typing: typing ? { role: typing.role, expiresAt: typing.expiresAt } : null,
   });
 });
 
@@ -140,6 +152,25 @@ export const POST = withApiErrors(async function POST(
   const db = requireD1();
   const now = isoNow();
 
+  if (parsed.data.action === "typing") {
+    if (!parsed.data.typing) {
+      await db.prepare(
+        `DELETE FROM lawyer_request_message_typing
+         WHERE lawyer_request_id=? AND user_id=?`,
+      ).bind(requestId, user.id).run();
+      return response({ ok: true, typing: false });
+    }
+    const expiresAt = new Date(Date.parse(now) + 8_000).toISOString();
+    await db.prepare(
+      `INSERT INTO lawyer_request_message_typing
+        (lawyer_request_id,user_id,role,expires_at,updated_at)
+       VALUES (?,?,?,?,?)
+       ON CONFLICT(lawyer_request_id,user_id) DO UPDATE SET
+         expires_at=excluded.expires_at,updated_at=excluded.updated_at`,
+    ).bind(requestId, user.id, participant.role, expiresAt, now).run();
+    return response({ ok: true, typing: true, expiresAt });
+  }
+
   if (parsed.data.action === "mark_read") {
     const results = await db.batch([
       db.prepare(
@@ -172,6 +203,54 @@ export const POST = withApiErrors(async function POST(
     return response({ ok: true, unreadCount: 0, changed });
   }
 
+  if (parsed.data.action === "pin") {
+    const message = await db.prepare(
+      `SELECT id,pinned_at AS pinnedAt FROM lawyer_request_messages
+       WHERE id=? AND lawyer_request_id=? LIMIT 1`,
+    ).bind(parsed.data.messageId, requestId)
+      .first<{ id: string; pinnedAt: string | null }>();
+    if (!message) {
+      return response({
+        code: "MESSAGE_UNAVAILABLE",
+        error: lawyerRequestMessageError(locale, "MESSAGE_UNAVAILABLE"),
+      }, 404);
+    }
+    const pinnedAt = parsed.data.pinned ? now : null;
+    await db.batch([
+      ...(parsed.data.pinned ? [db.prepare(
+        `UPDATE lawyer_request_messages
+         SET pinned_at=NULL,pinned_by_user_id=NULL
+         WHERE lawyer_request_id=? AND pinned_at IS NOT NULL AND id<>?`,
+      ).bind(requestId, message.id)] : []),
+      db.prepare(
+        `UPDATE lawyer_request_messages
+         SET pinned_at=?,pinned_by_user_id=?
+         WHERE id=? AND lawyer_request_id=?`,
+      ).bind(
+        pinnedAt,
+        parsed.data.pinned ? user.id : null,
+        message.id,
+        requestId,
+      ),
+      db.prepare(
+        `INSERT INTO workspace_audit_events
+          (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
+         VALUES (?,?,?,'lawyer_request_message',?,?,?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        participant.workspaceId,
+        user.id,
+        message.id,
+        parsed.data.pinned
+          ? "lawyer_request_message_pinned"
+          : "lawyer_request_message_unpinned",
+        JSON.stringify({ requestId }),
+        now,
+      ),
+    ]);
+    return response({ ok: true, messageId: message.id, pinnedAt });
+  }
+
   const document = parsed.data.documentId
     ? await (participant.role === "client"
       ? db.prepare(
@@ -197,6 +276,20 @@ export const POST = withApiErrors(async function POST(
       error: lawyerRequestMessageError(locale, "DOCUMENT_UNAVAILABLE"),
     }, 404);
   }
+  const reply = parsed.data.replyToMessageId
+    ? await db.prepare(
+      `SELECT id,author_role AS authorRole,body
+       FROM lawyer_request_messages
+       WHERE id=? AND lawyer_request_id=? LIMIT 1`,
+    ).bind(parsed.data.replyToMessageId, requestId)
+      .first<{ id: string; authorRole: "owner" | "lawyer"; body: string }>()
+    : null;
+  if (parsed.data.replyToMessageId && !reply) {
+    return response({
+      code: "MESSAGE_UNAVAILABLE",
+      error: lawyerRequestMessageError(locale, "MESSAGE_UNAVAILABLE"),
+    }, 404);
+  }
 
   const id = crypto.randomUUID();
   const recipientUserId = participant.role === "client"
@@ -207,9 +300,17 @@ export const POST = withApiErrors(async function POST(
   await db.batch([
     db.prepare(
       `INSERT INTO lawyer_request_messages
-        (id,lawyer_request_id,author_user_id,author_role,body,read_at,created_at)
-       VALUES (?,?,?,?,?,NULL,?)`,
-    ).bind(id, requestId, user.id, authorRole, parsed.data.body, now),
+        (id,lawyer_request_id,author_user_id,author_role,body,read_at,reply_to_message_id,created_at)
+       VALUES (?,?,?,?,?,NULL,?,?)`,
+    ).bind(
+      id,
+      requestId,
+      user.id,
+      authorRole,
+      parsed.data.body,
+      reply?.id ?? null,
+      now,
+    ),
     ...(document && attachmentId ? [
       db.prepare(
         `INSERT INTO lawyer_request_message_attachments
@@ -235,7 +336,12 @@ export const POST = withApiErrors(async function POST(
       participant.workspaceId,
       user.id,
       id,
-      JSON.stringify({ requestId, authorRole, documentId: document?.id ?? null }),
+      JSON.stringify({
+        requestId,
+        authorRole,
+        documentId: document?.id ?? null,
+        replyToMessageId: reply?.id ?? null,
+      }),
       now,
     ),
     db.prepare(
@@ -277,6 +383,11 @@ export const POST = withApiErrors(async function POST(
       documentTitle: document?.title ?? null,
       documentStatus: document?.status ?? null,
       attachmentStatus: document ? "sent" : null,
+      replyToMessageId: reply?.id ?? null,
+      replyAuthorRole: reply?.authorRole ?? null,
+      replyBody: reply?.body ?? null,
+      pinnedAt: null,
+      pinnedByUserId: null,
     },
   }, 201);
 });

@@ -148,6 +148,46 @@ test("0144 keeps request messages immutable and scopes document delivery to the 
   }
 });
 
+test("0156 scopes replies, keeps one persisted pin and bounds typing identity", () => {
+  const { sqlite } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    sqlite.prepare(`INSERT INTO lawyer_request_messages
+      (id,lawyer_request_id,author_user_id,author_role,body,created_at)
+      VALUES ('message-parent-0156','request-ops','owner-ops','owner','Original question',?)`).run(now);
+    sqlite.prepare(`INSERT INTO lawyer_request_messages
+      (id,lawyer_request_id,author_user_id,author_role,body,reply_to_message_id,created_at)
+      VALUES ('message-reply-0156','request-ops','lawyer-ops','lawyer','Scoped reply','message-parent-0156',?)`).run(now);
+    assert.throws(() => sqlite.prepare(`INSERT INTO lawyer_request_messages
+      (id,lawyer_request_id,author_user_id,author_role,body,reply_to_message_id,created_at)
+      VALUES ('message-bad-reply-0156','request-ops','lawyer-ops','lawyer','Bad reply','missing-message',?)`).run(now), /reply scope is invalid/u);
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_request_messages SET reply_to_message_id=NULL WHERE id='message-reply-0156'",
+    ).run(), /content is immutable/u);
+    sqlite.prepare(
+      "UPDATE lawyer_request_messages SET pinned_at=?,pinned_by_user_id='lawyer-ops' WHERE id='message-parent-0156'",
+    ).run(now);
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_request_messages SET pinned_at=?,pinned_by_user_id='owner-ops' WHERE id='message-reply-0156'",
+    ).run(now), /UNIQUE constraint failed/u);
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_request_messages SET pinned_at=NULL WHERE id='message-parent-0156'",
+    ).run(), /pin state is invalid/u);
+    sqlite.prepare(
+      "UPDATE lawyer_request_messages SET pinned_at=NULL,pinned_by_user_id=NULL WHERE id='message-parent-0156'",
+    ).run();
+    sqlite.prepare(`INSERT INTO lawyer_request_message_typing
+      (lawyer_request_id,user_id,role,expires_at,updated_at)
+      VALUES ('request-ops','lawyer-ops','lawyer','2026-08-20T12:00:08.000Z',?)`).run(now);
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_request_message_typing SET role='client' WHERE lawyer_request_id='request-ops' AND user_id='lawyer-ops'",
+    ).run(), /typing identity is immutable/u);
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("lawyer task and document request routes stay CSRF, grant, tenant and audit scoped", () => {
   const taskRoute = readFileSync(new URL("../app/api/platform/lawyer-tasks/route.ts", import.meta.url), "utf8");
   const documentRoute = readFileSync(new URL("../app/api/platform/lawyer-document-requests/route.ts", import.meta.url), "utf8");
@@ -168,6 +208,10 @@ test("lawyer task and document request routes stay CSRF, grant, tenant and audit
   assert.match(documentRoute, /owner_user_id=\? AND workspace_id=\? AND case_id=\?/u);
   assert.match(documentRoute, /status='provided'/u);
   assert.match(messageRoute, /action === "mark_read"/u);
+  assert.match(messageRoute, /action === "typing"/u);
+  assert.match(messageRoute, /action === "pin"/u);
+  assert.match(messageRoute, /reply_to_message_id/u);
+  assert.match(messageRoute, /lawyer_request_message_typing/u);
   assert.match(messageRoute, /lawyer_request_message_attachments/u);
   assert.match(messageRoute, /owner_user_id=\? AND workspace_id=\? AND case_id=\?/u);
   assert.match(messageRoute, /recipient_user_id=\?/u);
@@ -210,8 +254,14 @@ test("lawyer workspace UI exposes real task actions, document requests and docum
   assert.match(clientCase, /case-workspace-task-comments/u);
   assert.match(clientCase, /comment\.authorName/u);
   assert.match(messages, /action: "mark_read"/u);
-  assert.match(messages, /documentId: documentId \|\| undefined/u);
+  assert.match(messages, /documentId: draft\.documentId \|\| undefined/u);
   assert.match(messages, /message\.readAt/u);
+  assert.match(messages, /navigator\.clipboard\.writeText/u);
+  assert.match(messages, /replyToMessageId/u);
+  assert.match(messages, /action: "typing"/u);
+  assert.match(messages, /action: "pin"/u);
+  assert.match(messages, /lawyer-unread-separator/u);
+  assert.match(messages, /Повторить отправку/u);
   assert.match(consultation, /action: "start"/u);
   assert.match(workspace, /document-builder/u);
   assert.match(workspace, /data\?\.ownDocuments\.map/u);
