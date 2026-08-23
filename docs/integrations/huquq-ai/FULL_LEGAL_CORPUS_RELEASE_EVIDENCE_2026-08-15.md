@@ -6,6 +6,23 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 11:52–11:56Z)
+
+Scheduled run `827b94a8-3e1c-45e6-83c1-25929bb2e4dd` completed at
+`2026-08-23T11:55:56.793Z` with `error_code=NULL`. The immediate read-only
+probe recorded 41/44 discovery checkpoints completed and three queued. The
+ingestion ledger contained 2,252 completed and 24,089 queued jobs. No failed,
+terminal or dead-letter ingestion jobs were present.
+
+The failure ledger remained fifteen `retrying` rows and two
+`technically_unavailable` English official-text rows; no retryable result was
+force-completed. Materialized v2 totals reached 419 canonical documents, 803
+language variants, 14,925 distinct current provisions and 53,766 indexed
+current chunks. No code change or redeploy was justified. Release floors,
+checkpoint completion, queue freeze, snapshot, indexed evaluation, Qdrant/D1
+restore and CI gates remain open; production bindings, corpus ingestion,
+feature flags and DNS are unchanged.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 11:48–11:52Z)
 
 Scheduled run `37cd463d-c688-4b48-b69d-901d59a35dcb` completed at
