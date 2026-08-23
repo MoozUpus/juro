@@ -4,7 +4,7 @@ import {
   requireApiUser,
   withApiErrors,
 } from "../../../../../../lib/document-builder/auth/api";
-import { isoNow } from "../../../../../../lib/document-builder/storage/db";
+import { addNotification, isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 import {
   lawyerRequestMessageError,
@@ -76,7 +76,7 @@ export const GET = withApiErrors(async function GET(
   }
   const db = requireD1();
   const now = isoNow();
-  const [messages, unread, documents, typing] = await Promise.all([
+  const [messages, unread, documents, typing, notes] = await Promise.all([
     db.prepare(
       `SELECT m.id,m.author_role AS authorRole,m.body,m.read_at AS readAt,
         m.created_at AS createdAt,m.reply_to_message_id AS replyToMessageId,
@@ -112,6 +112,18 @@ export const GET = withApiErrors(async function GET(
        WHERE lawyer_request_id=? AND user_id<>? AND expires_at>?
        ORDER BY updated_at DESC LIMIT 1`,
     ).bind(requestId, user.id, now).first<{ role: "client" | "lawyer"; expiresAt: string }>(),
+    participant.role === "lawyer"
+      ? db.prepare(
+        `SELECT n.id,n.body,n.document_id AS documentId,d.title AS documentTitle,
+          n.converted_task_id AS convertedTaskId,n.created_at AS createdAt,
+          COALESCE(p.display_name,p.email) AS authorName
+         FROM lawyer_request_internal_notes n
+         JOIN user_profiles p ON p.id=n.author_user_id
+         LEFT JOIN documents d ON d.id=n.document_id
+         WHERE n.lawyer_request_id=? AND n.author_user_id=?
+         ORDER BY n.created_at DESC LIMIT 100`,
+      ).bind(requestId, user.id).all()
+      : Promise.resolve({ results: [] }),
   ]);
   return response({
     messages: messages.results,
@@ -119,6 +131,8 @@ export const GET = withApiErrors(async function GET(
     documents: documents.results,
     role: participant.role,
     typing: typing ? { role: typing.role, expiresAt: typing.expiresAt } : null,
+    notes: notes.results,
+    context: { requestId, caseId: participant.caseId },
   });
 });
 
@@ -249,6 +263,139 @@ export const POST = withApiErrors(async function POST(
       ),
     ]);
     return response({ ok: true, messageId: message.id, pinnedAt });
+  }
+
+  if (parsed.data.action === "note_create") {
+    if (participant.role !== "lawyer") {
+      return response({
+        code: "LAWYER_ONLY",
+        error: lawyerRequestMessageError(locale, "LAWYER_ONLY"),
+      }, 403);
+    }
+    const document = parsed.data.documentId
+      ? await db.prepare(
+        `SELECT id,title FROM documents
+         WHERE id=? AND owner_user_id=? AND workspace_id=? AND archived_at IS NULL
+         LIMIT 1`,
+      ).bind(parsed.data.documentId, user.id, ownWorkspace.id)
+        .first<{ id: string; title: string }>()
+      : null;
+    if (parsed.data.documentId && !document) {
+      return response({
+        code: "DOCUMENT_UNAVAILABLE",
+        error: lawyerRequestMessageError(locale, "DOCUMENT_UNAVAILABLE"),
+      }, 404);
+    }
+    const id = crypto.randomUUID();
+    const author = await db.prepare(
+      "SELECT COALESCE(display_name,email) AS authorName FROM user_profiles WHERE id=? LIMIT 1",
+    ).bind(user.id).first<{ authorName: string }>();
+    await db.batch([
+      db.prepare(
+        `INSERT INTO lawyer_request_internal_notes
+          (id,lawyer_request_id,case_id,author_user_id,body,document_id,converted_task_id,created_at)
+         VALUES (?,?,?,?,?,?,NULL,?)`,
+      ).bind(id, requestId, participant.caseId, user.id, parsed.data.body, document?.id ?? null, now),
+      db.prepare(
+        `INSERT INTO workspace_audit_events
+          (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
+         VALUES (?,?,?,'lawyer_request_internal_note',?,'lawyer_request_internal_note_created',?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        participant.workspaceId,
+        user.id,
+        id,
+        JSON.stringify({ requestId, caseId: participant.caseId, documentId: document?.id ?? null }),
+        now,
+      ),
+    ]);
+    return response({
+      ok: true,
+      note: {
+        id,
+        body: parsed.data.body,
+        documentId: document?.id ?? null,
+        documentTitle: document?.title ?? null,
+        convertedTaskId: null,
+        createdAt: now,
+        authorName: author?.authorName || (locale === "ru" ? "Юрист" : "Yurist"),
+      },
+    }, 201);
+  }
+
+  if (parsed.data.action === "note_to_task") {
+    if (participant.role !== "lawyer") {
+      return response({
+        code: "LAWYER_ONLY",
+        error: lawyerRequestMessageError(locale, "LAWYER_ONLY"),
+      }, 403);
+    }
+    const note = await db.prepare(
+      `SELECT id,body,converted_task_id AS convertedTaskId
+       FROM lawyer_request_internal_notes
+       WHERE id=? AND lawyer_request_id=? AND author_user_id=? LIMIT 1`,
+    ).bind(parsed.data.noteId, requestId, user.id)
+      .first<{ id: string; body: string; convertedTaskId: string | null }>();
+    if (!note || note.convertedTaskId) {
+      return response({
+        code: "NOTE_UNAVAILABLE",
+        error: lawyerRequestMessageError(locale, "NOTE_UNAVAILABLE"),
+      }, note ? 409 : 404);
+    }
+    const taskId = note.id;
+    const dueAt = parsed.data.dueAt ? new Date(parsed.data.dueAt).toISOString() : null;
+    await db.batch([
+      db.prepare(
+        `INSERT INTO tasks
+          (id,workspace_id,case_id,plan_step_id,owner_user_id,title,description,due_at,deadline_type,status,created_at,updated_at,completed_at)
+         VALUES (?,?,?,NULL,?,?,?,?, 'calendar_days','planned',?,?,NULL)`,
+      ).bind(
+        taskId,
+        participant.workspaceId,
+        participant.caseId,
+        user.id,
+        parsed.data.title,
+        note.body.slice(0, 2_000),
+        dueAt,
+        now,
+        now,
+      ),
+      db.prepare(
+        `UPDATE lawyer_request_internal_notes SET converted_task_id=?
+         WHERE id=? AND lawyer_request_id=? AND author_user_id=? AND converted_task_id IS NULL`,
+      ).bind(taskId, note.id, requestId, user.id),
+      db.prepare(
+        `INSERT INTO workspace_audit_events
+          (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
+         VALUES (?,?,?,'task',?,'lawyer_internal_note_converted_to_task',?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        participant.workspaceId,
+        user.id,
+        taskId,
+        JSON.stringify({ requestId, caseId: participant.caseId, noteId: note.id, dueAt }),
+        now,
+      ),
+      db.prepare(
+        `INSERT INTO case_events
+          (id,case_id,actor_user_id,event_type,metadata_json,created_at)
+         VALUES (?,?,?,'lawyer_task_created',?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        participant.caseId,
+        user.id,
+        JSON.stringify({ requestId, taskId, source: "internal_note" }),
+        now,
+      ),
+    ]);
+    await addNotification(
+      participant.clientUserId,
+      null,
+      "lawyer_task_created",
+      locale === "ru" ? "Юрист добавил задачу" : "Yurist vazifa qo‘shdi",
+      parsed.data.title,
+    );
+    return response({ ok: true, task: { id: taskId, status: "planned", dueAt } }, 201);
   }
 
   const document = parsed.data.documentId

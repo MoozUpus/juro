@@ -3,8 +3,12 @@
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated request history is loaded after initial browser render */
 
 import {
+  Bot,
+  CheckSquare2,
   Copy,
   LoaderCircle,
+  LockKeyhole,
+  NotebookPen,
   Paperclip,
   Pin,
   PinOff,
@@ -12,6 +16,7 @@ import {
   RotateCcw,
   Search,
   Send,
+  Sparkles,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -55,6 +60,26 @@ type Draft = {
   replyToMessageId?: string;
 };
 
+type InternalNote = {
+  id: string;
+  body: string;
+  documentId: string | null;
+  documentTitle: string | null;
+  convertedTaskId: string | null;
+  createdAt: string;
+  authorName: string;
+};
+
+type AiAssistKind =
+  | "draft"
+  | "summary"
+  | "facts"
+  | "deadlines"
+  | "questions"
+  | "tasks"
+  | "documents"
+  | "consultation";
+
 export function LawyerRequestMessages({
   requestId,
   locale,
@@ -78,6 +103,13 @@ export function LawyerRequestMessages({
   const [pinningId, setPinningId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [notes, setNotes] = useState<InternalNote[]>([]);
+  const [noteBody, setNoteBody] = useState("");
+  const [noteDocumentId, setNoteDocumentId] = useState("");
+  const [noteBusyId, setNoteBusyId] = useState("");
+  const [aiBusy, setAiBusy] = useState<AiAssistKind | "">("");
+  const [aiKind, setAiKind] = useState<AiAssistKind | null>(null);
+  const [aiResult, setAiResult] = useState("");
   const typingTimer = useRef<number | null>(null);
 
   const load = useCallback(async (quiet = false) => {
@@ -92,6 +124,7 @@ export function LawyerRequestMessages({
       unreadCount?: number;
       role?: "client" | "lawyer";
       typing?: { role: "client" | "lawyer"; expiresAt: string } | null;
+      notes?: InternalNote[];
       error?: string;
     };
     if (!response.ok) throw new Error(payload.error || "Ошибка");
@@ -105,6 +138,7 @@ export function LawyerRequestMessages({
     setMessages(nextMessages);
     setDocuments(payload.documents || []);
     setOtherTyping(Boolean(payload.typing));
+    setNotes(payload.notes || []);
     if ((payload.unreadCount ?? 0) > 0) {
       const readResponse = await fetch(
         `/api/platform/lawyer-requests/${encodeURIComponent(requestId)}/messages`,
@@ -245,6 +279,120 @@ export function LawyerRequestMessages({
     }
   }
 
+  async function saveInternalNote(content = noteBody, linkedDocumentId = noteDocumentId) {
+    const value = content.trim();
+    if (!value) return;
+    setNoteBusyId("new");
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/platform/lawyer-requests/${encodeURIComponent(requestId)}/messages`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+          body: JSON.stringify({
+            action: "note_create",
+            body: value,
+            documentId: linkedDocumentId || undefined,
+            locale,
+          }),
+        },
+      );
+      const payload = await response.json() as { note?: InternalNote; error?: string };
+      if (!response.ok || !payload.note) throw new Error(payload.error || "Ошибка");
+      setNotes((current) => [payload.note!, ...current]);
+      setNoteBody("");
+      setNoteDocumentId("");
+      setNotice(ru ? "Приватная заметка сохранена." : "Shaxsiy qayd saqlandi.");
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setNoteBusyId("");
+    }
+  }
+
+  async function convertNoteToTask(note: InternalNote) {
+    const compact = note.body.replace(/^[-*#\s]+/u, "").split(/\r?\n/u)[0]?.trim() || note.body.trim();
+    const title = compact.length >= 2
+      ? compact.slice(0, 240)
+      : (ru ? `Задача по заметке: ${compact}` : `Qayd bo‘yicha vazifa: ${compact}`).slice(0, 240);
+    setNoteBusyId(note.id);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/platform/lawyer-requests/${encodeURIComponent(requestId)}/messages`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+          body: JSON.stringify({ action: "note_to_task", noteId: note.id, title, locale }),
+        },
+      );
+      const payload = await response.json() as { task?: { id: string }; error?: string };
+      if (!response.ok || !payload.task) throw new Error(payload.error || "Ошибка");
+      setNotes((current) => current.map((item) => item.id === note.id
+        ? { ...item, convertedTaskId: payload.task!.id }
+        : item));
+      setNotice(ru ? "Заметка превращена в задачу по делу." : "Qayd ish vazifasiga aylantirildi.");
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setNoteBusyId("");
+    }
+  }
+
+  async function runAiAssist(kind: AiAssistKind) {
+    const operation: Record<AiAssistKind, string> = ru ? {
+      draft: "Подготовь профессиональный проект ответа клиенту без автоматической отправки.",
+      summary: "Сделай краткую структурированную сводку переписки.",
+      facts: "Извлеки только факты, явно содержащиеся в переписке.",
+      deadlines: "Извлеки даты и сроки; если их нет, так и укажи.",
+      questions: "Сформируй уточняющие вопросы клиенту.",
+      tasks: "Предложи конкретные задачи юриста по этой переписке.",
+      documents: "Найди упомянутые документы и недостающие материалы.",
+      consultation: "Предложи повестку следующей консультации.",
+    } : {
+      draft: "Mijozga professional javob loyihasini avtomatik yubormasdan tayyorla.",
+      summary: "Yozishmaning qisqa tuzilgan xulosasini tayyorla.",
+      facts: "Faqat yozishmada aniq mavjud faktlarni ajrat.",
+      deadlines: "Sana va muddatlarni ajrat; ular bo‘lmasa, shuni ayt.",
+      questions: "Mijoz uchun aniqlashtiruvchi savollar tuz.",
+      tasks: "Ushbu yozishma bo‘yicha yuristning aniq vazifalarini taklif qil.",
+      documents: "Tilga olingan hujjatlar va yetishmayotgan materiallarni top.",
+      consultation: "Keyingi maslahat kun tartibini taklif qil.",
+    };
+    const transcript = messages.slice(-20).map((message) => {
+      const author = message.authorRole === "lawyer" ? "LAWYER" : "CLIENT";
+      return `${author}: ${message.body || `[${message.documentTitle || "document"}]`}`;
+    }).join("\n").slice(-6_000);
+    const question = `${ru
+      ? "Ты — приватный AI-assist юриста JURO. Результат видит только юрист, он никогда не отправляется клиенту автоматически. Не добавляй факты, которых нет в контексте. Любое юридическое утверждение подтверждай только прямой официальной ссылкой Lex.uz."
+      : "Siz JURO yuristining shaxsiy AI yordamchisisiz. Natijani faqat yurist ko‘radi va u mijozga hech qachon avtomatik yuborilmaydi. Kontekstda bo‘lmagan faktlarni qo‘shmang. Har qanday huquqiy da’voni faqat Lex.uz rasmiy havolasi bilan tasdiqlang."}
+\n${operation[kind]}\n\n${ru ? "КОНТЕКСТ ПЕРЕПИСКИ" : "YOZISHMA KONTEKSTI"}:\n${transcript || (ru ? "Сообщений пока нет." : "Hozircha xabarlar yo‘q.")}`;
+    setAiBusy(kind);
+    setAiKind(kind);
+    setAiResult("");
+    setError("");
+    try {
+      const response = await fetch("/api/platform/ai", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+          "idempotency-key": `lawyer-chat-assist-${crypto.randomUUID()}`,
+        },
+        body: JSON.stringify({ question, locale, answerMode: "detailed", reasoningMode: "fast" }),
+      });
+      const payload = await response.json() as { result?: { answer?: string }; error?: string };
+      if (!response.ok || !payload.result?.answer) throw new Error(payload.error || "Ошибка");
+      setAiResult(payload.result.answer);
+      setNotice(ru ? "Приватный AI-проект готов и не отправлен клиенту." : "Shaxsiy AI loyihasi tayyor va mijozga yuborilmadi.");
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setAiBusy("");
+    }
+  }
+
   const ownAuthorRole = role === "client" ? "owner" : "lawyer";
   const normalizedQuery = query.trim().toLocaleLowerCase(ru ? "ru" : "uz");
   const visibleMessages = useMemo(() => normalizedQuery
@@ -255,6 +403,25 @@ export function LawyerRequestMessages({
     ].some((value) => value?.toLocaleLowerCase(ru ? "ru" : "uz").includes(normalizedQuery)))
     : messages, [messages, normalizedQuery, ru]);
   const pinnedMessage = messages.find((message) => Boolean(message.pinnedAt));
+  const aiAssistLabels: Record<AiAssistKind, string> = ru ? {
+    draft: "Проект ответа",
+    summary: "Сводка",
+    facts: "Факты",
+    deadlines: "Сроки",
+    questions: "Вопросы",
+    tasks: "Задачи",
+    documents: "Документы",
+    consultation: "План консультации",
+  } : {
+    draft: "Javob loyihasi",
+    summary: "Xulosa",
+    facts: "Faktlar",
+    deadlines: "Muddatlar",
+    questions: "Savollar",
+    tasks: "Vazifalar",
+    documents: "Hujjatlar",
+    consultation: "Maslahat rejasi",
+  };
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -392,6 +559,83 @@ export function LawyerRequestMessages({
           <span aria-hidden="true"><i /><i /><i /></span>
           {role === "lawyer" ? (ru ? "Клиент печатает…" : "Mijoz yozmoqda…") : (ru ? "Юрист печатает…" : "Yurist yozmoqda…")}
         </p>
+      )}
+      {role === "lawyer" && (
+        <aside className="lawyer-ai-assist" aria-label={ru ? "Приватный AI-assist" : "Shaxsiy AI yordamchi"}>
+          <header>
+            <span><Bot aria-hidden="true" /><strong>{ru ? "Приватный AI-assist" : "Shaxsiy AI yordamchi"}</strong></span>
+            <small><LockKeyhole aria-hidden="true" />{ru ? "Виден только вам · никогда не отправляется автоматически" : "Faqat sizga ko‘rinadi · hech qachon avtomatik yuborilmaydi"}</small>
+          </header>
+          <div className="lawyer-ai-actions">
+            {(Object.keys(aiAssistLabels) as AiAssistKind[]).map((kind) => (
+              <button type="button" key={kind} disabled={Boolean(aiBusy)} onClick={() => void runAiAssist(kind)}>
+                {aiBusy === kind ? <LoaderCircle className="spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
+                {aiAssistLabels[kind]}
+              </button>
+            ))}
+          </div>
+          {aiResult && (
+            <section className="lawyer-ai-result" aria-live="polite">
+              <strong>{aiKind ? aiAssistLabels[aiKind] : (ru ? "AI-проект" : "AI loyihasi")}</strong>
+              <p>{aiResult}</p>
+              <div>
+                <button type="button" onClick={() => { setBody(aiResult.slice(0, 4_000)); setNotice(ru ? "AI-текст перенесён в черновик. Проверьте его перед отправкой." : "AI matni qoralamaga o‘tkazildi. Yuborishdan oldin tekshiring."); }}>
+                  <Reply aria-hidden="true" />{ru ? "Перенести в черновик" : "Qoralamaga o‘tkazish"}
+                </button>
+                <button type="button" disabled={noteBusyId === "new"} onClick={() => void saveInternalNote(aiResult, "")}>
+                  {noteBusyId === "new" ? <LoaderCircle className="spin" aria-hidden="true" /> : <NotebookPen aria-hidden="true" />}
+                  {ru ? "Сохранить как заметку" : "Qayd sifatida saqlash"}
+                </button>
+              </div>
+            </section>
+          )}
+        </aside>
+      )}
+      {role === "lawyer" && (
+        <aside className="lawyer-internal-notes" aria-label={ru ? "Внутренние заметки" : "Ichki qaydlar"}>
+          <header>
+            <span><NotebookPen aria-hidden="true" /><strong>{ru ? "Внутренние заметки" : "Ichki qaydlar"}</strong></span>
+            <small><LockKeyhole aria-hidden="true" />{ru ? "Клиент их не видит" : "Mijoz ularni ko‘rmaydi"}</small>
+          </header>
+          <form onSubmit={(event) => { event.preventDefault(); void saveInternalNote(); }}>
+            <label>
+              {ru ? "Новая приватная заметка" : "Yangi shaxsiy qayd"}
+              <textarea maxLength={4_000} value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder={ru ? "Контекст, стратегия или следующий шаг…" : "Kontekst, strategiya yoki keyingi qadam…"} />
+            </label>
+            <label>
+              {ru ? "Связать с документом" : "Hujjat bilan bog‘lash"}
+              <select value={noteDocumentId} onChange={(event) => setNoteDocumentId(event.target.value)}>
+                <option value="">{ru ? "Без документа" : "Hujjatsiz"}</option>
+                {documents.map((document) => <option value={document.id} key={document.id}>{document.title}</option>)}
+              </select>
+            </label>
+            <button type="submit" disabled={!noteBody.trim() || noteBusyId === "new"}>
+              {noteBusyId === "new" ? <LoaderCircle className="spin" aria-hidden="true" /> : <NotebookPen aria-hidden="true" />}
+              {ru ? "Сохранить приватно" : "Shaxsiy saqlash"}
+            </button>
+          </form>
+          {notes.length > 0 && (
+            <ol>
+              {notes.map((note) => (
+                <li key={note.id}>
+                  <p>{note.body}</p>
+                  {note.documentTitle && <small><Paperclip aria-hidden="true" />{note.documentTitle}</small>}
+                  <footer>
+                    <span>{note.authorName} · {new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(note.createdAt))}</span>
+                    {note.convertedTaskId ? (
+                      <em><CheckSquare2 aria-hidden="true" />{ru ? "Задача создана" : "Vazifa yaratildi"}</em>
+                    ) : (
+                      <button type="button" disabled={Boolean(noteBusyId)} onClick={() => void convertNoteToTask(note)}>
+                        {noteBusyId === note.id ? <LoaderCircle className="spin" aria-hidden="true" /> : <CheckSquare2 aria-hidden="true" />}
+                        {ru ? "Создать задачу" : "Vazifa yaratish"}
+                      </button>
+                    )}
+                  </footer>
+                </li>
+              ))}
+            </ol>
+          )}
+        </aside>
       )}
       <form onSubmit={onSubmit}>
         {replyingTo && (

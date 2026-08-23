@@ -182,6 +182,24 @@ test("0156 scopes replies, keeps one persisted pin and bounds typing identity", 
     assert.throws(() => sqlite.prepare(
       "UPDATE lawyer_request_message_typing SET role='client' WHERE lawyer_request_id='request-ops' AND user_id='lawyer-ops'",
     ).run(), /typing identity is immutable/u);
+    sqlite.prepare(`INSERT INTO lawyer_request_internal_notes
+      (id,lawyer_request_id,case_id,author_user_id,body,created_at)
+      VALUES ('note-0156','request-ops','case-ops','lawyer-ops','Private strategy note',?)`).run(now);
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_request_internal_notes SET body='changed' WHERE id='note-0156'",
+    ).run(), /internal note is immutable/u);
+    assert.throws(() => sqlite.prepare(`INSERT INTO lawyer_request_internal_notes
+      (id,lawyer_request_id,case_id,author_user_id,body,created_at)
+      VALUES ('note-bad-scope-0156','request-ops','case-other-ops','lawyer-ops','Wrong case',?)`).run(now), /note scope is invalid/u);
+    sqlite.prepare(`INSERT INTO tasks
+      (id,workspace_id,case_id,owner_user_id,title,status,created_at,updated_at)
+      VALUES ('task-note-0156','workspace-owner-ops','case-ops','lawyer-ops','Converted note','planned',?,?)`).run(now, now);
+    sqlite.prepare(
+      "UPDATE lawyer_request_internal_notes SET converted_task_id='task-note-0156' WHERE id='note-0156'",
+    ).run();
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_request_internal_notes SET converted_task_id='task-note-0156' WHERE id='note-0156'",
+    ).run(), /internal note is immutable/u);
     assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     sqlite.close();
@@ -212,6 +230,9 @@ test("lawyer task and document request routes stay CSRF, grant, tenant and audit
   assert.match(messageRoute, /action === "pin"/u);
   assert.match(messageRoute, /reply_to_message_id/u);
   assert.match(messageRoute, /lawyer_request_message_typing/u);
+  assert.match(messageRoute, /lawyer_request_internal_notes/u);
+  assert.match(messageRoute, /participant\.role !== "lawyer"/u);
+  assert.match(messageRoute, /lawyer_internal_note_converted_to_task/u);
   assert.match(messageRoute, /lawyer_request_message_attachments/u);
   assert.match(messageRoute, /owner_user_id=\? AND workspace_id=\? AND case_id=\?/u);
   assert.match(messageRoute, /recipient_user_id=\?/u);
@@ -262,6 +283,10 @@ test("lawyer workspace UI exposes real task actions, document requests and docum
   assert.match(messages, /action: "pin"/u);
   assert.match(messages, /lawyer-unread-separator/u);
   assert.match(messages, /Повторить отправку/u);
+  assert.match(messages, /\/api\/platform\/ai/u);
+  assert.match(messages, /никогда не отправляется автоматически/u);
+  assert.match(messages, /note_create/u);
+  assert.match(messages, /note_to_task/u);
   assert.match(consultation, /action: "start"/u);
   assert.match(workspace, /document-builder/u);
   assert.match(workspace, /data\?\.ownDocuments\.map/u);
@@ -282,6 +307,9 @@ function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void {
   sqlite.prepare(`INSERT INTO cases
     (id,workspace_id,owner_user_id,account_type,locale,title,legal_area,status,current_revision,created_at,updated_at)
     VALUES ('case-ops','workspace-owner-ops','owner-ops','individual','ru','Case','contracts','open',1,?,?)`).run(now, now);
+  sqlite.prepare(`INSERT INTO cases
+    (id,workspace_id,owner_user_id,account_type,locale,title,legal_area,status,current_revision,created_at,updated_at)
+    VALUES ('case-other-ops','workspace-other-ops','outsider-ops','individual','ru','Other case','contracts','open',1,?,?)`).run(now, now);
   sqlite.prepare(`INSERT INTO lawyer_profiles
     (id,user_id,display_name,specialties_json,languages_json,status,marketplace_status,public_approved_at,created_at,updated_at)
     VALUES ('profile-ops','lawyer-ops','Lawyer','[]','["ru"]','public_approved','public_approved',?,?,?)`).run(now, now, now);
