@@ -213,6 +213,9 @@ test("0157 records an explicit no-show outcome without weakening call-room forei
     sqlite.prepare(`INSERT INTO lawyer_consultations
       (id,lawyer_request_id,lawyer_profile_id,client_user_id,case_id,starts_at,ends_at,timezone,format,status,created_at,updated_at)
       VALUES ('consultation-0157','request-ops','profile-ops','owner-ops','case-ops','2026-08-20T11:00:00.000Z','2026-08-20T11:30:00.000Z','Asia/Tashkent','video','confirmed',?,?)`).run(now, now);
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_consultations SET attendance_outcome='no_show' WHERE id='consultation-0157'",
+    ).run(), /CHECK constraint failed/u);
     sqlite.prepare(
       "UPDATE lawyer_consultations SET status='completed',attendance_outcome='no_show',updated_at=? WHERE id='consultation-0157'",
     ).run(now);
@@ -223,6 +226,12 @@ test("0157 records an explicit no-show outcome without weakening call-room forei
     assert.equal(saved?.attendanceOutcome, "no_show");
     assert.throws(() => sqlite.prepare(
       "UPDATE lawyer_consultations SET attendance_outcome='unknown' WHERE id='consultation-0157'",
+    ).run(), /CHECK constraint failed/u);
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_consultations SET status='confirmed' WHERE id='consultation-0157'",
+    ).run(), /CHECK constraint failed/u);
+    assert.throws(() => sqlite.prepare(
+      "UPDATE lawyer_consultations SET result_note='not applicable' WHERE id='consultation-0157'",
     ).run(), /CHECK constraint failed/u);
     assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
