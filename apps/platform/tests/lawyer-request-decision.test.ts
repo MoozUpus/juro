@@ -30,6 +30,9 @@ test("lawyer can request information and then explicitly accept the request", as
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     seed(sqlite);
+    sqlite.prepare(
+      "UPDATE user_profiles SET default_workspace_id='workspace-outsider-decision' WHERE id='owner-decision'",
+    ).run();
     const requested = await decideLawyerRequest({
       db: d1,
       requestId: "request-decision",
@@ -49,6 +52,12 @@ test("lawyer can request information and then explicitly accept the request", as
     assert.equal(requestStatus(sqlite), "needs_information");
     assert.equal(activeGrant(sqlite), 1);
     assert.equal(count(sqlite, "notifications"), 1);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT workspace_id AS workspaceId FROM notifications LIMIT 1",
+      ).get() as { workspaceId: string }).workspaceId,
+      "workspace-owner-decision",
+    );
     assert.equal(count(sqlite, "workspace_audit_events"), 1);
     assert.equal(count(sqlite, "case_events"), 1);
 

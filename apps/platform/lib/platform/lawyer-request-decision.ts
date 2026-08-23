@@ -197,8 +197,8 @@ export async function decideLawyerRequest(input: {
     input.db.prepare(
       `INSERT INTO notifications
         (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
-       SELECT ?,u.default_workspace_id,u.id,NULL,'lawyer_request',r.id,?,?,?,NULL,?
-       FROM lawyer_requests r JOIN user_profiles u ON u.id=r.requester_user_id
+       SELECT ?,r.workspace_id,r.requester_user_id,NULL,'lawyer_request',r.id,?,?,?,NULL,?
+       FROM lawyer_requests r
        WHERE r.id=? AND r.status=? AND r.lawyer_decision_claim_id=?`,
     ).bind(
       notificationId,
