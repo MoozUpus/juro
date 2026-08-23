@@ -55,12 +55,16 @@ async function recentlyRecordedOperationalEvidence(
 ): Promise<boolean> {
   if (minimumIntervalMs <= 0) return false;
   const row = await env.DB.prepare(
-    `SELECT checked_at AS checkedAt
+    `SELECT state,checked_at AS checkedAt
      FROM dependency_health_checks
-     WHERE environment=? AND dependency_key=? AND state='operational'
+     WHERE environment=? AND dependency_key=?
      ORDER BY checked_at DESC,id DESC
      LIMIT 1`,
-  ).bind(environment, key).first<{ checkedAt: string }>();
+  ).bind(environment, key).first<{ state: DependencyHealthState; checkedAt: string }>();
+  // A fresh success must immediately supersede a failure. Looking only at the
+  // most recent successful row would otherwise preserve a degraded public
+  // status until the operational throttle window expires.
+  if (row?.state !== "operational") return false;
   if (!row?.checkedAt) return false;
   const lastCheckedAt = Date.parse(row.checkedAt);
   return Number.isFinite(lastCheckedAt) && now.getTime() - lastCheckedAt < minimumIntervalMs;

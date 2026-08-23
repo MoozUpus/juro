@@ -38,19 +38,29 @@ test("dependency evidence records bounded, safe operational and failure outcomes
       startedAt: new Date("2026-08-12T06:01:00.000Z").getTime() - 120,
     }, new Date("2026-08-12T06:01:00.000Z")), true);
 
+    // A recovered dependency must clear the public degraded state immediately,
+    // even if the last successful probe is still inside its normal throttle.
+    assert.equal(await recordDependencyHealthEvidence(env, {
+      key: "openai",
+      state: "operational",
+      evidenceKind: "synthetic_probe",
+      startedAt: new Date("2026-08-12T06:02:00.000Z").getTime() - 20,
+      minimumOperationalIntervalMs: 15 * 60_000,
+    }, new Date("2026-08-12T06:02:00.000Z")), true);
+
     const health = await readDependencyHealth({
       db: d1,
       environment: "staging",
-      now: new Date("2026-08-12T06:01:00.000Z"),
+      now: new Date("2026-08-12T06:02:00.000Z"),
     });
     const openai = health.find((entry) => entry.key === "openai");
-    assert.equal(openai?.state, "degraded");
-    assert.equal(openai?.safeErrorCode, "PROVIDER_TIMEOUT");
-    assert.equal(openai?.latencyMs, 120);
+    assert.equal(openai?.state, "operational");
+    assert.equal(openai?.safeErrorCode, null);
+    assert.equal(openai?.latencyMs, 20);
     const countRow = sqlite.prepare(
       "SELECT count(*) AS count FROM dependency_health_checks WHERE dependency_key='openai'",
     ).get() as { count: number };
-    assert.equal(countRow.count, 2);
+    assert.equal(countRow.count, 3);
   } finally {
     sqlite.close();
   }
