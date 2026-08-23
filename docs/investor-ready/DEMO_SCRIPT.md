@@ -2,7 +2,10 @@
 
 ## Guardrails
 
-- Use only the three `investor-*@juro.uz` identities and the records marked `SYNTHETIC DEMO`.
+- Use the seeded `investor-client@juro.uz` and `investor-lawyer@juro.uz`
+  identities only with records marked `SYNTHETIC DEMO`. Administrative access
+  uses the approved operator account `muzaffarbekmurodoff@gmail.com` with fresh
+  MFA and must remain limited to those synthetic records.
 - OTP/session setup is an operator step; the seed deliberately creates no credentials or sessions.
 - Do not enter real personal, client, document or case data.
 - Payment steps are simulation only. The call is real WebRTC media but is not recorded.
@@ -39,7 +42,10 @@
     participant, permission or network check fails.
 14. Open Billing. Show the trial, 1% consultation entry, 5% configured corporate transfer entry, sandbox disclosure, status filter and CSV export. Run a demo payment and a refund if required; no real charge occurs.
 15. Open the public lawyer profile and show that self-publication carries no unearned Verified badge.
-16. Sign in through `https://admin.juro.uz/` as `investor-admin@juro.uz` with fresh MFA. Show trial controls, fee matrix, demo transaction, immutable audit evidence and the pending synthetic deletion request. Do not approve deletion during the standard demo.
+16. Sign in through `https://admin.juro.uz/` as the approved administrator
+    `muzaffarbekmurodoff@gmail.com` with fresh MFA. Show trial controls, fee
+    matrix, demo transaction, immutable audit evidence and the pending synthetic
+    deletion request. Do not approve deletion during the standard demo.
 17. Finish at `https://status.juro.uz/` and state the current verified service status, not a remembered status.
 
 ## Reset
