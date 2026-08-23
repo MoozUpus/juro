@@ -6,6 +6,33 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 09:48–09:54Z)
+
+Scheduled run `ec4ab007-8ce8-4c42-89fd-222e32df1fda` completed at
+`2026-08-23T09:51:48.796Z` with `error_code=NULL`. The next sequential run
+`f7228ea6-df4c-429d-8efb-630e6feb927b` was already running when the
+read-only counters were captured. At that boundary, 39/44 discovery
+checkpoints were completed and 5 remained queued; the ingestion ledger had
+2,092 completed, 22,884 queued and one running job. No failed, terminal or
+dead-letter ingestion jobs were observed.
+
+The failure ledger contained fourteen `retrying` rows and one
+`technically_unavailable` row: two `LEGAL_CORPUS_INGESTION_FAILED` (ru), one
+`LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE` (en, `lexuz:8348901`,
+non-retryable), one `LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE` (uz-Latn), four
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT`, six
+`LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE` (ru), and one
+`LEGAL_SOURCE_TIMEOUT` (ru). These remain explicitly tracked and are not
+claimed as successful legal coverage.
+
+The materialized v2 totals at the probe were 379 canonical documents, 721
+language variants, 14,775 distinct current provisions and 52,432 indexed
+current chunks. The document, provision and checkpoint release gates remain
+open and ingestion is not frozen. No code change or staging redeploy was
+justified. Snapshot, indexed evaluation, Qdrant/D1 restore and CI gates remain
+unopened; production bindings, corpus ingestion, feature flags and DNS are
+unchanged.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 09:40–09:44Z)
 
 Scheduled run `e3309f64-f1f4-46f9-946a-64fe8ff4a3e3` completed at
