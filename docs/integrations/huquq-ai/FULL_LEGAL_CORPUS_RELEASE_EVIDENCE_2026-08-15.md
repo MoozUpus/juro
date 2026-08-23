@@ -6,6 +6,23 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 19:19–19:22Z)
+
+Run `92ca5b38-c39c-4fd0-bfb5-39f618748623` completed at
+`2026-08-23T19:19:50.942Z` with `error_code=NULL`. Timestamp-bounded
+read-only reconciliation at that boundary remained at 501 canonical
+documents, 926 language variants, 15,278 distinct current provisions and
+55,294 indexed current chunks. The following sequential run
+`322ca38f-144b-4a21-a806-43871568bdbc` started at `19:20:54.362Z` and was
+running at the next probe. Discovery was 41 completed, one running and two
+queued checkpoints; the ingestion ledger contained 2,457 completed and
+26,684 queued jobs. The failure ledger remained 15 `retrying` and two
+`technically_unavailable` English official-text rows; terminal/dead-letter
+ingestion jobs remained zero. The distributed lock was held by the current
+run and renewed through `19:37:14.257Z`. No transient retry was
+force-completed and no code change or staging redeploy was justified. The
+release floors, queue freeze and all post-ingestion gates remain open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 19:16Z)
 
 The sequential run `92ca5b38-c39c-4fd0-bfb5-39f618748623` remained `running`
