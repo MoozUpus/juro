@@ -10,6 +10,7 @@ import { safeDisplayName } from "../../lib/platform/display-name";
 import {
   accountModuleRedirect,
   isLawyerHostRequest,
+  lawyerHostReturnTo,
 } from "../../lib/platform/lawyer-entry-routing";
 import { workspaceProfile } from "../../lib/platform/profile";
 
@@ -34,7 +35,10 @@ export async function renderAccountModuleRoute({ locale, accountType, module }: 
   if (!isLocale(locale) || !isAccountType(accountType) || !isPlatformModule(module)) notFound();
   const requestHeaders = await headers();
   const lawyerHost = isLawyerHostRequest(requestHeaders);
-  const user = await requireChatGPTUser(`/${locale}/${accountType}/${module}`);
+  const user = await requireChatGPTUser(lawyerHostReturnTo(
+    requestHeaders,
+    `/${locale}/${accountType}/${module}`,
+  ));
   const destination = accountModuleRedirect({
     requestedLocale: locale,
     requestedAccountType: accountType,

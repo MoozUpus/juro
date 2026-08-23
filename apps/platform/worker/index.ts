@@ -149,13 +149,20 @@ const worker = {
       || url.pathname.startsWith("/legal/")
       || /\.(?:avif|css|gif|ico|jpe?g|js|json|png|svg|webp|woff2?)$/u.test(url.pathname)
       || ["/favicon.ico", "/icon.png", "/apple-touch-icon.png", "/signin-with-chatgpt", "/signout-with-chatgpt", "/callback"].includes(url.pathname);
+    const routeHeaders = new Headers(request.headers);
+    const suppliedInternalLawyerHeader = routeHeaders.has("x-juro-lawyer-host")
+      || routeHeaders.has("x-juro-lawyer-original-path");
+    routeHeaders.delete("x-juro-lawyer-host");
+    routeHeaders.delete("x-juro-lawyer-original-path");
     if (isLawyerHost && !lawyerPassthrough) {
       const target = lawyerHostTarget(url);
       if (!target) return withSecurityHeaders(new Response("Not Found", { status: 404 }), url);
-      const headers = new Headers(request.headers);
-      headers.set("x-juro-lawyer-host", "1");
+      routeHeaders.set("x-juro-lawyer-host", "1");
+      routeHeaders.set("x-juro-lawyer-original-path", `${url.pathname}${url.search}`);
       routedUrl = target;
-      routedRequest = new Request(target, { method: request.method, headers, body: request.body, redirect: request.redirect });
+      routedRequest = new Request(target, { method: request.method, headers: routeHeaders, body: request.body, redirect: request.redirect });
+    } else if (suppliedInternalLawyerHeader) {
+      routedRequest = new Request(request, { headers: routeHeaders });
     }
 
     if (isStatusHost) {

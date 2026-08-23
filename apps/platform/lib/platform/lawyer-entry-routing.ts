@@ -53,6 +53,31 @@ const cleanLawyerHubViews: Record<string, string> = {
   tasks: "tasks",
 };
 
+const cleanLawyerPages = new Set([
+  "dashboard",
+  "ai-chat",
+  "document-builder",
+  "document-review",
+  "monitoring",
+  "requests",
+  "consultations",
+  "clients",
+  "matters",
+  "calendar",
+  "messages",
+  "documents",
+  "tasks",
+  "knowledge",
+  "billing",
+  "demo-payments",
+  "application",
+  "status",
+  "profile",
+  "security",
+  "help",
+  "settings",
+]);
+
 export function lawyerHubViewForPathname(pathname: string): string | null {
   const clean = pathname.match(
     /^\/(?:ru|uz)\/(requests|consultations|clients|matters|messages|documents|tasks)\/?$/u,
@@ -62,6 +87,37 @@ export function lawyerHubViewForPathname(pathname: string): string | null {
 
 export function isLawyerHostRequest(headers: Pick<Headers, "get">): boolean {
   return headers.get("x-juro-lawyer-host") === "1";
+}
+
+export function lawyerHostReturnTo(
+  headers: Pick<Headers, "get">,
+  fallback: string,
+): string {
+  if (!isLawyerHostRequest(headers)) return fallback;
+  const supplied = headers.get("x-juro-lawyer-original-path");
+  if (!supplied || supplied.length > 2_048 || !supplied.startsWith("/") || supplied.startsWith("//")) {
+    return fallback;
+  }
+  let original: URL;
+  try {
+    original = new URL(supplied, "https://lawyer.juro.uz");
+  } catch {
+    return fallback;
+  }
+  if (original.origin !== "https://lawyer.juro.uz") return fallback;
+
+  const localized = original.pathname.match(/^\/(ru|uz)\/([^/]+)\/?$/u);
+  if (localized && cleanLawyerPages.has(localized[2])) {
+    return `${original.pathname}${original.search}`;
+  }
+  const unprefixed = original.pathname.match(/^\/([^/]+)\/?$/u);
+  if (unprefixed && cleanLawyerPages.has(unprefixed[1])) {
+    return `/ru/${unprefixed[1]}${original.search}`;
+  }
+  if (/^\/(?:ru|uz)\/lawyer\/[a-z-]+\/?$/u.test(original.pathname)) {
+    return `${original.pathname}${original.search}`;
+  }
+  return fallback;
 }
 
 export function lawyerPublicOrigin(requestHost: string | null): string | null {

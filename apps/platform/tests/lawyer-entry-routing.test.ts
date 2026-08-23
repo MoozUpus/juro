@@ -6,6 +6,7 @@ import {
   accountModuleRedirect,
   authenticatedAuthRedirect,
   lawyerHubViewForPathname,
+  lawyerHostReturnTo,
   lawyerLandingDestination,
   lawyerPublicOrigin,
   lawyerRoleMismatchHome,
@@ -81,6 +82,35 @@ test("clean lawyer hub paths preserve their selected view after hydration", () =
   }
   assert.equal(lawyerHubViewForPathname("/ru/lawyer/consultations"), null);
   assert.equal(lawyerHubViewForPathname("/ru/not-a-lawyer-view"), null);
+});
+
+test("lawyer authentication preserves only Worker-attested clean return paths", () => {
+  const attested = new Headers({
+    "x-juro-lawyer-host": "1",
+    "x-juro-lawyer-original-path": "/ru/requests?focus=current",
+  });
+  assert.equal(lawyerHostReturnTo(attested, "/ru/lawyer/consultations"), "/ru/requests?focus=current");
+
+  const unprefixed = new Headers({
+    "x-juro-lawyer-host": "1",
+    "x-juro-lawyer-original-path": "/clients",
+  });
+  assert.equal(lawyerHostReturnTo(unprefixed, "/ru/lawyer/consultations"), "/ru/clients");
+
+  for (const headers of [
+    new Headers({ "x-juro-lawyer-original-path": "/ru/requests" }),
+    new Headers({ "x-juro-lawyer-host": "1", "x-juro-lawyer-original-path": "//attacker.invalid" }),
+    new Headers({ "x-juro-lawyer-host": "1", "x-juro-lawyer-original-path": "/ru/not-a-module" }),
+  ]) {
+    assert.equal(lawyerHostReturnTo(headers, "/ru/lawyer/consultations"), "/ru/lawyer/consultations");
+  }
+});
+
+test("the Worker owns and strips internal lawyer routing headers", () => {
+  const worker = readFileSync(new URL("../worker/index.ts", import.meta.url), "utf8");
+  assert.match(worker, /routeHeaders\.delete\("x-juro-lawyer-host"\)/u);
+  assert.match(worker, /routeHeaders\.delete\("x-juro-lawyer-original-path"\)/u);
+  assert.match(worker, /routeHeaders\.set\("x-juro-lawyer-original-path", `\$\{url\.pathname\}\$\{url\.search\}`\)/u);
 });
 
 test("account module guard rejects URL role spoofing on the lawyer host", () => {
