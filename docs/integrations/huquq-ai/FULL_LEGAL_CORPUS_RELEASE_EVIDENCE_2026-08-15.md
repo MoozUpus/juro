@@ -22,6 +22,21 @@ sequential run `13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` started at
 `2026-08-23T20:48:50.982Z`. No code change or staging redeploy was justified.
 Release floors, queue freeze and all post-ingestion gates remain open.
 
+## Sequential v2 monitoring continuation (2026-08-23, 21:08Z)
+
+Run `9748cab0-4e97-41fd-b8d7-4fd0d4d3db20` remained `running` under the
+single distributed lock, renewed through `2026-08-23T21:22:12.708Z`. The
+checkpoint ledger remained 41 completed and three queued. Ingestion advanced
+to 2,505 completed, 27,335 queued and one running version job for
+`https://lex.uz/uz/docs/-4674902?ONDATE=14.07.2026` (`uz-Latn`). Materialized
+totals advanced to 527 canonical documents, 956 language variants, 15,358
+distinct current provisions and 55,418 indexed current chunks. The failure
+ledger remained 15 `retrying` and two `technically_unavailable` English
+official-text rows; terminal/dead-letter jobs remained zero. No transient
+retry was force-completed and no code change or staging redeploy was
+justified. Release floors, queue freeze and all post-ingestion gates remain
+open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 21:05Z)
 
 Run `0dcd04ec-f8eb-4972-9fc1-cab273801e76` completed at
