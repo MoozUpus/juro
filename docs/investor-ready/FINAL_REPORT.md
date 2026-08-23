@@ -138,6 +138,13 @@ the Client profile and protected call-route navigation with
 speaker switching, WebRTC stats, network-quality and audio-only code, but this
 release does not mislabel that artifact check as a new live device-selector pass.
 
+The later legal-candidate head `eb93badc` passed type-check, lint, rendered HTML
+33/33, core 1070/1070, Cloudflare 201/201 and the production artifact locally.
+Its first full run correctly caught one rendered-HTML assertion pinned to the
+old draft version; the assertion was updated and the full suite then passed.
+GitHub CI `32635956989` passed Website in 51 seconds and Platform in 8 minutes
+21 seconds. The candidate is not deployed while its legal status is `draft`.
+
 Representative Lawyer production widths passed at 360, 390, 768, 1366 and 1440
 pixels. The public catalogue, Client dashboard and final Admin overview later
 passed the complete requested 320/360/375/390/430/768/820/1024/1280/1366/1440/
@@ -252,12 +259,19 @@ on-screen mobile keyboard and is not promoted to that separate gate.
 | Public | verified in production Chrome | verified in production Chrome | verified and restored in production Chrome |
 | Client | verified in production Chrome | verified in production Chrome | verified and restored in production Chrome |
 | Lawyer | verified in production Chrome | verified in production Chrome | verified and restored in production Chrome |
-| Admin | fixed Manrope/light surface deployed | not a supported control in the isolated console | not a supported control in the isolated console |
+| Admin | implementation deployed; local Chrome pass, production fresh-MFA replay pending | implementation deployed; local Chrome pass, production fresh-MFA replay pending | implementation deployed; local Chrome pass and reload persistence, production fresh-MFA replay pending |
 
 Shared-theme tests preserve cookie precedence over stale per-domain
-`localStorage`. The polished Admin overview passed every requested viewport from
-320 through 1920 pixels. Remaining full-matrix responsive coverage and the
-user-excluded native Chrome page-zoom check stay explicit in `QA_MATRIX.md`.
+`localStorage`. Commit `198bf708` extends that contract to the isolated Admin
+Worker with visible System, Light and Dark controls, semantic dark tokens,
+44-pixel targets and a nonce-bound script CSP. Local Chrome verified all three
+modes at 1536 pixels without overflow, and Admin Worker
+`67065fd8-fcc8-4c15-93c8-bc7b46ce4fcb` now receives 100% production traffic.
+The production theme row remains partial until a fresh-MFA Chrome replay opens
+the deployed isolated console. The earlier polished Admin overview passed every
+requested viewport from 320 through 1920 pixels. Remaining full-matrix
+responsive coverage and the user-excluded native Chrome page-zoom check stay
+explicit in `QA_MATRIX.md`.
 
 Client theme coverage was later expanded beyond dashboard screenshots. All 20
 top-level Client routes passed a 390×844 loop in explicit Dark and a second loop
@@ -349,8 +363,8 @@ records during the presentation.
    flow from the investor path while its API remains deny-by-default; file upload
    and analysis remain the complete working route. No empty/placeholder CTA or
    unlabelled coming-soon route remains in the scripted demo. Registration
-   policies remain an explicitly versioned pre-incorporation preview and cannot
-   be truthfully published without owner-approved legal data.
+   policies remain an explicitly versioned preview and cannot be truthfully
+   published without owner approval of the final RU/UZ content.
 2. **Investor-doubt pass.** Production D1 confirms one active synthetic trial,
    one pending synthetic profile-deletion request, 12 explicitly simulated demo
    payment runs and two immutable post-`0155` audit-access events. After the
@@ -366,19 +380,25 @@ records during the presentation.
    its fixed navy foreground was replaced by theme-aware primary text and a gold
    icon in commit `787f009f`. Worker 124 carries both final-pass corrections.
 
+A later line-by-line objective audit found that recording the isolated Admin as
+fixed-light did not satisfy the goal's ecosystem-wide System/Light/Dark
+requirement. Commit `198bf708` closes the implementation gap and the production
+Worker is live; only its authenticated production Chrome replay remains open.
+
 ## 12. Limitations and release truth
 
 - Production payment approval is off. Billing is an explicit demo foundation;
   no synthetic row is represented as a settled real payment.
 - Full local legal-corpus and dense/vector flags are off. The live release uses
   direct official Lex.uz retrieval/metadata and labels monitoring accordingly.
-- The owner has designated himself as JURO's sole current operator. App
-  registration policies nevertheless remain a versioned pre-incorporation
-  preview with visibly unfilled publishable operator identity/address fields.
-  Commercial publication still requires the owner's exact legal name, contact
-  email, postal/legal address, effective date/version and explicit RU/UZ
-  approvals; this report does not infer those particulars or represent the draft
-  as legal approval.
+- The owner has designated himself as JURO's sole current operator and supplied
+  the publication candidate designations `ООО «JURO»`, `«JURO» MChJ` and
+  `«JURO» LLC`, public contact `admin@juro.uz` and public address
+  `Tashkent, Uzbekistan`. The repository candidate uses 23 August 2026 and
+  version `2026-08-23.1`; all ten RU/UZ digests are locked and placeholder-free.
+  It deliberately remains `draft` because the owner has not yet explicitly
+  approved all five RU and UZ editions. This report does not treat supplied
+  particulars as approval of their legal content.
 - Native Chrome page zoom is intentionally `NOT TESTED` by the latest explicit
   user instruction. The Client dashboard, 19-route Lawyer suite and fresh-MFA
   Admin data screens passed Windows-scale 150%, and the host was restored to
@@ -400,6 +420,7 @@ records during the presentation.
   account-side root cause. The live content-hashed Admin launch asset contains
   Manrope and no previous inline Inter declaration.
 
-Until the exact owner-supplied legal-publication particulars and approvals are
+Until explicit owner approval of all five RU/UZ legal editions, their gated
+Platform publication, and the pending fresh-MFA Admin-theme Chrome replay are
 closed, this document remains a release-candidate report rather than a blanket
 Definition-of-Done claim.

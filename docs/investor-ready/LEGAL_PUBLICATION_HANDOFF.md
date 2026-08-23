@@ -36,9 +36,9 @@ remains `draft` until the owner explicitly approves all five RU and UZ editions:
    approval, change only this new version to `approved`, recompute its digests
    because status is canonical content, and never rewrite or relabel an already
    accepted historical version.
-4. Update `apps/platform/tests/policy-acceptance.test.ts` for the new version and
-   status. Preserve the assertions that registration records the exact locale,
-   content digest, acceptance method and auth evidence.
+4. Completed for the candidate: update policy and rendered-HTML tests for the
+   new draft version while preserving assertions that registration records the
+   exact locale, content digest, acceptance method and auth evidence.
 5. Verify that the protected policy registry creates a new versioned row while
    existing `user_acceptances` continue to reference the historical document
    version and digest.
