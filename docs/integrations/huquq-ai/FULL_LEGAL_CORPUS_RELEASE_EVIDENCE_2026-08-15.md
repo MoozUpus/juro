@@ -2,6 +2,18 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Sequential v2 monitoring continuation (2026-08-23, 22:42Z)
+
+The active bounded run remains under the single distributed lock. A read-only
+queue-type reconciliation shows 994 completed fetch jobs and 27,153 queued
+fetch jobs, plus 1,573 completed, 637 queued and one running version job. This
+explains why canonical-document growth is slower while the worker drains its
+bounded historical-version backlog; no queue rows were modified. Discovery
+remains 44/44 completed, terminal/dead-letter jobs remain zero, and the
+materialized totals remain 555 canonical documents, 15,448 distinct current
+provisions and 55,529 indexed current chunks. Document/provision floors remain
+unmet and the queue is not frozen; all post-ingestion gates remain closed.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 22:41Z)
 
 Run `7817848a-ee11-410f-a233-25f45e12e5b3` remains `running` under the single
