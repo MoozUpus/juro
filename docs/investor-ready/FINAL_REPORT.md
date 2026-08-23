@@ -175,6 +175,25 @@ message, disclosed no Lawyer-private labels, avoided a redirect loop, used
 Manrope, measured 1536/1536 without overflow and exposed a 44-pixel return link
 to the matching Client locale.
 
+A later cross-role document audit found no Lawyer data disclosure, but the
+denied Client page still rendered an empty receipt editor around its access
+errors. Commit `1c40b64b` now resolves the complete server-side document access
+record (owner, collaborator, recipient or active lawyer grant) before rendering
+and calls `notFound()` when no view permission exists. The focused document
+suite passed 57/57; type-check, lint, rendered HTML 33/33, core 1071/1071,
+Cloudflare 201/201 and the production artifact passed locally. GitHub CI
+`32644074770` passed Website in 58 seconds and Platform in 8 minutes 5 seconds.
+Worker `0234c879-eba3-49d4-81bd-9759b77ffcfd` took 100% traffic with
+`0b145b96-a45e-465b-b8a0-779d692dae93` as immediate rollback. Chrome created
+one synthetic owner receipt, opened its protected ID and proved that a full
+reload still rendered the owner editor with Manrope, no access error, no
+overflow and no browser log entry. Cleanup removed that exact draft and its
+three cascaded D1 children; it had no R2 files, the row count returned to zero
+and `foreign_key_check` stayed empty. Chrome continued to block direct
+automation of any `/documents/:id` URL, and the stale deleted-document tab could
+not be reclaimed for a visual 404; therefore the post-deploy foreign-ID visual
+replay remains PARTIAL rather than being promoted from code/test evidence.
+
 Representative Lawyer production widths passed at 360, 390, 768, 1366 and 1440
 pixels. The public catalogue, Client dashboard and final Admin overview later
 passed the complete requested 320/360/375/390/430/768/820/1024/1280/1366/1440/
@@ -460,10 +479,11 @@ after reload.
   account-side root cause. After the approved-policy deployment, independent app
   and status-host reads generated at `2026-08-23T11:53:29.582Z` and
   `2026-08-23T11:53:30.081Z` again returned operational 8/8 with zero active
-  incidents. The later role-boundary Worker
-  `0b145b96-a45e-465b-b8a0-779d692dae93` is current at 100%, and a fresh status
-  response generated at `2026-08-23T13:22:14.669Z` again returned operational
-  8/8 with zero active incidents. The live content-hashed Admin launch asset
+  incidents. The later document-boundary Worker
+  `0234c879-eba3-49d4-81bd-9759b77ffcfd` is current at 100%, and independent app
+  and status-host responses generated at `2026-08-23T14:25:48.375Z` and
+  `2026-08-23T14:25:48.956Z` returned operational 8/8 with empty active and
+  recent incident lists. The live content-hashed Admin launch asset
   contains Manrope and no previous inline Inter declaration.
 
 The genuine approved-version registration and fresh-MFA Admin-theme gates are
