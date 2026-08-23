@@ -137,6 +137,12 @@ test("DOCX footer содержит бренд JURO", () => { const zip = new Piz
 test("DOCX footer содержит поля PAGE и NUMPAGES", () => { const zip = new PizZip(ruDocx); const footer = Object.keys(zip.files).filter((name) => name.includes("footer") && name.endsWith(".xml")).map((name) => zip.file(name)?.asText()).join("\n"); assert.match(footer, /PAGE/); assert.match(footer, /NUMPAGES/); });
 
 test("My Documents реализован как защищенный D1 route", async () => { const source = await readFile(new URL("app/api/document-builder/documents/route.ts", root), "utf8"); assert.match(source, /requireApiUser/); assert.match(source, /FROM documents/); });
+test("страница документа отклоняет недоступный ID до рендера редактора", async () => {
+  const source = await readFile(new URL("app/_document-builder/documents/[id]/page.tsx", root), "utf8");
+  assert.match(source, /loadStoredDocument\(id,\s*profile\.id\)/);
+  assert.match(source, /if\s*\(!stored\)\s*notFound\(\)/);
+  assert.doesNotMatch(source, /WHERE id = \? AND owner_user_id = \?/);
+});
 test("document и file routes сохраняют active-workspace boundary", async () => {
   const [
     permissions,
