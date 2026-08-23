@@ -154,9 +154,26 @@ digests. The full local release suite, production artifact and GitHub CI
 100% Platform traffic with `ecabef2f-cd37-40f0-9e20-66803b753f3b` as the
 immediate rollback. All ten live policy routes passed HTTP and Chrome rendering,
 and one atomic D1 insert published exactly ten append-only approved policy rows.
-Existing acceptance counts were unchanged. The first genuine new registration
-under the approved version still needs observation through an owner-accessible
-mailbox; no fake user was created for evidence.
+Existing acceptance counts were unchanged at publication. A later fresh,
+owner-accessible individual registration completed through the production email
+OTP flow and onboarding. Read-only D1 evidence records exactly three RU
+`registration_checkbox` acceptances authenticated by `email_otp` at
+`2026-08-23T13:17:43.295Z`: Terms, Privacy and Personal Data version
+`2026-08-23.1`. All three acceptance digests equal their approved policy rows,
+the evidence source is `registration`, active marketing consent is zero and the
+live foreign-key check is empty.
+
+Commits `da827419` and `5e799726` add and localize the explicit Client-role
+boundary on protected Lawyer entry. Current-head type-check, lint, production
+artifact, rendered HTML 33/33, core 1070/1070 and Cloudflare 201/201 passed;
+GitHub CI `32641064248` passed Website in 47 seconds and Platform in 8 minutes
+25 seconds. Worker `0b145b96-a45e-465b-b8a0-779d692dae93` took 100% Platform
+traffic with `12051847-22cc-4c74-9c26-b2dd0408c510` as immediate rollback.
+Fresh production Chrome then opened both protected RU and UZ Lawyer routes as
+the newly registered Client. Each route displayed a localized role-mismatch
+message, disclosed no Lawyer-private labels, avoided a redirect loop, used
+Manrope, measured 1536/1536 without overflow and exposed a 44-pixel return link
+to the matching Client locale.
 
 Representative Lawyer production widths passed at 360, 390, 768, 1366 and 1440
 pixels. The public catalogue, Client dashboard and final Admin overview later
@@ -272,7 +289,7 @@ on-screen mobile keyboard and is not promoted to that separate gate.
 | Public | verified in production Chrome | verified in production Chrome | verified and restored in production Chrome |
 | Client | verified in production Chrome | verified in production Chrome | verified and restored in production Chrome |
 | Lawyer | verified in production Chrome | verified in production Chrome | verified and restored in production Chrome |
-| Admin | implementation deployed; local Chrome pass, production fresh-MFA replay pending | implementation deployed; local Chrome pass, production fresh-MFA replay pending | implementation deployed; local Chrome pass and reload persistence, production fresh-MFA replay pending |
+| Admin | verified in fresh-MFA production Chrome | verified and reload-persistent in fresh-MFA production Chrome | verified, restored and reload-persistent in fresh-MFA production Chrome |
 
 Shared-theme tests preserve cookie precedence over stale per-domain
 `localStorage`. Commit `198bf708` extends that contract to the isolated Admin
@@ -280,9 +297,11 @@ Worker with visible System, Light and Dark controls, semantic dark tokens,
 44-pixel targets and a nonce-bound script CSP. Local Chrome verified all three
 modes at 1536 pixels without overflow, and Admin Worker
 `67065fd8-fcc8-4c15-93c8-bc7b46ce4fcb` now receives 100% production traffic.
-The production theme row remains partial until a fresh-MFA Chrome replay opens
-the deployed isolated console. The earlier polished Admin overview passed every
-requested viewport from 320 through 1920 pixels. Remaining full-matrix
+A later owner-entered OTP plus TOTP session opened the deployed isolated console:
+Light and Dark changed to their semantic color pairs, Dark survived reload,
+System was restored and also survived reload, Manrope remained active and the
+1536-pixel document had no horizontal overflow. The earlier polished Admin
+overview passed every requested viewport from 320 through 1920 pixels. Remaining full-matrix
 responsive coverage and the user-excluded native Chrome page-zoom check stay
 explicit in `QA_MATRIX.md`.
 
@@ -340,7 +359,10 @@ after-state.
 The index also contains a privacy-safe production Client call preflight capture;
 live camera frames were not retained in the repository.
 
-Admin Demo now has an active TOTP factor. The fresh-MFA handoff created the
+The approved production administrator is `muzaffarbekmurodoff@gmail.com`; a
+read-only D1 check confirmed one active administrator assignment and one active
+verified TOTP factor without creating a duplicate row. The public legal contact
+remains the separately approved `admin@juro.uz`. The fresh-MFA handoff created the
 separate production Admin session and Chrome verified overview, lawyer profiles,
 review moderation, Legal Corpus and the platform fee matrix. The fee view showed
 the fixed 1% consultation policy, explicit 2%/5% rules, sandbox-only transactions
@@ -396,7 +418,10 @@ records during the presentation.
 A later line-by-line objective audit found that recording the isolated Admin as
 fixed-light did not satisfy the goal's ecosystem-wide System/Light/Dark
 requirement. Commit `198bf708` closes the implementation gap and the production
-Worker is live; only its authenticated production Chrome replay remains open.
+Worker is live. A fresh owner-entered OTP plus TOTP session opened the isolated
+console; production Chrome verified semantic Light and Dark, reload persistence,
+Manrope and 1536/1536 containment, then restored System and verified it again
+after reload.
 
 ## 12. Limitations and release truth
 
@@ -410,8 +435,10 @@ Worker is live; only its authenticated production Chrome replay remains open.
   GitHub CI `32637355533`, Platform Worker
   `c90f5dd6-459c-4358-9ccd-3316a45e6aab`, ten exact live-page checks and ten
   append-only production D1 rows establish the approved publication. This is
-  owner approval, not an independent qualified-counsel opinion. A first genuine
-  new-registration acceptance under this version remains to be observed.
+  owner approval, not an independent qualified-counsel opinion. A fresh
+  owner-accessible individual account subsequently completed email-OTP
+  registration and onboarding; production D1 contains exactly the three required
+  approved-version acceptances with matching hashes and no marketing opt-in.
 - Native Chrome page zoom is intentionally `NOT TESTED` by the latest explicit
   user instruction. The Client dashboard, 19-route Lawyer suite and fresh-MFA
   Admin data screens passed Windows-scale 150%, and the host was restored to
@@ -433,9 +460,13 @@ Worker is live; only its authenticated production Chrome replay remains open.
   account-side root cause. After the approved-policy deployment, independent app
   and status-host reads generated at `2026-08-23T11:53:29.582Z` and
   `2026-08-23T11:53:30.081Z` again returned operational 8/8 with zero active
-  incidents. The live content-hashed Admin launch asset contains Manrope and no
-  previous inline Inter declaration.
+  incidents. The later role-boundary Worker
+  `0b145b96-a45e-465b-b8a0-779d692dae93` is current at 100%, and a fresh status
+  response generated at `2026-08-23T13:22:14.669Z` again returned operational
+  8/8 with zero active incidents. The live content-hashed Admin launch asset
+  contains Manrope and no previous inline Inter declaration.
 
-Until the first genuine new-registration acceptance under `2026-08-23.1` and
-the pending fresh-MFA Admin-theme Chrome replay are closed, this document remains
-a release-candidate report rather than a blanket Definition-of-Done claim.
+The genuine approved-version registration and fresh-MFA Admin-theme gates are
+closed. This document remains an evidence-scoped release report rather than a
+blanket Definition-of-Done claim wherever `QA_MATRIX.md` still records PARTIAL
+coverage, explicit browser/device exclusions or production feature flags.

@@ -1,8 +1,8 @@
 # Legal publication handoff
 
-Status: **owner-approved and published in production**. The first genuine
-production registration under this version remains to be observed; no fake
-user was created merely to manufacture acceptance evidence.
+Status: **owner-approved, published and accepted through a genuine production
+registration**. The observation used an owner-accessible mailbox and a clearly
+synthetic QA identity; historical acceptance evidence was not rewritten.
 
 ## Owner-approved inputs
 
@@ -50,12 +50,17 @@ legal advice or a substitute for review by qualified counsel.
    registrations will reference the pre-published approved rows by exact ID,
    locale, version, status and digest.
 
-## Remaining live acceptance observation
+## Live acceptance observation
 
 The registration-path regression test proves that a new email-OTP registration
 records the approved mandatory Terms, Privacy and Personal Data versions with
-their exact digests and separate marketing consent. A genuine production signup
-must still be observed before that browser-level acceptance row is marked
-`VERIFIED`; it must use a real owner-accessible mailbox and remain explicitly
-synthetic/demo if created for QA. Historical acceptance evidence must not be
-rewritten, relabelled or deleted.
+their exact digests and separate marketing consent. On 23 August 2026 a fresh
+owner-accessible individual signup completed the production email-OTP flow at
+`2026-08-23T13:17:43.295Z` and onboarding at
+`2026-08-23T13:19:15.042Z`. Read-only D1 checks found one account and exactly
+three RU `registration_checkbox` acceptances authenticated by `email_otp` for
+Terms, Privacy and Personal Data version `2026-08-23.1`. Each acceptance digest
+matched the joined approved `policy_documents` row, evidence source was
+`registration`, active marketing consent count was zero and the live
+`foreign_key_check` returned no row. The synthetic QA acceptance rows are
+retained as immutable evidence.
