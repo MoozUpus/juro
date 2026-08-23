@@ -49,6 +49,7 @@ export async function AuthPage({
     });
     if (destination) redirect(destination);
     accountBoundaryHomeHref = lawyerRoleMismatchHome({
+      locale,
       requestedAccountType: initialAccountType,
       reauth,
       lawyerHost,

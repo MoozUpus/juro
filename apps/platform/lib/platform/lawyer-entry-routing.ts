@@ -29,6 +29,7 @@ type AccountModuleRouteInput = {
 };
 
 type LawyerRoleMismatchInput = {
+  locale: PlatformLocale;
   requestedAccountType: AccountType;
   reauth: boolean;
   lawyerHost: boolean;
@@ -92,6 +93,7 @@ function clientPublicOrigin(requestHost: string | null): string | null {
 }
 
 export function lawyerRoleMismatchHome({
+  locale,
   requestedAccountType,
   reauth,
   lawyerHost,
@@ -108,7 +110,7 @@ export function lawyerRoleMismatchHome({
     return null;
   }
   const origin = clientPublicOrigin(requestHost);
-  return origin ? `${origin}/${profile.locale}` : null;
+  return origin ? `${origin}/${locale}` : null;
 }
 
 export function operationalLawyer(profile: LawyerEntryProfile): boolean {

@@ -97,6 +97,7 @@ test("account module guard rejects URL role spoofing on the lawyer host", () => 
 
 test("a signed-in client gets an explicit route back from lawyer reauthentication", () => {
   assert.equal(lawyerRoleMismatchHome({
+    locale: "ru",
     requestedAccountType: "lawyer",
     reauth: true,
     lawyerHost: true,
@@ -104,17 +105,18 @@ test("a signed-in client gets an explicit route back from lawyer reauthenticatio
     profile: client,
   }), "https://app.juro.uz/ru");
   assert.equal(lawyerRoleMismatchHome({
+    locale: "uz",
     requestedAccountType: "lawyer",
     reauth: true,
     lawyerHost: true,
     requestHost: "lawyer.staging.juro.uz",
-    profile: { ...client, locale: "uz" },
+    profile: client,
   }), "https://app.staging.juro.uz/uz");
   for (const input of [
-    { requestedAccountType: "individual" as const, reauth: true, lawyerHost: true, requestHost: "lawyer.juro.uz", profile: client },
-    { requestedAccountType: "lawyer" as const, reauth: false, lawyerHost: true, requestHost: "lawyer.juro.uz", profile: client },
-    { requestedAccountType: "lawyer" as const, reauth: true, lawyerHost: false, requestHost: "app.juro.uz", profile: client },
-    { requestedAccountType: "lawyer" as const, reauth: true, lawyerHost: true, requestHost: "lawyer.juro.uz", profile: approvedLawyer },
+    { locale: "ru" as const, requestedAccountType: "individual" as const, reauth: true, lawyerHost: true, requestHost: "lawyer.juro.uz", profile: client },
+    { locale: "ru" as const, requestedAccountType: "lawyer" as const, reauth: false, lawyerHost: true, requestHost: "lawyer.juro.uz", profile: client },
+    { locale: "ru" as const, requestedAccountType: "lawyer" as const, reauth: true, lawyerHost: false, requestHost: "app.juro.uz", profile: client },
+    { locale: "ru" as const, requestedAccountType: "lawyer" as const, reauth: true, lawyerHost: true, requestHost: "lawyer.juro.uz", profile: approvedLawyer },
   ]) {
     assert.equal(lawyerRoleMismatchHome(input), null);
   }
