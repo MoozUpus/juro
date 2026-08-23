@@ -13,6 +13,7 @@ import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-r
 import { localizedLawyerProfileStatusNotification } from "../lib/platform/lawyer-profile-notifications";
 import { lawyerTrialReminderStage } from "../lib/platform/lawyer-trial-reminders";
 import { lawyerTrialEndsAt, lawyerTrialView } from "../lib/platform/lawyer-trial";
+import { lawyerRequestSchema } from "../lib/platform/lawyer-request";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const completeProfile: LawyerMarketplaceCompletionInput = {
@@ -98,6 +99,16 @@ test("a first-time client can create a private intake case together with a conse
   assert.match(handoffClient, /Новое приватное дело из заявки/);
   assert.match(handoffClient, /Юрист не получит доступ до conflict check/);
   assert.doesNotMatch(handoffClient, /!cases\.length \|\|/);
+
+  const parsed = lawyerRequestSchema.safeParse({
+    anonymizedSummary: "Нужна первичная консультация по договорному вопросу.",
+    serviceCode: "initial_consultation",
+    preferredFormat: "video",
+    consent: true,
+    locale: "ru",
+  });
+  assert.equal(parsed.success, true);
+  if (parsed.success) assert.equal(parsed.data.caseId, undefined);
 });
 
 test("lawyer scheduling persists recurring hours and bounded unavailability", () => {
