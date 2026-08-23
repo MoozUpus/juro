@@ -2,6 +2,20 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Sequential v2 monitoring continuation (2026-08-23, 22:52Z)
+
+Run `cbd49631-3e46-4325-a922-0401457110df` remains `running` under the single
+distributed lock, renewed through `2026-08-23T23:06:45.268Z`. Discovery remains
+44/44 `completed`. Queue composition is 999 completed and 27,148 queued fetch
+jobs, plus 1,575 completed, 635 queued and one running version job. Materialized
+v2 totals advanced to 559 canonical documents, 995 language variants, 15,477
+distinct current provisions and 55,159 indexed current chunks. Terminal/dead-
+letter rows remain zero. The failure ledger contains 15 `retrying` rows and
+three `technically_unavailable` rows (the latest is an English official-text
+unavailability, not a terminal/dead-letter result). Document/provision floors
+remain unmet and the queue is not frozen, so all post-ingestion release gates
+remain closed. No code change or staging redeploy was justified.
+
 ## Cross-database reconciliation probe (2026-08-23, 22:49Z)
 
 This was a read-only reconciliation; no bulk export/import or cross-database
