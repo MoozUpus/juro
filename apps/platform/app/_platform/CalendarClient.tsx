@@ -20,6 +20,7 @@ import {
   formatPlatformLongDate,
   formatPlatformMonth,
 } from "../../lib/platform/date-time";
+import { platformStatusLabel } from "../../lib/platform/presentation-labels";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
 type View = "month" | "week" | "day" | "list" | "cases" | "overdue";
@@ -392,7 +393,7 @@ function CalendarRow({
         {item.startsAt ? ` · ${formatCalendarTime(item.startsAt)}` : ""}
       </time>
       <span className={`calendar-status status-${item.status}`}>
-        {item.status}
+        {platformStatusLabel(item.status, locale)}
       </span>
       <span className="sr-only">{label}</span>
     </Link>

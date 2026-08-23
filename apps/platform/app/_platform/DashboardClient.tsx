@@ -31,6 +31,11 @@ import {
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { dashboardCopy } from "../../content/platform-ui";
 import { uploadDocumentForAnalysis } from "../../lib/document-analysis/client-upload";
+import {
+  documentCategoryLabel,
+  documentStatusLabel,
+  platformStatusLabel,
+} from "../../lib/platform/presentation-labels";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
 type DashboardData = {
@@ -205,7 +210,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
       href: `${base}/cases/${item.id}`,
       icon: BriefcaseBusiness,
       title: item.title,
-      detail: `${item.status} · ${item.progressPercent ?? 0}%`,
+      detail: `${platformStatusLabel(item.status, locale)} · ${item.progressPercent ?? 0}%`,
       time: item.updatedAt,
     })),
     ...data.documents.map((item) => ({
@@ -213,7 +218,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
       href: `${base}/documents/${item.id}`,
       icon: Files,
       title: item.title,
-      detail: `${item.category} · ${item.status}`,
+      detail: `${documentCategoryLabel(item.category, locale)} · ${documentStatusLabel(item.status, locale)}`,
       time: item.updatedAt,
     })),
   ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 7) : [];

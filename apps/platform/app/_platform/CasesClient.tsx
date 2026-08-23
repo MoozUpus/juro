@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BriefcaseBusiness, CalendarClock, CircleAlert, LoaderCircle, Plus, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
+import { platformStatusLabel } from "../../lib/platform/presentation-labels";
 
 type CaseItem = {
   id: string;
@@ -70,7 +71,7 @@ export function CasesClient({ locale }: { locale: PlatformLocale; accountType: A
             return (
               <article key={item.id}>
                 <div className="cases-live-icon"><BriefcaseBusiness /></div>
-                <div className="cases-live-body"><span>{item.legalArea} · {item.status}</span><h2>{item.title}</h2><p>{item.description || (ru ? "Описание пока не добавлено." : "Tavsif hali qo‘shilmagan.")}</p></div>
+                <div className="cases-live-body"><span>{item.legalArea} · {platformStatusLabel(item.status, locale)}</span><h2>{item.title}</h2><p>{item.description || (ru ? "Описание пока не добавлено." : "Tavsif hali qo‘shilmagan.")}</p></div>
                 <div className="cases-live-progress"><strong>{item.progressPercent ?? 0}%</strong><span>{complete}/{total} {ru ? "шагов" : "qadam"}</span></div>
                 <div className="cases-live-meta"><CalendarClock /><span>{item.nextDeadlineAt ? formatDate(item.nextDeadlineAt, ru) : (ru ? "Срок не назначен" : "Muddat belgilanmagan")}</span></div>
                 <Link href={`${base}/cases/${item.id}`}>{ru ? "Открыть дело" : "Ishni ochish"} →</Link>
