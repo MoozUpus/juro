@@ -22,6 +22,22 @@ sequential run `13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` started at
 `2026-08-23T20:48:50.982Z`. No code change or staging redeploy was justified.
 Release floors, queue freeze and all post-ingestion gates remain open.
 
+## Sequential v2 monitoring continuation (2026-08-23, 20:46Z)
+
+Run `880d9813-097f-4d6b-a8c7-4f9352e87952` was running under the single
+distributed lock, renewed through `2026-08-23T21:00:28.691Z`. The checkpoint
+ledger showed 41 completed, one running and two queued. The running bounded
+discovery checkpoint was `international` / `ru`, page 70, with 1,400
+documents discovered; session state and cookies were intentionally excluded
+from this evidence. Ingestion showed 2,492 completed and 27,142 queued jobs,
+with no running ingestion job. Materialized totals remained 518 canonical
+documents, 947 language variants, 15,328 distinct current provisions and
+55,388 indexed current chunks. The failure ledger remained 15 `retrying` and
+two `technically_unavailable` English official-text rows; terminal/dead-letter
+jobs remained zero. No transient retry was force-completed and no code change
+or staging redeploy was justified. Release floors, queue freeze and all
+post-ingestion gates remain open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 20:44Z)
 
 Run `13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` finished at
