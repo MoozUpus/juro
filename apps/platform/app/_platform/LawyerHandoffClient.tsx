@@ -166,7 +166,7 @@ export function LawyerHandoffClient({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!entitlements?.lawyerHandoff || !caseId || !consent) return;
+    if (!entitlements?.lawyerHandoff || !consent) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -175,7 +175,7 @@ export function LawyerHandoffClient({
         method: "POST",
         headers: { "content-type": "application/json", "x-juro-csrf": "1" },
         body: JSON.stringify({
-          caseId,
+          caseId: caseId || undefined,
           lawyerProfileId: lawyerProfileId || undefined,
           anonymizedSummary: summary,
           serviceCode,

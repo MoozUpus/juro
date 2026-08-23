@@ -98,6 +98,8 @@ test("a first-time client can create a private intake case together with a conse
   assert.match(requestRoute, /autoCreatedCase,/);
   assert.match(handoffClient, /Новое приватное дело из заявки/);
   assert.match(handoffClient, /Юрист не получит доступ до conflict check/);
+  assert.match(handoffClient, /caseId: caseId \|\| undefined/);
+  assert.doesNotMatch(handoffClient, /\|\| !caseId \|\|/);
   assert.doesNotMatch(handoffClient, /!cases\.length \|\|/);
 
   const parsed = lawyerRequestSchema.safeParse({
