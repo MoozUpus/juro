@@ -22,6 +22,25 @@ sequential run `13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` started at
 `2026-08-23T20:48:50.982Z`. No code change or staging redeploy was justified.
 Release floors, queue freeze and all post-ingestion gates remain open.
 
+## Sequential v2 monitoring continuation (2026-08-23, 21:03Z)
+
+The first scheduled-run D1 probe at `2026-08-23T21:00:53Z` failed with
+Cloudflare API error `7403` (account not valid or not authorized); this was
+recorded as a failed probe, not as evidence of database state. A subsequent
+read-only `wrangler whoami` confirmed the configured account and token, and a
+retry of the same D1 query succeeded. Run
+`0dcd04ec-f8eb-4972-9fc1-cab273801e76` remained `running` under the single
+distributed lock, renewed through `2026-08-23T21:17:11.397Z`. The checkpoint
+ledger was 41 completed and three queued. Final queue reconciliation showed
+2,502 completed and 27,259 queued ingestion jobs, with no running job.
+Materialized totals remained 524 canonical documents, 953 language variants,
+15,349 distinct current provisions and 55,409 indexed current chunks. The
+failure ledger remained 15 `retrying` and two `technically_unavailable`
+English official-text rows; terminal/dead-letter jobs remained zero. No
+transient retry was force-completed and no code change or staging redeploy was
+justified. Release floors, queue freeze and all post-ingestion gates remain
+open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 20:59Z)
 
 Run `0dcd04ec-f8eb-4972-9fc1-cab273801e76` remained `running` under the
