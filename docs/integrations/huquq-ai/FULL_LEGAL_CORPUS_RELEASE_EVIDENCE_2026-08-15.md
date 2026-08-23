@@ -6,6 +6,21 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 19:24Z)
+
+The sequential run `322ca38f-144b-4a21-a806-43871568bdbc` remained `running`
+with no recorded error or finish time. The discovery ledger remained 41
+completed and three queued checkpoints. The ingestion ledger contained 2,457
+completed, 26,743 queued and one running job. Current materialized totals
+were 503 canonical documents, 928 language variants, 15,283 distinct current
+provisions and 55,299 indexed current chunks. The running job was the bounded
+Lex.uz fetch for `https://lex.uz/uz/docs/8282153` in `uz-Latn`. The failure
+ledger remained 15 `retrying` and two `technically_unavailable` English
+official-text rows; terminal/dead-letter ingestion jobs remained zero. No
+transient retry was force-completed and no code change or staging redeploy was
+justified. Release floors, queue freeze and all post-ingestion gates remain
+open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 19:19–19:22Z)
 
 Run `92ca5b38-c39c-4fd0-bfb5-39f618748623` completed at
