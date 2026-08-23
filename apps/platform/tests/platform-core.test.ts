@@ -197,13 +197,13 @@ test("action plan step updates accept only bounded calendar data", () => {
   assert.equal(actionPlanStepPatchSchema.safeParse({ status: "completed", revision: 1, dueAt: null, userId: "other" }).success, false);
 
 });
-test("workspace entitlements fail closed without current paid evidence", () => {
+test("free clients can begin marketplace intake while paid features still fail closed", () => {
   const now = new Date("2026-07-30T12:00:00.000Z");
   assert.deepEqual(entitlementsForSubscription(null, now), {
     planCode: "free",
     subscriptionStatus: null,
     aiAnswerCyclesMonthly: 20,
-    lawyerHandoff: false,
+    lawyerHandoff: true,
     fullDocumentAnalysis: false,
     expertDocumentAnalysis: false,
     documentComparison: false,
@@ -222,7 +222,10 @@ test("workspace entitlements fail closed without current paid evidence", () => {
     { planCode: "individual", status: "active", currentPeriodEndsAt: "2026-07-01T00:00:00.000Z" },
     { planCode: "unknown", status: "active", currentPeriodEndsAt: null },
   ]) {
-    assert.equal(entitlementsForSubscription(evidence, now).lawyerHandoff, false);
+    const entitlements = entitlementsForSubscription(evidence, now);
+    assert.equal(entitlements.lawyerHandoff, true);
+    assert.equal(entitlements.fullDocumentAnalysis, false);
+    assert.equal(entitlements.planCode, "free");
   }
 });
 

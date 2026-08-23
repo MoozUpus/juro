@@ -26,7 +26,12 @@ const FREE_ENTITLEMENTS: WorkspaceEntitlements = {
   planCode: "free",
   subscriptionStatus: null,
   aiAnswerCyclesMonthly: AI_ANSWER_CYCLE_LIMITS.free,
-  lawyerHandoff: false,
+  // Sending an anonymised request is the client’s first marketplace step.
+  // Payment is evaluated only after a lawyer has made a concrete offer, so a
+  // client must not need a platform subscription merely to start that flow.
+  // The route still enforces the operational feature flag, consent, conflict
+  // boundary and the lawyer profile's availability server-side.
+  lawyerHandoff: true,
   fullDocumentAnalysis: false,
   expertDocumentAnalysis: false,
   documentComparison: false,
