@@ -8,6 +8,7 @@ import {
   lawyerHubViewForPathname,
   lawyerLandingDestination,
   lawyerPublicOrigin,
+  lawyerRoleMismatchHome,
   operationalLawyer,
   type LawyerEntryProfile,
 } from "../lib/platform/lawyer-entry-routing";
@@ -92,6 +93,43 @@ test("account module guard rejects URL role spoofing on the lawyer host", () => 
     profile: client,
   });
   assert.equal(destination, "/ru/auth/login?accountType=lawyer&reauth=1&returnTo=%2Fru%2Fdashboard");
+});
+
+test("a signed-in client gets an explicit route back from lawyer reauthentication", () => {
+  assert.equal(lawyerRoleMismatchHome({
+    requestedAccountType: "lawyer",
+    reauth: true,
+    lawyerHost: true,
+    requestHost: "lawyer.juro.uz",
+    profile: client,
+  }), "https://app.juro.uz/ru");
+  assert.equal(lawyerRoleMismatchHome({
+    requestedAccountType: "lawyer",
+    reauth: true,
+    lawyerHost: true,
+    requestHost: "lawyer.staging.juro.uz",
+    profile: { ...client, locale: "uz" },
+  }), "https://app.staging.juro.uz/uz");
+  for (const input of [
+    { requestedAccountType: "individual" as const, reauth: true, lawyerHost: true, requestHost: "lawyer.juro.uz", profile: client },
+    { requestedAccountType: "lawyer" as const, reauth: false, lawyerHost: true, requestHost: "lawyer.juro.uz", profile: client },
+    { requestedAccountType: "lawyer" as const, reauth: true, lawyerHost: false, requestHost: "app.juro.uz", profile: client },
+    { requestedAccountType: "lawyer" as const, reauth: true, lawyerHost: true, requestHost: "lawyer.juro.uz", profile: approvedLawyer },
+  ]) {
+    assert.equal(lawyerRoleMismatchHome(input), null);
+  }
+});
+
+test("the lawyer reauthentication surface explains the client-role boundary", () => {
+  const authPage = readFileSync(new URL("../app/_auth/AuthPage.tsx", import.meta.url), "utf8");
+  const authForm = readFileSync(new URL("../app/_auth/AuthForm.tsx", import.meta.url), "utf8");
+  const authCss = readFileSync(new URL("../app/_auth/auth.css", import.meta.url), "utf8");
+  assert.match(authPage, /lawyerRoleMismatchHome/);
+  assert.match(authPage, /accountBoundaryHomeHref=\{accountBoundaryHomeHref\}/);
+  assert.match(authForm, /Открыт клиентский профиль/);
+  assert.match(authForm, /Вернуться в клиентский кабинет/);
+  assert.match(authForm, /Mijoz kabinetiga qaytish/);
+  assert.match(authCss, /\.auth-role-boundary a\s*\{[\s\S]*?min-height:\s*44px/);
 });
 
 test("pending lawyers stay in application surfaces until approval", () => {

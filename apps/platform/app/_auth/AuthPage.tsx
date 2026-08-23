@@ -5,6 +5,7 @@ import { runtimeEnv } from "../../lib/document-builder/storage/runtime";
 import {
   authenticatedAuthRedirect,
   isLawyerHostRequest,
+  lawyerRoleMismatchHome,
 } from "../../lib/platform/lawyer-entry-routing";
 import { workspaceProfile } from "../../lib/platform/profile";
 import { getChatGPTUser } from "../chatgpt-auth";
@@ -33,23 +34,35 @@ export async function AuthPage({
   returnTo?: string;
   reauth?: boolean;
 }) {
+  const initialAccountType = registrationPersona(accountType);
   const authenticated = await getChatGPTUser();
+  let accountBoundaryHomeHref: string | undefined;
   if (authenticated) {
     const requestHeaders = await headers();
+    const profile = await workspaceProfile(authenticated.email);
+    const lawyerHost = isLawyerHostRequest(requestHeaders);
     const destination = authenticatedAuthRedirect({
       mode,
       reauth,
-      lawyerHost: isLawyerHostRequest(requestHeaders),
-      profile: await workspaceProfile(authenticated.email),
+      lawyerHost,
+      profile,
     });
     if (destination) redirect(destination);
+    accountBoundaryHomeHref = lawyerRoleMismatchHome({
+      requestedAccountType: initialAccountType,
+      reauth,
+      lawyerHost,
+      requestHost: requestHeaders.get("host"),
+      profile,
+    }) ?? undefined;
   }
   const env = runtimeEnv();
   return (
     <AuthForm
       mode={mode}
       initialLocale={locale}
-      initialAccountType={registrationPersona(accountType)}
+      initialAccountType={initialAccountType}
+      accountBoundaryHomeHref={accountBoundaryHomeHref}
       returnTo={returnTo}
       otpEnabled={Boolean(
         env.RESEND_API_KEY

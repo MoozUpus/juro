@@ -28,6 +28,14 @@ type AccountModuleRouteInput = {
   profile: LawyerEntryProfile | null;
 };
 
+type LawyerRoleMismatchInput = {
+  requestedAccountType: AccountType;
+  reauth: boolean;
+  lawyerHost: boolean;
+  requestHost: string | null;
+  profile: LawyerEntryProfile | null;
+};
+
 const pendingLawyerModules = new Set<PlatformModule>([
   "profile",
   "settings",
@@ -67,6 +75,40 @@ export function lawyerPublicOrigin(requestHost: string | null): string | null {
     return "https://lawyer.staging.juro.uz";
   }
   return null;
+}
+
+function clientPublicOrigin(requestHost: string | null): string | null {
+  const host = requestHost?.split(":", 1)[0]?.toLowerCase() ?? "";
+  if (host === "app.juro.uz" || host === "lawyer.juro.uz") {
+    return "https://app.juro.uz";
+  }
+  if (
+    host === "app.staging.juro.uz"
+    || host === "lawyer.staging.juro.uz"
+  ) {
+    return "https://app.staging.juro.uz";
+  }
+  return null;
+}
+
+export function lawyerRoleMismatchHome({
+  requestedAccountType,
+  reauth,
+  lawyerHost,
+  requestHost,
+  profile,
+}: LawyerRoleMismatchInput): string | null {
+  if (
+    !reauth
+    || !lawyerHost
+    || requestedAccountType !== "lawyer"
+    || !profile
+    || profile.accountType === "lawyer"
+  ) {
+    return null;
+  }
+  const origin = clientPublicOrigin(requestHost);
+  return origin ? `${origin}/${profile.locale}` : null;
 }
 
 export function operationalLawyer(profile: LawyerEntryProfile): boolean {

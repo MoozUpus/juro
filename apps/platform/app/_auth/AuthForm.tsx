@@ -26,6 +26,7 @@ type Props = {
   mode: "login" | "register";
   initialLocale: Locale;
   initialAccountType?: AccountType;
+  accountBoundaryHomeHref?: string;
   returnTo?: string;
   otpEnabled: boolean;
   platformAuthEnabled: boolean;
@@ -61,6 +62,7 @@ export function AuthForm({
   mode,
   initialLocale,
   initialAccountType = "individual",
+  accountBoundaryHomeHref,
   returnTo,
   otpEnabled,
   platformAuthEnabled,
@@ -306,6 +308,21 @@ export function AuthForm({
       <section className="auth-card">
         <div className="auth-theme"><ThemeSwitcher locale={locale} compact persistAccount={false} /></div>
         <LanguageSwitch locale={locale} hrefFor={localeHref} />
+        {accountBoundaryHomeHref && (
+          <section className="auth-role-boundary" role="status">
+            <ShieldCheck aria-hidden="true" />
+            <div>
+              <strong>{ru ? "Открыт клиентский профиль" : "Mijoz profili ochiq"}</strong>
+              <p>{ru
+                ? "Профессиональное пространство требует учётную запись юриста. Данные текущего клиентского кабинета здесь не раскрываются."
+                : "Professional ish maydoni yurist hisobini talab qiladi. Joriy mijoz kabineti ma’lumotlari bu yerda ochilmaydi."}</p>
+              <Link href={accountBoundaryHomeHref}>
+                <ArrowRight aria-hidden="true" />
+                {ru ? "Вернуться в клиентский кабинет" : "Mijoz kabinetiga qaytish"}
+              </Link>
+            </div>
+          </section>
+        )}
         {step === "details" ? (
           <form onSubmit={requestCode}>
             <header>

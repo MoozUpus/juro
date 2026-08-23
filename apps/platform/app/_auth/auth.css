@@ -171,6 +171,59 @@
   line-height: 1.55;
 }
 
+.auth-role-boundary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  margin: 42px 0 22px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--brand-gold) 44%, var(--border-default));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--brand-gold) 9%, var(--surface-raised));
+}
+
+.auth-role-boundary > svg {
+  width: 24px;
+  height: 24px;
+  color: var(--brand-gold-text);
+}
+
+.auth-role-boundary strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.auth-role-boundary p {
+  font-size: 14px;
+}
+
+.auth-role-boundary a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  color: var(--brand-gold-text);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.auth-role-boundary a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-role-boundary a:focus-visible {
+  border-radius: 6px;
+  outline: 3px solid color-mix(in srgb, var(--brand-gold) 52%, transparent);
+  outline-offset: 2px;
+}
+
+.auth-role-boundary a svg {
+  width: 18px;
+}
+
 .auth-card label {
   display: grid;
   gap: 8px;
