@@ -22,6 +22,22 @@ sequential run `13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` started at
 `2026-08-23T20:48:50.982Z`. No code change or staging redeploy was justified.
 Release floors, queue freeze and all post-ingestion gates remain open.
 
+## Sequential v2 monitoring continuation (2026-08-23, 20:40Z)
+
+At the sequential read-only probe, run
+`13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` remained `running` under the single
+distributed lock, renewed through `2026-08-23T20:54:09.761Z`. The checkpoint
+ledger remained 41 completed and three queued. Ingestion showed 2,490
+completed, 27,130 queued and one running job. Materialized totals were 518
+canonical documents, 947 language variants, 15,328 distinct current
+provisions and 55,388 indexed current chunks. The active running job was a
+version check for `https://lex.uz/ru/docs/4674902?ONDATE=11.03.2020` (`ru`).
+The failure ledger remained 15 `retrying` and two
+`technically_unavailable` English official-text rows; terminal/dead-letter
+ingestion jobs remained zero. No transient retry was force-completed and no
+code change or staging redeploy was justified. Release floors, queue freeze
+and all post-ingestion gates remain open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 20:37Z)
 
 Run `13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` remained `running` under the
