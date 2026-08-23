@@ -6,6 +6,37 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 14:32–14:55Z)
+
+Scheduled run `c3f121ed-eeca-40ce-bd82-665862b78b09` completed at
+`2026-08-23T14:43:28.608Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`. A timestamp-bounded read-only reconciliation at that
+finish boundary recorded 2,342 completed and 25,209 queued ingestion jobs;
+41 discovery checkpoints were completed. The corresponding materialized
+counts were 455 canonical documents, 857 language variants, 15,142 distinct
+current provisions and 55,013 indexed current chunks. The subsequent
+single-lease run `5c650c5a-5616-4cc5-9ee8-43a7de12cf0c` started at
+`2026-08-23T14:44:54.362Z`. No retryable result was force-completed; the
+catalogue timeout did not justify a code change, regression test or staging
+redeploy.
+
+Run `5c650c5a-5616-4cc5-9ee8-43a7de12cf0c` completed at
+`2026-08-23T14:55:26.444Z` with `error_code=NULL`. A timestamp-bounded
+read-only reconciliation at its finish boundary recorded 2,347 completed
+and 25,289 queued ingestion jobs. The materialized counts at that boundary
+were 457 canonical documents, 860 language variants, 15,147 distinct current
+provisions and 55,022 indexed current chunks. The next single-lease run
+`6aca7f42-5a4a-416b-a5bb-a51ba80fff19` was running during the following
+probe. At that probe the live ledger was 2,351 completed, 25,349 queued and
+one running job; checkpoints remained 41 completed and three queued. The
+failure ledger remained 15 `retrying` and two `technically_unavailable`
+English official-text rows, with no failed, terminal or dead-letter ingestion
+jobs. Materialized current totals were 459 canonical documents, 863 language
+variants, 15,153 distinct current provisions and 55,043 indexed current
+chunks. Release floors, queue freeze, snapshot, indexed evaluation,
+Qdrant/D1 restore and CI gates remain open; production bindings, corpus
+ingestion, feature flags and DNS are unchanged.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 14:20–14:31Z)
 
 Scheduled run `d17ba8bb-e582-4b81-9117-ede372a276d3` completed at
