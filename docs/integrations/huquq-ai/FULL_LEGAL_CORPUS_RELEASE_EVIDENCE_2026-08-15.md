@@ -2,6 +2,21 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Sequential v2 monitoring continuation (2026-08-23, 21:43Z)
+
+Run `c3428b10-15ae-470c-b1d8-1540a04485c3` completed at
+`2026-08-23T21:42:21.736Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`; the distributed lock is now released. The checkpoint
+ledger remains 41 completed and three queued. Ingestion contains 2,527
+completed and 27,554 queued jobs, with no running ingestion job at the probe
+boundary. Materialized totals remain 538 canonical documents, 968 language
+variants, 15,400 distinct current provisions and 55,464 indexed current
+chunks. Terminal/dead-letter jobs remain zero; the failure ledger remains 15
+`retrying` and two `technically_unavailable` English official-text rows. No
+transient retry was force-completed and no code change or staging redeploy was
+justified. Release floors, queue freeze and all post-ingestion gates remain
+open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 21:41Z)
 
 Run `c3428b10-15ae-470c-b1d8-1540a04485c3` remained active under the single
