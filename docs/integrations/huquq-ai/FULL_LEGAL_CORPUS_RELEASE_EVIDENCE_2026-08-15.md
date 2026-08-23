@@ -279,6 +279,24 @@ or staging redeploy. Snapshot, indexed evaluation, Qdrant/D1 restore and CI
 gates remained unopened; production bindings, corpus ingestion, feature flags
 and DNS were unchanged.
 
+## Sequential v2 monitoring continuation (2026-08-23, 00:08–00:12Z)
+
+Scheduled run `a4428268-3899-4632-bbfc-0fb2076336cb` completed at
+`2026-08-23T00:11:44.070Z` with `error_code=NULL`. The immediate read-only
+post-run probe showed 21/44 discovery checkpoints completed and 23 queued; no
+checkpoint was running or retrying at probe time. The ingestion ledger
+contained 1,487 completed and 16,199 queued jobs. The failure ledger contained
+nine `retrying` rows only; no terminal, technically-unavailable or dead-letter
+ingestion rows were observed.
+
+The materialized v2 totals were 269 canonical documents, 392 language
+variants, 14,096 distinct current provisions and 42,292 indexed current chunks.
+The indexed-chunk floor is met, but the document and provision floors remain
+open, discovery is not 44/44, and ingestion is not frozen. No code change or
+staging redeploy was justified. Snapshot, indexed evaluation, Qdrant/D1
+restore and CI gates remain unopened; production bindings, corpus ingestion,
+feature flags and DNS are unchanged.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 00:00–00:07Z)
 
 Scheduled run `5aa770be-f964-43ea-a440-eb0a87e95359` completed at
