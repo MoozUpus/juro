@@ -4,7 +4,10 @@ const uuid = z.string().uuid();
 const localizedLocale = z.enum(["ru", "uz"]);
 
 export const lawyerRequestSchema = z.object({
-  caseId: uuid,
+  // A first-time Client may start with a marketplace intake rather than an
+  // already-created matter. The request route creates a private Client case
+  // atomically in that situation; a supplied ID is still scoped server-side.
+  caseId: uuid.optional(),
   lawyerProfileId: uuid.optional(),
   anonymizedSummary: z.string().trim().min(20).max(2_000),
   serviceCode: z.enum([

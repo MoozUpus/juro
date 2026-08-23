@@ -4,6 +4,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { lawyerRequestSchema, localizedHandoffError } from "../../../../lib/platform/lawyer-request";
+import { caseScenarioSteps } from "../../../../lib/platform/case-create";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../lib/operations/operational-feature-flags";
 
@@ -59,11 +60,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response({ code: "PLAN_LIMIT", error: localizedHandoffError(locale, "PLAN_LIMIT") }, 403);
   }
 
-  const caseRow = await db.prepare(
-    "SELECT id FROM cases WHERE id=? AND workspace_id=? AND archived_at IS NULL LIMIT 1",
-  ).bind(parsed.data.caseId, workspace.id).first();
-  if (!caseRow) {
-    return response({ code: "CASE_UNAVAILABLE", error: localizedHandoffError(locale, "CASE_UNAVAILABLE") }, 404);
+  const autoCreatedCase = !parsed.data.caseId;
+  const caseId = parsed.data.caseId ?? crypto.randomUUID();
+  if (parsed.data.caseId) {
+    const caseRow = await db.prepare(
+      "SELECT id FROM cases WHERE id=? AND workspace_id=? AND archived_at IS NULL LIMIT 1",
+    ).bind(caseId, workspace.id).first();
+    if (!caseRow) {
+      return response({ code: "CASE_UNAVAILABLE", error: localizedHandoffError(locale, "CASE_UNAVAILABLE") }, 404);
+    }
   }
 
   const lawyer = parsed.data.lawyerProfileId
@@ -82,11 +87,65 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const requestId = crypto.randomUUID();
   const conflictCheckId = lawyer ? crypto.randomUUID() : null;
   const status = lawyer ? "conflict_check_pending" : "unassigned";
-  const scope = { caseId: parsed.data.caseId, stage: "anonymized_conflict_check", lawyerProfileId: lawyer?.id ?? null };
+  const scope = { caseId, stage: "anonymized_conflict_check", lawyerProfileId: lawyer?.id ?? null };
+  const automaticPlanId = autoCreatedCase ? crypto.randomUUID() : null;
+  const automaticCaseTitle = locale === "ru" ? "Запрос на консультацию" : "Maslahat so‘rovi";
+  const automaticPlanTitle = locale === "ru"
+    ? `План: ${automaticCaseTitle}`
+    : `Reja: ${automaticCaseTitle}`;
+  const automaticSteps = autoCreatedCase
+    ? caseScenarioSteps("other", locale).map((title, ordinal) => ({
+      id: crypto.randomUUID(),
+      title,
+      ordinal: ordinal + 1,
+      status: "not_started",
+    }))
+    : [];
+  const automaticPlanSnapshot = JSON.stringify({
+    version: 1,
+    title: automaticPlanTitle,
+    status: "in_progress",
+    progressPercent: 0,
+    steps: automaticSteps,
+  });
   await db.batch([
+    ...(autoCreatedCase && automaticPlanId ? [
+      db.prepare(
+        "INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,'open',1,?,?)",
+      ).bind(
+        caseId,
+        workspace.id,
+        user.id,
+        workspace.type === "business" ? "business" : "individual",
+        locale,
+        automaticCaseTitle,
+        parsed.data.anonymizedSummary,
+        "other",
+        now,
+        now,
+      ),
+      db.prepare(
+        "INSERT INTO action_plans (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at) VALUES (?,?,?,?,'in_progress',0,1,?,?)",
+      ).bind(automaticPlanId, caseId, user.id, automaticPlanTitle, now, now),
+      ...automaticSteps.map((step) => db.prepare(
+        "INSERT INTO action_plan_steps (id,plan_id,ordinal,title,status,deadline_type,revision,created_at,updated_at) VALUES (?,?,?,?,'not_started','calendar_days',1,?,?)",
+      ).bind(step.id, automaticPlanId, step.ordinal, step.title, now, now)),
+      db.prepare(
+        "INSERT INTO action_plan_versions (id,plan_id,version,created_by_user_id,reason,snapshot_json,created_at) VALUES (?,?,1,?,'plan_created',?,?)",
+      ).bind(crypto.randomUUID(), automaticPlanId, user.id, automaticPlanSnapshot, now),
+      db.prepare(
+        "INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'case_created',?,?)",
+      ).bind(
+        crypto.randomUUID(),
+        caseId,
+        user.id,
+        JSON.stringify({ legalArea: "other", source: "lawyer_handoff_intake" }),
+        now,
+      ),
+    ] : []),
     db.prepare(
       "INSERT INTO lawyer_requests (id,workspace_id,case_id,requester_user_id,lawyer_profile_id,status,anonymized_summary,requested_scope_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-    ).bind(requestId, workspace.id, parsed.data.caseId, user.id, lawyer?.id ?? null, status, parsed.data.anonymizedSummary, JSON.stringify({
+    ).bind(requestId, workspace.id, caseId, user.id, lawyer?.id ?? null, status, parsed.data.anonymizedSummary, JSON.stringify({
       scope: "case",
       consentVersion: "2026-07-31",
       serviceCode: parsed.data.serviceCode ?? null,
@@ -102,7 +161,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
     db.prepare(
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_request',?,'lawyer_request_created',?,?)",
     ).bind(crypto.randomUUID(), workspace.id, user.id, requestId, JSON.stringify({
-      caseId: parsed.data.caseId,
+      caseId,
+      autoCreatedCase,
       lawyerProfileId: lawyer?.id ?? null,
       planCode: entitlements.planCode,
       serviceCode: parsed.data.serviceCode ?? null,
@@ -125,5 +185,5 @@ export const POST = withApiErrors(async function POST(request: Request) {
     )] : []),
   ]);
 
-  return response({ ok: true, requestId, status, conflictCheckRequired: Boolean(lawyer) }, 201);
+  return response({ ok: true, requestId, caseId, autoCreatedCase, status, conflictCheckRequired: Boolean(lawyer) }, 201);
 });

@@ -85,6 +85,21 @@ test("profile status notifications are localized and preserve only a bounded rev
   assert.doesNotMatch(published.body, /одобрен|проверен/iu);
 });
 
+test("a first-time client can create a private intake case together with a consented lawyer request", () => {
+  const requestInput = readFileSync(new URL("../lib/platform/lawyer-request.ts", import.meta.url), "utf8");
+  const requestRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/route.ts", import.meta.url), "utf8");
+  const handoffClient = readFileSync(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8");
+
+  assert.match(requestInput, /caseId: uuid\.optional\(\)/);
+  assert.match(requestRoute, /const autoCreatedCase = !parsed\.data\.caseId/);
+  assert.match(requestRoute, /caseScenarioSteps\("other", locale\)/);
+  assert.match(requestRoute, /source: "lawyer_handoff_intake"/);
+  assert.match(requestRoute, /autoCreatedCase,/);
+  assert.match(handoffClient, /Новое приватное дело из заявки/);
+  assert.match(handoffClient, /Юрист не получит доступ до conflict check/);
+  assert.doesNotMatch(handoffClient, /!cases\.length \|\|/);
+});
+
 test("lawyer scheduling persists recurring hours and bounded unavailability", () => {
   const route = readFileSync(new URL("../app/api/platform/lawyer-schedule/route.ts", import.meta.url), "utf8");
   const migration = readFileSync(new URL("../drizzle/0142_legal_ecosystem_foundation.sql", import.meta.url), "utf8");

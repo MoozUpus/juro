@@ -340,18 +340,24 @@ export function LawyerHandoffClient({
             onChange={(event) => setCaseId(event.target.value)}
             disabled={!entitlements?.lawyerHandoff || busy}
           >
-            {cases.length ? (
-              cases.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}
-                </option>
-              ))
-            ) : (
-              <option value="">
-                {ru ? "Нет доступных дел" : "Mavjud ish yo‘q"}
+            <option value="">
+              {ru ? "Новое приватное дело из заявки" : "So‘rovdan yangi maxfiy ish"}
+            </option>
+            {cases.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title}
               </option>
-            )}
+            ))}
           </select>
+          <small>
+            {caseId
+              ? (ru
+                ? "Заявка будет связана с выбранным делом."
+                : "So‘rov tanlangan ish bilan bog‘lanadi.")
+              : (ru
+                ? "Мы создадим приватную карточку дела из этой заявки. Юрист не получит доступ до conflict check и вашего отдельного согласия."
+                : "Ushbu so‘rovdan maxfiy ish kartasi yaratiladi. Yurist manfaatlar to‘qnashuvi tekshiruvi va alohida roziligingizgacha ruxsat olmaydi.")}
+          </small>
         </label>
         <fieldset className="lawyer-directory-filters">
           <legend>
@@ -548,7 +554,6 @@ export function LawyerHandoffClient({
           type="submit"
           disabled={
             !entitlements?.lawyerHandoff ||
-            !cases.length ||
             summary.trim().length < 20 ||
             !consent ||
             busy
