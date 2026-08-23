@@ -52,9 +52,11 @@ The corresponding before evidence is in `screenshots/before/`.
   privileged request rechecks staff capability and current MFA evidence.
 - Production D1 is the system of record; private files and verified backups use
   private R2. Corrective migration `0155` replaces D1-incompatible expanded
-  audit-hash `GLOB` checks without discarding immutable events. Its full pre/post
-  exports, isolated restores and private-R2 SHA-256 round trips passed. Queue and
-  DLQ status is included in operational health evidence.
+  audit-hash `GLOB` checks without discarding immutable events. Migration `0156`
+  adds request-scoped reply/pin/typing state and immutable lawyer-only internal
+  notes. Its full pre/post exports, isolated restores and private-R2 SHA-256
+  round trips passed; no migration remains pending. Queue and DLQ status is
+  included in operational health evidence.
 - AI uses OpenAI and Anthropic with direct official Lex.uz grounding. Advice.uz
   ingestion and the local full-corpus flags remain disabled in this release.
 - Cloudflare Realtime provides call room transport; TURN credentials are Worker
@@ -68,6 +70,11 @@ The corresponding before evidence is in `screenshots/before/`.
   profile editing and admin-decided deletion lifecycle.
 - Professional dashboard, assigned requests, clients, matters, messages,
   documents, tasks, time recording, conflict check and knowledge base.
+- The request chat now includes search, replies, copy, one persisted pin,
+  typing/read/delivery state, retry/unread presentation, eight private
+  lawyer-only AI-assist modes, and document-linked internal notes that require an
+  explicit conversion before becoming a case task. AI output is never sent to
+  the client automatically, and the server omits AI/note data from Client reads.
 - Professional AI, document preparation, analysis, comparison/redline and
   action-plan workflows using existing authenticated backend data.
 - Lex.uz metadata monitoring with official-source links and task/document actions.
@@ -94,6 +101,17 @@ schedule, matters, clients, messages, documents, tasks, profile, calendar,
 security, billing, AI chat, document builder, document review, monitoring,
 knowledge, settings, demo payments and help. These routes produced no new
 warning/error console logs and no page-level horizontal overflow.
+
+The `0156` chat release passed rendered HTML 33/33, core 1068/1068 and
+Cloudflare 201/201 locally, then GitHub CI `32608885211`. Its first authenticated
+Lawyer load exposed a schema mismatch confined to the new private-note query:
+`user_profiles` has no `display_name`. Commit `e25a9fee` reads the canonical
+`lawyer_profiles` identity instead; focused tests, dry-run and CI `32609779920`
+passed, and Worker `00e80afc-a659-4158-827b-1b73228cf862` deployed at 100%.
+Two-profile Chrome then loaded the same synthetic request history, verified
+search and local reply preview, kept the Client free of private AI/notes, and
+rendered both 1536-pixel pages at 1521/1521 without overflow. Synthetic
+send/pin/AI/note-to-task mutations remain pending exact action-time confirmation.
 
 Representative Lawyer production widths passed at 360, 390, 768, 1366 and 1440
 pixels. The public catalogue, Client dashboard and final Admin overview later
@@ -340,13 +358,12 @@ records during the presentation.
   The platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
   direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
-- `/api/status` returned to a fully operational 8/8 aggregate after migration
-  `0155` and remained operational after Worker
-  `cd929f01-f04d-495b-8079-54dedcd621ea` (version 124). Fresh app/status-host
-  reads generated at `2026-08-22T23:49:21.229Z` and
-  `2026-08-22T23:49:21.701Z` showed no stale or degraded component and no incident
-  object. The live content-hashed Admin launch asset contains Manrope and no
-  previous inline Inter declaration.
+- `/api/status` remained fully operational after migration `0156`, the initial
+  chat release and hotfix Worker `00e80afc-a659-4158-827b-1b73228cf862`.
+  The fresh app read generated at `2026-08-23T01:23:51.558Z` reported all eight
+  components operational, no non-operational component and zero active incidents.
+  The live content-hashed Admin launch asset contains Manrope and no previous
+  inline Inter declaration.
 
 Until the owner-supplied legal-publication items are closed, this document is a
 release-candidate report rather than a blanket Definition-of-Done claim.
