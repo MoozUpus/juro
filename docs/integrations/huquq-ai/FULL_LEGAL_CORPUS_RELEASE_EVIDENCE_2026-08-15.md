@@ -22,6 +22,24 @@ sequential run `13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` started at
 `2026-08-23T20:48:50.982Z`. No code change or staging redeploy was justified.
 Release floors, queue freeze and all post-ingestion gates remain open.
 
+## Sequential v2 monitoring continuation (2026-08-23, 20:57Z)
+
+The prior run `880d9813-097f-4d6b-a8c7-4f9352e87952` completed at
+`2026-08-23T20:55:32.448Z` without an error. New run
+`0dcd04ec-f8eb-4972-9fc1-cab273801e76` was running under the single
+distributed lock, renewed through `2026-08-23T21:11:54.382Z`. The checkpoint
+ledger showed 41 completed, one queued, one running and one retrying. The
+retrying checkpoint was `international` / `uz-Latn`, page 71, with the
+allow-listed `LEX_CATALOG_TIMEOUT`; the running checkpoint was
+`international` / `uz-Cyrl`, page 72. Ingestion showed 2,497 completed and
+27,224 queued jobs, with no running ingestion job. Materialized totals
+remained 521 canonical documents, 950 language variants, 15,339 distinct
+current provisions and 55,399 indexed current chunks. The failure ledger
+remained 15 `retrying` and two `technically_unavailable` English official-text
+rows; terminal/dead-letter jobs remained zero. No transient retry was
+force-completed and no code change or staging redeploy was justified. Release
+floors, queue freeze and all post-ingestion gates remain open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 20:56Z)
 
 Run `880d9813-097f-4d6b-a8c7-4f9352e87952` remained `running` under the
