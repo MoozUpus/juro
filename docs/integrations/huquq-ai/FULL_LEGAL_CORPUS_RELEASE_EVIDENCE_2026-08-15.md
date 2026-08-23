@@ -6,6 +6,27 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 19:07–19:12Z)
+
+The scheduled run `d74b62d5-5712-4764-8693-be287fe69c3f` completed at
+`2026-08-23T19:07:42.386Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`. Timestamp-bounded read-only reconciliation at that
+finish boundary recorded 499 canonical documents, 923 language variants,
+15,273 distinct current provisions and 55,274 indexed current chunks; the
+ingestion ledger contained 2,452 completed and 26,605 queued jobs, with 41
+discovery checkpoints completed. The following sequential run
+`92ca5b38-c39c-4fd0-bfb5-39f618748623` started at `19:08:54.360Z` and was
+still running at the next probe. Current materialized totals were 500
+canonical documents, 924 language variants, 15,277 distinct current
+provisions and 55,278 indexed current chunks; the ingestion ledger contained
+2,452 completed, 26,688 queued and one running job, with 41 completed and
+three queued checkpoints. The failure ledger remained 15 `retrying` and two
+`technically_unavailable` English official-text rows; terminal/dead-letter
+ingestion jobs remained zero. No timeout was treated as terminal or
+force-completed, and no code change or staging redeploy was justified. The
+release floors, queue freeze and all post-ingestion gates remain open; the
+separate original `juro-staging` database remains unchanged.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 18:08–18:55Z)
 
 After the Wrangler read-only session was re-established, the scheduled-run
