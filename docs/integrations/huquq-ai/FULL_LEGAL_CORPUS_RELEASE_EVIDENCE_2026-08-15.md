@@ -6,6 +6,33 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 18:08–18:55Z)
+
+After the Wrangler read-only session was re-established, the scheduled-run
+ledger showed four additional completed single-lease cycles:
+`4bd8acb7-f85e-4ee4-8595-381a2b581265` completed at
+`18:19:53.643Z` with `error_code=NULL`; `c2b45677-e648-4fc6-8f39-faa1576d253c`
+completed at `18:31:30.577Z` with allow-listed `LEX_CATALOG_TIMEOUT`;
+`46b01c78-ca80-4112-bc66-c985e5e569c4` completed at
+`18:43:51.692Z` with the same retryable timeout; and
+`767e1df5-3c88-4fc7-86b0-bcc0823fd77b` completed at
+`18:55:41.232Z` with `error_code=NULL`.
+
+Timestamp-bounded reconciliation at the last clean finish boundary recorded
+2,447 completed and 26,550 queued ingestion jobs, with 41 discovery
+checkpoints completed. Materialized totals there were 497 canonical
+documents, 920 language variants, 15,267 distinct current provisions and
+55,258 indexed current chunks. The current sequential probe, while the next
+run `d74b62d5-5712-4764-8693-be287fe69c3f` is running, records 2,450
+completed and 26,611 queued jobs; checkpoints remain 41 completed and three
+queued. Current materialized totals are 499 canonical documents, 923 language
+variants, 15,273 distinct current provisions and 55,274 indexed current
+chunks. The failure ledger remains 15 `retrying` and two
+`technically_unavailable` English official-text rows; terminal/dead-letter
+jobs remain zero. No timeout was treated as terminal or force-completed, no
+code change/redeploy was justified, and all release/post-ingestion gates
+remain open.
+
 ## Sequential v2 monitoring boundary (2026-08-23, 15:36Z)
 
 Run `cb902304-8357-4dac-a0d9-c4c4d650a79f` remained `running`. Discovery
