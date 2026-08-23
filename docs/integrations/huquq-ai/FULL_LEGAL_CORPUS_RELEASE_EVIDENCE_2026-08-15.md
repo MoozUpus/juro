@@ -6,6 +6,26 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 10:44–10:48Z)
+
+Scheduled run `7cfba736-b13e-49d6-a552-83f4e6cff1fa` completed at
+`2026-08-23T10:48:12.141Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`. No newer scheduled run was present when the
+post-run read-only counters were captured. At that boundary, 39/44 discovery
+checkpoints were completed, 4 were queued and one checkpoint was retrying.
+The ingestion ledger contained 2,165 completed and 23,132 queued jobs, with no
+running job. No failed, terminal or dead-letter ingestion jobs were observed.
+
+The failure ledger remained fourteen `retrying` rows and two
+`technically_unavailable` English official-text rows. Materialized v2 totals
+were 389 canonical documents, 756 language variants, 14,827 distinct current
+provisions and 53,288 indexed current chunks. The document, provision and
+checkpoint release gates remain open and ingestion is not frozen. The
+retryable catalogue timeout did not justify a code change or staging
+redeploy. Snapshot, indexed evaluation, Qdrant/D1 restore and CI gates remain
+unopened; production bindings, corpus ingestion, feature flags and DNS are
+unchanged.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 10:36–10:40Z)
 
 Scheduled run `406b40ec-30c6-4546-8d23-686d8f77551f` completed at
