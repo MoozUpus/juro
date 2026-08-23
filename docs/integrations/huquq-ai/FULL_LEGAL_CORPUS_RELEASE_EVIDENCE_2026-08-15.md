@@ -2,6 +2,30 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Cross-database reconciliation probe (2026-08-23, 22:49Z)
+
+This was a read-only reconciliation; no bulk export/import or cross-database
+write was started. The legacy `juro-staging` database currently reports 3,575
+canonical documents, 62,075 distinct current provisions and 151,499 indexed
+current chunks. The isolated `juro-staging-corpus-v2` database currently reports
+555 canonical documents, 15,460 distinct current provisions and 55,138 indexed
+current chunks. These are not being treated as equivalent snapshots: v2 is being
+populated by its own bounded Lex.uz discovery/fetch/version pipeline, and the
+worker does not automatically copy the legacy database. A future delta import,
+if needed, would require a separately reviewed export/manifest/restore plan and
+would preserve canonical IDs, content hashes and version history; it is not part
+of this probe.
+
+The current v2 scheduled run is `cbd49631-3e46-4325-a922-0401457110df` and is
+`running` under the single `legal-corpus-worker` lock, renewed through
+`2026-08-23T23:04:17.023Z`. Discovery remains 44/44 `completed`. Queue
+composition is 994 completed and 27,153 queued fetch jobs, plus 1,575 completed
+and 636 queued version jobs. Terminal/dead-letter failure rows remain zero; the
+failure ledger remains 15 `retrying` and two `technically_unavailable` rows.
+The document and provision release floors remain unmet and the queue is not
+frozen, so snapshot, evaluation, Qdrant and D1 restore gates remain closed.
+Production is unchanged.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 22:44Z)
 
 Run `7817848a-ee11-410f-a233-25f45e12e5b3` remains `running` under the single
