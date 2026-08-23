@@ -6,6 +6,24 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-23, 19:31–19:34Z)
+
+Run `322ca38f-144b-4a21-a806-43871568bdbc` completed at
+`2026-08-23T19:31:51.605Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`. Timestamp-bounded reconciliation at that finish
+boundary remained 503 canonical documents, 929 language variants, 15,284
+distinct current provisions and 55,303 indexed current chunks. The next
+sequential run `5b52f4c5-94d4-46b2-a13d-ffbd6c3b0904` started at
+`19:32:54.362Z` and was running at the probe. Its discovery checkpoint was
+`international/uz-Cyrl`, page 63, with no error. The checkpoint ledger was
+41 completed, one running and two queued; the ingestion ledger contained
+2,462 completed and 26,739 queued jobs. The failure ledger remained 15
+`retrying` and two `technically_unavailable` English official-text rows;
+terminal/dead-letter ingestion jobs remained zero. No timeout was treated as
+terminal or force-completed, and no code change or staging redeploy was
+justified. Release floors, queue freeze and all post-ingestion gates remain
+open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 19:28Z)
 
 Run `322ca38f-144b-4a21-a806-43871568bdbc` remained `running`. The
