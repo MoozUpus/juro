@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { appLegalContent } from "../content/app-legal";
 import { recordRegistrationAcceptances } from "../lib/legal/acceptance";
 import {
   policyRegistry,
@@ -8,6 +9,18 @@ import {
   verifiedPolicyDocument,
 } from "../lib/legal/policies";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
+
+test("owner-supplied RU/UZ publication particulars replace every shipped placeholder", () => {
+  const content = JSON.stringify(appLegalContent);
+  assert.doesNotMatch(content, /\{OPERATOR_(?:LEGAL_NAME|EMAIL|ADDRESS)\}/u);
+  assert.match(content, /ООО «JURO»/u);
+  assert.match(content, /«JURO» MChJ/u);
+  assert.match(content, /«JURO» LLC/u);
+  assert.match(content, /admin@juro\.uz/u);
+  assert.match(content, /Tashkent, Uzbekistan/u);
+  assert.ok(Object.values(appLegalContent.ru).every(({ updated }) => updated === "23 августа 2026"));
+  assert.ok(Object.values(appLegalContent.uz).every(({ updated }) => updated === "2026-yil 23-avgust"));
+});
 
 test("every displayed RU/UZ policy has a locked version and content digest", async () => {
   for (const locale of ["ru", "uz"] as const) {
@@ -18,7 +31,7 @@ test("every displayed RU/UZ policy has a locked version and content digest", asy
       policySlugs,
     );
     for (const policy of registry) {
-      assert.equal(policy.documentVersion, "2026-07-26.draft.1");
+      assert.equal(policy.documentVersion, "2026-08-23.1");
       assert.equal(policy.status, "draft");
       assert.match(policy.contentSha256, /^[a-f0-9]{64}$/);
       assert.deepEqual(
@@ -97,7 +110,7 @@ test("registration records exact policy evidence and separates marketing consent
       ["personal-data-processing", "privacy-policy", "terms"],
     );
     for (const acceptance of acceptances) {
-      assert.equal(acceptance.documentVersion, "2026-07-26.draft.1");
+      assert.equal(acceptance.documentVersion, "2026-08-23.1");
       assert.equal(acceptance.locale, "ru");
       assert.equal(acceptance.contentSha256, acceptance.policyDigest);
       assert.equal(

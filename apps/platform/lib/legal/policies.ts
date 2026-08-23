@@ -37,7 +37,7 @@ export type VerifiedPolicyDocument = {
 
 export const MARKETING_CONSENT_VERSION = "2026-07-26.1";
 
-const POLICY_VERSION = "2026-07-26.draft.1";
+const POLICY_VERSION = "2026-08-23.1";
 
 const policyDefinitions = [
   {
@@ -47,8 +47,8 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: true,
     contentSha256: {
-      ru: "bee1ea543edf4d2ed79025cfaeafb17440640a5c9038855b1e38dccf0d3d0ad1",
-      uz: "ac71dc79fb7bf5c44447ceda68b01b46a831a51c0403211e276c495fe2f9b6aa",
+      ru: "6868550ffe75d126c2d64471781cfa1bf2c6cda51ffe58fb2bdc02f2f60a8328",
+      uz: "f8bfdcfcf27f8a0509ef5ad39cffc47857590be626f8b46114c388a9512bd4f9",
     },
   },
   {
@@ -58,8 +58,8 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: true,
     contentSha256: {
-      ru: "8f843cededaa10aaa1bcc490ebc7c722645213e967e2a13db37011634d9e2805",
-      uz: "d51ac5b4105fc8628e5adf1cfa8b918fc9c96bd24b78a31f05a9e9cebc38491d",
+      ru: "1763f9df1c03fc9793f9295d713c3a1c8f3706c30d24e111f996524b60ebdf06",
+      uz: "3b5da247cc512cd80dbb648b9e53c97936bba11ed451614355bb86dc66f6c3a3",
     },
   },
   {
@@ -69,8 +69,8 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: false,
     contentSha256: {
-      ru: "2eb817a4de8965ea9239f7558550c19641df6ae056981e33ab00fa83997005a8",
-      uz: "00f19dc9e4758119288d8257e775ab3acce71f0c2c4757ddf210cfe88a2bd7ae",
+      ru: "cb8cba617c90aaadde6d0e5ae2949b9bcccb6e5a19c9035a24557ffee345e28d",
+      uz: "a455973df28c8a19657dac9297a37feaa3d18a44aadd2ebae9a622096e9dea4a",
     },
   },
   {
@@ -80,8 +80,8 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: false,
     contentSha256: {
-      ru: "b23ee0d265fd4d50819a793e4f8dfc9f063161221eb071e9eebbd6bd8fe153ef",
-      uz: "1cf21a4315a49135156cc7b9cb90d24e6bff203a35043ce6ce6e3a0227edb069",
+      ru: "f8938adaa396591b5e5e3bd9a3a484100c36a0114ae0f7f88130f2d03cf58e13",
+      uz: "24394fa46a23b0a2731b3ea40688857abac03c4e4a4eb955947239c304f8b09c",
     },
   },
   {
@@ -91,8 +91,8 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: true,
     contentSha256: {
-      ru: "672d2020393c98d5392b26cec0e0a42253ba0a1328d5b1e1d9bed3d64b2e4c31",
-      uz: "dd07b89ada8fe00113d724af213474076db1ce4ce28847d1bc6dbad6bc0ab291",
+      ru: "933f3fc6ecc9413374a939b43c6d2364699b9a5850ff4a02840fc9e4a7181820",
+      uz: "09f9e8b6f35fa623860aec0faefb4f536c1557bd9c3343e25c793dbbae6bf382",
     },
   },
 ] as const satisfies readonly PolicyDefinition[];

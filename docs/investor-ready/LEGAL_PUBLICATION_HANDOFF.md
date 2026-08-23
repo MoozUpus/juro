@@ -1,20 +1,23 @@
 # Legal publication handoff
 
-Status: **awaiting owner-supplied data and approval**. This document is an
-execution checklist, not legal approval and not a substitute for review by the
-project owner's qualified counsel.
+Status: **owner particulars supplied; explicit RU/UZ content approval pending**.
+This document is an execution checklist, not legal approval and not a
+substitute for review by the project owner's qualified counsel.
 
 ## Owner-supplied inputs
 
-Do not infer any of these values from a domain registration, email account,
-repository metadata or a demo identity. The owner must provide and approve:
+The owner supplied the following publication candidate values on 23 August
+2026. They are now present in the repository candidate, but that candidate
+remains `draft` until the owner explicitly approves all five RU and UZ editions:
 
-1. `OPERATOR_LEGAL_NAME` — the exact public legal name of the platform operator.
-2. `OPERATOR_EMAIL` — the public contact address for policy requests and
-   complaints.
-3. `OPERATOR_ADDRESS` — the exact public operator address.
-4. The effective/publication date and approved version label.
-5. Explicit approval of both the RU and UZ editions of each document:
+1. Public operator designations — `ООО «JURO»`, `«JURO» MChJ` and `«JURO» LLC`.
+2. Public contact — `admin@juro.uz`.
+3. Public address — `Tashkent, Uzbekistan`.
+4. Candidate effective/publication date — 23 August 2026 (`23 августа 2026` /
+   `2026-yil 23-avgust`).
+5. Candidate version label — `2026-08-23.1`.
+6. Still required: explicit approval of both the RU and UZ editions of each
+   document:
    - Terms;
    - Privacy Policy;
    - Cookies Policy;
@@ -23,14 +26,16 @@ repository metadata or a demo identity. The owner must provide and approve:
 
 ## Repository publication procedure
 
-1. Replace every `{OPERATOR_*}` placeholder in
-   `apps/platform/content/app-legal.ts` with the exact owner-approved values and
-   apply any owner/counsel-approved RU/UZ text changes.
-2. Update each document's visible `updated` value in both locales.
-3. In `apps/platform/lib/legal/policies.ts`, issue a new immutable
-   `POLICY_VERSION`, change the new definitions from `draft` to `approved`, and
-   set the ten RU/UZ SHA-256 values to the digests of the final canonical
-   content. Never rewrite or relabel an already accepted historical version.
+1. Completed for the candidate: replace every `{OPERATOR_*}` placeholder in
+   `apps/platform/content/app-legal.ts` with the supplied values.
+2. Completed for the candidate: update each document's visible `updated` value
+   in both locales.
+3. Completed for the candidate: issue `POLICY_VERSION=2026-08-23.1` and set the
+   ten RU/UZ SHA-256 values to the candidate canonical-content digests. The
+   definitions intentionally remain `draft` until explicit approval. After
+   approval, change only this new version to `approved`, recompute its digests
+   because status is canonical content, and never rewrite or relabel an already
+   accepted historical version.
 4. Update `apps/platform/tests/policy-acceptance.test.ts` for the new version and
    status. Preserve the assertions that registration records the exact locale,
    content digest, acceptance method and auth evidence.
@@ -58,4 +63,3 @@ The legal-publication gate is closed only when all of the following are true:
   rendering evidence pass;
 - the final evidence record identifies who supplied/approved the public values
   without placing private credentials or unrelated personal data in the repo.
-
