@@ -2,6 +2,20 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Sequential v2 monitoring continuation (2026-08-23, 23:03Z)
+
+The active run `bc0e5d6c-6bab-4b6e-8aee-1d247ff8ea7e` remains `running` under
+the single distributed lock. Queue composition advanced to 1,004 completed and
+27,143 queued fetch jobs, plus 1,579 completed, 631 queued and one running
+version job. Direct terminal/dead-letter filtering remains empty; the failure
+ledger remains 15 `retrying` and three `technically_unavailable` rows. The
+materialized totals advanced to 563 canonical documents, 1,000 language
+variants, 15,489 distinct current provisions and 55,171 indexed current chunks.
+Discovery remains 44/44 `completed`. Document/provision floors remain unmet and
+the queue is not frozen, so all post-ingestion gates remain closed. The single
+Cloudflare API 7403 probe failure was retried successfully and caused no state
+change. No code change or staging redeploy was justified.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 23:00Z)
 
 Run `bc0e5d6c-6bab-4b6e-8aee-1d247ff8ea7e` is `running` under the single
