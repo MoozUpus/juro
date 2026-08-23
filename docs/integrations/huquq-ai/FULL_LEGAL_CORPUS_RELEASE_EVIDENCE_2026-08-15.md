@@ -2,6 +2,26 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Sequential v2 monitoring continuation (2026-08-23, 23:44–23:48Z)
+
+Run `b90c1212-24f8-447d-aff8-966ebfb48163` completed at
+`2026-08-23T23:44:35.146Z` with `error_code=NULL`; the distributed lock was
+released. A new scheduled run `f668e7f4-9e54-43e2-adaa-3f97097cde22` was
+observed `running` at `2026-08-23T23:48:20.192Z` under the next lease.
+Discovery remains 44/44 `completed`. Immediately after closure, fetch jobs
+were 1,019 `completed`, 27,131 `queued` and no running fetch; version jobs
+were 1,595 `completed` and 616 `queued`. At the next lease, one fetch job was
+running and the queue was 1,019 completed / 27,130 queued fetches plus 1,595
+completed / 616 queued versions. Direct terminal/dead-letter filtering remains
+empty; the failure ledger remains 15 `retrying` and four
+`technically_unavailable`. Totals remain 575 canonical documents, 1,014
+language variants, 15,659 distinct current provisions and 55,500 indexed
+current chunks. `wrangler d1 info` reports the v2 database at 9.78 GB; this is
+an operational observation, not the fresh 8-GB release-capacity artifact.
+Floors and queue freeze remain unmet, so snapshot, evaluation, Qdrant/D1
+restore and CI gates stay closed. No code change or staging redeploy was
+justified; production remains untouched.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 23:43Z)
 
 Run `b90c1212-24f8-447d-aff8-966ebfb48163` is still `running`; its single
