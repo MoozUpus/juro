@@ -2,6 +2,22 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Sequential v2 monitoring continuation (2026-08-23, 21:12Z)
+
+Read-only reconciliation after run `9748cab0-4e97-41fd-b8d7-4fd0d4d3db20`
+finished at `2026-08-23T21:10:18.942Z`: the scheduled run completed with no
+error, the distributed lock is no longer held, and the checkpoint ledger is
+41 completed with three queued (`international` discovery checkpoints). The
+ingestion queue contains 2,507 completed and 27,334 queued jobs, with no
+running job. Materialized totals are 527 canonical documents, 956 language
+variants, 15,358 distinct current provisions and 55,418 indexed current
+chunks. The failure ledger remains 15 `retrying` and two
+`technically_unavailable` English official-text rows; terminal/dead-letter
+jobs remain zero. The preceding completed run still records the allow-listed
+retryable `LEX_CATALOG_TIMEOUT`; it was not force-completed. Release floors,
+queue freeze and all post-ingestion gates remain open; no code change or
+staging redeploy was justified.
+
 This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
