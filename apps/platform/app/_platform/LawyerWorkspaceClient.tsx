@@ -52,6 +52,15 @@ function statusCopy(status: string, ru: boolean) {
     suspended: ["Работа приостановлена", "Ish to‘xtatilgan"],
     blocked: ["Доступ заблокирован", "Kirish bloklangan"],
     archived: ["Профиль в архиве", "Profil arxivda"],
+    conflict_check_pending: ["Требуется проверка конфликта", "Manfaatlar to‘qnashuvini tekshirish kerak"],
+    awaiting_user_consent: ["Ожидается решение клиента", "Mijozning qarori kutilmoqda"],
+    access_granted: ["Доступ к делу предоставлен", "Ishga ruxsat berildi"],
+    access_revoked: ["Доступ к делу отозван", "Ishga ruxsat bekor qilindi"],
+    conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi"],
+    offer_proposed: ["Условия направлены клиенту", "Shartlar mijozga yuborildi"],
+    offer_accepted: ["Условия приняты", "Shartlar qabul qilindi"],
+    offer_declined: ["Условия отклонены", "Shartlar rad etildi"],
+    completed: ["Работа завершена", "Ish yakunlandi"],
   };
   return values[status]?.[ru ? 0 : 1] ?? status;
 }
