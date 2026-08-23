@@ -54,9 +54,11 @@ The corresponding before evidence is in `screenshots/before/`.
   private R2. Corrective migration `0155` replaces D1-incompatible expanded
   audit-hash `GLOB` checks without discarding immutable events. Migration `0156`
   adds request-scoped reply/pin/typing state and immutable lawyer-only internal
-  notes. Its full pre/post exports, isolated restores and private-R2 SHA-256
-  round trips passed; no migration remains pending. Queue and DLQ status is
-  included in operational health evidence.
+  notes. Migration `0157` adds an explicit no-show outcome constrained to a
+  completed consultation with no result note. The `0157` full pre/post exports,
+  isolated restores and private-R2 SHA-256 round trips passed; no migration
+  remains pending. Queue and DLQ status is included in operational health
+  evidence.
 - AI uses OpenAI and Anthropic with direct official Lex.uz grounding. Advice.uz
   ingestion and the local full-corpus flags remain disabled in this release.
 - Cloudflare Realtime provides call room transport; TURN credentials are Worker
@@ -73,8 +75,11 @@ The corresponding before evidence is in `screenshots/before/`.
 - The request chat now includes search, replies, copy, one persisted pin,
   typing/read/delivery state, retry/unread presentation, eight private
   lawyer-only AI-assist modes, and document-linked internal notes that require an
-  explicit conversion before becoming a case task. AI output is never sent to
-  the client automatically, and the server omits AI/note data from Client reads.
+  explicit conversion before becoming a case task. Compact chat context cards
+  expose the current proposal, payment/case action, consultation/call action and
+  document requests without mixing private notes into Client reads. AI output is
+  never sent to the client automatically, and the server omits AI/note data from
+  Client reads.
 - Professional AI, document preparation, analysis, comparison/redline and
   action-plan workflows using existing authenticated backend data.
 - Lex.uz metadata monitoring with official-source links and task/document actions.
@@ -82,8 +87,9 @@ The corresponding before evidence is in `screenshots/before/`.
 - Consultation room/signalling foundation, transparent demo billing, 1% case
   fee semantics, configurable 2%/5% rules, Uzum exclusion and admin fee matrix.
 - Route-scoped camera/microphone/display-capture policy, actionable RU/UZ device
-  errors, TURN credential exchange, idempotent end-call handling and reusable
-  bounded demo-call reset.
+  errors, explicit camera/microphone/speaker selection, WebRTC-stat network
+  quality, audio-only state, TURN credential exchange, idempotent end-call
+  handling and reusable bounded demo-call reset.
 - Three bounded demo accounts, three synthetic payment records and one
   consent-published demo lawyer. Synthetic data is labelled and bounded.
 - Auto-published profiles now use neutral publication language on public,
@@ -112,6 +118,18 @@ Two-profile Chrome then loaded the same synthetic request history, verified
 search and local reply preview, kept the Client free of private AI/notes, and
 rendered both 1536-pixel pages at 1521/1521 without overflow. Synthetic
 send/pin/AI/note-to-task mutations remain pending exact action-time confirmation.
+
+The follow-up `0157` release passed rendered HTML 33/33, core 1069/1069,
+Cloudflare 201/201, production artifact/performance budgets, dependency audit and
+GitHub CI `32612175998`. Migration `0157` passed pre/post full-export recovery
+gates and private-R2 readback, then Worker
+`ecabef2f-cd37-40f0-9e20-66803b753f3b` took 100% traffic. Authenticated RU and UZ
+Lawyer Chrome rendered two context cards, the call action and the private
+AI/note boundaries at 1521/1521 pixels without overflow. Chrome itself blocked
+the Client profile and protected call-route navigation with
+`ERR_BLOCKED_BY_CLIENT`; the deployed hashed call asset proves device enumeration,
+speaker switching, WebRTC stats, network-quality and audio-only code, but this
+release does not mislabel that artifact check as a new live device-selector pass.
 
 Representative Lawyer production widths passed at 360, 390, 768, 1366 and 1440
 pixels. The public catalogue, Client dashboard and final Admin overview later
@@ -298,12 +316,13 @@ included in the evidence index.
 That pass also found a previously hidden audit-log failure: production D1
 rejected the seven-term compound query. The fix first shipped in Worker
 `073aac71-2aa2-4083-948e-1c4c12f1fd68` and is retained in current Worker
-`cd929f01-f04d-495b-8079-54dedcd621ea`, using bounded per-source queries and a
+`ecabef2f-cd37-40f0-9e20-66803b753f3b`, using bounded per-source queries and a
 safe global top-N merge. A later fresh-MFA Chrome replay reached the route and
 found a second D1-specific fault: migration `0086` generated a 64-term hash
 `GLOB` that D1 rejected as too complex. Production migration `0155` now uses
 bounded length and character-class checks, retains the immutable chain/index
-guards, has no pending successor migration and passed pre/post recovery gates.
+guards and passed its pre/post recovery gates. Migration `0157` is now the
+latest applied migration, with no pending successor.
 The final fresh-MFA Chrome replay and one reload both loaded the localized audit
 table without any console warning/error and displayed immutable-chain receipts.
 A read-only production D1 aggregate confirmed the two corresponding access
@@ -358,10 +377,11 @@ records during the presentation.
   The platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
   direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
-- `/api/status` remained fully operational after migration `0156`, the initial
-  chat release and hotfix Worker `00e80afc-a659-4158-827b-1b73228cf862`.
-  The fresh app read generated at `2026-08-23T01:23:51.558Z` reported all eight
-  components operational, no non-operational component and zero active incidents.
+- `/api/status` remained fully operational after migration `0157` and Worker
+  `ecabef2f-cd37-40f0-9e20-66803b753f3b`. Fresh app and status-host reads
+  generated at `2026-08-23T02:23:40.568Z` and `2026-08-23T02:23:40.997Z`
+  reported all eight components operational, no non-operational component and
+  zero active incidents.
   The live content-hashed Admin launch asset contains Manrope and no previous
   inline Inter declaration.
 

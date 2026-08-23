@@ -28,7 +28,7 @@
 1. Export the production database to a protected local temporary path.
 2. Record SHA-256, restore the export locally, run SQLite quick check and foreign-key check.
 3. Upload the encrypted/private backup and manifest to the approved private R2 location, then read back and verify the SHA-256.
-4. Apply migrations `0146`–`0156` sequentially with production bindings.
+4. Apply migrations `0146`–`0157` sequentially with production bindings.
 5. Re-list migrations and query only bounded verification counts/constraints.
 6. Apply the version-1 investor seed only after the schema gate passes. Immediately after the first bounded seed, confirm exactly three active demo-account registry rows, the three fixed seed payment rows and one consent-published demo lawyer. Later rehearsal-created runs may increase the payment count; every such row must still be constrained to `provider=demo` and `is_simulation=1` and must never be represented as a real payment.
 7. Remove verified local plaintext backup copies using the approved safe cleanup procedure.

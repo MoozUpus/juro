@@ -6,10 +6,12 @@
 - OTP/session setup is an operator step; the seed deliberately creates no credentials or sessions.
 - Do not enter real personal, client, document or case data.
 - Payment steps are simulation only. The call is real WebRTC media but is not recorded.
-- Treat `QA_MATRIX.md` as the hard rehearsal gate. Do not advertise the full
-  script as end-to-end ready while selected-source remote screen rendering or
-  live forced reconnect is still `PENDING`, `PARTIAL` or `NOT TESTED`. Native
-  Chrome page zoom is intentionally outside the QA scope by user instruction.
+- Treat `QA_MATRIX.md` as the hard rehearsal gate. Selected-source remote screen
+  rendering, explicit share stop, bounded live reconnect and one-sided remote
+  teardown are verified in two authenticated Chrome profiles. Recheck the
+  current matrix and production status before each presentation; do not infer a
+  new pass from this historical evidence. Native Chrome page zoom is
+  intentionally outside the QA scope by user instruction.
 - Before a two-profile rehearsal, confirm that the ChatGPT Chrome extension is
   stably connected to both selected Chrome profiles. A tab listing alone is not
   sufficient: navigation and DOM inspection must also succeed after any Windows
@@ -30,12 +32,11 @@
 11. Open Knowledge, show case/client linking, folders, tags and favorites. Create only a synthetic note.
 12. Open AI/document review/monitoring from the professional navigation. Any legal change shown live must retain its official source; do not invent a monitoring event for the rehearsal.
 13. Open the confirmed consultation call. Run device preflight, join from both
-    participant accounts, and verify the already rehearsed two-way audio/video,
-    mute/camera controls, synchronized timer and clean end-call state. Add
-    selected-source screen sharing and a forced reconnect to the investor demo
-    only after those exact live gates are marked `VERIFIED` in `QA_MATRIX.md`;
-    implementation, automated tests or opening the native picker are not
-    substitutes for remote-rendering and interruption evidence.
+    participant accounts, and demonstrate the rehearsed two-way audio/video,
+    mute/camera controls, synchronized timer, selected-source public-tab share,
+    explicit share stop, bounded reconnect and clean one-sided end-call state.
+    Never represent a stale rehearsal as evidence for the current session if a
+    participant, permission or network check fails.
 14. Open Billing. Show the trial, 1% consultation entry, 5% configured corporate transfer entry, sandbox disclosure, status filter and CSV export. Run a demo payment and a refund if required; no real charge occurs.
 15. Open the public lawyer profile and show that self-publication carries no unearned Verified badge.
 16. Sign in through `https://admin.juro.uz/` as `investor-admin@juro.uz` with fresh MFA. Show trial controls, fee matrix, demo transaction, immutable audit evidence and the pending synthetic deletion request. Do not approve deletion during the standard demo.
