@@ -22,6 +22,21 @@ sequential run `13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` started at
 `2026-08-23T20:48:50.982Z`. No code change or staging redeploy was justified.
 Release floors, queue freeze and all post-ingestion gates remain open.
 
+## Sequential v2 monitoring continuation (2026-08-23, 20:44Z)
+
+Run `13f3c522-7bce-4a2c-9e7a-0ec20b6ebfe8` finished at
+`2026-08-23T20:43:17.707Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`; it was not treated as terminal and no retry was
+force-completed. The distributed lock was released. Checkpoints remained 41
+completed and three queued. The ingestion queue contained 2,492 completed and
+27,129 queued jobs, with no running job. Materialized totals remained 518
+canonical documents, 947 language variants, 15,328 distinct current
+provisions and 55,388 indexed current chunks. The failure ledger remained 15
+`retrying` and two `technically_unavailable` English official-text rows;
+terminal/dead-letter jobs remained zero. No code change or staging redeploy
+was justified. Ingestion is not frozen and release floors plus all
+post-ingestion gates remain open.
+
 ## Sequential v2 monitoring continuation (2026-08-23, 20:42Z)
 
 The next sequential read-only probe kept run
