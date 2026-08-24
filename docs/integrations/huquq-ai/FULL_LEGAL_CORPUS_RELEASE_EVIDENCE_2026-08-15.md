@@ -11012,3 +11012,17 @@ checkpoints are `completed`. The failure ledger contains one
 technical-unavailability rate is approximately 0.0036%, below the 2% release
 threshold. The queue remains active, so release floors and post-ingestion gates
 remain open; production is untouched.
+
+## Shard run closure (2026-08-24, 07:12Z)
+
+The cron run `e667fa98-4355-4a6a-bbab-1ef38e40e9a0` completed at
+`2026-08-24T07:12:25.011Z` with `status=completed` and `error_code=NULL`.
+The read-only shard aggregate is 39 canonical documents, 5,341 unique current
+provisions and 16,769 indexed chunks. All 44 discovery checkpoints remain
+`completed`. The ingestion queue is not frozen: 27,092 fetch jobs and 2,198
+version jobs are still `queued` (76 fetch and 13 version jobs are
+`completed`). The failure ledger still has one
+`technically_unavailable` source-language row for
+`https://lex.uz/en/docs/8152156`; no `failed` or `dead_letter` ingestion jobs
+are present. Release floors and post-ingestion snapshot/evaluation/restore/CI
+gates therefore remain open; production is untouched.
