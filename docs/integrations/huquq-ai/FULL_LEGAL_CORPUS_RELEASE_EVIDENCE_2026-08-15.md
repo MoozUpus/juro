@@ -2,6 +2,32 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Historical-version lease recovery (2026-08-24, 19:56–19:58Z)
+
+The long-running scheduled invocation `a103194e-d09d-4d9b-b272-0f696e0790dd`
+was reclaimed at `2026-08-24T19:56:17.593Z` with
+`LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED` after its last durable heartbeat at
+`19:39:10.167Z`. The stale-running reconciliation recorded one retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` entry for the historical version job
+`legal-version:761d756a8704c1085e59c001f88e` (`lexuz:149947`,
+`?ONDATE=05.04.2019`); the job was subsequently marked `completed` on attempt
+2 by the replacement invocation. The replacement run
+`60f9db7c-2abe-4f29-af8d-3c6291dfa7fe` started at `19:56:17.593Z` and had a
+fresh heartbeat at `19:58:52.446Z`, extending the distributed lock to
+`20:13:52.446Z`.
+
+The post-reclaim read-only probe recorded 315 canonical documents, 11,588
+unique current provisions and 39,732 indexed chunks, with all 44 discovery
+checkpoints completed. The ingestion ledger contained 759 completed, 26,989
+queued and one running fetch job, plus 101 completed and 2,110 queued version
+jobs. Explicit `failed`/`dead_letter`/`terminal`/`dead_lettered` job queries
+remain empty. The failure ledger now has six retrying stale-running records
+(including this recovered historical job), three retrying generic ingestion
+records, six retrying language-text records and the same eight technically
+unavailable source records. Release floors, queue freeze and all snapshot,
+evaluation, Qdrant/D1-restore and CI gates remain open; production is
+untouched.
+
 ## Post-fix shard run closure (2026-08-24, 19:08Z)
 
 The post-deploy run `bec64037-61b1-461c-939b-508e8c5481d8` completed at
