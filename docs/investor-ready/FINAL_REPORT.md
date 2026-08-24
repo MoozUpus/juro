@@ -545,6 +545,37 @@ Lawyer Chrome reopened the exact ended call and rendered `Звонок заве�
 `Устройства не включались. Юрист может добавить итог консультации в карточке
 заявки.` without the device-check action or a browser error.
 
+After the owner gave the required action-time confirmation, the Lawyer sent the
+exact privacy-safe result and completed consultation
+`1d3bcda6-0d69-451d-829e-86a4d32db2f9`. The production write created exactly
+one Client notification, one workspace audit event and one case event, but the
+independent D1 audit found `result_note=null`: the update SQL compared the
+persisted status bind with `completed` even though the action bind is
+`complete`. Commit `9a45a7b6` extracts the transition SQL, corrects that guard
+and adds a real SQLite regression proving the completed state and result note
+survive with foreign-key integrity. The focused suite passed 28/28, the full
+local release suite passed rendered HTML 33/33, the full core suite and
+Cloudflare 201/201 plus types, lint, production artifact, environment matrix, budgets and
+licence policy, and GitHub CI `32769402060` passed both jobs. Worker
+`dbaeccc9-b13c-43bf-8637-06680faa0320` (deployment
+`0b87b88e-973e-444d-aa0a-feda7f594d55`) receives 100% traffic.
+
+The already-transmitted exact result was recovered without a duplicate Client
+message: a guarded one-row D1 update filled only the null canonical result on
+the already completed consultation. Pre/post exports and isolated restores
+both returned `quickCheck=ok`, zero foreign-key violations, 157 migrations, 281
+tables, 607 indexes and 378 triggers. Private R2 readback under
+`d1/juro-production/20260825T004900Z-result-repair-9a45a7b6/` matched SHA-256
+`3574902b0d8febe53e6d8755187c8b5ddcf78935fbed7ca5515dcbcacce4d6f5`
+before and
+`86125ee97eebc6665b8ee726eea3ddd87b452d77e1716fa5d3ea3d934e3bc001`
+after; the final manifest hash is
+`661fe85bc88f42ae22169e213152454ebf8182c54f3027c626b07ed0d047b38d`.
+Exact local plaintext/readback directories were deleted and both `Test-Path`
+checks returned false. Reloaded authenticated Lawyer Chrome showed
+`Завершена`, `Итог консультации` and the exact approved text with no completion
+control or browser warning/error.
+
 ## 12. Limitations and release truth
 
 - Production payment approval is off. Billing is an explicit demo foundation;
@@ -573,10 +604,12 @@ Lawyer Chrome reopened the exact ended call and rendered `Звонок заве�
   covered by authenticated production Chrome plus exact D1 evidence. The flow
   completed conflict-clear, Client consent/access grant and Lawyer accept for
   request `5a2ec6d4-1807-411d-b2b5-ef6f199620ed`, then proposed and confirmed a
-  consultation and completed the real two-party call. The final post-call
-  result is still withheld until the mandatory action-time confirmation for
-  transmitting that generated result to the Client; no broader pre-approval is
-  treated as proof that this representational step occurred.
+  consultation and completed the real two-party call. After the required
+  action-time confirmation, the exact privacy-safe post-call result was sent
+  once, the consultation became `completed`, and the canonical result was
+  verified in D1 and authenticated Lawyer Chrome. The Client Chrome session had
+  expired before the final visual replay, so Client receipt is evidenced by the
+  exact single notification row rather than claimed from a current Client UI.
 - `/api/status` was fully operational immediately after migration `0157` and
   Worker `ecabef2f-cd37-40f0-9e20-66803b753f3b`. It later recorded a real
   Anthropic/document-analysis regression, while the other six published
@@ -597,13 +630,12 @@ Lawyer Chrome reopened the exact ended call and rendered `Звонок заве�
   recent incident lists. The live content-hashed Admin launch asset
   contains Manrope and no previous inline Inter declaration.
 
-After the provider-boundary and terminal-state releases, app and status-host
-reads generated at `2026-08-24T18:43:29.177Z` and
-`2026-08-24T18:43:29.619Z` returned operational 8/8 with no incident on Worker
-`2f54c3a6-d5a1-4030-beea-e32d394a33ec`. The post-deploy D1 read retained the
-exact ended-room evidence: two prepared, two joined, two left, one ended event,
-zero signals and an empty foreign-key check. The separate consultation result
-remains unsent and the business row remains `in_progress`.
+After the result-note hotfix and guarded recovery, app and status-host reads
+generated at `2026-08-24T20:01:28.663Z` and `2026-08-24T20:01:30.26Z`
+returned operational 8/8 with no active or recent incident on Worker
+`dbaeccc9-b13c-43bf-8637-06680faa0320`. The final D1 read retained the exact
+ended-room evidence, one completion notification/audit/case event and zero
+signals, while the consultation is `completed` with the exact approved result.
 
 The genuine approved-version registration and fresh-MFA Admin-theme gates are
 closed. This document remains an evidence-scoped release report rather than a

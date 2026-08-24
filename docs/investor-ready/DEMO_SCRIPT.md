@@ -27,6 +27,9 @@
   terminal-state demonstration and must not request devices. A new live-call
   rehearsal requires a distinct fresh `SYNTHETIC DEMO` request and confirmed
   consultation; never reset or reopen the ended room as if it were active.
+- That consultation is also `completed` with the approved privacy-safe result.
+  Its card may be used to demonstrate `Итог консультации`; do not resubmit the
+  completion action or create a duplicate Client notification.
 
 ## Rehearsal
 
@@ -40,6 +43,7 @@
 6. Open the linked request, accepted offer, client/lawyer chat and consultation.
    The proven accessible flow uses request
    `5a2ec6d4-1807-411d-b2b5-ef6f199620ed`; do not substitute real case data.
+   Show its completed state and exact `SYNTHETIC DEMO` result without editing it.
 7. Switch to `https://lawyer.juro.uz/` with the owner-accessible assigned Lawyer
    account. Show the dedicated dashboard and 90-day trial.
 8. Open Requests → the synthetic request. Show the active grant and only the permitted client/case records.
