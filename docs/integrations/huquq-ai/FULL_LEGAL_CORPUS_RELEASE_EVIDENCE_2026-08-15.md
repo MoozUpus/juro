@@ -10927,3 +10927,14 @@ intermediate CLI probe returned Cloudflare API code 7403, but the identical
 read-only scheduler query immediately succeeded and the durable run remained
 healthy; this is recorded as a probe transport retry, not an ingestion failure.
 The queue is active and all post-ingestion release gates remain closed.
+
+## Preserved v2 capacity probe (2026-08-24, 06:06Z)
+
+The original `juro-staging-corpus-v2` remains at `9,999,998,976` bytes. Its
+last durable scheduler rows are the previously recorded `D1_ERROR` failures
+from the capacity guard; no new source work was started there. A sequential
+read-only job aggregate remains 1,055 completed fetches, 27,097 queued fetches,
+1,619 completed versions, 589 queued versions, one retrying version and two
+running versions. The job ledger still has zero `failed` and zero
+`dead_letter` rows; the separate failure ledger has 28 retrying and five
+technically-unavailable rows. The v2 database was not modified or rebound.
