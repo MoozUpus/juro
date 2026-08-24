@@ -11066,6 +11066,22 @@ current provisions and 17,752 indexed chunks. All 44 discovery checkpoints are
 post-ingestion snapshot/evaluation/restore/CI gates remain open; production is
 untouched.
 
+## Shard run closure (2026-08-24, 13:17Z)
+
+The scheduled run `565e1266-3c95-43f1-8b8a-2b9d3f0a2057` completed at
+`2026-08-24T13:17:28.560Z` with `status=completed` and `error_code=NULL`.
+The post-run read-only aggregate is 160 canonical documents, 7,872 unique
+current provisions and 25,703 indexed chunks. All 44 discovery checkpoints are
+`completed`. The queue remains active and unfrozen: 374 fetch jobs are
+`completed`, 27,052 are `queued`; 49 version jobs are `completed`, 2,162 are
+`queued`. The failure ledger contains three technically unavailable
+`LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE` rows, three retrying
+`LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE` rows and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records; the explicit
+`failed`/`dead_letter` query is empty. Release floors, queue freeze and all
+post-ingestion snapshot/evaluation/restore/CI gates remain open; production is
+untouched.
+
 ## Shard run closure (2026-08-24, 13:01Z)
 
 The scheduled run `763c8fef-b896-4ba0-879c-05a11b363ea3` completed at
