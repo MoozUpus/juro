@@ -2,6 +2,35 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Capacity-boundary monitoring (2026-08-24, 00:36–00:56Z)
+
+Three consecutive scheduled runs completed their bounded work but recorded
+`error_code=LEGAL_CORPUS_INGESTION_FAILED`: run
+`3f83ddbf-343c-4300-97d7-d73ed9bd300a` (`00:36:20–00:42:53Z`), run
+`d58635d4-d53f-4b88-ab9f-85055add5f55` (`00:44:20–00:48:51Z`) and run
+`4263e2fb-cdfb-45e8-a9f4-0b4ca1ee0691` (`00:52:20–00:56:53Z`). The direct
+terminal/dead-letter job filter is still empty, but a version job remains
+`retrying`; the failure ledger has 10 generic ingestion retries, seven
+`LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE` retries, four stale-running retries,
+one `LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE` retry, one source-timeout retry
+and five technically unavailable rows. Queue composition is 1,051 completed
+and 27,101 queued fetch jobs, plus 1,618 completed, 592 queued and one
+retrying version job. Materialized totals are 597 canonical documents, 1,045
+language variants, 15,893 distinct current provisions and 55,808 indexed
+current chunks; 44/44 discovery checkpoints remain completed.
+
+The remote D1 size is stable at `9,999,978,496` bytes, immediately below the
+10,000,000,000-byte database ceiling. A read-only `PRAGMA page_count` is
+rejected by D1 with `SQLITE_AUTH`, while `PRAGMA page_size` returns 4,096;
+the Worker does not persist the underlying low-level write error, so the
+capacity diagnosis is recorded as an evidence-backed blocker rather than an
+invented `SQLITE_FULL` claim. The corpus has 1,308,838 total chunks and
+64,936,739 compressed sparse postings, explaining why the v2 database reaches
+the ceiling before the release floors. No destructive compaction, flag change,
+new database, staging redeploy or production change was performed. Floors,
+queue freeze, snapshot, evaluation, Qdrant/D1 restore and CI gates remain
+closed.
+
 ## Sequential v2 monitoring continuation (2026-08-24, 00:32Z)
 
 Run `13c0b66f-d276-4e9d-a700-81229a2e0276` completed at
