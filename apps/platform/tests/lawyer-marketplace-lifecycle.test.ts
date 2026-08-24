@@ -137,7 +137,8 @@ test("consultation transitions are participant-scoped, audited and return a real
   assert.match(route, /lawyer_consultation_\$\{eventStatus\}/);
   assert.match(route, /transition === "no_show"/);
   assert.match(route, /attendance_outcome/);
-  assert.match(route, /CASE WHEN \?='completed' THEN \? ELSE result_note END/);
+  assert.match(route, /UPDATE_LAWYER_CONSULTATION_TRANSITION_SQL/);
+  assert.doesNotMatch(route, /CASE WHEN \?='completed' THEN \? ELSE result_note END/);
 });
 
 test("lawyer application auto-publishes only after explicit consent and starts a 90-day trial", () => {

@@ -5,6 +5,7 @@ import {
   withApiErrors,
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { UPDATE_LAWYER_CONSULTATION_TRANSITION_SQL } from "../../../../lib/platform/lawyer-consultation-transition";
 
 const consultationInput = z.discriminatedUnion("action", [
   z.object({
@@ -361,9 +362,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const recipientUserId = isLawyer ? handoff.clientUserId : handoff.lawyerUserId;
   await db.batch([
     db
-      .prepare(
-        "UPDATE lawyer_consultations SET status=?,attendance_outcome=CASE WHEN ?='no_show' THEN 'no_show' ELSE attendance_outcome END,result_note=CASE WHEN ?='completed' THEN ? ELSE result_note END,updated_at=? WHERE id=?",
-      )
+      .prepare(UPDATE_LAWYER_CONSULTATION_TRANSITION_SQL)
       .bind(
         status,
         transition,

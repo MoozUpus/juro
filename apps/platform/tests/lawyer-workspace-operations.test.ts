@@ -6,6 +6,7 @@ import {
   hasActiveLawyerDocumentGrant,
   lawyerMessageAttachmentRecipientRole,
 } from "../lib/platform/lawyer-workspace-access";
+import { UPDATE_LAWYER_CONSULTATION_TRANSITION_SQL } from "../lib/platform/lawyer-consultation-transition";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const now = "2026-08-20T12:00:00.000Z";
@@ -233,6 +234,36 @@ test("0157 records an explicit no-show outcome without weakening call-room forei
     assert.throws(() => sqlite.prepare(
       "UPDATE lawyer_consultations SET result_note='not applicable' WHERE id='consultation-0157'",
     ).run(), /CHECK constraint failed/u);
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("consultation completion persists the client-visible result note", () => {
+  const { sqlite } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    sqlite.prepare(`INSERT INTO lawyer_consultations
+      (id,lawyer_request_id,lawyer_profile_id,client_user_id,case_id,starts_at,ends_at,timezone,format,status,created_at,updated_at)
+      VALUES ('consultation-complete','request-ops','profile-ops','owner-ops','case-ops','2026-08-20T11:00:00.000Z','2026-08-20T11:30:00.000Z','Asia/Tashkent','video','in_progress',?,?)`).run(now, now);
+    const resultNote = "SYNTHETIC DEMO — completed consultation result.";
+
+    sqlite.prepare(UPDATE_LAWYER_CONSULTATION_TRANSITION_SQL).run(
+      "completed",
+      "complete",
+      "complete",
+      resultNote,
+      now,
+      "consultation-complete",
+    );
+
+    const saved = sqlite.prepare(
+      "SELECT status,result_note AS resultNote,attendance_outcome AS attendanceOutcome FROM lawyer_consultations WHERE id='consultation-complete'",
+    ).get() as { status: string; resultNote: string | null; attendanceOutcome: string | null } | undefined;
+    assert.equal(saved?.status, "completed");
+    assert.equal(saved?.resultNote, resultNote);
+    assert.equal(saved?.attendanceOutcome, null);
     assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     sqlite.close();
