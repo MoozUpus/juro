@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const STAGING_ENVIRONMENT = "staging";
 const STAGING_DATABASE = "juro-staging-corpus-v2";
+const STAGING_SHARD_PATTERN = /^juro-staging-corpus-shard-[1-9][0-9]*$/u;
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const WRANGLER_ENTRYPOINT = resolve(SCRIPT_DIRECTORY, "../node_modules/wrangler/bin/wrangler.js");
 
@@ -47,7 +48,8 @@ async function main() {
   const config = optionalArgument("--config", "wrangler.legal-corpus.jsonc");
   const database = optionalArgument("--database", STAGING_DATABASE);
   const environment = optionalArgument("--environment", STAGING_ENVIRONMENT);
-  if (database !== STAGING_DATABASE || environment !== STAGING_ENVIRONMENT) {
+  if ((database !== STAGING_DATABASE && !STAGING_SHARD_PATTERN.test(database))
+    || environment !== STAGING_ENVIRONMENT) {
     throw new TypeError("LEGAL_CORPUS_D1_CAPACITY_STAGING_ONLY");
   }
 
@@ -60,7 +62,7 @@ async function main() {
   const result = JSON.parse(stdout);
   if (!result || typeof result !== "object"
     || typeof result.uuid !== "string"
-    || result.name !== STAGING_DATABASE
+    || result.name !== database
     || !Number.isSafeInteger(result.database_size)
     || result.database_size < 0) {
     throw new TypeError("LEGAL_CORPUS_D1_CAPACITY_PROBE_INVALID");

@@ -13,9 +13,16 @@ export const LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS =
   LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length;
 /**
  * The legacy `juro-staging` database is a separate, capacity-bound corpus.
- * Release evidence is produced from the isolated v2 rebuild only.
+ * Release evidence is produced from one explicitly named isolated staging
+ * database at a time: the preserved v2 rebuild or a numbered staging shard.
+ * Cross-database totals require a separate federated retrieval/evidence
+ * contract and are never inferred by this single-database gate.
  */
 export const LEGAL_CORPUS_STAGING_D1_DATABASE_NAME = "juro-staging-corpus-v2";
+export const LEGAL_CORPUS_STAGING_D1_DATABASE_NAMES = [
+  LEGAL_CORPUS_STAGING_D1_DATABASE_NAME,
+  "juro-staging-corpus-shard-1",
+] as const;
 
 /**
  * Cloudflare currently limits one paid D1 database to 10 GB. The release gate
@@ -181,7 +188,7 @@ export const legalCorpusD1CapacityInputSchema = z.object({
   schemaVersion: z.literal(1),
   environment: z.literal("staging"),
   databaseId: z.string().uuid(),
-  databaseName: z.literal(LEGAL_CORPUS_STAGING_D1_DATABASE_NAME),
+  databaseName: z.enum(LEGAL_CORPUS_STAGING_D1_DATABASE_NAMES),
   observedAt: isoTimestampSchema,
   databaseSizeBytes: z.number().int().nonnegative(),
   source: z.literal("wrangler_d1_info"),
@@ -285,7 +292,7 @@ export function evaluateLegalCorpusReleaseEvidence(
   )) failures.push("HUMAN_REVIEW_MFA_STALE");
   if (!fresh(totals.lastSuccessfulUpdate, now)) failures.push("CORPUS_UPDATE_STALE");
   if (!fresh(d1Capacity.observedAt, now)) failures.push("D1_CAPACITY_EVIDENCE_STALE");
-  if (d1Capacity.databaseName !== LEGAL_CORPUS_STAGING_D1_DATABASE_NAME) {
+  if (!LEGAL_CORPUS_STAGING_D1_DATABASE_NAMES.includes(d1Capacity.databaseName)) {
     failures.push("D1_CAPACITY_DATABASE_MISMATCH");
   }
   if (d1Capacity.databaseSizeBytes > LEGAL_CORPUS_RELEASE_THRESHOLDS.maximumD1DatabaseBytes) {
