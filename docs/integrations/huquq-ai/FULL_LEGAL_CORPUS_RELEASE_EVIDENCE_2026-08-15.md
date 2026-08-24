@@ -10973,3 +10973,16 @@ returned no rows, and the only running job is a fetch for an allow-listed
 Lex.uz URL with no error code. The queue remains active (34 completed fetches,
 27,097 queued fetches, seven completed versions and 2,204 queued versions), so
 release floors, ingestion freeze and all post-ingestion gates remain open.
+
+## Shard run closure (2026-08-24, 06:40Z)
+
+The cron-started run `ff3d5805-36d1-4fe0-8e1d-b863dd91ca2e` completed at
+`2026-08-24T06:40:24.220Z` with `status=completed` and `error_code=NULL`.
+It completed 12 fetch jobs and two version jobs without failure-ledger rows.
+The materialized totals remain 25 canonical documents, 5,253 unique current
+provisions and 16,463 indexed chunks; this run processed existing/version
+work without adding a new canonical document. All 44 discovery checkpoints are
+still `completed`. The queue remains active with 27,095 queued fetches and
+2,202 queued versions, so the release floors, ingestion freeze,
+snapshot/evaluation, Qdrant/D1 restore and CI gates remain open; production is
+untouched.
