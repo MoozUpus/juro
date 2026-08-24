@@ -33,6 +33,19 @@ failure ledger now has seven technically-unavailable official-text records;
 terminal/dead-letter jobs remain zero and release floors/queue freeze remain
 open.
 
+## Source-availability audit (2026-08-24, 19:23Z)
+
+The active run recorded one concrete upstream source condition for
+`lexuz:5193832` (`https://lex.uz/en/docs/5193832`, `ministries:en`):
+`LEGAL_SOURCE_UPSTREAM_UNAVAILABLE` with `http_status=404`, `retryable=0`,
+`retry_count=1` and `retry_state=technically_unavailable`. The corresponding
+fetch job is `status=completed` with the same `last_error_code`, not `failed`
+or `dead_letter`; a read-only alias lookup found no alternate language source
+for this canonical ID. The condition is therefore retained as a truthful
+source limitation and is not retried indefinitely. Failure-ledger grouping now
+contains one technically-unavailable upstream 404 in addition to the seven
+official-text records; terminal/dead-letter jobs remain zero.
+
 ## Scheduler lease heartbeat fix and staging verification (2026-08-24, 18:56–19:01Z)
 
 The scheduled run `b15ba697-378a-4ffa-baed-ac0e72486f92` stopped renewing its
