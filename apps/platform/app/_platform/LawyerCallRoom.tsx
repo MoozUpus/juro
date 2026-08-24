@@ -9,8 +9,13 @@ import type { PlatformLocale } from "../../lib/platform/routing";
 type IceServer = { urls: string | string[]; username?: string; credential?: string };
 type DeviceReadiness = { camera: boolean; microphone: boolean; speaker: boolean; cameraLabel?: string; microphoneLabel?: string };
 type PrepareResponse = { roomId: string; role: "client" | "lawyer"; peerName: string; iceServers: IceServer[]; relayAvailable: boolean; provider: string };
+type CallStatusResponse = {
+  room: { status: "waiting" | "active" | "ended" } | null;
+  consultation: { consultationStatus: "proposed" | "confirmed" | "in_progress" | "completed" | "cancelled" };
+};
 type Signal = { id: string; type: "offer" | "answer" | "ice" | "restart"; payload: Record<string, unknown>; createdAt: string };
-type Phase = "preflight" | "preparing" | "ready" | "joining" | "waiting" | "connected" | "reconnecting" | "ended";
+type Phase = "checking" | "preflight" | "preparing" | "ready" | "joining" | "waiting" | "connected" | "reconnecting" | "ended";
+type TerminalState = "ended" | "completed" | "cancelled";
 type NetworkQuality = "checking" | "excellent" | "stable" | "weak";
 type DeviceInventory = { cameras: MediaDeviceInfo[]; microphones: MediaDeviceInfo[]; speakers: MediaDeviceInfo[] };
 
@@ -48,7 +53,9 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
   const reconnectAttempts = useRef(0);
   const reconnectInFlight = useRef(false);
   const callEnded = useRef(false);
-  const [phase, setPhase] = useState<Phase>("preflight");
+  const [phase, setPhase] = useState<Phase>("checking");
+  const [statusRevision, setStatusRevision] = useState(0);
+  const [terminalState, setTerminalState] = useState<TerminalState | null>(null);
   const [prepared, setPrepared] = useState<PrepareResponse | null>(null);
   const [cameraOn, setCameraOn] = useState(true);
   const [microphoneOn, setMicrophoneOn] = useState(true);
@@ -358,7 +365,31 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
   }
 
   useEffect(() => {
-    if (!peer.current || ["preflight", "preparing", "ready", "ended"].includes(phase)) return;
+    const controller = new AbortController();
+    void api<CallStatusResponse>(endpoint, { cache: "no-store", signal: controller.signal })
+      .then((result) => {
+        if (result.room?.status === "ended" || ["completed", "cancelled"].includes(result.consultation.consultationStatus)) {
+          callEnded.current = true;
+          setTerminalState(result.consultation.consultationStatus === "cancelled"
+            ? "cancelled"
+            : result.consultation.consultationStatus === "completed"
+              ? "completed"
+              : "ended");
+          setPhase("ended");
+          return;
+        }
+        setTerminalState(null);
+        setPhase("preflight");
+      })
+      .catch((value) => {
+        if (value instanceof DOMException && value.name === "AbortError") return;
+        setError(describeLawyerCallApiError(value, locale));
+      });
+    return () => controller.abort();
+  }, [endpoint, locale, statusRevision]);
+
+  useEffect(() => {
+    if (!peer.current || ["checking", "preflight", "preparing", "ready", "ended"].includes(phase)) return;
     const poll = window.setInterval(() => void pollSignals(), 900);
     const heartbeat = window.setInterval(() => {
       void post<{ status?: string }>({ action: "heartbeat" })
@@ -428,11 +459,18 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
     if (kind === "audio") setMicrophoneOn(track.enabled); else setCameraOn(track.enabled);
   };
   const clock = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+  const terminalCopy = terminalState === "cancelled"
+    ? (ru ? ["Консультация отменена", "Устройства не включались. Вернитесь к консультациям, чтобы выбрать следующий шаг."] : ["Maslahat bekor qilindi", "Qurilmalar yoqilmadi. Keyingi qadamni tanlash uchun maslahatlar sahifasiga qayting."])
+    : terminalState === "completed"
+      ? (ru ? ["Консультация завершена", "Устройства не включались. Итог консультации доступен в карточке заявки."] : ["Maslahat yakunlandi", "Qurilmalar yoqilmadi. Maslahat yakuni so‘rov kartasida mavjud."])
+      : (ru ? ["Звонок завершён", "Устройства не включались. Юрист может добавить итог консультации в карточке заявки."] : ["Qo‘ng‘iroq yakunlandi", "Qurilmalar yoqilmadi. Yurist so‘rov kartasiga maslahat yakunini qo‘shishi mumkin."]);
 
   return <main className="lawyer-call-room">
     <header className="lawyer-call-heading"><div><small>JURO · SECURE CONSULTATION</small><h1>{ru ? "Видеоконсультация" : "Video maslahat"}</h1><p><ShieldCheck aria-hidden="true" />{ru ? "Peer-to-peer WebRTC. JURO не записывает аудио или видео." : "Peer-to-peer WebRTC. JURO audio yoki videoni yozmaydi."}</p></div><Link href={returnPath}>{ru ? "Вернуться к консультациям" : "Maslahatlarga qaytish"}</Link></header>
     {error && <p className="lawyer-call-error" role="alert"><CircleAlert />{error}</p>}
-    {!prepared && <section className="lawyer-call-preflight"><div><Camera /><Mic /><Volume2 /></div><h2>{ru ? "Проверьте камеру и микрофон" : "Kamera va mikrofonni tekshiring"}</h2><p>{ru ? "Chrome запросит разрешение. До нажатия кнопки устройства не включаются." : "Chrome ruxsat so‘raydi. Tugma bosilmaguncha qurilmalar yoqilmaydi."}</p><button type="button" onClick={() => void prepare()} disabled={phase === "preparing"}>{phase === "preparing" && <LoaderCircle className="spin" />}{ru ? "Проверить устройства" : "Qurilmalarni tekshirish"}</button></section>}
+    {!prepared && phase === "checking" && <section className="lawyer-call-preflight" aria-live="polite"><div><LoaderCircle className="spin" /></div><h2>{ru ? "Проверяем статус звонка" : "Qo‘ng‘iroq holati tekshirilmoqda"}</h2><p>{ru ? "Камера и микрофон не включатся до подтверждения, что комната доступна." : "Xona mavjudligi tasdiqlanmaguncha kamera va mikrofon yoqilmaydi."}</p>{error && <button type="button" onClick={() => { setError(""); setStatusRevision((current) => current + 1); }}>{ru ? "Повторить" : "Qayta urinish"}</button>}</section>}
+    {!prepared && phase === "ended" && <section className="lawyer-call-preflight"><div><PhoneOff /></div><h2>{terminalCopy[0]}</h2><p>{terminalCopy[1]}</p></section>}
+    {!prepared && (phase === "preflight" || phase === "preparing") && <section className="lawyer-call-preflight"><div><Camera /><Mic /><Volume2 /></div><h2>{ru ? "Проверьте камеру и микрофон" : "Kamera va mikrofonni tekshiring"}</h2><p>{ru ? "Chrome запросит разрешение. До нажатия кнопки устройства не включаются." : "Chrome ruxsat so‘raydi. Tugma bosilmaguncha qurilmalar yoqilmaydi."}</p><button type="button" onClick={() => void prepare()} disabled={phase === "preparing"}>{phase === "preparing" && <LoaderCircle className="spin" />}{ru ? "Проверить устройства" : "Qurilmalarni tekshirish"}</button></section>}
     <section className="lawyer-call-stage" hidden={!prepared}>
       <div className="lawyer-call-videos"><figure className="remote"><video ref={remoteVideo} autoPlay playsInline /><figcaption><UsersRound />{prepared?.peerName || (ru ? "Собеседник" : "Suhbatdosh")}<span>{phase === "connected" ? clock : ru ? "Ожидание подключения" : "Ulanish kutilmoqda"}</span></figcaption></figure><figure className="local"><video ref={localVideo} autoPlay muted playsInline /><figcaption>{ru ? "Вы" : "Siz"}</figcaption></figure></div>
       <section className="lawyer-call-device-controls" aria-label={ru ? "Устройства звонка" : "Qo‘ng‘iroq qurilmalari"}>

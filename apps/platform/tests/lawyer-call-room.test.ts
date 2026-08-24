@@ -165,6 +165,13 @@ test("call room is participant-scoped, ephemeral, audited and never records medi
   assert.match(ui, /peer\.current !== connection/);
   assert.match(ui, /action: "prepare", deviceReadiness: deviceReadiness\.current/);
   assert.match(ui, /navigator\.mediaDevices\.enumerateDevices\(\)/);
+  assert.match(ui, /api<CallStatusResponse>\(endpoint, \{ cache: "no-store", signal: controller\.signal \}\)/);
+  assert.match(ui, /result\.room\?\.status === "ended"/);
+  assert.match(ui, /phase === "ended" && <section className="lawyer-call-preflight"/);
+  assert.match(ui, /Устройства не включались/);
+  assert.match(ui, /Консультация отменена/);
+  assert.match(ui, /Итог консультации доступен/);
+  assert.match(ui, /phase === "preflight" \|\| phase === "preparing"/);
   assert.match(ui, /deviceId: \{ exact: nextDeviceId \}/);
   assert.match(ui, /sender\.replaceTrack\(nextTrack\)/);
   assert.match(ui, /setSinkId\?/);
