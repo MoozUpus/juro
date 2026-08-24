@@ -10916,3 +10916,14 @@ totals were eight canonical documents, ten language variants, fourteen
 versions, 17,366 provisions and 16,411 indexed chunks; the failure ledger was
 empty. The batch is still governed by the single 20-second Lex.uz host pacer,
 and the release floors and queue-freeze/post-ingestion gates remain open.
+
+## Shard sequential monitor (2026-08-24, 06:03Z)
+
+The active run `cb2b91ba-4ce4-469f-9448-4217acc1e2be` still reports
+`status=running`, `error_code=NULL`, and a renewed lease. A sequential
+read-only aggregate reports 10 canonical documents, 3,611 unique current
+provisions and 7,965 indexed chunks; the failure ledger has no rows. One
+intermediate CLI probe returned Cloudflare API code 7403, but the identical
+read-only scheduler query immediately succeeded and the durable run remained
+healthy; this is recorded as a probe transport retry, not an ingestion failure.
+The queue is active and all post-ingestion release gates remain closed.
