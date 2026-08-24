@@ -451,7 +451,10 @@ actor, session and hash values were not copied into repository evidence.
 
 The investor sequence is maintained in `DEMO_SCRIPT.md`. Production execution
 must use only the bounded demo registry and must never create or edit real user
-records during the presentation.
+records during the presentation. The script no longer treats seeded fixture
+emails as accessible credentials and distinguishes the already ended proven
+room from a distinct fresh `SYNTHETIC DEMO` consultation required for any new
+live-call rehearsal.
 
 ## 11. Three final investor-ready passes
 
