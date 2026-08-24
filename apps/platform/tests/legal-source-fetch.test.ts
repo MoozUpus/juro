@@ -532,8 +532,7 @@ test("content type, encoding, and byte limits are enforced before persistence", 
       headers: { "content-type": "text/html; charset=utf-8" },
     }),
   ]);
-  const startedAt = Date.now();
-  await rejectsCode(
+  const boundedFailure = rejectsCode(
     () => fetchLegalSource("https://lex.uz/ru/docs/-43", {
       adviceEnabled: false,
       fetchImpl: stalledCancellation.fetchImpl,
@@ -541,5 +540,10 @@ test("content type, encoding, and byte limits are enforced before persistence", 
     }),
     "LEGAL_SOURCE_TIMEOUT",
   );
-  assert.ok(Date.now() - startedAt < 2_000, "body cancellation must remain bounded");
+  await Promise.race([
+    boundedFailure,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("body cancellation exceeded bounded cleanup")), 2_000);
+    }),
+  ]);
 });
