@@ -288,19 +288,37 @@ async function fetchOnce(
   accept: string,
 ): Promise<Response> {
   const timeout = timeoutSignal(timeoutMs);
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const request = Promise.resolve().then(() => fetchImpl(url, {
+    method: "GET",
+    redirect: "manual",
+    cache: "no-store",
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
+    headers: {
+      Accept: accept,
+      "User-Agent": SOURCE_USER_AGENT,
+    },
+    signal: timeout.signal,
+  }));
+  // A custom edge fetch implementation may ignore AbortSignal and never
+  // settle. Observe any late rejection and cancel a late response so that a
+  // timed-out source cannot retain a body after the scheduler has moved on.
+  request.catch(() => undefined);
+  void request.then((response) => {
+    if (timedOut) void cancelBody(response);
+  }, () => undefined);
   try {
-    return await fetchImpl(url, {
-      method: "GET",
-      redirect: "manual",
-      cache: "no-store",
-      credentials: "omit",
-      referrerPolicy: "no-referrer",
-      headers: {
-        Accept: accept,
-        "User-Agent": SOURCE_USER_AGENT,
-      },
-      signal: timeout.signal,
-    });
+    return await Promise.race([
+      request,
+      new Promise<Response>((_, reject) => {
+        fallbackTimer = setTimeout(() => {
+          timedOut = true;
+          reject(new LegalSourceFetchError("LEGAL_SOURCE_TIMEOUT", true));
+        }, timeoutMs);
+      }),
+    ]);
   } catch (error) {
     if (
       timeout.signal.aborted ||
@@ -311,6 +329,7 @@ async function fetchOnce(
     throw new LegalSourceFetchError("LEGAL_SOURCE_UPSTREAM_UNAVAILABLE", true);
   } finally {
     timeout.clear();
+    if (fallbackTimer) clearTimeout(fallbackTimer);
   }
 }
 

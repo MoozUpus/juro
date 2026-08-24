@@ -547,3 +547,31 @@ test("content type, encoding, and byte limits are enforced before persistence", 
     }),
   ]);
 });
+
+test("upstream fetch promises are bounded even when AbortSignal is ignored", async () => {
+  let aborted = false;
+  const neverSettles = (async (
+    _input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => {
+    init?.signal?.addEventListener("abort", () => {
+      aborted = true;
+    });
+    return new Promise<Response>(() => undefined);
+  }) as typeof fetch;
+  const boundedFailure = rejectsCode(
+    () => fetchLegalSource("https://lex.uz/ru/docs/-44", {
+      adviceEnabled: false,
+      fetchImpl: neverSettles,
+      timeoutMs: 10,
+    }),
+    "LEGAL_SOURCE_TIMEOUT",
+  );
+  await Promise.race([
+    boundedFailure,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("upstream fetch exceeded bounded timeout")), 2_000);
+    }),
+  ]);
+  assert.equal(aborted, true);
+});
