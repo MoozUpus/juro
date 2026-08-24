@@ -11107,3 +11107,17 @@ and `https://lex.uz/en/docs/8101804`), both with
 `LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE`; the explicit `failed`/`dead_letter`
 query is empty. Release floors, queue freeze and all post-ingestion
 snapshot/evaluation/restore/CI gates remain open; production is untouched.
+
+## Shard run closure (2026-08-24, 08:33Z)
+
+The cron run `d310dfbd-23b3-4085-a683-695b9fe1a54b` completed at
+`2026-08-24T08:33:05.795Z` with `status=completed` and `error_code=NULL`.
+The post-run read-only aggregate is 73 canonical documents, 5,778 unique
+current provisions and 18,624 indexed chunks. All 44 discovery checkpoints are
+`completed`. The queue remains active and unfrozen: 151 fetch jobs are
+`completed`, 27,083 are `queued`; 22 version jobs are `completed`, 2,189 are
+`queued`. The failure ledger remains at two non-terminal
+`technically_unavailable` source-language rows; the explicit
+`failed`/`dead_letter` query is empty. Release floors, queue freeze and all
+post-ingestion snapshot/evaluation/restore/CI gates remain open; production is
+untouched.
