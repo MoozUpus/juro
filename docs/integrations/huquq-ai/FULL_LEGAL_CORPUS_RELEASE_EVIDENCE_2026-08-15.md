@@ -19,6 +19,20 @@ records, six retrying language-text records and six
 and all snapshot/evaluation/Qdrant/D1-restore/CI gates remain open; production
 is untouched.
 
+## Source-availability audit (2026-08-24, 19:14Z)
+
+The next sequential run recorded one additional concrete source condition for
+`lexuz:8264178` (`https://lex.uz/en/docs/8264178`, `president:en`):
+`LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE`, `retryable=0`, `retry_count=1`,
+`retry_state=technically_unavailable`. The corresponding fetch job is already
+`status=completed` with `last_error_code` set to the same code; it is not a
+`failed` or `dead_letter` job. A read-only alias lookup found no alternate
+language source for this canonical ID. This is retained as an explicit source
+availability limitation rather than hidden or retried indefinitely. The
+failure ledger now has seven technically-unavailable official-text records;
+terminal/dead-letter jobs remain zero and release floors/queue freeze remain
+open.
+
 ## Scheduler lease heartbeat fix and staging verification (2026-08-24, 18:56–19:01Z)
 
 The scheduled run `b15ba697-378a-4ffa-baed-ac0e72486f92` stopped renewing its
