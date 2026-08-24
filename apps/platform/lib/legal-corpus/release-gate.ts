@@ -11,7 +11,11 @@ export const LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION = 5;
 export const LEGAL_CORPUS_RELEASE_SCENARIO_COUNT = 314;
 export const LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS =
   LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length;
-export const LEGAL_CORPUS_STAGING_D1_DATABASE_NAME = "juro-staging";
+/**
+ * The legacy `juro-staging` database is a separate, capacity-bound corpus.
+ * Release evidence is produced from the isolated v2 rebuild only.
+ */
+export const LEGAL_CORPUS_STAGING_D1_DATABASE_NAME = "juro-staging-corpus-v2";
 
 /**
  * Cloudflare currently limits one paid D1 database to 10 GB. The release gate

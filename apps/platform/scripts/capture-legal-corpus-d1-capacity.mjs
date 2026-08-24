@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const STAGING_ENVIRONMENT = "staging";
-const STAGING_DATABASE = "juro-staging";
+const STAGING_DATABASE = "juro-staging-corpus-v2";
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const WRANGLER_ENTRYPOINT = resolve(SCRIPT_DIRECTORY, "../node_modules/wrangler/bin/wrangler.js");
 

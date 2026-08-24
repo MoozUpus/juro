@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   LEGAL_CORPUS_BASELINE,
   LEGAL_CORPUS_MAX_RELEASE_D1_DATABASE_BYTES,
+  LEGAL_CORPUS_STAGING_D1_DATABASE_NAME,
   evaluateLegalCorpusReleaseEvidence,
   legalCorpusReleaseEvidenceSchema,
   type LegalCorpusReleaseEvidence,
@@ -40,8 +41,8 @@ function validEvidence(): LegalCorpusReleaseEvidence {
     d1Capacity: {
       schemaVersion: 1,
       environment: "staging",
-      databaseId: "bb716a96-b2fb-4823-90d6-6c228fed181a",
-      databaseName: "juro-staging",
+      databaseId: "62620fb3-3da3-4c76-a8e9-aa60858c1063",
+      databaseName: LEGAL_CORPUS_STAGING_D1_DATABASE_NAME,
       observedAt: "2026-08-15T11:59:00.000Z",
       databaseSizeBytes: 2_862_432_256,
       source: "wrangler_d1_info",
@@ -152,6 +153,10 @@ test("release gate accepts only complete frozen staging evidence", () => {
   assert.equal(verdict.observed.checkpointCount, 44);
   assert.equal(verdict.observed.completeCheckpointCount, 44);
   assert.equal(verdict.observed.discoveredDocuments, 4_400);
+});
+
+test("release capacity evidence is bound to the isolated v2 staging database", () => {
+  assert.equal(LEGAL_CORPUS_STAGING_D1_DATABASE_NAME, "juro-staging-corpus-v2");
 });
 
 test("release gate requires a fresh staging D1 capacity probe below the release reserve", () => {
