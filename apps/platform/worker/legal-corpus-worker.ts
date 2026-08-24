@@ -312,6 +312,12 @@ function log(
  */
 export function legalCorpusWorkerErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
+  // Cloudflare reports the hard D1 file-size boundary with provider-specific
+  // wording. Keep that operational cause explicit without persisting the raw
+  // provider message (which may contain SQL, URLs or source text).
+  if (/\b(?:exceeded maximum db size|maximum database size|database is full|sqlite_full)\b/iu.test(message)) {
+    return "LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED";
+  }
   const match = message.match(/\b(?:D1|LEGAL|SQLITE)_[A-Z0-9_]+\b/u);
   return match?.[0] ?? "LEGAL_CORPUS_WORKER_FAILED";
 }

@@ -44,7 +44,11 @@ test("worker errors preserve only safe actionable tokens", () => {
   );
   assert.equal(
     legalCorpusWorkerErrorCode(new Error("D1_ERROR: Exceeded maximum DB size")),
-    "D1_ERROR",
+    "LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED",
+  );
+  assert.equal(
+    legalCorpusWorkerErrorCode(new Error("SQLITE_FULL: database is full; source=https://lex.uz/private")),
+    "LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED",
   );
   assert.equal(
     legalCorpusWorkerErrorCode(new Error("LEGAL_CORPUS_SCHEDULE_LEASE_LOST")),
