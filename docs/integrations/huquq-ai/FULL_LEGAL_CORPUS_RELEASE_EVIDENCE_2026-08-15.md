@@ -2,6 +2,23 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Post-fix shard run closure (2026-08-24, 19:08Z)
+
+The post-deploy run `bec64037-61b1-461c-939b-508e8c5481d8` completed at
+`2026-08-24T19:08:36.058Z` with `status=completed` and `error_code=NULL`.
+Heartbeat updates were observed during the run after commit `9f0d4fc0` and
+staging Worker version `e20bfa55-f8b6-4f7f-ae6e-d94a52dce52a` were deployed.
+The read-only post-run aggregate is 290 canonical documents, 11,165 unique
+current provisions and 36,893 indexed chunks. All 44 discovery checkpoints are
+`completed`. The queue remains active and unfrozen (`fetch`: 715 completed,
+27,000 queued; `version`: 99 completed, 2,112 queued). Jobs with status
+`failed` or `dead_letter` remain zero. The failure ledger remains limited to
+three retrying `LEGAL_CORPUS_INGESTION_FAILED`, five retrying stale-running
+records, six retrying language-text records and six
+`technically_unavailable` official-text records. Release floors, queue freeze
+and all snapshot/evaluation/Qdrant/D1-restore/CI gates remain open; production
+is untouched.
+
 ## Scheduler lease heartbeat fix and staging verification (2026-08-24, 18:56–19:01Z)
 
 The scheduled run `b15ba697-378a-4ffa-baed-ac0e72486f92` stopped renewing its
