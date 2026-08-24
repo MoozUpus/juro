@@ -20,6 +20,12 @@ chunks. Query metadata reports `size_after=9,999,994,880` bytes, leaving only
 snapshot, evaluation, Qdrant/D1 restore and CI gates remain closed; no code
 redeploy, destructive compaction, new database or production change was made.
 
+An independent machine-captured capacity artifact from the updated v2-only
+capture script was generated at `2026-08-24T01:06:33.324Z`:
+`databaseSizeBytes=9,999,994,880`, database ID
+`62620fb3-3da3-4c76-a8e9-aa60858c1063`, file SHA-256
+`4398ed82334c3604ef4ef474f754aea0f602e27072565b883744485931126f34`.
+
 ## Capacity-boundary monitoring (2026-08-24, 00:36–00:56Z)
 
 Three consecutive scheduled runs completed their bounded work but recorded
