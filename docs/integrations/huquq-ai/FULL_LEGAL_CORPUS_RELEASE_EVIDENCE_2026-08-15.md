@@ -10949,3 +10949,16 @@ provisions and 14,924 indexed chunks, with no failure-ledger rows. The queue
 remains 27,103 queued fetches and 2,206 queued versions, so the required
 release floors and ingestion freeze are not met and no post-ingestion gate has
 started.
+
+## Shard run closure (2026-08-24, 06:25Z)
+
+The next shard run `e5692b7b-418f-4608-a698-0ea2f0808e03` completed at
+`2026-08-24T06:25:37.447Z` with `status=completed` and `error_code=NULL`.
+Sequential processing completed 15 fetch jobs and two version jobs. The
+materialized shard totals are 19 canonical documents, 5,220 unique current
+provisions and 16,383 indexed chunks. All 44 discovery checkpoints remain
+`completed`, and the failure ledger query returned no rows. The job ledger has
+31 completed fetches, 27,097 queued fetches, seven completed versions and 2,204
+queued versions, with no running jobs. The queue is therefore still active and
+the 1,500/22,000/22,513 floors, ingestion freeze, snapshot/evaluation,
+Qdrant/D1 restore and CI gates remain open; production is untouched.
