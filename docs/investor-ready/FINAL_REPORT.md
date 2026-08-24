@@ -1,6 +1,6 @@
 # JURO investor-ready ecosystem — final report
 
-Evidence through 2026-08-23 (Tashkent). Branch: `codex/investor-ready-ecosystem`.
+Evidence through 2026-08-24 (Tashkent). Branch: `codex/investor-ready-ecosystem`.
 Draft PR: [#64](https://github.com/MoozUpus/juro/pull/64).
 
 This report separates implemented code, deployed production state and observed
@@ -55,7 +55,8 @@ The corresponding before evidence is in `screenshots/before/`.
   audit-hash `GLOB` checks without discarding immutable events. Migration `0156`
   adds request-scoped reply/pin/typing state and immutable lawyer-only internal
   notes. Migration `0157` adds an explicit no-show outcome constrained to a
-  completed consultation with no result note. The `0157` full pre/post exports,
+  completed consultation with no result note. Migration `0158` adds explicit,
+  concurrency-fenced Lawyer request decision evidence. The `0158` full pre/post exports,
   isolated restores and private-R2 SHA-256 round trips passed; no migration
   remains pending. Queue and DLQ status is included in operational health
   evidence.
@@ -72,6 +73,12 @@ The corresponding before evidence is in `screenshots/before/`.
   profile editing and admin-decided deletion lifecycle.
 - Professional dashboard, assigned requests, clients, matters, messages,
   documents, tasks, time recording, conflict check and knowledge base.
+- After the Client grants case access, the Lawyer must explicitly accept,
+  request information or decline. Proposals and consultations remain locked
+  until acceptance; decline revokes the exact grant. The mutation rechecks the
+  active public profile and grant inside its atomic batch, produces one audited
+  transition under concurrency and writes the Client notification into the
+  request workspace rather than whichever workspace is currently selected.
 - The request chat now includes search, replies, copy, one persisted pin,
   typing/read/delivery state, retry/unread presentation, eight private
   lawyer-only AI-assist modes, and document-linked internal notes that require an
@@ -396,8 +403,10 @@ safe global top-N merge. A later fresh-MFA Chrome replay reached the route and
 found a second D1-specific fault: migration `0086` generated a 64-term hash
 `GLOB` that D1 rejected as too complex. Production migration `0155` now uses
 bounded length and character-class checks, retains the immutable chain/index
-guards and passed its pre/post recovery gates. Migration `0157` is now the
-latest applied migration, with no pending successor.
+guards and passed its pre/post recovery gates. Migration `0158` is now the
+latest applied migration, with no pending successor; its isolated pre/post
+restores, private-R2 SHA-256 readbacks, live decision columns/index and
+foreign-key check all passed.
 The final fresh-MFA Chrome replay and one reload both loaded the localized audit
 table without any console warning/error and displayed immutable-chain receipts.
 A read-only production D1 aggregate confirmed the two corresponding access
@@ -442,6 +451,22 @@ console; production Chrome verified semantic Light and Dark, reload persistence,
 Manrope and 1536/1536 containment, then restored System and verified it again
 after reload.
 
+The final independent Lawyer audit found two further production gaps rather than
+stopping at the first working release. The dedicated document-builder route did
+not preserve the clean Lawyer return path, and clean category/template deep links
+were rejected. Commits `f7c3bbad` and `ca7d3921` close both gaps with
+Worker-attested bounded return paths and strict slug routing. The same release
+includes the explicit post-consent Lawyer request decision lifecycle and migration
+`0158`. Focused decision/routing tests passed 22/22; GitHub CI `32675703372`
+passed rendered HTML 33/33, core 1073/1073, Cloudflare 201/201, production
+artifact, environment, dependency and licence gates. Worker
+`4ce7db88-f20f-49ba-b887-b3496b02451c` receives 100% traffic with
+`d3635713-7bb7-4538-8051-04a5c8885e42` as rollback. Post-deploy HTTP covered
+44 clean RU/UZ professional routes and six clean builder deep links, rejected an
+unknown module, stripped spoofed internal headers and preserved the decision
+endpoint's `403/403/401` gates. D1 remained integral and the protected test
+request remained unmodified.
+
 ## 12. Limitations and release truth
 
 - Production payment approval is off. Billing is an explicit demo foundation;
@@ -466,6 +491,11 @@ after reload.
   The platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
   direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
+- The new `0158` decision controls are implemented, migrated, deployed and
+  covered by unit/integration/HTTP/D1 evidence, but their authenticated Chrome
+  interaction is not claimed. The installed Browser plugin transport returned
+  `Browser is not available` after the prescribed Chrome launch and single retry;
+  no standalone or substitute browser automation was used.
 - `/api/status` was fully operational immediately after migration `0157` and
   Worker `ecabef2f-cd37-40f0-9e20-66803b753f3b`. It later recorded a real
   Anthropic/document-analysis regression, while the other six published
@@ -480,11 +510,16 @@ after reload.
   and status-host reads generated at `2026-08-23T11:53:29.582Z` and
   `2026-08-23T11:53:30.081Z` again returned operational 8/8 with zero active
   incidents. The later document-boundary Worker
-  `0234c879-eba3-49d4-81bd-9759b77ffcfd` is current at 100%, and independent app
+  `0234c879-eba3-49d4-81bd-9759b77ffcfd` was current at that checkpoint, and independent app
   and status-host responses generated at `2026-08-23T14:25:48.375Z` and
   `2026-08-23T14:25:48.956Z` returned operational 8/8 with empty active and
   recent incident lists. The live content-hashed Admin launch asset
   contains Manrope and no previous inline Inter declaration.
+
+After the final Lawyer decision/routing deployment, app and status-host reads
+again returned operational 8/8 with zero active or recent incidents; the latest
+recorded response was generated at `2026-08-24T00:20:15.776Z` on Worker
+`4ce7db88-f20f-49ba-b887-b3496b02451c`.
 
 The genuine approved-version registration and fresh-MFA Admin-theme gates are
 closed. This document remains an evidence-scoped release report rather than a

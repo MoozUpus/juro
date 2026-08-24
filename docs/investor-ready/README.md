@@ -1,6 +1,6 @@
 # JURO investor-ready ecosystem
 
-Status snapshot: release candidate on `codex/investor-ready-ecosystem`. Production evidence is recorded only after the relevant migration, deployment, HTTP and Chrome checks pass. Commercial production is not claimed while the app registration policies remain a disclosed pre-incorporation draft awaiting owner-approved operator details and final RU/UZ legal editions.
+Status snapshot: release candidate on `codex/investor-ready-ecosystem`. Production evidence is recorded only after the relevant migration, deployment, HTTP and Chrome checks pass. The owner-approved RU/UZ registration policies version `2026-08-23.1` are published and have passed a genuine production email-OTP acceptance replay. Billing remains explicitly simulated until a real payment provider is separately approved and integrated.
 
 ## Ecosystem map
 
@@ -27,11 +27,13 @@ The dedicated host resolves clean routes to existing role-aware platform modules
 - Configurable demo billing: 1% consultation fee, rule-based 2%/5% case-transfer fee, installment protection against double charging, transaction/audit history, status filter and CSV report.
 - Professional time tracking, conflict search and private knowledge base. Conflict queries are stored only as SHA-256 evidence; results are restricted to accessible matters and the lawyer's own internal records.
 - Object-targeted notifications, so lawyer request, consultation and admin deletion notifications open the specific record.
+- Explicit Lawyer request decisions after Client consent: accept, request additional information or decline. Professional proposals and consultations stay server-locked until acceptance; decline revokes the exact active case grant.
 - A versioned, idempotent, fully synthetic three-account investor dataset. It creates no OTP, session, credential, uploaded file or invented legal-source record.
 
 ## Data and security boundaries
 
 - Client/lawyer case access is derived from an active `lawyer_access_grant`; no global user directory is exposed.
+- A public-approved Lawyer with an active grant must explicitly accept a request before proposing paid work or a consultation. Decision writes are tenant-scoped, concurrency-fenced, audited and notify the Client in the request workspace.
 - Calls accept only consultation participants and store signalling metadata, never call media.
 - The browser receives short-lived ICE credentials only. The long-lived Cloudflare Calls key must remain a Worker secret.
 - Demo payments are permanently marked `provider=demo` and `is_simulation=1`; they cannot activate production entitlements or move real money.
@@ -54,8 +56,9 @@ The dedicated host resolves clean routes to existing role-aware platform modules
 | `0155_platform_audit_hash_constraints.sql` | D1-safe immutable audit hash constraints |
 | `0156_lawyer_message_workspace.sql` | Request-scoped replies, one persisted pin and bounded typing presence |
 | `0157_lawyer_consultation_attendance.sql` | Explicit consultation no-show outcome with database-enforced lifecycle constraints |
+| `0158_lawyer_request_decisions.sql` | Concurrency-fenced explicit Lawyer decision evidence |
 
-The production platform D1 migration pattern includes `0146` through `0157`. The separate legal-corpus Worker intentionally remains bounded through `0145` because these application tables are outside its runtime.
+The production platform D1 migration pattern includes `0146` through `0158`. The separate legal-corpus Worker intentionally remains bounded through `0145` because these application tables are outside its runtime.
 
 ## Verification contract
 
