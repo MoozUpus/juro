@@ -10823,6 +10823,19 @@ live-or-manual queued/retrying jobs. The release floors, queue freeze,
 snapshot/evaluation, Qdrant/D1 restore and CI gates remain open; production is
 untouched.
 
+## Shard run closure (2026-08-24, 06:56Z)
+
+The shard run `1414c04b-058d-40f7-aac0-ad928a04a204` completed at
+`2026-08-24T06:56:25.305Z` with `status=completed` and `error_code=NULL`.
+It completed 14 fetch jobs and two version jobs without failure-ledger rows.
+The materialized totals are 31 canonical documents, 5,298 unique current
+provisions and 16,626 indexed chunks. All 44 discovery checkpoints remain
+`completed`; the job ledger has 61 completed fetches, 27,093 queued fetches,
+11 completed versions and 2,200 queued versions, with no running jobs. The
+queue remains active, so the release floors, ingestion freeze,
+snapshot/evaluation, Qdrant/D1 restore and CI gates remain open; production is
+untouched.
+
 ## Government/PKM page continuation (2026-08-21, 18:56–19:00Z)
 
 The same bounded run `2b12acc2-22c7-44bf-bc70-bfb58ade5a1d` continued under
