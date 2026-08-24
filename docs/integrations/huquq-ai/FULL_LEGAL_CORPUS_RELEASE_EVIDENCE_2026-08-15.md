@@ -24,6 +24,12 @@ is now directly confirmed by the Worker log, but the corpus floors and queue
 freeze remain unmet; no snapshot, evaluation, restore or CI release gate is
 claimed.
 
+Cloudflare's current D1 limits document states that a single D1 database is
+limited to 10 GB and that this per-database limit cannot be increased; it
+recommends horizontal scale-out across multiple smaller databases. This is an
+external platform constraint, not a release-gate relaxation:
+<https://developers.cloudflare.com/d1/platform/limits/>.
+
 ## Legacy/v2 capacity comparison (2026-08-24, read-only)
 
 The active release source remains the isolated v2 database; no records are
