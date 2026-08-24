@@ -90,6 +90,8 @@ type FetchOptions = {
   maxBytes?: number;
   maxRedirects?: number;
   wait?: (delayMs: number) => Promise<void>;
+  /** Keep a scheduled corpus lease alive while a bounded response streams. */
+  heartbeat?: () => Promise<void>;
   /**
    * A user-initiated live lookup has a short response budget.  It still reads
    * robots rules and rejects a disallowed path, but it must not turn a
@@ -341,6 +343,7 @@ async function fetchFollowingRedirects(
     maxRedirects: number;
     accept: string;
     validateUrl: (url: URL) => boolean;
+    heartbeat?: () => Promise<void>;
     unavailableCode:
       | "LEGAL_SOURCE_ROBOTS_UNAVAILABLE"
       | "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE";
@@ -348,6 +351,7 @@ async function fetchFollowingRedirects(
 ): Promise<{ response: Response; finalUrl: URL }> {
   let currentUrl = initialUrl;
   for (let redirects = 0; redirects <= options.maxRedirects; redirects += 1) {
+    await options.heartbeat?.();
     const response = await fetchOnce(
       options.fetchImpl,
       currentUrl,
@@ -410,6 +414,7 @@ async function readBoundedBytes(
   response: Response,
   maxBytes: number,
   timeoutMs: number,
+  heartbeat?: () => Promise<void>,
 ): Promise<Uint8Array> {
   const declared = response.headers.get("content-length");
   if (declared && /^\d+$/.test(declared) && Number(declared) > maxBytes) {
@@ -453,6 +458,7 @@ async function readBoundedBytes(
         throw new LegalSourceFetchError("LEGAL_SOURCE_TOO_LARGE", false);
       }
       chunks.push(value);
+      await heartbeat?.();
     }
   } catch (error) {
     await cancelWithTimeout(() => reader.cancel());
@@ -604,6 +610,7 @@ export async function fetchLegalSource(
     fetchImpl,
     timeoutMs,
     maxRedirects,
+    heartbeat: options.heartbeat,
     accept: "*/*",
     unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
     validateUrl(candidate) {
@@ -629,6 +636,7 @@ export async function fetchLegalSource(
     robotsResult.response,
     ROBOTS_MAX_BYTES,
     timeoutMs,
+    options.heartbeat,
   );
   const robots = robotsAllows(
     parseRobots(decodeUtf8(robotsBytes)),
@@ -657,6 +665,7 @@ export async function fetchLegalSource(
       fetchImpl,
       timeoutMs,
       maxRedirects,
+      heartbeat: options.heartbeat,
       accept: "text/html;charset=UTF-8",
       unavailableCode: "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
       validateUrl(candidate) {
@@ -696,6 +705,7 @@ export async function fetchLegalSource(
     contentResult.response,
     maxBytes,
     timeoutMs,
+    options.heartbeat,
   );
   if (bytes.byteLength === 0) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_EMPTY_CONTENT", false);
@@ -723,7 +733,7 @@ export async function fetchLexPdfRepresentation(
   canonicalUrl: string,
   options: Pick<
     FetchOptions,
-    "fetchImpl" | "now" | "timeoutMs" | "maxBytes" | "maxRedirects" | "wait"
+    "fetchImpl" | "now" | "timeoutMs" | "maxBytes" | "maxRedirects" | "wait" | "heartbeat"
   >,
 ): Promise<FetchedLexPdfRepresentation> {
   const reference = classifyLegalSourceUrl(canonicalUrl);
@@ -757,6 +767,7 @@ export async function fetchLexPdfRepresentation(
     fetchImpl,
     timeoutMs,
     maxRedirects,
+    heartbeat: options.heartbeat,
     accept: "*/*",
     unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
     validateUrl(candidate) {
@@ -782,6 +793,7 @@ export async function fetchLexPdfRepresentation(
     robotsResult.response,
     ROBOTS_MAX_BYTES,
     timeoutMs,
+    options.heartbeat,
   );
   const robots = robotsAllows(
     parseRobots(decodeUtf8(robotsBytes)),
@@ -804,6 +816,7 @@ export async function fetchLexPdfRepresentation(
     fetchImpl,
     timeoutMs,
     maxRedirects,
+    heartbeat: options.heartbeat,
     accept: "application/pdf",
     unavailableCode: "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
     validateUrl(candidate) {
@@ -822,7 +835,9 @@ export async function fetchLexPdfRepresentation(
     await cancelBody(contentResult.response);
     throw new LegalSourceFetchError("LEGAL_SOURCE_CONTENT_TYPE_REJECTED", false);
   }
-  const bytes = await readBoundedBytes(contentResult.response, maxBytes, timeoutMs);
+  const bytes = await readBoundedBytes(
+    contentResult.response, maxBytes, timeoutMs, options.heartbeat,
+  );
   if (
     bytes.byteLength < 5
     || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-"
@@ -852,7 +867,7 @@ export async function fetchLexArchiveRepresentation(
   representationValue: string,
   options: Pick<
     FetchOptions,
-    "fetchImpl" | "now" | "timeoutMs" | "maxBytes" | "maxRedirects" | "wait"
+    "fetchImpl" | "now" | "timeoutMs" | "maxBytes" | "maxRedirects" | "wait" | "heartbeat"
   >,
 ): Promise<FetchedLexArchiveRepresentation> {
   const reference = classifyLegalSourceUrl(canonicalUrl);
@@ -897,6 +912,7 @@ export async function fetchLexArchiveRepresentation(
     fetchImpl,
     timeoutMs,
     maxRedirects,
+    heartbeat: options.heartbeat,
     accept: "*/*",
     unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
     validateUrl(candidate) {
@@ -922,6 +938,7 @@ export async function fetchLexArchiveRepresentation(
     robotsResult.response,
     ROBOTS_MAX_BYTES,
     timeoutMs,
+    options.heartbeat,
   );
   const robots = robotsAllows(parseRobots(decodeUtf8(robotsBytes)), representationUrl);
   if (!robots.allowed) {
@@ -942,6 +959,7 @@ export async function fetchLexArchiveRepresentation(
     fetchImpl,
     timeoutMs,
     maxRedirects,
+    heartbeat: options.heartbeat,
     accept: "application/zip,application/octet-stream",
     unavailableCode: "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
     validateUrl(candidate) {
@@ -964,7 +982,9 @@ export async function fetchLexArchiveRepresentation(
     await cancelBody(contentResult.response);
     throw new LegalSourceFetchError("LEGAL_SOURCE_CONTENT_TYPE_REJECTED", false);
   }
-  const bytes = await readBoundedBytes(contentResult.response, maxBytes, timeoutMs);
+  const bytes = await readBoundedBytes(
+    contentResult.response, maxBytes, timeoutMs, options.heartbeat,
+  );
   const zipMagic = bytes.byteLength >= 4
     && bytes[0] === 0x50
     && bytes[1] === 0x4b

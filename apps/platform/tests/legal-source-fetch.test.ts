@@ -253,6 +253,24 @@ test("bounded Lex fetch verifies robots, preserves evidence, and hashes bytes", 
   }
 });
 
+test("scheduled Lex fetch heartbeats while reading bounded responses", async () => {
+  const synthetic = sequenceFetch([robots(), html()]);
+  let heartbeatCalls = 0;
+  const result = await fetchLegalSource("https://lex.uz/ru/docs/-42", {
+    adviceEnabled: false,
+    fetchImpl: synthetic.fetchImpl,
+    heartbeat: async () => {
+      heartbeatCalls += 1;
+    },
+  });
+
+  assert.equal(result.canonicalId, "-42");
+  // Two fetch boundaries plus at least one bounded-body heartbeat for each
+  // response prevent a slow streaming source from outliving the scheduler
+  // lease without evidence of liveness.
+  assert.ok(heartbeatCalls >= 4, `expected bounded-read heartbeats, got ${heartbeatCalls}`);
+});
+
 test("robots disallow and excessive crawl-delay policies fail closed", async () => {
   for (const [body, code] of [
     ["User-agent: *\nDisallow: /ru/docs/\n", "LEGAL_SOURCE_ROBOTS_DISALLOWED"],

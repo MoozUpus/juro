@@ -278,6 +278,7 @@ async function normalizeOfficialLexSource(input: {
   now: Date;
   wait?: (delayMs: number) => Promise<void>;
   fetchImpl?: FetchLike;
+  heartbeat?: () => Promise<void>;
 }): Promise<{
   normalized: NormalizedLegalSourceSnapshot;
   representation: CorpusRepresentation | null;
@@ -314,6 +315,7 @@ async function normalizeOfficialLexSource(input: {
       fetchImpl: input.fetchImpl,
       now: () => input.now,
       wait: input.wait,
+      heartbeat: input.heartbeat,
       maxBytes: MAX_LEX_REPRESENTATION_BYTES,
     });
     representation = {
@@ -340,6 +342,7 @@ async function normalizeOfficialLexSource(input: {
         fetchImpl: input.fetchImpl,
         now: () => input.now,
         wait: input.wait,
+        heartbeat: input.heartbeat,
         maxBytes: MAX_LEX_REPRESENTATION_BYTES,
       },
     );
@@ -883,6 +886,7 @@ export async function ingestOfficialLexDocument(
     now: () => input.now ?? new Date(),
     wait: input.wait,
     fetchImpl: input.fetchImpl,
+    heartbeat: input.heartbeat,
     maxBytes: MAX_LEX_SOURCE_BYTES,
   });
   await input.heartbeat?.();
@@ -904,6 +908,7 @@ export async function ingestOfficialLexDocument(
     now: input.now ?? new Date(),
     wait: input.wait,
     fetchImpl: input.fetchImpl,
+    heartbeat: input.heartbeat,
   });
   await input.heartbeat?.();
   const { normalized, representation } = normalizedSource;
