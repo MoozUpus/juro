@@ -114,7 +114,16 @@ export function lawyerHostReturnTo(
   if (unprefixed && cleanLawyerPages.has(unprefixed[1])) {
     return `/ru/${unprefixed[1]}${original.search}`;
   }
-  if (/^\/(?:ru|uz)\/lawyer\/[a-z-]+\/?$/u.test(original.pathname)) {
+  if (
+    /^\/(?:ru|uz)\/document-builder\/[a-z0-9-]+(?:\/[a-z0-9-]+)?\/?$/u.test(original.pathname)
+    || /^\/document-builder\/[a-z0-9-]+(?:\/[a-z0-9-]+)?\/?$/u.test(original.pathname)
+  ) {
+    return `${original.pathname.startsWith("/document-builder/") ? "/ru" : ""}${original.pathname}${original.search}`;
+  }
+  if (
+    /^\/(?:ru|uz)\/lawyer\/[a-z-]+\/?$/u.test(original.pathname)
+    || /^\/(?:ru|uz)\/lawyer\/document-builder\/[a-z0-9-]+(?:\/[a-z0-9-]+)?\/?$/u.test(original.pathname)
+  ) {
     return `${original.pathname}${original.search}`;
   }
   return fallback;

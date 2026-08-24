@@ -76,3 +76,27 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/not-a-module")), null);
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/not-a-module")), null);
 });
+
+test("lawyer host maps clean document-builder category and template deep links", () => {
+  const category = lawyerHostTarget(
+    new URL("https://lawyer.juro.uz/ru/document-builder/debt-receipts?caseId=case-1"),
+  );
+  assert.equal(category?.pathname, "/ru/lawyer/document-builder/debt-receipts");
+  assert.equal(category?.search, "?caseId=case-1");
+
+  const template = lawyerHostTarget(
+    new URL("https://lawyer.juro.uz/uz/document-builder/debt-receipts/0602001?resume=1"),
+  );
+  assert.equal(template?.pathname, "/uz/lawyer/document-builder/debt-receipts/0602001");
+  assert.equal(template?.search, "?resume=1");
+
+  const unprefixed = lawyerHostTarget(
+    new URL("https://lawyer.juro.uz/document-builder/debt-receipts/0602001"),
+  );
+  assert.equal(unprefixed?.pathname, "/ru/lawyer/document-builder/debt-receipts/0602001");
+
+  assert.equal(
+    lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/document-builder/../admin")),
+    null,
+  );
+});

@@ -47,6 +47,14 @@ export function lawyerHostTarget(url: URL): URL | null {
     target.pathname = `/${onboarding[1] || "ru"}/onboarding`;
     return target;
   }
+  const documentBuilder = url.pathname.match(
+    /^\/(?:(ru|uz)\/)?document-builder\/([a-z0-9-]+)(?:\/([a-z0-9-]+))?\/?$/u,
+  );
+  if (documentBuilder) {
+    const [, locale = "ru", categorySlug, documentCode] = documentBuilder;
+    target.pathname = `/${locale}/lawyer/document-builder/${categorySlug}${documentCode ? `/${documentCode}` : ""}`;
+    return target;
+  }
   const unprefixed = url.pathname.match(/^\/([^/]+)\/?$/u);
   if (unprefixed) {
     const mapped = lawyerPageMap[unprefixed[1]];

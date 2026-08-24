@@ -122,6 +122,43 @@ test("the dedicated document builder preserves its clean Lawyer return path", ()
   assert.match(page, /await headers\(\)/u);
 });
 
+test("document-builder deep links preserve only attested clean Lawyer return paths", () => {
+  const category = new Headers({
+    "x-juro-lawyer-host": "1",
+    "x-juro-lawyer-original-path": "/ru/document-builder/debt-receipts?caseId=case-1",
+  });
+  assert.equal(
+    lawyerHostReturnTo(category, "/ru/lawyer/document-builder/debt-receipts"),
+    "/ru/document-builder/debt-receipts?caseId=case-1",
+  );
+
+  const template = new Headers({
+    "x-juro-lawyer-host": "1",
+    "x-juro-lawyer-original-path": "/document-builder/debt-receipts/0602001?resume=1",
+  });
+  assert.equal(
+    lawyerHostReturnTo(template, "/ru/lawyer/document-builder/debt-receipts/0602001"),
+    "/ru/document-builder/debt-receipts/0602001?resume=1",
+  );
+
+  const unsafe = new Headers({
+    "x-juro-lawyer-host": "1",
+    "x-juro-lawyer-original-path": "/ru/document-builder/debt-receipts/%2Fadmin",
+  });
+  assert.equal(
+    lawyerHostReturnTo(unsafe, "/ru/lawyer/document-builder/debt-receipts"),
+    "/ru/lawyer/document-builder/debt-receipts",
+  );
+
+  for (const relative of [
+    "../app/[locale]/[accountType]/document-builder/[categorySlug]/page.tsx",
+    "../app/[locale]/[accountType]/document-builder/[categorySlug]/[documentCode]/page.tsx",
+  ]) {
+    const page = readFileSync(new URL(relative, import.meta.url), "utf8");
+    assert.match(page, /lawyerHostReturnTo\(await headers\(\), fallback\)/u);
+  }
+});
+
 test("account module guard rejects URL role spoofing on the lawyer host", () => {
   const destination = accountModuleRedirect({
     requestedLocale: "ru",
