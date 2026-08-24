@@ -10896,3 +10896,14 @@ jobs are completed; the failure ledger remains empty. The next bounded run
 `e6b34c66-33c2-4496-9acc-585a80b0b9c6` started at `2026-08-24T05:48:23.810Z`.
 The queue is active, so the 1,500/22,000/22,513 floors, freeze, snapshot,
 evaluation, restore and CI gates remain open.
+
+## Staging shard bounded batch update (2026-08-24, 05:53Z)
+
+The shard Worker was updated to version `76660542-3127-428e-a258-b7c0e0529582`.
+It now packs up to 20 sequential ingestion jobs into one staging lease,
+bounded by the existing twelve-minute start fence, fifteen-minute lease and
+20-second Lex.uz host delay. Production and the primary v2 Worker retain the
+five-job default; no second crawl stream or parallel source request was
+introduced. Boundary tests, type-check and shard dry-run passed before this
+staging-only deployment. This is a throughput change inside the existing
+robots budget, not a release-gate relaxation.
