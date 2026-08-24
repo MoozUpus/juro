@@ -2,6 +2,23 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Sequential v2 monitoring continuation (2026-08-24, 00:02Z)
+
+Run `f4961a70-4854-4580-83fc-320634779c39` remains `running` under its
+single distributed lock. Discovery remains 44/44 `completed`. Queue
+composition is 1,028 completed, 27,123 queued and one running fetch job,
+plus 1,599 completed and 612 queued version jobs. The direct
+terminal/dead-letter filter remains empty. The failure ledger is now 15
+`retrying` and five `technically_unavailable`; the newly recorded row is
+`LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE` for the English Lex URL
+`https://lex.uz/en/docs/8380252`, which is a source-condition record rather
+than a terminal ingestion failure. Totals are 580 canonical documents, 1,020
+language variants, 15,680 distinct current provisions and 55,521 indexed
+current chunks. Query metadata reports `size_after=9,827,614,720` bytes; this
+is not the final capacity artifact. Floors and queue freeze remain unmet, so
+all post-ingestion gates stay closed. No code change or staging redeploy was
+justified; production remains untouched.
+
 ## Sequential v2 monitoring continuation (2026-08-24, 00:00–00:01Z)
 
 Run `f4961a70-4854-4580-83fc-320634779c39` is `running` under the single
