@@ -10962,3 +10962,14 @@ provisions and 16,383 indexed chunks. All 44 discovery checkpoints remain
 queued versions, with no running jobs. The queue is therefore still active and
 the 1,500/22,000/22,513 floors, ingestion freeze, snapshot/evaluation,
 Qdrant/D1 restore and CI gates remain open; production is untouched.
+
+## Shard run monitor (2026-08-24, 06:30Z)
+
+The cron-started run `ff3d5805-36d1-4fe0-8e1d-b863dd91ca2e` remains
+`status=running` with `error_code=NULL`. The materialized shard totals are
+21 canonical documents, 5,225 unique current provisions and 16,388 indexed
+chunks. All 44 discovery checkpoints are `completed`; the failure ledger
+returned no rows, and the only running job is a fetch for an allow-listed
+Lex.uz URL with no error code. The queue remains active (34 completed fetches,
+27,097 queued fetches, seven completed versions and 2,204 queued versions), so
+release floors, ingestion freeze and all post-ingestion gates remain open.
