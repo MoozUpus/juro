@@ -10999,3 +10999,16 @@ still `completed`. The queue remains active with 27,095 queued fetches and
 2,202 queued versions, so the release floors, ingestion freeze,
 snapshot/evaluation, Qdrant/D1 restore and CI gates remain open; production is
 untouched.
+
+## Shard run monitor (2026-08-24, 07:05Z)
+
+The cron run `e667fa98-4355-4a6a-bbab-1ef38e40e9a0` remains active with
+`error_code=NULL`. Materialized totals are 35 canonical documents, 5,320
+unique current provisions and 16,715 indexed chunks; all 44 discovery
+checkpoints are `completed`. The failure ledger contains one
+`technically_unavailable` row for `https://lex.uz/en/docs/8152156` with
+`LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE`; its fetch job is completed and no
+`failed` or `dead_letter` jobs exist. With 27,900 discovered URLs, the
+technical-unavailability rate is approximately 0.0036%, below the 2% release
+threshold. The queue remains active, so release floors and post-ingestion gates
+remain open; production is untouched.
