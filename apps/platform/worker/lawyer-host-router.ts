@@ -73,6 +73,20 @@ export function lawyerHostTarget(url: URL): URL | null {
     if (mapped.view) target.searchParams.set("view", mapped.view);
     return target;
   }
+  // Keep previously shared/internal-looking lawyer URLs functional on the
+  // dedicated host without duplicating pages. In particular, requests,
+  // clients, matters, messages, documents, and tasks are views of the shared
+  // consultations module rather than standalone Next routes.
+  const nestedClean = url.pathname.match(/^\/(ru|uz)\/lawyer\/([^/]+)\/?$/u);
+  if (nestedClean) {
+    const locale = nestedClean[1];
+    const mapped = lawyerPageMap[nestedClean[2]];
+    if (mapped) {
+      target.pathname = `/${locale}/lawyer/${mapped.module}`;
+      if (mapped.view) target.searchParams.set("view", mapped.view);
+      return target;
+    }
+  }
   if (/^\/(?:ru|uz)\/lawyer(?:\/|$)/u.test(url.pathname)) return target;
   return null;
 }

@@ -100,3 +100,34 @@ test("lawyer host maps clean document-builder category and template deep links",
     null,
   );
 });
+
+test("lawyer host keeps known nested lawyer aliases on their real modules", () => {
+  for (const locale of ["ru", "uz"] as const) {
+    const requests = lawyerHostTarget(
+      new URL(`https://lawyer.juro.uz/${locale}/lawyer/requests?source=legacy`),
+    );
+    assert.equal(requests?.pathname, `/${locale}/lawyer/consultations`);
+    assert.equal(requests?.searchParams.get("view"), "requests");
+    assert.equal(requests?.searchParams.get("source"), "legacy");
+
+    const clients = lawyerHostTarget(
+      new URL(`https://lawyer.juro.uz/${locale}/lawyer/clients`),
+    );
+    assert.equal(clients?.pathname, `/${locale}/lawyer/consultations`);
+    assert.equal(clients?.searchParams.get("view"), "clients");
+
+    const dashboard = lawyerHostTarget(
+      new URL(`https://lawyer.juro.uz/${locale}/lawyer/dashboard`),
+    );
+    assert.equal(dashboard?.pathname, `/${locale}/lawyer/dashboard`);
+    assert.equal(dashboard?.searchParams.get("view"), null);
+  }
+
+  const deepBuilder = lawyerHostTarget(
+    new URL("https://lawyer.juro.uz/ru/lawyer/document-builder/debt-receipts/0602001"),
+  );
+  assert.equal(
+    deepBuilder?.pathname,
+    "/ru/lawyer/document-builder/debt-receipts/0602001",
+  );
+});
