@@ -11052,6 +11052,20 @@ the existing `technically_unavailable` source-language row; the explicit
 not yet proven, so snapshot/evaluation/restore/CI gates remain open; production
 is untouched.
 
+## Shard run closure (2026-08-24, 08:00Z)
+
+The cron run `4f1fb552-6372-4a34-9619-756639405299` completed at
+`2026-08-24T08:00:46.362Z` with `status=completed` and `error_code=NULL`.
+The post-run read-only aggregate is 59 canonical documents, 5,582 unique
+current provisions and 17,752 indexed chunks. All 44 discovery checkpoints are
+`completed`. The queue remains active and unfrozen: 121 fetch jobs are
+`completed`, 27,086 are `queued`; 18 version jobs are `completed`, 2,193 are
+`queued`. The failure ledger still contains only the previously recorded
+`technically_unavailable` source-language row, while the explicit
+`failed`/`dead_letter` query is empty. Release floors, queue freeze and all
+post-ingestion snapshot/evaluation/restore/CI gates remain open; production is
+untouched.
+
 ## Shard run closure (2026-08-24, 07:46Z)
 
 The cron run `82b5eebf-d876-4cb0-be84-bee05fd44877` completed at
