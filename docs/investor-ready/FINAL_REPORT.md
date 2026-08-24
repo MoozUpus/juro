@@ -293,6 +293,25 @@ media call also passed. The authenticated Client dashboard passed
 official Lex.uz link whose article 217 text was opened and checked in a second
 Chrome profile.
 
+The final authenticated production replay now proves the current request
+decision and consultation path with accessible Client and Lawyer accounts, not
+only the fixed demo seed. Client request
+`5a2ec6d4-1807-411d-b2b5-ef6f199620ed` was created with the explicit
+`SYNTHETIC DEMO` marker and no documents or real case details. The assigned
+Lawyer completed a clear conflict check, the Client recorded the exact access
+consent/grant, and the Lawyer accepted under concurrency-fenced decision claim
+`f85c1edb-029d-4a7d-908b-e1118a05aa41`. The Lawyer proposed consultation
+`1d3bcda6-0d69-451d-829e-86a4d32db2f9` for 17:30 Asia/Tashkent and the Client
+confirmed it. Both authenticated Chrome profiles prepared real camera and
+microphone devices, joined TURN room `a7dfaa3f-9104-4891-9ff9-01456bbaf835`,
+showed the correct peer, synchronized timer and `Excellent` network state, and
+passed mute/unmute plus camera/audio-only restoration on both sides. The call
+ended after 4 minutes 16 seconds; D1 records two prepared, two joined and both
+participant `left_at` values, one terminal event and zero remaining signals.
+The consultation remains `in_progress` until the Lawyer sends the explicitly
+confirmed synthetic post-call result; this report does not prematurely call
+that business transition complete.
+
 A later authenticated responsive replay covered 20 top-level Client routes at
 both 390×844 mobile and 768×1024 tablet viewports: dashboard, AI, builder,
 review, cases, documents, plans, calendar, archive, history, consultations,
@@ -470,6 +489,20 @@ and preserved the decision endpoint's `403/403/401` gates. Connected production
 Chrome reached localized Lawyer authentication through the exact formerly broken
 URL. D1 remained integral and the protected test request remained unmodified.
 
+The subsequent authenticated flow found one more real integration defect: the
+Lawyer Requests alias generated `/lawyer/requests/call/{id}`, while the protected
+room exists under the canonical Consultations module. Commit `8cf6af75` makes
+all Lawyer call links canonical and preserves only the exact historical
+requests-call UUID alias in the host router; arbitrary deep aliases continue to
+fail closed. Focused tests passed 11/11 and the sequential current-head release
+suite passed type-check, lint, rendered HTML 33/33, core 1075/1075, Cloudflare
+201/201, the production environment matrix and artifact budgets. GitHub CI
+`32726605712` passed both jobs. Worker
+`16fbffa3-4b3b-4808-946c-17e9976d454c` receives 100% traffic with
+`927f5a61-1bf0-4d14-9a7e-cf6b0cbdc1a5` as the immediate rollback. Canonical
+and historical call URLs now reach the protected room rather than a 404, and
+the authenticated two-profile replay above exercised the deployed route.
+
 ## 12. Limitations and release truth
 
 - Production payment approval is off. Billing is an explicit demo foundation;
@@ -494,12 +527,14 @@ URL. D1 remained integral and the protected test request remained unmodified.
   The platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
   direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
-- The new `0158` decision controls are implemented, migrated, deployed and
-  covered by unit/integration/HTTP/D1 evidence. The Chrome extension transport is
-  now connected in separate Client and Lawyer profiles, and the fixed nested URL
-  reaches the localized login flow. The authenticated mutation is not yet claimed:
-  Turnstile passed, but OTP dispatch is paused until its required action-time
-  confirmation. No standalone or substitute browser automation is used.
+- The new `0158` decision controls are implemented, migrated, deployed and now
+  covered by authenticated production Chrome plus exact D1 evidence. The flow
+  completed conflict-clear, Client consent/access grant and Lawyer accept for
+  request `5a2ec6d4-1807-411d-b2b5-ef6f199620ed`, then proposed and confirmed a
+  consultation and completed the real two-party call. The final post-call
+  result is still withheld until the mandatory action-time confirmation for
+  transmitting that generated result to the Client; no broader pre-approval is
+  treated as proof that this representational step occurred.
 - `/api/status` was fully operational immediately after migration `0157` and
   Worker `ecabef2f-cd37-40f0-9e20-66803b753f3b`. It later recorded a real
   Anthropic/document-analysis regression, while the other six published
@@ -520,10 +555,11 @@ URL. D1 remained integral and the protected test request remained unmodified.
   recent incident lists. The live content-hashed Admin launch asset
   contains Manrope and no previous inline Inter declaration.
 
-After the nested Lawyer compatibility release, app and status-host reads again
-returned operational 8/8 with zero active or recent incidents; the latest
-recorded response was generated at `2026-08-24T05:41:28.853Z` on Worker
-`927f5a61-1bf0-4d14-9a7e-cf6b0cbdc1a5`.
+After the canonical call-route release and authenticated two-party call, app
+and status-host reads again returned operational 8/8 with zero active or recent
+incidents; the latest recorded response was generated at
+`2026-08-24T12:33:31.311Z` on Worker
+`16fbffa3-4b3b-4808-946c-17e9976d454c`.
 
 The genuine approved-version registration and fresh-MFA Admin-theme gates are
 closed. This document remains an evidence-scoped release report rather than a
