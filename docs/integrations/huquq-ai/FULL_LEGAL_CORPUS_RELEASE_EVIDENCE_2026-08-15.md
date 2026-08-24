@@ -2,6 +2,29 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Capacity-boundary continuation (2026-08-24, 01:12–01:15Z)
+
+The subsequent scheduled run `e9844dfc-9245-4343-8e71-4c49d450c0ed` started at
+`2026-08-24T01:12:20.191Z` and finished at `2026-08-24T01:13:00.605Z` with
+`status=failed` and `error_code=D1_ERROR`. The read-only terminal/dead-letter
+filter remains empty, so this is not a terminal ingestion result. Discovery is
+still 44/44 `completed`; the distributed lock is empty. Queue composition is
+unchanged at 1,055 completed and 27,097 queued fetch jobs, plus 1,619
+completed, 589 queued, one retrying and two running version jobs. The failure
+ledger remains 15 generic ingestion retries, seven language-text retries, four
+stale-running retries, one official-text retry, one source-timeout retry and
+five technically unavailable rows.
+
+The release-gate aggregate remains 599 canonical documents, 1,049 language
+variants, 15,899 distinct current provisions and 55,814 indexed current chunks.
+The v2-only capacity capture at `2026-08-24T01:14:47.669Z` again reports
+`databaseSizeBytes=9,999,998,976` for database ID
+`62620fb3-3da3-4c76-a8e9-aa60858c1063`; the artifact SHA-256 is
+`EAEA0E917AD9DE5CF8C51258985ED392A3C27E1CC133F3E23D3576147E99B6C2`.
+The release floors and queue freeze remain unmet; snapshot, evaluation,
+Qdrant/D1 restore and CI gates remain closed. No code redeploy, destructive
+compaction, new database or production change was made.
+
 ## Capacity-boundary continuation (2026-08-24, 01:08–01:13Z)
 
 The next scheduled run `2be43674-86be-4cd8-8e30-32d0a3a5a7d8` started at
