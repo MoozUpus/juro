@@ -10938,3 +10938,14 @@ read-only job aggregate remains 1,055 completed fetches, 27,097 queued fetches,
 running versions. The job ledger still has zero `failed` and zero
 `dead_letter` rows; the separate failure ledger has 28 retrying and five
 technically-unavailable rows. The v2 database was not modified or rebound.
+
+## Shard run closure (2026-08-24, 06:08Z)
+
+The shard run `cb2b91ba-4ce4-469f-9448-4217acc1e2be` closed successfully at
+`2026-08-24T06:08:53.463Z`; the lock was released only after the durable run
+row was finalized. It completed 16 fetch jobs and five version jobs. The
+materialized shard totals are 10 canonical documents, 4,123 unique current
+provisions and 14,924 indexed chunks, with no failure-ledger rows. The queue
+remains 27,103 queued fetches and 2,206 queued versions, so the required
+release floors and ingestion freeze are not met and no post-ingestion gate has
+started.
