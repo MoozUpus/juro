@@ -2,6 +2,24 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Legacy/v2 capacity comparison (2026-08-24, read-only)
+
+The active release source remains the isolated v2 database; no records are
+copied or federated from the legacy database. A sequential read-only probe of
+`juro-staging-corpus-v2` reports 599 canonical documents, 15,899 distinct
+current provisions, 55,814 indexed current chunks, 44/44 completed discovery
+checkpoints, zero terminal/dead-letter ingestion jobs, 27,097 queued fetch
+jobs and 589 queued version jobs. `wrangler d1 info` reports
+`databaseSizeBytes=9,999,998,976`.
+
+For comparison only, the preserved legacy `juro-staging` database reports
+3,575 canonical documents, 62,075 distinct current provisions and 151,499
+indexed current chunks, but it also reports 38,310 queued fetch jobs and 5,373
+queued version jobs. Its D1 size is likewise `9,999,998,976` bytes. It is not
+a release substitute: its queue is not frozen, and its capacity evidence would
+also fail the release reserve. The two ledgers therefore remain separate;
+switching the binding would not prove the current release gate.
+
 ## Capacity-boundary continuation (2026-08-24, 01:12–01:15Z)
 
 The subsequent scheduled run `e9844dfc-9245-4343-8e71-4c49d450c0ed` started at
