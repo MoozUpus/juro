@@ -11066,6 +11066,20 @@ current provisions and 17,752 indexed chunks. All 44 discovery checkpoints are
 post-ingestion snapshot/evaluation/restore/CI gates remain open; production is
 untouched.
 
+## Scheduler incident evidence (2026-08-24, 18:00–18:12Z)
+
+The scheduled run `1b0ebf19-62ed-4bbe-96e1-84238812dba3` started at
+`2026-08-24T17:32:17.593Z` and was recorded as `status=failed` at
+`2026-08-24T18:00:23.108Z` with `error_code=LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED`.
+The next run `dbc27ecb-2b43-478f-8e61-d341a32a3fd7` ran from
+`2026-08-24T18:00:23.108Z` to `2026-08-24T18:12:40.326Z` with
+`status=completed` and `error_code=LEGAL_CORPUS_INGESTION_FAILED`.
+The related three failure-ledger rows are retrying, not terminal; their
+corresponding fetch jobs are now `completed` at attempt 2. The explicit
+`failed`/`dead_letter` ingestion-job query remains empty. The lease incident
+and retryable source errors remain a release limitation; no production state
+was changed.
+
 ## Shard run closure (2026-08-24, 18:28Z)
 
 The scheduled run `05a376f9-182d-43df-aa2f-2170e036c061` completed at
