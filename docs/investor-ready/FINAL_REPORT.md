@@ -451,21 +451,24 @@ console; production Chrome verified semantic Light and Dark, reload persistence,
 Manrope and 1536/1536 containment, then restored System and verified it again
 after reload.
 
-The final independent Lawyer audit found two further production gaps rather than
+The final independent Lawyer audit found three further production gaps rather than
 stopping at the first working release. The dedicated document-builder route did
-not preserve the clean Lawyer return path, and clean category/template deep links
-were rejected. Commits `f7c3bbad` and `ca7d3921` close both gaps with
-Worker-attested bounded return paths and strict slug routing. The same release
-includes the explicit post-consent Lawyer request decision lifecycle and migration
-`0158`. Focused decision/routing tests passed 22/22; GitHub CI `32675703372`
-passed rendered HTML 33/33, core 1073/1073, Cloudflare 201/201, production
-artifact, environment, dependency and licence gates. Worker
-`4ce7db88-f20f-49ba-b887-b3496b02451c` receives 100% traffic with
-`d3635713-7bb7-4538-8051-04a5c8885e42` as rollback. Post-deploy HTTP covered
-44 clean RU/UZ professional routes and six clean builder deep links, rejected an
-unknown module, stripped spoofed internal headers and preserved the decision
-endpoint's `403/403/401` gates. D1 remained integral and the protected test
-request remained unmodified.
+not preserve the clean Lawyer return path, clean category/template deep links
+were rejected, and a previously shared nested compatibility URL such as
+`/ru/lawyer/requests` returned a plain-text 404. Commits `f7c3bbad`, `ca7d3921`
+and `7b36fc25` close the gaps with Worker-attested bounded return paths, strict
+slug routing and a bounded alias map that continues to reject unknown modules.
+The release includes the explicit post-consent Lawyer request decision lifecycle
+and migration `0158`. Focused decision/routing tests passed 23/23; GitHub CI
+`32694042835` passed rendered HTML 33/33, core 1074/1074, Cloudflare 201/201,
+production artifact, environment, dependency and licence gates. Worker
+`927f5a61-1bf0-4d14-9a7e-cf6b0cbdc1a5` receives 100% traffic with
+`4ce7db88-f20f-49ba-b887-b3496b02451c` as rollback. Post-deploy HTTP covered
+44 clean RU/UZ professional routes, six clean builder deep links and the known
+nested aliases, rejected an unknown module, stripped spoofed internal headers
+and preserved the decision endpoint's `403/403/401` gates. Connected production
+Chrome reached localized Lawyer authentication through the exact formerly broken
+URL. D1 remained integral and the protected test request remained unmodified.
 
 ## 12. Limitations and release truth
 
@@ -492,10 +495,11 @@ request remained unmodified.
   direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - The new `0158` decision controls are implemented, migrated, deployed and
-  covered by unit/integration/HTTP/D1 evidence, but their authenticated Chrome
-  interaction is not claimed. The installed Browser plugin transport returned
-  `Browser is not available` after the prescribed Chrome launch and single retry;
-  no standalone or substitute browser automation was used.
+  covered by unit/integration/HTTP/D1 evidence. The Chrome extension transport is
+  now connected in separate Client and Lawyer profiles, and the fixed nested URL
+  reaches the localized login flow. The authenticated mutation is not yet claimed:
+  Turnstile passed, but OTP dispatch is paused until its required action-time
+  confirmation. No standalone or substitute browser automation is used.
 - `/api/status` was fully operational immediately after migration `0157` and
   Worker `ecabef2f-cd37-40f0-9e20-66803b753f3b`. It later recorded a real
   Anthropic/document-analysis regression, while the other six published
@@ -516,10 +520,10 @@ request remained unmodified.
   recent incident lists. The live content-hashed Admin launch asset
   contains Manrope and no previous inline Inter declaration.
 
-After the final Lawyer decision/routing deployment, app and status-host reads
-again returned operational 8/8 with zero active or recent incidents; the latest
-recorded response was generated at `2026-08-24T00:20:15.776Z` on Worker
-`4ce7db88-f20f-49ba-b887-b3496b02451c`.
+After the nested Lawyer compatibility release, app and status-host reads again
+returned operational 8/8 with zero active or recent incidents; the latest
+recorded response was generated at `2026-08-24T05:41:28.853Z` on Worker
+`927f5a61-1bf0-4d14-9a7e-cf6b0cbdc1a5`.
 
 The genuine approved-version registration and fresh-MFA Admin-theme gates are
 closed. This document remains an evidence-scoped release report rather than a
