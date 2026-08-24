@@ -518,4 +518,28 @@ test("content type, encoding, and byte limits are enforced before persistence", 
     }),
     "LEGAL_SOURCE_TIMEOUT",
   );
+
+  const stalledCancellation = sequenceFetch([
+    robots(),
+    new Response(new ReadableStream<Uint8Array>({
+      pull() {
+        return new Promise<void>(() => undefined);
+      },
+      cancel() {
+        return new Promise<void>(() => undefined);
+      },
+    }), {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    }),
+  ]);
+  const startedAt = Date.now();
+  await rejectsCode(
+    () => fetchLegalSource("https://lex.uz/ru/docs/-43", {
+      adviceEnabled: false,
+      fetchImpl: stalledCancellation.fetchImpl,
+      timeoutMs: 10,
+    }),
+    "LEGAL_SOURCE_TIMEOUT",
+  );
+  assert.ok(Date.now() - startedAt < 2_000, "body cancellation must remain bounded");
 });

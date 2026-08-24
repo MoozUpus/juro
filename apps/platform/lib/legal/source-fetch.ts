@@ -120,6 +120,10 @@ const DEFAULT_ARCHIVE_MAX_BYTES = 20 * 1024 * 1024;
 const ROBOTS_MAX_BYTES = 128 * 1024;
 const DEFAULT_MAX_REDIRECTS = 2;
 const MAX_ROBOTS_CRAWL_DELAY_SECONDS = 60;
+// A stalled upstream body must not keep scheduled ingestion alive after its
+// bounded read timeout. Stream cancellation is best-effort because some edge
+// bodies never resolve cancel(), so cap this cleanup wait.
+const RESPONSE_BODY_CANCEL_TIMEOUT_MS = 1_000;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function sourceHostKind(hostname: string): LegalSourceKind | null {
@@ -243,10 +247,25 @@ function sameSourceReference(
 }
 
 async function cancelBody(response: Response): Promise<void> {
+  const body = response.body;
+  if (!body) return;
+  await cancelWithTimeout(() => body.cancel());
+}
+
+async function cancelWithTimeout(cancel: () => PromiseLike<void> | void): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancellation = Promise.resolve()
+    .then(cancel)
+    .catch(() => undefined);
   try {
-    await response.body?.cancel();
-  } catch {
-    // Cancellation is best effort after a rejected response.
+    await Promise.race([
+      cancellation,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, RESPONSE_BODY_CANCEL_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -378,11 +397,12 @@ async function readBoundedBytes(
     await cancelBody(response);
     throw new LegalSourceFetchError("LEGAL_SOURCE_TOO_LARGE", false);
   }
-  if (!response.body) {
+  const body = response.body;
+  if (!body) {
     return new Uint8Array();
   }
 
-  const reader = response.body.getReader();
+  const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
   try {
@@ -410,17 +430,13 @@ async function readBoundedBytes(
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
-        await reader.cancel();
+        await cancelWithTimeout(() => reader.cancel());
         throw new LegalSourceFetchError("LEGAL_SOURCE_TOO_LARGE", false);
       }
       chunks.push(value);
     }
   } catch (error) {
-    try {
-      await reader.cancel();
-    } catch {
-      // Cancellation is best effort after a body read failure.
-    }
+    await cancelWithTimeout(() => reader.cancel());
     throw error;
   } finally {
     reader.releaseLock();
