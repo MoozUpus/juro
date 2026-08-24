@@ -61,6 +61,7 @@ const DISCOVERY_PAGES_PER_RUN = 4;
 // authoritative: a document requiring a second official representation simply
 // leaves a later durable job queued rather than overlapping the next tick.
 const INGESTION_JOBS_PER_RUN = 5;
+const MAX_STAGING_INGESTION_JOBS_PER_RUN = 24;
 // Four of the five ingestion slots may prefer already-discovered official
 // catalogues. The order is the current operational legal-source policy:
 // enacted laws first; Cabinet of Ministers acts (ПКМ) second; then the
@@ -178,19 +179,32 @@ async function nextLegalCorpusCoverageBootstrapTarget(
 
 export function legalCorpusIngestionJobBudget(
   discoveries: readonly { claimed: boolean; status: string }[],
-  input: { persistentRobotsPolicy?: boolean } = {},
+  input: { persistentRobotsPolicy?: boolean; ingestionJobsPerRun?: number } = {},
 ): number {
   // Reuse only catalogue slots that were proved empty. A failed/disabled
   // discovery does not grant extra nominal source jobs. The nominal maximum
-  // remains ten real Lex.uz requests (a network robots policy + 4 discovery
-  // + 5 ingestion, or a fresh five-minute robots policy + 4 discovery + 6
-  // ingestion). An earlier empty discovery page reclaims its capacity; the elapsed-time
+  // remains bounded by the configured ingestion limit (five for the primary
+  // Worker, at most 24 for the staging shard) plus four discovery pages and a
+  // robots request. An earlier empty discovery page reclaims its capacity; the elapsed-time
   // start fence below is authoritative when a job discovers a secondary PDF
   // or ZIP representation and therefore consumes an additional paced fetch.
-  const nominalIngestionJobs = INGESTION_JOBS_PER_RUN + (input.persistentRobotsPolicy ? 1 : 0);
+  const configuredJobs = Number.isFinite(input.ingestionJobsPerRun)
+    ? Math.min(MAX_STAGING_INGESTION_JOBS_PER_RUN, Math.max(INGESTION_JOBS_PER_RUN, Math.floor(input.ingestionJobsPerRun ?? INGESTION_JOBS_PER_RUN)))
+    : INGESTION_JOBS_PER_RUN;
+  const nominalIngestionJobs = configuredJobs + (input.persistentRobotsPolicy ? 1 : 0);
   if (!discoveries.some((result) => result.status === "empty")) return nominalIngestionJobs;
   const claimed = discoveries.filter((result) => result.claimed).length;
   return nominalIngestionJobs + Math.max(0, DISCOVERY_PAGES_PER_RUN - claimed);
+}
+
+export function legalCorpusStagingIngestionJobsPerRun(input: {
+  appEnv?: string;
+  configured?: string;
+}): number {
+  if (input.appEnv !== "staging") return INGESTION_JOBS_PER_RUN;
+  const parsed = Number(input.configured);
+  if (!Number.isFinite(parsed)) return INGESTION_JOBS_PER_RUN;
+  return Math.min(MAX_STAGING_INGESTION_JOBS_PER_RUN, Math.max(INGESTION_JOBS_PER_RUN, Math.floor(parsed)));
 }
 
 /**
@@ -272,6 +286,7 @@ type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   LEGAL_CORPUS_EMBEDDING_SERVICE?: Fetcher;
   /** Additive compressed sparse migration remains an explicit capacity gate. */
   LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED?: string;
+  LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN?: string;
 };
 
 type ClaimedRun = {
@@ -601,6 +616,10 @@ export async function handleLegalCorpusScheduled(
         : null;
       const nominalIngestionBudget = legalCorpusIngestionJobBudget(discoveries, {
         persistentRobotsPolicy: pacerStats.persistentRobotsCacheHits > 0,
+        ingestionJobsPerRun: legalCorpusStagingIngestionJobsPerRun({
+          appEnv: env.APP_ENV,
+          configured: env.LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN,
+        }),
       });
       let corePagerContinuationRequired = legalCorpusCorePagerContinuationRequired(coreCode);
       let corePagerContinuationAttempted = false;
@@ -623,7 +642,10 @@ export async function handleLegalCorpusScheduled(
         await renewRunLease(env, run);
         const reservedVersionSlot = versionSlotIndexes.includes(index);
         const coverageBootstrapSlot = index === 0 && coverageBootstrapTarget !== null;
-        const preferredCatalogSlot = index < INGESTION_JOBS_PER_RUN && !reservedVersionSlot;
+        const preferredCatalogSlot = index < legalCorpusStagingIngestionJobsPerRun({
+          appEnv: env.APP_ENV,
+          configured: env.LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN,
+        }) && !reservedVersionSlot;
         const preferredSlotIndex = index - versionSlotIndexes.filter((slot) => slot < index).length;
         const result = await runNextLegalCorpusIngestionJob(env, {
           wait,

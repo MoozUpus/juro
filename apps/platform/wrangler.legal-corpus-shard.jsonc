@@ -70,6 +70,7 @@
         "LEGAL_CORPUS_DENSE_ENABLED": "false",
         "LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED": "false",
         "LEGAL_CORPUS_SHADOW_MODE": "true",
+        "LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN": "20",
         "QDRANT_URL": "https://qdrant.internal",
         "QDRANT_COLLECTION": "juro_legal_staging_shard_1",
         "EMBEDDING_MODEL": "text-embedding-3-large"

@@ -9,6 +9,7 @@ import {
   legalCorpusCorePagerContinuationRequired,
   legalCorpusIngestionBudgetForCorePager,
   legalCorpusIngestionJobBudget,
+  legalCorpusStagingIngestionJobsPerRun,
   legalCorpusIngestionStartAllowed,
   legalCorpusWorkerErrorCode,
   legalCorpusVersionSlotIndexes,
@@ -208,6 +209,14 @@ test("the bounded acquisition phase prioritizes discovery and reuses only empty 
   ]), 5);
   assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 5);
   assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 5);
+});
+
+test("staging shard may use a larger sequential budget without changing production", () => {
+  assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "production", configured: "20" }), 5);
+  assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "20" }), 20);
+  assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "999" }), 24);
+  assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "bogus" }), 5);
+  assert.equal(legalCorpusIngestionJobBudget([], { ingestionJobsPerRun: 20 }), 20);
 });
 
 test("long historical batches reserve one bounded slot to continue a live core-code pager", () => {

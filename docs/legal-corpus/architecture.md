@@ -151,6 +151,9 @@ treated as indexed corpus. The shard has its own D1-backed lock and remains a
 single sequential Lex.uz stream with the same 20-second delay. Release
 evidence must name the exact database(s) and must not add v2 and shard counts
 unless a separately tested federated retrieval/evidence contract is present.
+The shard packs up to 20 sequential ingestion jobs into one staging lease (the
+primary Worker remains at five); this changes only bounded batch packing and
+never reduces the source delay or opens a second stream.
 
 ### Sparse-index capacity transition
 

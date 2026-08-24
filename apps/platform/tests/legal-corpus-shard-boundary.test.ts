@@ -32,6 +32,7 @@ test("staging corpus shard is isolated and ingestion-only", () => {
   assert.equal(staging.vars?.LEGAL_CORPUS_ENABLED, "true");
   assert.equal(staging.vars?.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
   assert.equal(staging.vars?.LEGAL_CORPUS_DENSE_ENABLED, "false");
+  assert.equal(staging.vars?.LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN, "20");
 });
 
 test("primary legal-corpus staging binding remains the v2 database", () => {
