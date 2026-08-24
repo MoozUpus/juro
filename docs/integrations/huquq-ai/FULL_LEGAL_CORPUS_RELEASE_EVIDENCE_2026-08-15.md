@@ -10857,3 +10857,31 @@ failure ledger remains one retrying `LEGAL_CORPUS_INGESTION_FAILED` and three
 retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter is
 zero. Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore
 and CI remain unproven; production is untouched.
+
+## Staging D1 shard continuation (2026-08-24, 05:22–05:45Z)
+
+The v2 database reached Cloudflare's non-increaseable 10 GB per-database limit,
+so a separate staging-only database was created: `juro-staging-corpus-shard-1`,
+ID `e09e0682-0c2e-4458-a8f3-be9de28117e3`. All 142 existing corpus migrations
+were applied to the new database. The original `juro-staging-corpus-v2` binding
+and its data were not changed, truncated or rebound; production was not
+touched. Cloudflare D1 limits remain a capacity constraint rather than a
+release-gate relaxation.
+
+The idempotent seed copied only 44 completed discovery checkpoints, 27,900
+discovery metadata rows, 27,689 active ingestion jobs (running rows reset to
+queued), and the verified Lex.uz robots pacing row. It did not copy raw HTML,
+R2 objects, provisions, chunks, user documents, secrets or any production data.
+The temporary SQL file was removed after import. The dedicated staging Worker
+`juro-legal-corpus-shard-staging` was deployed as version
+`85c7ef5b-a769-4792-bf24-bf2615c74392` with dense Qdrant disabled and no
+production environment in its config.
+
+Its first sequential run `e22c655c-d90f-4078-a32a-a9dfcecf5b02` started at
+`2026-08-24T05:40:24.024Z` and was still running at the last probe
+(`2026-08-24T05:45:18.573Z`). At that probe the shard contained two fetched
+canonical documents, three language variants, three versions, 3,900 parsed
+provisions and 3,901 indexed chunks. The failure ledger was empty; the queue
+remained active and the release floors, queue freeze, snapshot/evaluation,
+Qdrant/D1 restore and CI gates were therefore still unproven. These are actual
+materialized rows, not discovery or placeholder counts.

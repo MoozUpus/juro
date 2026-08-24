@@ -133,6 +133,25 @@ npm run build:legal-corpus:release-evidence -- `
 This is a staging-only safety gate. It does not authorise production storage,
 feature flags, ingestion, a deployment, or a rollout.
 
+### Staging D1 capacity shard
+
+Cloudflare's per-database 10 GB limit is not increaseable. The original
+`juro-staging-corpus-v2` database remains preserved and read-only at its hard
+capacity boundary; it is not truncated or rebound. Staging continuation uses
+the separate `juro-staging-corpus-shard-1` database and the dedicated
+`wrangler.legal-corpus-shard.jsonc` configuration, which binds the same
+route-free Worker to the shard while leaving every production binding absent.
+The seed operation copies only the 44 completed discovery checkpoints, their
+discovery metadata, active queued/retrying jobs (running jobs are reset to
+queued), and the verified Lex.uz robots pacing row. It does not copy raw HTML,
+provisions, chunks, user documents, secrets, or a legal corpus into Git.
+Consequently, shard document/provision/chunk totals count only successfully
+fetched and parsed official sources; discovery rows and queue rows are not
+treated as indexed corpus. The shard has its own D1-backed lock and remains a
+single sequential Lex.uz stream with the same 20-second delay. Release
+evidence must name the exact database(s) and must not add v2 and shard counts
+unless a separately tested federated retrieval/evidence contract is present.
+
 ### Sparse-index capacity transition
 
 Migration `0140_compressed_legal_corpus_sparse_postings` is additive and is
