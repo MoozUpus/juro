@@ -30,6 +30,26 @@ recommends horizontal scale-out across multiple smaller databases. This is an
 external platform constraint, not a release-gate relaxation:
 <https://developers.cloudflare.com/d1/platform/limits/>.
 
+## Post-resume read-only probe (2026-08-24, 05:17Z)
+
+After the goal was resumed, a sequential read-only probe of the active v2
+database used the release-gate aggregate from `admin-operations.ts`. It still
+reports 599 canonical documents, 1,049 language variants, 15,899 distinct
+current provisions, 55,814 current chunks and 55,814 indexed current chunks.
+The ingestion ledger contains 2,674 completed, 27,686 queued, one retrying and
+two running jobs; it contains zero `failed` or `dead_letter` jobs. All 44
+discovery checkpoints are `completed`, and `scheduled_locks` is empty. The
+last durable scheduler rows remain the earlier `D1_ERROR` records because the
+capacity guard rejects the claim before a new row can be inserted.
+
+The same probe verified the sparse-capacity transition is complete: the
+compressed index contains 1,308,850 chunk keys and 64,936,933 postings, while
+the legacy posting table is empty and all 1,308,850 chunk JSON payloads are
+compacted to `[]`. This is a read-only observation, not permission to drop
+the compressed index or to claim that D1 capacity has been recovered. D1
+remains `9,999,998,976` bytes, so the document/provision floors and queue-freeze
+gate remain unmet and snapshot, evaluation, restore and CI gates stay closed.
+
 ## Legacy/v2 capacity comparison (2026-08-24, read-only)
 
 The active release source remains the isolated v2 database; no records are
