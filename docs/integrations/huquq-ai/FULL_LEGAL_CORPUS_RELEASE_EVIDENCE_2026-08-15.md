@@ -2,6 +2,31 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Capacity-boundary continuation (2026-08-24, 01:08–01:13Z)
+
+The next scheduled run `2be43674-86be-4cd8-8e30-32d0a3a5a7d8` started at
+`2026-08-24T01:08:20.192Z` and finished at `2026-08-24T01:09:32.002Z` with
+`status=failed` and `error_code=D1_ERROR`. This is a scheduler/D1 error, not a
+terminal or dead-letter ingestion job: the read-only terminal/dead-letter
+filter remains empty. Discovery remains 44/44 `completed`, and the distributed
+lock table is empty after the run. Queue composition is 1,055 completed and
+27,097 queued fetch jobs, plus 1,619 completed, 589 queued, two retrying and
+one running version job. The failure ledger contains 15
+`LEGAL_CORPUS_INGESTION_FAILED` retries, seven language-text retries, four
+stale-running retries, one official-text retry, one source-timeout retry and
+five technically unavailable rows.
+
+The release-gate aggregate remains 599 canonical documents, 1,049 language
+variants, 15,899 distinct current provisions and 55,814 indexed current chunks.
+An independent v2-only capacity capture at `2026-08-24T01:13:02.282Z` reports
+`databaseSizeBytes=9,999,998,976` for database ID
+`62620fb3-3da3-4c76-a8e9-aa60858c1063`; the artifact SHA-256 is
+`77152728aaE70d670f93909064f49e3bc3256bcf705b14cd935d99ec92ca0a3e`.
+The D1 size is therefore 1,024 bytes below the 10,000,000,000-byte ceiling.
+Floors, queue freeze, snapshot, evaluation, Qdrant/D1 restore and CI gates
+remain closed. No code redeploy, destructive compaction, new database or
+production change was made.
+
 ## Capacity-boundary continuation (2026-08-24, 01:00–01:04Z)
 
 Run `b83f9a13-d8a5-4384-841c-d8f208e3a9d4` completed at
