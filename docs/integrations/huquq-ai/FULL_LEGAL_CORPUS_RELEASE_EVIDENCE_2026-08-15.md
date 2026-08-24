@@ -11092,3 +11092,18 @@ current provisions and 16,973 indexed chunks. All 44 discovery checkpoints are
 `failed`/`dead_letter` query is empty. Release floors, queue freeze and all
 post-ingestion snapshot/evaluation/restore/CI gates remain open; production is
 untouched.
+
+## Shard run closure (2026-08-24, 08:16Z)
+
+The cron run `b17c3d9d-54a0-4b4d-b495-5fa6a0cdd533` completed at
+`2026-08-24T08:16:39.445Z` with `status=completed` and `error_code=NULL`.
+The post-run read-only aggregate is 67 canonical documents, 5,639 unique
+current provisions and 17,964 indexed chunks. All 44 discovery checkpoints are
+`completed`. The queue remains active and unfrozen: 136 fetch jobs are
+`completed`, 27,085 are `queued`; 20 version jobs are `completed`, 2,191 are
+`queued`. The failure ledger now contains two non-terminal
+`technically_unavailable` source-language rows (`https://lex.uz/en/docs/8152156`
+and `https://lex.uz/en/docs/8101804`), both with
+`LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE`; the explicit `failed`/`dead_letter`
+query is empty. Release floors, queue freeze and all post-ingestion
+snapshot/evaluation/restore/CI gates remain open; production is untouched.
