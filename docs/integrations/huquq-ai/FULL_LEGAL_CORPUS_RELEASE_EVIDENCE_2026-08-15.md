@@ -10907,3 +10907,12 @@ five-job default; no second crawl stream or parallel source request was
 introduced. Boundary tests, type-check and shard dry-run passed before this
 staging-only deployment. This is a throughput change inside the existing
 robots budget, not a release-gate relaxation.
+
+## Shard monitor after larger bounded batch (2026-08-24, 06:00Z)
+
+The next run `cb2b91ba-4ce4-469f-9448-4217acc1e2be` remained active at
+`2026-08-24T06:00:20.068Z` with no error code. The read-only materialized
+totals were eight canonical documents, ten language variants, fourteen
+versions, 17,366 provisions and 16,411 indexed chunks; the failure ledger was
+empty. The batch is still governed by the single 20-second Lex.uz host pacer,
+and the release floors and queue-freeze/post-ingestion gates remain open.
