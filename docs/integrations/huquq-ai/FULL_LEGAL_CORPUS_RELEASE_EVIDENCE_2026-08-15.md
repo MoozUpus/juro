@@ -11026,3 +11026,15 @@ version jobs are still `queued` (76 fetch and 13 version jobs are
 `https://lex.uz/en/docs/8152156`; no `failed` or `dead_letter` ingestion jobs
 are present. Release floors and post-ingestion snapshot/evaluation/restore/CI
 gates therefore remain open; production is untouched.
+
+## Shard run monitor (2026-08-24, 07:20Z)
+
+The next cron run `8fa50581-524c-453f-8473-13a44352fe3b` is still
+`running` with `error_code=NULL` (`started_at=2026-08-24T07:16:17.183Z`).
+The read-only aggregate is 43 canonical documents, 5,357 unique current
+provisions and 16,788 indexed chunks; all 44 discovery checkpoints are
+`completed`. The queue remains active (`fetch`: 82 completed, 27,092 queued,
+1 running; `version`: 13 completed, 2,198 queued). The failure ledger still
+contains only the previously recorded `technically_unavailable` row, and the
+explicit `failed`/`dead_letter` query is empty. Release floors, queue freeze,
+snapshot/evaluation/restore and CI gates remain open; production is untouched.
