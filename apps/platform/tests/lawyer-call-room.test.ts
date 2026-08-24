@@ -31,10 +31,11 @@ test("lawyer calls exchange the server-only TURN key for short-lived browser cre
 });
 
 test("call room is participant-scoped, ephemeral, audited and never records media", async () => {
-  const [roomRoute, signalRoute, ui, migration] = await Promise.all([
+  const [roomRoute, signalRoute, ui, panel, migration] = await Promise.all([
     readFile(new URL("../app/api/platform/lawyer-consultations/[consultationId]/call/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/lawyer-consultations/[consultationId]/call/signals/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/LawyerCallRoom.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerConsultationPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0148_lawyer_call_rooms.sql", import.meta.url), "utf8"),
   ]);
   for (const source of [roomRoute, signalRoute]) {
@@ -66,6 +67,9 @@ test("call room is participant-scoped, ephemeral, audited and never records medi
   assert.match(ui, /networkQualityLabel/);
   assert.match(ui, /Только аудио/);
   assert.doesNotMatch(ui, /MediaRecorder|recording/i);
+  assert.match(panel, /role === "lawyer"/);
+  assert.match(panel, /\/lawyer\/consultations\/call\//);
+  assert.doesNotMatch(panel, /pathname\.replace\([^\n]+requests\/call/);
   assert.match(migration, /FOREIGN KEY \(`consultation_id`\)/);
   assert.match(migration, /CHECK \(`signal_type` IN \('offer','answer','ice','restart'\)\)/);
   assert.doesNotMatch(migration, /DROP\s+TABLE/iu);

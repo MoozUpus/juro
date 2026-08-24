@@ -131,3 +131,25 @@ test("lawyer host keeps known nested lawyer aliases on their real modules", () =
     "/ru/lawyer/document-builder/debt-receipts/0602001",
   );
 });
+
+test("lawyer host preserves only the historical requests call-room deep alias", () => {
+  const consultationId = "1d3bcda6-0d69-451d-829e-86a4d32db2f9";
+  for (const locale of ["ru", "uz"] as const) {
+    const legacyCall = lawyerHostTarget(
+      new URL(`https://lawyer.juro.uz/${locale}/lawyer/requests/call/${consultationId}?source=legacy`),
+    );
+    assert.equal(
+      legacyCall?.pathname,
+      `/${locale}/lawyer/consultations/call/${consultationId}`,
+    );
+    assert.equal(legacyCall?.searchParams.get("source"), "legacy");
+  }
+
+  const unrelatedDeepAlias = lawyerHostTarget(
+    new URL(`https://lawyer.juro.uz/ru/lawyer/clients/call/${consultationId}`),
+  );
+  assert.equal(
+    unrelatedDeepAlias?.pathname,
+    `/ru/lawyer/clients/call/${consultationId}`,
+  );
+});

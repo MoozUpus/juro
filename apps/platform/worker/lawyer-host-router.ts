@@ -87,6 +87,17 @@ export function lawyerHostTarget(url: URL): URL | null {
       return target;
     }
   }
+  // The requests view historically emitted a deep call-room URL below the
+  // alias. Keep only that exact participant route working while the UI moves
+  // to the canonical consultations module. Do not turn arbitrary nested
+  // aliases into open-ended rewrites.
+  const requestCallRoom = url.pathname.match(
+    /^\/(ru|uz)\/lawyer\/requests\/call\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/iu,
+  );
+  if (requestCallRoom) {
+    target.pathname = `/${requestCallRoom[1]}/lawyer/consultations/call/${requestCallRoom[2]}`;
+    return target;
+  }
   if (/^\/(?:ru|uz)\/lawyer(?:\/|$)/u.test(url.pathname)) return target;
   return null;
 }

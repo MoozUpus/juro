@@ -42,6 +42,11 @@ export function LawyerConsultationPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [observedAt, setObservedAt] = useState(0);
+  const callRoomPath = consultation
+    ? role === "lawyer"
+      ? `/${locale}/lawyer/consultations/call/${encodeURIComponent(consultation.id)}`
+      : `${pathname.replace(/\/+$/, "")}/call/${encodeURIComponent(consultation.id)}`
+    : "";
 
   const load = useCallback(async () => {
     const response = await fetch(
@@ -187,17 +192,17 @@ export function LawyerConsultationPanel({
           )}
           {consultation?.status === "confirmed" && (
             <div className="lawyer-consultation-actions">
-              {consultation.format === "video" && <Link className="call-room-link" href={`${pathname.replace(/\/+$/, "")}/call/${encodeURIComponent(consultation.id)}`}><Video />{ru ? "Войти в видеокомнату" : "Video xonaga kirish"}</Link>}
+              {consultation.format === "video" && <Link className="call-room-link" href={callRoomPath}><Video />{ru ? "Войти в видеокомнату" : "Video xonaga kirish"}</Link>}
               <button className="secondary" type="button" disabled={busy} onClick={() => void mutate({ action: "cancel" })}>{ru ? "Отменить консультацию" : "Konsultatsiyani bekor qilish"}</button>
             </div>
           )}
-          {consultation?.status === "in_progress" && consultation.format === "video" && <Link className="call-room-link" href={`${pathname.replace(/\/+$/, "")}/call/${encodeURIComponent(consultation.id)}`}><Video />{ru ? "Вернуться в видеокомнату" : "Video xonaga qaytish"}</Link>}
+          {consultation?.status === "in_progress" && consultation.format === "video" && <Link className="call-room-link" href={callRoomPath}><Video />{ru ? "Вернуться в видеокомнату" : "Video xonaga qaytish"}</Link>}
         </>
       ) : (
         <>
           {consultation?.status === "confirmed" && (
             <div className="lawyer-consultation-actions">
-              {consultation.format === "video" ? <Link className="call-room-link" href={`${pathname.replace(/\/+$/, "")}/call/${encodeURIComponent(consultation.id)}`}><Video />{ru ? "Начать видеозвонок" : "Video qo‘ng‘iroqni boshlash"}</Link> : <button type="button" disabled={busy} onClick={() => void mutate({ action: "start" })}>{busy && <LoaderCircle className="spin" />}{ru ? "Начать консультацию" : "Konsultatsiyani boshlash"}</button>}
+              {consultation.format === "video" ? <Link className="call-room-link" href={callRoomPath}><Video />{ru ? "Начать видеозвонок" : "Video qo‘ng‘iroqni boshlash"}</Link> : <button type="button" disabled={busy} onClick={() => void mutate({ action: "start" })}>{busy && <LoaderCircle className="spin" />}{ru ? "Начать консультацию" : "Konsultatsiyani boshlash"}</button>}
               <button
                 className="secondary"
                 type="button"
@@ -220,7 +225,7 @@ export function LawyerConsultationPanel({
           )}
           {consultation?.status === "in_progress" && (
             <div className="lawyer-consultation-completion">
-              {consultation.format === "video" && <Link className="call-room-link" href={`${pathname.replace(/\/+$/, "")}/call/${encodeURIComponent(consultation.id)}`}><Video />{ru ? "Вернуться в видеокомнату" : "Video xonaga qaytish"}</Link>}
+              {consultation.format === "video" && <Link className="call-room-link" href={callRoomPath}><Video />{ru ? "Вернуться в видеокомнату" : "Video xonaga qaytish"}</Link>}
               <label>
                 {ru ? "Итоговый комментарий клиенту" : "Mijoz uchun yakuniy izoh"}
                 <textarea
