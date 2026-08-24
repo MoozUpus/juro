@@ -64,6 +64,11 @@ The corresponding before evidence is in `screenshots/before/`.
   ingestion and the local full-corpus flags remain disabled in this release.
 - Cloudflare Realtime provides call room transport; TURN credentials are Worker
   secrets and are absent from repository and evidence files.
+- The call route depends on a typed provider boundary rather than Cloudflare
+  details directly. Its production adapter exposes `createRoom`,
+  `createParticipantToken`, `joinRoom`, `endRoom`, `getRoomStatus` and
+  `getCallMetadata`; authentication, role and state enforcement remain in the
+  protected route layer.
 
 ## 4. Implemented changes
 
@@ -481,8 +486,8 @@ The release includes the explicit post-consent Lawyer request decision lifecycle
 and migration `0158`. Focused decision/routing tests passed 23/23; GitHub CI
 `32694042835` passed rendered HTML 33/33, core 1074/1074, Cloudflare 201/201,
 production artifact, environment, dependency and licence gates. Worker
-`927f5a61-1bf0-4d14-9a7e-cf6b0cbdc1a5` receives 100% traffic with
-`4ce7db88-f20f-49ba-b887-b3496b02451c` as rollback. Post-deploy HTTP covered
+`927f5a61-1bf0-4d14-9a7e-cf6b0cbdc1a5` received 100% traffic at that checkpoint
+with `4ce7db88-f20f-49ba-b887-b3496b02451c` as rollback. Post-deploy HTTP covered
 44 clean RU/UZ professional routes, six clean builder deep links and the known
 nested aliases, rejected an unknown module, stripped spoofed internal headers
 and preserved the decision endpoint's `403/403/401` gates. Connected production
@@ -498,10 +503,34 @@ fail closed. Focused tests passed 11/11 and the sequential current-head release
 suite passed type-check, lint, rendered HTML 33/33, core 1075/1075, Cloudflare
 201/201, the production environment matrix and artifact budgets. GitHub CI
 `32726605712` passed both jobs. Worker
-`16fbffa3-4b3b-4808-946c-17e9976d454c` receives 100% traffic with
-`927f5a61-1bf0-4d14-9a7e-cf6b0cbdc1a5` as the immediate rollback. Canonical
+`16fbffa3-4b3b-4808-946c-17e9976d454c` received 100% traffic at that checkpoint
+with `927f5a61-1bf0-4d14-9a7e-cf6b0cbdc1a5` as rollback. Canonical
 and historical call URLs now reach the protected room rather than a 404, and
 the authenticated two-profile replay above exercised the deployed route.
+
+The release then replaced the remaining transport-specific route logic with a
+typed provider abstraction in commit `fcaf807e`. The concrete
+`CloudflareRealtimeLawyerCallProvider` implements `createRoom`,
+`createParticipantToken`, `joinRoom`, `endRoom`, `getRoomStatus` and
+`getCallMetadata`, while the protected route retains authentication,
+authorization, input and state guards. A behavioral SQLite test covers the full
+provider-backed lifecycle. CI `32729892232` passed, and Worker
+`9396e8eb-7ccd-4f82-8d95-e0caa4e130b8` deployed that boundary.
+
+The independent post-call audit then reopened the exact ended room and found a
+terminal-state UX defect: the client could show device preflight before its
+first server-status read. Commit `c9ea547d` adds an abortable protected status
+check before any media access and fails closed for ended, completed or cancelled
+calls with localized terminal copy. The full local release suite passed
+rendered HTML 33/33, core 1076/1076, Cloudflare 201/201, type-check, lint,
+production build/artifact, environment matrix and performance budgets. GitHub
+CI `32762898540` passed both jobs. Worker
+`2f54c3a6-d5a1-4030-beea-e32d394a33ec` (version 142, deployment
+`d165dcae-0ba7-44f0-a642-ed05e3509222`) now receives 100% traffic with
+`9396e8eb-7ccd-4f82-8d95-e0caa4e130b8` as immediate rollback. Authenticated
+Lawyer Chrome reopened the exact ended call and rendered `Звонок завершён` and
+`Устройства не включались. Юрист может добавить итог консультации в карточке
+заявки.` without the device-check action or a browser error.
 
 ## 12. Limitations and release truth
 
@@ -555,11 +584,13 @@ the authenticated two-profile replay above exercised the deployed route.
   recent incident lists. The live content-hashed Admin launch asset
   contains Manrope and no previous inline Inter declaration.
 
-After the canonical call-route release and authenticated two-party call, app
-and status-host reads again returned operational 8/8 with zero active or recent
-incidents; the latest recorded response was generated at
-`2026-08-24T12:33:31.311Z` on Worker
-`16fbffa3-4b3b-4808-946c-17e9976d454c`.
+After the provider-boundary and terminal-state releases, app and status-host
+reads generated at `2026-08-24T18:43:29.177Z` and
+`2026-08-24T18:43:29.619Z` returned operational 8/8 with no incident on Worker
+`2f54c3a6-d5a1-4030-beea-e32d394a33ec`. The post-deploy D1 read retained the
+exact ended-room evidence: two prepared, two joined, two left, one ended event,
+zero signals and an empty foreign-key check. The separate consultation result
+remains unsent and the business row remains `in_progress`.
 
 The genuine approved-version registration and fresh-MFA Admin-theme gates are
 closed. This document remains an evidence-scoped release report rather than a
