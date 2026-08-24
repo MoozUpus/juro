@@ -11038,3 +11038,16 @@ provisions and 16,788 indexed chunks; all 44 discovery checkpoints are
 contains only the previously recorded `technically_unavailable` row, and the
 explicit `failed`/`dead_letter` query is empty. Release floors, queue freeze,
 snapshot/evaluation/restore and CI gates remain open; production is untouched.
+
+## Shard run monitor (2026-08-24, 07:22Z)
+
+The active cron run `8fa50581-524c-453f-8473-13a44352fe3b` remains
+`running` with `error_code=NULL` (`started_at=2026-08-24T07:16:17.183Z`).
+The read-only aggregate is 44 canonical documents, 5,371 unique current
+provisions and 16,842 indexed chunks; all 44 discovery checkpoints are
+`completed`. The queue is still active (`fetch`: 85 completed, 27,092 queued,
+1 running; `version`: 13 completed, 2,198 queued). The failure ledger has only
+the existing `technically_unavailable` source-language row; the explicit
+`failed`/`dead_letter` query remains empty. Release floors and queue freeze are
+not yet proven, so snapshot/evaluation/restore/CI gates remain open; production
+is untouched.
