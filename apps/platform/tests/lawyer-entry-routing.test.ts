@@ -113,6 +113,15 @@ test("the Worker owns and strips internal lawyer routing headers", () => {
   assert.match(worker, /routeHeaders\.set\("x-juro-lawyer-original-path", `\$\{url\.pathname\}\$\{url\.search\}`\)/u);
 });
 
+test("the dedicated document builder preserves its clean Lawyer return path", () => {
+  const page = readFileSync(
+    new URL("../app/[locale]/[accountType]/document-builder/page.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(page, /lawyerHostReturnTo\(requestHeaders, fallback\)/u);
+  assert.match(page, /await headers\(\)/u);
+});
+
 test("account module guard rejects URL role spoofing on the lawyer host", () => {
   const destination = accountModuleRedirect({
     requestedLocale: "ru",
