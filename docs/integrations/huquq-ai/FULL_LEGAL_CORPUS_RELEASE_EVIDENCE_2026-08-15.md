@@ -2,6 +2,33 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Scheduler lease heartbeat fix and staging verification (2026-08-24, 18:56–19:01Z)
+
+The scheduled run `b15ba697-378a-4ffa-baed-ac0e72486f92` stopped renewing its
+lease while a Lex response body was being read and was reclaimed by the next
+invocation at `2026-08-24T18:56:17.593Z` with
+`LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED`. This was a scheduler-stall recovery,
+not a terminal ingestion job: the explicit `failed`/`dead_letter` job query
+remained empty. Commit `9f0d4fc0` forwards the scheduler heartbeat through
+bounded Lex HTML/PDF/archive response reads and redirects, with a regression
+test. The targeted source-fetch suite passed 15/15, platform type-check and
+lint passed, and the legal-corpus artifact dry-run passed.
+
+The staging-only deployment produced Worker version
+`e20bfa55-f8b6-4f7f-ae6e-d94a52dce52a`. The next run
+`bec64037-61b1-461c-939b-508e8c5481d8` started at `2026-08-24T18:56:17.593Z`
+and had a fresh heartbeat at `2026-08-24T19:01:25.506Z`, confirming the fix
+is active. Its read-only state is 286 canonical documents, 10,747 unique
+current provisions and 35,202 indexed chunks; all 44 discovery checkpoints are
+`completed`. The queue remains active and unfrozen (`fetch`: 704 completed,
+26,999 queued, one running; `version`: 98 completed, 2,113 queued). Jobs with
+status `failed` or `dead_letter` remain zero. The failure ledger contains
+three retrying `LEGAL_CORPUS_INGESTION_FAILED`, five retrying stale-running
+records (including the reclaimed run), six retrying language-text records and
+six `technically_unavailable` official-text records. Release floors, queue
+freeze and all snapshot/evaluation/Qdrant/D1-restore/CI gates remain open;
+production is untouched.
+
 ## Capacity guard verification after staging deploy (2026-08-24, 01:28Z)
 
 Commit `7f4106b0` classified Cloudflare's hard D1-size wording as the safe
