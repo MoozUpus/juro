@@ -11084,6 +11084,21 @@ fix is deployed to staging and its 14/14 source-fetch plus 60 ingestion/worker
 boundary tests passed. Release floors, queue freeze and all post-ingestion
 snapshot/evaluation/restore/CI gates remain open; production is untouched.
 
+## Stale-run recovery (2026-08-24, 10:40Z)
+
+The scheduled run `6c5f8005-49d6-4cf4-b789-27fbb2abf6fe` was closed by the
+next scheduled invocation at `2026-08-24T10:40:17.189Z` with
+`LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED` after version job
+`legal-version:f9a2eb6c0148fb1017b22d8e1c7b` stopped renewing its run lease.
+The normal reconciliation path reclaimed that job at attempt 2 under the
+following run `e91dc21d-1451-4238-a3e4-1bc369a8e4a1`; it completed successfully
+with `last_error_code=NULL`. The queue remained bounded and sequential
+(`fetch`: 228 completed, 27,074 queued, 1 running; `version`: 30 completed,
+2,181 queued), and the explicit `failed`/`dead_letter` query remained empty.
+This is recovery evidence only; release floors, queue freeze and all
+post-ingestion snapshot/evaluation/restore/CI gates remain open; production is
+untouched.
+
 ## Shard run closure (2026-08-24, 09:25Z)
 
 The cron run `cb63939b-3830-4869-a768-e428518ac3cb` completed at
