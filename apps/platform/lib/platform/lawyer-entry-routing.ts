@@ -37,6 +37,12 @@ type LawyerRoleMismatchInput = {
   profile: LawyerEntryProfile | null;
 };
 
+type AuthContinuationInput = {
+  selectedAccountType: AccountType;
+  serverRedirectTo: string;
+  explicitReturnTo: string | null;
+};
+
 const pendingLawyerModules = new Set<PlatformModule>([
   "profile",
   "settings",
@@ -141,6 +147,26 @@ export function lawyerPublicOrigin(requestHost: string | null): string | null {
     return "https://lawyer.staging.juro.uz";
   }
   return null;
+}
+
+export function authContinuationDestination({
+  selectedAccountType,
+  serverRedirectTo,
+  explicitReturnTo,
+}: AuthContinuationInput): string {
+  if (selectedAccountType === "lawyer") return serverRedirectTo;
+  try {
+    const target = new URL(serverRedirectTo, "https://app.juro.uz");
+    if (
+      target.hostname === "lawyer.juro.uz"
+      || target.hostname === "lawyer.staging.juro.uz"
+    ) {
+      return serverRedirectTo;
+    }
+  } catch {
+    return serverRedirectTo;
+  }
+  return explicitReturnTo ?? serverRedirectTo;
 }
 
 function clientPublicOrigin(requestHost: string | null): string | null {

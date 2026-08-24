@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   accountModuleRedirect,
+  authContinuationDestination,
   authenticatedAuthRedirect,
   lawyerHubViewForPathname,
   lawyerHostReturnTo,
@@ -63,6 +64,27 @@ test("lawyer landing routes onboarding, application, and approved workspace sepa
   assert.equal(lawyerLandingDestination({ ...pendingLawyer, onboardingCompleted: false }, true, "lawyer.juro.uz"), "/ru/onboarding");
   assert.equal(lawyerLandingDestination(pendingLawyer, true, "lawyer.juro.uz"), "/ru/application");
   assert.equal(lawyerLandingDestination(approvedLawyer, false, "app.juro.uz"), "https://lawyer.juro.uz/ru/dashboard");
+});
+
+test("lawyer registration always continues on the dedicated host", () => {
+  assert.equal(authContinuationDestination({
+    selectedAccountType: "lawyer",
+    serverRedirectTo: "https://lawyer.juro.uz/ru/onboarding",
+    explicitReturnTo: "/ru/individual/dashboard",
+  }), "https://lawyer.juro.uz/ru/onboarding");
+  assert.equal(authContinuationDestination({
+    selectedAccountType: "individual",
+    serverRedirectTo: "https://lawyer.staging.juro.uz/uz/dashboard",
+    explicitReturnTo: "/uz/individual/documents",
+  }), "https://lawyer.staging.juro.uz/uz/dashboard");
+  assert.equal(authContinuationDestination({
+    selectedAccountType: "individual",
+    serverRedirectTo: "/ru/individual/dashboard",
+    explicitReturnTo: "/ru/individual/documents",
+  }), "/ru/individual/documents");
+
+  const authForm = readFileSync(new URL("../app/_auth/AuthForm.tsx", import.meta.url), "utf8");
+  assert.equal(authForm.match(/authContinuationDestination\(\{/gu)?.length, 2);
 });
 
 test("clean lawyer hub paths preserve their selected view after hydration", () => {

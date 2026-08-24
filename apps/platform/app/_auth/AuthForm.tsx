@@ -18,6 +18,7 @@ import {
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { TurnstileWidget } from "./TurnstileWidget";
 import { ThemeSwitcher } from "../_theme/ThemeSwitcher";
+import { authContinuationDestination } from "../../lib/platform/lawyer-entry-routing";
 
 type AccountType = "individual" | "entrepreneur" | "lawyer";
 type Locale = "ru" | "uz";
@@ -226,7 +227,11 @@ export function AuthForm({
           ? "Сервер не вернул безопасный маршрут продолжения."
           : "Server xavfsiz davom etish yo‘lini qaytarmadi.");
       }
-      window.location.assign(explicitReturnTo ?? data.redirectTo);
+      window.location.assign(authContinuationDestination({
+        selectedAccountType: accountType,
+        serverRedirectTo: data.redirectTo,
+        explicitReturnTo,
+      }));
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
@@ -268,7 +273,11 @@ export function AuthForm({
         }
         throw new Error(message);
       }
-      window.location.assign(explicitReturnTo ?? data.redirectTo);
+      window.location.assign(authContinuationDestination({
+        selectedAccountType: accountType,
+        serverRedirectTo: data.redirectTo,
+        explicitReturnTo,
+      }));
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {

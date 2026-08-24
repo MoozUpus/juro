@@ -42,6 +42,12 @@ export function lawyerHostTarget(url: URL): URL | null {
     target.searchParams.set("accountType", "lawyer");
     return target;
   }
+  const localeEntry = url.pathname.match(/^\/(ru|uz)\/?$/u);
+  if (localeEntry) {
+    target.pathname = `/${localeEntry[1]}/auth/login`;
+    target.searchParams.set("accountType", "lawyer");
+    return target;
+  }
   const onboarding = url.pathname.match(/^\/(?:(ru|uz)\/)?onboarding\/?$/u);
   if (onboarding) {
     target.pathname = `/${onboarding[1] || "ru"}/onboarding`;
