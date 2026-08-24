@@ -2,6 +2,28 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Capacity guard verification after staging deploy (2026-08-24, 01:28Z)
+
+Commit `7f4106b0` classified Cloudflare's hard D1-size wording as the safe
+operational code `LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED`, without persisting raw
+provider details. Focused worker tests (21/21), type-check, lint and the
+staging artifact dry-run passed. The staging-only deploy produced Worker
+version `ec30b7c9-6727-4e05-91b0-69e9b3d41879` with the existing v2 D1 binding;
+no flags, data, Qdrant collection or production binding changed.
+
+The next cron invocation at `2026-08-24T01:28:20.192Z` emitted
+`legal_corpus.claim_failed` with `errorCode=LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED`.
+The claim failed before a durable `scheduled_runs` row could be inserted, so
+the prior two `D1_ERROR` rows remain the last persisted run records. The
+read-only post-deploy probe still shows an empty distributed lock, 44/44
+completed checkpoints, zero terminal/dead-letter jobs, 15 generic retrying
+failures plus the same language/stale/official/timeout ledger, and unchanged
+totals of 599 documents, 15,899 distinct current provisions and 55,814 indexed
+current chunks. D1 size remains `9,999,998,976` bytes. The capacity diagnosis
+is now directly confirmed by the Worker log, but the corpus floors and queue
+freeze remain unmet; no snapshot, evaluation, restore or CI release gate is
+claimed.
+
 ## Legacy/v2 capacity comparison (2026-08-24, read-only)
 
 The active release source remains the isolated v2 database; no records are
