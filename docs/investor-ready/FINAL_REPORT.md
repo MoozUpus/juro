@@ -365,6 +365,16 @@ horizontal overflow or browser warning/error log. System was then restored,
 survived reload and remained selected after returning to the normal 1536-pixel
 dashboard viewport.
 
+Lawyer responsive coverage was then expanded to the same route-level standard.
+Authenticated production Chrome exercised all 20 top-level RU professional
+routes at 390×844 in explicit Light and again in explicit Dark, followed by a
+768×1024 tablet loop with System selected. Every final URL remained canonical,
+every route retained Manrope and a real `main` region, no route rendered 404,
+and both document and body widths stayed within the viewport. The accumulated
+Chrome warning/error log was empty. The temporary viewport override was reset,
+System was restored, and Requests returned to the normal 1536×826 viewport at
+DPR 1.25. This is responsive Chrome evidence, not a physical-device claim.
+
 Windows scale was also exercised directly rather than inferred from viewport
 emulation. Settings changed 125% to the recommended 150%, the authenticated
 Client dashboard rendered at DPR 1.5 with a 1280×665 viewport and 1265-pixel
