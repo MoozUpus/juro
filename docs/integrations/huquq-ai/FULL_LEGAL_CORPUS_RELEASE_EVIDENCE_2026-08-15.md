@@ -10885,3 +10885,14 @@ provisions and 3,901 indexed chunks. The failure ledger was empty; the queue
 remained active and the release floors, queue freeze, snapshot/evaluation,
 Qdrant/D1 restore and CI gates were therefore still unproven. These are actual
 materialized rows, not discovery or placeholder counts.
+
+## Staging shard first-run closure (2026-08-24, 05:48Z)
+
+The first shard run `e22c655c-d90f-4078-a32a-a9dfcecf5b02` completed at
+`2026-08-24T05:48:02.542Z` with no scheduler error. Sequential processing
+materialized two canonical documents, three language variants, five versions,
+8,158 provisions and 8,161 indexed chunks. Two fetch jobs and three version
+jobs are completed; the failure ledger remains empty. The next bounded run
+`e6b34c66-33c2-4496-9acc-585a80b0b9c6` started at `2026-08-24T05:48:23.810Z`.
+The queue is active, so the 1,500/22,000/22,513 floors, freeze, snapshot,
+evaluation, restore and CI gates remain open.
