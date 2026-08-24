@@ -2,6 +2,24 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Capacity-boundary continuation (2026-08-24, 01:00–01:04Z)
+
+Run `b83f9a13-d8a5-4384-841c-d8f208e3a9d4` completed at
+`2026-08-24T01:04:39.481Z` with `error_code=LEGAL_CORPUS_INGESTION_FAILED`.
+The direct terminal/dead-letter filter remains empty, while three version jobs
+are `retrying`. The failure ledger now contains 14 generic ingestion retries,
+seven `LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE` retries, four stale-running
+retries, one `LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE` retry, one source-timeout
+retry and five technically unavailable rows. Queue composition is 1,055
+completed and 27,097 queued fetch jobs, plus 1,619 completed, 589 queued and
+three retrying version jobs. Discovery remains 44/44 `completed`.
+Materialized totals advanced to 599 canonical documents, 1,049 language
+variants, 15,899 distinct current provisions and 55,814 indexed current
+chunks. Query metadata reports `size_after=9,999,994,880` bytes, leaving only
+5,120 bytes below the 10,000,000,000-byte ceiling. Floors, queue freeze,
+snapshot, evaluation, Qdrant/D1 restore and CI gates remain closed; no code
+redeploy, destructive compaction, new database or production change was made.
+
 ## Capacity-boundary monitoring (2026-08-24, 00:36–00:56Z)
 
 Three consecutive scheduled runs completed their bounded work but recorded
