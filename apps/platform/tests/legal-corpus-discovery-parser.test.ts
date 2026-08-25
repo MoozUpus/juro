@@ -160,3 +160,12 @@ test("provision parser keeps article structure and only splits genuinely large a
   const large = { ...provisions[0]!, text: "A".repeat(5) + "\n\n" + "B".repeat(5) };
   assert.deepEqual(chunkLegalProvision(large, 8), ["AAAAA", "BBBBB"]);
 });
+
+test("provision parser stops at the bounded overflow sentinel", () => {
+  const source = Array.from({ length: 5 }, (_, index) => `${index + 1}-modda. Norma\nText`).join("\n");
+  const provisions = parseLegalProvisions(source, "uz-Latn", { maxProvisions: 3 });
+  assert.equal(provisions.length, 4);
+  assert.deepEqual(provisions.slice(0, 3).map((item) => item.articleNumber), ["1", "2", "3"]);
+  assert.equal(provisions[3]?.articleNumber, "4");
+  assert.equal(provisions[3]?.text, "");
+});

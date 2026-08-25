@@ -929,7 +929,9 @@ export async function ingestOfficialLexDocument(
     currentRevisionDate: revisionHistory.currentRevisionDate,
     revisionDate: revision?.revisionDate ?? null,
   }));
-  const provisions = parseLegalProvisions(normalized.plainText, parsed.language);
+  const provisions = parseLegalProvisions(normalized.plainText, parsed.language, {
+    maxProvisions: MAX_PROVISIONS_PER_VERSION,
+  });
   if (provisions.length === 0 || provisions.length > MAX_PROVISIONS_PER_VERSION) {
     throw new TypeError("LEGAL_CORPUS_PROVISION_LIMIT_REJECTED");
   }
