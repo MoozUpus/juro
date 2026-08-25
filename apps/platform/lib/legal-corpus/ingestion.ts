@@ -432,6 +432,11 @@ function technicallyUnavailable(error: unknown): boolean {
       && error.httpStatus !== null
       && error.httpStatus >= 400
       && error.httpStatus < 500)
+    // A bounded article-first parser can prove that an official page exceeds
+    // the per-version safety ceiling without treating the source as a worker
+    // failure. Retain that explicit limitation as technical unavailability so
+    // the job is completed with evidence rather than dead-lettered.
+    || internalErrorCode(error) === "LEGAL_CORPUS_PROVISION_LIMIT_REJECTED"
     // A Lex page can link an attachment whose archive itself is corrupted.
     // The primary HTML has already established this as the document's sole
     // official representation, so retrying the same immutable invalid bytes

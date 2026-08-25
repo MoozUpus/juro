@@ -725,6 +725,51 @@ test("long-running corpus jobs renew their durable ingestion lease", async () =>
   }
 });
 
+test("an oversized official article list is recorded as technical unavailability", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/67893",
+      now,
+      correlationId: "oversized-article-list",
+    });
+    const oversizedText = Array.from({ length: 8_001 }, (_, index) =>
+      `Статья ${index + 1}. Правило ${index + 1}<br/>Норма применяется.`,
+    ).join("<br/>");
+    const oversizedHtml = `<!doctype html><html><body><main id="divCont">
+      <div class="lx_elem ACT_TITLE">Большой официальный акт</div>
+      ${oversizedText}
+    </main></body></html>`;
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now,
+      fetchImpl: fetchFor(oversizedHtml),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE",
+    });
+    const job = sqlite.prepare(`SELECT status,last_error_code AS errorCode
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; errorCode: string | null;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      errorCode: "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE",
+    });
+    const failure = sqlite.prepare(`SELECT retryable,retry_state AS retryState
+      FROM legal_corpus_failures WHERE job_id=? ORDER BY attempted_at DESC LIMIT 1`).get(queued.jobId) as {
+        retryable: number; retryState: string;
+      };
+    assert.deepEqual({ ...failure }, { retryable: 0, retryState: "technically_unavailable" });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a retryable Qdrant post-ingest failure keeps the corpus job retryable", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
