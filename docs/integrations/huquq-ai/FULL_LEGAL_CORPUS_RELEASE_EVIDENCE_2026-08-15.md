@@ -2,6 +2,38 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Provision/chunk floors crossed while document and freeze gates remain open (2026-08-25, 21:36–21:48Z)
+
+Single-stream staging run `93e0dd9a-3101-4e80-9419-d41103048d1c`
+started at `21:36:47.387Z` and completed at `21:47:15.871Z` with
+`error_code=NULL`. Its distributed lock was empty at the measurement boundary.
+The staging Worker remains version `1fb18209-c95f-46c5-abf5-6400a6442879` at
+100% with the unchanged shard-2 binding. No code, migration, flag, DNS or
+production state changed in this monitoring interval.
+
+One read-only SQL snapshot at that empty-lock boundary recorded active
+acquisition, 44/44 completed discovery checkpoints, 19/19 indexed core-code
+targets, zero failed/dead-letter ingestion jobs and zero terminal failure
+records. Queue composition was 151 completed and 25,768 queued fetch jobs,
+plus 94 completed and 2,134 queued version jobs. The only failure-ledger rows
+remained two historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records
+for one fetch job that is now `completed`.
+
+The same snapshot recorded 136 canonical documents, 25,046 unique current
+provisions and 25,065 indexed current chunks. A separate per-document
+distribution check used distinct provision IDs against each variant's exact
+current-version pointer; the increase is concentrated in genuinely large code
+documents rather than a many-to-many join expansion. The largest current
+contributors were the Tax Code (6,435 provisions), Civil Procedure Code
+(4,336), Administrative Judicial Procedure Code (2,932) and Administrative
+Responsibility Code (2,634). `wrangler d1 info` reported 529,321,984 bytes,
+well below the documented rollover reserve.
+
+The provision and chunk numeric floors are now exceeded, but that is progress
+only. The document floor remains 136/1,500, acquisition is active, and both
+queues are open. Federation freeze, snapshot, indexed 314-scenario evaluation,
+Qdrant/D1 restore gates, CI and release therefore remain unauthorized.
+
 ## Post-core shard-2 ingestion progression (2026-08-25, 21:12–21:35Z)
 
 The next two single-stream staging runs completed without an error. Run
