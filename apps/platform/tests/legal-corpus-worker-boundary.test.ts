@@ -303,6 +303,7 @@ test("version debt preserves current-corpus fetch capacity within the request bu
   assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 6, queuedVersionJobs: 500 }), [3, 4, 5]);
   assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 5, queuedVersionJobs: 500 }), [3, 4]);
   assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 2, queuedVersionJobs: 500 }), [1]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 20, queuedVersionJobs: 500 }), [3, 5, 7, 9, 11, 13, 15, 17]);
 });
 
 test("preferred catalogue order follows the laws, PKM, President, then public-authority policy", () => {

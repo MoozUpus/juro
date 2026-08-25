@@ -71,17 +71,13 @@ const MAX_STAGING_INGESTION_JOBS_PER_RUN = 24;
 // before a document header is fetched, so the Worker must not invent one from
 // a URL or source order.
 //
-// Place the ordinary reserved historical version slot after three fetch slots,
-// so secondary PDF/ZIP representations cannot consistently consume the start
-// window before versioning progresses. When durable historical work has grown
-// beyond a bounded debt threshold, reserve the already-authorised sequential
-// windows for versions while retaining at least three current-corpus fetch
-// slots even when the short five-slot budget is in use. Current-corpus
-// coverage is the release-gate priority; allowing four version slots in a
-// five-slot batch leaves the 1,500-document target hostage to a single fetch
-// slot. Ordinary priority fetching resumes automatically below that
-// threshold. This is back-pressure, not a new crawl stream: the shared
-// 20-second host pacer and start fence still govern every source request.
+// Reserve the first three sequential slots for current-corpus fetches, then
+// interleave bounded historical version slots through the remaining batch.
+// This keeps current-corpus coverage moving while ensuring the version debt is
+// reached before the staging start fence expires. Ordinary priority fetching
+// resumes automatically below the debt threshold. This is back-pressure, not
+// a new crawl stream: the shared 20-second host pacer and start fence still
+// govern every source request.
 const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const VERSION_INGESTION_SLOT_INDEX = 3;
 const VERSION_CATCHUP_QUEUE_THRESHOLD = 500;
@@ -257,9 +253,11 @@ export function legalCorpusVersionSlotIndexes(input: {
     VERSION_CATCHUP_MAX_SLOTS,
     ingestionBudget - VERSION_CATCHUP_MINIMUM_FETCH_SLOTS,
   );
+  const firstVersionSlot = Math.min(VERSION_INGESTION_SLOT_INDEX, ingestionBudget - 1);
+  const availableSlots = ingestionBudget - firstVersionSlot;
   return Array.from(
-    { length: catchupSlots },
-    (_unused, index) => ingestionBudget - catchupSlots + index,
+    { length: Math.min(catchupSlots, availableSlots) },
+    (_unused, index) => firstVersionSlot + Math.floor(index * availableSlots / catchupSlots),
   );
 }
 
