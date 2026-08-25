@@ -298,8 +298,8 @@ test("scheduled lease covers a bounded long-running staging batch", () => {
 
 test("version debt preserves current-corpus fetch capacity within the request budget", () => {
   assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 499 }), [3]);
-  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 500 }), [5, 6, 7, 8]);
-  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 10, queuedVersionJobs: 500 }), [6, 7, 8, 9]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 500 }), [3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 10, queuedVersionJobs: 500 }), [3, 4, 5, 6, 7, 8, 9]);
   assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 6, queuedVersionJobs: 500 }), [3, 4, 5]);
   assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 5, queuedVersionJobs: 500 }), [3, 4]);
   assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 2, queuedVersionJobs: 500 }), [1]);

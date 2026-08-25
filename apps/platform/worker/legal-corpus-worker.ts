@@ -86,10 +86,11 @@ const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const VERSION_INGESTION_SLOT_INDEX = 3;
 const VERSION_CATCHUP_QUEUE_THRESHOLD = 500;
 const VERSION_CATCHUP_MINIMUM_FETCH_SLOTS = 3;
-// Ten is the established upper bound for a scheduled worker invocation. The
-// elapsed-time start fence remains authoritative if the robots policy or a
-// secondary official representation consumes part of that request budget.
-const VERSION_CATCHUP_MAX_SLOTS = 4;
+// Keep the historical debt share bounded while the current-corpus floor is
+// already above the release document target. At least three current fetch
+// slots remain reserved; the existing 20-second host pacer and start fence
+// still govern every source request, so this does not add concurrency.
+const VERSION_CATCHUP_MAX_SLOTS = 8;
 export const LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES = LEX_CORPUS_CATEGORY_PRIORITY;
 const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
 // Production retains a short start fence so its disabled acquisition path
