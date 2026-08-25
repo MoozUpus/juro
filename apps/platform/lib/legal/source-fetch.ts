@@ -126,6 +126,13 @@ const MAX_ROBOTS_CRAWL_DELAY_SECONDS = 60;
 // bounded read timeout. Stream cancellation is best-effort because some edge
 // bodies never resolve cancel(), so cap this cleanup wait.
 const RESPONSE_BODY_CANCEL_TIMEOUT_MS = 1_000;
+// A large compressed Lex response can be decompressed into thousands of small
+// stream chunks. The corpus heartbeat performs durable D1 writes, so calling it
+// after every chunk turns an otherwise sub-second body read into a multi-minute
+// scheduled run. One heartbeat at the body boundary plus a time-based refresh
+// keeps the fifteen-minute ingestion lease live without coupling D1 write
+// volume to an upstream transport's arbitrary chunk size.
+const RESPONSE_BODY_HEARTBEAT_INTERVAL_MS = 30_000;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function sourceHostKind(hostname: string): LegalSourceKind | null {
@@ -429,7 +436,12 @@ async function readBoundedBytes(
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let lastHeartbeatAt = Date.now();
   try {
+    if (heartbeat) {
+      await heartbeat();
+      lastHeartbeatAt = Date.now();
+    }
     while (true) {
       const { done, value } = await new Promise<ReadableStreamReadResult<Uint8Array>>(
         (resolve, reject) => {
@@ -458,7 +470,10 @@ async function readBoundedBytes(
         throw new LegalSourceFetchError("LEGAL_SOURCE_TOO_LARGE", false);
       }
       chunks.push(value);
-      await heartbeat?.();
+      if (heartbeat && Date.now() - lastHeartbeatAt >= RESPONSE_BODY_HEARTBEAT_INTERVAL_MS) {
+        await heartbeat();
+        lastHeartbeatAt = Date.now();
+      }
     }
   } catch (error) {
     await cancelWithTimeout(() => reader.cancel());

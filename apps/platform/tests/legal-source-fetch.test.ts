@@ -49,6 +49,26 @@ function html(body = "<!doctype html><html><body>Official act</body></html>"):
   });
 }
 
+function chunkedHtml(chunkCount = 4_096): Response {
+  const bytes = new TextEncoder().encode(
+    `<!doctype html><html><body>${"A".repeat(chunkCount)}</body></html>`,
+  );
+  let offset = 0;
+  return new Response(new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= bytes.byteLength) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(bytes.slice(offset, offset + 1));
+      offset += 1;
+    },
+  }), {
+    status: 200,
+    headers: { "content-type": "text/html; charset=UTF-8" },
+  });
+}
+
 function pdf(body = "%PDF-1.7\nsynthetic official Lex representation\n"):
   Response {
   return new Response(body, {
@@ -269,6 +289,24 @@ test("scheduled Lex fetch heartbeats while reading bounded responses", async () 
   // response prevent a slow streaming source from outliving the scheduler
   // lease without evidence of liveness.
   assert.ok(heartbeatCalls >= 4, `expected bounded-read heartbeats, got ${heartbeatCalls}`);
+});
+
+test("scheduled Lex fetch bounds durable heartbeats independently of stream chunking", async () => {
+  const synthetic = sequenceFetch([robots(), chunkedHtml()]);
+  let heartbeatCalls = 0;
+  const result = await fetchLegalSource("https://lex.uz/ru/docs/-42", {
+    adviceEnabled: false,
+    fetchImpl: synthetic.fetchImpl,
+    heartbeat: async () => {
+      heartbeatCalls += 1;
+    },
+  });
+
+  assert.equal(result.canonicalId, "-42");
+  assert.ok(result.bytes.byteLength > 4_096);
+  // Two request boundaries and two body boundaries are enough for a fast
+  // response. Transport chunking must not multiply remote D1 lease writes.
+  assert.equal(heartbeatCalls, 4);
 });
 
 test("robots disallow and excessive crawl-delay policies fail closed", async () => {
