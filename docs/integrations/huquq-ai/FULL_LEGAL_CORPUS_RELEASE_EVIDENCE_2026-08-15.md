@@ -2,6 +2,59 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Shard-2 stream-heartbeat amplification fix (2026-08-25, 16:56–18:14Z)
+
+The first shard-2 fetch job, `legal-corpus:109bff9d41820f474df91ad3789a`
+(`lexuz:97664`, `https://lex.uz/ru/docs/97664`), repeatedly consumed the
+15-minute Worker invocation while reading a valid but large official Lex.uz
+page. In-app Browser inspection confirmed a live page with approximately
+4.7 million HTML characters. A controlled local profile of the same official
+response read 528,313 compressed bytes and parsed 3,484 blocks in about one
+second, excluding the upstream page and parser as the source of the 15-minute
+delay.
+
+The bounded response reader was invoking its scheduler heartbeat once per
+decompressed stream chunk. Each corpus heartbeat performs durable D1 updates
+for both the ingestion job and scheduled-run lease, so transport chunking
+amplified one response into thousands of sequential remote D1 writes. Commit
+`b80f76d` retains the per-chunk body-size and ten-second stall fences but
+throttles body heartbeats to a 30-second interval, with explicit heartbeats at
+the body boundaries. A regression response containing more than 4,096
+one-byte chunks now produces exactly four heartbeats independent of chunk
+count. The focused source-fetch suite passed 16/16; platform type-check, lint,
+the shard Wrangler dry-run, the full 857-test core suite and the 186-test
+Cloudflare suite passed.
+
+The final staging-only deployment is Worker version
+`737c8623-7af1-482b-839a-46672decd16c`, bound only to
+`juro-staging-corpus-shard-2` (`36fa1cfe-6d00-47b7-a980-864020028d86`) and
+Qdrant collection `juro_legal_staging_shard_2`; dense and sparse-compression
+flags remained disabled and shadow mode remained enabled. The pre-deploy
+invocation `ea7c63cd-e1ae-4f05-8326-12b3ba1f4367` reached the platform's
+15-minute execution fence, and its last heartbeat left the fail-closed
+distributed lease valid until `2026-08-25T17:58:44.816Z`. Intervening cron
+ticks correctly emitted `legal_corpus.duplicate_or_busy`; no parallel crawler
+was started and no lock row was manually changed.
+
+The first safe takeover, run `65c20ba2-84ac-44d1-b6b1-219f411cbd38`, began
+at `2026-08-25T18:00:44.925Z`. It reclaimed the target job on attempt 3 and
+completed that job at `18:03:52.706Z` with `last_error_code=NULL`, rather than
+stalling for another 15 minutes. The entire scheduled batch emitted
+`legal_corpus.process_completed` from version `737c8623` with
+`errorCode=NULL`, 7/7 claimed ingestion jobs and an expected start-cutoff
+stop; it completed at `18:13:05.423Z` after 740,689 ms and released the
+distributed lock. The durable post-run ledger contains five completed fetch
+jobs, two completed version jobs, zero running jobs and zero terminal or
+dead-letter jobs. Shard 2 contains 3 canonical documents, 4,560 provision
+rows, 4,562 chunk rows and 11 source aliases; all 44 discovery checkpoints
+remain completed.
+
+This closes the shard-2 response-stream stall only. The queue remains active
+and unfrozen with 25,799 queued fetch jobs, 1,861 queued version jobs and two
+retrying recovery-evidence rows. Federated release floors, queue freeze,
+snapshot, 314-scenario evaluation, Qdrant/D1 restore and CI gates therefore
+remain open. No production binding, data, DNS or feature flag was touched.
+
 ## Historical-version lease recovery (2026-08-24, 19:56–19:58Z)
 
 The long-running scheduled invocation `a103194e-d09d-4d9b-b272-0f696e0790dd`
