@@ -72,6 +72,11 @@ hash are retained in an append-only handoff ledger. This means a rollback to an
 older Worker that does not know the new columns still cannot claim the source
 rows. The target receives ordinary claimable copies plus the same ledger. A
 partial handoff tuple, mutation, or deletion is rejected by D1 triggers.
+The handoff also requires zero active jobs whose canonical document already
+exists on the source. Such document-affinity work must finish on its owning
+shard; moving it would duplicate a canonical document and invalidate the
+disjoint partition manifest. D1 rechecks and records this zero in the immutable
+handoff ledger.
 
 `scripts/rollover-staging-legal-corpus-shard.ts` implements a resumable
 two-phase `prepare`/`activate` operation. `prepare` accepts only the exact next
@@ -110,9 +115,10 @@ npx wrangler d1 migrations apply juro-staging-corpus-shard-2 --remote `
   --config wrangler.legal-corpus-shard.jsonc --env staging
 ```
 
-Wait for the current source run/lease to finish, then prepare. The command is
-safe to repeat with the same source and target; it resumes the immutable
-handoff or fails on any mismatch.
+Wait for the current source run/lease and all active jobs belonging to already
+materialized source documents to finish, then prepare. The command is safe to
+repeat with the same source and target; it resumes the immutable handoff or
+fails on any mismatch or non-zero document-affinity backlog.
 
 ```powershell
 npm run rollover:legal-corpus:staging-shard -- `

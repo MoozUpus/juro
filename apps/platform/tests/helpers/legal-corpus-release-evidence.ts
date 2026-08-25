@@ -56,6 +56,7 @@ export function validLegalCorpusReleaseEvidence(): LegalCorpusReleaseEvidence {
         LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST: true,
         LEGAL_CORPUS_HISTORICAL_ENABLED: true,
         LEGAL_CORPUS_DENSE_ENABLED: true,
+        LEGAL_CORPUS_FEDERATED_ENABLED: false,
         LEGAL_CORPUS_SHADOW_MODE: true,
       },
       lexHealth: { state: "fresh" },

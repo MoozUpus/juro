@@ -89,6 +89,7 @@ CREATE TABLE `legal_corpus_shard_handoffs` (
   `checkpoint_count` integer NOT NULL,
   `discovery_document_count` integer NOT NULL,
   `active_job_count` integer NOT NULL,
+  `document_affinity_job_count` integer NOT NULL,
   `failure_count` integer NOT NULL,
   `created_at` text NOT NULL,
   CONSTRAINT `legal_corpus_shard_handoff_database_check` CHECK (
@@ -101,9 +102,22 @@ CREATE TABLE `legal_corpus_shard_handoffs` (
   ),
   CONSTRAINT `legal_corpus_shard_handoff_count_check` CHECK (
     `checkpoint_count`>=0 AND `discovery_document_count`>=0
-    AND `active_job_count`>=0 AND `failure_count`>=0
+    AND `active_job_count`>=0 AND `document_affinity_job_count`=0
+    AND `failure_count`>=0
   )
 );
+--> statement-breakpoint
+CREATE TRIGGER `legal_corpus_shard_handoff_document_affinity_guard`
+BEFORE INSERT ON `legal_corpus_shard_handoffs`
+FOR EACH ROW WHEN EXISTS (
+  SELECT 1 FROM `legal_corpus_ingestion_jobs` AS job
+  INNER JOIN `legal_corpus_documents` AS document
+    ON document.`id`=job.`canonical_document_id`
+  WHERE job.`status` IN ('queued','retrying','running') AND job.`handoff_id` IS NULL
+)
+BEGIN
+  SELECT RAISE(ABORT,'LEGAL_CORPUS_SHARD_DOCUMENT_AFFINITY_PENDING');
+END;
 --> statement-breakpoint
 CREATE TRIGGER `legal_corpus_shard_handoffs_no_update`
 BEFORE UPDATE ON `legal_corpus_shard_handoffs`
@@ -199,6 +213,22 @@ FOR EACH ROW WHEN
   ))
 BEGIN
   SELECT RAISE(ABORT,'LEGAL_CORPUS_INGESTION_HANDOFF_STATE_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `legal_corpus_shard_ingestion_affinity_insert_guard`
+BEFORE INSERT ON `legal_corpus_ingestion_jobs`
+FOR EACH ROW WHEN NEW.`status` IN ('queued','retrying','running')
+  AND NEW.`canonical_document_id` IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM `legal_corpus_shard_control`
+    WHERE `singleton_id`=1 AND `acquisition_state`='active'
+  )
+  AND EXISTS (
+    SELECT 1 FROM `legal_corpus_documents`
+    WHERE `id`=NEW.`canonical_document_id`
+  )
+BEGIN
+  SELECT RAISE(ABORT,'LEGAL_CORPUS_SHARD_DOCUMENT_AFFINITY_PENDING');
 END;
 --> statement-breakpoint
 CREATE TRIGGER `legal_corpus_ingestion_job_handoff_update_guard`

@@ -162,6 +162,27 @@ The contract is fail-closed plumbing, not evidence that the current staging
 queue is frozen or that cross-shard retrieval has passed. Those artifacts may
 only be captured after sequential ingestion is actually complete.
 
+The runtime retrieval path now has the matching fail-closed federation
+primitive. With `LEGAL_CORPUS_FEDERATED_ENABLED=true`, the staging application
+requires contiguous `LEGAL_CORPUS_SHARD_1_DB` through
+`LEGAL_CORPUS_SHARD_N_DB` bindings (at least two), executes dense search once,
+hydrates its candidates against every partition, and queries all sparse D1
+partitions. One sparse-partition failure rejects the indexed packet so the
+existing verified direct-Lex fallback can run; it never presents a partial
+federation as complete. Cross-shard evidence identity is deduplicated before
+global RRF, and a duplicate partition cannot improve its score. Validated live
+fallback URLs are queued only when the D1 control rows prove exactly one active
+shard; prepared/frozen or ambiguous multi-active routing remains read-only.
+
+The flag remains `false` in every checked-in environment and no federated D1
+bindings are configured yet. For live evidence capture it may be enabled only
+in staging, with the exact reviewed bindings and `LEGAL_CORPUS_SHADOW_MODE=true`
+so user answers still use direct Lex. Indexed federation must not become the
+answer path until the routing, disjoint partition, snapshot/restore,
+point-in-time and sparse/dense packet-parity artifacts above pass; the
+federated release gate also rejects evidence captured while the runtime flag is
+off.
+
 ### Staging D1 capacity shard
 
 Cloudflare's per-database 10 GB limit is not increaseable. The original

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { retrieveCorpusAwareLegalSources } from "../lib/legal-corpus/chat-retrieval";
+import {
+  configuredFederatedCorpusShards,
+  retrieveCorpusAwareLegalSources,
+} from "../lib/legal-corpus/chat-retrieval";
 import { ingestOfficialLexDocument } from "../lib/legal-corpus/ingestion";
 import type { LiveLexRetrievalResult } from "../lib/legal/live-lex-retrieval";
 import { legalDatabaseFreshnessFromAsOf } from "../lib/legal/verified-retrieval";
@@ -63,6 +66,45 @@ function liveResult(): LiveLexRetrievalResult {
     }],
   };
 }
+
+test("federated runtime bindings are staging-only, contiguous, and require two shards", () => {
+  const first = sqliteD1Fixture();
+  const second = sqliteD1Fixture();
+  try {
+    assert.equal(configuredFederatedCorpusShards({
+      DB: first.d1,
+      APP_ENV: "staging",
+      LEGAL_CORPUS_FEDERATED_ENABLED: "false",
+    }), null);
+    const valid = {
+      DB: first.d1,
+      APP_ENV: "staging" as const,
+      LEGAL_CORPUS_FEDERATED_ENABLED: "true",
+      LEGAL_CORPUS_SHARD_1_DB: first.d1,
+      LEGAL_CORPUS_SHARD_2_DB: second.d1,
+    };
+    assert.deepEqual(configuredFederatedCorpusShards(valid)?.map((shard) => shard.databaseName), [
+      "juro-staging-corpus-shard-1",
+      "juro-staging-corpus-shard-2",
+    ]);
+    const gap = {
+      ...valid,
+      LEGAL_CORPUS_SHARD_2_DB: undefined,
+      LEGAL_CORPUS_SHARD_3_DB: second.d1,
+    };
+    assert.throws(
+      () => configuredFederatedCorpusShards(gap),
+      /LEGAL_CORPUS_FEDERATION_BINDING_INVALID:2/u,
+    );
+    assert.throws(
+      () => configuredFederatedCorpusShards({ ...valid, APP_ENV: "production" }),
+      /LEGAL_CORPUS_FEDERATION_ENVIRONMENT_INVALID/u,
+    );
+  } finally {
+    first.sqlite.close();
+    second.sqlite.close();
+  }
+});
 
 test("feature-off chat retrieval preserves the existing direct Lex path", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
@@ -170,5 +212,77 @@ test("validated live fallback is used immediately and queued idempotently", asyn
     assert.equal(Number(row.count), 1);
   } finally {
     sqlite.close();
+  }
+});
+
+test("an incomplete requested federation falls back live without queuing into the primary app DB", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const result = await retrieveCorpusAwareLegalSources({
+      env: {
+        APP_ENV: "staging",
+        DB: d1,
+        LEGAL_CORPUS_ENABLED: "true",
+        LEGAL_CORPUS_LIVE_LEXUZ_ENABLED: "true",
+        LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+        LEGAL_CORPUS_FEDERATED_ENABLED: "true",
+      },
+      query: "статья 9 live проверка",
+      locale: "ru",
+      liveSearch: async () => liveResult(),
+    });
+    assert.equal(result.sourceAccessMode, "direct");
+    assert.equal(result.sources.length, 1);
+    const jobs = sqlite.prepare(
+      "SELECT count(*) AS count FROM legal_corpus_ingestion_jobs",
+    ).get() as { count: number };
+    assert.equal(Number(jobs.count), 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("federated live fallback queues only when exactly one shard control is active", async () => {
+  const first = sqliteD1Fixture();
+  const second = sqliteD1Fixture();
+  const env = {
+    APP_ENV: "staging" as const,
+    DB: first.d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_LIVE_LEXUZ_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+    LEGAL_CORPUS_FEDERATED_ENABLED: "true",
+    LEGAL_CORPUS_SHARD_1_DB: first.d1,
+    LEGAL_CORPUS_SHARD_2_DB: second.d1,
+  };
+  const countJobs = (sqlite: typeof first.sqlite) => Number((sqlite.prepare(
+    "SELECT count(*) AS count FROM legal_corpus_ingestion_jobs",
+  ).get() as { count: number }).count);
+  try {
+    await retrieveCorpusAwareLegalSources({
+      env,
+      query: "статья 9 live проверка",
+      locale: "ru",
+      liveSearch: async () => liveResult(),
+    });
+    assert.equal(countJobs(first.sqlite), 0);
+    assert.equal(countJobs(second.sqlite), 0);
+
+    first.sqlite.prepare(`UPDATE legal_corpus_shard_control
+      SET acquisition_state='handoff_prepared',
+        active_handoff_id='test-handoff',
+        target_database_name='juro-staging-corpus-shard-2',updated_at=?
+      WHERE singleton_id=1`).run(now.toISOString());
+    await retrieveCorpusAwareLegalSources({
+      env,
+      query: "статья 9 live проверка",
+      locale: "ru",
+      liveSearch: async () => liveResult(),
+    });
+    assert.equal(countJobs(first.sqlite), 0);
+    assert.equal(countJobs(second.sqlite), 1);
+  } finally {
+    first.sqlite.close();
+    second.sqlite.close();
   }
 });

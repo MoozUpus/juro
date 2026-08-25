@@ -13,6 +13,7 @@ import {
   type LegalCorpusSearchScope,
 } from "./retrieval";
 import {
+  FederatedLexUzIndexedProvider,
   LexUzIndexedProvider,
   type LegalSourceProviderResult,
 } from "./source-provider";
@@ -25,12 +26,66 @@ import { createQdrantDenseSearch } from "./qdrant-indexing";
 type CorpusRuntimeEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>
   & {
+    LEGAL_CORPUS_FEDERATED_ENABLED?: string;
     OPENAI_API_KEY?: string;
     EMBEDDING_MODEL?: string;
     QDRANT_URL?: string;
     QDRANT_API_KEY?: string;
     QDRANT_COLLECTION?: string;
   };
+
+const MAX_FEDERATED_CORPUS_BINDINGS = 32;
+
+function isD1Database(value: unknown): value is D1Database {
+  return Boolean(value) && typeof value === "object"
+    && typeof (value as { prepare?: unknown }).prepare === "function";
+}
+
+export function configuredFederatedCorpusShards(
+  env: CorpusRuntimeEnv,
+): Array<{ databaseName: string; db: D1Database }> | null {
+  if (env.LEGAL_CORPUS_FEDERATED_ENABLED !== "true") return null;
+  if (env.APP_ENV !== "staging") {
+    throw new TypeError("LEGAL_CORPUS_FEDERATION_ENVIRONMENT_INVALID");
+  }
+  const record = env as CorpusRuntimeEnv & Record<string, unknown>;
+  const values = Array.from({ length: MAX_FEDERATED_CORPUS_BINDINGS }, (_, index) => (
+    record[`LEGAL_CORPUS_SHARD_${index + 1}_DB`]
+  ));
+  const lastBinding = values.findLastIndex((value) => value !== undefined && value !== null);
+  if (lastBinding < 1) {
+    throw new TypeError("LEGAL_CORPUS_FEDERATION_BINDINGS_INCOMPLETE");
+  }
+  return values.slice(0, lastBinding + 1).map((value, index) => {
+    if (!isD1Database(value)) {
+      throw new TypeError(`LEGAL_CORPUS_FEDERATION_BINDING_INVALID:${index + 1}`);
+    }
+    return {
+      databaseName: `juro-staging-corpus-shard-${index + 1}`,
+      db: value,
+    };
+  });
+}
+
+async function liveFallbackIngestionEnv(
+  env: CorpusRuntimeEnv,
+  shards: ReturnType<typeof configuredFederatedCorpusShards>,
+  federationRequested: boolean,
+): Promise<CorpusRuntimeEnv | null> {
+  if (!shards) return federationRequested ? null : env;
+  try {
+    const states = await Promise.all(shards.map(async (shard) => {
+      const row = await shard.db.prepare(`SELECT acquisition_state AS state
+        FROM legal_corpus_shard_control WHERE singleton_id=1 LIMIT 1`)
+        .first<{ state: string }>();
+      return row?.state === "active" ? shard.db : null;
+    }));
+    const active = states.filter((db): db is D1Database => Boolean(db));
+    return active.length === 1 ? { ...env, DB: active[0]! } : null;
+  } catch {
+    return null;
+  }
+}
 
 export type LegalChatSourceEvidence = {
   sourceId: string;
@@ -280,12 +335,15 @@ export async function retrieveCorpusAwareLegalSources(input: {
     budgetMs: input.budgetMs,
     discoverOfficialUrls: input.discoverOfficialUrls,
   };
+  const federationRequested = input.env.LEGAL_CORPUS_FEDERATED_ENABLED === "true";
   if (!featureEnabled(input.env, "LEGAL_CORPUS_ENABLED")) {
     return withLiveCoverage(await liveSearch(liveInput), input.query);
   }
 
   let indexed: LegalSourceProviderResult[] = [];
+  let federatedShards: ReturnType<typeof configuredFederatedCorpusShards> = null;
   try {
+    federatedShards = configuredFederatedCorpusShards(input.env);
     const denseSearch = input.env.APP_ENV
       ? createQdrantDenseSearch({
         ...input.env,
@@ -293,7 +351,10 @@ export async function retrieveCorpusAwareLegalSources(input: {
         DB: input.env.DB,
       })
       : undefined;
-    indexed = await new LexUzIndexedProvider(input.env.DB, denseSearch).search({
+    const indexedProvider = federatedShards
+      ? new FederatedLexUzIndexedProvider(federatedShards, denseSearch)
+      : new LexUzIndexedProvider(input.env.DB, denseSearch);
+    indexed = await indexedProvider.search({
       query: input.query,
       scope: input.scope,
       limit: input.limit,
@@ -319,7 +380,12 @@ export async function retrieveCorpusAwareLegalSources(input: {
 
   if (featureEnabled(input.env, "LEGAL_CORPUS_SHADOW_MODE")) {
     const live = await liveSearch(liveInput);
-    await queueValidatedLiveSources(input.env, live, input.correlationId);
+    const ingestionEnv = await liveFallbackIngestionEnv(
+      input.env,
+      federatedShards,
+      federationRequested,
+    );
+    if (ingestionEnv) await queueValidatedLiveSources(ingestionEnv, live, input.correlationId);
     return withLiveCoverage(live, input.query);
   }
   if (useIndexed) return indexedPacket;
@@ -329,6 +395,11 @@ export async function retrieveCorpusAwareLegalSources(input: {
       : indexedRetrieval([], input.now ?? new Date(), "no_coverage");
   }
   const live = await liveSearch(liveInput);
-  await queueValidatedLiveSources(input.env, live, input.correlationId);
+  const ingestionEnv = await liveFallbackIngestionEnv(
+    input.env,
+    federatedShards,
+    federationRequested,
+  );
+  if (ingestionEnv) await queueValidatedLiveSources(ingestionEnv, live, input.correlationId);
   return withLiveCoverage(live, input.query);
 }

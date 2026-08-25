@@ -3,7 +3,9 @@ import test from "node:test";
 import { ingestOfficialLexDocument } from "../lib/legal-corpus/ingestion";
 import {
   assessLegalCorpusCoverage,
+  federatedReciprocalRankFusion,
   reciprocalRankFusion,
+  retrieveFederatedLegalCorpus,
   retrieveLegalCorpus,
   type LegalCorpusRetrievalItem,
 } from "../lib/legal-corpus/retrieval";
@@ -58,6 +60,28 @@ test("RRF retains a hydrated dense-only result without inventing a sparse rank",
   assert.equal(fused[0]?.denseRank, 1);
   assert.equal(fused[0]?.sparseRank, undefined);
   assert.equal(fused[0]?.fusionScore, 1 / 61);
+});
+
+test("federated RRF deduplicates the same evidence without rewarding a duplicate shard", () => {
+  const first = source("duplicate-z");
+  const duplicate = { ...first, chunkId: "duplicate-a" };
+  const unique = {
+    ...source("unique"),
+    documentId: "lexuz:2",
+    contentHash: "b".repeat(64),
+  };
+  const fused = federatedReciprocalRankFusion({
+    sparseByShard: [[first], [duplicate, unique]],
+    dense: [{ chunkId: duplicate.chunkId, score: 0.99 }],
+    hydratedDense: [duplicate],
+    limit: 8,
+  });
+  assert.equal(fused.length, 2);
+  assert.equal(fused.filter((item) => item.documentId === first.documentId).length, 1);
+  assert.equal(fused[0]?.chunkId, duplicate.chunkId);
+  assert.equal(fused[0]?.sparseRank, 1);
+  assert.equal(fused[0]?.denseRank, 1);
+  assert.equal(fused[0]?.fusionScore, 2 / 61);
 });
 
 test("sparse retrieval returns only the current, scope-authorized version", async () => {
@@ -226,5 +250,91 @@ test("point-in-time retrieval selects one immutable historical interval", async 
     }), /LEGAL_CORPUS_AS_OF_DATE_REJECTED/u);
   } finally {
     sqlite.close();
+  }
+});
+
+test("federated retrieval queries two shards, hydrates dense once, and removes a duplicate packet", async () => {
+  const first = sqliteD1Fixture();
+  const second = sqliteD1Fixture();
+  const page = (title: string, article: string) => `<!doctype html><main id="divCont">
+    <div>Дата вступления в силу</div><div>01.01.2020</div>
+    <div class="lx_elem ACT_TITLE">${title}</div>
+    <div class="lx_elem ARTICLE">Статья ${article}. Порядок проверки</div>
+    <div class="lx_elem">${"Порядок проверки официальных документов установлен законом. ".repeat(8)}</div>
+  </main>`;
+  const fetchImpl = async (input: RequestInfo | URL) => String(input).endsWith("robots.txt")
+    ? new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain" } })
+    : new Response(String(input).includes("88888")
+      ? page("Второй закон", "26")
+      : page("Первый закон", "25"), { headers: { "content-type": "text/html" } });
+  const ingest = (db: D1Database, url: string, now: string) => ingestOfficialLexDocument({
+    APP_ENV: "staging",
+    DB: db,
+    BUCKET: new MemoryBucket() as unknown as R2Bucket,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  }, {
+    sourceUrl: url,
+    now: new Date(now),
+    fetchImpl,
+  });
+  try {
+    await ingest(first.d1, "https://lex.uz/ru/docs/99999", "2026-08-14T00:00:00Z");
+    await ingest(second.d1, "https://lex.uz/ru/docs/99999", "2026-08-14T00:01:00Z");
+    await ingest(second.d1, "https://lex.uz/ru/docs/88888", "2026-08-14T00:02:00Z");
+    const denseChunk = (second.sqlite.prepare(`SELECT chunk.id AS id
+      FROM legal_corpus_chunks chunk
+      INNER JOIN legal_corpus_provisions provision ON provision.id=chunk.provision_id
+      WHERE provision.source_url LIKE '%88888%' LIMIT 1`).get() as { id: string }).id;
+    let denseCalls = 0;
+    const results = await retrieveFederatedLegalCorpus({
+      shards: [
+        { databaseName: "juro-staging-corpus-shard-1", db: first.d1 },
+        { databaseName: "juro-staging-corpus-shard-2", db: second.d1 },
+      ],
+      query: "статья 25 статья 26 порядок проверки",
+      denseSearch: async () => {
+        denseCalls += 1;
+        return [{ chunkId: denseChunk, score: 0.99 }];
+      },
+      officialOnly: true,
+    });
+    assert.equal(denseCalls, 1);
+    assert.deepEqual(new Set(results.map((item) => item.documentTitle)), new Set([
+      "Первый закон",
+      "Второй закон",
+    ]));
+    assert.equal(results.filter((item) => item.documentTitle === "Первый закон").length, 1);
+    assert.ok(results.some((item) => item.chunkId === denseChunk && item.denseRank === 1));
+    await assert.rejects(() => retrieveFederatedLegalCorpus({
+      shards: [
+        { databaseName: "juro-staging-corpus-shard-2", db: second.d1 },
+        { databaseName: "juro-staging-corpus-shard-1", db: first.d1 },
+      ],
+      query: "проверка",
+    }), /LEGAL_CORPUS_FEDERATION_SHARD_SEQUENCE_INVALID/u);
+  } finally {
+    first.sqlite.close();
+    second.sqlite.close();
+  }
+});
+
+test("federated retrieval rejects the whole indexed packet when one shard fails", async () => {
+  const healthy = sqliteD1Fixture();
+  const failed = {
+    prepare() {
+      throw new Error("simulated shard failure");
+    },
+  } as unknown as D1Database;
+  try {
+    await assert.rejects(() => retrieveFederatedLegalCorpus({
+      shards: [
+        { databaseName: "juro-staging-corpus-shard-1", db: healthy.d1 },
+        { databaseName: "juro-staging-corpus-shard-2", db: failed },
+      ],
+      query: "статья 7",
+    }), /simulated shard failure/u);
+  } finally {
+    healthy.sqlite.close();
   }
 });

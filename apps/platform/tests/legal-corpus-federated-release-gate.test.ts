@@ -18,6 +18,7 @@ const shard2Id = "d09e0682-0c2e-4458-a8f3-be9de28117e4";
 
 function validFederatedEvidence(): FederatedLegalCorpusReleaseEvidence {
   const baseEvidence = validLegalCorpusReleaseEvidence();
+  baseEvidence.dashboard.featureFlags.LEGAL_CORPUS_FEDERATED_ENABLED = true;
   baseEvidence.d1Capacity = {
     schemaVersion: 1,
     environment: "staging",
@@ -130,6 +131,17 @@ test("federated release gate checks every shard capacity and freshness", () => {
   assert.ok(verdict.failures.includes(
     "FEDERATION_D1_CAPACITY_STALE:juro-staging-corpus-shard-2",
   ));
+  assert.equal(verdict.passed, false);
+});
+
+test("federated release gate requires the runtime federation flag", () => {
+  const evidence = validFederatedEvidence();
+  evidence.baseEvidence.dashboard.featureFlags.LEGAL_CORPUS_FEDERATED_ENABLED = false;
+  const verdict = evaluateFederatedLegalCorpusReleaseEvidence(
+    evidence,
+    LEGAL_CORPUS_TEST_NOW,
+  );
+  assert.ok(verdict.failures.includes("FEDERATION_RUNTIME_FLAG_DISABLED"));
   assert.equal(verdict.passed, false);
 });
 

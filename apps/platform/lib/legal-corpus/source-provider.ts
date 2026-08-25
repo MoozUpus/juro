@@ -2,7 +2,9 @@ import { detectLegalQueryLanguage } from "../legal/legal-language";
 import { retrieveLiveLexSources } from "../legal/live-lex-retrieval";
 import {
   assessLegalCorpusCoverage,
+  retrieveFederatedLegalCorpus,
   retrieveLegalCorpus,
+  type LegalCorpusFederatedShard,
   type LegalCorpusRetrievalItem,
   type LegalCorpusSearchScope,
 } from "./retrieval";
@@ -86,6 +88,27 @@ export class LexUzIndexedProvider implements LegalSourceProvider {
   async search(request: LegalSourceProviderRequest): Promise<LegalSourceProviderResult[]> {
     const results = await retrieveLegalCorpus({
       db: this.db,
+      query: request.query,
+      scope: request.scope,
+      limit: request.limit,
+      officialOnly: true,
+      denseSearch: this.denseSearch,
+    });
+    return results.map(indexedSource).filter((source): source is LegalSourceProviderResult => Boolean(source));
+  }
+}
+
+export class FederatedLexUzIndexedProvider implements LegalSourceProvider {
+  readonly id = "lex_uz_indexed" as const;
+
+  constructor(
+    private readonly shards: readonly LegalCorpusFederatedShard[],
+    private readonly denseSearch?: (query: string, limit: number) => Promise<Array<{ chunkId: string; score: number }>>,
+  ) {}
+
+  async search(request: LegalSourceProviderRequest): Promise<LegalSourceProviderResult[]> {
+    const results = await retrieveFederatedLegalCorpus({
+      shards: this.shards,
       query: request.query,
       scope: request.scope,
       limit: request.limit,

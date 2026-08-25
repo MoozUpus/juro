@@ -188,6 +188,7 @@ async function createFixture(): Promise<Fixture> {
     })),
   });
   const baseEvidence = validLegalCorpusReleaseEvidence();
+  baseEvidence.dashboard.featureFlags.LEGAL_CORPUS_FEDERATED_ENABLED = true;
   baseEvidence.capturedAt = "2026-08-15T11:59:30.000Z";
   baseEvidence.corpusSnapshotSha256 = sha256(snapshotRaw);
   baseEvidence.benchmark.corpusSnapshotSha256 = baseEvidence.corpusSnapshotSha256;

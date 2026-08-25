@@ -13,6 +13,8 @@ import { sparseStorageMode } from "./sparse-index";
 
 const RRF_K = 60;
 const MAX_QUERY_LENGTH = 3_000;
+const MAX_FEDERATED_SHARDS = 32;
+const NUMBERED_SHARD_PATTERN = /^juro-staging-corpus-shard-([1-9][0-9]*)$/u;
 
 export type LegalCorpusSearchScope = {
   tenantId?: string | null;
@@ -171,7 +173,7 @@ export function reciprocalRankFusion(
     .slice(0, Math.max(1, Math.min(limit, 30)));
 }
 
-async function hydrateDenseCandidates(input: {
+export async function hydrateLegalCorpusDenseCandidates(input: {
   db: D1Database;
   candidates: readonly DenseCorpusCandidate[];
   scope: LegalCorpusSearchScope;
@@ -470,7 +472,7 @@ export async function retrieveLegalCorpus(input: {
   if (input.denseSearch) {
     try {
       dense = await input.denseSearch(input.query.slice(0, MAX_QUERY_LENGTH), limit * 2);
-      hydratedDense = await hydrateDenseCandidates({
+      hydratedDense = await hydrateLegalCorpusDenseCandidates({
         db: input.db,
         candidates: dense,
         scope,
@@ -484,6 +486,177 @@ export async function retrieveLegalCorpus(input: {
     }
   }
   return reciprocalRankFusion(sparse, dense, limit, hydratedDense);
+}
+
+export type LegalCorpusFederatedShard = {
+  databaseName: string;
+  db: D1Database;
+};
+
+function assertFederatedShards(shards: readonly LegalCorpusFederatedShard[]): void {
+  if (shards.length < 2 || shards.length > MAX_FEDERATED_SHARDS) {
+    throw new TypeError("LEGAL_CORPUS_FEDERATION_SHARD_COUNT_INVALID");
+  }
+  const names = new Set<string>();
+  shards.forEach((shard, index) => {
+    const match = shard.databaseName.match(NUMBERED_SHARD_PATTERN);
+    if (!match || Number(match[1]) !== index + 1 || names.has(shard.databaseName)
+      || !shard.db || typeof shard.db.prepare !== "function") {
+      throw new TypeError("LEGAL_CORPUS_FEDERATION_SHARD_SEQUENCE_INVALID");
+    }
+    names.add(shard.databaseName);
+  });
+}
+
+function federatedEvidenceKey(item: LegalCorpusRetrievalItem): string {
+  return JSON.stringify([
+    item.sourceClass,
+    item.documentId,
+    item.language,
+    item.articleNumber,
+    item.validFrom,
+    item.validTo,
+    item.versionDate,
+    item.sourceUrl,
+    item.contentHash,
+  ]);
+}
+
+type FederatedCandidate = {
+  item: LegalCorpusRetrievalItem;
+  sparseContribution: number;
+  denseContribution: number;
+  sparseRank?: number;
+  denseRank?: number;
+};
+
+function selectStableRepresentative(
+  current: LegalCorpusRetrievalItem,
+  candidate: LegalCorpusRetrievalItem,
+): LegalCorpusRetrievalItem {
+  return candidate.chunkId.localeCompare(current.chunkId) < 0 ? candidate : current;
+}
+
+/**
+ * Merges independently ranked shard packets without allowing an accidental
+ * duplicate partition to improve its rank. The same evidence identity keeps
+ * only the best sparse contribution plus one global dense contribution.
+ */
+export function federatedReciprocalRankFusion(input: {
+  sparseByShard: readonly (readonly LegalCorpusRetrievalItem[])[];
+  dense: readonly DenseCorpusCandidate[];
+  hydratedDense: readonly LegalCorpusRetrievalItem[];
+  limit?: number;
+}): LegalCorpusRetrievalItem[] {
+  const candidates = new Map<string, FederatedCandidate>();
+  const chunkToEvidence = new Map<string, string>();
+  const ensure = (item: LegalCorpusRetrievalItem): FederatedCandidate => {
+    const key = federatedEvidenceKey(item);
+    chunkToEvidence.set(item.chunkId, key);
+    const existing = candidates.get(key);
+    if (existing) {
+      existing.item = selectStableRepresentative(existing.item, item);
+      return existing;
+    }
+    const created = { item: { ...item }, sparseContribution: 0, denseContribution: 0 };
+    candidates.set(key, created);
+    return created;
+  };
+
+  input.hydratedDense.forEach(ensure);
+  for (const sparse of input.sparseByShard) {
+    const seenEvidence = new Set<string>();
+    sparse.forEach((item, index) => {
+      const candidate = ensure(item);
+      const key = federatedEvidenceKey(item);
+      if (seenEvidence.has(key)) return;
+      seenEvidence.add(key);
+      const rank = index + 1;
+      candidate.sparseContribution = Math.max(
+        candidate.sparseContribution,
+        1 / (RRF_K + rank),
+      );
+      candidate.sparseRank = Math.min(candidate.sparseRank ?? rank, rank);
+    });
+  }
+
+  const denseEvidence = new Set<string>();
+  input.dense.forEach((dense, index) => {
+    const key = chunkToEvidence.get(dense.chunkId);
+    if (!key || denseEvidence.has(key)) return;
+    denseEvidence.add(key);
+    const candidate = candidates.get(key);
+    if (!candidate) return;
+    const rank = index + 1;
+    candidate.denseContribution = 1 / (RRF_K + rank);
+    candidate.denseRank = rank;
+  });
+
+  const limit = Math.max(1, Math.min(input.limit ?? 12, 30));
+  return [...candidates.values()]
+    .map((candidate) => ({
+      ...candidate.item,
+      ...(candidate.sparseRank ? { sparseRank: candidate.sparseRank } : {}),
+      ...(candidate.denseRank ? { denseRank: candidate.denseRank } : {}),
+      fusionScore: candidate.sparseContribution + candidate.denseContribution,
+    }))
+    .filter((item) => (item.fusionScore ?? 0) > 0)
+    .sort((left, right) => (right.fusionScore ?? 0) - (left.fusionScore ?? 0)
+      || left.chunkId.localeCompare(right.chunkId))
+    .slice(0, limit);
+}
+
+/**
+ * Queries every disjoint shard as one fail-closed corpus. Dense search is
+ * executed once, then hydrated against each D1 partition. Any sparse D1
+ * failure rejects the federation so callers can use their verified live
+ * fallback instead of silently returning a partial legal index.
+ */
+export async function retrieveFederatedLegalCorpus(input: {
+  shards: readonly LegalCorpusFederatedShard[];
+  query: string;
+  scope?: LegalCorpusSearchScope;
+  limit?: number;
+  denseSearch?: (query: string, limit: number) => Promise<DenseCorpusCandidate[]>;
+  officialOnly?: boolean;
+}): Promise<LegalCorpusRetrievalItem[]> {
+  assertFederatedShards(input.shards);
+  const limit = Math.max(1, Math.min(input.limit ?? 8, 30));
+  const perShardLimit = Math.min(30, limit * 2);
+  const sparseByShard = await Promise.all(input.shards.map((shard) => retrieveLegalCorpus({
+    db: shard.db,
+    query: input.query,
+    scope: input.scope,
+    limit: perShardLimit,
+    officialOnly: input.officialOnly,
+  })));
+
+  let dense: DenseCorpusCandidate[] = [];
+  let hydratedDense: LegalCorpusRetrievalItem[] = [];
+  if (input.denseSearch) {
+    try {
+      dense = await input.denseSearch(input.query.slice(0, MAX_QUERY_LENGTH), perShardLimit);
+      const hydratedByShard = await Promise.all(input.shards.map((shard) => (
+        hydrateLegalCorpusDenseCandidates({
+          db: shard.db,
+          candidates: dense,
+          scope: input.scope ?? {},
+          officialOnly: input.officialOnly ?? false,
+        })
+      )));
+      hydratedDense = hydratedByShard.flat();
+    } catch {
+      dense = [];
+      hydratedDense = [];
+    }
+  }
+
+  return federatedReciprocalRankFusion({
+    sparseByShard,
+    dense,
+    hydratedDense,
+    limit,
+  });
 }
 
 export function assessLegalCorpusCoverage(input: {

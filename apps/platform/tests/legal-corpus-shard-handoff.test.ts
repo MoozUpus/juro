@@ -41,14 +41,16 @@ test("rollover CLI is staging-only and activation requires handoff plus deployed
   assert.match(rolloverSource, /deployedDatabaseBinding\(config, source\)/u);
   assert.match(rolloverSource, /deployedDatabaseBinding\(config, target\)/u);
   assert.match(rolloverSource, /LEGAL_CORPUS_SHARD_ROLLOVER_DEPLOYED_BINDING_MISMATCH/u);
+  assert.match(rolloverSource, /LEGAL_CORPUS_SHARD_DOCUMENT_AFFINITY_PENDING/u);
   assert.doesNotMatch(rolloverSource, /juro-production|STAGING_ENVIRONMENT\s*=\s*"production"/u);
 });
 
 function insertHandoff(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void {
   sqlite.prepare(`INSERT INTO legal_corpus_shard_handoffs
     (id,source_database_name,target_database_name,manifest_sha256,
-      checkpoint_count,discovery_document_count,active_job_count,failure_count,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?)`).run(
+      checkpoint_count,discovery_document_count,active_job_count,
+      document_affinity_job_count,failure_count,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
     handoffId,
     "juro-staging-corpus-shard-1",
     "juro-staging-corpus-shard-2",
@@ -56,6 +58,7 @@ function insertHandoff(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): vo
     44,
     33_000,
     1,
+    0,
     0,
     createdAt,
   );
@@ -245,6 +248,26 @@ test("partial job handoff evidence is rejected at the D1 boundary", () => {
       () => sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
         SET handoff_id=? WHERE id='partial-handoff-job'`).run(handoffId),
       /LEGAL_CORPUS_INGESTION_HANDOFF_IMMUTABLE/u,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("handoff ledger rejects an active job whose canonical document belongs to the source shard", () => {
+  const { sqlite } = sqliteD1Fixture();
+  try {
+    sqlite.prepare(`INSERT INTO legal_corpus_documents (
+      id,provider,jurisdiction,source_class,scope,visibility,title,
+      availability_status,trusted,verification_status,approval_required,created_at,updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "lexuz:12345", "lex_uz", "UZ", "OFFICIAL_LEGISLATION", "global", "global",
+      "Existing source document", "ready", 1, "official_source", 0, createdAt, createdAt,
+    );
+    insertJob(sqlite, "affinity-job");
+    assert.throws(
+      () => insertHandoff(sqlite),
+      /LEGAL_CORPUS_SHARD_DOCUMENT_AFFINITY_PENDING/u,
     );
   } finally {
     sqlite.close();

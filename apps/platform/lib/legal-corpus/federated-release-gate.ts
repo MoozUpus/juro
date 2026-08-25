@@ -129,6 +129,9 @@ export function evaluateFederatedLegalCorpusReleaseEvidence(
   const baseEvidence: LegalCorpusReleaseEvidence = evidence.baseEvidence;
   const baseVerdict = evaluateLegalCorpusReleaseEvidence(baseEvidence, now);
   const failures = [...baseVerdict.failures];
+  if (!baseEvidence.dashboard.featureFlags.LEGAL_CORPUS_FEDERATED_ENABLED) {
+    failures.push("FEDERATION_RUNTIME_FLAG_DISABLED");
+  }
   const routeNames = evidence.routing.shardNames;
   const capacityNames = evidence.d1Capacities.map(({ databaseName }) => databaseName);
   const summaryNames = evidence.shards.map(({ databaseName }) => databaseName);

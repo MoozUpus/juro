@@ -60,6 +60,7 @@ type HandoffLedgerRow = {
   targetDatabaseName: string;
   manifestSha256: string;
   activeJobCount: number;
+  documentAffinityJobCount: number;
   createdAt: string;
 };
 type DeploymentBindingEvidence = {
@@ -453,10 +454,22 @@ function manifest(
   };
 }
 
+function assertNoActiveDocumentAffinityJobs(config: string, database: string): void {
+  const count = Number(query(config, database, `SELECT count(*) AS count
+    FROM legal_corpus_ingestion_jobs AS job
+    INNER JOIN legal_corpus_documents AS document
+      ON document.id=job.canonical_document_id
+    WHERE job.status IN ('queued','retrying','running') AND job.handoff_id IS NULL`)[0]?.count ?? -1);
+  if (count !== 0) {
+    throw new TypeError(`LEGAL_CORPUS_SHARD_DOCUMENT_AFFINITY_PENDING:${count}`);
+  }
+}
+
 function ledger(config: string, database: string, handoffId: string): HandoffLedgerRow | null {
   const row = query(config, database, `SELECT id,source_database_name AS sourceDatabaseName,
       target_database_name AS targetDatabaseName,manifest_sha256 AS manifestSha256,
-      active_job_count AS activeJobCount,created_at AS createdAt
+      active_job_count AS activeJobCount,
+      document_affinity_job_count AS documentAffinityJobCount,created_at AS createdAt
     FROM legal_corpus_shard_handoffs WHERE id=${sqlValue(handoffId)} LIMIT 1`)[0];
   if (!row) return null;
   return {
@@ -465,6 +478,7 @@ function ledger(config: string, database: string, handoffId: string): HandoffLed
     targetDatabaseName: String(row.targetDatabaseName),
     manifestSha256: String(row.manifestSha256),
     activeJobCount: Number(row.activeJobCount),
+    documentAffinityJobCount: Number(row.documentAffinityJobCount),
     createdAt: String(row.createdAt),
   };
 }
@@ -476,11 +490,12 @@ function ledgerInsertSql(
 ): string {
   return `INSERT OR IGNORE INTO legal_corpus_shard_handoffs
     (id,source_database_name,target_database_name,manifest_sha256,checkpoint_count,
-      discovery_document_count,active_job_count,failure_count,created_at)
+      discovery_document_count,active_job_count,document_affinity_job_count,
+      failure_count,created_at)
     VALUES (${sqlValue(value.handoffId)},${sqlValue(value.sourceDatabaseName)},
       ${sqlValue(value.targetDatabaseName)},${sqlValue(manifestSha256)},
       ${value.checkpoints.length},${value.discoveryDocuments.length},${value.jobs.length},
-      ${value.failures.length},${sqlValue(createdAt)});`;
+      0,${value.failures.length},${sqlValue(createdAt)});`;
 }
 
 function eventSql(
@@ -535,7 +550,8 @@ function assertLedger(
     || value.sourceDatabaseName !== expected.sourceDatabaseName
     || value.targetDatabaseName !== expected.targetDatabaseName
     || value.manifestSha256 !== manifestSha256
-    || value.activeJobCount !== expected.jobs.length) {
+    || value.activeJobCount !== expected.jobs.length
+    || value.documentAffinityJobCount !== 0) {
     throw new TypeError(`LEGAL_CORPUS_SHARD_HANDOFF_LEDGER_MISMATCH:${database}`);
   }
 }
@@ -697,6 +713,7 @@ async function prepare(args: ReadonlyMap<string, string>): Promise<void> {
 
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "juro-corpus-rollover-"));
   try {
+    assertNoActiveDocumentAffinityJobs(config, source);
     const sourceSnapshot = snapshot(config, source, size, null);
     const value = manifest(handoffId, source, target, sourceSnapshot);
     const digest = sha256(value);
@@ -711,6 +728,7 @@ async function prepare(args: ReadonlyMap<string, string>): Promise<void> {
       eventSql(handoffId, "target_seeded", digest, now),
     ], temporaryDirectory, "target-event");
 
+    assertNoActiveDocumentAffinityJobs(config, source);
     const sourceRecheck = manifest(handoffId, source, target, snapshot(config, source, size, null));
     if (sha256(sourceRecheck) !== digest) {
       throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_SOURCE_CHANGED");

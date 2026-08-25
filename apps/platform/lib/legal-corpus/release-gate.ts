@@ -83,6 +83,7 @@ export const legalCorpusFeatureFlagsEvidenceSchema = z.object({
   LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST: z.boolean(),
   LEGAL_CORPUS_HISTORICAL_ENABLED: z.boolean(),
   LEGAL_CORPUS_DENSE_ENABLED: z.boolean(),
+  LEGAL_CORPUS_FEDERATED_ENABLED: z.boolean(),
   LEGAL_CORPUS_SHADOW_MODE: z.boolean(),
 }).strict();
 
