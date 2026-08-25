@@ -54,8 +54,10 @@ integrity, privacy-safe activation telemetry, and truthful production status.
 
 - Cloudflare account billing showed an overdue balance of $381.29 during this
   audit; service continuity is an owner action, not a code change.
-- Zone SSL mode was Full rather than Full (Strict), and no custom WAF/rate rules
-  were observed. Tightening them needs certificate/origin and traffic validation.
+- Zone SSL mode was Full during baseline. It is now explicit Full (Strict) after
+  certificate/origin classification and production/staging traffic validation.
+  The scoped analytics rate rule is active; broader custom WAF posture remains
+  a separate open control.
 - Core Web Vitals could not be measured because the required Chrome DevTools
   performance connector was unavailable. Artifact budgets are green but are not
   an LCP/INP/CLS claim.

@@ -21,6 +21,8 @@
 - Sites version 82 deployed exact 121-file source from `d0310b90`; version 81
   is the immediate public rollback. The Platform Worker remains version 146
   because this follow-up did not change `apps/platform`.
+- Zone origin encryption now uses explicit Cloudflare `Full (strict)` instead
+  of automatic `Full`; the prior `Full` setting is the control-plane rollback.
 
 ## Verification
 
@@ -47,6 +49,10 @@
   `1985bd83-d685-4ae3-8978-60f4f469d1e7` passed. Version 82 added the existing
   neutral JURO image to the 61 routes that lacked one; the final crawl returned
   78/78 complete Open Graph and Twitter preview contracts.
+- TLS hardening: Sites reported active apex SSL, the four application hosts are
+  Worker Custom Domains, and post-change probes passed all six production and
+  three protected-staging HTTPS boundaries without a `526`; status remained
+  operational 8/8 with no active incident at `2026-08-25T11:25:16.533Z`.
 
 ## Not represented as complete
 

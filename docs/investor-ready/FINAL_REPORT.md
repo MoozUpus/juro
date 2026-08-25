@@ -698,10 +698,13 @@ login, dedicated Lawyer login, fail-closed Admin re-auth boundary and status
 page. The status API generated at `2026-08-25T08:10:26.036Z` was operational
 8/8 with no incident.
 
-The release does not conceal its remaining controls: the Cloudflare account UI
-still reports USD 381.29 overdue, zone SSL is Full rather than Full (strict),
-general custom WAF posture remains minimal, and a real Core Web Vitals trace is
-not available. The execution policy also blocked deletion of exact local
+Cloudflare zone origin encryption is now explicit `Full (strict)`. Sites
+reported active apex SSL, Worker Custom Domains covered app/lawyer/admin/status,
+and six production plus three protected-staging probes retained their expected
+boundaries without `526`; the prior `Full` mode is rollback. The release does
+not conceal its remaining controls: the account UI still reports USD 381.29
+overdue, general custom WAF posture remains minimal, and a real Core Web Vitals
+trace is not available. The execution policy also blocked deletion of exact local
 plaintext price-gate directory
 `C:\Users\A S U S\AppData\Local\Temp\juro-production-price-config-f42c48fc-20260825T074158Z`
 after verified private R2 readback. Manual removal remains required; no alternate

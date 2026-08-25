@@ -1,14 +1,15 @@
-# Rollback plan — Worker 357d0438 / migration 0159
+# Rollback plan — Worker 146 / migration 0159 / Sites 82
 
 ## Application rollback
 
-The immediate application rollback version is
-`f91406c2-903b-438f-bafb-01a64f5af2b7`. Confirm the currently active version
-before changing traffic; the release version is
-`357d0438-1a5f-4b29-ba81-869cbc130c0a`.
+The active application version is
+`c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146). The immediate application
+rollback is `357d0438-1a5f-4b29-ba81-869cbc130c0a` (version 145). Confirm the
+currently active version before changing traffic. Sites version 82 is live and
+version 81 is its immediate public rollback.
 
 Rollback is justified for a release-caused availability, authentication,
-routing or signed-share regression. After rollback, repeat the four-host HTTPS
+routing or signed-share regression. After rollback, repeat the six-host HTTPS
 probe, login/status smoke and `/api/status` read. Do not report overall recovery
 unless status evidence is fresh and operational.
 
@@ -16,6 +17,17 @@ Migration 0159 is additive. An older application can ignore its new table and
 columns, so an application-only rollback should not edit D1. It would, however,
 remove the new lockout/encryption behavior and is therefore a short-lived
 incident action, not a preferred steady state.
+
+## Zone TLS rollback
+
+The current zone encryption mode is explicit `Full (strict)`. If a verified
+post-change origin failure produces `526` or an application host becomes
+unavailable, restore the previous `Full` mode in Cloudflare SSL/TLS settings.
+Then repeat the six-host production matrix (`juro`, `www`, `app`, `lawyer`,
+`admin`, `status`), the three protected-staging probes and `/api/status`.
+Do not weaken TLS for an unrelated application regression, and do not call the
+rollback successful until expected status/redirect/auth boundaries and fresh
+operational health are restored.
 
 ## Database recovery
 

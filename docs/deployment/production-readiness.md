@@ -161,13 +161,18 @@ in-app browser rendered representative legal, lawyer and EN-video routes with
 no overflow or page log. Screenshot capture timed out and is not claimed as
 evidence. Status generated at `2026-08-25T10:58:57.247Z` was operational 8/8.
 
+Zone origin TLS was then changed from automatic `Full` to explicit
+`Full (strict)`. Sites reported the apex custom-domain SSL active, and the four
+application hosts are Worker Custom Domains. Post-change probes retained the
+expected six production outcomes (`200/308/200/200/303/200`) and three protected
+staging outcomes (`302/302/200`) with no `526`. Status generated at
+`2026-08-25T11:25:16.533Z` remained operational 8/8 with no active incident.
+The control-plane rollback is the previous `Full` mode.
+
 ## Open release risks
 
 - The Cloudflare account UI showed an overdue balance of USD 381.29 and warned
   about possible service interruption. No financial action was taken.
-- Zone SSL mode is `Full`, not `Full (strict)`. The deployed Worker enforces
-  HTTPS and HSTS, but origin-certificate strictness remains a control-plane
-  hardening item.
 - The scoped public-analytics edge rate limit is active. General custom rules
   remain 0/5, so no broader custom WAF posture is claimed.
 - A real Lighthouse/Core Web Vitals trace is not claimed because the required
@@ -194,6 +199,6 @@ evidence. Status generated at `2026-08-25T10:58:57.247Z` was operational 8/8.
 
 Release status: the named analytics/cost and website dependency-hardening
 production releases are verified. This
-is not a blanket ecosystem Definition of Done: Cloudflare billing, Full-not-
-Strict TLS, general WAF/CWV evidence, the local plaintext cleanup and any
-explicitly PARTIAL browser/device rows remain open.
+is not a blanket ecosystem Definition of Done: Cloudflare billing, general
+WAF/CWV evidence, the local plaintext cleanup and any explicitly PARTIAL
+browser/device rows remain open.
