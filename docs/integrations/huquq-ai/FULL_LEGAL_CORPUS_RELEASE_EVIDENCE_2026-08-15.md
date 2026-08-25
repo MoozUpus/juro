@@ -2,6 +2,35 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Post-core shard-2 ingestion progression (2026-08-25, 21:12–21:35Z)
+
+The next two single-stream staging runs completed without an error. Run
+`ed4e530c-c792-43b2-93c9-016e7ed57530` ran from `21:12:47.393Z` through
+`21:22:11.046Z`; run `deda49fe-1da7-4b2e-ae8e-c88bb15bc28e` ran from
+`21:24:47.388Z` through `21:34:42.016Z`. Both durable scheduler records are
+`completed` with `error_code=NULL`, and the distributed lock was empty at the
+post-run measurement boundary. The staging Worker remains version
+`1fb18209-c95f-46c5-abf5-6400a6442879` at 100% with the unchanged shard-2
+binding. No code, migration, flag, DNS or production state changed in this
+monitoring interval.
+
+A single read-only SQL snapshot at that empty-lock boundary recorded active
+acquisition, 44/44 completed discovery checkpoints, 19/19 indexed core-code
+targets, zero failed/dead-letter ingestion jobs and zero terminal failure
+records. The queue contained 135 completed and 25,772 queued fetch jobs, plus
+86 completed and 2,070 queued version jobs. The only failure-ledger rows were
+two historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records for one
+fetch job that is now `completed`; they are recovery evidence, not an active
+or terminal job.
+
+The same snapshot recorded 123 canonical documents, 21,714 unique current
+provisions and 21,731 indexed current chunks. `wrangler d1 info` reported
+465,821,696 bytes. These values remain below the 1,500-document,
+22,000-provision and 22,513-chunk release floors, and acquisition and both
+queues remain active. They therefore do not authorize federation freeze,
+snapshot, the indexed 314-scenario evaluation, Qdrant/D1 restore gates, CI or
+release.
+
 ## Core-code pager continuity and 19/19 settlement (2026-08-25, 19:52–21:11Z)
 
 Live staging timings showed that the prior 15-minute private metadata expiry
