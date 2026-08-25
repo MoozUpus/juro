@@ -17,6 +17,13 @@ import { featureEnabled, type LegalCorpusFeatureFlag } from "./trust";
 // as a source-unavailable retry on every cycle.
 export const CORE_CODE_TIMEOUT_MS = 45_000;
 
+// One legal-corpus invocation may legitimately hold the scheduler lease for
+// 15 minutes, and the next eligible staging tick can arrive almost four
+// minutes later. Keep the public unauthenticated Lex pager session only long
+// enough to span that bounded gap, with margin for response latency, so a
+// multi-page exact-title search does not restart at page one on every batch.
+export const CORE_CODE_SESSION_TTL_MS = 30 * 60_000;
+
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type CoreCodeEnv = LegalCorpusQueueEnv & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
@@ -268,7 +275,7 @@ export async function runNextLexCoreCodeDiscovery(
       if (canAdvance) {
         const sessionCookie = page.sourceSessionCookie ?? targetRow.sourceSessionCookie;
         const sessionExpiry = page.sourceSessionCookie
-          ? new Date(now.getTime() + 15 * 60_000).toISOString()
+          ? new Date(now.getTime() + CORE_CODE_SESSION_TTL_MS).toISOString()
           : targetRow.sourceSessionExpiresAt;
         await env.DB.prepare(`UPDATE legal_corpus_core_code_targets
           SET status='retrying',attempt_count=MIN(attempt_count+1,12),page_number=?,

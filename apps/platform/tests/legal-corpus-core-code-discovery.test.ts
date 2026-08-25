@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { fetchLexCatalogPage } from "../lib/legal-corpus/lex-catalog-discovery";
 import {
+  CORE_CODE_SESSION_TTL_MS,
   CORE_CODE_TIMEOUT_MS,
   LEX_CORE_CODE_SEED_URLS,
   runNextLexCoreCodeDiscovery,
@@ -15,6 +16,7 @@ const robots = "User-agent: *\nAllow: /\nCrawl-delay: 0\n";
 
 test("core-code title lookup keeps a bounded extended Worker response window", () => {
   assert.equal(CORE_CODE_TIMEOUT_MS, 45_000);
+  assert.equal(CORE_CODE_SESSION_TTL_MS, 30 * 60_000);
 });
 
 test("core-code searches remain limited to the fixed official target registry", async () => {
@@ -256,7 +258,7 @@ test("a paced core-code retry does not unlock generic catalogue discovery", asyn
   }
 });
 
-test("core-code discovery resumes the official pager before deferring a title", async () => {
+test("core-code discovery retains the official pager across a full bounded batch", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     const env = { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" };
@@ -275,14 +277,22 @@ test("core-code discovery resumes the official pager before deferring a title", 
     });
     assert.equal(first.status, "queued");
     assert.equal(first.canonicalDocumentId, null);
-    const paged = sqlite.prepare(`SELECT status,page_number AS pageNumber,next_event_target AS nextEventTarget
+    const paged = sqlite.prepare(`SELECT status,page_number AS pageNumber,next_event_target AS nextEventTarget,
+        source_session_expires_at AS sourceSessionExpiresAt
       FROM legal_corpus_core_code_targets WHERE target_id=?`).get(target.id) as {
-        status: string; pageNumber: number; nextEventTarget: string;
+        status: string; pageNumber: number; nextEventTarget: string; sourceSessionExpiresAt: string;
       };
-    assert.deepEqual({ ...paged }, { status: "retrying", pageNumber: 1, nextEventTarget: "pager2" });
+    assert.deepEqual({ ...paged }, {
+      status: "retrying",
+      pageNumber: 1,
+      nextEventTarget: "pager2",
+      sourceSessionExpiresAt: new Date(CORE_CODE_SESSION_TTL_MS).toISOString(),
+    });
 
     const second = await runNextLexCoreCodeDiscovery(env, {
-      now: new Date(4 * 60_000),
+      // A near-maximum 15-minute batch plus the next scheduler tick must not
+      // discard the source-issued pager session and restart at page one.
+      now: new Date(16 * 60_000),
       fetchImpl: async (input, init) => String(input).endsWith("robots.txt")
         ? new Response(robots, { headers: { "content-type": "text/plain" } })
         : init?.method === "POST"
