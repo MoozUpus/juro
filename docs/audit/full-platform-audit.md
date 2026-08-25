@@ -41,7 +41,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 | Area | State | Evidence / remaining gate |
 | --- | --- | --- |
-| Public routes and SEO | PASS in production | Sites version 81 is live; all 78 sitemap URLs returned 2xx with exact canonical, complete RU/UZ/EN hreflang, explicit Open Graph title and expected indexability. `robots.txt` points to the canonical sitemap. |
+| Public routes and SEO | PASS in production | Sites version 82 is live; all 78 sitemap URLs returned 2xx with exact canonical, complete RU/UZ/EN hreflang, Open Graph/Twitter preview metadata, single H1, valid present JSON-LD and expected indexability. `robots.txt` points to the canonical sitemap. |
 | Transport/security headers | PASS in production | HTTPS-first Worker redirects, private no-store/noindex and restricted permissions policy tested; public Sites uses Cloudflare canonical redirects. |
 | Auth/RBAC/tenant isolation | PASS for this delta | The exact commit passed the complete 1086-test core and 201-test Cloudflare suites; the 26/26-file security diff scan found no tenant/privacy issue. Historical authenticated journey coverage remains scoped in the QA matrix. |
 | Signed public shares | PASS at baseline | Signed authorization and bounded transport deployed in the hardened release. |
@@ -78,17 +78,19 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
   gates.
 - Worker `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) receives 100%
   production traffic; `357d0438-1a5f-4b29-ba81-869cbc130c0a` is rollback.
-- Sites version 81 deployed the exact 121-file `apps/website` source from
-  `ee0687af`; Git tree `357e8823ead4462dba05b3dc3911e544cc956f7d`
-  matched before save. Sites version 80 is rollback.
-- GitHub CI `32836146215` passed Website and Platform on `ee0687af`. The
+- Sites version 82 deployed the exact 121-file `apps/website` source from
+  `d0310b90`; Git tree `f35a8f36db9240a281e204f7d7e8b3675d2a18e7`
+  matched before save. Sites version 81 is rollback.
+- GitHub CI `32838994132` passed Website and Platform on `d0310b90`. The
   hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero
   findings; metadata diff scan `fa1b3e34-235b-48e6-8fb4-41e9f731f210` also
-  retained zero findings with complete changed-source coverage. The broader
-  immutable Standard scan remains explicitly PARTIAL.
+  retained zero findings with complete changed-source coverage. Social-preview
+  diff scan `1985bd83-d685-4ae3-8978-60f4f469d1e7` closed its seven changed
+  source files with zero findings. The broader immutable Standard scan remains
+  explicitly PARTIAL.
 - The live telemetry route returned exact `204/403/403/400/413` for valid,
   foreign-origin, missing-fetch-metadata, invalid-pair and oversized requests.
-- `status.juro.uz/api/status`, generated at `2026-08-25T10:27:12.585Z`, was
+- `status.juro.uz/api/status`, generated at `2026-08-25T10:58:57.247Z`, was
   operational for all eight published components with no incident.
 - The price backup gate is complete in private R2, but the exact local plaintext
   staging directory could not be deleted because the execution policy blocked

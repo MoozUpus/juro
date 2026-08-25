@@ -9,12 +9,12 @@ item in the wider ecosystem audit is complete.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest public website source commit | `ee0687afa23a7fb78c788d1857c56d1ee63eb4bb` |
+| Latest public website source commit | `d0310b9031b12bdc8846aba2328671574c4a0998` |
 | Draft PR | `#64` |
-| GitHub Actions | CI run `32836146215`, Website and Platform successful on exact public source |
+| GitHub Actions | CI run `32838994132`, Website and Platform successful on exact public source |
 | Production Worker | `juro` version `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146), 100% traffic |
 | Immediate application rollback | `357d0438-1a5f-4b29-ba81-869cbc130c0a` (version 145) |
-| Public Sites release | Version 81, deployment `appgdep_6a8d6d17ddcc8191b7365baa02afc9c8`; rollback version 80 |
+| Public Sites release | Version 82, deployment `appgdep_6a8d7522f25c8191a871d05e7677ef9d`; rollback version 81 |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
@@ -103,11 +103,11 @@ Platform passed rendered HTML 34/34, core 1086/1086 and Cloudflare 201/201,
 plus generated types, lint, type-check, deployable artifact, environment matrix,
 production dependency audit and licence policy.
 
-Sites version 81 contains the exact 121-file `apps/website` source extracted
-from `ee0687af`; source-tree comparison reported identical Git tree
-`357e8823ead4462dba05b3dc3911e544cc956f7d` before internal source commit
-`369c85ac1736c233b9b324ff38be4c574c07c985` was pushed. The saved archive has
-canonical storage hash `sha256:8f03f7febc21471a98abe206f2c61681426d07bfa6c590e3a0ed717efe0a4c51`. The
+Sites version 82 contains the exact 121-file `apps/website` source extracted
+from `d0310b90`; source-tree comparison reported identical Git tree
+`f35a8f36db9240a281e204f7d7e8b3675d2a18e7` before internal source commit
+`ec6b7868ea2a34fc60b609b0b707a153dc984e52` was pushed. The saved archive has
+canonical storage hash `sha256:2417277aaad0eda9781816fd861be0080d49c5bff63f03908c5e2001cb016ebb`. The
 live custom domain rendered the localized privacy banner. Both consent controls
 measured 44 pixels high; choosing essential-only removed the banner without
 exposing private data. All 78 canonical sitemap URLs returned a successful
@@ -152,11 +152,14 @@ artifact gates.
 Exact hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero
 findings. Metadata diff scan `fa1b3e34-235b-48e6-8fb4-41e9f731f210` covered all
 six changed source files in `33d7f8e3..ee0687af` and retained zero findings.
-GitHub CI `32836146215` passed and Sites version 81 succeeded. The replacement
-crawl verified 78/78 exact canonical, RU/UZ/EN hreflang and Open Graph titles;
-the in-app browser rendered nine affected RU/UZ/EN pages with no overflow or
-page log. Screenshot capture timed out and is not claimed as evidence. Status
-generated at `2026-08-25T10:27:12.585Z` was operational 8/8.
+Social-preview diff scan `1985bd83-d685-4ae3-8978-60f4f469d1e7` covered all
+seven changed source files in `3f2bf72e..d0310b90` and retained zero findings.
+GitHub CI `32838994132` passed and Sites version 82 succeeded. The replacement
+crawl verified 78/78 exact canonical, RU/UZ/EN hreflang, complete Open Graph
+and Twitter metadata, single H1, valid present JSON-LD and indexability; the
+in-app browser rendered representative legal, lawyer and EN-video routes with
+no overflow or page log. Screenshot capture timed out and is not claimed as
+evidence. Status generated at `2026-08-25T10:58:57.247Z` was operational 8/8.
 
 ## Open release risks
 

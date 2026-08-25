@@ -18,7 +18,7 @@
   `357d0438-1a5f-4b29-ba81-869cbc130c0a`.
 - Public website dependency resolution now pins PostCSS `8.5.23` and Sharp
   `0.35.3`; production `npm audit` reports zero vulnerabilities.
-- Sites version 81 deployed exact 121-file source from `ee0687af`; version 80
+- Sites version 82 deployed exact 121-file source from `d0310b90`; version 81
   is the immediate public rollback. The Platform Worker remains version 146
   because this follow-up did not change `apps/platform`.
 
@@ -43,6 +43,10 @@
   `fa1b3e34-235b-48e6-8fb4-41e9f731f210` passed. The expanded production
   crawl returned 78/78 exact canonical URLs, complete RU/UZ/EN hreflang,
   explicit Open Graph titles and expected indexability.
+- Social-preview closure: GitHub CI `32838994132` and exact diff scan
+  `1985bd83-d685-4ae3-8978-60f4f469d1e7` passed. Version 82 added the existing
+  neutral JURO image to the 61 routes that lacked one; the final crawl returned
+  78/78 complete Open Graph and Twitter preview contracts.
 
 ## Not represented as complete
 

@@ -50,10 +50,10 @@ deployability.
 
 The public website sitemap currently lists 78 canonical RU/UZ/EN URLs across
 home, Trust, video, lawyer catalogue/profiles, knowledge and legal content. A
-fresh Sites-version-81 crawl followed every listed URL and found 78 final 2xx
-responses, exact canonical metadata, complete RU/UZ/EN hreflang, explicit Open
-Graph titles, zero unexpected redirects and zero failures. `robots.txt` points
-to `https://juro.uz/sitemap.xml`.
+fresh Sites-version-82 crawl followed every listed URL and found 78 final 2xx
+responses, exact canonical metadata, complete RU/UZ/EN hreflang, complete Open
+Graph/Twitter preview metadata, zero unexpected redirects and zero failures.
+`robots.txt` points to `https://juro.uz/sitemap.xml`.
 
 For historical authenticated route-by-route browser evidence, see
 `docs/investor-ready/QA_MATRIX.md`. This file deliberately distinguishes that

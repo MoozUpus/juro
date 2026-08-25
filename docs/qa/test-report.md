@@ -21,6 +21,8 @@
 | Website metadata closure | PASS; 43/43 tests, type-check, lint, licence policy, artifact validation and 0 production audit vulnerabilities |
 | Metadata diff scan `fa1b3e34-235b-48e6-8fb4-41e9f731f210` | PASS; complete changed-source coverage for `33d7f8e3..ee0687af`, 0 reportable findings |
 | GitHub Actions CI `32836146215` | PASS on exact public source commit `ee0687af`; Website and Platform successful |
+| Social-preview diff scan `1985bd83-d685-4ae3-8978-60f4f469d1e7` | PASS; complete changed-source coverage for `3f2bf72e..d0310b90`, 0 reportable findings |
+| GitHub Actions CI `32838994132` | PASS on exact public source commit `d0310b90`; Website and Platform successful |
 
 The production artifact stayed inside the checked-in regression budgets:
 591.9 KiB CSS (600 KiB limit), 295.3 KiB initial browser JavaScript (320 KiB),
@@ -59,9 +61,9 @@ rehearsed against user data. No Lighthouse/Chrome trace ran because the
 Safari/WebKit and native page zoom remain intentionally not tested under the
 current QA boundary.
 
-Post-deploy public QA for Sites version 81 verified nine affected RU/UZ/EN legal
-and lawyer DOM states, canonical/hreflang/Open Graph metadata, no horizontal
-overflow, an empty in-app browser log, 78/78 sitemap URLs passing every checked
-SEO field, canonical `robots.txt`, public security headers, private
+Post-deploy public QA for Sites version 82 verified affected RU/UZ/EN legal,
+lawyer and video DOM states, canonical/hreflang/Open Graph/Twitter metadata, no
+horizontal overflow, an empty in-app browser log, 78/78 sitemap URLs passing
+every checked SEO/social field, canonical `robots.txt`, public security headers, private
 app/lawyer/admin no-store/noindex boundaries and an operational 8/8 status
 response. CDP screenshot capture timed out and is not claimed as evidence.

@@ -2,21 +2,29 @@
 
 ## Public website
 
-A full Sites-version-81 fetch of all 78 sitemap URLs found:
+A full Sites-version-82 fetch of all 78 sitemap URLs found:
 
 - 78/78 HTTP 2xx;
 - 78/78 non-empty titles;
 - 78/78 non-empty meta descriptions;
 - 78/78 canonical URLs exactly matching the sitemap URL;
 - 78/78 with complete RU/UZ/EN hreflang alternatives;
-- 78/78 with explicit Open Graph titles;
+- 78/78 with complete Open Graph title, description, canonical URL, type, site
+  name and image metadata;
+- 78/78 with Twitter large-card, title, description and image metadata;
+- 78/78 with exactly one H1;
+- every JSON-LD block present on the crawled pages parsed successfully;
 - zero unexpected `noindex` pages.
 
 The expanded Sites-version-80 crawl had rejected the earlier SEO pass: only
 40/78 routes had complete hreflang and 18/78 had explicit Open Graph titles.
 The failure was isolated to legal routes and the three lawyer catalogues.
-Version 81 deployed the tested fix and the complete 78-URL production re-crawl
-closed both gaps without changing indexability or canonical destinations.
+Version 81 deployed the tested fix and closed both gaps without changing
+indexability or canonical destinations. A stricter social-preview audit then
+found only 17/78 routes with an Open Graph/Twitter image. Version 82 reused the
+visually inspected, neutral, repository-owned "/juro-og.png" asset and the next
+78-URL crawl closed that gap. The asset itself returned 200 `image/png` and
+1,650,752 bytes.
 
 `robots.txt` returns 200, allows the public site, disallows `/api/` and the two
 retired landing-test paths, and points to the canonical sitemap.
@@ -32,6 +40,9 @@ content.
 ## Open checks
 
 - Structured-data validity was not re-run with an external schema validator.
+- External social-network cache refresh and vendor-specific preview rendering
+  were not triggered; this audit verifies the production HTML contract and the
+  referenced image response.
 - Public Lawyer profiles are represented in the current sitemap only after the
   existing publication/consent policy admits them; this crawl did not infer
   professional verification from sitemap inclusion.
