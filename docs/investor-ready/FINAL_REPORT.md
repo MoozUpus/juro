@@ -722,15 +722,19 @@ production findings because the public site does not route attacker-controlled
 CSS or images through those build-time packages. Commit
 `81aaf408cf573168f1e52c6349293f94db3a1a8e` nevertheless pins patched PostCSS
 `8.5.23` and Sharp `0.35.3`. Production audit returned zero vulnerabilities
-across 716 locked packages; 42/42 website tests, types, lint, licence and
-artifact validation passed. Exact diff scan
+across 716 locked packages. The final metadata head passed 43/43 website tests,
+type-check, lint, licence policy and artifact validation. Exact diff scan
 `a2cb0d4a-7512-4b0a-aa5e-362681007619` covered the hardening range and retained
-zero findings. GitHub CI `32829635485` passed Website and Platform.
+zero findings. Metadata diff scan `fa1b3e34-235b-48e6-8fb4-41e9f731f210`
+covered all six changed source files in `33d7f8e3..ee0687af` and retained zero
+findings. GitHub CI `32836146215` passed Website and Platform on the final
+public source.
 
-Sites version 80 was saved from an exact 121-file source snapshot whose Git tree
-matched `8941edebd6054e2919dbea92fcecd2dd59136359`, then published as deployment
-`appgdep_6a8d5c0551d88191ab7b708f312fc84c`; version 79 is rollback. Production
-verification returned 78/78 exact canonical sitemap URLs, canonical robots,
-correct RU/UZ/EN title/lang/canonical DOM, no horizontal overflow, an empty page
-log, the expected public/private security headers and operational 8/8 status at
-`2026-08-25T09:14:04.480Z`.
+Sites version 81 was saved from an exact 121-file source snapshot whose Git tree
+matched `357e8823ead4462dba05b3dc3911e544cc956f7d`, then published as deployment
+`appgdep_6a8d6d17ddcc8191b7365baa02afc9c8`; version 80 is rollback. Production
+verification returned 78/78 exact canonical sitemap URLs, complete RU/UZ/EN
+hreflang, explicit Open Graph titles, expected indexability, canonical robots,
+correct nine-route browser DOM, no horizontal overflow, an empty page log, the
+expected public/private security headers and operational 8/8 status at
+`2026-08-25T10:27:12.585Z`. CDP screenshot capture timed out and is not claimed.

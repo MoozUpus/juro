@@ -18,7 +18,7 @@
   `357d0438-1a5f-4b29-ba81-869cbc130c0a`.
 - Public website dependency resolution now pins PostCSS `8.5.23` and Sharp
   `0.35.3`; production `npm audit` reports zero vulnerabilities.
-- Sites version 80 deployed exact 121-file source from `81aaf408`; version 79
+- Sites version 81 deployed exact 121-file source from `ee0687af`; version 80
   is the immediate public rollback. The Platform Worker remains version 146
   because this follow-up did not change `apps/platform`.
 
@@ -38,6 +38,11 @@
   42/42 local website tests, types, lint, 716-package licence policy and
   deployable artifact passed; production crawl returned 78/78 exact canonical
   URLs and status remained operational 8/8.
+- SEO closure release: GitHub CI `32836146215` passed Website and Platform on
+  `ee0687af`; 43/43 website tests and exact diff scan
+  `fa1b3e34-235b-48e6-8fb4-41e9f731f210` passed. The expanded production
+  crawl returned 78/78 exact canonical URLs, complete RU/UZ/EN hreflang,
+  explicit Open Graph titles and expected indexability.
 
 ## Not represented as complete
 

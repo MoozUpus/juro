@@ -9,12 +9,12 @@ item in the wider ecosystem audit is complete.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest public website source commit | `81aaf408cf573168f1e52c6349293f94db3a1a8e` |
+| Latest public website source commit | `ee0687afa23a7fb78c788d1857c56d1ee63eb4bb` |
 | Draft PR | `#64` |
-| GitHub Actions | CI run `32829635485`, Website and Platform successful on exact public source |
+| GitHub Actions | CI run `32836146215`, Website and Platform successful on exact public source |
 | Production Worker | `juro` version `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146), 100% traffic |
 | Immediate application rollback | `357d0438-1a5f-4b29-ba81-869cbc130c0a` (version 145) |
-| Public Sites release | Version 80, deployment `appgdep_6a8d5c0551d88191ab7b708f312fc84c`; rollback version 79 |
+| Public Sites release | Version 81, deployment `appgdep_6a8d6d17ddcc8191b7365baa02afc9c8`; rollback version 80 |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
@@ -103,9 +103,11 @@ Platform passed rendered HTML 34/34, core 1086/1086 and Cloudflare 201/201,
 plus generated types, lint, type-check, deployable artifact, environment matrix,
 production dependency audit and licence policy.
 
-Sites version 80 contains the exact 121-file `apps/website` source extracted
-from `81aaf408`; source-tree comparison reported identical Git tree
-`8941edebd6054e2919dbea92fcecd2dd59136359`. The
+Sites version 81 contains the exact 121-file `apps/website` source extracted
+from `ee0687af`; source-tree comparison reported identical Git tree
+`357e8823ead4462dba05b3dc3911e544cc956f7d` before internal source commit
+`369c85ac1736c233b9b324ff38be4c574c07c985` was pushed. The saved archive has
+canonical storage hash `sha256:8f03f7febc21471a98abe206f2c61681426d07bfa6c590e3a0ed717efe0a4c51`. The
 live custom domain rendered the localized privacy banner. Both consent controls
 measured 44 pixels high; choosing essential-only removed the banner without
 exposing private data. All 78 canonical sitemap URLs returned a successful
@@ -143,14 +145,18 @@ available.
 The scan identified advisory-affected transitive PostCSS and Sharp versions as
 a dependency-hygiene candidate. Production exploit reachability was rejected:
 the public site does not process attacker-controlled CSS or images through
-those packages. Commit `81aaf408` still pins patched PostCSS `8.5.23` and Sharp
+those packages. Commit `81aaf408` pins patched PostCSS `8.5.23` and Sharp
 `0.35.3`. Production `npm audit` reports zero vulnerabilities across 716 locked
-packages; 42/42 website tests, types, lint, licence and artifact gates passed.
+packages. The release head passed 43/43 website tests, types, lint, licence and
+artifact gates.
 Exact hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero
-findings, GitHub CI `32829635485` passed, and Sites version 80 succeeded. A
-post-deploy crawl verified 78/78 canonical URLs; the in-app browser rendered
-RU/UZ/EN with no overflow or console/network log. Status generated at
-`2026-08-25T09:14:04.480Z` was operational 8/8.
+findings. Metadata diff scan `fa1b3e34-235b-48e6-8fb4-41e9f731f210` covered all
+six changed source files in `33d7f8e3..ee0687af` and retained zero findings.
+GitHub CI `32836146215` passed and Sites version 81 succeeded. The replacement
+crawl verified 78/78 exact canonical, RU/UZ/EN hreflang and Open Graph titles;
+the in-app browser rendered nine affected RU/UZ/EN pages with no overflow or
+page log. Screenshot capture timed out and is not claimed as evidence. Status
+generated at `2026-08-25T10:27:12.585Z` was operational 8/8.
 
 ## Open release risks
 
@@ -172,9 +178,10 @@ RU/UZ/EN with no overflow or console/network log. Status generated at
 - Cleanup of the release-created public Sites snapshot and archive directories
   `C:\Users\A S U S\AppData\Local\Temp\juro-sites-source-v80-81aaf408` and
   `C:\Users\A S U S\AppData\Local\Temp\juro-sites-v80-81aaf408` was also
-  blocked by execution policy. They contain only the public source snapshot,
-  Git metadata without a persisted token and the public build archive; manual
-  cleanup remains desirable but this is not a private-data exposure.
+  blocked by execution policy. They now contain only the public version-80/81
+  source snapshots, Git metadata without a persisted token and public build
+  archives; manual cleanup remains desirable but this is not a private-data
+  exposure.
 - Remote URL document import remains disabled in development, staging and
   production. It must not be enabled until a dedicated SSRF/DNS-rebinding gate
   validates the exact Cloudflare egress path.

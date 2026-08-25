@@ -2,22 +2,21 @@
 
 ## Public website
 
-A full Sites-version-80 fetch of all 78 sitemap URLs found:
+A full Sites-version-81 fetch of all 78 sitemap URLs found:
 
 - 78/78 HTTP 2xx;
 - 78/78 non-empty titles;
 - 78/78 non-empty meta descriptions;
 - 78/78 canonical URLs exactly matching the sitemap URL;
-- 40/78 with complete RU/UZ/EN hreflang alternatives;
-- 18/78 with explicit Open Graph titles;
+- 78/78 with complete RU/UZ/EN hreflang alternatives;
+- 78/78 with explicit Open Graph titles;
 - zero unexpected `noindex` pages.
 
-The expanded crawl therefore rejected the earlier SEO pass. Missing English
-alternatives were isolated to Russian and Uzbek legal routes, while legal
-routes and the three lawyer catalogue pages lacked explicit Open Graph titles.
-The source fix and 43/43 rendered test suite pass locally; production remains
-unverified until the replacement Sites version is deployed and all 78 URLs are
-re-crawled.
+The expanded Sites-version-80 crawl had rejected the earlier SEO pass: only
+40/78 routes had complete hreflang and 18/78 had explicit Open Graph titles.
+The failure was isolated to legal routes and the three lawyer catalogues.
+Version 81 deployed the tested fix and the complete 78-URL production re-crawl
+closed both gaps without changing indexability or canonical destinations.
 
 `robots.txt` returns 200, allows the public site, disallows `/api/` and the two
 retired landing-test paths, and points to the canonical sitemap.
