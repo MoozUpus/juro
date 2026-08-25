@@ -4,14 +4,17 @@
 
 `juro-staging-corpus-v2` reached Cloudflare's non-increaseable 10 GB
 per-database limit. The staging-only continuation database
-`juro-staging-corpus-shard-1` (`e09e0682-0c2e-4458-a8f3-be9de28117e3`) lets the
-bounded Lex.uz ingestion finish without deleting or rewriting the v2 corpus.
+`juro-staging-corpus-shard-1` (`e09e0682-0c2e-4458-a8f3-be9de28117e3`) let the
+bounded Lex.uz ingestion continue without deleting or rewriting the v2 corpus.
+On 2026-08-25 its continuation state was atomically handed to
+`juro-staging-corpus-shard-2` (`36fa1cfe-6d00-47b7-a980-864020028d86`). Shard 1
+is durably frozen and shard 2 is the only active acquisition database.
 
 ## Isolation
 
 - Worker: `juro-legal-corpus-shard-staging`.
 - Config: `apps/platform/wrangler.legal-corpus-shard.jsonc`.
-- Binding: `DB` points only to `juro-staging-corpus-shard-1` in the staging
+- Binding: `DB` points only to `juro-staging-corpus-shard-2` in the staging
   environment.
 - There is no production environment in the shard config.
 - `LEGAL_CORPUS_DENSE_ENABLED=false`; the private Qdrant and embedding
@@ -38,7 +41,7 @@ are idempotent.
 ## Verification sequence
 
 ```powershell
-npx wrangler d1 migrations apply juro-staging-corpus-shard-1 --remote `
+npx wrangler d1 migrations apply juro-staging-corpus-shard-2 --remote `
   --config wrangler.legal-corpus-shard.jsonc --env staging
 npx wrangler deploy --dry-run --config wrangler.legal-corpus-shard.jsonc `
   --env staging --outdir dist/legal-corpus-shard
@@ -88,18 +91,25 @@ proves through Cloudflare deployment metadata that the current 100% Worker
 version is bound to the target D1 UUID and was deployed after the handoff was
 created. Split deployments and stale/source bindings fail closed.
 
-This fence and utility are currently local code and migration evidence only.
-They have not been applied to the live shard, no target shard has been
-provisioned, and no remote queue rows have been transferred.
+The first live staging handoff completed with ID
+`3ccc2e81-403d-4f2a-a7b8-0a91f269ea95` and manifest SHA-256
+`1a91230051c9d889a7e4885d4aacac5f61377d11ddc7dfe95d3f4896e71999e1`.
+It transferred 44 checkpoints, 27,900 discovery rows and 27,649 active jobs
+with zero failure rows. Source verification found 27,649 immutable tombstones
+and zero remaining active jobs; target verification found the same number of
+ready jobs and handoff ledger rows before activation. The 100% target Worker
+deployment was created after the handoff and bound `DB` to the exact shard-2
+UUID. These facts prove the continuation handoff, not corpus completion or any
+release gate.
 
-## Future rollover runbook (not executed)
+## Reusable rollover runbook
 
 Run from `apps/platform`. Every D1 operation is staging-only and sequential.
 First, while the checked-in shard config still binds `DB` to the source, apply
 the additive fence migration and deploy the barrier-aware Worker to the source:
 
 ```powershell
-npx wrangler d1 migrations apply juro-staging-corpus-shard-1 --remote `
+npx wrangler d1 migrations apply juro-staging-corpus-shard-2 --remote `
   --config wrangler.legal-corpus-shard.jsonc --env staging
 npx wrangler deploy --dry-run --config wrangler.legal-corpus-shard.jsonc `
   --env staging --outdir dist/legal-corpus-shard-rollover-fence
@@ -110,8 +120,8 @@ Create only the exact next shard, record the returned UUID, and apply the full
 migration chain before attempting a handoff:
 
 ```powershell
-npx wrangler d1 create juro-staging-corpus-shard-2
-npx wrangler d1 migrations apply juro-staging-corpus-shard-2 --remote `
+npx wrangler d1 create juro-staging-corpus-shard-3
+npx wrangler d1 migrations apply juro-staging-corpus-shard-3 --remote `
   --config wrangler.legal-corpus-shard.jsonc --env staging
 ```
 
@@ -123,30 +133,30 @@ fails on any mismatch or non-zero document-affinity backlog.
 ```powershell
 npm run rollover:legal-corpus:staging-shard -- `
   --phase prepare `
-  --source juro-staging-corpus-shard-1 `
-  --target juro-staging-corpus-shard-2
+  --source juro-staging-corpus-shard-2 `
+  --target juro-staging-corpus-shard-3
 ```
 
 Keep the printed `handoffId` and `manifestSha256`. Only after `prepare` reports
 `prepared` or `already_prepared`, update the staging `DB.database_name` and
-`DB.database_id` in `wrangler.legal-corpus-shard.jsonc` to shard 2 and its
+`DB.database_id` in `wrangler.legal-corpus-shard.jsonc` to shard 3 and its
 returned UUID. Also advance the dormant staging `QDRANT_COLLECTION` suffix so
-future dense evidence cannot collide with shard 1. Dry-run and deploy while the
+future dense evidence cannot collide with shard 2. Dry-run and deploy while the
 target remains `handoff_prepared`; crons cannot acquire it yet.
 
 ```powershell
 npx wrangler deploy --dry-run --config wrangler.legal-corpus-shard.jsonc `
-  --env staging --outdir dist/legal-corpus-shard-2
+  --env staging --outdir dist/legal-corpus-shard-3
 npx wrangler deploy --config wrangler.legal-corpus-shard.jsonc --env staging
 npm run rollover:legal-corpus:staging-shard -- `
   --phase activate `
-  --source juro-staging-corpus-shard-1 `
-  --target juro-staging-corpus-shard-2 `
+  --source juro-staging-corpus-shard-2 `
+  --target juro-staging-corpus-shard-3 `
   --confirm-handoff-id <handoffId-from-prepare>
 ```
 
 Do not activate from a mixed-percentage deployment. Do not rebind the Worker
-back to shard 1 after source commit: its active jobs are durable tombstones.
+back to shard 2 after source commit: its active jobs are durable tombstones.
 The safe post-commit containment action is to disable the staging Worker/cron
 while retaining both D1 databases and their evidence.
 

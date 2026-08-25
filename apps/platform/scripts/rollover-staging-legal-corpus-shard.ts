@@ -164,7 +164,10 @@ function runWranglerCommand(
     windowsHide: true,
   });
   if (result.status !== 0) {
-    const detail = result.error?.message ?? `exit_${result.status ?? "unknown"}`;
+    const stderr = result.stderr?.trim();
+    const stdout = result.stdout?.trim();
+    const detail = result.error?.message
+      ?? ([stderr, stdout].filter(Boolean).join(" | ") || `exit_${result.status ?? "unknown"}`);
     throw new Error(`LEGAL_CORPUS_SHARD_ROLLOVER_WRANGLER_FAILED:${errorScope}:${detail}`);
   }
   return result.stdout;
@@ -186,6 +189,24 @@ function parseJson(raw: string, scope: string): unknown {
   } catch {
     throw new TypeError(`LEGAL_CORPUS_SHARD_ROLLOVER_WRANGLER_JSON_INVALID:${scope}`);
   }
+}
+
+export function parseWranglerImportJson(raw: string, scope: string): unknown {
+  const lines = raw.split(/\r?\n/u);
+  const payloadStart = lines.findIndex((line) => line.trimStart().startsWith("["));
+  if (payloadStart < 0) {
+    throw new TypeError(`LEGAL_CORPUS_SHARD_ROLLOVER_IMPORT_JSON_INVALID:${scope}`);
+  }
+  try {
+    return JSON.parse(lines.slice(payloadStart).join("\n")) as unknown;
+  } catch {
+    throw new TypeError(`LEGAL_CORPUS_SHARD_ROLLOVER_IMPORT_JSON_INVALID:${scope}`);
+  }
+}
+
+export function isLongRunningImportError(error: unknown): boolean {
+  return error instanceof Error
+    && error.message.includes("Currently processing a long-running import");
 }
 
 function parseWranglerRows(raw: string, database: string): JsonRecord[] {
@@ -281,17 +302,20 @@ async function executeStatements(
     const batch = statements.slice(offset, offset + MAX_STATEMENTS_PER_IMPORT);
     const file = join(temporaryDirectory, `${label}-${offset}.sql`);
     await writeFile(file, `${batch.join("\n")}\n`, "utf8");
-    const raw = runWrangler(config, database, ["--file", file]);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw) as unknown;
-    } catch {
-      throw new TypeError(`LEGAL_CORPUS_SHARD_ROLLOVER_IMPORT_JSON_INVALID:${database}:${label}`);
-    }
-    if (!Array.isArray(parsed)
-      || parsed.some((entry) => !entry || typeof entry !== "object"
-        || !(entry as { success?: boolean }).success)) {
-      throw new TypeError(`LEGAL_CORPUS_SHARD_ROLLOVER_IMPORT_FAILED:${database}:${label}`);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const raw = runWrangler(config, database, ["--file", file]);
+        const parsed = parseWranglerImportJson(raw, `${database}:${label}`);
+        if (!Array.isArray(parsed)
+          || parsed.some((entry) => !entry || typeof entry !== "object"
+            || !(entry as { success?: boolean }).success)) {
+          throw new TypeError(`LEGAL_CORPUS_SHARD_ROLLOVER_IMPORT_FAILED:${database}:${label}`);
+        }
+        break;
+      } catch (error) {
+        if (!isLongRunningImportError(error) || attempt >= 60) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+      }
     }
   }
 }

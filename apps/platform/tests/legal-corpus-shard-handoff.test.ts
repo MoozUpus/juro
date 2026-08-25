@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { nextLegalCorpusShardName } from "../scripts/rollover-staging-legal-corpus-shard";
+import {
+  isLongRunningImportError,
+  nextLegalCorpusShardName,
+  parseWranglerImportJson,
+} from "../scripts/rollover-staging-legal-corpus-shard";
 import {
   handleLegalCorpusScheduled,
   LEGAL_CORPUS_STAGING_PROCESS_CRON,
@@ -33,6 +37,24 @@ test("rollover naming accepts only the exact next staging shard", () => {
     () => nextLegalCorpusShardName("juro-production-corpus-shard-1"),
     /LEGAL_CORPUS_SHARD_ROLLOVER_SOURCE_INVALID/u,
   );
+});
+
+test("rollover import parser accepts Wrangler progress before the JSON result", () => {
+  const parsed = parseWranglerImportJson(`├ Checking if file needs uploading\r\n│\r\n[\r\n  {"success":true,"results":[]}\r\n]\r\n`, "test");
+  assert.deepEqual(parsed, [{ success: true, results: [] }]);
+  assert.throws(
+    () => parseWranglerImportJson("upload complete without result", "test"),
+    /LEGAL_CORPUS_SHARD_ROLLOVER_IMPORT_JSON_INVALID:test/u,
+  );
+});
+
+test("rollover retries only the D1 long-running import contention error", () => {
+  assert.equal(
+    isLongRunningImportError(new Error("Currently processing a long-running import. Cannot start another import until that completes or times out.")),
+    true,
+  );
+  assert.equal(isLongRunningImportError(new Error("permission denied")), false);
+  assert.equal(isLongRunningImportError("long-running import"), false);
 });
 
 test("rollover CLI is staging-only and activation requires handoff plus deployed target binding", () => {

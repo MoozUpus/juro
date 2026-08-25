@@ -25,14 +25,15 @@ test("staging corpus shard is isolated and ingestion-only", () => {
   assert.ok(staging);
   assert.deepEqual(staging.d1_databases, [{
     binding: "DB",
-    database_name: "juro-staging-corpus-shard-1",
-    database_id: "e09e0682-0c2e-4458-a8f3-be9de28117e3",
+    database_name: "juro-staging-corpus-shard-2",
+    database_id: "36fa1cfe-6d00-47b7-a980-864020028d86",
     migrations_dir: "./drizzle",
   }]);
   assert.equal(staging.vars?.LEGAL_CORPUS_ENABLED, "true");
   assert.equal(staging.vars?.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
   assert.equal(staging.vars?.LEGAL_CORPUS_DENSE_ENABLED, "false");
   assert.equal(staging.vars?.LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN, "20");
+  assert.equal(staging.vars?.QDRANT_COLLECTION, "juro_legal_staging_shard_2");
 });
 
 test("primary legal-corpus staging binding remains the v2 database", () => {

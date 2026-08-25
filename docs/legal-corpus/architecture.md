@@ -188,9 +188,12 @@ off.
 Cloudflare's per-database 10 GB limit is not increaseable. The original
 `juro-staging-corpus-v2` database remains preserved and read-only at its hard
 capacity boundary; it is not truncated or rebound. Staging continuation uses
-the separate `juro-staging-corpus-shard-1` database and the dedicated
+numbered `juro-staging-corpus-shard-N` databases and the dedicated
 `wrangler.legal-corpus-shard.jsonc` configuration, which binds the same
-route-free Worker to the shard while leaving every production binding absent.
+route-free Worker to exactly one active shard while leaving every production
+binding absent. The first capacity rollover completed on 2026-08-25: shard 1
+is durably frozen and the single Worker stream is bound to active shard 2
+(`36fa1cfe-6d00-47b7-a980-864020028d86`).
 The seed operation copies only the 44 completed discovery checkpoints, their
 discovery metadata, active queued/retrying jobs (running jobs are reset to
 queued), and the verified Lex.uz robots pacing row. It does not copy raw HTML,

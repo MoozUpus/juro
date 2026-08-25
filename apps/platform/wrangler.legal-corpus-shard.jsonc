@@ -72,7 +72,7 @@
         "LEGAL_CORPUS_SHADOW_MODE": "true",
         "LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN": "20",
         "QDRANT_URL": "https://qdrant.internal",
-        "QDRANT_COLLECTION": "juro_legal_staging_shard_1",
+        "QDRANT_COLLECTION": "juro_legal_staging_shard_2",
         "EMBEDDING_MODEL": "text-embedding-3-large"
       },
       "triggers": {
@@ -81,8 +81,8 @@
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "juro-staging-corpus-shard-1",
-          "database_id": "e09e0682-0c2e-4458-a8f3-be9de28117e3",
+          "database_name": "juro-staging-corpus-shard-2",
+          "database_id": "36fa1cfe-6d00-47b7-a980-864020028d86",
           "migrations_dir": "./drizzle"
         }
       ],
