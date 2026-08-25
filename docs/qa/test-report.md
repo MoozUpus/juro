@@ -1,4 +1,4 @@
-# Test report — a3f22f87 / production 357d0438
+# Test report — 2026-08-25 release evidence
 
 ## Automated gates
 
@@ -14,6 +14,8 @@
 | Production artifact | PASS |
 | Git diff whitespace check | PASS |
 | GitHub Actions CI `32816221498` | PASS; Website and Platform |
+| Website dependency hardening | PASS; 42/42 tests, type-check, lint, licence policy, artifact validation and 0 production audit vulnerabilities |
+| Standard repository security scan `df6f1247-116c-42b8-b233-a693efb52263` | PASS within stated boundary; immutable `e4f407a8`, 1,898 tracked files, 8/8 planned surfaces, 0 reportable findings, PARTIAL coverage |
 
 The production artifact stayed inside the checked-in regression budgets:
 591.9 KiB CSS (600 KiB limit), 295.3 KiB initial browser JavaScript (320 KiB),
@@ -37,10 +39,13 @@ These are emitted raw-byte budgets, not transfer sizes or Core Web Vitals.
 
 ## Coverage boundaries
 
-The Codex Security scan was sealed as partial by risk-surface coverage and
-found two medium/high-confidence signed-share issues; both are remediated in
-this release. It is not represented as an exhaustive repository security
-proof.
+The earlier Codex Security scan was sealed as partial by risk-surface coverage
+and found two medium/high-confidence signed-share issues; both are remediated
+in this release. The later whole-repository Standard scan targeted immutable
+`e4f407a8`, closed 8/8 planned surfaces and retained zero reportable findings.
+It is still classified PARTIAL because independent delegated review, TAC and
+destructive production testing were unavailable. Neither scan is represented
+as an exhaustive proof that no vulnerability exists.
 
 No live share existed in production, so the fifth-failure 429 path was not
 rehearsed against user data. No Lighthouse/Chrome trace ran because the
