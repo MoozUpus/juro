@@ -13,6 +13,7 @@ import {
 } from "../../../../../../lib/document-comparison/storage";
 import { ComparisonProcessingError, type ComparisonChange, type ComparisonLocale } from "../../../../../../lib/document-comparison/types";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { trackProductEvent } from "../../../../../../lib/platform/analytics";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -187,6 +188,7 @@ export const POST = withApiErrors(async function POST(
         aiStatus,
       }), isoNow()),
     ]);
+    trackProductEvent({ event: "document_compared", surface: "document_comparison" });
     return response({ comparison: { id: comparisonId, status: completedStatus, stage: "completed", summary } });
   } catch (error) {
     const code = error instanceof ComparisonProcessingError ? error.code : "COMPARISON_PROCESSING_FAILED";

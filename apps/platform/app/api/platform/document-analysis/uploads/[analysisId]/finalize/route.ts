@@ -9,6 +9,7 @@ import {
   validateUploadMagicBytes,
 } from "../../../../../../../lib/document-analysis/upload-pipeline";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
+import { trackProductEvent } from "../../../../../../../lib/platform/analytics";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -190,6 +191,7 @@ async function queueMalwareScan(
       now,
     ),
   ]);
+  trackProductEvent({ event: "document_uploaded", surface: "document_analysis" });
   return malwareScanQueuedResponse({ ...record, status: "quarantined" }, false);
 }
 

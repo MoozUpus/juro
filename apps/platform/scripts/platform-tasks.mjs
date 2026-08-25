@@ -204,6 +204,7 @@ const coreTestFiles = [
   "tests/platform-document-navigation.test.ts",
   "tests/platform-shell-accessibility.test.ts",
   "tests/platform-product-ux.test.ts",
+  "tests/product-analytics.test.ts",
   "tests/ai-action-plan-save.test.ts",
   "tests/ai-chat-theme.test.ts",
   "tests/ai-citation-article-route.test.ts",

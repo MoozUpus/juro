@@ -28,6 +28,7 @@ import editorialStyles from "./juro-editorial.module.css";
 import decisionStyles from "./juro-decision.module.css";
 import laptopStyles from "./juro-laptop.module.css";
 import processStyles from "./scenario-process.module.css";
+import { trackPublicEvent } from "../../../lib/analytics";
 
 const copy = {
   ru: {
@@ -334,6 +335,7 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
 
   const selectScenario = (index: number) => {
     scenarioInteracted.current = true;
+    trackPublicEvent({ event: "start_scenario", locale: language, page: "landing" });
     setProcessStep(0);
     setScenario(index);
   };

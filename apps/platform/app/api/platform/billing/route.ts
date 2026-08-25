@@ -13,6 +13,7 @@ import {
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 import { lawyerTrialView, type LawyerTrialRow } from "../../../../lib/platform/lawyer-trial";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -77,6 +78,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
       error: parsed.data.locale === "ru" ? "Неизвестный тариф." : "Noma’lum tarif.",
     }, 400);
   }
+
+  trackProductEvent({ event: "paid_action_started", surface: "billing", locale: parsed.data.locale });
 
   const provider = paymentProviderStatus();
   if (!provider.credentialsConfigured) {

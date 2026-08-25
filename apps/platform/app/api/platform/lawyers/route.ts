@@ -1,6 +1,7 @@
 import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { projectPublicLawyerDirectory } from "../../../../lib/platform/lawyer-directory-reviews";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 
 export const GET = withApiErrors(async function GET() {
   await requireApiUser();
@@ -61,7 +62,9 @@ export const GET = withApiErrors(async function GET() {
     FROM ranked_reviews WHERE reviewRank <= 3
     ORDER BY lawyerProfileId ASC,createdAt DESC`,
   ).all<{ reviewId: string; lawyerProfileId: string; overallRating: number; body: string | null; createdAt: string; replyBody: string | null; replyCreatedAt: string | null }>();
+  const directory = projectPublicLawyerDirectory(lawyers.results, aggregates.results, reviews.results);
+  if (directory.length > 0) trackProductEvent({ event: "lawyer_viewed", surface: "lawyer_marketplace" });
   return Response.json({
-    lawyers: projectPublicLawyerDirectory(lawyers.results, aggregates.results, reviews.results),
+    lawyers: directory,
   }, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 });

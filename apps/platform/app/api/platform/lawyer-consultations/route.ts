@@ -6,6 +6,7 @@ import {
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { UPDATE_LAWYER_CONSULTATION_TRANSITION_SQL } from "../../../../lib/platform/lawyer-consultation-transition";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 
 const consultationInput = z.discriminatedUnion("action", [
   z.object({
@@ -415,6 +416,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
       now,
     ),
   ]);
+  if (transition === "confirm") {
+    trackProductEvent({ event: "consultation_scheduled", surface: "lawyer_marketplace" });
+  }
   return response({
     ok: true,
     id: existing.id,

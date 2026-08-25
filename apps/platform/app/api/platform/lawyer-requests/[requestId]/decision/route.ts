@@ -9,6 +9,7 @@ import {
   lawyerRequestDecisionSchema,
   localizedHandoffError,
 } from "../../../../../../lib/platform/lawyer-request";
+import { trackProductEvent } from "../../../../../../lib/platform/analytics";
 
 type Context = { params: Promise<{ requestId: string }> };
 
@@ -39,6 +40,9 @@ export const POST = withApiErrors(async function POST(request: Request, context:
       decision: parsed.data.decision,
       message: parsed.data.message,
     });
+    if (parsed.data.decision === "accept") {
+      trackProductEvent({ event: "lawyer_request_accepted", surface: "lawyer_marketplace", locale });
+    }
     return response({ ok: true, ...result });
   } catch (error) {
     if (error instanceof LawyerRequestDecisionError) {

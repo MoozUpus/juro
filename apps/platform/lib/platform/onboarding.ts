@@ -6,6 +6,7 @@ import {
 } from "../auth/identity-protection";
 import { parseJsonRequest, type JsonRequestError } from "../auth/input";
 import { registrationPolicies } from "../legal/policies";
+import { trackProductEvent } from "./analytics";
 
 export const ONBOARDING_MAX_BYTES = 4_096;
 
@@ -468,6 +469,9 @@ export async function handleOnboardingRequest(
   }
   if (result.status === "policy_evidence_required") {
     return localizedError("POLICY_EVIDENCE_REQUIRED", parsed.data.locale);
+  }
+  if (result.status === "completed") {
+    trackProductEvent({ event: "signup_completed", surface: "onboarding", locale: parsed.data.locale });
   }
   return Response.json({
     ok: true,

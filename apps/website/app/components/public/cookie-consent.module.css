@@ -1,0 +1,77 @@
+.banner {
+  position: fixed;
+  z-index: 100;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: max(1rem, env(safe-area-inset-left));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  max-width: 920px;
+  margin-inline: auto;
+  padding: 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  box-shadow: 0 20px 65px rgb(6 24 39 / 24%);
+  color: var(--text-primary);
+  backdrop-filter: blur(18px);
+}
+
+.banner p {
+  max-width: 62ch;
+  margin: 0 0 .35rem;
+  font-size: .875rem;
+  line-height: 1.5;
+}
+
+.banner a {
+  color: var(--interactive-primary);
+  font-size: .78rem;
+  font-weight: 750;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: .55rem;
+}
+
+.actions button {
+  min-height: 44px;
+  padding: .65rem .9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 780;
+}
+
+.actions button:focus-visible,
+.banner a:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.actions .primary {
+  border-color: var(--interactive-primary);
+  background: var(--interactive-primary);
+  color: var(--surface-raised);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .actions button:hover { border-color: var(--interactive-primary); }
+  .actions .primary:hover { filter: brightness(1.08); }
+}
+
+@media (max-width: 720px) {
+  .banner { align-items: stretch; flex-direction: column; }
+  .actions { display: grid; grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .banner { background: var(--surface-raised); backdrop-filter: none; }
+}

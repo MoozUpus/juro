@@ -177,6 +177,10 @@ export async function callOpenAiStructured<T>(options: {
           },
           body: JSON.stringify({
             model,
+            // Legal questions and uploaded document content must not create
+            // provider-side application state. Keep this explicit even when
+            // an account-level retention policy is configured.
+            store: false,
             instructions: options.instructions,
             input: options.rawInput ? options.input : typeof options.input === "string" ? options.input : JSON.stringify(options.input),
             ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),

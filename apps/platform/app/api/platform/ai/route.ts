@@ -48,6 +48,7 @@ import {
 import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 import {
   listUserMemories,
   memoryKeyring,
@@ -276,11 +277,19 @@ async function executePostWithinBudget(
     idempotencyKey,
   })).slice(0, 48)}`;
   const existingConversation = Boolean(body?.conversationId);
+  let priorResponseKind: string | null = null;
   if (existingConversation) {
     const accessible = await db.prepare(
       "SELECT id FROM conversations WHERE id=? AND workspace_id=? AND owner_user_id=? LIMIT 1",
     ).bind(conversationId, workspace.id, user.id).first();
     if (!accessible) return response({ code: "ACCESS_DENIED", error: locale === "ru" ? "Диалог не найден." : "Suhbat topilmadi." }, 404);
+    const prior = await db.prepare(
+      `SELECT json_extract(structured_json,'$.responseKind') AS responseKind
+       FROM conversation_messages
+       WHERE conversation_id=? AND author_type='assistant' AND structured_json IS NOT NULL
+       ORDER BY created_at DESC,id DESC LIMIT 1`,
+    ).bind(conversationId).first<{ responseKind: string | null }>();
+    priorResponseKind = prior?.responseKind ?? null;
   }
 
   let branchInput: Awaited<ReturnType<typeof resolveAiBranchInput>>;
@@ -344,6 +353,7 @@ async function executePostWithinBudget(
   const provider = legalAiProvider();
   const providerStatus = aiProviderStatus();
   if (!provider || !providerStatus.model) {
+    trackProductEvent({ event: "AI_error", surface: "ai_chat", locale, outcome: "failure" });
     return response({
       code: "AI_PROVIDER_UNAVAILABLE",
       error: locale === "ru"
@@ -621,6 +631,9 @@ async function executePostWithinBudget(
         : "Oldingi urinish xato bilan yakunlandi va limit yechilmadi. Yangi so‘rovni xavfsiz yaratish mumkin.",
     }, 409);
   }
+  if (!existingConversation) {
+    trackProductEvent({ event: "first_question_sent", surface: "ai_chat", locale });
+  }
 
   const providerCalls: Array<{
     provider: "openai" | "anthropic";
@@ -787,6 +800,14 @@ async function executePostWithinBudget(
       providerFirstDeltaAtMs,
       outcome: aiSloFailureOutcome(code, budget),
     });
+    trackProductEvent({
+      event: "AI_error",
+      surface: "ai_chat",
+      locale,
+      outcome: "failure",
+      provider: telemetryProvider,
+      fallback: fallbackFromProgress ? "provider" : "none",
+    });
     return response({
       code,
       correlationId: reservation.correlationId,
@@ -858,6 +879,7 @@ async function executePostWithinBudget(
       providerFirstDeltaAtMs,
       outcome: aiSloFailureOutcome("INVALID_AI_OUTPUT", budget),
     });
+    trackProductEvent({ event: "AI_error", surface: "ai_chat", locale, outcome: "failure", provider: aiResult.provider });
     return response({
       code: "INVALID_AI_OUTPUT",
       correlationId: reservation.correlationId,
@@ -886,6 +908,7 @@ async function executePostWithinBudget(
       providerFirstDeltaAtMs,
       outcome: aiSloFailureOutcome("PROVIDER_TIMEOUT", budget),
     });
+    trackProductEvent({ event: "AI_error", surface: "ai_chat", locale, outcome: "failure", provider: aiResult.provider });
     return response({
       code: "PROVIDER_TIMEOUT",
       correlationId: reservation.correlationId,
@@ -1077,6 +1100,23 @@ async function executePostWithinBudget(
     providerFirstDeltaAtMs,
     outcome: { outcome: "completed", safeErrorCode: null },
   });
+
+  if (priorResponseKind === "clarification_required" && result.responseKind === "answer") {
+    trackProductEvent({ event: "clarification_completed", surface: "ai_chat", locale, provider: aiResult.provider });
+  }
+  if (retrieval.errors.length > 0) {
+    trackProductEvent({
+      event: "retrieval_fallback",
+      surface: "ai_chat",
+      locale,
+      outcome: result.sources.length > 0 ? "partial" : "failure",
+      provider: aiResult.provider,
+      fallback: "retrieval",
+    });
+  }
+  if (result.sources.length === 0) {
+    trackProductEvent({ event: "source_not_found", surface: "ai_chat", locale, outcome: "failure", provider: aiResult.provider });
+  }
 
   if (memoryEncryption) {
     try {
@@ -1424,6 +1464,9 @@ async function completeNonChargeableIntent(input: {
       return response({ ...replay, idempotentReplay: true }, 200);
     }
     throw error;
+  }
+  if (!input.existingConversation) {
+    trackProductEvent({ event: "first_question_sent", surface: "ai_chat", locale: input.locale });
   }
   const sourceFreshness = legalDatabaseFreshnessFromAsOf("unavailable");
   const turns = await conversationTurnsForClient({

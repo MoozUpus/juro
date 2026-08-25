@@ -180,6 +180,22 @@ test("0081 price sources are provider-bound and dashboard reports unpriced calls
       }),
       (error: unknown) => error instanceof ProviderUsageError && error.code === "PROVIDER_USAGE_INVALID",
     );
+    const anthropicPrice = await createAiModelPriceVersion({
+      db: d1,
+      actorUserId: "cost-user",
+      now: new Date(now),
+      value: {
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        operation: "messages",
+        inputMicrousdPerMillionTokens: 3_000_000,
+        outputMicrousdPerMillionTokens: 15_000_000,
+        cachedInputMicrousdPerMillionTokens: 300_000,
+        effectiveFrom: now,
+        sourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
+      },
+    });
+    assert.ok(anthropicPrice.id);
     await recordProviderUsage({
       db: d1,
       environment: "staging",
@@ -198,7 +214,7 @@ test("0081 price sources are provider-bound and dashboard reports unpriced calls
       eventId: "usage-unpriced",
     });
     const dashboard = await readAiCostDashboard({ db: d1, environment: "staging", now: new Date(now) });
-    assert.equal(dashboard.prices.length, 0);
+    assert.equal(dashboard.prices.length, 1);
     assert.equal(dashboard.daily.length, 1);
     assert.equal(dashboard.unpricedEvents, 1);
   } finally {

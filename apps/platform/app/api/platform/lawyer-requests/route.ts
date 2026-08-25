@@ -6,6 +6,7 @@ import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/
 import { lawyerRequestSchema, localizedHandoffError } from "../../../../lib/platform/lawyer-request";
 import { caseScenarioSteps } from "../../../../lib/platform/case-create";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../lib/operations/operational-feature-flags";
 
 function response(body: unknown, status = 200) {
@@ -184,6 +185,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
       now,
     )] : []),
   ]);
+
+  if (autoCreatedCase) {
+    trackProductEvent({ event: "case_created", surface: "lawyer_marketplace", locale });
+    trackProductEvent({ event: "plan_created", surface: "lawyer_marketplace", locale });
+  }
+  trackProductEvent({ event: "lawyer_request_created", surface: "lawyer_marketplace", locale });
 
   return response({ ok: true, requestId, caseId, autoCreatedCase, status, conflictCheckRequired: Boolean(lawyer) }, 201);
 });

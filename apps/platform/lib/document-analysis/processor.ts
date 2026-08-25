@@ -42,6 +42,7 @@ import {
 import { scheduleTrustedUserDocumentIndexStatements } from "./user-document-vectors";
 import { resolveAiRuntimeSettings, type AiRuntimeSettings } from "../ai/runtime-settings";
 import { publishPendingOwnerCorpusUpload } from "../legal-corpus/owner-upload";
+import { trackProductEvent } from "../platform/analytics";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
@@ -967,6 +968,12 @@ async function persistNormalizedAnalysis(
       now,
     ),
   ]);
+  trackProductEvent({
+    event: "document_analyzed",
+    surface: "document_analysis",
+    provider: persisted.technical.provider,
+    fallback: persisted.technical.fallbackFromProvider ? "provider" : "none",
+  });
 }
 
 function uniqueBy<T>(items: readonly T[], key: (item: T) => string, limit: number): T[] {

@@ -3,6 +3,7 @@ import { requireD1, requireR2 } from "../../../../../../lib/document-builder/sto
 import { parsePrivateDocumentLocator } from "../../../../../../lib/document-analysis/private-document-locator";
 import { normalizeArticleNumber } from "../../../../../../lib/legal/legal-language";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { trackProductEvent } from "../../../../../../lib/platform/analytics";
 
 type Context = { params: Promise<{ messageId: string }> };
 
@@ -181,6 +182,7 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
       return response({ code: "CITATION_UNAVAILABLE" }, 404);
     }
     const displayed = text.slice(0, MAX_PRIVATE_DOCUMENT_CHARACTERS);
+    trackProductEvent({ event: "source_opened", surface: "ai_chat" });
     return response({
       documentTitle: privateDocument.fileName,
       documentType: "uploaded_document",
@@ -263,6 +265,7 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
     || combinedArticleText.length > MAX_ARTICLE_CHARACTERS
     || articleRows.some((row) => row.textLength > row.text.length);
 
+  trackProductEvent({ event: "source_opened", surface: "ai_chat" });
   return response({
     documentTitle: article?.documentTitle ?? citation.title,
     documentType: article?.documentType ?? null,

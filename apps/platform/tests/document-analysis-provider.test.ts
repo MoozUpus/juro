@@ -329,11 +329,13 @@ test("quick document analysis prefers bounded low-reasoning OpenAI structured ou
       assert.equal(String(input), "https://api.openai.com/v1/responses");
       const request = JSON.parse(String(init?.body)) as {
         model?: string;
+        store?: boolean;
         max_output_tokens?: number;
         reasoning?: { effort?: string };
         text?: { verbosity?: string };
       };
       assert.equal(request.model, "gpt-test");
+      assert.equal(request.store, false);
       assert.equal(request.max_output_tokens, 3_600);
       assert.deepEqual(request.reasoning, { effort: "low" });
       assert.equal(request.text?.verbosity, "low");

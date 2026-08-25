@@ -11,6 +11,7 @@ import {
   withApiErrors,
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -155,6 +156,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!sent?.ok) {
     await db.prepare("UPDATE auth_otp_challenges SET invalidated_at = ? WHERE id = ?").bind(new Date().toISOString(), id).run();
     return json({ code: "EMAIL_PROVIDER_ERROR", error: locale === "ru" ? "Не удалось отправить письмо. Попробуйте позже." : "Xat yuborilmadi. Keyinroq urinib ko‘ring." }, 502);
+  }
+  if (purpose === "register") {
+    trackProductEvent({ event: "signup_started", surface: "onboarding", locale });
   }
   return json({ ok: true, challengeId: id, expiresInSeconds: 600, resendAfterSeconds: 60 });
 });

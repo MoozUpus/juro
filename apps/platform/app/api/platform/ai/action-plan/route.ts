@@ -6,6 +6,7 @@ import {
   saveAiActionPlanToCase,
 } from "../../../../../lib/ai/action-plan-save";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import { trackProductEvent } from "../../../../../lib/platform/analytics";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
@@ -34,6 +35,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       assistantMessageId: parsed.data.assistantMessageId,
       targetCaseId: parsed.data.targetCaseId,
     });
+    if (!result.replay) trackProductEvent({ event: "plan_created", surface: "ai_chat", locale: parsed.data.locale });
     return response(result, result.replay ? 200 : 201);
   } catch (error) {
     if (!(error instanceof AiActionPlanSaveError)) throw error;

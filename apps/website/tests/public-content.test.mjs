@@ -30,7 +30,17 @@ test("public copy avoids unresolved commercial and legal claims", () => {
 test("public surface does not accept sensitive legal text or files", () => {
   const homepage = fs.readFileSync("app/components/public/JuroHomepage.tsx", "utf8");
   const analytics = fs.readFileSync("lib/analytics.ts", "utf8");
+  const bridge = fs.readFileSync("app/components/public/PublicAnalyticsBridge.tsx", "utf8");
+  const consent = fs.readFileSync("app/components/public/CookieConsentBanner.tsx", "utf8");
   assert.doesNotMatch(homepage, /type="file"|<textarea|FormData/);
-  assert.match(analytics, /text\|content\|document\|email\|phone\|name\|otp/);
+  assert.match(analytics, /no route, query, content, contact, or device fields/);
   assert.match(analytics, /juro-cookie-consent/);
+  assert.match(analytics, /credentials: "omit"/);
+  assert.match(analytics, /mode: "no-cors"/);
+  assert.match(consent, /juro-cookie-consent/);
+  assert.match(consent, /juro:consent-change/);
+  assert.match(consent, /Essential only/);
+  assert.match(bridge, /page === "landing"/);
+  assert.match(bridge, /page === "lawyers"/);
+  assert.doesNotMatch(analytics + bridge + consent, /email|phone|userId|workspaceId|freeText|documentText\s*[?:]/i);
 });

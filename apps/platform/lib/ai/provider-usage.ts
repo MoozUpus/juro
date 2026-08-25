@@ -325,7 +325,7 @@ function priceSourceAllowed(provider: ProviderName, value: string | null | undef
   const host = url.hostname.toLowerCase();
   const allowed = provider === "openai"
     ? host === "openai.com" || host.endsWith(".openai.com")
-    : host === "anthropic.com" || host.endsWith(".anthropic.com");
+    : host === "anthropic.com" || host.endsWith(".anthropic.com") || host === "platform.claude.com";
   if (!allowed) throw new ProviderUsageError("PROVIDER_USAGE_INVALID");
   url.hash = "";
   return url.toString();

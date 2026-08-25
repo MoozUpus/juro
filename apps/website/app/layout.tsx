@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope } from "next/font/google";
 import { headers } from "next/headers";
+import { CookieConsentBanner } from "./components/public/CookieConsentBanner";
+import { PublicAnalyticsBridge } from "./components/public/PublicAnalyticsBridge";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -43,6 +45,8 @@ export default async function RootLayout({
     <html className={manrope.variable} lang={locale} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+        <PublicAnalyticsBridge locale={locale} />
+        <CookieConsentBanner locale={locale} />
         {children}
       </body>
     </html>
