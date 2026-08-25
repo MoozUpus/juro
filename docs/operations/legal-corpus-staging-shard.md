@@ -55,6 +55,10 @@ MFA-bound legal-reviewer decision and cannot be inferred from shard ingestion.
 
 Do not delete v2 or the shard as a rollback action. Disable the shard Worker
 staging deployment or remove its staging trigger, retain its D1 snapshot and
-evidence, and keep production flags and bindings unchanged. Any later
-federation of v2 and shard retrieval requires a typed contract, cross-database
-deduplication tests, point-in-time semantics, and a new release approval.
+evidence, and keep production flags and bindings unchanged. The typed
+federated evidence builder now exists, but it deliberately cannot prove a live
+rollover or retrieval path by itself: it requires disjoint sorted ID manifests,
+per-shard capacity and restored-snapshot evidence, a frozen single Lex stream,
+point-in-time and sparse/dense packet-parity verification, and a new release
+approval. Until those inputs exist and the nested v5 gate passes, cross-shard
+totals and retrieval remain unapproved.

@@ -40,6 +40,7 @@ function validFederatedEvidence(): FederatedLegalCorpusReleaseEvidence {
       partitionManifestSha256: "4".repeat(64),
       routingContractSha256: "5".repeat(64),
       snapshotManifestSha256: "6".repeat(64),
+      retrievalVerificationSha256: "7".repeat(64),
       canonicalDocumentDuplicateCount: 0,
       chunkDuplicateCount: 0,
       canonicalDocumentIdsDisjoint: true,
@@ -58,7 +59,7 @@ function validFederatedEvidence(): FederatedLegalCorpusReleaseEvidence {
         observedAt: "2026-08-15T11:59:30.000Z",
         databaseSizeBytes: 2_000_000_000,
         source: "wrangler_d1_info",
-        fileSha256: "7".repeat(64),
+        fileSha256: "e".repeat(64),
       },
     ],
     shards: [

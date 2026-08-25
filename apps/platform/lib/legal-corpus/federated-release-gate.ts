@@ -53,6 +53,7 @@ export const federatedLegalCorpusReleaseEvidenceSchema = z.object({
     partitionManifestSha256: sha256Schema,
     routingContractSha256: sha256Schema,
     snapshotManifestSha256: sha256Schema,
+    retrievalVerificationSha256: sha256Schema,
     canonicalDocumentDuplicateCount: z.literal(0),
     chunkDuplicateCount: z.literal(0),
     canonicalDocumentIdsDisjoint: z.literal(true),

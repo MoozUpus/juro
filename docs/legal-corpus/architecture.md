@@ -133,6 +133,35 @@ npm run build:legal-corpus:release-evidence -- `
 This is a staging-only safety gate. It does not authorise production storage,
 feature flags, ingestion, a deployment, or a rollout.
 
+When the corpus spans two or more numbered D1 shards, the v5 evidence remains
+the mandatory nested base gate. The federated builder does not accept summed
+counts or handwritten `verified: true` claims. It hashes the exact routing,
+partition, snapshot and retrieval-verification artifacts; checks that all
+artifacts and fresh `wrangler d1 info` captures describe the same database
+names and UUIDs; reads sorted canonical-document and current-chunk ID files;
+and rejects duplicate IDs before emitting evidence. The snapshot manifest is
+also the `corpusSnapshotSha256` bound to the benchmark. Every shard must have a
+verified export restore (`quickCheck: ok`, zero foreign-key violations), stay
+below the existing 8 GB reserve, and the captured Lex stream must be frozen.
+
+```powershell
+npm run build:legal-corpus:federated-release-evidence -- `
+  --base-evidence artifacts/legal-corpus/release-evidence.json `
+  --routing-contract artifacts/legal-corpus/federation-routing.json `
+  --partition-manifest artifacts/legal-corpus/federation-partitions.json `
+  --snapshot-manifest artifacts/legal-corpus/federation-snapshots.json `
+  --retrieval-verification artifacts/legal-corpus/federated-retrieval.json `
+  --d1-capacity artifacts/legal-corpus/shard-1-capacity.json `
+  --d1-capacity artifacts/legal-corpus/shard-2-capacity.json `
+  --output artifacts/legal-corpus/federated-release-evidence.json
+npm run validate:legal-corpus:federated-release -- `
+  --evidence artifacts/legal-corpus/federated-release-evidence.json
+```
+
+The contract is fail-closed plumbing, not evidence that the current staging
+queue is frozen or that cross-shard retrieval has passed. Those artifacts may
+only be captured after sequential ingestion is actually complete.
+
 ### Staging D1 capacity shard
 
 Cloudflare's per-database 10 GB limit is not increaseable. The original
