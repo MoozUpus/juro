@@ -390,7 +390,11 @@ async function claimRun(
   const results = await env.DB.batch([
     env.DB.prepare(`INSERT INTO scheduled_locks
         (name,holder_id,acquired_at,expires_at,updated_at)
-      VALUES (?,?,?,?,?)
+      SELECT ?,?,?,?,?
+      WHERE EXISTS (
+        SELECT 1 FROM legal_corpus_shard_control
+        WHERE singleton_id=1 AND acquisition_state='active'
+      )
       ON CONFLICT(name) DO UPDATE SET
         holder_id=excluded.holder_id,
         acquired_at=excluded.acquired_at,
@@ -404,6 +408,9 @@ async function claimRun(
       WHERE EXISTS (
         SELECT 1 FROM scheduled_locks
         WHERE name=? AND holder_id=? AND expires_at>?
+      ) AND EXISTS (
+        SELECT 1 FROM legal_corpus_shard_control
+        WHERE singleton_id=1 AND acquisition_state='active'
       )
       ON CONFLICT(idempotency_key) DO NOTHING`)
       .bind(

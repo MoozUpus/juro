@@ -19,6 +19,7 @@
     "validate:legal-corpus:release": "tsx scripts/validate-legal-corpus-release.ts",
     "validate:legal-corpus:federated-release": "tsx scripts/validate-legal-corpus-federated-release.ts",
     "capture:legal-corpus:d1-capacity": "node scripts/capture-legal-corpus-d1-capacity.mjs",
+    "rollover:legal-corpus:staging-shard": "tsx scripts/rollover-staging-legal-corpus-shard.ts",
     "build:legal-corpus:release-evidence": "tsx scripts/build-legal-corpus-release-evidence.ts",
     "build:legal-corpus:federated-release-evidence": "tsx scripts/build-legal-corpus-federated-release-evidence.ts",
     "start": "node scripts/platform-tasks.mjs start",

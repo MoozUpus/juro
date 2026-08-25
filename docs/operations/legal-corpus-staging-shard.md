@@ -51,6 +51,99 @@ until shard snapshot/restore, indexed evaluation, Qdrant benchmark/restore and
 CI evidence are complete. Human legal review remains an independent
 MFA-bound legal-reviewer decision and cannot be inferred from shard ingestion.
 
+## Durable rollover fence
+
+Migration `0142_legal_corpus_shard_handoffs` and the corpus Worker implement the
+database side of a later sequential rollover. Every corpus database has one
+`legal_corpus_shard_control` row. It starts `active`, so applying the additive
+migration does not pause ingestion. A handoff utility may change it to
+`handoff_prepared` only while there is no live scheduler lock, running
+scheduled run, or running ingestion job. Worker lock acquisition and scheduled
+run creation both recheck the `active` state in the same D1 batch; once the
+barrier changes, a later cron cannot race into a second Lex stream.
+The migration also guards the corpus scheduler lock, scheduled-run start and
+ingestion-job reactivation directly in D1. Those guards keep the fence closed
+even if the Worker is rolled back to code that predates the control-row check.
+
+Transferred source jobs are not merely hidden by a new query predicate. They
+become immutable `completed` tombstones with
+`LEGAL_CORPUS_SHARD_HANDOFF`, while their original queued/retrying state and
+hash are retained in an append-only handoff ledger. This means a rollback to an
+older Worker that does not know the new columns still cannot claim the source
+rows. The target receives ordinary claimable copies plus the same ledger. A
+partial handoff tuple, mutation, or deletion is rejected by D1 triggers.
+
+`scripts/rollover-staging-legal-corpus-shard.ts` implements a resumable
+two-phase `prepare`/`activate` operation. `prepare` accepts only the exact next
+`juro-staging-corpus-shard-N+1`, proves that the currently deployed 100% Worker
+version is still bound to the source D1 UUID, closes both barriers, copies and
+hash-verifies the continuation state, creates immutable source tombstones, and
+leaves the target prepared. `activate` requires the printed handoff UUID and
+proves through Cloudflare deployment metadata that the current 100% Worker
+version is bound to the target D1 UUID and was deployed after the handoff was
+created. Split deployments and stale/source bindings fail closed.
+
+This fence and utility are currently local code and migration evidence only.
+They have not been applied to the live shard, no target shard has been
+provisioned, and no remote queue rows have been transferred.
+
+## Future rollover runbook (not executed)
+
+Run from `apps/platform`. Every D1 operation is staging-only and sequential.
+First, while the checked-in shard config still binds `DB` to the source, apply
+the additive fence migration and deploy the barrier-aware Worker to the source:
+
+```powershell
+npx wrangler d1 migrations apply juro-staging-corpus-shard-1 --remote `
+  --config wrangler.legal-corpus-shard.jsonc --env staging
+npx wrangler deploy --dry-run --config wrangler.legal-corpus-shard.jsonc `
+  --env staging --outdir dist/legal-corpus-shard-rollover-fence
+npx wrangler deploy --config wrangler.legal-corpus-shard.jsonc --env staging
+```
+
+Create only the exact next shard, record the returned UUID, and apply the full
+migration chain before attempting a handoff:
+
+```powershell
+npx wrangler d1 create juro-staging-corpus-shard-2
+npx wrangler d1 migrations apply juro-staging-corpus-shard-2 --remote `
+  --config wrangler.legal-corpus-shard.jsonc --env staging
+```
+
+Wait for the current source run/lease to finish, then prepare. The command is
+safe to repeat with the same source and target; it resumes the immutable
+handoff or fails on any mismatch.
+
+```powershell
+npm run rollover:legal-corpus:staging-shard -- `
+  --phase prepare `
+  --source juro-staging-corpus-shard-1 `
+  --target juro-staging-corpus-shard-2
+```
+
+Keep the printed `handoffId` and `manifestSha256`. Only after `prepare` reports
+`prepared` or `already_prepared`, update the staging `DB.database_name` and
+`DB.database_id` in `wrangler.legal-corpus-shard.jsonc` to shard 2 and its
+returned UUID. Also advance the dormant staging `QDRANT_COLLECTION` suffix so
+future dense evidence cannot collide with shard 1. Dry-run and deploy while the
+target remains `handoff_prepared`; crons cannot acquire it yet.
+
+```powershell
+npx wrangler deploy --dry-run --config wrangler.legal-corpus-shard.jsonc `
+  --env staging --outdir dist/legal-corpus-shard-2
+npx wrangler deploy --config wrangler.legal-corpus-shard.jsonc --env staging
+npm run rollover:legal-corpus:staging-shard -- `
+  --phase activate `
+  --source juro-staging-corpus-shard-1 `
+  --target juro-staging-corpus-shard-2 `
+  --confirm-handoff-id <handoffId-from-prepare>
+```
+
+Do not activate from a mixed-percentage deployment. Do not rebind the Worker
+back to shard 1 after source commit: its active jobs are durable tombstones.
+The safe post-commit containment action is to disable the staging Worker/cron
+while retaining both D1 databases and their evidence.
+
 ## Rollback
 
 Do not delete v2 or the shard as a rollback action. Disable the shard Worker

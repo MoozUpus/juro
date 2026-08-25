@@ -624,7 +624,8 @@ export async function performLegalCorpusAdminAction(input: {
       if (Number(result[0]?.meta.changes ?? 0) !== 1) throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_CONFLICT");
       return { action: input.value.action, affected: 1 };
     }
-    const job = await input.env.DB.prepare(`SELECT id,status FROM legal_corpus_ingestion_jobs WHERE id=?`)
+    const job = await input.env.DB.prepare(`SELECT id,status FROM legal_corpus_ingestion_jobs
+      WHERE id=? AND handoff_id IS NULL`)
       .bind(input.value.jobId).first<{ id: string; status: string }>();
     if (!job) throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_NOT_FOUND");
     if (!["retrying", "failed", "dead_letter"].includes(job.status)) {
@@ -632,7 +633,8 @@ export async function performLegalCorpusAdminAction(input: {
     }
     const result = await input.env.DB.batch([
       input.env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs SET status='queued',attempt_count=0,
-        next_attempt_at=?,last_error_code=NULL,updated_at=? WHERE id=? AND status=?`)
+        next_attempt_at=?,last_error_code=NULL,updated_at=?
+        WHERE id=? AND handoff_id IS NULL AND status=?`)
         .bind(now, now, job.id, job.status),
       input.env.DB.prepare(`UPDATE legal_corpus_failures SET retry_state='retrying' WHERE job_id=? AND retry_state IN ('pending','terminal')`)
         .bind(job.id),

@@ -148,6 +148,7 @@ const coreTestFiles = [
   "tests/legal-source-trust.test.ts",
   "tests/legal-corpus-worker-boundary.test.ts",
   "tests/legal-corpus-shard-boundary.test.ts",
+  "tests/legal-corpus-shard-handoff.test.ts",
   "tests/legal-corpus-release-gate.test.ts",
   "tests/legal-corpus-federated-release-gate.test.ts",
   "tests/legal-corpus-federated-release-evidence-builder.test.ts",

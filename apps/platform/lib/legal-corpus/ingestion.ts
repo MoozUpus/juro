@@ -202,7 +202,7 @@ async function findPreferredCanonicalDocumentJob(
   return db.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
       canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
-    WHERE status='queued' AND job_type='fetch'
+    WHERE status='queued' AND handoff_id IS NULL AND job_type='fetch'
       AND canonical_document_id IN (${documentIds.map(() => "?").join(",")})
       AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY ${priority},coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
@@ -228,7 +228,7 @@ async function findPreferredCatalogJob(
     WHERE dd.checkpoint_id=cp.id
       AND j.canonical_document_id=dd.provider_source_id AND j.language=dd.language
       AND cp.category_key IN (${categories.map(() => "?").join(",")})
-      AND j.job_type='fetch' AND j.status='queued'
+      AND j.job_type='fetch' AND j.status='queued' AND j.handoff_id IS NULL
       ${languageClause}
       AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
     -- The approved legal-source sequence is the primary ordering. A fetched
@@ -690,7 +690,7 @@ async function reconcileStaleRunningJob(
   const stranded = await db.prepare(`SELECT id,attempt_count AS attemptCount,
       max_attempts AS maxAttempts,updated_at AS updatedAt
     FROM legal_corpus_ingestion_jobs
-    WHERE status='running' AND updated_at<=?
+    WHERE status='running' AND handoff_id IS NULL AND updated_at<=?
     ORDER BY updated_at ASC,id ASC LIMIT 1
   `).bind(staleBefore).first<{
     id: string;
@@ -702,7 +702,7 @@ async function reconcileStaleRunningJob(
   const exhausted = stranded.attemptCount >= stranded.maxAttempts;
   const updated = await db.prepare(`UPDATE legal_corpus_ingestion_jobs
     SET status=?,next_attempt_at=?,last_error_code=?,updated_at=?
-    WHERE id=? AND status='running' AND updated_at=?
+    WHERE id=? AND status='running' AND handoff_id IS NULL AND updated_at=?
   `).bind(
     exhausted ? "dead_letter" : "retrying",
     exhausted ? null : now,
@@ -732,7 +732,7 @@ async function reconcileRecoverableDeadLetter(
   const stranded = await db.prepare(`SELECT id,attempt_count AS attemptCount,
       max_attempts AS maxAttempts,last_error_code AS lastErrorCode
     FROM legal_corpus_ingestion_jobs
-    WHERE status='dead_letter' AND (
+    WHERE status='dead_letter' AND handoff_id IS NULL AND (
       (attempt_count<max_attempts AND last_error_code IN (${placeholders}))
       OR last_error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
       -- This was emitted before the parser distinguished a page with no
@@ -761,7 +761,7 @@ async function reconcileRecoverableDeadLetter(
     SET status='retrying',
       max_attempts=CASE WHEN attempt_count>=max_attempts THEN attempt_count+1 ELSE max_attempts END,
       next_attempt_at=?,updated_at=?
-    WHERE id=? AND status='dead_letter' AND (
+    WHERE id=? AND status='dead_letter' AND handoff_id IS NULL AND (
       attempt_count<max_attempts OR last_error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
       OR last_error_code=?
       OR (last_error_code IN (${boundedRecoveryPlaceholders})
@@ -795,7 +795,7 @@ async function reconcileRecoverableSignedLexUnavailable(
 ): Promise<void> {
   const stranded = await db.prepare(`SELECT id
       FROM legal_corpus_ingestion_jobs
-      WHERE status='completed' AND attempt_count=1
+      WHERE status='completed' AND handoff_id IS NULL AND attempt_count=1
         AND last_error_code=?
         AND (source_url LIKE 'https://lex.uz/docs/-%'
           OR source_url LIKE 'https://lex.uz/%/docs/-%')
@@ -804,7 +804,7 @@ async function reconcileRecoverableSignedLexUnavailable(
   if (!stranded) return;
   const updated = await db.prepare(`UPDATE legal_corpus_ingestion_jobs
       SET status='retrying',next_attempt_at=?,updated_at=?
-      WHERE id=? AND status='completed' AND attempt_count=1
+      WHERE id=? AND status='completed' AND handoff_id IS NULL AND attempt_count=1
         AND last_error_code=?
     `).bind(now, now, stranded.id, SIGNED_LEX_UNAVAILABLE_RECOVERY_CODE).run();
   if (Number(updated.meta.changes ?? 0) !== 1) return;
@@ -824,14 +824,14 @@ async function reconcileRecoverableLanguageTextUnavailable(
 ): Promise<void> {
   const stranded = await db.prepare(`SELECT id
       FROM legal_corpus_ingestion_jobs
-      WHERE status='completed' AND attempt_count=1
+      WHERE status='completed' AND handoff_id IS NULL AND attempt_count=1
         AND last_error_code=?
       ORDER BY updated_at ASC,id ASC LIMIT 1
     `).bind(LANGUAGE_TEXT_UNAVAILABLE_RECOVERY_CODE).first<{ id: string }>();
   if (!stranded) return;
   const updated = await db.prepare(`UPDATE legal_corpus_ingestion_jobs
       SET status='retrying',next_attempt_at=?,updated_at=?
-      WHERE id=? AND status='completed' AND attempt_count=1
+      WHERE id=? AND status='completed' AND handoff_id IS NULL AND attempt_count=1
         AND last_error_code=?
     `).bind(now, now, stranded.id, LANGUAGE_TEXT_UNAVAILABLE_RECOVERY_CODE).run();
   if (Number(updated.meta.changes ?? 0) !== 1) return;
@@ -1352,7 +1352,8 @@ export async function runNextLegalCorpusIngestionJob(
   await reconcileRecoverableDeadLetter(env.DB, now);
   const retryCandidate = await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
-    WHERE status='retrying' AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+    WHERE status='retrying' AND handoff_id IS NULL
+      AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
   `).bind(now).first<IngestionJob>();
   const reservedCandidate = retryCandidate || !input.reservedQueuedJobType
@@ -1360,7 +1361,8 @@ export async function runNextLegalCorpusIngestionJob(
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
         canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
       FROM legal_corpus_ingestion_jobs
-      WHERE status='queued' AND job_type=? AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+      WHERE status='queued' AND handoff_id IS NULL
+        AND job_type=? AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
     `).bind(input.reservedQueuedJobType, now).first<IngestionJob>();
   const preferredDocumentIds = preferredCanonicalDocumentIds(input.preferredCanonicalDocumentIds);
@@ -1379,14 +1381,16 @@ export async function runNextLegalCorpusIngestionJob(
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
       FROM legal_corpus_ingestion_jobs
-      WHERE status='queued' AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+      WHERE status='queued' AND handoff_id IS NULL
+        AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
     `).bind(now).first<IngestionJob>();
   const candidate = retryCandidate ?? reservedCandidate ?? preferredCodeCandidate ?? preferredCandidate ?? fifoCandidate;
   if (!candidate) return { claimed: false, status: "empty", jobId: null, safeErrorCode: null };
   const claimed = await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
     SET status='running',attempt_count=attempt_count+1,updated_at=?
-    WHERE id=? AND status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+    WHERE id=? AND handoff_id IS NULL AND status IN ('queued','retrying')
+      AND (next_attempt_at IS NULL OR next_attempt_at<=?)
   `).bind(now, candidate.id, now).run();
   if (Number(claimed.meta.changes ?? 0) !== 1) {
     return { claimed: false, status: "empty", jobId: candidate.id, safeErrorCode: null };
