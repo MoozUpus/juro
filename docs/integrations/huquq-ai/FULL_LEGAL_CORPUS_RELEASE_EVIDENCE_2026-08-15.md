@@ -2,6 +2,32 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## First 200-document milestone while acquisition remains open (2026-08-25, 22:36–22:46Z)
+
+Single-stream staging run `3c6925e2-6370-40c4-a5ab-f71ed6ae0359`
+started at `22:36:47.387Z` and completed at `22:46:04.245Z` with
+`error_code=NULL`. Its distributed lock was empty at the measurement boundary.
+The staging Worker remains version `1fb18209-c95f-46c5-abf5-6400a6442879` at
+100% with the unchanged shard-2 binding. No code, migration, flag, DNS or
+production state changed in this monitoring interval.
+
+One read-only SQL snapshot at that empty-lock boundary recorded active
+acquisition, 44/44 completed discovery checkpoints, 19/19 indexed core-code
+targets, zero failed/dead-letter ingestion jobs and zero terminal failure
+records. Queue composition was 231 completed and 25,749 queued fetch jobs,
+plus 134 completed and 3,063 queued version jobs. The only failure-ledger rows
+remained two historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records
+for one fetch job that is now `completed`.
+
+The same snapshot recorded 201 canonical documents, 32,268 unique current
+provisions and 32,292 indexed current chunks. `wrangler d1 info` reported
+759,193,600 bytes, well below the documented rollover reserve. This is the
+first verified lock-free snapshot above 200 canonical documents, but it is a
+progress milestone only: the document floor remains 201/1,500, acquisition is
+active, and both queues are open. Federation freeze, snapshot, indexed
+314-scenario evaluation, Qdrant/D1 restore gates, CI and release therefore
+remain unauthorized.
+
 ## Provision/chunk floors crossed while document and freeze gates remain open (2026-08-25, 21:36–21:48Z)
 
 Single-stream staging run `93e0dd9a-3101-4e80-9419-d41103048d1c`
