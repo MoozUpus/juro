@@ -2,6 +2,55 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Core-code pager continuity and 19/19 settlement (2026-08-25, 19:52–21:11Z)
+
+Live staging timings showed that the prior 15-minute private metadata expiry
+for the public unauthenticated Lex.uz ASP.NET pager could elapse between two
+eligible Worker invocations: a bounded ingestion batch normally held the
+scheduler lock for 12–13 minutes and the next free four-minute tick could land
+after expiry. This repeatedly returned the `customs` exact-title search to page
+one. Commit `647f793f` changes only the core-code pager metadata TTL to a
+bounded 30 minutes, enough to span the 15-minute scheduler lease plus cadence
+and response-latency margin. The pager cookie remains private operational
+metadata and is cleared immediately when the target is found, deferred or
+reset.
+
+The regression now resumes the source-issued pager after a simulated
+16-minute full-batch gap and passed in the 9/9 core-code suite. Worker boundary
+tests passed 22/22; platform type-check, lint, both canonical and shard-2
+Wrangler artifact dry-runs and the full `npm test` command passed. Staging-only
+Worker version `1fb18209-c95f-46c5-abf5-6400a6442879` was deployed at 100%
+with the unchanged shard-2 D1 binding and staging flags. Production remained
+untouched.
+
+The first new-version run created a `customs` pager session at
+`2026-08-25T19:52:44.000Z` with expiry `20:22:44.000Z`, advanced it to page 2
+inside the same batch and completed normally. The next free run
+`bf687651-49bb-4a32-a9e8-90ee911dffe8` started at `20:08:44.901Z`, reused that
+still-valid session rather than resetting it, found official target
+`lexuz:2876352` (`https://lex.uz/ru/docs/2876352`) and completed its preferred
+fetch without error. `customs` reconciled to `indexed` at `20:24:44.000Z`.
+
+The final `economic_procedure` pager then created a 30-minute session, found
+official target `lexuz:3523895` (`https://lex.uz/ru/docs/3523895`) on its second
+bounded page, and the next run completed its preferred fetch against ready
+internal family `lexuz-family:3523891`. Run
+`603b60f7-4bb4-48f2-b888-4e9ce6d05a4d` reconciled the target at
+`20:56:44.000Z` and completed at `21:09:02.762Z` with `error_code=NULL`; its
+distributed lock was released. The durable core-code ledger is now 19/19
+`indexed`, with no queued, retrying, awaiting-ingestion or technically
+unavailable target.
+
+The immediate post-run read-only snapshot remains 44/44 completed discovery
+checkpoints, zero failed/dead-letter ingestion jobs and only two retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` recovery records. Queue composition is
+103 completed and 25,780 queued fetch jobs, plus 70 completed and 1,936 queued
+version jobs. Shard 2 contains 97 canonical documents, 6,690 unique current
+provisions and 18,699 indexed current chunks; `wrangler d1 info` reports
+403,701,760 bytes. This closes only the core-code bootstrap gate. The active
+queue is not frozen, so federated deduplication, snapshot, 314-scenario
+evaluation, Qdrant/D1 restore and CI release gates remain closed.
+
 ## Remapped core-code alias reconciliation (2026-08-25, 19:19–19:34Z)
 
 The `administrative_responsibility` code target was discovered from the
