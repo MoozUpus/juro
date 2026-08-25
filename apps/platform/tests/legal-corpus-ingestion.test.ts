@@ -680,6 +680,51 @@ test("queued corpus jobs claim once and do not leak text into the queue", async 
   }
 });
 
+test("long-running corpus jobs renew their durable ingestion lease", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  let heartbeatUpdatedAt: string | null = null;
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/67892",
+      now,
+      correlationId: "durable-ingestion-heartbeat",
+    });
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now,
+      fetchImpl: fetchFor(manyArticleLexHtml(130)),
+      heartbeat: async () => {
+        const job = sqlite.prepare(`SELECT updated_at AS updatedAt
+          FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+            updatedAt: string;
+          };
+        heartbeatUpdatedAt = job.updatedAt;
+      },
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    assert.ok(heartbeatUpdatedAt, "expected at least one durable job heartbeat");
+    assert.ok(
+      Date.parse(heartbeatUpdatedAt) > Date.parse(now.toISOString()),
+      `expected heartbeat ${heartbeatUpdatedAt} after initial claim ${now.toISOString()}`,
+    );
+    const job = sqlite.prepare(`SELECT status,updated_at AS updatedAt
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string;
+        updatedAt: string;
+      };
+    assert.equal(job.status, "completed");
+    assert.ok(Date.parse(job.updatedAt) >= Date.parse(heartbeatUpdatedAt));
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a retryable Qdrant post-ingest failure keeps the corpus job retryable", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

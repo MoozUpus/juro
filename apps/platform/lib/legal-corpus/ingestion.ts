@@ -1392,21 +1392,37 @@ export async function runNextLegalCorpusIngestionJob(
     return { claimed: false, status: "empty", jobId: candidate.id, safeErrorCode: null };
   }
   const attempt = candidate.attemptCount + 1;
+  // Keep the durable ingestion lease fresh as well as the scheduler lease.
+  // Long Lex pages can spend several minutes in fetch/parse/index work; only
+  // renewing the scheduled-run row would let a neighboring invocation
+  // incorrectly reclaim this still-live job as stale.
+  const touchIngestionJob = async (): Promise<void> => {
+    const heartbeatAt = new Date().toISOString();
+    const touched = await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET updated_at=? WHERE id=? AND status='running'`).bind(
+      heartbeatAt, candidate.id,
+    ).run();
+    if (Number(touched.meta.changes ?? 0) !== 1) {
+      throw new Error("LEGAL_CORPUS_INGESTION_LEASE_LOST");
+    }
+    await input.heartbeat?.();
+  };
   try {
     const result = await ingestOfficialLexDocument(env, {
       sourceUrl: candidate.sourceUrl,
       now: nowDate,
       wait: input.wait,
       fetchImpl: input.fetchImpl,
-      heartbeat: input.heartbeat,
+      heartbeat: touchIngestionJob,
     });
     if (result.status !== "halted_suspicious_change" && result.versionId && input.afterIngest) {
       await input.afterIngest(result);
     }
     const terminal = result.status === "halted_suspicious_change";
+    const finishedAt = new Date().toISOString();
     await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
       SET status=?,next_attempt_at=NULL,last_error_code=?,updated_at=? WHERE id=?
-    `).bind(terminal ? "failed" : "completed", terminal ? "LEGAL_CORPUS_SUSPICIOUS_CHANGE" : null, now, candidate.id).run();
+    `).bind(terminal ? "failed" : "completed", terminal ? "LEGAL_CORPUS_SUSPICIOUS_CHANGE" : null, finishedAt, candidate.id).run();
     return {
       claimed: true,
       status: terminal ? "halted_suspicious_change" : "completed",
@@ -1414,12 +1430,14 @@ export async function runNextLegalCorpusIngestionJob(
       safeErrorCode: terminal ? "LEGAL_CORPUS_SUSPICIOUS_CHANGE" : null,
     };
   } catch (error) {
+    const finishedDate = new Date();
+    const finishedAt = finishedDate.toISOString();
     const errorCode = safeErrorCode(error);
     const alternate = alternateLanguageSource(error);
     if (alternate && candidate.attemptCount <= 1 && alternate.sourceUrl !== candidate.sourceUrl) {
       await recordFailure({
         db: env.DB, jobId: candidate.id, documentId: candidate.canonicalDocumentId,
-        sourceUrl: candidate.sourceUrl, language: candidate.language, now,
+        sourceUrl: candidate.sourceUrl, language: candidate.language, now: finishedAt,
         errorCode, httpStatus: fetchHttpStatus(error), retryable: true,
         retryCount: attempt, retryState: "retrying",
       });
@@ -1427,7 +1445,7 @@ export async function runNextLegalCorpusIngestionJob(
         SET status='retrying',source_url=?,language=?,next_attempt_at=?,last_error_code=?,updated_at=?
         WHERE id=? AND status='running'
       `).bind(
-        alternate.sourceUrl, alternate.language, now, ALTERNATE_LANGUAGE_REDIRECT_CODE, now, candidate.id,
+        alternate.sourceUrl, alternate.language, now, ALTERNATE_LANGUAGE_REDIRECT_CODE, finishedAt, candidate.id,
       ).run();
       return { claimed: true, status: "completed", jobId: candidate.id, safeErrorCode: null };
     }
@@ -1446,7 +1464,7 @@ export async function runNextLegalCorpusIngestionJob(
     }
     await recordFailure({
       db: env.DB, jobId: candidate.id, documentId: candidate.canonicalDocumentId,
-      sourceUrl: candidate.sourceUrl, language: candidate.language, now, errorCode,
+      sourceUrl: candidate.sourceUrl, language: candidate.language, now: finishedAt, errorCode,
       httpStatus: fetchHttpStatus(error),
       retryable: shouldRetry, retryCount: attempt,
       retryState: unavailable ? "technically_unavailable" : shouldRetry ? "retrying" : "terminal",
@@ -1454,7 +1472,7 @@ export async function runNextLegalCorpusIngestionJob(
     await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
       SET status=?,next_attempt_at=?,last_error_code=?,updated_at=? WHERE id=?
     `).bind(unavailable ? "completed" : shouldRetry ? "retrying" : "dead_letter",
-      shouldRetry ? retryAt(nowDate, attempt) : null, errorCode, now, candidate.id).run();
+      shouldRetry ? retryAt(finishedDate, attempt) : null, errorCode, finishedAt, candidate.id).run();
     return {
       claimed: true,
       status: unavailable ? "completed" : shouldRetry ? "retrying" : "failed",
