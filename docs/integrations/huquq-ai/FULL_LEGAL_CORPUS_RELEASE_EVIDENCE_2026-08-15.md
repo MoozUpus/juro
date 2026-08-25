@@ -2,6 +2,32 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Read-only federated progress snapshot (2026-08-25, 18:30–18:35Z)
+
+Sequential remote D1 aggregates recorded the following current-corpus rows:
+
+- frozen `juro-staging-corpus-v2`: 599 canonical documents, 15,899 unique
+  current provisions and 55,814 indexed current chunks;
+- frozen `juro-staging-corpus-shard-1`: 1,635 canonical documents, 18,724
+  unique current provisions and 52,370 indexed current chunks; and
+- active `juro-staging-corpus-shard-2`: 9 canonical documents, 3,613 unique
+  current provisions and 7,456 indexed current chunks.
+
+The provisional per-database arithmetic is therefore 2,243 canonical
+documents, 38,236 per-shard-unique current provisions and 115,640 indexed
+current chunks. This exceeds the numerical release floors, but it is progress
+only: the arithmetic is not the required cross-shard sorted-ID deduplication
+manifest or restored-snapshot evidence and cannot approve a federated release.
+
+The live fence check found shard 1 `acquisition_state=frozen`, handoff
+`3ccc2e81-403d-4f2a-a7b8-0a91f269ea95`, zero active jobs, zero terminal jobs
+and zero scheduler locks. Shard 2 alone remained `acquisition_state=active`
+with one scheduler lock and run `c602399f-60d1-44b9-85a2-f157fcdad1ee`
+renewing normally. It still had 27,653 queued/retrying/running jobs at the
+captured aggregate. Queue freeze, cross-shard deduplication, snapshot,
+314-scenario evaluation, Qdrant/D1 restore and CI gates remain open;
+production is untouched.
+
 ## Shard-2 stream-heartbeat amplification fix (2026-08-25, 16:56–18:14Z)
 
 The first shard-2 fetch job, `legal-corpus:109bff9d41820f474df91ad3789a`
