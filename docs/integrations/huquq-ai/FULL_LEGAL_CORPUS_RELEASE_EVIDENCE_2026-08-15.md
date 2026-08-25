@@ -2,6 +2,50 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Remapped core-code alias reconciliation (2026-08-25, 19:19–19:34Z)
+
+The `administrative_responsibility` code target was discovered from the
+official URL `https://lex.uz/ru/docs/97664` with provider identity
+`lexuz:97664`, while Lex.uz resolved the ingested official family to internal
+document `lexuz-family:97661` and variant URL
+`https://lex.uz/ru/docs/97661`. The prior exact-URL-only reconciliation could
+therefore leave a successfully ingested code in `awaiting_ingestion`
+indefinitely. Commit `84d4f1e6` keeps reconciliation fail-closed but also
+accepts an exact append-only `legal_corpus_source_aliases.provider_source_id`
+binding to the ready official variant's internal document. It does not use
+titles, fuzzy URLs or unverified identity inference.
+
+The regression suite for core-code discovery passed 9/9, the corpus Worker
+boundary suite passed 22/22, the ingestion suite passed 40/40, platform
+type-check and lint passed, both the canonical and shard-2 Wrangler artifact
+dry-runs passed, and the full `npm test` command exited successfully. The
+staging-only deployment produced Worker version
+`53d1726c-b772-47d2-9b7f-c889a60720e6`, distributed at 100% with the unchanged
+`juro-staging-corpus-shard-2` D1 binding and existing staging flags. No
+production binding, migration, flag, DNS or data was changed.
+
+The first post-deploy run `54d47f98-4e6c-403a-8f7c-0513bdd26759` started at
+`2026-08-25T19:20:45.045Z`, renewed its durable heartbeat during the batch and
+completed at `19:33:11.960Z` with `error_code=NULL`. Its Worker event reported
+17/17 claimed ingestion jobs, the expected bounded start-cutoff stop and
+`errorCode=NULL`. Intervening cron ticks emitted `duplicate_or_busy`, so no
+parallel ingestion stream was started. The live D1 target row changed to
+`status=indexed` with `resolved_at=2026-08-25T19:20:44.000Z`; the post-run core
+ledger is 17 indexed targets, one resumable `customs` pager in `retrying` and
+one queued `economic_procedure` target.
+
+The post-run read-only gate probe found the distributed lock released, shard 2
+still `acquisition_state=active`, all 44 discovery checkpoints completed and
+zero failed/dead-letter ingestion jobs. Queue composition is 43 completed and
+25,786 queued fetch jobs, plus 28 completed and 1,976 queued version jobs. The
+failure ledger contains only two retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` recovery records. Shard 2 contains 37
+canonical documents, 5,521 unique current provisions and 16,549 indexed
+current chunks; `wrangler d1 info` reports 273,178,624 bytes, well below the
+8 GB rollover reserve. The queue and core-code phase are not frozen, so
+cross-shard deduplication, snapshot, 314-scenario evaluation, Qdrant/D1
+restore and CI release gates remain closed.
+
 ## Read-only federated progress snapshot (2026-08-25, 18:30–18:35Z)
 
 Sequential remote D1 aggregates recorded the following current-corpus rows:
