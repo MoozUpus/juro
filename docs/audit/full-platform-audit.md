@@ -13,11 +13,13 @@ documents, cases and AI. The audit did not treat successful builds or polished
 screens as proof. Security, database, source, pricing, deployment and browser
 evidence are separate gates.
 
-The prior hardened release is live and CI-green. The current release candidate
-adds privacy-safe product measurement, explicit OpenAI non-storage, current
-provider pricing support, and durable AI/source/design/audit documentation. It
-remains a candidate until the full suite, database backup/config gate, deployment,
-production browser checks, crawl and health verification complete.
+The hardened release and the analytics/cost follow-up are live and CI-green.
+Commit `f42c48fc` adds privacy-safe product measurement, explicit OpenAI
+non-storage, current provider pricing support, and durable
+AI/source/design/audit documentation. Its full suite, database backup/config
+gate, Worker and Sites deployment, production boundary checks, crawl and health
+verification completed. The remaining limitations below are not silently
+upgraded into a blanket ecosystem Definition of Done.
 
 ## Ecosystem inventory
 
@@ -38,19 +40,19 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 | Area | State | Evidence / remaining gate |
 | --- | --- | --- |
-| Public routes and SEO | PASS at baseline | 33/33 public crawl and metadata checks; repeat after Sites release. |
-| Transport/security headers | PASS at baseline | HTTPS-first redirects, private no-store/noindex and restricted permissions policy tested. |
-| Auth/RBAC/tenant isolation | PASS at baseline | Focused tests and Codex Security rescan; repeat full suite for candidate. |
+| Public routes and SEO | PASS in production | Sites version 79 is live; all 78 canonical RU/UZ/EN sitemap URLs returned a successful response and `robots.txt` points to the canonical sitemap. |
+| Transport/security headers | PASS in production | HTTPS-first Worker redirects, private no-store/noindex and restricted permissions policy tested; public Sites uses Cloudflare canonical redirects. |
+| Auth/RBAC/tenant isolation | PASS for this delta | The exact commit passed the complete 1086-test core and 201-test Cloudflare suites; the 26/26-file security diff scan found no tenant/privacy issue. Historical authenticated journey coverage remains scoped in the QA matrix. |
 | Signed public shares | PASS at baseline | Signed authorization and bounded transport deployed in the hardened release. |
 | AI citations | PARTIAL by design | Direct Lex.uz fail-closed pipeline active; fresh current legal evaluation still required for a quality claim. |
 | Full legal corpus/vector retrieval | NOT RELEASED | Separate 44/44 snapshot/evaluation gate open; production flags disabled. |
-| Document/case/lawyer workflows | IMPLEMENTED | Authenticated post-deploy Chrome journey remains required for this candidate. |
+| Document/case/lawyer workflows | PASS from prior authenticated release evidence; PARTIAL for this delta | The analytics delta is covered by server-side success-boundary tests. Fresh in-app browser checks proved guest, Client login, dedicated Lawyer login, Admin re-auth and status boundaries; no new OTP-authenticated mutable workflow was submitted for this delta. |
 | Payments | DEMO / NOT APPROVED | Production approval flag false; no live-payment claim. |
-| Product analytics | RELEASE CANDIDATE | Exact content-free event contract implemented; production baseline does not exist yet. |
-| AI costs | RELEASE CANDIDATE | Official price values documented; effective production price rows and post-write verification pending. |
+| Product analytics | DEPLOYED | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. No conversion baseline is invented before an observation window exists. |
+| AI costs | ACTIVE CONFIGURATION | Four official, effective-dated production price rows passed pre/post D1 export, isolated restore, FK, private R2 and SHA-256 readback gates. No post-effective AI event exists yet, so no measured runtime cost baseline is claimed. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
 | Accessibility | PARTIAL | Static contracts present; no automated WCAG runner or completed deployed manual matrix. |
-| Cloudflare continuity | RISK | Overdue billing, Full-not-Strict TLS and missing custom WAF/rate policies need owner/platform action. |
+| Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active. Overdue billing, Full-not-Strict TLS, minimal broader custom WAF posture and unavailable real CWV tracing remain explicit risks. |
 
 ## Definition of done for this candidate
 
@@ -66,3 +68,21 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
    are rechecked.
 7. Remaining external risks are reported plainly and no green release is called
    overall healthy if service health is degraded.
+
+## Candidate completion checkpoint
+
+- GitHub CI `32822786084` passed at exact commit `f42c48fcd67c8b24f3e27369401d3ae8b6c1be8a`:
+  Website 42/42; Platform rendered HTML 34/34, core 1086/1086 and Cloudflare
+  201/201, plus lint, type-check, artifact, environment, dependency and licence
+  gates.
+- Worker `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) receives 100%
+  production traffic; `357d0438-1a5f-4b29-ba81-869cbc130c0a` is rollback.
+- Sites version 79 deployed the exact `apps/website` source from `f42c48fc`;
+  Sites version 78 is rollback.
+- The live telemetry route returned exact `204/403/403/400/413` for valid,
+  foreign-origin, missing-fetch-metadata, invalid-pair and oversized requests.
+- `status.juro.uz/api/status`, generated at `2026-08-25T08:10:26.036Z`, was
+  operational for all eight published components with no incident.
+- The price backup gate is complete in private R2, but the exact local plaintext
+  staging directory could not be deleted because the execution policy blocked
+  the removal operation. This remains an explicit local cleanup item.

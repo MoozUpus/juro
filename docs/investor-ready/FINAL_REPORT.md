@@ -641,3 +641,68 @@ The genuine approved-version registration and fresh-MFA Admin-theme gates are
 closed. This document remains an evidence-scoped release report rather than a
 blanket Definition-of-Done claim wherever `QA_MATRIX.md` still records PARTIAL
 coverage, explicit browser/device exclusions or production feature flags.
+
+## 13. Privacy-safe analytics and effective-cost production release
+
+Commit `f42c48fcd67c8b24f3e27369401d3ae8b6c1be8a` completes the bounded product
+measurement delta. The Platform event vocabulary has 21 exact events and only
+low-cardinality surface, locale, outcome, provider, fallback and bounded elapsed
+dimensions. It carries no user/workspace identifiers, question text, document
+content or filenames. Public Sites telemetry is optional, remains disabled until
+the visitor selects analytics, uses credentials-omitted `text/plain` transport,
+and submits only event, locale and page. OpenAI Responses calls explicitly set
+`store:false`; official price source URLs are allowlisted.
+
+GitHub CI `32822786084` passed the exact commit: Website 42/42; Platform rendered
+HTML 34/34, core 1086/1086 and Cloudflare 201/201, plus generated types, lint,
+type-check, deployable artifact, environment matrix, dependency audit and
+licence policy. The full local release suite and artifact budgets also passed.
+
+The production D1 price table was empty before configuration. One atomic insert
+created exactly four rows effective `2026-08-25T07:44:49.444Z`: OpenAI
+`gpt-5.6-sol`, `gpt-5.6-terra`, `text-embedding-3-large`, and Anthropic
+`claude-sonnet-4-6`, using the official price sources recorded with each row.
+The pre export was 156,868,036 bytes with SHA-256
+`df1a19c3a58b7d9929ec535b84f5d47064d90318320fb1bf93d53dcf64e5a7e0`; the
+post export was 156,873,094 bytes with SHA-256
+`90f8ad5a6d7c97e7cc24aa8ec068f649e54b7826902ca9f5d4b3fb73208569c8`.
+Both isolated restores returned `quickCheck=ok`, zero FK violations, 158
+migrations, 282 tables, 608 indexes and 380 triggers. Source and readback bytes
+and hashes matched under private R2 prefix
+`d1/juro-production/20260825T074158Z-price-config-f42c48fc/`. A fresh read found
+no successful production provider event after the effective timestamp, so this
+release claims configured cost accounting, not a measured zero-cost baseline.
+
+Worker `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) receives 100%
+traffic; `357d0438-1a5f-4b29-ba81-869cbc130c0a` is immediate rollback. Sites
+version 79 deployed the exact 121-file `apps/website` source extracted from
+`f42c48fc` with zero source differences; version 78 is rollback.
+
+The post-deploy public telemetry matrix returned `204` for a valid same-site
+event, `403` for a foreign origin, `403` without Fetch Metadata, `400` for an
+invalid event/page pair and `413` for an oversized body, all non-cacheable. Codex
+Security diff scan `3424a2a8-02aa-42b6-9de1-7b57963082ce` completed 26/26
+changed-file coverage and reported one Low/high-confidence CWE-770 finding:
+anonymous scripted event repetition. Cloudflare rule
+`b6afd1615e2042c898f2a446c7dbb525` now actively matches only
+`POST app.juro.uz/api/public/analytics`, permits 20 requests per IP per 10
+seconds, then blocks for 10 seconds. A production burst was not deliberately
+fired from the shared operator IP; the active rule, exact configuration and
+below-threshold matrix are the verified runtime boundary.
+
+The public crawl returned 78/78 successful canonical RU/UZ/EN URLs, and
+`robots.txt` points to the canonical sitemap. In-app browser QA rendered the RU
+home and lawyer catalogue, confirmed both consent actions are 44 pixels high and
+that essential-only dismissal removes the banner, then rendered the Client
+login, dedicated Lawyer login, fail-closed Admin re-auth boundary and status
+page. The status API generated at `2026-08-25T08:10:26.036Z` was operational
+8/8 with no incident.
+
+The release does not conceal its remaining controls: the Cloudflare account UI
+still reports USD 381.29 overdue, zone SSL is Full rather than Full (strict),
+general custom WAF posture remains minimal, and a real Core Web Vitals trace is
+not available. The execution policy also blocked deletion of exact local
+plaintext price-gate directory
+`C:\Users\A S U S\AppData\Local\Temp\juro-production-price-config-f42c48fc-20260825T074158Z`
+after verified private R2 readback. Manual removal remains required; no alternate
+shell was used to evade that safety boundary.
