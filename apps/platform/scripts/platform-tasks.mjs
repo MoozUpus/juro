@@ -98,6 +98,8 @@ const coreTestFiles = [
   "tests/comparison-change-decision.test.ts",
   "tests/document-registry.test.ts",
   "tests/document-access.test.ts",
+  "tests/signed-share-verification-guard.test.ts",
+  "tests/signed-share-protected-secret.test.ts",
   "tests/document-analysis-upload.test.ts",
   "tests/document-analysis-route-boundary.test.ts",
   "tests/document-analysis-provider.test.ts",

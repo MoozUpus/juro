@@ -108,6 +108,24 @@ function withSecurityHeaders(response: Response, url: URL): Response {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
+function requiresJuroHttps(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  return url.protocol === "http:"
+    && (hostname === "juro.uz" || hostname.endsWith(".juro.uz"));
+}
+
+function redirectJuroRequestToHttps(url: URL): Response {
+  const target = new URL(url);
+  target.protocol = "https:";
+  return withSecurityHeaders(new Response(null, {
+    status: 308,
+    headers: {
+      Location: target.toString(),
+      "Cache-Control": "private, no-store, max-age=0",
+    },
+  }), target);
+}
+
 // Image security config. SVG sources with .svg extension auto-skip the
 // optimization endpoint on the client side (served directly, no proxy).
 // To route SVGs through the optimizer (with security headers), set
@@ -117,6 +135,7 @@ function withSecurityHeaders(response: Response, url: URL): Response {
 const worker = {
   async fetch(request: Request, env: FrameworkEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (requiresJuroHttps(url)) return redirectJuroRequestToHttps(url);
     if (url.hostname === "malware-scanner.internal") {
       return handleMalwareScannerServiceRequest(request, env);
     }

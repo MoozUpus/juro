@@ -39,6 +39,38 @@ test("built Worker exposes fetch, queue, and scheduled module handlers", async (
   assert.equal(typeof worker.scheduled, "function");
 });
 
+test("public JURO platform hosts enforce HTTPS before application routing", async () => {
+  const worker = await createWorker();
+  const path = "/ru/auth/login?returnTo=%2Fru%2Findividual%2Fdashboard";
+  for (const hostname of [
+    "app.juro.uz",
+    "lawyer.juro.uz",
+    "admin.juro.uz",
+    "status.juro.uz",
+    "staging.app.juro.uz",
+    "admin.staging.juro.uz",
+    "status.staging.juro.uz",
+  ]) {
+    const response = await worker.fetch(
+      new Request(`http://${hostname}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+        redirect: "manual",
+      }),
+      {
+        APP_ENV: "production",
+        STATUS_HOSTNAME: "status.juro.uz",
+        ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+      },
+      context,
+    );
+    assert.equal(response.status, 308, hostname);
+    assert.equal(response.headers.get("location"), `https://${hostname}${path}`, hostname);
+    assert.match(response.headers.get("cache-control") ?? "", /no-store/u, hostname);
+  }
+});
+
 test("public status API fails safely without D1 and status host exposes no application routes", async () => {
   const worker = await createWorker();
   const statusRuntime = {

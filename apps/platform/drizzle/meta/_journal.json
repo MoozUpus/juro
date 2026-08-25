@@ -1114,6 +1114,13 @@
       "when": 1787554800000,
       "tag": "0158_lawyer_request_decisions",
       "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1787637043644,
+      "tag": "0159_signed_share_verification_guard",
+      "breakpoints": true
     }
   ]
 }

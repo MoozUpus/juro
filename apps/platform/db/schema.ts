@@ -633,14 +633,36 @@ export const standaloneSignedPdfShares = sqliteTable(
     ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
     tokenHash: text("token_hash").notNull().unique(),
     publicToken: text("public_token").notNull(),
+    publicTokenCiphertext: text("public_token_ciphertext"),
+    publicTokenIv: text("public_token_iv"),
+    publicTokenKeyVersion: text("public_token_key_version"),
     accessCode: text("access_code").notNull(),
     accessCodeHash: text("access_code_hash").notNull(),
+    accessCodeCiphertext: text("access_code_ciphertext"),
+    accessCodeIv: text("access_code_iv"),
+    accessCodeKeyVersion: text("access_code_key_version"),
     expiresAt: text("expires_at").notNull(),
     deactivatedAt: text("deactivated_at"),
     deletedAt: text("deleted_at"),
     createdAt: text("created_at").notNull(),
   },
   (table) => [index("standalone_signed_pdf_shares_file_idx").on(table.fileId)],
+);
+
+export const signedShareVerificationGuards = sqliteTable(
+  "signed_share_verification_guards",
+  {
+    shareId: text("share_id").primaryKey().references(() => standaloneSignedPdfShares.id, { onDelete: "cascade" }),
+    failedAttemptCount: integer("failed_attempt_count").notNull().default(0),
+    windowStartedAt: text("window_started_at").notNull(),
+    lockedUntil: text("locked_until"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("signed_share_verification_guards_lock_idx").on(table.lockedUntil),
+    check("signed_share_verification_failed_attempts_check", sql`${table.failedAttemptCount} >= 0 AND ${table.failedAttemptCount} <= 5`),
+    check("signed_share_verification_lock_check", sql`${table.lockedUntil} IS NULL OR ${table.lockedUntil} > ${table.windowStartedAt}`),
+  ],
 );
 
 export const signedShareSessions = sqliteTable(

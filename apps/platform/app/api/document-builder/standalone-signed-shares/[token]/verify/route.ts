@@ -1,6 +1,11 @@
 import { assertSafeWrite } from "../../../../../../lib/document-builder/auth/api";
 import { apiError, badRequest, jsonResponse } from "../../../../../../lib/document-builder/auth/responses";
 import { addHours, randomToken, sha256 } from "../../../../../../lib/document-builder/share-links/crypto";
+import {
+  activeSignedShareVerificationGuard,
+  clearSignedShareVerificationGuardStatement,
+  recordSignedShareVerificationFailure,
+} from "../../../../../../lib/document-builder/share-links/verification-guard";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 
@@ -27,12 +32,31 @@ export async function POST(request: Request, context: Context): Promise<Response
       return jsonResponse({ error: "Срок действия ссылки истёк", code: "LINK_EXPIRED" }, { status: 410 });
     }
     if (share.deactivatedAt || share.archivedAt) return jsonResponse({ error: "Доступ запрещён", code: "ACCESS_DENIED" }, { status: 403 });
-    if (await sha256(code) !== share.accessCodeHash) return jsonResponse({ error: "Доступ запрещён", code: "ACCESS_DENIED" }, { status: 403 });
+    const activeGuard = await activeSignedShareVerificationGuard(db, share.id, now);
+    if (activeGuard) {
+      return jsonResponse(
+        { error: "Слишком много попыток. Попробуйте позже.", code: "TOO_MANY_ATTEMPTS" },
+        { status: 429, headers: { "retry-after": String(activeGuard.retryAfterSeconds) } },
+      );
+    }
+    if (await sha256(code) !== share.accessCodeHash) {
+      const guard = await recordSignedShareVerificationFailure(db, share.id, now);
+      if (guard.lockedUntil) {
+        return jsonResponse(
+          { error: "Слишком много попыток. Попробуйте позже.", code: "TOO_MANY_ATTEMPTS" },
+          { status: 429, headers: { "retry-after": String(guard.retryAfterSeconds) } },
+        );
+      }
+      return jsonResponse({ error: "Доступ запрещён", code: "ACCESS_DENIED" }, { status: 403 });
+    }
     const session = randomToken(32);
     const sessionHash = await sha256(session);
     const sessionExpiresAt = addHours(now, 1);
-    await db.prepare("INSERT INTO signed_share_sessions (id, share_id, session_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), share.id, sessionHash, sessionExpiresAt, now).run();
+    await db.batch([
+      clearSignedShareVerificationGuardStatement(db, share.id, now),
+      db.prepare("INSERT INTO signed_share_sessions (id, share_id, session_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), share.id, sessionHash, sessionExpiresAt, now),
+    ]);
     const response = jsonResponse({ viewerUrl: `/api/document-builder/standalone-signed-shares/${token}/file` });
     response.headers.append("set-cookie", `juro_signed_share_session=${session}; Path=/api/document-builder/standalone-signed-shares/${token}/file; Max-Age=3600; HttpOnly; Secure; SameSite=Strict`);
     return response;
