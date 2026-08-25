@@ -121,8 +121,14 @@ async function reconcileCoreCodeTargetStates(env: CoreCodeEnv, now: string): Pro
       WHERE status='awaiting_ingestion' AND source_url IS NOT NULL AND EXISTS (
         SELECT 1 FROM legal_corpus_variants variant
         JOIN legal_corpus_documents document ON document.id=variant.document_id
-        WHERE variant.source_url=target.source_url AND variant.is_official_language_version=1
-          AND document.availability_status='ready'
+        WHERE variant.is_official_language_version=1 AND document.availability_status='ready'
+          AND (variant.source_url=target.source_url OR (
+            target.canonical_document_id IS NOT NULL AND EXISTS (
+              SELECT 1 FROM legal_corpus_source_aliases alias
+              WHERE alias.document_id=variant.document_id
+                AND alias.provider_source_id=target.canonical_document_id
+            )
+          ))
       )`).bind(now, now),
     env.DB.prepare(`UPDATE legal_corpus_core_code_targets AS target
       SET status='technically_unavailable',resolved_at=COALESCE(resolved_at,?),next_attempt_at=NULL,

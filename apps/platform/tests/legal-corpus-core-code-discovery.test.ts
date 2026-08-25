@@ -185,6 +185,52 @@ test("a discovered code remains prioritized until its exact source is indexed", 
   }
 });
 
+test("a verified provider alias settles a code when Lex remaps its document family URL", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const env = { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" };
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "air")!;
+    const discovered = await runNextLexCoreCodeDiscovery(env, {
+      now: new Date(0),
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(`<a href="/ru/docs/777">${target.titleRu}</a>`, {
+          headers: { "content-type": "text/html" },
+        }),
+    });
+    assert.equal(discovered.canonicalDocumentId, "lexuz:777");
+
+    const timestamp = new Date(0).toISOString();
+    sqlite.prepare(`INSERT INTO legal_corpus_documents
+      (id,provider,jurisdiction,source_class,scope,visibility,canonical_url,title,short_title,
+        availability_status,trusted,verification_status,approval_required,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "lexuz-family:776", "lex_uz", "UZ", "OFFICIAL_LEGISLATION", "global", "global",
+      "https://lex.uz/ru/docs/776", target.titleRu, target.titleRu, "ready", 1,
+      "official_source", 0, timestamp, timestamp,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_variants
+      (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,
+        current_version_id,created_at,updated_at,title,short_title)
+      VALUES (?,?,?,1,NULL,?,?,NULL,?,?,?,?)`).run(
+      "lexuz-family:776:ru", "lexuz-family:776", "ru", "https://lex.uz/ru/docs/776",
+      timestamp, timestamp, timestamp, target.titleRu, target.titleRu,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_source_aliases
+      (source_url,document_id,provider_source_id,language,created_at)
+      VALUES (?,?,?,?,?)`).run(
+      "https://lex.uz/ru/docs/777", "lexuz-family:776", "lexuz:777", "ru", timestamp,
+    );
+
+    await runNextLexCoreCodeDiscovery(env, { now: new Date(4 * 60_000) });
+    const indexed = sqlite.prepare("SELECT status FROM legal_corpus_core_code_targets WHERE target_id=?")
+      .get(target.id) as { status: string };
+    assert.equal(indexed.status, "indexed");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a paced core-code retry does not unlock generic catalogue discovery", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
