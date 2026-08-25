@@ -13,7 +13,8 @@ documents, cases and AI. The audit did not treat successful builds or polished
 screens as proof. Security, database, source, pricing, deployment and browser
 evidence are separate gates.
 
-The hardened release and the analytics/cost follow-up are live and CI-green.
+The hardened release, analytics/cost follow-up and public dependency-hardening
+follow-up are live and CI-green.
 Commit `f42c48fc` adds privacy-safe product measurement, explicit OpenAI
 non-storage, current provider pricing support, and durable
 AI/source/design/audit documentation. Its full suite, database backup/config
@@ -40,7 +41,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 | Area | State | Evidence / remaining gate |
 | --- | --- | --- |
-| Public routes and SEO | PASS in production | Sites version 79 is live; all 78 canonical RU/UZ/EN sitemap URLs returned a successful response and `robots.txt` points to the canonical sitemap. |
+| Public routes and SEO | PASS in production | Sites version 80 is live; all 78 canonical RU/UZ/EN sitemap URLs returned a successful response with exact canonical metadata and `robots.txt` points to the canonical sitemap. |
 | Transport/security headers | PASS in production | HTTPS-first Worker redirects, private no-store/noindex and restricted permissions policy tested; public Sites uses Cloudflare canonical redirects. |
 | Auth/RBAC/tenant isolation | PASS for this delta | The exact commit passed the complete 1086-test core and 201-test Cloudflare suites; the 26/26-file security diff scan found no tenant/privacy issue. Historical authenticated journey coverage remains scoped in the QA matrix. |
 | Signed public shares | PASS at baseline | Signed authorization and bounded transport deployed in the hardened release. |
@@ -77,11 +78,15 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
   gates.
 - Worker `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) receives 100%
   production traffic; `357d0438-1a5f-4b29-ba81-869cbc130c0a` is rollback.
-- Sites version 79 deployed the exact `apps/website` source from `f42c48fc`;
-  Sites version 78 is rollback.
+- Sites version 80 deployed the exact 121-file `apps/website` source from
+  `81aaf408`; Git tree `8941edebd6054e2919dbea92fcecd2dd59136359`
+  matched before save. Sites version 79 is rollback.
+- GitHub CI `32829635485` passed Website and Platform on `81aaf408`. The
+  hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero
+  findings; the broader immutable Standard scan remains explicitly PARTIAL.
 - The live telemetry route returned exact `204/403/403/400/413` for valid,
   foreign-origin, missing-fetch-metadata, invalid-pair and oversized requests.
-- `status.juro.uz/api/status`, generated at `2026-08-25T08:10:26.036Z`, was
+- `status.juro.uz/api/status`, generated at `2026-08-25T09:14:04.480Z`, was
   operational for all eight published components with no incident.
 - The price backup gate is complete in private R2, but the exact local plaintext
   staging directory could not be deleted because the execution policy blocked

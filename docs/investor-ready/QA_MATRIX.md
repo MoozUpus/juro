@@ -81,12 +81,13 @@ mode each survived a reload.
 
 | Gate | Status |
 | --- | --- |
-| Exact source / CI | VERIFIED — commit `f42c48fcd67c8b24f3e27369401d3ae8b6c1be8a`, Draft PR `#64`, CI `32822786084`; Website 42/42 and Platform 34/34 rendered, 1086/1086 core, 201/201 Cloudflare plus lint, types, artifact, environment, dependency and licence checks |
+| Exact source / CI | VERIFIED — public source commit `81aaf408cf573168f1e52c6349293f94db3a1a8e`, Draft PR `#64`, CI `32829635485`; Website and Platform passed. Local website 42/42, types, lint, 716-package licence policy, artifact validation and zero-vulnerability production audit also passed |
 | Product telemetry privacy | VERIFIED — 21 exact event names, bounded enum dimensions, no identifiers/content, explicit OpenAI `store:false`, public analytics only after optional local consent, exact three-key 512-byte request contract |
 | Public telemetry abuse control | VERIFIED with bounded runtime scope — Cloudflare rule `b6afd1615e2042c898f2a446c7dbb525` is Active for only `POST app.juro.uz/api/public/analytics`, 20 requests/IP/10 seconds, 10-second block. Valid and negative route probes passed; a deliberate production burst from the shared IP was not rehearsed |
 | Effective AI price configuration | VERIFIED — four official effective-dated rows; pre/post exports restored with `quickCheck=ok`, zero FK violations and exact private R2 SHA-256 readback. No post-effective AI usage event existed yet, so no runtime-cost baseline is claimed |
 | Platform production deployment | VERIFIED — Worker `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) receives 100%; rollback `357d0438-1a5f-4b29-ba81-869cbc130c0a` |
-| Public production deployment | VERIFIED — Sites version 79 deployed exact `apps/website` source from `f42c48fc`; version 78 is rollback; all 78 sitemap URLs passed |
-| In-app browser boundary QA | VERIFIED for anonymous/auth boundaries — RU public home/catalogue, 44-pixel cookie actions and essential-only dismissal, Client login, dedicated Lawyer persona, fail-closed Admin re-auth and public status page rendered. No new authenticated mutable business action was submitted for this delta |
-| Production health | VERIFIED at checkpoint — `2026-08-25T08:10:26.036Z`, operational 8/8, no incident |
+| Public production deployment | VERIFIED — Sites version 80 deployed exact 121-file `apps/website` source from `81aaf408` with matching Git tree `8941edebd6054e2919dbea92fcecd2dd59136359`; version 79 is rollback; all 78 sitemap URLs and exact canonical metadata passed |
+| Security review | VERIFIED with explicit scope — whole-repository Standard scan `df6f1247-116c-42b8-b233-a693efb52263` closed 8/8 planned surfaces with zero reportable findings but PARTIAL coverage; exact dependency-hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero findings |
+| In-app browser boundary QA | VERIFIED for anonymous/auth boundaries — fresh RU/UZ/EN public render, canonical/title/lang checks, no horizontal overflow or page log; earlier home/catalogue, 44-pixel cookie actions, Client login, dedicated Lawyer persona, fail-closed Admin re-auth and public status evidence remains recorded. No new authenticated mutable business action was submitted for this delta |
+| Production health | VERIFIED at checkpoint — `2026-08-25T09:14:04.480Z`, operational 8/8 |
 | Local plaintext cleanup | OPEN — exact price-gate directory remains because the execution policy blocked removal; private R2 is the verified recovery source |

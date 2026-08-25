@@ -16,6 +16,11 @@
 - Platform production Worker advanced from rollback version
   `f91406c2-903b-438f-bafb-01a64f5af2b7` to
   `357d0438-1a5f-4b29-ba81-869cbc130c0a`.
+- Public website dependency resolution now pins PostCSS `8.5.23` and Sharp
+  `0.35.3`; production `npm audit` reports zero vulnerabilities.
+- Sites version 80 deployed exact 121-file source from `81aaf408`; version 79
+  is the immediate public rollback. The Platform Worker remains version 146
+  because this follow-up did not change `apps/platform`.
 
 ## Verification
 
@@ -25,6 +30,14 @@
 - Production: migration ledger empty, D1 foreign-key violations zero, four-host
   HTTPS enforcement passed, signed-share unknown-token fail-closed passed and
   public status was operational.
+- Security: immutable whole-repository Standard scan
+  `df6f1247-116c-42b8-b233-a693efb52263` closed 8/8 planned surfaces with zero
+  reportable findings and explicit PARTIAL coverage. Exact hardening diff scan
+  `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero findings.
+- Public hardening release: GitHub CI `32829635485` passed Website and Platform;
+  42/42 local website tests, types, lint, 716-package licence policy and
+  deployable artifact passed; production crawl returned 78/78 exact canonical
+  URLs and status remained operational 8/8.
 
 ## Not represented as complete
 

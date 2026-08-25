@@ -38,8 +38,10 @@ The immutable target resolved advisory-affected PostCSS and Sharp versions.
 Reachability review rejected them as reportable production vulnerabilities:
 JURO does not accept untrusted CSS for build processing, public `next/image`
 usages are unoptimized, and the deployed Vinext image path uses Cloudflare
-Images rather than Sharp. The working tree still upgrades PostCSS to `8.5.23`
-and Sharp to `0.35.3`, closing the dependency-hygiene gap. See the upstream
+Images rather than Sharp. Public release commit `81aaf408` upgrades PostCSS to
+`8.5.23` and Sharp to `0.35.3`, closing the dependency-hygiene gap. Exact diff
+scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` covered the hardening range and
+retained zero reportable findings. See the upstream
 [PostCSS advisory](https://github.com/advisories/GHSA-fxqj-rqcc-2cmp) and
 [Sharp advisory](https://github.com/advisories/GHSA-f88m-g3jw-g9cj).
 

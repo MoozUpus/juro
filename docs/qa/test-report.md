@@ -16,6 +16,8 @@
 | GitHub Actions CI `32816221498` | PASS; Website and Platform |
 | Website dependency hardening | PASS; 42/42 tests, type-check, lint, licence policy, artifact validation and 0 production audit vulnerabilities |
 | Standard repository security scan `df6f1247-116c-42b8-b233-a693efb52263` | PASS within stated boundary; immutable `e4f407a8`, 1,898 tracked files, 8/8 planned surfaces, 0 reportable findings, PARTIAL coverage |
+| Hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` | PASS; complete changed-source coverage for `e4f407a8..81aaf408`, 0 reportable findings |
+| GitHub Actions CI `32829635485` | PASS on exact website source commit `81aaf408`; Website and Platform successful |
 
 The production artifact stayed inside the checked-in regression budgets:
 591.9 KiB CSS (600 KiB limit), 295.3 KiB initial browser JavaScript (320 KiB),
@@ -52,3 +54,9 @@ rehearsed against user data. No Lighthouse/Chrome trace ran because the
 `chrome-devtools` MCP was unavailable. Physical iOS/Android, Edge, Firefox,
 Safari/WebKit and native page zoom remain intentionally not tested under the
 current QA boundary.
+
+Post-deploy public QA for Sites version 80 verified localized RU/UZ/EN DOM,
+canonical metadata, no horizontal overflow, an empty in-app browser log,
+78/78 sitemap URLs with exact canonical URLs, canonical `robots.txt`, public
+security headers, private app/lawyer/admin no-store/noindex boundaries and an
+operational 8/8 status response.

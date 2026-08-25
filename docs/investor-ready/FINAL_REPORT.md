@@ -1,6 +1,6 @@
 # JURO investor-ready ecosystem — final report
 
-Evidence through 2026-08-24 (Tashkent). Branch: `codex/investor-ready-ecosystem`.
+Evidence through 2026-08-25 (Tashkent). Branch: `codex/investor-ready-ecosystem`.
 Draft PR: [#64](https://github.com/MoozUpus/juro/pull/64).
 
 This report separates implemented code, deployed production state and observed
@@ -706,3 +706,31 @@ plaintext price-gate directory
 `C:\Users\A S U S\AppData\Local\Temp\juro-production-price-config-f42c48fc-20260825T074158Z`
 after verified private R2 readback. Manual removal remains required; no alternate
 shell was used to evade that safety boundary.
+
+## 14. Repository security and public dependency hardening
+
+Codex Security Standard scan `df6f1247-116c-42b8-b233-a693efb52263`
+targeted immutable `e4f407a8b9fba0db8cac1a3cde681460ab58132f`, inventoried
+1,898 tracked files and closed 8/8 planned threat surfaces with zero reportable
+findings. Its coverage is PARTIAL, not exhaustive: independent delegated review,
+TAC and destructive production testing were unavailable. Remote URL document
+import remains disabled pending a dedicated SSRF/DNS-rebinding gate; voice
+provider retention and regional handling remain an operational assurance gap.
+
+The scan rejected advisory-affected PostCSS and Sharp versions as exploitable
+production findings because the public site does not route attacker-controlled
+CSS or images through those build-time packages. Commit
+`81aaf408cf573168f1e52c6349293f94db3a1a8e` nevertheless pins patched PostCSS
+`8.5.23` and Sharp `0.35.3`. Production audit returned zero vulnerabilities
+across 716 locked packages; 42/42 website tests, types, lint, licence and
+artifact validation passed. Exact diff scan
+`a2cb0d4a-7512-4b0a-aa5e-362681007619` covered the hardening range and retained
+zero findings. GitHub CI `32829635485` passed Website and Platform.
+
+Sites version 80 was saved from an exact 121-file source snapshot whose Git tree
+matched `8941edebd6054e2919dbea92fcecd2dd59136359`, then published as deployment
+`appgdep_6a8d5c0551d88191ab7b708f312fc84c`; version 79 is rollback. Production
+verification returned 78/78 exact canonical sitemap URLs, canonical robots,
+correct RU/UZ/EN title/lang/canonical DOM, no horizontal overflow, an empty page
+log, the expected public/private security headers and operational 8/8 status at
+`2026-08-25T09:14:04.480Z`.

@@ -9,12 +9,12 @@ item in the wider ecosystem audit is complete.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Commit | `f42c48fcd67c8b24f3e27369401d3ae8b6c1be8a` |
+| Latest public website source commit | `81aaf408cf573168f1e52c6349293f94db3a1a8e` |
 | Draft PR | `#64` |
-| GitHub Actions | CI run `32822786084`, Website and Platform successful |
+| GitHub Actions | CI run `32829635485`, Website and Platform successful on exact public source |
 | Production Worker | `juro` version `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146), 100% traffic |
 | Immediate application rollback | `357d0438-1a5f-4b29-ba81-869cbc130c0a` (version 145) |
-| Public Sites release | Version 79, deployment `appgdep_6a8d4bf3fe548191aa044dd3bed0f11f`; rollback version 78 |
+| Public Sites release | Version 80, deployment `appgdep_6a8d5c0551d88191ab7b708f312fc84c`; rollback version 79 |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
@@ -103,8 +103,9 @@ Platform passed rendered HTML 34/34, core 1086/1086 and Cloudflare 201/201,
 plus generated types, lint, type-check, deployable artifact, environment matrix,
 production dependency audit and licence policy.
 
-Sites version 79 contains the exact 121-file `apps/website` source extracted
-from `f42c48fc`; source comparison reported 121/121 and zero differences. The
+Sites version 80 contains the exact 121-file `apps/website` source extracted
+from `81aaf408`; source-tree comparison reported identical Git tree
+`8941edebd6054e2919dbea92fcecd2dd59136359`. The
 live custom domain rendered the localized privacy banner. Both consent controls
 measured 44 pixels high; choosing essential-only removed the banner without
 exposing private data. All 78 canonical sitemap URLs returned a successful
@@ -131,6 +132,26 @@ and the public status page. The status API generated at
 `2026-08-25T08:10:26.036Z` reported `overallStatus=operational`, all eight
 components operational and no incident.
 
+## Repository security and public dependency hardening
+
+Standard scan `df6f1247-116c-42b8-b233-a693efb52263` targeted immutable
+`e4f407a8`, inventoried 1,898 tracked files and closed 8/8 planned threat
+surfaces with zero reportable findings. Its coverage remains PARTIAL because an
+independent delegated baseline, TAC and destructive production tests were not
+available.
+
+The scan identified advisory-affected transitive PostCSS and Sharp versions as
+a dependency-hygiene candidate. Production exploit reachability was rejected:
+the public site does not process attacker-controlled CSS or images through
+those packages. Commit `81aaf408` still pins patched PostCSS `8.5.23` and Sharp
+`0.35.3`. Production `npm audit` reports zero vulnerabilities across 716 locked
+packages; 42/42 website tests, types, lint, licence and artifact gates passed.
+Exact hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero
+findings, GitHub CI `32829635485` passed, and Sites version 80 succeeded. A
+post-deploy crawl verified 78/78 canonical URLs; the in-app browser rendered
+RU/UZ/EN with no overflow or console/network log. Status generated at
+`2026-08-25T09:14:04.480Z` was operational 8/8.
+
 ## Open release risks
 
 - The Cloudflare account UI showed an overdue balance of USD 381.29 and warned
@@ -148,8 +169,15 @@ components operational and no incident.
   It contains plaintext export/restore/readback artifacts and still requires
   manual removal. Switching shells to evade the policy was intentionally not
   attempted.
+- Remote URL document import remains disabled in development, staging and
+  production. It must not be enabled until a dedicated SSRF/DNS-rebinding gate
+  validates the exact Cloudflare egress path.
+- Provider-side retention and regional handling for voice transcription and
+  synthesis remain an operational privacy assurance question; repository code
+  does not prove a zero-retention contractual boundary.
 
-Release status: the named analytics/cost production release is verified. This
+Release status: the named analytics/cost and website dependency-hardening
+production releases are verified. This
 is not a blanket ecosystem Definition of Done: Cloudflare billing, Full-not-
 Strict TLS, general WAF/CWV evidence, the local plaintext cleanup and any
 explicitly PARTIAL browser/device rows remain open.
