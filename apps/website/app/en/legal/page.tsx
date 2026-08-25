@@ -20,6 +20,7 @@ export const metadata: Metadata = {
   title: "Legal Centre",
   description: "English navigation for JURO’s published legal documents, with links to the Russian and Uzbek originals.",
   alternates: { canonical: "https://juro.uz/en/legal", languages: { ru: "https://juro.uz/ru/legal", uz: "https://juro.uz/uz/legal", en: "https://juro.uz/en/legal", "x-default": "https://juro.uz/ru/legal" } },
+  openGraph: { title: "Legal Centre", description: "English navigation for JURO’s published legal documents, with links to the Russian and Uzbek originals.", url: "https://juro.uz/en/legal", siteName: "JURO", type: "website" },
 };
 
 export default function EnglishLegalCenter() {

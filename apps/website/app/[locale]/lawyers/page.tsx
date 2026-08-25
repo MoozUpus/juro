@@ -22,7 +22,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const locale = localeOf((await params).locale);
   if (!locale) return {};
   const t = copy[locale];
-  return { title: t.title, description: t.description, robots: { index: true, follow: true }, alternates: { canonical: `https://juro.uz/${locale}/lawyers`, languages: { ru: "https://juro.uz/ru/lawyers", uz: "https://juro.uz/uz/lawyers", en: "https://juro.uz/en/lawyers", "x-default": "https://juro.uz/ru/lawyers" } } };
+  const canonical = `https://juro.uz/${locale}/lawyers`;
+  return { title: t.title, description: t.description, robots: { index: true, follow: true }, alternates: { canonical, languages: { ru: "https://juro.uz/ru/lawyers", uz: "https://juro.uz/uz/lawyers", en: "https://juro.uz/en/lawyers", "x-default": "https://juro.uz/ru/lawyers" } }, openGraph: { title: t.title, description: t.description, url: canonical, siteName: "JURO", type: "website" } };
 }
 
 export default async function LawyersPage({ params, searchParams }: Props) {

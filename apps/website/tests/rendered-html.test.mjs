@@ -109,6 +109,8 @@ test("serves all RU and UZ legal pages without authentication", async () => {
     const html = await canonical.text();
     assert.match(html, new RegExp(`<div[^>]+lang="${locale}"`), route);
     assert.match(html, new RegExp(`https://juro\\.uz/${locale}/legal/${canonicalSlug}`), canonicalRoute);
+    assert.match(html, new RegExp(`<link rel="alternate" hrefLang="en" href="https://juro\\.uz/en/legal/${canonicalSlug}"`), canonicalRoute);
+    assert.match(html, /<meta property="og:title" content="/, canonicalRoute);
   }
 });
 
@@ -206,6 +208,22 @@ test("serves an English legal guide for every published document without claimin
     assert.match(html, /not an English legal translation/i, slug);
     assert.match(html, new RegExp(`href="/ru/legal/${slug}"`), slug);
     assert.match(html, new RegExp(`href="/uz/legal/${slug}"`), slug);
+    assert.match(html, new RegExp(`<link rel="alternate" hrefLang="en" href="https://juro\\.uz/en/legal/${slug}"`), slug);
+    assert.match(html, /<meta property="og:title" content="/, slug);
+  }
+});
+
+test("publishes complete multilingual and Open Graph metadata for every legal centre", async () => {
+  const worker = await createWorker();
+  for (const locale of ["ru", "uz", "en"]) {
+    const route = `/${locale}/legal`;
+    const response = await worker.fetch(new Request(`http://localhost${route}`, { headers: { accept: "text/html" } }), runtime, context);
+    assert.equal(response.status, 200, route);
+    const html = await response.text();
+    for (const alternateLocale of ["ru", "uz", "en"]) {
+      assert.match(html, new RegExp(`<link rel="alternate" hrefLang="${alternateLocale}" href="https://juro\\.uz/${alternateLocale}/legal"`), `${route}:${alternateLocale}`);
+    }
+    assert.match(html, /<meta property="og:title" content="/, route);
   }
 });
 
@@ -221,5 +239,9 @@ test("renders the correct document language on each public lawyer catalogue loca
     const html = await response.text();
     assert.match(html, new RegExp(`<html\\b[^>]*\\blang="${locale}"`), locale);
     assert.match(html, new RegExp(`https://juro\\.uz/${locale}/lawyers`), locale);
+    for (const alternateLocale of ["ru", "uz", "en"]) {
+      assert.match(html, new RegExp(`<link rel="alternate" hrefLang="${alternateLocale}" href="https://juro\\.uz/${alternateLocale}/lawyers"`), `${locale}:${alternateLocale}`);
+    }
+    assert.match(html, /<meta property="og:title" content="/, locale);
   }
 });

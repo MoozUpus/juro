@@ -13,10 +13,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!isLegalLocale(locale)) return {};
   const ru = locale === "ru";
   const canonical = `https://juro.uz/${locale}/legal`;
+  const title = ru ? "Юридический центр" : "Yuridik markaz";
+  const description = ru ? "Все юридические документы JURO в одном каталоге." : "JUROning barcha yuridik hujjatlari bitta katalogda.";
   return {
-    title: ru ? "Юридический центр" : "Yuridik markaz",
-    description: ru ? "Все юридические документы JURO в одном каталоге." : "JUROning barcha yuridik hujjatlari bitta katalogda.",
-    alternates: { canonical, languages: { ru: "https://juro.uz/ru/legal", uz: "https://juro.uz/uz/legal", "x-default": "https://juro.uz/ru/legal" } },
+    title,
+    description,
+    alternates: { canonical, languages: { ru: "https://juro.uz/ru/legal", uz: "https://juro.uz/uz/legal", en: "https://juro.uz/en/legal", "x-default": "https://juro.uz/ru/legal" } },
+    openGraph: { title, description, url: canonical, siteName: "JURO", type: "website" },
   };
 }
 

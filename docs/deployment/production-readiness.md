@@ -169,6 +169,12 @@ RU/UZ/EN with no overflow or console/network log. Status generated at
   It contains plaintext export/restore/readback artifacts and still requires
   manual removal. Switching shells to evade the policy was intentionally not
   attempted.
+- Cleanup of the release-created public Sites snapshot and archive directories
+  `C:\Users\A S U S\AppData\Local\Temp\juro-sites-source-v80-81aaf408` and
+  `C:\Users\A S U S\AppData\Local\Temp\juro-sites-v80-81aaf408` was also
+  blocked by execution policy. They contain only the public source snapshot,
+  Git metadata without a persisted token and the public build archive; manual
+  cleanup remains desirable but this is not a private-data exposure.
 - Remote URL document import remains disabled in development, staging and
   production. It must not be enabled until a dedicated SSRF/DNS-rebinding gate
   validates the exact Cloudflare egress path.

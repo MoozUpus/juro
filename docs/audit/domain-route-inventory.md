@@ -7,7 +7,7 @@ source route is not treated as live merely because a page file exists.
 
 | Host | Runtime | Access/index boundary | Current evidence |
 | --- | --- | --- | --- |
-| `juro.uz` | Public Sites/website | Public and indexable only for useful canonical content | 33 sitemap URLs, all 2xx; RU/UZ/EN |
+| `juro.uz` | Public Sites/website | Public and indexable only for useful canonical content | 78 sitemap URLs, all 2xx with exact canonical metadata; RU/UZ/EN |
 | `www.juro.uz` | Cloudflare canonical redirect | Public | 308 to apex with path/query preservation in prior release evidence |
 | `app.juro.uz` | Platform Worker `juro` | Authenticated Client/Business; all application HTML/API noindex | HTTPS login 200; HTTP POST 308; production smoke passed |
 | `lawyer.juro.uz` | Platform Worker with server Lawyer-host routing | Professional persona, session + role/workspace checks | Dedicated RU login rendered; HTTP POST 308 |
@@ -48,10 +48,11 @@ deployability.
 | Status | `/api/status`, `/status` on status host | Public, content-free health | VERIFIED operational |
 | Legacy aliases | explicit redirect/rewrite allowlist only | Safe return paths; arbitrary aliases fail closed | Rendered suite passes; no blanket compatibility routing |
 
-The public website sitemap currently lists 33 canonical RU/UZ/EN URLs: home,
-Trust, video, lawyers, knowledge index plus three knowledge articles, AI lawyer,
-online lawyer and contract review. A fresh crawl followed every listed URL and
-found 33 final 2xx responses, zero unexpected redirects and zero failures.
+The public website sitemap currently lists 78 canonical RU/UZ/EN URLs across
+home, Trust, video, lawyer catalogue/profiles, knowledge and legal content. A
+fresh Sites-version-80 crawl followed every listed URL and found 78 final 2xx
+responses, exact canonical metadata, zero unexpected redirects and zero
+failures. `robots.txt` points to `https://juro.uz/sitemap.xml`.
 
 For historical authenticated route-by-route browser evidence, see
 `docs/investor-ready/QA_MATRIX.md`. This file deliberately distinguishes that

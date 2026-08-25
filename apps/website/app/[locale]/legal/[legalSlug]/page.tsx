@@ -18,7 +18,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: document.title,
     description: document.description,
-    alternates: { canonical, languages: { ru: `https://juro.uz${legalPath("ru", legalSlug)}`, uz: `https://juro.uz${legalPath("uz", legalSlug)}`, "x-default": `https://juro.uz${legalPath("ru", legalSlug)}` } },
+    alternates: { canonical, languages: { ru: `https://juro.uz${legalPath("ru", legalSlug)}`, uz: `https://juro.uz${legalPath("uz", legalSlug)}`, en: `https://juro.uz/en/legal/${legalSlug}`, "x-default": `https://juro.uz${legalPath("ru", legalSlug)}` } },
+    openGraph: { title: document.title, description: document.description, url: canonical, siteName: "JURO", type: "article" },
   };
 }
 

@@ -2,15 +2,22 @@
 
 ## Public website
 
-A fresh fetch of all 33 sitemap URLs found:
+A full Sites-version-80 fetch of all 78 sitemap URLs found:
 
-- 33/33 HTTP 2xx;
-- 33/33 non-empty titles;
-- 33/33 non-empty meta descriptions;
-- 33/33 canonical URLs exactly matching the sitemap URL;
-- 33/33 with at least RU/UZ/EN hreflang alternatives;
-- 33/33 with Open Graph titles;
+- 78/78 HTTP 2xx;
+- 78/78 non-empty titles;
+- 78/78 non-empty meta descriptions;
+- 78/78 canonical URLs exactly matching the sitemap URL;
+- 40/78 with complete RU/UZ/EN hreflang alternatives;
+- 18/78 with explicit Open Graph titles;
 - zero unexpected `noindex` pages.
+
+The expanded crawl therefore rejected the earlier SEO pass. Missing English
+alternatives were isolated to Russian and Uzbek legal routes, while legal
+routes and the three lawyer catalogue pages lacked explicit Open Graph titles.
+The source fix and 43/43 rendered test suite pass locally; production remains
+unverified until the replacement Sites version is deployed and all 78 URLs are
+re-crawled.
 
 `robots.txt` returns 200, allows the public site, disallows `/api/` and the two
 retired landing-test paths, and points to the canonical sitemap.
@@ -26,9 +33,9 @@ content.
 ## Open checks
 
 - Structured-data validity was not re-run with an external schema validator.
-- Dynamic public Lawyer profiles were not present in the current sitemap and
-  therefore were not included in the 33-URL crawl; publication/consent policy
-  must control any future inclusion.
+- Public Lawyer profiles are represented in the current sitemap only after the
+  existing publication/consent policy admits them; this crawl did not infer
+  professional verification from sitemap inclusion.
 - Lighthouse SEO scoring is not claimed because `chrome-devtools` MCP was
   unavailable. The deterministic metadata/status crawl passed, but it is not a
   substitute for a Lighthouse run.
