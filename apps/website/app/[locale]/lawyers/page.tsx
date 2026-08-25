@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!locale) return {};
   const t = copy[locale];
   const canonical = `https://juro.uz/${locale}/lawyers`;
-  return { title: t.title, description: t.description, robots: { index: true, follow: true }, alternates: { canonical, languages: { ru: "https://juro.uz/ru/lawyers", uz: "https://juro.uz/uz/lawyers", en: "https://juro.uz/en/lawyers", "x-default": "https://juro.uz/ru/lawyers" } }, openGraph: { title: t.title, description: t.description, url: canonical, siteName: "JURO", type: "website" } };
+  return { title: t.title, description: t.description, robots: { index: true, follow: true }, alternates: { canonical, languages: { ru: "https://juro.uz/ru/lawyers", uz: "https://juro.uz/uz/lawyers", en: "https://juro.uz/en/lawyers", "x-default": "https://juro.uz/ru/lawyers" } }, openGraph: { title: t.title, description: t.description, url: canonical, siteName: "JURO", type: "website", images: [{ url: "/juro-og.png", width: 1681, height: 909, alt: t.title }] }, twitter: { card: "summary_large_image", title: t.title, description: t.description, images: ["/juro-og.png"] } };
 }
 
 export default async function LawyersPage({ params, searchParams }: Props) {

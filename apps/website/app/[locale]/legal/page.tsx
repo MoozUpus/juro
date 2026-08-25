@@ -19,7 +19,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     alternates: { canonical, languages: { ru: "https://juro.uz/ru/legal", uz: "https://juro.uz/uz/legal", en: "https://juro.uz/en/legal", "x-default": "https://juro.uz/ru/legal" } },
-    openGraph: { title, description, url: canonical, siteName: "JURO", type: "website" },
+    openGraph: { title, description, url: canonical, siteName: "JURO", type: "website", images: [{ url: "/juro-og.png", width: 1681, height: 909, alt: title }] },
+    twitter: { card: "summary_large_image", title, description, images: ["/juro-og.png"] },
   };
 }
 

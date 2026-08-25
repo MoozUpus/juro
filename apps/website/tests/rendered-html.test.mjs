@@ -111,6 +111,8 @@ test("serves all RU and UZ legal pages without authentication", async () => {
     assert.match(html, new RegExp(`https://juro\\.uz/${locale}/legal/${canonicalSlug}`), canonicalRoute);
     assert.match(html, new RegExp(`<link rel="alternate" hrefLang="en" href="https://juro\\.uz/en/legal/${canonicalSlug}"`), canonicalRoute);
     assert.match(html, /<meta property="og:title" content="/, canonicalRoute);
+    assert.match(html, /<meta property="og:image" content="https:\/\/juro\.uz\/juro-og\.png"/, canonicalRoute);
+    assert.match(html, /<meta name="twitter:image" content="https:\/\/juro\.uz\/juro-og\.png"/, canonicalRoute);
   }
 });
 
@@ -165,6 +167,8 @@ test("serves the English investor video from its dedicated public route", async 
   assert.match(html, /https:\/\/pub-28041c6b6dff4877a700421e6cd2c986\.r2\.dev\/investor\/juro-investor-presentation-en-v1\.mp4/);
   assert.match(html, /autoplay/i);
   assert.match(html, /muted/);
+  assert.match(html, /<meta property="og:image" content="https:\/\/juro\.uz\/juro-og\.png"/);
+  assert.match(html, /<meta name="twitter:image" content="https:\/\/juro\.uz\/juro-og\.png"/);
 });
 
 test("every discoverable internal public link resolves", async () => {
@@ -210,6 +214,8 @@ test("serves an English legal guide for every published document without claimin
     assert.match(html, new RegExp(`href="/uz/legal/${slug}"`), slug);
     assert.match(html, new RegExp(`<link rel="alternate" hrefLang="en" href="https://juro\\.uz/en/legal/${slug}"`), slug);
     assert.match(html, /<meta property="og:title" content="/, slug);
+    assert.match(html, /<meta property="og:image" content="https:\/\/juro\.uz\/juro-og\.png"/, slug);
+    assert.match(html, /<meta name="twitter:image" content="https:\/\/juro\.uz\/juro-og\.png"/, slug);
   }
 });
 
@@ -224,6 +230,8 @@ test("publishes complete multilingual and Open Graph metadata for every legal ce
       assert.match(html, new RegExp(`<link rel="alternate" hrefLang="${alternateLocale}" href="https://juro\\.uz/${alternateLocale}/legal"`), `${route}:${alternateLocale}`);
     }
     assert.match(html, /<meta property="og:title" content="/, route);
+    assert.match(html, /<meta property="og:image" content="https:\/\/juro\.uz\/juro-og\.png"/, route);
+    assert.match(html, /<meta name="twitter:image" content="https:\/\/juro\.uz\/juro-og\.png"/, route);
   }
 });
 
@@ -243,5 +251,7 @@ test("renders the correct document language on each public lawyer catalogue loca
       assert.match(html, new RegExp(`<link rel="alternate" hrefLang="${alternateLocale}" href="https://juro\\.uz/${alternateLocale}/lawyers"`), `${locale}:${alternateLocale}`);
     }
     assert.match(html, /<meta property="og:title" content="/, locale);
+    assert.match(html, /<meta property="og:image" content="https:\/\/juro\.uz\/juro-og\.png"/, locale);
+    assert.match(html, /<meta name="twitter:image" content="https:\/\/juro\.uz\/juro-og\.png"/, locale);
   }
 });

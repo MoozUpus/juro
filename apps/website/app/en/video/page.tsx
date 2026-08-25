@@ -25,11 +25,13 @@ export const metadata: Metadata = {
     locale: "en_US",
     alternateLocale: ["ru_RU", "uz_UZ"],
     type: "website",
+    images: [{ url: "/juro-og.png", width: 1681, height: 909, alt: "JURO video presentation" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "JURO video presentation",
     description: "See how JURO turns a legal question into a clear next step.",
+    images: ["/juro-og.png"],
   },
 };
 
