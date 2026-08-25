@@ -53,6 +53,10 @@
   Worker Custom Domains, and post-change probes passed all six production and
   three protected-staging HTTPS boundaries without a `526`; status remained
   operational 8/8 with no active incident at `2026-08-25T11:25:16.533Z`.
+- Managed WAF verification: Cloudflare Security Settings showed the Free
+  Managed Ruleset checked and `Always active`; its viewer listed 31 blocking
+  rules. The scoped public-analytics rate limit remains active. No arbitrary
+  custom rule was added merely to change the 0/5 custom-rule count.
 
 ## Not represented as complete
 

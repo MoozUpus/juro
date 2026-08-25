@@ -169,12 +169,16 @@ staging outcomes (`302/302/200`) with no `526`. Status generated at
 `2026-08-25T11:25:16.533Z` remained operational 8/8 with no active incident.
 The control-plane rollback is the previous `Full` mode.
 
+Cloudflare Security Settings also confirmed that the Free Managed Ruleset is
+checked and `Always active`; its viewer lists 31 rules with `Block` actions.
+The separate public-analytics rate limit remains active. Custom rules are 0/5,
+but this is not represented as absent WAF protection, and no unrelated rule was
+added solely to change that count.
+
 ## Open release risks
 
 - The Cloudflare account UI showed an overdue balance of USD 381.29 and warned
   about possible service interruption. No financial action was taken.
-- The scoped public-analytics edge rate limit is active. General custom rules
-  remain 0/5, so no broader custom WAF posture is claimed.
 - A real Lighthouse/Core Web Vitals trace is not claimed because the required
   `chrome-devtools` MCP was unavailable in this session.
 - The verified private price-backup round trip completed, but the execution
@@ -199,6 +203,6 @@ The control-plane rollback is the previous `Full` mode.
 
 Release status: the named analytics/cost and website dependency-hardening
 production releases are verified. This
-is not a blanket ecosystem Definition of Done: Cloudflare billing, general
-WAF/CWV evidence, the local plaintext cleanup and any explicitly PARTIAL
-browser/device rows remain open.
+is not a blanket ecosystem Definition of Done: Cloudflare billing, CWV
+evidence, the local plaintext cleanup and any explicitly PARTIAL browser/device
+rows remain open.

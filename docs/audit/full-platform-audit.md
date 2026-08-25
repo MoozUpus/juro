@@ -53,7 +53,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | AI costs | ACTIVE CONFIGURATION | Four official, effective-dated production price rows passed pre/post D1 export, isolated restore, FK, private R2 and SHA-256 readback gates. No post-effective AI event exists yet, so no measured runtime cost baseline is claimed. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
 | Accessibility | PARTIAL | Static contracts present; no automated WCAG runner or completed deployed manual matrix. |
-| Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active and zone origin TLS is now `Full (strict)` with production/staging smoke. Overdue billing, minimal broader custom WAF posture and unavailable real CWV tracing remain explicit risks. |
+| Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Overdue billing and unavailable real CWV tracing remain explicit risks. |
 
 ## Definition of done for this candidate
 

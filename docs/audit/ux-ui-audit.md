@@ -56,8 +56,9 @@ integrity, privacy-safe activation telemetry, and truthful production status.
   audit; service continuity is an owner action, not a code change.
 - Zone SSL mode was Full during baseline. It is now explicit Full (Strict) after
   certificate/origin classification and production/staging traffic validation.
-  The scoped analytics rate rule is active; broader custom WAF posture remains
-  a separate open control.
+  Cloudflare's 31-rule Free Managed Ruleset is `Always active`, and the scoped
+  analytics rate rule is active. Custom rules remain 0/5 intentionally; an
+  unrelated rule was not added merely to change the count.
 - Core Web Vitals could not be measured because the required Chrome DevTools
   performance connector was unavailable. Artifact budgets are green but are not
   an LCP/INP/CLS claim.

@@ -702,10 +702,13 @@ Cloudflare zone origin encryption is now explicit `Full (strict)`. Sites
 reported active apex SSL, Worker Custom Domains covered app/lawyer/admin/status,
 and six production plus three protected-staging probes retained their expected
 boundaries without `526`; the prior `Full` mode is rollback. The release does
-not conceal its remaining controls: the account UI still reports USD 381.29
-overdue, general custom WAF posture remains minimal, and a real Core Web Vitals
-trace is not available. The execution policy also blocked deletion of exact local
-plaintext price-gate directory
+not infer WAF absence from an empty custom-rule list: Cloudflare Security
+Settings reports the 31-rule Free Managed Ruleset `Always active`, and the
+separate analytics rate limit is active. No unrelated custom rule was added
+solely to change the 0/5 count. The release does not conceal its remaining
+controls: the account UI still reports USD 381.29 overdue, and a real Core Web
+Vitals trace is not available. The execution policy also blocked deletion of
+exact local plaintext price-gate directory
 `C:\Users\A S U S\AppData\Local\Temp\juro-production-price-config-f42c48fc-20260825T074158Z`
 after verified private R2 readback. Manual removal remains required; no alternate
 shell was used to evade that safety boundary.
