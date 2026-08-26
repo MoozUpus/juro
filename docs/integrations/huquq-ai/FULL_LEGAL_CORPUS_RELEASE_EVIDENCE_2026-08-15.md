@@ -12618,6 +12618,65 @@ and 44,273 indexed chunks; all 44 discovery checkpoints were completed,
 terminal failures and dead-letter jobs were zero, and the new run was active.
 The release floors and queue freeze remain open; production is untouched.
 
+## Partial version materialization recovery (2026-08-26, 15:47Z–15:58Z)
+
+The 13:08Z scheduler recovery exposed a correctness defect that aggregate
+queue status did not show. Historical version
+`lexuz-family:97661:uz-Latn:v96:d7edca003c28` had an immutable version header
+but zero provisions and zero chunks after its Worker was interrupted. Job
+`legal-version:c0271e0588b3c0017bdc36afe4c4` then completed its second attempt
+because the old processor treated any matching header hash as a fully stored
+version.
+
+Commit `badf9f38` makes the matching-hash path verify exact provision count,
+exact chunk count and sparse coverage for every expected chunk. An incomplete
+header now resumes the same version ID through the existing idempotent writes;
+the job cannot complete until the post-write materialization invariant passes.
+It also revalidates each job that completed immediately after a recorded
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` exactly once for that stale attempt. The
+bounded attempt predicate prevents a permanent requeue loop.
+
+Local verification passed platform type-check, lint, 63/63 focused ingestion
+and Worker-boundary tests, and an exact shard-2 Wrangler dry-run (3,736.63 KiB
+upload / 820.98 KiB gzip). The regression test persists only the immutable
+header, simulates a Worker interruption, and proves that the next attempt
+reuses its ID, materializes two provisions/two chunks with sparse coverage,
+and subsequently returns `unchanged`.
+
+The previous run `ed916a97-c3bb-4df4-89bb-3446e3828044` completed and released
+its lock at `2026-08-26T15:47:15.243Z`. Only then was staging Worker version
+`11e89e2d-3c60-4f77-8f14-5370bae40c2e` deployed at 100% with the unchanged
+`juro-staging-corpus-shard-2` binding. The first new-version run
+`c9371773-802c-446d-b0ae-9548901960d0` completed from
+`2026-08-26T15:48:40.209Z` to `2026-08-26T15:58:51.536Z` with
+`error_code=NULL` and released its lock.
+
+All five unique jobs with stale-running completion evidence received their one
+bounded revalidation attempt, finished `completed` with
+`last_error_code=NULL`, and left zero remaining stale-revalidation candidates.
+The formerly empty version completed attempt 3 at
+`2026-08-26T15:53:00.931Z` and now has 770 provisions, 771 chunks and sparse
+coverage for all 771 chunks.
+
+The post-run lock-free snapshot observed zero scheduler locks, zero retrying,
+failed or dead-letter jobs, and zero terminal/technically-unavailable failure
+rows. It records 1,091 canonical documents, 1,331 variants, 10,855 exact
+unique current provisions under the checked-in formula, 45,102 physical
+current provision rows and 45,172/45,172 current/indexed chunks. All 44/44
+discovery checkpoints remain count-aligned and all 19/19 core-code targets
+remain indexed. Broken current-version pointers, orphan variants or versions,
+provision reference/ownership errors and chunk reference/version errors are
+all zero. Fetch work is 1,283 completed / 25,611 queued; version work is 669
+completed / 2,816 queued; 50 variants remain without a current version;
+acquisition is still `active`; D1 size is 3,616,612,352 bytes.
+
+This proves the repair, not corpus completion. The document gate is
+1,091/1,500 and the exact unique-provision gate is 10,855/22,000; both queues
+and acquisition remain open. Federation, snapshot, indexed 314-scenario
+evaluation, Qdrant/D1 restore, CI, browser QA and release remain gated.
+Production, DNS, production flags, merge state and production data were not
+changed.
+
 ## Shard run closure (2026-08-26, 13:19Z; retry recovered)
 
 The cron run `9b3f247b-6ca0-4445-b262-d3be771855d2` completed at
