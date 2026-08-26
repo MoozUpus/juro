@@ -22,6 +22,7 @@ export const LEGAL_CORPUS_STAGING_D1_DATABASE_NAME = "juro-staging-corpus-v2";
 export const LEGAL_CORPUS_STAGING_D1_DATABASE_NAMES = [
   LEGAL_CORPUS_STAGING_D1_DATABASE_NAME,
   "juro-staging-corpus-shard-1",
+  "juro-staging-corpus-shard-2",
 ] as const;
 
 /**

@@ -33,6 +33,12 @@ test("release capacity evidence may name the explicit staging shard", () => {
   assert.doesNotThrow(() => legalCorpusReleaseEvidenceSchema.parse(evidence));
 });
 
+test("release capacity evidence may name the active shard-2 staging database", () => {
+  const evidence = validEvidence();
+  evidence.d1Capacity.databaseName = "juro-staging-corpus-shard-2";
+  assert.doesNotThrow(() => legalCorpusReleaseEvidenceSchema.parse(evidence));
+});
+
 test("release gate requires a fresh staging D1 capacity probe below the release reserve", () => {
   const evidence = validEvidence();
   evidence.d1Capacity.observedAt = "2026-08-14T11:59:00.000Z";
