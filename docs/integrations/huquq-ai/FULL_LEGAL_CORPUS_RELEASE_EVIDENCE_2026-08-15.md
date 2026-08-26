@@ -12506,3 +12506,20 @@ provision/version reference or version mismatches. Fifty variants remain
 without a current version while acquisition is active. The document and exact-
 provision floors, queue/acquisition freeze, federation, snapshot, evaluation,
 restore, CI, and browser gates therefore remain open; production is untouched.
+
+## Shard run closure (2026-08-26, 12:22Z; transient retry)
+
+The cron run `7753d700-6896-4d24-991c-eb57da98a973` completed at
+`2026-08-26T12:22:48.469Z` with `status=completed` and
+`error_code=LEGAL_SOURCE_TIMEOUT`. The timeout belongs to fetch job
+`legal-corpus:cedf70c12f6b30c2e7940eead4e8`, source
+`https://lex.uz/docs/7768370`, language `uz-Cyrl`. Its failure ledger row is
+`retry_state=retrying`, `retryable=1`, `retry_count=1`; it is not terminal and
+not dead-letter. The post-run aggregate is 961 canonical documents, 10,228
+unique current provisions and 44,206 indexed chunks. All 44 discovery
+checkpoints are `completed`, the lock is released, and the staging D1 size is
+`3,256,479,744` bytes (approximately 3.03 GiB). The queue is not frozen:
+1,751 ingestion jobs are `completed`, 28,496 are `queued` or `retrying`, and
+4,417 are live/manual or version work. The acquisition state remains `active`.
+No code change or staging redeploy was justified; the next sequential run must
+retry the timeout before any release gate can open. Production is untouched.
