@@ -12468,3 +12468,31 @@ cross-owned current-version pointers, orphan variants or versions, provision
 reference/ownership errors, and chunk reference/version errors. Fifty variants
 remain without a current version while acquisition is active. The queue and
 acquisition are not frozen, so no downstream release gate is unlocked.
+
+## Shard run closure (2026-08-26, 12:11Z)
+
+The cron run `570a36fd-71e9-4d50-8ac8-7a3added185f` completed at
+`2026-08-26T12:11:40.749Z` with `status=completed` and `error_code=NULL`.
+The post-run read-only aggregate is 953 canonical documents, 10,191 unique
+current provisions and 44,169 indexed chunks. All 44 discovery checkpoints are
+`completed`, and the distributed `legal-corpus-worker` lock is released. The
+queue is not frozen: 1,739 ingestion jobs are `completed` and 28,498 remain
+`queued`; 4,410 of the queued/retrying jobs are live/manual or version work
+(catalog discovery jobs are excluded from the release queue calculation).
+Terminal failures and dead-letter jobs are both zero. The staging D1 size is
+`3,234,033,664` bytes (approximately 3.01 GiB). Release floors, queue freeze
+and all post-ingestion snapshot/evaluation/restore/CI gates remain open;
+production is untouched.
+
+## Lock-free quality snapshot (2026-08-26, 12:11Z)
+
+The run completed in 660.801 seconds and released its lock before the next
+scheduled slot. The compact read-only snapshot observed an empty
+`scheduled_locks` table. The resulting totals are 953 canonical documents,
+10,191 exact unique current provisions and 44,169/44,169 current/indexed
+chunks, with zero unindexed current chunks. Fetch work is 1,145 completed /
+25,607 queued and version work is 594 completed / 2,891 queued; no ingestion
+job is `running`, `failed` or `dead_letter` in the lock-free snapshot. The
+five failure-ledger rows remain non-terminal `retrying` records. Fifty variants
+remain without a current version while acquisition is active. The queue and
+acquisition are not frozen, so no downstream release gate is unlocked.
