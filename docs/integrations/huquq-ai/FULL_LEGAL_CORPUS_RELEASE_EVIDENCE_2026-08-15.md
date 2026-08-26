@@ -12566,3 +12566,40 @@ version mismatches. Fifty variants remain without a current version while
 acquisition is active. The document and exact-provision floors,
 queue/acquisition freeze, federation, snapshot, evaluation, restore, CI, and
 browser gates therefore remain open; production is untouched.
+
+## Shard run closure (2026-08-26, 12:47Z)
+
+The cron run `cbc8d708-bde5-4210-8e18-295116d9a00f` completed at
+`2026-08-26T12:47:38.278Z` with `status=completed` and `error_code=NULL`.
+It ran for 658.330 seconds and released the distributed lock about 62 seconds
+before the next 12-minute slot. The post-run read-only aggregate is 977
+canonical documents, 10,284 exact unique current provisions and 44,263 indexed
+current chunks. All 44 discovery checkpoints remain `completed`, all 19
+core-code targets remain `indexed`, and terminal failures and dead-letter jobs
+remain zero. The queue is not frozen: 1,775 ingestion jobs are `completed` and
+28,490 remain `queued`. Acquisition remains `active`, and the staging D1 size
+is 3,300,761,600 bytes (approximately 3.07 GiB). Release floors, queue freeze
+and all post-ingestion snapshot/evaluation/restore/CI gates remain open;
+production is untouched.
+
+## Lock-free quality snapshot (2026-08-26, 12:47Z)
+
+The compact read-only snapshot explicitly observed an empty `scheduled_locks`
+table. Since the 12:34Z baseline, the shard added 9 canonical documents, 9
+variants, 33 exact unique current provisions, 34 physical current provision
+rows and 34 indexed current chunks. The resulting totals are 977 documents,
+1,217 variants, 10,284 exact unique current provisions, 44,193 physical current
+provision rows and 44,263/44,263 current/indexed chunks, with zero unindexed
+current chunks.
+
+Fetch work is 1,169 completed / 25,611 queued and version work is 606 completed
+/ 2,879 queued. All 11 historical failure-ledger rows remain non-terminal
+`retrying` evidence while every related current job is `completed`; there are
+zero currently retrying, failed or dead-letter ingestion jobs. Checks again
+found zero broken or cross-owned current-version pointers, orphan variants or
+versions, provision document/variant/version reference or ownership errors,
+and chunk provision/version reference or version mismatches. Fifty variants
+remain without a current version while acquisition is active. The document and
+exact-provision floors, queue/acquisition freeze, federation, snapshot,
+evaluation, restore, CI, and browser gates therefore remain open; production
+is untouched.
