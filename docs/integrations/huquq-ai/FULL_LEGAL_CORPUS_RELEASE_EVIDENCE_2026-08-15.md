@@ -12926,3 +12926,29 @@ rollover and quality suites passed 12/12, platform lint and type-check passed,
 and the exact Wrangler dry-run retained shard-2, 20 sequential jobs, dense
 retrieval disabled, and sparse backfill disabled. Production, DNS, production
 flags, merge state, and production data were not changed.
+
+## Lock-free shard quality snapshot (2026-08-26, 17:48Z)
+
+The checked-in command `npm run capture:legal-corpus:shard-quality` captured a
+read-only snapshot at `2026-08-26T17:48:12.285Z` after run
+`b281ed87-4284-430c-b0b5-2136c3e3d036` completed at
+`2026-08-26T17:47:00.225Z`. The empty-lock guard passed (`locks=0`), the
+acquisition state was `active`, and the command reported zero rows written.
+
+The snapshot recorded 1,178 canonical documents, 1,418 variants, 11,325 exact
+unique current provisions, 45,910 physical current provisions, and 45,981
+current/indexed chunks. All 44 checkpoints were completed and aligned, all 19
+core targets were indexed, and no checkpoint errors were present. Fifty
+variants remained without a current version and stayed in the open ingestion
+queue; all other integrity checks were clean: zero empty version headers,
+broken current pointers, orphan variants, orphan versions, provision errors,
+chunk errors, or current chunks missing sparse coverage. The failure ledger had
+14 historical rows, with zero retrying jobs, zero failed jobs, zero
+terminal/unavailable failures and zero dead-letter jobs.
+
+The acquisition queue was not frozen: 25,611 fetch jobs and 2,774 version jobs
+were queued (28,385 queued jobs in total), and the release queue predicate
+still found open non-catalog work. The release floors remain 322 documents and
+10,675 exact unique provisions short. Release snapshot, indexed 314-scenario
+evaluation, Qdrant/D1 restore, CI and federation activation remain pending;
+production was not changed.
