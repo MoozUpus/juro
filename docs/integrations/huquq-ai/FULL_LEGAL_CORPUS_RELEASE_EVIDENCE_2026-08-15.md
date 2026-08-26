@@ -12617,3 +12617,20 @@ the shard had 981 canonical documents, 10,294 exact unique current provisions
 and 44,273 indexed chunks; all 44 discovery checkpoints were completed,
 terminal failures and dead-letter jobs were zero, and the new run was active.
 The release floors and queue freeze remain open; production is untouched.
+
+## Shard run closure (2026-08-26, 13:19Z; retry recovered)
+
+The cron run `9b3f247b-6ca0-4445-b262-d3be771855d2` completed at
+`2026-08-26T13:19:13.508Z` with `status=completed` and the actionable run
+code `LEGAL_CORPUS_INGESTION_FAILED`. The code was emitted for one retryable
+version-fetch attempt at `2026-08-26T13:13:46.247Z` for
+`https://lex.uz/uz/docs/-97664?ONDATE=28.03.2023`; the corresponding job
+completed on attempt 2 with `last_error_code=NULL`. The stale-run recovery
+operation completed, and no ingestion job is currently failed or retrying.
+Post-run counters are 988 canonical documents, 10,329 exact unique
+current provisions and 44,308 indexed chunks; all 44 discovery checkpoints are
+`completed`, terminal failures are zero and dead-letter jobs are zero. The
+queue remains open (latest probe: 1,791 completed and 28,485 queued; 4,432
+live/manual or version jobs), and the next sequential run
+`e303d886-c5f4-4f4f-a008-765f36caaa54` started at `2026-08-26T13:20:39.951Z`.
+The release floors and queue freeze remain open; production is untouched.
