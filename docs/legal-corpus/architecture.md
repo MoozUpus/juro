@@ -206,9 +206,11 @@ treated as indexed corpus. The shard has its own D1-backed lock and remains a
 single sequential Lex.uz stream with the same 20-second delay. Release
 evidence must name the exact database(s) and must not add v2 and shard counts
 unless a separately tested federated retrieval/evidence contract is present.
-The shard packs up to 24 sequential ingestion jobs into one staging lease (the
-primary Worker remains at five); this changes only bounded batch packing and
-never reduces the source delay or opens a second stream.
+The shard packs up to 22 sequential ingestion jobs into one staging lease (the
+primary Worker remains at five). A live 24-job trial crossed the twelve-minute
+scheduler slot and therefore reduced effective cadence; the 22-job cap keeps
+the batch below that boundary without reducing the source delay or opening a
+second stream.
 
 ### Sparse-index capacity transition
 
