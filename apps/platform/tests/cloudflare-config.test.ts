@@ -214,9 +214,28 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
 
     assert.deepEqual(
       config.d1_databases.map(({ binding }) => binding),
-      ["DB"],
+      environment === "staging"
+        ? [
+            "DB",
+            "LEGAL_CORPUS_LEGACY_DB",
+            "LEGAL_CORPUS_V2_DB",
+            "LEGAL_CORPUS_SHARD_1_DB",
+            "LEGAL_CORPUS_SHARD_2_DB",
+          ]
+        : ["DB"],
     );
     assert.equal(config.d1_databases[0]?.migrations_dir, "./drizzle");
+    assert.deepEqual(
+      config.d1_databases.slice(1).map(({ binding, migrations_dir }) => ({ binding, migrations_dir })),
+      environment === "staging"
+        ? [
+            { binding: "LEGAL_CORPUS_LEGACY_DB", migrations_dir: undefined },
+            { binding: "LEGAL_CORPUS_V2_DB", migrations_dir: undefined },
+            { binding: "LEGAL_CORPUS_SHARD_1_DB", migrations_dir: undefined },
+            { binding: "LEGAL_CORPUS_SHARD_2_DB", migrations_dir: undefined },
+          ]
+        : [],
+    );
     assert.equal(
       config.d1_databases[0]?.migrations_pattern,
       environment === "production"
