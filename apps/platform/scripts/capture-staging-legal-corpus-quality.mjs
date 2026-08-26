@@ -8,6 +8,8 @@ const platformDirectory = join(scriptDirectory, "..");
 const wranglerPath = join(platformDirectory, "node_modules", "wrangler", "bin", "wrangler.js");
 const configPath = join(platformDirectory, "wrangler.legal-corpus-shard.jsonc");
 const snapshotSqlPath = join(scriptDirectory, "legal-corpus-shard-quality-snapshot.sql");
+const scheduleSeconds = 4 * 60;
+const minimumCaptureWindowSeconds = 45;
 const config = JSON.parse(readFileSync(configPath, "utf8"));
 const databaseBindings = config.env?.staging?.d1_databases?.filter(
   (binding) => binding?.binding === "DB",
@@ -53,16 +55,27 @@ function executeReadOnly(sql) {
 }
 
 const boundarySql = `WITH latest AS (
-  SELECT id,status,error_code,started_at,finished_at
+  SELECT id,cron,status,error_code,started_at,finished_at
   FROM scheduled_runs ORDER BY started_at DESC LIMIT 1
 )
 SELECT (SELECT COUNT(*) FROM scheduled_locks) AS lock_count,
-  id,status,error_code,started_at,finished_at
+  id,cron,status,error_code,started_at,finished_at,
+  unixepoch('now') AS now_epoch,
+  CAST((unixepoch(finished_at)+${scheduleSeconds - 1})/${scheduleSeconds} AS INTEGER)
+    * ${scheduleSeconds} AS next_due_epoch
 FROM latest;`;
 const preflight = executeReadOnly(boundarySql);
 const preflightRow = preflight.results?.[0];
 if (!preflightRow || Number(preflightRow.lock_count) !== 0 || preflightRow.status === "running") {
   throw new Error(`LEGAL_CORPUS_QUALITY_SNAPSHOT_LOCKED:${preflightRow?.id ?? "unknown"}`);
+}
+const secondsUntilNextDue = Number(preflightRow.next_due_epoch) - Number(preflightRow.now_epoch);
+if (preflightRow.cron !== "*/4 * * * *"
+  || !Number.isFinite(secondsUntilNextDue)
+  || secondsUntilNextDue < minimumCaptureWindowSeconds) {
+  throw new Error(
+    `LEGAL_CORPUS_QUALITY_SNAPSHOT_WINDOW_UNSAFE:${secondsUntilNextDue}`,
+  );
 }
 
 const sql = readFileSync(snapshotSqlPath, "utf8");
@@ -94,6 +107,7 @@ console.log(JSON.stringify({
   },
   latestRun: preflightRow,
   postflightRun: postflightRow,
+  captureWindowSeconds: secondsUntilNextDue,
   snapshot: snapshotRow,
   meta: {
     rowsRead: Number(snapshot.meta?.rows_read ?? 0),
