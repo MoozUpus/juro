@@ -12952,3 +12952,28 @@ still found open non-catalog work. The release floors remain 322 documents and
 10,675 exact unique provisions short. Release snapshot, indexed 314-scenario
 evaluation, Qdrant/D1 restore, CI and federation activation remain pending;
 production was not changed.
+
+## Lock-free shard quality snapshot (2026-08-26, 18:00Z)
+
+The checked-in command `npm run capture:legal-corpus:shard-quality` captured a
+read-only snapshot at `2026-08-26T18:00:37.030Z` after run
+`a42e349b-f2ba-47c6-984b-c8934358187c` completed at
+`2026-08-26T17:58:57.273Z`. Both the preflight and postflight observed the
+same completed run ID with `lock_count=0`; the command reported
+`rowsWritten=0` and therefore did not mutate D1.
+
+The snapshot recorded 1,189 canonical documents, 1,429 variants, 11,362 exact
+unique current provisions, 45,947 physical current provisions, and 46,018
+current/indexed chunks. All 44 checkpoints were completed and aligned, all 19
+core targets were indexed, and no checkpoint errors were present. Fifty
+variants remained without a current version and stayed in the open ingestion
+queue; all other integrity checks were zero. The failure ledger had 14
+historical rows, with zero retrying jobs, zero failed jobs, zero
+terminal/unavailable failures and zero dead-letter jobs.
+
+The acquisition queue was not frozen: 25,611 fetch jobs and 2,769 version jobs
+were queued (28,380 queued jobs in total), and `acquisition_state` remained
+`active`. The release floors remain 311 documents and 10,638 exact unique
+provisions short. Release snapshot, indexed 314-scenario evaluation,
+Qdrant/D1 restore, CI and federation activation remain pending; production was
+not changed.
