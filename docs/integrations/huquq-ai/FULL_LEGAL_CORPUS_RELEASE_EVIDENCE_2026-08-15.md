@@ -12723,3 +12723,22 @@ before RRF and citation validation. This permits a later all-source staging
 read without returning four copies of the same norm, but it does not waive the
 required frozen partition/snapshot evidence. `LEGAL_CORPUS_FEDERATED_ENABLED`
 remains `false`; no production binding or flag was changed.
+
+## Post-deploy shard run closure (2026-08-26, 16:24Z–16:34Z)
+
+The first scheduled shard run after Worker version `8e4a33a3-a8bd-4f4f-a549-aa06d40e456f`
+(`25efb6fa-2380-49d1-a539-664175cd3b40`) completed at
+`2026-08-26T16:34:50.439Z` with `status=completed` and `error_code=NULL`.
+The generic partial-completion revalidation fix was therefore exercised by a
+real staging cycle. A sequential lock-free read observed an empty
+`scheduled_locks` table, 1,117 canonical documents, 1,357 language variants,
+10,935 exact unique current provisions, 45,182 physical current provisions,
+and 45,253/45,253 current/indexed chunks. All 44 discovery checkpoints were
+completed; terminal failure rows and dead-letter jobs were both zero.
+
+Ingestion is not frozen: 28,415 jobs remain queued/running and 4,491 are
+non-catalog queued work. This is a successful recovery/deployment probe, not
+corpus completion. The document floor is 1,117/1,500 and the exact
+unique-provision floor is 10,935/22,000. Snapshot, indexed 314-scenario
+evaluation, Qdrant/D1 restore, CI, federation activation and browser gates
+remain pending; production was not changed.
