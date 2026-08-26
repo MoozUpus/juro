@@ -105,6 +105,20 @@ release gate.
 ## Reusable rollover runbook
 
 Run from `apps/platform`. Every D1 operation is staging-only and sequential.
+Capture one reproducible read-only quality row only after the source run and
+distributed lock have closed:
+
+```powershell
+npm run capture:legal-corpus:shard-quality
+```
+
+The command preflights the latest run and `scheduled_locks`, rejects an active
+lease, then passes the checked-in SQL to Wrangler as one `--command` argument.
+The final query is also guarded by the empty-lock predicate and accepts sparse
+coverage from either the legacy or compressed representation. This avoids
+mixing counters from different runs and avoids Wrangler's summary-only output
+for remote `--file` execution.
+
 First, while the checked-in shard config still binds `DB` to the source, apply
 the additive fence migration and deploy the barrier-aware Worker to the source:
 
