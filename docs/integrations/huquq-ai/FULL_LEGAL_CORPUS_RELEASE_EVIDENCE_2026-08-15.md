@@ -2,6 +2,47 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## First 600-document milestone while acquisition remains open (2026-08-26, 05:00–05:35Z)
+
+Three consecutive single-stream staging runs closed normally in this interval:
+`39b7837c-9176-457d-932f-7e26a1c2c79b` ran from `05:00:47.581Z` to
+`05:10:32.382Z`, `866c9030-4510-490e-b9a9-8b443fafccb7` ran from
+`05:12:47.388Z` to `05:22:32.222Z`, and
+`394379d8-e4b0-4793-b9c7-011b368b7f54` ran from `05:24:47.387Z` to
+`05:34:33.589Z`. All three finished with `status=completed` and
+`error_code=NULL`. The `legal-corpus-worker` lock was empty before the final
+read-only snapshot and remained empty after the totals, integrity, queue,
+failure-ledger and capacity queries. The shard-control row remained `active`,
+and the staging Worker remained version
+`1fb18209-c95f-46c5-abf5-6400a6442879` at 100% with the exact shard-2 D1
+binding.
+
+The final lock-free snapshot recorded 44/44 completed and count-aligned
+discovery checkpoints, 19/19 indexed core-code targets, zero failed or
+dead-letter ingestion jobs, zero running jobs, and zero terminal or
+technically unavailable failure records. The failure ledger still contained
+only four historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows across
+three fetch jobs; all three current jobs are `completed`, their
+`last_error_code` values are cleared, and no new retry row appeared in this
+interval. Queue composition was 735 completed and 25,653 queued fetch jobs,
+plus 387 completed and 3,096 queued version jobs.
+
+Using the exact checked-in dashboard formula, shard 2 contained 605 canonical
+documents, 783 language variants, **8,648 unique current provisions**, 41,020
+current provision rows, and 41,083 current/indexed chunks. All current chunks
+were indexed. Fifty newly discovered variants still had no current version
+and remained in the open ingestion pipeline; there were zero broken non-null
+current-version references, zero orphan provisions, and zero orphan chunks.
+`wrangler d1 info` reported 2,163,359,744 bytes, below the 8 GB rollover reserve
+and Cloudflare's 10 GB per-database boundary.
+
+This is the first verified lock-free snapshot above 600 canonical documents,
+but it is progress evidence only. The document floor remains 605/1,500, the
+exact unique-provision floor remains 8,648/22,000, acquisition is active, and
+both queues remain open. The indexed-chunk floor alone is crossed. Federation
+freeze, snapshot, the indexed 314-scenario evaluation, Qdrant/D1 restore
+gates, CI, release and production therefore remain unauthorized.
+
 ## First 550-document milestone and recovered long-page leases (2026-08-26, 02:24–04:47Z)
 
 Single-stream staging run `ecbb1a8c-1808-43f1-8910-f72eb8908db1` started at
