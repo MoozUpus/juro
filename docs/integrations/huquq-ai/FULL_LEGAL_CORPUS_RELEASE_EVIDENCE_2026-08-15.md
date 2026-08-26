@@ -2,27 +2,54 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
-## Batch-22 staging verification after cadence fix (2026-08-26, 09:32–09:45Z)
+## Batch cadence rollback and first 850-document milestone (2026-08-26, 09:32–10:03Z)
 
-The staging-only Worker deployment `d3979813-445b-4231-83f3-32c5826fa503`
-serves `juro-staging-corpus-shard-2` with the bounded sequential batch set to
-22. The Worker retains the 20-second Lex pacing, one stream and distributed
-lease; dense retrieval, sparse compression and federation remain disabled.
-The boundary suite passed `186/186` before deployment.
+Run `d4f502c5-b588-47dc-96e9-76cfe3893f4e` started before the batch-22
+deployment and was therefore the third batch-24 run. It closed normally from
+`09:32:39.947Z` to `09:44:57.805Z` with `status=completed` and
+`error_code=NULL`. The lock-free snapshot recorded 850 canonical documents,
+1,088 language variants, **9,793 unique current provisions** by the checked-in
+dashboard formula, 43,660 physical current provision rows, and
+43,729/43,729 current/indexed chunks. Queue composition was 1,040 completed /
+25,607 queued fetch jobs and 537 completed / 2,946 queued version jobs.
 
-Run `d4f502c5-b588-47dc-96e9-76cfe3893f4e` closed with `status=completed`,
-`error_code=NULL`, from `09:32:39.947Z` to `09:44:57.805Z`. A subsequent
-read-only D1 snapshot found no `legal-corpus-worker` lock. It recorded 850
-canonical documents, 1,080 language variants, 9,793 unique current provisions
-by the checked-in dashboard formula, and 43,725 current indexed chunks. The
-ingestion queue still contained 28,553 queued/running/retrying jobs.
+The three batch-24 runs started at `09:00:39.950Z`, `09:16:39.947Z` and
+`09:32:39.947Z`. Their approximately 12-minute-15-second runtimes crossed the
+12-minute start slot, so each next usable four-minute cron tick was 16 minutes
+after the previous start. The nominal cadence was therefore only 24/16 = 1.5
+jobs per minute, below the previously verified batch-20 cadence of 20/12 =
+1.67 jobs per minute. The functional and integrity checks were healthy, but
+the larger batch did not improve throughput.
 
-The same snapshot recorded 44/44 completed discovery checkpoints, zero
-terminal failure rows and zero dead-letter jobs. This is progress evidence
-only: the document floor is 850/1,500, the unique-provision floor is
-9,793/22,000, acquisition remains active and the queue is not frozen.
-Federation, corpus freeze, snapshot, indexed 314-scenario evaluation,
-Qdrant/D1 restore gates, CI release and production remain closed.
+A bounded batch-22 trial was then deployed as identical Worker versions
+`d3979813-445b-4231-83f3-32c5826fa503` and
+`97ab6904-07fe-400b-921a-bf0c861201e9`. Its first run,
+`3f1a0b8c-177b-4a8d-9e0f-a82e328e57a6`, also crossed the boundary, running
+from `09:48:40.151Z` to `10:00:59.442Z`. The hypothesis that 22 jobs would fit
+the slot was therefore rejected from live evidence rather than retained.
+
+Commit `1163a3f2` restores and hard-caps the proven sequential batch at 20.
+The focused config/Worker boundary suite passed 24/24 and a Wrangler dry-run
+preserved the exact shard-2 D1 and staging-only bindings. Deployment
+`6de814b8-f46c-4d1e-861b-2e37612cc1ed` now serves Worker version
+`25688f1b-68f6-464e-af67-9ea35360ed73` at 100% with
+`LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN=20`. The 20-second Lex pacing,
+one-stream lock, shadow mode and disabled dense/sparse-compression flags are
+unchanged.
+
+The final lock-free rollback baseline contained 861 canonical documents,
+1,099 variants, **9,834 unique current provisions**, 43,709 physical current
+provision rows, and 43,778/43,778 current/indexed chunks. Fetch jobs were
+1,051 completed / 25,607 queued and version jobs were 542 completed / 2,941
+queued. The failure ledger remained at five historical retry rows, with zero
+terminal or technically unavailable failures, zero running/failed/dead-letter
+jobs and zero current unindexed chunks. Acquisition remained `active`, the
+queues remained open, and D1 size was 2,922,037,248 bytes.
+
+This remains progress evidence only: the document floor is 861/1,500 and the
+exact unique-provision floor is 9,834/22,000. Federation, queue/acquisition
+freeze, snapshot, indexed 314-scenario evaluation, Qdrant/D1 restore gates,
+CI, release and production remain closed.
 
 ## Batch-24 staging verification while acquisition remains open (2026-08-26, 09:00–09:29Z)
 
@@ -66,12 +93,9 @@ completed jobs, all with `last_error_code=NULL`. `wrangler d1 info` reported
 2,859,843,584 bytes, still below the 8 GB rollover reserve and Cloudflare's
 10 GB per-database boundary.
 
-This verifies that the bounded batch increase is healthy on staging; it does
-not authorize a release. The document floor remains 839/1,500, the exact
-unique-provision floor remains 9,747/22,000, acquisition remains `active`, and
-both queues remain open. Federation freeze, snapshot, the indexed 314-scenario
-evaluation, Qdrant/D1 restore gates, CI, release and production remain
-unauthorized.
+This verifies functional and integrity safety of the batch-24 trial, but the
+later cadence comparison above shows that it reduced effective throughput and
+has been superseded by the proven batch-20 cap. It never authorized a release.
 
 ## First 800-document milestone while acquisition remains open (2026-08-26, 08:00–08:47Z)
 
@@ -12230,3 +12254,16 @@ is not frozen: 1,051 fetch jobs and 542 version jobs are `completed`, with
 dead-letter jobs are both zero. The staging D1 size is approximately 2.92 GB.
 Release floors, queue freeze and all post-ingestion snapshot/evaluation/restore/
 CI gates remain open; production is untouched.
+
+## Shard run closure (2026-08-26, 10:17Z)
+
+The cron run `b79fc4fe-3e32-4dc9-a937-1c17e8510eee` completed at
+`2026-08-26T10:17:51.462Z` with `status=completed` and `error_code=NULL`.
+The post-run read-only aggregate is 871 canonical documents, 9,870 unique
+current provisions and 43,819 indexed chunks. All 44 discovery checkpoints are
+`completed`; the distributed `legal-corpus-worker` lock is released. The queue
+is not frozen: 1,062 fetch jobs and 548 version jobs are `completed`, with
+28,542 fetch/version jobs still `queued`. Terminal failures and dead-letter jobs
+are both zero. The staging D1 size is approximately 2.96 GB. Release floors,
+queue freeze and all post-ingestion snapshot/evaluation/restore/CI gates remain
+open; production is untouched.
