@@ -12411,3 +12411,24 @@ Terminal failures and dead-letter jobs are both zero. The staging D1 size is
 3,175,174,144 bytes (approximately 2.96 GiB). Release floors, queue freeze and
 all post-ingestion snapshot/evaluation/restore/CI gates remain open; production
 is untouched.
+
+## Lock-free quality snapshot (2026-08-26, 11:47Z)
+
+The run completed in 652.435 seconds and released its lock about 68 seconds
+before the next expected 12-minute slot. The compact read-only snapshot
+explicitly observed an empty `scheduled_locks` table. Since the preceding
+lock-free baseline, the shard added 8 canonical documents, 9 variants, 40 exact
+unique current provisions, 50 physical current provision rows and 50 indexed
+current chunks. The resulting totals are 935 documents, 1,175 variants, 10,113
+exact unique current provisions, 44,009 physical current provision rows and
+44,079/44,079 current/indexed chunks, with zero unindexed current chunks.
+
+All 44 discovery checkpoints remain `completed`, all 19 core-code targets
+remain `indexed`, and the five failure-ledger rows remain non-terminal
+`retrying` records. Fetch work is 1,127 completed / 25,606 queued and version
+work is 584 completed / 2,899 queued. No ingestion job was `running`, `failed`
+or `dead_letter` in the lock-free snapshot. Checks again found zero broken or
+cross-owned current-version pointers, orphan variants or versions, provision
+reference/ownership errors, and chunk reference/version errors. Fifty variants
+remain without a current version while acquisition is active. The queue and
+acquisition are not frozen, so no downstream release gate is unlocked.
