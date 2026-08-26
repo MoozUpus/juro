@@ -12603,3 +12603,17 @@ remain without a current version while acquisition is active. The document and
 exact-provision floors, queue/acquisition freeze, federation, snapshot,
 evaluation, restore, CI, and browser gates therefore remain open; production
 is untouched.
+
+## Scheduler lease recovery (2026-08-26, 13:08Z)
+
+The sequential run `e8f75220-5114-40b9-91b0-9dff2ca54350` stopped renewing its
+lease at `2026-08-26T12:51:08.060Z`; its lock expired at
+`2026-08-26T13:06:08.060Z`. The next cron tick safely recorded
+`status=failed` with `error_code=LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED` and
+claimed the next run `9b3f247b-6ca0-4445-b262-d3be771855d2` at
+`2026-08-26T13:08:39.949Z`. This is the designed stale-run fence, not a
+source terminal failure or a dead-letter ingestion job. At the recovery probe
+the shard had 981 canonical documents, 10,294 exact unique current provisions
+and 44,273 indexed chunks; all 44 discovery checkpoints were completed,
+terminal failures and dead-letter jobs were zero, and the new run was active.
+The release floors and queue freeze remain open; production is untouched.
