@@ -12807,3 +12807,20 @@ corpus completion. The document floor is 1,117/1,500 and the exact
 unique-provision floor is 10,935/22,000. Snapshot, indexed 314-scenario
 evaluation, Qdrant/D1 restore, CI, federation activation and browser gates
 remain pending; production was not changed.
+
+## Subsequent shard run closure (2026-08-26, 16:36Z–16:46Z)
+
+The next scheduled run `08680a4f-9eb8-40cd-bb8c-35fc3d4e6e6c` completed at
+`2026-08-26T16:46:58.520Z` with `status=completed` and `error_code=NULL`.
+The lock-free read observed zero scheduler locks, 1,127 canonical documents,
+1,367 language variants, 10,968 exact unique current provisions, 45,215
+physical current provisions and 45,286/45,286 current/indexed chunks. All 44
+discovery checkpoints remained completed and terminal failure/dead-letter
+counts remained zero.
+
+The acquisition queue is still open: 28,410 ingestion jobs remain
+queued/running, including 4,496 non-catalog jobs. This cycle advances the
+corpus but does not satisfy the release gate. The document floor is 1,127/1,500
+and the exact unique-provision floor is 10,968/22,000. Snapshot, indexed
+314-scenario evaluation, Qdrant/D1 restore, CI and federation activation
+remain pending; production was not changed.
