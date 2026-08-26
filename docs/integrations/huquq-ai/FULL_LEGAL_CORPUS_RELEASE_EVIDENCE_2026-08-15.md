@@ -2,6 +2,56 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## First 800-document milestone while acquisition remains open (2026-08-26, 08:00–08:47Z)
+
+Four consecutive single-stream staging runs closed normally in this interval:
+`2c333b04-3cf3-4eb1-9ee4-b300fb79cf40` ran from `08:00:49.880Z` to
+`08:10:20.262Z`, `b4936ddd-a4e7-4438-a82f-9c20e28ed97b` ran from
+`08:12:47.390Z` to `08:22:15.549Z`,
+`49736de2-ee01-4874-a2c1-179877b502dd` ran from `08:24:47.388Z` to
+`08:34:20.792Z`, and `4fc9c300-7551-4fda-8a94-14de6b7855a8` ran from
+`08:36:47.390Z` to `08:46:30.090Z`. All four finished with
+`status=completed` and `error_code=NULL`. The `legal-corpus-worker` lock was
+empty before the final read-only snapshot and remained empty after the totals,
+integrity, queue and failure-ledger queries. The shard-control row remained
+`active`, and the staging Worker remained version
+`1fb18209-c95f-46c5-abf5-6400a6442879` at 100% with the exact shard-2 D1
+binding.
+
+One read-only polling request during the final run returned a transient
+Cloudflare API authentication error (`10000`). `wrangler whoami` immediately
+confirmed the existing OAuth account and D1 permission, the next identical
+probe succeeded, and the same Worker run continued renewing its lease before
+closing normally. This was a monitoring-request failure, not an ingestion-run
+failure.
+
+The final lock-free snapshot recorded 44/44 completed and count-aligned
+discovery checkpoints, 19/19 indexed core-code targets, zero failed or
+dead-letter ingestion jobs, zero running jobs, and zero terminal or
+technically unavailable failure records. The failure ledger remained unchanged
+at five historical retrying rows across four currently completed jobs: four
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows across three fetch jobs and one
+`LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE` alternate-language redirect row.
+Every current job has `last_error_code=NULL`. Queue composition was 991
+completed and 25,610 queued fetch jobs, plus 514 completed and 2,969 queued
+version jobs.
+
+Using the exact checked-in dashboard formula, shard 2 contained 804 canonical
+documents, 1,039 language variants, **9,599 unique current provisions**,
+43,466 physical current provision rows, and 43,533 current/indexed chunks. All
+current chunks were indexed. Fifty newly discovered variants still had no
+current version and remained in the open ingestion pipeline; there were zero
+broken non-null current-version references, zero orphan provisions, and zero
+orphan chunks. `wrangler d1 info` reported 2,745,708,544 bytes, below the 8 GB
+rollover reserve and Cloudflare's 10 GB per-database boundary.
+
+This is the first verified lock-free snapshot above 800 canonical documents,
+but it is progress evidence only. The document floor remains 804/1,500, the
+exact unique-provision floor remains 9,599/22,000, acquisition is active, and
+both queues remain open. The indexed-chunk floor alone is crossed. Federation
+freeze, snapshot, the indexed 314-scenario evaluation, Qdrant/D1 restore
+gates, CI, release and production therefore remain unauthorized.
+
 ## First 750-document milestone while acquisition remains open (2026-08-26, 07:24–07:59Z)
 
 Three consecutive single-stream staging runs closed normally in this interval:
