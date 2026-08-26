@@ -288,6 +288,99 @@ test("an interrupted historical version resumes the same immutable materializati
   }
 });
 
+test("a legacy generic-failure completion is revalidated and repairs its partial header once", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const sourceUrl = "https://lex.uz/ru/docs/12347?ONDATE=26.04.2023";
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusRevision(env, {
+      sourceUrl,
+      now,
+      correlationId: "generic-partial-header-revalidation",
+    });
+    let persistedBatches = 0;
+    const interruptedDb = {
+      prepare: d1.prepare.bind(d1),
+      async batch(statements: D1PreparedStatement[]) {
+        const results = await d1.batch(statements);
+        persistedBatches += 1;
+        if (persistedBatches === 1) throw new Error("SIMULATED_WORKER_INTERRUPTION");
+        return results;
+      },
+    } as unknown as D1Database;
+    const interrupted = await runNextLegalCorpusIngestionJob(
+      { ...env, DB: interruptedDb },
+      { now, fetchImpl: fetchFor(lexHtml()) },
+    );
+    assert.deepEqual(interrupted, {
+      claimed: true,
+      status: "retrying",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_CORPUS_INGESTION_FAILED",
+    });
+    const partial = sqlite.prepare("SELECT id FROM legal_corpus_versions").get() as { id: string };
+    assert.ok(partial.id);
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_provisions").get() as { count: number }).count),
+      0,
+    );
+
+    // Reproduce the legacy processor's false completion: it incremented the
+    // attempt but returned unchanged solely because the header hash existed.
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='completed',attempt_count=2,next_attempt_at=NULL,
+        last_error_code=NULL,updated_at=? WHERE id=?`).run(
+      new Date(now.getTime() + 60_000).toISOString(),
+      queued.jobId,
+    );
+    const repaired = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 120_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(repaired, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const completed = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; errorCode: string | null;
+      };
+    assert.deepEqual({ ...completed }, {
+      status: "completed",
+      attemptCount: 3,
+      errorCode: null,
+    });
+    assert.equal(
+      (sqlite.prepare("SELECT id FROM legal_corpus_versions").get() as { id: string }).id,
+      partial.id,
+    );
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_provisions").get() as { count: number }).count),
+      2,
+    );
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_chunks").get() as { count: number }).count),
+      2,
+    );
+
+    const noLoop = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 180_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(noLoop, {
+      claimed: false,
+      status: "empty",
+      jobId: null,
+      safeErrorCode: null,
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("known Lex reader controls are repaired from stored corpus titles without touching legal text", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const storedAt = now.toISOString();

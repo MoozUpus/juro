@@ -102,6 +102,10 @@ const SIGNED_LEX_UNAVAILABLE_RECOVERY_CODE = "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAIL
 const LANGUAGE_TEXT_UNAVAILABLE_RECOVERY_CODE = "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE";
 const ALTERNATE_LANGUAGE_REDIRECT_CODE = "LEGAL_CORPUS_ALTERNATE_LANGUAGE_REDIRECT";
 const STALE_RUNNING_ERROR_CODE = "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT";
+const COMPLETED_PARTIAL_WRITE_RISK_CODES = [
+  STALE_RUNNING_ERROR_CODE,
+  "LEGAL_CORPUS_INGESTION_FAILED",
+] as const;
 // A normal scheduled invocation is fenced by a seven-minute distributed lock
 // and its Lex requests have shorter individual timeouts. Keep a wider window
 // so a slow but live invocation is never reclaimed by the next cron tick.
@@ -783,29 +787,36 @@ async function reconcileStaleRunningJob(
   });
 }
 
-async function reconcileCompletedStaleRunningJob(
+async function reconcileCompletedPartialWriteRiskJob(
   db: D1Database,
   now: string,
 ): Promise<void> {
   // A Worker can be interrupted after inserting the immutable version header
   // but before all article/chunk batches are durable. Older processors then
-  // treated the header hash as a completed version. Re-read each completion
-  // exactly once per recorded stale attempt so the materialization invariant
-  // below can verify or repair it without creating a permanent retry loop.
+  // treated the header hash as a completed version. A stale-running timeout
+  // proves an interrupted processor, while the generic retryable ingestion
+  // code can represent an interruption after the header batch but before the
+  // article batches. Re-read each affected completion exactly once per
+  // recorded failed attempt so the materialization invariant below can verify
+  // or repair it without creating a permanent retry loop. Source-fetch
+  // timeouts and explicit source conditions occur before the header write and
+  // are deliberately excluded from this extra fetch.
+  const placeholders = COMPLETED_PARTIAL_WRITE_RISK_CODES.map(() => "?").join(",");
   const candidate = await db.prepare(`SELECT job.id,
-      job.attempt_count AS attemptCount,max(failure.retry_count) AS staleAttempt
+      job.attempt_count AS attemptCount,max(failure.retry_count) AS failedAttempt
     FROM legal_corpus_ingestion_jobs AS job
     INNER JOIN legal_corpus_failures AS failure ON failure.job_id=job.id
     WHERE job.status='completed' AND job.handoff_id IS NULL
-      AND failure.error_code=?
+      AND failure.retryable=1
+      AND failure.error_code IN (${placeholders})
     GROUP BY job.id,job.attempt_count
     HAVING job.attempt_count=max(failure.retry_count)+1
     ORDER BY min(failure.attempted_at) ASC,job.id ASC
     LIMIT 1
-  `).bind(STALE_RUNNING_ERROR_CODE).first<{
+  `).bind(...COMPLETED_PARTIAL_WRITE_RISK_CODES).first<{
     id: string;
     attemptCount: number;
-    staleAttempt: number;
+    failedAttempt: number;
   }>();
   if (!candidate) return;
   await db.prepare(`UPDATE legal_corpus_ingestion_jobs
@@ -816,17 +827,18 @@ async function reconcileCompletedStaleRunningJob(
       AND attempt_count=?
       AND EXISTS (
         SELECT 1 FROM legal_corpus_failures
-        WHERE job_id=? AND error_code=? AND retry_count=?
+        WHERE job_id=? AND retryable=1
+          AND error_code IN (${placeholders}) AND retry_count=?
       )
   `).bind(
     now,
-    "LEGAL_CORPUS_STALE_COMPLETION_REVALIDATION",
+    "LEGAL_CORPUS_COMPLETION_REVALIDATION",
     now,
     candidate.id,
     candidate.attemptCount,
     candidate.id,
-    STALE_RUNNING_ERROR_CODE,
-    candidate.staleAttempt,
+    ...COMPLETED_PARTIAL_WRITE_RISK_CODES,
+    candidate.failedAttempt,
   ).run();
 }
 
@@ -1483,7 +1495,7 @@ export async function runNextLegalCorpusIngestionJob(
   const nowDate = input.now ?? new Date();
   const now = nowIso(nowDate);
   await reconcileStaleRunningJob(env.DB, nowDate);
-  await reconcileCompletedStaleRunningJob(env.DB, now);
+  await reconcileCompletedPartialWriteRiskJob(env.DB, now);
   await reconcileRecoverableSignedLexUnavailable(env.DB, now);
   await reconcileRecoverableLanguageTextUnavailable(env.DB, now);
   await reconcileRecoverableDeadLetter(env.DB, now);
