@@ -208,6 +208,19 @@ test("dashboard proves coverage from indexed or technically unavailable document
       INSERT INTO legal_corpus_chunks
         (id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,sparse_terms_json,indexed_at,created_at)
       VALUES ('chunk-100','provision-100','version-current',0,1,'Official rule text','${"c".repeat(64)}','[]','2026-08-15T10:00:00.000Z','2026-08-15T10:00:00.000Z');
+      INSERT INTO legal_corpus_variants
+        (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,current_version_id,created_at,updated_at)
+      VALUES ('variant-100-uz','lexuz:100','uz-Latn',1,NULL,'https://lex.uz/uz/docs/-100','2026-08-15T10:00:00.000Z',NULL,'2026-08-15T10:00:00.000Z','2026-08-15T10:00:00.000Z');
+      INSERT INTO legal_corpus_versions
+        (id,variant_id,previous_version_id,version_number,status,valid_from,valid_to,version_date,content_sha256,source_url,fetched_at,change_type,created_at)
+      VALUES ('version-current-uz','variant-100-uz',NULL,1,'active','2026-01-01',NULL,'2026-01-01','${"d".repeat(64)}','https://lex.uz/uz/docs/-100','2026-08-15T10:00:00.000Z','new','2026-08-15T10:00:00.000Z');
+      UPDATE legal_corpus_variants SET current_version_id='version-current-uz' WHERE id='variant-100-uz';
+      INSERT INTO legal_corpus_provisions
+        (id,document_id,variant_id,version_id,article_number,article_number_normalized,article_title,sequence,text,exact_quote_source,language,status,valid_from,valid_to,source_url,content_sha256,created_at)
+      VALUES ('provision-100-uz','lexuz:100','variant-100-uz','version-current-uz','1','1','Qoida',0,'Rasmiy qoida matni','Rasmiy qoida matni','uz-Latn','active','2026-01-01',NULL,'https://lex.uz/uz/docs/-100','${"e".repeat(64)}','2026-08-15T10:00:00.000Z');
+      INSERT INTO legal_corpus_chunks
+        (id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,sparse_terms_json,indexed_at,created_at)
+      VALUES ('chunk-100-uz','provision-100-uz','version-current-uz',0,1,'Rasmiy qoida matni','${"e".repeat(64)}','[]','2026-08-15T10:00:00.000Z','2026-08-15T10:00:00.000Z');
       INSERT INTO legal_corpus_source_aliases (source_url,document_id,provider_source_id,language,created_at)
       VALUES ('https://lex.uz/ru/docs/100','lexuz:100','lexuz:100','ru','2026-08-15T10:00:00.000Z');
       INSERT INTO legal_corpus_discovery_documents (checkpoint_id,source_url,provider_source_id,language,discovered_at)
@@ -238,10 +251,12 @@ test("dashboard proves coverage from indexed or technically unavailable document
     assert.equal(dashboard.qdrantHealth.status, "disabled");
     assert.equal(dashboard.qdrantHealth.enabled, false);
     assert.equal(dashboard.totals.canonicalDocuments, 1);
-    assert.equal(dashboard.totals.languageVariants, 1);
+    assert.equal(dashboard.totals.languageVariants, 2);
+    // The release metric deduplicates the same article across current
+    // language variants; currentProvisions remains the physical row count.
     assert.equal(dashboard.totals.uniqueProvisions, 1);
-    assert.equal(dashboard.totals.currentProvisions, 1);
-    assert.equal(dashboard.totals.indexedChunks, 1);
+    assert.equal(dashboard.totals.currentProvisions, 2);
+    assert.equal(dashboard.totals.indexedChunks, 2);
     assert.equal(dashboard.totals.historicalVersions, 1);
     assert.equal(dashboard.totals.lastSuccessfulUpdate, "2026-08-15T11:58:00.000Z");
     const recovered = dashboard.failures.find((failure) => failure.id === "failure-recovered");

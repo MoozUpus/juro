@@ -2,6 +2,43 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Provision-metric correction and first 375-document milestone (2026-08-26, 00:48–01:00Z)
+
+The prior shard-2 milestones from the 123-document snapshot through the
+361-document snapshot mislabeled the count of current provision rows as
+"unique current provisions". That row count is not the release-gate metric:
+it counts every current language/version provision row. The authoritative
+dashboard and release gate instead count distinct current
+`document_id + normalized article number` keys, falling back to sequence only
+when an article number is absent. Consequently, the earlier claim that the
+22,000 unique-provision floor had crossed is withdrawn. The underlying run,
+document, chunk, queue, lock and capacity observations in those sections are
+unchanged; only their provision label and floor conclusion were wrong.
+
+Single-stream staging run `57a3695b-b860-48b0-bb82-ab88e0cb2a6f` started at
+`00:48:47.388Z` and completed at `00:57:36.145Z` with `error_code=NULL`.
+The post-run lock was empty. The shard-control row remained `active`, and the
+staging Worker remained version `1fb18209-c95f-46c5-abf5-6400a6442879` at
+100% with the exact shard-2 D1 binding.
+
+The lock-free read-only snapshot recorded 44/44 completed and count-aligned
+discovery checkpoints, 19/19 indexed core-code targets, zero failed or
+dead-letter ingestion jobs, and no terminal failure record. The two failure
+ledger rows remained historical retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records whose current fetch job is
+`completed`. Queue composition was 407 completed and 25,722 queued fetch
+jobs, plus 222 completed and 3,259 queued version jobs.
+
+Using the exact checked-in dashboard formula, shard 2 contained 375 canonical
+documents, 446 language variants, **7,794 unique current provisions**, 39,844
+current provision rows, and 39,899 current/indexed chunks. All current chunks
+were indexed; no current-version reference or provision-to-document orphan was
+found. `wrangler d1 info` reported 1,033,568,256 bytes. The document and unique
+provision floors remain open, acquisition is active, and both queues remain
+open. The indexed-chunk floor alone is crossed. This is corrective progress
+evidence, not authorization for federation freeze, snapshot, the indexed
+314-scenario evaluation, Qdrant/D1 restore gates, CI, release, or production.
+
 ## First 350-document milestone while acquisition remains open (2026-08-26, 00:36–00:45Z)
 
 Single-stream staging run `43a1e17a-2ab4-443c-9ab8-92cb05fd0116`
@@ -19,12 +56,13 @@ plus 214 completed and 3,267 queued version jobs. The only failure-ledger rows
 remained two historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records
 for one fetch job that is now `completed`.
 
-The same snapshot recorded 361 canonical documents, 39,804 unique current
-provisions and 39,859 indexed current chunks. `wrangler d1 info` reported
+The same snapshot recorded 361 canonical documents, 39,804 current provision
+rows and 39,859 indexed current chunks. `wrangler d1 info` reported
 1,029,378,048 bytes, well below the documented rollover reserve. This is the
 first verified lock-free snapshot above 350 canonical documents, but it is a
-progress milestone only: the document floor remains 361/1,500, acquisition is
-active, and both queues are open. Federation freeze, snapshot, indexed
+progress milestone only: the document floor remains 361/1,500, the unique
+provision floor was not measured by this snapshot, acquisition is active, and
+both queues are open. Federation freeze, snapshot, indexed
 314-scenario evaluation, Qdrant/D1 restore gates, CI and release therefore
 remain unauthorized.
 
@@ -45,12 +83,13 @@ plus 190 completed and 3,291 queued version jobs. The only failure-ledger rows
 remained two historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records
 for one fetch job that is now `completed`.
 
-The same snapshot recorded 306 canonical documents, 39,371 unique current
-provisions and 39,426 indexed current chunks. `wrangler d1 info` reported
+The same snapshot recorded 306 canonical documents, 39,371 current provision
+rows and 39,426 indexed current chunks. `wrangler d1 info` reported
 996,372,480 bytes, well below the documented rollover reserve. This is the
 first verified lock-free snapshot above 300 canonical documents, but it is a
-progress milestone only: the document floor remains 306/1,500, acquisition is
-active, and both queues are open. Federation freeze, snapshot, indexed
+progress milestone only: the document floor remains 306/1,500, the unique
+provision floor was not measured by this snapshot, acquisition is active, and
+both queues are open. Federation freeze, snapshot, indexed
 314-scenario evaluation, Qdrant/D1 restore gates, CI and release therefore
 remain unauthorized.
 
@@ -71,12 +110,13 @@ plus 166 completed and 3,124 queued version jobs. The only failure-ledger rows
 remained two historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records
 for one fetch job that is now `completed`.
 
-The same snapshot recorded 253 canonical documents, 34,076 unique current
-provisions and 34,128 indexed current chunks. `wrangler d1 info` reported
+The same snapshot recorded 253 canonical documents, 34,076 current provision
+rows and 34,128 indexed current chunks. `wrangler d1 info` reported
 901,804,032 bytes, well below the documented rollover reserve. This is the
 first verified lock-free snapshot above 250 canonical documents, but it is a
-progress milestone only: the document floor remains 253/1,500, acquisition is
-active, and both queues are open. Federation freeze, snapshot, indexed
+progress milestone only: the document floor remains 253/1,500, the unique
+provision floor was not measured by this snapshot, acquisition is active, and
+both queues are open. Federation freeze, snapshot, indexed
 314-scenario evaluation, Qdrant/D1 restore gates, CI and release therefore
 remain unauthorized.
 
@@ -97,16 +137,17 @@ plus 134 completed and 3,063 queued version jobs. The only failure-ledger rows
 remained two historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records
 for one fetch job that is now `completed`.
 
-The same snapshot recorded 201 canonical documents, 32,268 unique current
-provisions and 32,292 indexed current chunks. `wrangler d1 info` reported
+The same snapshot recorded 201 canonical documents, 32,268 current provision
+rows and 32,292 indexed current chunks. `wrangler d1 info` reported
 759,193,600 bytes, well below the documented rollover reserve. This is the
 first verified lock-free snapshot above 200 canonical documents, but it is a
-progress milestone only: the document floor remains 201/1,500, acquisition is
-active, and both queues are open. Federation freeze, snapshot, indexed
+progress milestone only: the document floor remains 201/1,500, the unique
+provision floor was not measured by this snapshot, acquisition is active, and
+both queues are open. Federation freeze, snapshot, indexed
 314-scenario evaluation, Qdrant/D1 restore gates, CI and release therefore
 remain unauthorized.
 
-## Provision/chunk floors crossed while document and freeze gates remain open (2026-08-25, 21:36–21:48Z)
+## Current-provision row and chunk counts crossed while release gates remain open (2026-08-25, 21:36–21:48Z)
 
 Single-stream staging run `93e0dd9a-3101-4e80-9419-d41103048d1c`
 started at `21:36:47.387Z` and completed at `21:47:15.871Z` with
@@ -123,20 +164,22 @@ plus 94 completed and 2,134 queued version jobs. The only failure-ledger rows
 remained two historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records
 for one fetch job that is now `completed`.
 
-The same snapshot recorded 136 canonical documents, 25,046 unique current
-provisions and 25,065 indexed current chunks. A separate per-document
-distribution check used distinct provision IDs against each variant's exact
-current-version pointer; the increase is concentrated in genuinely large code
+The same snapshot recorded 136 canonical documents, 25,046 current provision
+rows and 25,065 indexed current chunks. A separate per-document distribution
+check used distinct provision row IDs against each variant's exact
+current-version pointer; the increase was concentrated in genuinely large code
 documents rather than a many-to-many join expansion. The largest current
 contributors were the Tax Code (6,435 provisions), Civil Procedure Code
 (4,336), Administrative Judicial Procedure Code (2,932) and Administrative
 Responsibility Code (2,634). `wrangler d1 info` reported 529,321,984 bytes,
 well below the documented rollover reserve.
 
-The provision and chunk numeric floors are now exceeded, but that is progress
-only. The document floor remains 136/1,500, acquisition is active, and both
-queues are open. Federation freeze, snapshot, indexed 314-scenario evaluation,
-Qdrant/D1 restore gates, CI and release therefore remain unauthorized.
+The current-row count is not the unique-provision release metric. This
+snapshot therefore proved only that the indexed-chunk floor had crossed; it did
+not prove the unique-provision floor. The document floor remained 136/1,500,
+acquisition was active, and both queues were open. Federation freeze, snapshot,
+indexed 314-scenario evaluation, Qdrant/D1 restore gates, CI and release
+therefore remained unauthorized.
 
 ## Post-core shard-2 ingestion progression (2026-08-25, 21:12–21:35Z)
 
@@ -159,13 +202,13 @@ two historical retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records for one
 fetch job that is now `completed`; they are recovery evidence, not an active
 or terminal job.
 
-The same snapshot recorded 123 canonical documents, 21,714 unique current
-provisions and 21,731 indexed current chunks. `wrangler d1 info` reported
-465,821,696 bytes. These values remain below the 1,500-document,
-22,000-provision and 22,513-chunk release floors, and acquisition and both
-queues remain active. They therefore do not authorize federation freeze,
-snapshot, the indexed 314-scenario evaluation, Qdrant/D1 restore gates, CI or
-release.
+The same snapshot recorded 123 canonical documents, 21,714 current provision
+rows and 21,731 indexed current chunks. `wrangler d1 info` reported
+465,821,696 bytes. The document and indexed-chunk floors remained open; the
+unique-provision release metric was not measured by this snapshot. Acquisition
+and both queues remained active. These values therefore did not authorize
+federation freeze, snapshot, the indexed 314-scenario evaluation, Qdrant/D1
+restore gates, CI or release.
 
 ## Core-code pager continuity and 19/19 settlement (2026-08-25, 19:52–21:11Z)
 
