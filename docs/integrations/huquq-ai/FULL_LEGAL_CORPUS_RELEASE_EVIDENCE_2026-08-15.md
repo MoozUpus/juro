@@ -12651,6 +12651,15 @@ its lock at `2026-08-26T15:47:15.243Z`. Only then was staging Worker version
 `2026-08-26T15:48:40.209Z` to `2026-08-26T15:58:51.536Z` with
 `error_code=NULL` and released its lock.
 
+A concurrent heartbeat redundantly deployed the same checked-out Worker code
+at `2026-08-26T15:49:31.781Z`, while that already-started invocation was
+running. No corpus source file changed between the two uploads. The resulting
+current staging version is `b90f965b-88c8-45cc-8a89-ffb8c3ccd47f` at 100%
+with the same shard-2 binding. The completed run and point-in-time repair below
+are attributed to the invocation that began after the lock-free
+`11e89e2d-3c60-4f77-8f14-5370bae40c2e` deployment; the next run uses the
+redundant current version.
+
 All five unique jobs with stale-running completion evidence received their one
 bounded revalidation attempt, finished `completed` with
 `last_error_code=NULL`, and left zero remaining stale-revalidation candidates.
