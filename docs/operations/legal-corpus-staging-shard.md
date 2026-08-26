@@ -114,15 +114,17 @@ npm run capture:legal-corpus:shard-quality
 
 The command preflights the latest run and `scheduled_locks`, rejects an active
 lease, and requires at least 45 seconds before the first `*/4` cron boundary
-after that run finished. It then passes the checked-in SQL to Wrangler as one
-`--command` argument. The final query is also guarded by the empty-lock
-predicate and accepts sparse coverage from either the legacy or compressed
-representation. A second lightweight postflight must observe the same
-completed run ID, an empty lock, and a still-future cron boundary; a cron that
-starts during the aggregate or an aggregate that crosses that boundary
-invalidates the capture. This avoids loading D1 inside an imminent ingestion
-window, mixing counters from different runs, and Wrangler's summary-only
-output for remote `--file` execution.
+after that run finished. The boundary is the nominal UTC minute-aligned
+`*/4` slot, not the seconds component of `ScheduledController.scheduledTime`:
+Cloudflare may deliver the controller later within the minute. It then passes
+the checked-in SQL to Wrangler as one `--command` argument. The final query is
+also guarded by the empty-lock predicate and accepts sparse coverage from
+either the legacy or compressed representation. A second lightweight
+postflight must observe the same completed run ID, an empty lock, and the same
+still-future cron boundary; a cron that starts during the aggregate or an
+aggregate that crosses that boundary invalidates the capture. This avoids
+loading D1 inside an imminent ingestion window, mixing counters from different
+runs, and Wrangler's summary-only output for remote `--file` execution.
 
 First, while the checked-in shard config still binds `DB` to the source, apply
 the additive fence migration and deploy the barrier-aware Worker to the source:

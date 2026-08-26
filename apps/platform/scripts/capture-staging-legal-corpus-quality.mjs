@@ -61,9 +61,8 @@ const boundarySql = `WITH latest AS (
 SELECT (SELECT COUNT(*) FROM scheduled_locks) AS lock_count,
   id,cron,status,error_code,scheduled_for,started_at,finished_at,
   unixepoch('now') AS now_epoch,
-  unixepoch(scheduled_for)
-    + CAST((unixepoch(finished_at)-unixepoch(scheduled_for)+${scheduleSeconds - 1})
-      /${scheduleSeconds} AS INTEGER)*${scheduleSeconds} AS next_due_epoch
+  CAST((unixepoch(finished_at)+${scheduleSeconds - 1})/${scheduleSeconds} AS INTEGER)
+    * ${scheduleSeconds} AS next_due_epoch
 FROM latest;`;
 const preflight = executeReadOnly(boundarySql);
 const preflightRow = preflight.results?.[0];

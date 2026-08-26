@@ -20,14 +20,14 @@ test("shard quality capture rejects active leases and non-read-only output", () 
   assert.match(captureSource, /postflightRow\.id !== preflightRow\.id/u);
   assert.match(captureSource, /minimumCaptureWindowSeconds = 45/u);
   assert.match(captureSource, /postflightSecondsUntilNextDue <= 0/u);
-  assert.match(captureSource, /unixepoch\(scheduled_for\)/u);
+  assert.match(captureSource, /scheduled_for,started_at,finished_at/u);
   assert.match(
     captureSource,
-    /unixepoch\(finished_at\)-unixepoch\(scheduled_for\)/u,
+    /unixepoch\(finished_at\)\+\$\{scheduleSeconds - 1\}/u,
   );
   assert.doesNotMatch(
     captureSource,
-    /unixepoch\('now'\)-unixepoch\(scheduled_for\)/u,
+    /unixepoch\(scheduled_for\)\s*\+\s*CAST/u,
   );
   assert.match(captureSource, /"DB"/u);
   assert.match(captureSource, /wrangler\.legal-corpus-shard\.jsonc/u);
