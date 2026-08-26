@@ -12787,8 +12787,12 @@ production flags and merge state were not changed.
 
 ## Post-deploy shard run closure (2026-08-26, 16:24Z–16:34Z)
 
-The first scheduled shard run after Worker version `8e4a33a3-a8bd-4f4f-a549-aa06d40e456f`
-(`25efb6fa-2380-49d1-a539-664175cd3b40`) completed at
+Worker version `8e4a33a3-a8bd-4f4f-a549-aa06d40e456f` was uploaded while the
+preceding invocation still held the shard lock. After that invocation released
+its lock, version `7eabb30d-844d-4d08-9d8a-1a67eba07715` was deployed at
+`2026-08-26T16:24:01.384868Z`. The next scheduled shard run
+(`25efb6fa-2380-49d1-a539-664175cd3b40`) began at
+`2026-08-26T16:24:44.132Z` and completed at
 `2026-08-26T16:34:50.439Z` with `status=completed` and `error_code=NULL`.
 The generic partial-completion revalidation fix was therefore exercised by a
 real staging cycle. A sequential lock-free read observed an empty
