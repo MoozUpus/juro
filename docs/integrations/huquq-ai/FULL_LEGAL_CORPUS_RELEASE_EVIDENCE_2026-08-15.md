@@ -12724,6 +12724,67 @@ read without returning four copies of the same norm, but it does not waive the
 required frozen partition/snapshot evidence. `LEGAL_CORPUS_FEDERATED_ENABLED`
 remains `false`; no production binding or flag was changed.
 
+## Generic partial-completion recovery (2026-08-26, 16:24Z–16:34Z)
+
+The stale-timeout repair exposed one second legacy partial header whose failed
+attempt had the broader retryable code `LEGAL_CORPUS_INGESTION_FAILED` instead
+of `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT`. Historical version
+`lexuz-family:97661:uz-Latn:v98:0e2137d8771c`, sourced from
+`https://lex.uz/uz/docs/-97664?ONDATE=28.03.2023`, had zero provisions and zero
+chunks even though job `legal-version:cd58b2b641b310cd972a2ffbe2fe` had later
+been marked completed on attempt 2.
+
+Commit `21ff7229` expands the one-time completed-job revalidation only to the
+two retryable failure codes that can represent a partial write:
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` and `LEGAL_CORPUS_INGESTION_FAILED`.
+Source-fetch timeouts and explicit source-condition codes remain excluded,
+because they occur before the immutable header write. The exact
+`attempt_count=max(retry_count)+1` predicate still prevents a permanent
+requeue loop.
+
+Local verification passed platform type-check, lint, 64/64 focused ingestion
+and Worker-boundary tests, and an exact shard-2 Wrangler dry-run (3,736.94 KiB
+upload / 821.03 KiB gzip). The added regression test persists a header before
+a simulated generic Worker interruption, reproduces the legacy false
+completion and proves one bounded repair to the same immutable version ID,
+followed by an empty next poll.
+
+The preceding run `c7cf403b-a835-44d1-8a11-4a31881199f2` completed with
+`error_code=NULL` and released its lock at `2026-08-26T16:23:19.416Z`. Only
+after that lock-free observation was staging Worker version
+`7eabb30d-844d-4d08-9d8a-1a67eba07715` deployed at 100% with the unchanged
+`juro-staging-corpus-shard-2` binding. No production resource was changed.
+
+The first new-version run `25efb6fa-2380-49d1-a539-664175cd3b40` completed
+from `2026-08-26T16:24:44.132Z` to `2026-08-26T16:34:50.439Z` with
+`error_code=NULL` and released its lock. It revalidated the target exactly
+once: attempt 3 completed with `last_error_code=NULL`, and the same version ID
+now has 764 provisions, 765 chunks and sparse coverage for all 765 chunks.
+
+The immediate single-statement lock-free quality snapshot observed zero
+scheduler locks, zero remaining partial-completion revalidation candidates and
+zero empty version headers. It records 1,117 canonical documents, 1,357
+variants, 10,935 exact unique current provisions under the checked-in formula,
+45,182 physical current provision rows and 45,253/45,253 current/indexed
+chunks. All current chunks have sparse coverage. All 44/44 discovery
+checkpoints are completed and count-aligned, and all 19/19 core-code targets
+remain indexed.
+
+Fetch work is 1,309 completed / 25,611 queued; version work is 682 completed /
+2,804 queued; 50 variants remain without a current version. There are zero
+retrying, failed or dead-letter jobs and zero terminal or
+technically-unavailable failure rows. Broken current-version pointers, orphan
+variants or versions, provision reference/ownership errors and chunk
+reference/version errors are all zero. Acquisition remains `active`; D1 size
+is 3,680,849,920 bytes.
+
+This proves both bounded partial-materialization repairs, not corpus
+completion. The document gate is 1,117/1,500 and the exact unique-provision
+gate is 10,935/22,000; the queues and acquisition are not frozen. Federation,
+snapshot, indexed 314-scenario evaluation, Qdrant/D1 restore, CI, browser QA,
+release and the wider JURO Definition of Done remain gated. Production, DNS,
+production flags and merge state were not changed.
+
 ## Post-deploy shard run closure (2026-08-26, 16:24Z–16:34Z)
 
 The first scheduled shard run after Worker version `8e4a33a3-a8bd-4f4f-a549-aa06d40e456f`
