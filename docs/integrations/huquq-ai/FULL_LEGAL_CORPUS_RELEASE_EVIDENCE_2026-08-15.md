@@ -13012,4 +13012,8 @@ Commits `860a2754`, `2be70edd` and `dae32bb3` fence the capture with a stable
 preflight/postflight run ID, empty distributed lock, a minimum 45-second
 preflight window and a still-future postflight cron boundary. Live checks
 rejected unsafe 20- and 38-second windows before running the aggregate; this
-52-to-26-second capture is the corresponding successful live path.
+52-to-26-second capture is the corresponding successful live path. Commit
+`f0c13085` anchors cron cadence to the run's `scheduled_for` slot, and follow-up
+`36418c2c` keeps the selected boundary immutable by choosing the first slot
+after `finished_at`; postflight therefore cannot hide a crossed boundary by
+advancing to a later slot.
