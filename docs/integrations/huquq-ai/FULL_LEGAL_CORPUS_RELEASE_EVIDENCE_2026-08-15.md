@@ -12486,13 +12486,23 @@ production is untouched.
 
 ## Lock-free quality snapshot (2026-08-26, 12:11Z)
 
-The run completed in 660.801 seconds and released its lock before the next
-scheduled slot. The compact read-only snapshot observed an empty
-`scheduled_locks` table. The resulting totals are 953 canonical documents,
-10,191 exact unique current provisions and 44,169/44,169 current/indexed
-chunks, with zero unindexed current chunks. Fetch work is 1,145 completed /
-25,607 queued and version work is 594 completed / 2,891 queued; no ingestion
-job is `running`, `failed` or `dead_letter` in the lock-free snapshot. The
-five failure-ledger rows remain non-terminal `retrying` records. Fifty variants
-remain without a current version while acquisition is active. The queue and
-acquisition are not frozen, so no downstream release gate is unlocked.
+The run completed in 660.801 seconds and released its lock about 63 seconds
+before the next 12-minute slot. The compact read-only snapshot explicitly
+observed an empty `scheduled_locks` table. Since the 11:59Z baseline, the shard
+added 9 canonical documents, 9 variants, 49 exact unique current provisions,
+60 physical current provision rows and 60 indexed current chunks. The resulting
+totals are 953 documents, 1,193 variants, 10,191 exact unique current
+provisions, 44,099 physical current provision rows and 44,169/44,169
+current/indexed chunks, with zero unindexed current chunks.
+
+All 44 discovery checkpoints remain `completed`, all 19 core-code targets
+remain `indexed`, and the five failure-ledger rows remain non-terminal
+`retrying` records. Fetch work is 1,145 completed / 25,607 queued and version
+work is 594 completed / 2,891 queued. No ingestion job was `running`, `failed`
+or `dead_letter` in the lock-free snapshot. Checks again found zero broken or
+cross-owned current-version pointers, orphan variants or versions, provision
+document/variant/version reference or ownership errors, and chunk
+provision/version reference or version mismatches. Fifty variants remain
+without a current version while acquisition is active. The document and exact-
+provision floors, queue/acquisition freeze, federation, snapshot, evaluation,
+restore, CI, and browser gates therefore remain open; production is untouched.
