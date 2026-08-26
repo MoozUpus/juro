@@ -60,8 +60,8 @@ test("rollover retries only the D1 long-running import contention error", () => 
 test("rollover CLI is staging-only and activation requires handoff plus deployed target binding", () => {
   assert.match(rolloverSource, /const STAGING_ENVIRONMENT = "staging"/u);
   assert.match(rolloverSource, /required\(args, "confirm-handoff-id"\)/u);
-  assert.match(rolloverSource, /deployedDatabaseBinding\(config, source\)/u);
-  assert.match(rolloverSource, /deployedDatabaseBinding\(config, target\)/u);
+  assert.match(rolloverSource, /deployedDatabaseBinding\(configs\.source, source\)/u);
+  assert.match(rolloverSource, /deployedDatabaseBinding\(configs\.target, target\)/u);
   assert.match(rolloverSource, /LEGAL_CORPUS_SHARD_ROLLOVER_DEPLOYED_BINDING_MISMATCH/u);
   assert.match(rolloverSource, /LEGAL_CORPUS_SHARD_DOCUMENT_AFFINITY_PENDING/u);
   assert.doesNotMatch(rolloverSource, /juro-production|STAGING_ENVIRONMENT\s*=\s*"production"/u);

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -93,6 +93,39 @@ function required(args: ReadonlyMap<string, string>, name: string): string {
   return value;
 }
 
+export function stagingDatabaseOverrideConfig(
+  rawConfig: string,
+  databaseName: string,
+  databaseId: string,
+): string {
+  let config: JsonRecord;
+  try {
+    config = JSON.parse(rawConfig) as JsonRecord;
+  } catch {
+    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_CONFIG_JSON_INVALID");
+  }
+  const environments = config.env;
+  const staging = environments && typeof environments === "object" && !Array.isArray(environments)
+    ? (environments as JsonRecord).staging
+    : null;
+  const databases = staging && typeof staging === "object" && !Array.isArray(staging)
+    ? (staging as JsonRecord).d1_databases
+    : null;
+  if (!Array.isArray(databases)) {
+    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_CONFIG_STAGING_DB_INVALID");
+  }
+  const bindings = databases.filter((value): value is JsonRecord => (
+    Boolean(value) && typeof value === "object" && !Array.isArray(value)
+      && value.binding === "DB"
+  ));
+  if (bindings.length !== 1) {
+    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_CONFIG_STAGING_DB_INVALID");
+  }
+  bindings[0]!.database_name = databaseName;
+  bindings[0]!.database_id = databaseId;
+  return `${JSON.stringify(config, null, 2)}\n`;
+}
+
 export function nextLegalCorpusShardName(source: string): string {
   const match = source.match(SHARD_PATTERN);
   if (!match) throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_SOURCE_INVALID");
@@ -171,6 +204,88 @@ function runWranglerCommand(
     throw new Error(`LEGAL_CORPUS_SHARD_ROLLOVER_WRANGLER_FAILED:${errorScope}:${detail}`);
   }
   return result.stdout;
+}
+
+function runWranglerTextCommand(
+  config: string,
+  args: readonly string[],
+  errorScope: string,
+): string {
+  const result = spawnSync(process.execPath, [
+    WRANGLER_ENTRYPOINT,
+    ...args,
+    "--config",
+    config,
+    "--env",
+    STAGING_ENVIRONMENT,
+  ], {
+    encoding: "utf8",
+    maxBuffer: MAX_BUFFER_BYTES,
+    windowsHide: true,
+  });
+  if (result.status !== 0) {
+    const stderr = result.stderr?.trim();
+    const stdout = result.stdout?.trim();
+    const detail = result.error?.message
+      ?? ([stderr, stdout].filter(Boolean).join(" | ") || `exit_${result.status ?? "unknown"}`);
+    throw new Error(`LEGAL_CORPUS_SHARD_ROLLOVER_WRANGLER_FAILED:${errorScope}:${detail}`);
+  }
+  return result.stdout;
+}
+
+function databaseId(config: string, databaseName: string): string {
+  const raw = parseJson(runWranglerCommand(
+    config,
+    ["d1", "list"],
+    "d1-list",
+  ), "d1-list");
+  if (!Array.isArray(raw)) {
+    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_DATABASE_LIST_INVALID");
+  }
+  const matches = raw.filter((value): value is JsonRecord => (
+    Boolean(value) && typeof value === "object" && !Array.isArray(value)
+      && value.name === databaseName && typeof value.uuid === "string"
+  ));
+  if (matches.length !== 1) {
+    throw new TypeError(`LEGAL_CORPUS_SHARD_ROLLOVER_DATABASE_LOOKUP_INVALID:${databaseName}`);
+  }
+  return String(matches[0]!.uuid);
+}
+
+async function withDatabaseConfig<T>(
+  baseConfig: string,
+  databaseName: string,
+  callback: (config: string) => Promise<T>,
+): Promise<T> {
+  const resolvedConfig = resolve(baseConfig);
+  const rawConfig = await readFile(resolvedConfig, "utf8");
+  const temporaryConfig = join(
+    dirname(resolvedConfig),
+    `.juro-corpus-rollover-${randomUUID()}.jsonc`,
+  );
+  await writeFile(
+    temporaryConfig,
+    stagingDatabaseOverrideConfig(rawConfig, databaseName, databaseId(baseConfig, databaseName)),
+    "utf8",
+  );
+  try {
+    return await callback(temporaryConfig);
+  } finally {
+    await rm(temporaryConfig, { force: true });
+  }
+}
+
+async function withShardConfigs<T>(
+  baseConfig: string,
+  source: string,
+  target: string,
+  callback: (configs: { source: string; target: string }) => Promise<T>,
+): Promise<T> {
+  return withDatabaseConfig(baseConfig, source, async (sourceConfig) => (
+    withDatabaseConfig(baseConfig, target, async (targetConfig) => (
+      callback({ source: sourceConfig, target: targetConfig })
+    ))
+  ));
 }
 
 function runWrangler(config: string, database: string, args: string[]): string {
@@ -592,6 +707,39 @@ function targetEmpty(config: string, target: string): boolean {
       .every((value) => Number(value) === 0);
 }
 
+async function initialize(args: ReadonlyMap<string, string>): Promise<void> {
+  const config = args.get("config") ?? "wrangler.legal-corpus-shard.jsonc";
+  const source = required(args, "source");
+  const target = required(args, "target");
+  assertShardPair(source, target);
+  const targetDatabaseId = databaseId(config, target);
+  await withDatabaseConfig(config, target, async (targetConfig) => {
+    runWranglerTextCommand(
+      targetConfig,
+      ["d1", "migrations", "apply", target, "--remote"],
+      `target-migrations:${target}`,
+    );
+    const targetControl = control(targetConfig, target);
+    const migration = query(targetConfig, target, `SELECT count(*) AS count,
+      max(name) AS latest FROM d1_migrations`)[0];
+    if (targetControl.state !== "active" || !targetEmpty(targetConfig, target)
+      || !migration || Number(migration.count) < 1 || typeof migration.latest !== "string") {
+      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_TARGET_INITIALIZATION_INVALID");
+    }
+    process.stdout.write(`${JSON.stringify({
+      phase: "initialize",
+      status: "initialized",
+      source,
+      target,
+      targetDatabaseId,
+      migrationsApplied: Number(migration.count),
+      latestMigration: migration.latest,
+      acquisitionState: targetControl.state,
+      next: "wait_for_rollover_threshold_then_prepare",
+    })}\n`);
+  });
+}
+
 async function seedTarget(
   config: string,
   target: string,
@@ -700,81 +848,88 @@ async function prepare(args: ReadonlyMap<string, string>): Promise<void> {
   const source = required(args, "source");
   const target = required(args, "target");
   assertShardPair(source, target);
-  const size = pageSize(args);
-  const sourceControl = control(config, source);
-  const targetControl = control(config, target);
-  const sourceDeployment = sourceControl.state === "frozen"
-    ? null
-    : deployedDatabaseBinding(config, source);
-  const existingIds = [sourceControl.handoffId, targetControl.handoffId]
-    .filter((value): value is string => Boolean(value));
-  if (new Set(existingIds).size > 1) {
-    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_HANDOFF_ID_CONFLICT");
-  }
-  const handoffId = existingIds[0] ?? randomUUID();
-  const now = new Date().toISOString();
-  prepareControl(config, target, handoffId, source, now);
-  const preparedSource = prepareControl(config, source, handoffId, target, now);
-  if (preparedSource.state === "frozen") {
-    const sourceLedger = ledger(config, source, handoffId);
-    const targetLedger = ledger(config, target, handoffId);
-    if (!sourceLedger || !targetLedger
-      || sourceLedger.manifestSha256 !== targetLedger.manifestSha256) {
-      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_COMMITTED_LEDGER_INVALID");
+  await withShardConfigs(config, source, target, async (configs) => {
+    const size = pageSize(args);
+    const sourceControl = control(configs.source, source);
+    const targetControl = control(configs.target, target);
+    const sourceDeployment = sourceControl.state === "frozen"
+      ? null
+      : deployedDatabaseBinding(configs.source, source);
+    const existingIds = [sourceControl.handoffId, targetControl.handoffId]
+      .filter((value): value is string => Boolean(value));
+    if (new Set(existingIds).size > 1) {
+      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_HANDOFF_ID_CONFLICT");
     }
-    process.stdout.write(`${JSON.stringify({
-      phase: "prepare",
-      status: "already_prepared",
-      handoffId,
-      source,
-      target,
-      manifestSha256: sourceLedger.manifestSha256,
-      activeJobs: sourceLedger.activeJobCount,
-      next: "deploy_target_binding_then_activate",
-    })}\n`);
-    return;
-  }
+    const handoffId = existingIds[0] ?? randomUUID();
+    const now = new Date().toISOString();
+    prepareControl(configs.target, target, handoffId, source, now);
+    const preparedSource = prepareControl(configs.source, source, handoffId, target, now);
+    if (preparedSource.state === "frozen") {
+      const sourceLedger = ledger(configs.source, source, handoffId);
+      const targetLedger = ledger(configs.target, target, handoffId);
+      if (!sourceLedger || !targetLedger
+        || sourceLedger.manifestSha256 !== targetLedger.manifestSha256) {
+        throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_COMMITTED_LEDGER_INVALID");
+      }
+      process.stdout.write(`${JSON.stringify({
+        phase: "prepare",
+        status: "already_prepared",
+        handoffId,
+        source,
+        target,
+        manifestSha256: sourceLedger.manifestSha256,
+        activeJobs: sourceLedger.activeJobCount,
+        next: "deploy_target_binding_then_activate",
+      })}\n`);
+      return;
+    }
 
-  const temporaryDirectory = await mkdtemp(join(tmpdir(), "juro-corpus-rollover-"));
-  try {
-    assertNoActiveDocumentAffinityJobs(config, source);
-    const sourceSnapshot = snapshot(config, source, size, null);
-    const value = manifest(handoffId, source, target, sourceSnapshot);
-    const digest = sha256(value);
-    await seedTarget(config, target, value, digest, temporaryDirectory, now);
-    const targetSnapshot = snapshot(config, target, size, handoffId);
-    const targetDigest = sha256(manifest(handoffId, source, target, targetSnapshot));
-    if (targetDigest !== digest) {
-      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_TARGET_VERIFY_FAILED");
-    }
-    assertLedger(ledger(config, target, handoffId), value, digest, target);
-    await executeStatements(config, target, [
-      eventSql(handoffId, "target_seeded", digest, now),
-    ], temporaryDirectory, "target-event");
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "juro-corpus-rollover-"));
+    try {
+      assertNoActiveDocumentAffinityJobs(configs.source, source);
+      const sourceSnapshot = snapshot(configs.source, source, size, null);
+      const value = manifest(handoffId, source, target, sourceSnapshot);
+      const digest = sha256(value);
+      await seedTarget(configs.target, target, value, digest, temporaryDirectory, now);
+      const targetSnapshot = snapshot(configs.target, target, size, handoffId);
+      const targetDigest = sha256(manifest(handoffId, source, target, targetSnapshot));
+      if (targetDigest !== digest) {
+        throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_TARGET_VERIFY_FAILED");
+      }
+      assertLedger(ledger(configs.target, target, handoffId), value, digest, target);
+      await executeStatements(configs.target, target, [
+        eventSql(handoffId, "target_seeded", digest, now),
+      ], temporaryDirectory, "target-event");
 
-    assertNoActiveDocumentAffinityJobs(config, source);
-    const sourceRecheck = manifest(handoffId, source, target, snapshot(config, source, size, null));
-    if (sha256(sourceRecheck) !== digest) {
-      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_SOURCE_CHANGED");
+      assertNoActiveDocumentAffinityJobs(configs.source, source);
+      const sourceRecheck = manifest(
+        handoffId,
+        source,
+        target,
+        snapshot(configs.source, source, size, null),
+      );
+      if (sha256(sourceRecheck) !== digest) {
+        throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_SOURCE_CHANGED");
+      }
+      await commitSource(configs.source, source, value, digest, temporaryDirectory, now);
+      process.stdout.write(`${JSON.stringify({
+        phase: "prepare",
+        status: "prepared",
+        handoffId,
+        source,
+        target,
+        manifestSha256: digest,
+        checkpoints: value.checkpoints.length,
+        discoveryDocuments: value.discoveryDocuments.length,
+        activeJobs: value.jobs.length,
+        failures: value.failures.length,
+        sourceDeployment,
+        next: "deploy_target_binding_then_activate",
+      })}\n`);
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
     }
-    await commitSource(config, source, value, digest, temporaryDirectory, now);
-    process.stdout.write(`${JSON.stringify({
-      phase: "prepare",
-      status: "prepared",
-      handoffId,
-      source,
-      target,
-      manifestSha256: digest,
-      checkpoints: value.checkpoints.length,
-      discoveryDocuments: value.discoveryDocuments.length,
-      activeJobs: value.jobs.length,
-      failures: value.failures.length,
-      sourceDeployment,
-      next: "deploy_target_binding_then_activate",
-    })}\n`);
-  } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
-  }
+  });
 }
 
 async function activate(args: ReadonlyMap<string, string>): Promise<void> {
@@ -783,8 +938,9 @@ async function activate(args: ReadonlyMap<string, string>): Promise<void> {
   const target = required(args, "target");
   const handoffId = required(args, "confirm-handoff-id");
   assertShardPair(source, target);
-  const sourceControl = control(config, source);
-  const targetControl = control(config, target);
+  await withShardConfigs(config, source, target, async (configs) => {
+  const sourceControl = control(configs.source, source);
+  const targetControl = control(configs.target, target);
   if (sourceControl.state !== "frozen" || sourceControl.handoffId !== handoffId) {
     throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_SOURCE_NOT_FROZEN");
   }
@@ -795,30 +951,30 @@ async function activate(args: ReadonlyMap<string, string>): Promise<void> {
   if (!targetIsPrepared && !targetIsAlreadyActive) {
     throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_TARGET_NOT_PREPARED");
   }
-  const sourceLedger = ledger(config, source, handoffId);
-  const targetLedger = ledger(config, target, handoffId);
+  const sourceLedger = ledger(configs.source, source, handoffId);
+  const targetLedger = ledger(configs.target, target, handoffId);
   if (!sourceLedger || !targetLedger
     || sourceLedger.manifestSha256 !== targetLedger.manifestSha256
     || sourceLedger.activeJobCount !== targetLedger.activeJobCount) {
     throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_ACTIVATION_LEDGER_INVALID");
   }
-  const targetDeployment = deployedDatabaseBinding(config, target);
+  const targetDeployment = deployedDatabaseBinding(configs.target, target);
   if (!Number.isFinite(Date.parse(targetDeployment.createdOn))
     || !Number.isFinite(Date.parse(targetLedger.createdAt))
     || Date.parse(targetDeployment.createdOn) <= Date.parse(targetLedger.createdAt)) {
     throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_TARGET_DEPLOYMENT_STALE");
   }
   if (targetIsAlreadyActive) {
-    assertEventRecorded(config, target, handoffId, "activated", targetLedger.manifestSha256);
+    assertEventRecorded(configs.target, target, handoffId, "activated", targetLedger.manifestSha256);
     const recoveryDirectory = await mkdtemp(join(tmpdir(), "juro-corpus-activate-recovery-"));
     try {
-      await executeStatements(config, source, [
+      await executeStatements(configs.source, source, [
         eventSql(handoffId, "activated", sourceLedger.manifestSha256, new Date().toISOString()),
       ], recoveryDirectory, "source-activated-event-recovery");
     } finally {
       await rm(recoveryDirectory, { recursive: true, force: true });
     }
-    assertEventRecorded(config, source, handoffId, "activated", sourceLedger.manifestSha256);
+    assertEventRecorded(configs.source, source, handoffId, "activated", sourceLedger.manifestSha256);
     process.stdout.write(`${JSON.stringify({
       phase: "activate",
       status: "already_active",
@@ -831,7 +987,7 @@ async function activate(args: ReadonlyMap<string, string>): Promise<void> {
     })}\n`);
     return;
   }
-  const targetState = query(config, target, `SELECT
+  const targetState = query(configs.target, target, `SELECT
       (SELECT count(*) FROM scheduled_locks
         WHERE name='legal-corpus-worker' AND expires_at>${sqlValue(new Date().toISOString())}) AS liveLocks,
       (SELECT count(*) FROM scheduled_runs
@@ -854,7 +1010,7 @@ async function activate(args: ReadonlyMap<string, string>): Promise<void> {
   const now = new Date().toISOString();
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "juro-corpus-activate-"));
   try {
-    await executeStatements(config, target, [
+    await executeStatements(configs.target, target, [
       eventSql(handoffId, "activated", targetLedger.manifestSha256, now),
       `UPDATE legal_corpus_shard_control
         SET acquisition_state='active',active_handoff_id=NULL,target_database_name=NULL,
@@ -862,17 +1018,17 @@ async function activate(args: ReadonlyMap<string, string>): Promise<void> {
         WHERE singleton_id=1 AND acquisition_state='handoff_prepared'
           AND active_handoff_id=${sqlValue(handoffId)};`,
     ], temporaryDirectory, "target-activate");
-    await executeStatements(config, source, [
+    await executeStatements(configs.source, source, [
       eventSql(handoffId, "activated", sourceLedger.manifestSha256, now),
     ], temporaryDirectory, "source-activated-event");
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
   }
-  if (control(config, target).state !== "active") {
+  if (control(configs.target, target).state !== "active") {
     throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_ACTIVATION_FAILED");
   }
-  assertEventRecorded(config, target, handoffId, "activated", targetLedger.manifestSha256);
-  assertEventRecorded(config, source, handoffId, "activated", sourceLedger.manifestSha256);
+  assertEventRecorded(configs.target, target, handoffId, "activated", targetLedger.manifestSha256);
+  assertEventRecorded(configs.source, source, handoffId, "activated", sourceLedger.manifestSha256);
   process.stdout.write(`${JSON.stringify({
     phase: "activate",
     status: "active",
@@ -883,12 +1039,14 @@ async function activate(args: ReadonlyMap<string, string>): Promise<void> {
     readyJobs: targetLedger.activeJobCount,
     targetDeployment,
   })}\n`);
+  });
 }
 
 async function main(): Promise<void> {
   const args = argumentMap();
   const phase = required(args, "phase");
-  if (phase === "prepare") await prepare(args);
+  if (phase === "initialize") await initialize(args);
+  else if (phase === "prepare") await prepare(args);
   else if (phase === "activate") await activate(args);
   else throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_PHASE_INVALID");
 }
