@@ -12856,3 +12856,15 @@ non-catalog jobs. The document floor is 1,147/1,500 and the exact
 unique-provision floor is 11,039/22,000. Snapshot, indexed 314-scenario
 evaluation, Qdrant/D1 restore, CI and federation activation remain pending;
 production was not changed.
+
+## Shard run closure (2026-08-26, 17:12Z–17:22Z)
+
+The scheduled run `2fa778bd-5656-4a7e-97c2-07e7d463266b` completed at
+`2026-08-26T17:22:59.170Z` with `status=completed` and `error_code=NULL`.
+The sequential read taken at the end of that run recorded 1,156 canonical
+documents and 11,228 exact unique current provisions. Terminal failures stayed
+at zero; the retry ledger contained 14 previously recorded retrying rows and
+no dead-letter state. The acquisition queue remained open at 28,396 jobs,
+including 4,511 non-catalog jobs, so this cycle did not satisfy the release
+gate. A new scheduled run started at `2026-08-26T17:24:43.992Z`; no snapshot,
+evaluation, restore, CI or federation activation was performed.
