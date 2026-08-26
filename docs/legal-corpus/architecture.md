@@ -206,11 +206,14 @@ treated as indexed corpus. The shard has its own D1-backed lock and remains a
 single sequential Lex.uz stream with the same 20-second delay. Release
 evidence must name the exact database(s) and must not add v2 and shard counts
 unless a separately tested federated retrieval/evidence contract is present.
-The shard packs up to 20 sequential ingestion jobs into one staging lease (the
-primary Worker remains at five). Live 24-job and 22-job trials both crossed the
-twelve-minute scheduler slot and therefore reduced effective cadence; the
-20-job cap is the verified value that stays below that boundary without
-reducing the source delay or opening a second stream.
+The shard permits at most 20 sequential ingestion jobs in one staging lease
+(the primary Worker remains at five), but elapsed time is authoritative. Live
+24-job, 22-job and 20-job trials all crossed the twelve-minute scheduler slot
+when a final source job was claimed immediately before the old twelve-minute
+start fence. Staging now stops new claims after ten minutes, leaving two
+minutes for the last sequential source job and D1 finalization. This preserves
+the source delay and one-stream boundary while allowing the next useful cron
+tick to acquire the released lock.
 
 ### Sparse-index capacity transition
 
@@ -259,10 +262,11 @@ maintenance after the final Lex request. The previous seven-minute lease was
 shown to expire during a healthy eight-minute staging run; this longer lease is
 still bounded by the durable lock and does not widen the Lex request budget.
 Production retains its 195,000 ms ingestion start fence. Staging uses a
-twelve-minute fence with the fifteen-minute lease, leaving three minutes for
-bounded sparse-index and D1 finalization while allowing more already-queued
-jobs in the same sequential invocation. The robots policy and 20-second
-host-wide pacer remain authoritative for every source request.
+ten-minute claim fence with the fifteen-minute lease, leaving two minutes
+before the next useful twelve-minute scheduler slot and five minutes before
+lease expiry for the last bounded source job and D1 finalization. The robots
+policy and 20-second host-wide pacer remain authoritative for every source
+request.
 The first four ingestion
 slots prefer already-discovered `court_acts`, `laws`, `court_practice`,
 `oliy_majlis` or `president` catalogue jobs while rotating exact source

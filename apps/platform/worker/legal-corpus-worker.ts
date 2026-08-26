@@ -43,10 +43,14 @@ const LOCK_NAME = "legal-corpus-worker";
 export const LEGAL_CORPUS_SCHEDULE_LEASE_MS = 15 * 60_000;
 const LOCK_MS = LEGAL_CORPUS_SCHEDULE_LEASE_MS;
 const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
-// Staging uses the remaining wall-clock budget of the 15-minute Cron
-// invocation to drain more already-queued, sequential jobs. Production keeps
-// the historical short fence and its acquisition flags remain disabled.
-export const LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS = 12 * 60_000;
+// Staging stops claiming new ingestion work two minutes before the next usable
+// twelve-minute scheduler slot. Live batch-20 evidence showed that a version
+// job claimed immediately before the old twelve-minute fence needed another
+// 75 seconds, causing the next cron tick to miss the distributed lock. The
+// ten-minute start fence leaves a bounded tail for that final sequential source
+// job and D1 finalization. Production keeps the historical short fence and its
+// acquisition flags remain disabled.
+export const LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS = 10 * 60_000;
 // Once all core codes are settled, four catalogue pages advance the durable
 // discovery checkpoints per staging tick. The shared 20-second host pacer
 // permits ten sequential Lex.uz request windows per four-minute invocation
@@ -61,11 +65,11 @@ const DISCOVERY_PAGES_PER_RUN = 4;
 // authoritative: a document requiring a second official representation simply
 // leaves a later durable job queued rather than overlapping the next tick.
 const INGESTION_JOBS_PER_RUN = 5;
-// Live staging cadence showed that both 24-job and 22-job batches cross the
-// twelve-minute scheduler slot (about 12m15s), so the next usable four-minute
-// cron tick is missed and effective throughput falls below the 20-job
-// baseline. Keep the proven 20-job cap so the bounded batch finishes before
-// that slot while preserving the same single-stream Lex pacing.
+// Live staging cadence showed that 24-job, 22-job and then 20-job batches could
+// all cross the twelve-minute scheduler slot when the old start fence allowed
+// one final source job too late. Keep the 20-job cap as a hard upper bound; the
+// elapsed-time fence above is authoritative and preserves the same
+// single-stream Lex pacing.
 const MAX_STAGING_INGESTION_JOBS_PER_RUN = 20;
 // Four of the five ingestion slots may prefer already-discovered official
 // catalogues. The order is the current operational legal-source policy:

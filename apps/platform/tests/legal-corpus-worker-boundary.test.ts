@@ -236,6 +236,7 @@ test("long historical batches reserve one bounded slot to continue a live core-c
 
 test("ingestion start fence leaves a bounded representation-fetch window", () => {
   const scheduledTime = Date.UTC(2026, 7, 16, 19, 10, 28);
+  assert.equal(LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS, 10 * 60_000);
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime), true);
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 194_999), true);
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 195_000), false);
@@ -474,7 +475,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;/u);
   assert.match(corpusWorker, /const VERSION_INGESTION_SLOT_INDEX = 3;/u);
   assert.match(corpusWorker, /const INGESTION_START_CUTOFF_MS = 195_000;/u);
-  assert.match(corpusWorker, /LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS = 12 \* 60_000;/u);
+  assert.match(corpusWorker, /LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS = 10 \* 60_000;/u);
   assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
   assert.doesNotMatch(corpusWorker, /afterIngest:/u);
 });
