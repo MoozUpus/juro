@@ -118,7 +118,8 @@ after that run finished. It then passes the checked-in SQL to Wrangler as one
 `--command` argument. The final query is also guarded by the empty-lock
 predicate and accepts sparse coverage from either the legacy or compressed
 representation. A second lightweight postflight must observe the same
-completed run ID and an empty lock; a cron that starts during the aggregate
+completed run ID, an empty lock, and a still-future cron boundary; a cron that
+starts during the aggregate or an aggregate that crosses that boundary
 invalidates the capture. This avoids loading D1 inside an imminent ingestion
 window, mixing counters from different runs, and Wrangler's summary-only
 output for remote `--file` execution.

@@ -90,10 +90,14 @@ if (!snapshotRow || Number(snapshotRow.locks) !== 0) {
 }
 const postflight = executeReadOnly(boundarySql);
 const postflightRow = postflight.results?.[0];
+const postflightSecondsUntilNextDue = Number(postflightRow?.next_due_epoch)
+  - Number(postflightRow?.now_epoch);
 if (!postflightRow
   || Number(postflightRow.lock_count) !== 0
   || postflightRow.status === "running"
-  || postflightRow.id !== preflightRow.id) {
+  || postflightRow.id !== preflightRow.id
+  || !Number.isFinite(postflightSecondsUntilNextDue)
+  || postflightSecondsUntilNextDue <= 0) {
   throw new Error(
     `LEGAL_CORPUS_QUALITY_SNAPSHOT_POSTFLIGHT_CHANGED:${postflightRow?.id ?? "unknown"}`,
   );
@@ -108,6 +112,7 @@ console.log(JSON.stringify({
   latestRun: preflightRow,
   postflightRun: postflightRow,
   captureWindowSeconds: secondsUntilNextDue,
+  postflightWindowSeconds: postflightSecondsUntilNextDue,
   snapshot: snapshotRow,
   meta: {
     rowsRead: Number(snapshot.meta?.rows_read ?? 0),
