@@ -12312,3 +12312,16 @@ is not frozen: 1,649 jobs are `completed` and 28,531 fetch/version jobs remain
 are both zero. The staging D1 size is approximately 2.82 GiB. Release floors,
 queue freeze and all post-ingestion snapshot/evaluation/restore/CI gates remain
 open; production is untouched.
+
+## Shard run closure (2026-08-26, 11:00Z)
+
+The cron run `8cc47386-ccaa-493c-801d-73875481912b` completed at
+`2026-08-26T10:59:42.142Z` with `status=completed` and `error_code=NULL`.
+The post-run read-only aggregate is 901 canonical documents, 9,986 unique
+current provisions and 43,941 indexed chunks. All 44 discovery checkpoints are
+`completed`. A subsequent bounded worker cycle holds the distributed
+`legal-corpus-worker` lock; the completed run itself introduced no terminal or
+dead-letter failures. The queue is not frozen: 1,656 jobs are `completed`,
+28,525 remain `queued`, and one fetch job is currently `running`. Release
+floors, queue freeze and all post-ingestion snapshot/evaluation/restore/CI
+gates remain open; production is untouched.
