@@ -2,6 +2,28 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Batch-22 staging verification after cadence fix (2026-08-26, 09:32–09:45Z)
+
+The staging-only Worker deployment `d3979813-445b-4231-83f3-32c5826fa503`
+serves `juro-staging-corpus-shard-2` with the bounded sequential batch set to
+22. The Worker retains the 20-second Lex pacing, one stream and distributed
+lease; dense retrieval, sparse compression and federation remain disabled.
+The boundary suite passed `186/186` before deployment.
+
+Run `d4f502c5-b588-47dc-96e9-76cfe3893f4e` closed with `status=completed`,
+`error_code=NULL`, from `09:32:39.947Z` to `09:44:57.805Z`. A subsequent
+read-only D1 snapshot found no `legal-corpus-worker` lock. It recorded 850
+canonical documents, 1,080 language variants, 9,793 unique current provisions
+by the checked-in dashboard formula, and 43,725 current indexed chunks. The
+ingestion queue still contained 28,553 queued/running/retrying jobs.
+
+The same snapshot recorded 44/44 completed discovery checkpoints, zero
+terminal failure rows and zero dead-letter jobs. This is progress evidence
+only: the document floor is 850/1,500, the unique-provision floor is
+9,793/22,000, acquisition remains active and the queue is not frozen.
+Federation, corpus freeze, snapshot, indexed 314-scenario evaluation,
+Qdrant/D1 restore gates, CI release and production remain closed.
+
 ## Batch-24 staging verification while acquisition remains open (2026-08-26, 09:00–09:29Z)
 
 Deployment `d38bd8fd-5f4a-427c-8911-f99ec07694c7` put staging Worker
