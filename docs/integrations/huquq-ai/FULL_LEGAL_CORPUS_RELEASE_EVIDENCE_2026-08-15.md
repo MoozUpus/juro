@@ -2,6 +2,38 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## First 400-document milestone while acquisition remains open (2026-08-26, 01:24–01:35Z)
+
+Single-stream staging run `d3278097-1476-4989-8a08-0b5803188d9b` started at
+`01:24:47.386Z` and completed at `01:34:41.675Z` with `error_code=NULL`.
+The post-run `legal-corpus-worker` lock was empty before the snapshot and after
+the read-only evidence queries. The shard-control row remained `active`, and the
+staging Worker remained version `1fb18209-c95f-46c5-abf5-6400a6442879` at
+100% with the exact shard-2 D1 binding.
+
+The lock-free snapshot recorded 44/44 completed and count-aligned discovery
+checkpoints, 19/19 indexed core-code targets, zero failed or dead-letter
+ingestion jobs, zero running jobs, and zero terminal or technically
+unavailable failure records. The two failure-ledger rows remained historical
+retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` records for one fetch job whose
+current status is `completed`. Queue composition was 455 completed and 25,707
+queued fetch jobs, plus 246 completed and 3,237 queued version jobs.
+
+Using the exact checked-in dashboard formula, shard 2 contained 407 canonical
+documents, 503 language variants, **7,920 unique current provisions**, 40,009
+current provision rows, and 40,066 current/indexed chunks. All current chunks
+were indexed. Fifty newly discovered variants still had no current version and
+remained in the open ingestion pipeline; there were zero broken non-null
+current-version references, zero orphan provisions, and zero orphan chunks.
+`wrangler d1 info` reported 1,143,541,760 bytes.
+
+This is the first verified lock-free snapshot above 400 canonical documents,
+but it is progress evidence only. The document floor remains 407/1,500, the
+exact unique-provision floor remains 7,920/22,000, acquisition is active, and
+both queues remain open. The indexed-chunk floor alone is crossed. Federation
+freeze, snapshot, the indexed 314-scenario evaluation, Qdrant/D1 restore
+gates, CI, release and production therefore remain unauthorized.
+
 ## Provision-metric correction and first 375-document milestone (2026-08-26, 00:48–01:00Z)
 
 The prior shard-2 milestones from the 123-document snapshot through the
