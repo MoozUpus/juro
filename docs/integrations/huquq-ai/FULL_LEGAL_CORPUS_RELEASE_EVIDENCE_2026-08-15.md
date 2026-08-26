@@ -48,23 +48,25 @@ compression flags.
 
 The first corrected run, `c63df720-8d55-47b4-a799-1e9cc83bd5d9`, completed
 without an error in 669.6 seconds (`10:36:39.947Z`–`10:47:49.517Z`), releasing
-the lock 50.4 seconds before the twelve-minute boundary. The next scheduled
-run, `8cc47386-ccaa-493c-801d-73875481912b`, started at
-`10:48:39.947Z`: exactly 12 minutes after the prior start, rather than the
-regressed 16-minute interval. This is live cadence evidence, not a release
-gate shortcut.
+the lock 50.4 seconds before the twelve-minute boundary. The second corrected
+run, `8cc47386-ccaa-493c-801d-73875481912b`, completed without an error in
+662.2 seconds (`10:48:39.947Z`–`10:59:42.142Z`), leaving 57.8 seconds. The
+third run, `d52a37fb-ecc7-40d5-ba84-057903fc2231`, started at
+`11:00:40.179Z`. Consecutive start intervals were therefore 12:00.000 and
+12:00.232, rather than the regressed 16 minutes. This is repeatable live
+cadence evidence, not a release gate shortcut.
 
-The lock-free snapshot after the first corrected run contained 891 canonical
-documents, 1,130 variants, **9,952 unique current provisions**, 43,836 physical
-current provision rows, and 43,905/43,905 current/indexed chunks. Fetch jobs
-were 1,082 completed / 25,607 queued and version jobs were 559 completed /
-2,924 queued. The failure ledger remained at five historical retry rows, with
+The lock-free snapshot after the second corrected run contained 900 canonical
+documents, 1,139 variants, **9,980 unique current provisions**, 43,865 physical
+current provision rows, and 43,935/43,935 current/indexed chunks. Fetch jobs
+were 1,091 completed / 25,607 queued and version jobs were 564 completed /
+2,919 queued. The failure ledger remained at five historical retry rows, with
 zero terminal or technically unavailable failures, zero running/failed/dead-
 letter ingestion jobs and zero current unindexed chunks. Acquisition remained
-`active`, the queues remained open, and D1 size was 3,025,850,368 bytes.
+`active`, the queues remained open, and D1 size was 3,056,062,464 bytes.
 
-This remains progress evidence only: the document floor is 891/1,500 and the
-exact unique-provision floor is 9,952/22,000. Federation, queue/acquisition
+This remains progress evidence only: the document floor is 900/1,500 and the
+exact unique-provision floor is 9,980/22,000. Federation, queue/acquisition
 freeze, snapshot, indexed 314-scenario evaluation, Qdrant/D1 restore gates,
 CI, release and production remain closed.
 
