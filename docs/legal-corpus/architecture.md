@@ -174,9 +174,11 @@ global RRF, and a duplicate partition cannot improve its score. Validated live
 fallback URLs are queued only when the D1 control rows prove exactly one active
 shard; prepared/frozen or ambiguous multi-active routing remains read-only.
 
-The flag remains `false` in every checked-in environment and no federated D1
-bindings are configured yet. For live evidence capture it may be enabled only
-in staging, with the exact reviewed bindings and `LEGAL_CORPUS_SHADOW_MODE=true`
+The flag remains `false` in every checked-in environment. The exact federated
+D1 bindings are present only in the staging platform configuration and are
+read-only until the nested release gate passes. For live evidence capture the
+flag may be enabled only in staging, with those reviewed bindings and
+`LEGAL_CORPUS_SHADOW_MODE=true`
 so user answers still use direct Lex. Indexed federation must not become the
 answer path until the routing, disjoint partition, snapshot/restore,
 point-in-time and sparse/dense packet-parity artifacts above pass; the
@@ -204,7 +206,7 @@ treated as indexed corpus. The shard has its own D1-backed lock and remains a
 single sequential Lex.uz stream with the same 20-second delay. Release
 evidence must name the exact database(s) and must not add v2 and shard counts
 unless a separately tested federated retrieval/evidence contract is present.
-The shard packs up to 20 sequential ingestion jobs into one staging lease (the
+The shard packs up to 24 sequential ingestion jobs into one staging lease (the
 primary Worker remains at five); this changes only bounded batch packing and
 never reduces the source delay or opens a second stream.
 
