@@ -12355,6 +12355,21 @@ failures and dead-letter jobs are both zero. The staging D1 size is
 all post-ingestion snapshot/evaluation/restore/CI gates remain open; production
 is untouched.
 
+## Shard run closure (2026-08-26, 11:59Z)
+
+The cron run `65616f69-8688-47b8-b869-50a3af497707` completed at
+`2026-08-26T11:59:36.523Z` with `status=completed` and `error_code=NULL`.
+The post-run read-only aggregate is 944 canonical documents, 10,142 unique
+current provisions and 44,109 indexed chunks. All 44 discovery checkpoints are
+`completed`, and the distributed `legal-corpus-worker` lock is released. The
+queue is not frozen: 1,725 ingestion jobs are `completed` and 28,502 remain
+`queued`; 4,405 of the queued/retrying jobs are live/manual or version work
+(catalog discovery jobs are excluded from the release queue calculation).
+Terminal failures and dead-letter jobs are both zero. The staging D1 size is
+3,204,694,016 bytes (approximately 2.98 GiB). Release floors, queue freeze and
+all post-ingestion snapshot/evaluation/restore/CI gates remain open; production
+is untouched.
+
 ## Shard run closure (2026-08-26, 11:35Z)
 
 The cron run `90c75439-468b-433c-aee7-53b92d5df79f` completed at
