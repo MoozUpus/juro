@@ -12523,3 +12523,20 @@ checkpoints are `completed`, the lock is released, and the staging D1 size is
 4,417 are live/manual or version work. The acquisition state remains `active`.
 No code change or staging redeploy was justified; the next sequential run must
 retry the timeout before any release gate can open. Production is untouched.
+
+## Shard run closure (2026-08-26, 12:34Z; transient conditions resolved)
+
+The cron run `f2c188c7-da64-414f-9049-532ba84b991e` completed at
+`2026-08-26T12:34:57.687Z` with `status=completed` and
+`error_code=LEGAL_SOURCE_TIMEOUT`. During the run, three Lex.uz fetch/version
+attempts recorded retryable timeout rows; all three corresponding job rows
+completed successfully with `attempt_count` 2 or 3 and `last_error_code=NULL`
+by `2026-08-26T12:30:56.074Z`. No ingestion job remains `failed`, `retrying`,
+or `dead_letter`, and terminal failures remain zero. The post-run aggregate is
+968 canonical documents, 10,251 unique current provisions and 44,229 indexed
+chunks. All 44 discovery checkpoints are `completed`, the lock is released,
+and the staging D1 size is `3,273,113,600` bytes (approximately 3.05 GiB).
+The queue is not frozen: 1,761 ingestion jobs are `completed`, 28,495 are
+`queued`, and 4,422 are live/manual or version work. Acquisition remains
+`active`; no code change or staging redeploy was justified. Production is
+untouched.
