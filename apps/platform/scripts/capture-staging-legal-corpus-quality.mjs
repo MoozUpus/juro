@@ -52,13 +52,14 @@ function executeReadOnly(sql) {
   return query;
 }
 
-const preflight = executeReadOnly(`WITH latest AS (
+const boundarySql = `WITH latest AS (
   SELECT id,status,error_code,started_at,finished_at
   FROM scheduled_runs ORDER BY started_at DESC LIMIT 1
 )
 SELECT (SELECT COUNT(*) FROM scheduled_locks) AS lock_count,
   id,status,error_code,started_at,finished_at
-FROM latest;`);
+FROM latest;`;
+const preflight = executeReadOnly(boundarySql);
 const preflightRow = preflight.results?.[0];
 if (!preflightRow || Number(preflightRow.lock_count) !== 0 || preflightRow.status === "running") {
   throw new Error(`LEGAL_CORPUS_QUALITY_SNAPSHOT_LOCKED:${preflightRow?.id ?? "unknown"}`);
@@ -74,6 +75,16 @@ const snapshotRow = snapshot.results?.[0];
 if (!snapshotRow || Number(snapshotRow.locks) !== 0) {
   throw new Error("LEGAL_CORPUS_QUALITY_SNAPSHOT_LOST_LOCK_FREE_BOUNDARY");
 }
+const postflight = executeReadOnly(boundarySql);
+const postflightRow = postflight.results?.[0];
+if (!postflightRow
+  || Number(postflightRow.lock_count) !== 0
+  || postflightRow.status === "running"
+  || postflightRow.id !== preflightRow.id) {
+  throw new Error(
+    `LEGAL_CORPUS_QUALITY_SNAPSHOT_POSTFLIGHT_CHANGED:${postflightRow?.id ?? "unknown"}`,
+  );
+}
 
 console.log(JSON.stringify({
   capturedAt: new Date().toISOString(),
@@ -82,6 +93,7 @@ console.log(JSON.stringify({
     id: databaseBinding.database_id,
   },
   latestRun: preflightRow,
+  postflightRun: postflightRow,
   snapshot: snapshotRow,
   meta: {
     rowsRead: Number(snapshot.meta?.rows_read ?? 0),
