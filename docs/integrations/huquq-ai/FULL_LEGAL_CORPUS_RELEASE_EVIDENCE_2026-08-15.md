@@ -12396,3 +12396,18 @@ frozen, and query metadata reports `size_after=3,145,568,256` bytes. The
 document and exact-provision floors, queue/acquisition freeze, federation,
 snapshot, evaluation, restore, CI, and browser gates therefore remain open;
 production is untouched.
+
+## Shard run closure (2026-08-26, 11:47Z)
+
+The cron run `d8f32323-8f58-4781-b43d-2a34246694c3` completed at
+`2026-08-26T11:47:32.383Z` with `status=completed` and `error_code=NULL`.
+The post-run read-only aggregate is 935 canonical documents, 10,113 unique
+current provisions and 44,079 indexed chunks. All 44 discovery checkpoints are
+`completed`, and the distributed `legal-corpus-worker` lock is released. The
+queue is not frozen: 1,711 ingestion jobs are `completed` and 28,505 remain
+`queued`; 4,399 of the queued/retrying jobs are live/manual or version work
+(catalog discovery jobs are excluded from the release queue calculation).
+Terminal failures and dead-letter jobs are both zero. The staging D1 size is
+3,175,174,144 bytes (approximately 2.96 GiB). Release floors, queue freeze and
+all post-ingestion snapshot/evaluation/restore/CI gates remain open; production
+is untouched.
