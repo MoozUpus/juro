@@ -27,6 +27,11 @@ type CorpusRuntimeEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>
   & {
     LEGAL_CORPUS_FEDERATED_ENABLED?: string;
+    LEGAL_CORPUS_FEDERATED_SOURCE_SET?: string;
+    LEGAL_CORPUS_LEGACY_DB?: D1Database;
+    LEGAL_CORPUS_V2_DB?: D1Database;
+    LEGAL_CORPUS_SHARD_1_DB?: D1Database;
+    LEGAL_CORPUS_SHARD_2_DB?: D1Database;
     OPENAI_API_KEY?: string;
     EMBEDDING_MODEL?: string;
     QDRANT_URL?: string;
@@ -35,6 +40,7 @@ type CorpusRuntimeEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
   };
 
 const MAX_FEDERATED_CORPUS_BINDINGS = 32;
+const ALL_STAGING_CORPUS_SOURCE_SET = "all-staging-d1";
 
 function isD1Database(value: unknown): value is D1Database {
   return Boolean(value) && typeof value === "object"
@@ -49,6 +55,18 @@ export function configuredFederatedCorpusShards(
     throw new TypeError("LEGAL_CORPUS_FEDERATION_ENVIRONMENT_INVALID");
   }
   const record = env as CorpusRuntimeEnv & Record<string, unknown>;
+  if (env.LEGAL_CORPUS_FEDERATED_SOURCE_SET === ALL_STAGING_CORPUS_SOURCE_SET) {
+    const explicit = [
+      ["juro-staging", record.LEGAL_CORPUS_LEGACY_DB],
+      ["juro-staging-corpus-v2", record.LEGAL_CORPUS_V2_DB],
+      ["juro-staging-corpus-shard-1", record.LEGAL_CORPUS_SHARD_1_DB],
+      ["juro-staging-corpus-shard-2", record.LEGAL_CORPUS_SHARD_2_DB],
+    ] as const;
+    if (explicit.some(([, value]) => !isD1Database(value))) {
+      throw new TypeError("LEGAL_CORPUS_FEDERATION_BINDINGS_INCOMPLETE");
+    }
+    return explicit.map(([databaseName, db]) => ({ databaseName, db: db as D1Database }));
+  }
   const values = Array.from({ length: MAX_FEDERATED_CORPUS_BINDINGS }, (_, index) => (
     record[`LEGAL_CORPUS_SHARD_${index + 1}_DB`]
   ));
@@ -73,18 +91,20 @@ async function liveFallbackIngestionEnv(
   federationRequested: boolean,
 ): Promise<CorpusRuntimeEnv | null> {
   if (!shards) return federationRequested ? null : env;
-  try {
-    const states = await Promise.all(shards.map(async (shard) => {
+  const states = await Promise.all(shards.map(async (shard) => {
+    try {
       const row = await shard.db.prepare(`SELECT acquisition_state AS state
         FROM legal_corpus_shard_control WHERE singleton_id=1 LIMIT 1`)
         .first<{ state: string }>();
       return row?.state === "active" ? shard.db : null;
-    }));
-    const active = states.filter((db): db is D1Database => Boolean(db));
-    return active.length === 1 ? { ...env, DB: active[0]! } : null;
-  } catch {
-    return null;
-  }
+    } catch {
+      // Legacy and corpus-v2 databases predate shard-control. They are
+      // intentionally read-only federation sources, never ingestion targets.
+      return null;
+    }
+  }));
+  const active = states.filter((db): db is D1Database => Boolean(db));
+  return active.length === 1 ? { ...env, DB: active[0]! } : null;
 }
 
 export type LegalChatSourceEvidence = {

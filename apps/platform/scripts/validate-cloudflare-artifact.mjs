@@ -151,43 +151,53 @@ assert.deepEqual(selected.r2_buckets, [
     bucket_name: `juro-${requestedEnvironment}-quarantine`,
   },
 ]);
-assert.equal(artifact.d1_databases?.length, 1);
-const expectedD1Database = replacesSitesPrimaryBindings
-  ? {
+const expectedD1Databases = replacesSitesPrimaryBindings
+  ? [{
       binding: "DB",
       database_name: "site-creator-d1",
       database_id: "00000000-0000-4000-8000-000000000000",
       migrations_dir: "./drizzle",
-    }
-  : selected.d1_databases[0];
-const {
-  migrations_dir: artifactMigrationsDirectory,
-  migrations_pattern: artifactMigrationsPattern,
-  ...artifactD1Database
-} = artifact.d1_databases[0];
-const {
-  migrations_dir: expectedMigrationsDirectory,
-  migrations_pattern: expectedMigrationsPattern,
-  ...expectedD1DatabaseBinding
-} = expectedD1Database;
-assert.deepEqual(
-  artifactD1Database,
-  expectedD1DatabaseBinding,
-);
-assert.equal(
-  resolve(dirname(artifactConfigPath), artifactMigrationsDirectory),
-  resolve(dirname(sourceConfigPath), expectedMigrationsDirectory),
-  "artifact D1 migrations_dir must resolve to the configured migration directory",
-);
-assert.equal(
-  artifactMigrationsPattern
-    ? resolve(dirname(artifactConfigPath), artifactMigrationsPattern)
-    : artifactMigrationsPattern,
-  expectedMigrationsPattern
-    ? resolve(dirname(sourceConfigPath), expectedMigrationsPattern)
-    : expectedMigrationsPattern,
-  "artifact D1 migrations_pattern must resolve to the configured migration pattern",
-);
+    }]
+  : selected.d1_databases;
+assert.equal(artifact.d1_databases?.length, expectedD1Databases.length);
+for (let index = 0; index < artifact.d1_databases.length; index += 1) {
+  const artifactD1 = artifact.d1_databases[index];
+  const expectedD1 = expectedD1Databases[index];
+  assert.ok(artifactD1 && expectedD1, `missing D1 binding at index ${index}`);
+  const {
+    migrations_dir: artifactMigrationsDirectory,
+    migrations_pattern: artifactMigrationsPattern,
+    ...artifactD1Binding
+  } = artifactD1;
+  const {
+    migrations_dir: expectedMigrationsDirectory,
+    migrations_pattern: expectedMigrationsPattern,
+    ...expectedD1Binding
+  } = expectedD1;
+  assert.deepEqual(artifactD1Binding, expectedD1Binding);
+  if (expectedMigrationsDirectory) {
+    assert.equal(
+      resolve(dirname(artifactConfigPath), artifactMigrationsDirectory),
+      resolve(dirname(sourceConfigPath), expectedMigrationsDirectory),
+      "artifact D1 migrations_dir must resolve to the configured migration directory",
+    );
+  } else {
+    assert.equal(
+      artifactMigrationsDirectory,
+      "../../migrations",
+      "read-only D1 bindings must not inherit the application migration directory",
+    );
+  }
+  assert.equal(
+    artifactMigrationsPattern
+      ? resolve(dirname(artifactConfigPath), artifactMigrationsPattern)
+      : artifactMigrationsPattern,
+    expectedMigrationsPattern
+      ? resolve(dirname(sourceConfigPath), expectedMigrationsPattern)
+      : expectedMigrationsPattern,
+    "artifact D1 migrations_pattern must resolve to the configured migration pattern",
+  );
+}
 
 assert.equal(artifact.r2_buckets?.length, 3);
 assert.deepEqual(

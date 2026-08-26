@@ -15,6 +15,7 @@ const RRF_K = 60;
 const MAX_QUERY_LENGTH = 3_000;
 const MAX_FEDERATED_SHARDS = 32;
 const NUMBERED_SHARD_PATTERN = /^juro-staging-corpus-shard-([1-9][0-9]*)$/u;
+const NAMED_FEDERATED_SOURCE_PATTERN = /^(?:juro-staging|juro-staging-corpus-v2|juro-staging-corpus-shard-[1-9][0-9]*)$/u;
 
 export type LegalCorpusSearchScope = {
   tenantId?: string | null;
@@ -498,9 +499,12 @@ function assertFederatedShards(shards: readonly LegalCorpusFederatedShard[]): vo
     throw new TypeError("LEGAL_CORPUS_FEDERATION_SHARD_COUNT_INVALID");
   }
   const names = new Set<string>();
+  const allNumbered = shards.every((shard) => NUMBERED_SHARD_PATTERN.test(shard.databaseName));
   shards.forEach((shard, index) => {
     const match = shard.databaseName.match(NUMBERED_SHARD_PATTERN);
-    if (!match || Number(match[1]) !== index + 1 || names.has(shard.databaseName)
+    const sequenceValid = allNumbered ? Boolean(match && Number(match[1]) === index + 1) : true;
+    if ((!allNumbered && !NAMED_FEDERATED_SOURCE_PATTERN.test(shard.databaseName))
+      || !sequenceValid || names.has(shard.databaseName)
       || !shard.db || typeof shard.db.prepare !== "function") {
       throw new TypeError("LEGAL_CORPUS_FEDERATION_SHARD_SEQUENCE_INVALID");
     }
@@ -509,16 +513,15 @@ function assertFederatedShards(shards: readonly LegalCorpusFederatedShard[]): vo
 }
 
 function federatedEvidenceKey(item: LegalCorpusRetrievalItem): string {
+  // A shard can contain an older copy of an article that is current in
+  // another shard. Version/hash fields are deliberately excluded so that the
+  // federation picks one current representative instead of returning both.
+  const documentIdentity = item.sourceUrl ?? item.documentId;
   return JSON.stringify([
     item.sourceClass,
-    item.documentId,
+    documentIdentity,
     item.language,
     item.articleNumber,
-    item.validFrom,
-    item.validTo,
-    item.versionDate,
-    item.sourceUrl,
-    item.contentHash,
   ]);
 }
 
@@ -534,6 +537,19 @@ function selectStableRepresentative(
   current: LegalCorpusRetrievalItem,
   candidate: LegalCorpusRetrievalItem,
 ): LegalCorpusRetrievalItem {
+  const statusRank: Record<LegalCorpusRetrievalItem["status"], number> = {
+    active: 3,
+    unknown: 2,
+    historical: 1,
+    repealed: 0,
+  };
+  const currentStatus = statusRank[current.status];
+  const candidateStatus = statusRank[candidate.status];
+  if (candidateStatus !== currentStatus) return candidateStatus > currentStatus ? candidate : current;
+  const currentVersion = current.versionDate ?? current.validFrom ?? "";
+  const candidateVersion = candidate.versionDate ?? candidate.validFrom ?? "";
+  if (candidateVersion !== currentVersion) return candidateVersion > currentVersion ? candidate : current;
+  if (candidate.fetchedAt !== current.fetchedAt) return candidate.fetchedAt > current.fetchedAt ? candidate : current;
   return candidate.chunkId.localeCompare(current.chunkId) < 0 ? candidate : current;
 }
 

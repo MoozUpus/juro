@@ -198,6 +198,7 @@
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
         "LEGAL_CORPUS_DENSE_ENABLED": "false",
         "LEGAL_CORPUS_FEDERATED_ENABLED": "false",
+        "LEGAL_CORPUS_FEDERATED_SOURCE_SET": "all-staging-d1",
         "LEGAL_CORPUS_SHADOW_MODE": "true",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
         "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
@@ -224,6 +225,26 @@
           "database_name": "juro-staging",
           "database_id": "bb716a96-b2fb-4823-90d6-6c228fed181a",
           "migrations_dir": "./drizzle"
+        },
+        {
+          "binding": "LEGAL_CORPUS_LEGACY_DB",
+          "database_name": "juro-staging",
+          "database_id": "bb716a96-b2fb-4823-90d6-6c228fed181a"
+        },
+        {
+          "binding": "LEGAL_CORPUS_V2_DB",
+          "database_name": "juro-staging-corpus-v2",
+          "database_id": "62620fb3-3da3-4c76-a8e9-aa60858c1063"
+        },
+        {
+          "binding": "LEGAL_CORPUS_SHARD_1_DB",
+          "database_name": "juro-staging-corpus-shard-1",
+          "database_id": "e09e0682-0c2e-4458-a8f3-be9de28117e3"
+        },
+        {
+          "binding": "LEGAL_CORPUS_SHARD_2_DB",
+          "database_name": "juro-staging-corpus-shard-2",
+          "database_id": "36fa1cfe-6d00-47b7-a980-864020028d86"
         }
       ],
       "migrations": [

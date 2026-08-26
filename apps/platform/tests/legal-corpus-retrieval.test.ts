@@ -68,6 +68,7 @@ test("federated RRF deduplicates the same evidence without rewarding a duplicate
   const unique = {
     ...source("unique"),
     documentId: "lexuz:2",
+    sourceUrl: "https://lex.uz/ru/docs/2",
     contentHash: "b".repeat(64),
   };
   const fused = federatedReciprocalRankFusion({
@@ -82,6 +83,52 @@ test("federated RRF deduplicates the same evidence without rewarding a duplicate
   assert.equal(fused[0]?.sparseRank, 1);
   assert.equal(fused[0]?.denseRank, 1);
   assert.equal(fused[0]?.fusionScore, 2 / 61);
+});
+
+test("federated RRF keeps the newest current version across overlapping sources", () => {
+  const older = {
+    ...source("version-old"),
+    exactQuote: "Старая редакция",
+    versionDate: "2024-01-01",
+    fetchedAt: "2024-01-02T00:00:00.000Z",
+    contentHash: "b".repeat(64),
+  };
+  const newer = {
+    ...source("version-new"),
+    exactQuote: "Актуальная редакция",
+    versionDate: "2026-01-01",
+    fetchedAt: "2026-01-02T00:00:00.000Z",
+    contentHash: "c".repeat(64),
+  };
+  const fused = federatedReciprocalRankFusion({
+    sparseByShard: [[older], [newer]],
+    dense: [],
+    hydratedDense: [],
+    limit: 8,
+  });
+  assert.equal(fused.length, 1);
+  assert.equal(fused[0]?.chunkId, "version-new");
+  assert.equal(fused[0]?.exactQuote, "Актуальная редакция");
+  assert.equal(fused[0]?.fusionScore, 1 / 61);
+});
+
+test("federated retrieval accepts explicitly named legacy corpus sources", async () => {
+  const first = sqliteD1Fixture();
+  const second = sqliteD1Fixture();
+  try {
+    const results = await retrieveFederatedLegalCorpus({
+      shards: [
+        { databaseName: "juro-staging", db: first.d1 },
+        { databaseName: "juro-staging-corpus-v2", db: second.d1 },
+      ],
+      query: "несуществующая норма",
+      officialOnly: true,
+    });
+    assert.deepEqual(results, []);
+  } finally {
+    first.sqlite.close();
+    second.sqlite.close();
+  }
 });
 
 test("sparse retrieval returns only the current, scope-authorized version", async () => {

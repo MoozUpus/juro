@@ -106,6 +106,48 @@ test("federated runtime bindings are staging-only, contiguous, and require two s
   }
 });
 
+test("all-staging federation accepts the four explicit corpus D1 bindings", () => {
+  const legacy = sqliteD1Fixture();
+  const v2 = sqliteD1Fixture();
+  const shard1 = sqliteD1Fixture();
+  const shard2 = sqliteD1Fixture();
+  try {
+    const configured = configuredFederatedCorpusShards({
+      DB: legacy.d1,
+      APP_ENV: "staging",
+      LEGAL_CORPUS_FEDERATED_ENABLED: "true",
+      LEGAL_CORPUS_FEDERATED_SOURCE_SET: "all-staging-d1",
+      LEGAL_CORPUS_LEGACY_DB: legacy.d1,
+      LEGAL_CORPUS_V2_DB: v2.d1,
+      LEGAL_CORPUS_SHARD_1_DB: shard1.d1,
+      LEGAL_CORPUS_SHARD_2_DB: shard2.d1,
+    });
+    assert.deepEqual(configured?.map((shard) => shard.databaseName), [
+      "juro-staging",
+      "juro-staging-corpus-v2",
+      "juro-staging-corpus-shard-1",
+      "juro-staging-corpus-shard-2",
+    ]);
+    assert.throws(
+      () => configuredFederatedCorpusShards({
+        DB: legacy.d1,
+        APP_ENV: "staging",
+        LEGAL_CORPUS_FEDERATED_ENABLED: "true",
+        LEGAL_CORPUS_FEDERATED_SOURCE_SET: "all-staging-d1",
+        LEGAL_CORPUS_LEGACY_DB: legacy.d1,
+        LEGAL_CORPUS_V2_DB: v2.d1,
+        LEGAL_CORPUS_SHARD_1_DB: shard1.d1,
+      }),
+      /LEGAL_CORPUS_FEDERATION_BINDINGS_INCOMPLETE/u,
+    );
+  } finally {
+    legacy.sqlite.close();
+    v2.sqlite.close();
+    shard1.sqlite.close();
+    shard2.sqlite.close();
+  }
+});
+
 test("feature-off chat retrieval preserves the existing direct Lex path", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   let calls = 0;
