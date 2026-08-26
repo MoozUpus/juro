@@ -2,6 +2,55 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
+## Batch-24 staging verification while acquisition remains open (2026-08-26, 09:00–09:29Z)
+
+Deployment `d38bd8fd-5f4a-427c-8911-f99ec07694c7` put staging Worker
+version `e9153f7c-7510-4eca-9ed4-f19c9818e3a9` at 100%. A live
+`versions view` recheck showed the exact shard-2 D1 binding
+`36fa1cfe-6d00-47b7-a980-864020028d86`,
+`LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN=24`, shadow mode enabled,
+dense retrieval disabled, and the same private service bindings. The config
+and Worker boundary suite passed 24/24, including staging-only isolation,
+bounded lease renewal and production fail-closed behavior. The change does not
+reduce the 20-second Lex pacing and does not create another stream.
+
+The first two runs that were definitely served by that version closed
+normally: `64a22c06-5c8b-42ec-8e3d-5c48d5e298d7` ran from
+`09:00:39.950Z` to `09:12:50.896Z`, and
+`c56c55e3-5d90-4b22-9ea2-9a2537380657` ran from `09:16:39.947Z` to
+`09:28:56.942Z`. Both finished with `status=completed` and
+`error_code=NULL`; their durable leases renewed throughout and were absent
+before and after the final sequential snapshot.
+
+Against the lock-free pre-deployment baseline of 817 canonical documents,
+9,660 exact unique provisions, 1,007 completed fetch jobs and 522 completed
+version jobs, the two post-deployment runs added 22 documents, 87 exact unique
+provisions, 22 completed fetch jobs and 10 completed version jobs. The final
+snapshot contained 839 canonical documents, 1,077 language variants,
+**9,747 unique current provisions** by the checked-in dashboard formula,
+43,614 physical current provision rows, and 43,682/43,682 current/indexed
+chunks. It also recorded 818 active documents, zero repealed documents, 534
+historical versions, 747 variants fetched today, 4,354 live/manual queued
+jobs, and 50 unversioned variants.
+
+Discovery remained 44/44 completed and count-aligned and the core-code set
+remained 19/19 indexed. The queues remained open at 1,029 completed / 25,607
+queued fetch jobs and 532 completed / 2,951 queued version jobs. There were
+zero running, failed or dead-letter jobs, zero terminal or technically
+unavailable failures, zero broken non-null current-version references, zero
+orphan provisions/chunks, and zero current unindexed chunks. The failure
+ledger was unchanged at five historical retrying rows across four currently
+completed jobs, all with `last_error_code=NULL`. `wrangler d1 info` reported
+2,859,843,584 bytes, still below the 8 GB rollover reserve and Cloudflare's
+10 GB per-database boundary.
+
+This verifies that the bounded batch increase is healthy on staging; it does
+not authorize a release. The document floor remains 839/1,500, the exact
+unique-provision floor remains 9,747/22,000, acquisition remains `active`, and
+both queues remain open. Federation freeze, snapshot, the indexed 314-scenario
+evaluation, Qdrant/D1 restore gates, CI, release and production remain
+unauthorized.
+
 ## First 800-document milestone while acquisition remains open (2026-08-26, 08:00–08:47Z)
 
 Four consecutive single-stream staging runs closed normally in this interval:
