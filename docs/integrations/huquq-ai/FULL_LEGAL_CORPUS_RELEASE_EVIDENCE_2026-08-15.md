@@ -12868,3 +12868,29 @@ no dead-letter state. The acquisition queue remained open at 28,396 jobs,
 including 4,511 non-catalog jobs, so this cycle did not satisfy the release
 gate. A new scheduled run started at `2026-08-26T17:24:43.992Z`; no snapshot,
 evaluation, restore, CI or federation activation was performed.
+
+## Lock-free shard quality snapshot (2026-08-26, 17:36Z)
+
+The checked-in command `npm run capture:legal-corpus:shard-quality` captured a
+read-only snapshot at `2026-08-26T17:36:31.525Z` after run
+`91595b38-fa21-42e0-bc72-36f9ead79838` completed at
+`2026-08-26T17:35:09.828Z`. The empty-lock guard passed (`locks=0`), the
+acquisition state was `active`, and the command reported zero rows written.
+
+The snapshot recorded 1,167 canonical documents, 1,407 variants, 11,284 exact
+unique current provisions, 45,868 physical current provisions, and 45,939
+current/indexed chunks. All 44 checkpoints were completed and aligned, all 19
+core targets were indexed, and there were no checkpoint errors. Integrity
+checks were clean: zero unversioned current pointers, empty version headers,
+broken current pointers, orphan variants, orphan versions, provision errors,
+chunk errors, or current chunks missing sparse coverage. The failure ledger had
+14 historical rows but zero retrying jobs, zero failed jobs, and zero
+terminal/unavailable failures; dead-letter jobs were zero.
+
+The acquisition queue was not frozen: the snapshot contained 25,611 queued
+fetch jobs and 2,779 queued version jobs (28,390 queued jobs in total); the
+separate queue predicate at the same boundary recorded 4,514 non-catalog open
+jobs. The release floors therefore remain 333 documents and 10,716 exact
+unique provisions short. Snapshot release, indexed 314-scenario evaluation,
+Qdrant/D1 restore, CI and federation activation remain pending; production was
+not changed.
