@@ -12519,8 +12519,9 @@ not dead-letter. The post-run aggregate is 961 canonical documents, 10,228
 unique current provisions and 44,206 indexed chunks. All 44 discovery
 checkpoints are `completed`, the lock is released, and the staging D1 size is
 `3,256,479,744` bytes (approximately 3.03 GiB). The queue is not frozen:
-1,751 ingestion jobs are `completed`, 28,496 are `queued` or `retrying`, and
-4,417 are live/manual or version work. The acquisition state remains `active`.
+1,751 ingestion jobs are `completed`, 28,496 are `queued`, one is `retrying`,
+and 4,417 are live/manual or version work. The acquisition state remains
+`active`.
 No code change or staging redeploy was justified; the next sequential run must
 retry the timeout before any release gate can open. Production is untouched.
 
@@ -12528,15 +12529,40 @@ retry the timeout before any release gate can open. Production is untouched.
 
 The cron run `f2c188c7-da64-414f-9049-532ba84b991e` completed at
 `2026-08-26T12:34:57.687Z` with `status=completed` and
-`error_code=LEGAL_SOURCE_TIMEOUT`. During the run, three Lex.uz fetch/version
-attempts recorded retryable timeout rows; all three corresponding job rows
+`error_code=LEGAL_SOURCE_TIMEOUT`. During the run, five retryable timeout
+attempts were recorded across three new Lex.uz fetch/version jobs. All three
 completed successfully with `attempt_count` 2 or 3 and `last_error_code=NULL`
-by `2026-08-26T12:30:56.074Z`. No ingestion job remains `failed`, `retrying`,
-or `dead_letter`, and terminal failures remain zero. The post-run aggregate is
-968 canonical documents, 10,251 unique current provisions and 44,229 indexed
-chunks. All 44 discovery checkpoints are `completed`, the lock is released,
-and the staging D1 size is `3,273,113,600` bytes (approximately 3.05 GiB).
-The queue is not frozen: 1,761 ingestion jobs are `completed`, 28,495 are
-`queued`, and 4,422 are live/manual or version work. Acquisition remains
-`active`; no code change or staging redeploy was justified. Production is
-untouched.
+by `2026-08-26T12:30:56.074Z`. The run also completed the prior slot's timeout
+job on attempt 2 at `2026-08-26T12:25:29.872Z`. No ingestion job remains
+`failed`, `retrying`, or `dead_letter`, and terminal failures remain zero. The
+post-run aggregate is 968 canonical documents, 10,251 unique current provisions
+and 44,229 indexed chunks. All 44 discovery checkpoints are `completed`, the
+lock is released, and the staging D1 size is `3,273,113,600` bytes
+(approximately 3.05 GiB). The queue is not frozen: 1,761 ingestion jobs are
+`completed`, 28,495 are `queued`, and 4,422 are live/manual or version work.
+Acquisition remains `active`; no code change or staging redeploy was justified.
+Production is untouched.
+
+## Lock-free timeout-recovery quality snapshot (2026-08-26, 12:34Z)
+
+The run completed in 617.728 seconds and released its lock about 102 seconds
+before the next 12-minute slot. The compact read-only snapshot explicitly
+observed an empty `scheduled_locks` table. Since the 12:22Z baseline, the shard
+added 7 canonical documents, 7 variants, 23 exact unique current provisions,
+23 physical current provision rows and 23 indexed current chunks. The resulting
+totals are 968 documents, 1,208 variants, 10,251 exact unique current
+provisions, 44,159 physical current provision rows and 44,229/44,229
+current/indexed chunks, with zero unindexed current chunks.
+
+All 44 discovery checkpoints remain `completed` and all 19 core-code targets
+remain `indexed`. Fetch work is 1,160 completed / 25,611 queued and version
+work is 601 completed / 2,884 queued. All 11 historical failure-ledger rows
+remain non-terminal `retrying` evidence, while every related current job row is
+already `completed`; there are zero currently retrying, failed or dead-letter
+ingestion jobs. Checks again found zero broken or cross-owned current-version
+pointers, orphan variants or versions, provision document/variant/version
+reference or ownership errors, and chunk provision/version reference or
+version mismatches. Fifty variants remain without a current version while
+acquisition is active. The document and exact-provision floors,
+queue/acquisition freeze, federation, snapshot, evaluation, restore, CI, and
+browser gates therefore remain open; production is untouched.
