@@ -6,6 +6,7 @@ import {
   isLongRunningImportError,
   nextLegalCorpusShardName,
   parseWranglerImportJson,
+  stagingDatabaseOverrideConfig,
 } from "../scripts/rollover-staging-legal-corpus-shard";
 import {
   handleLegalCorpusScheduled,
@@ -57,9 +58,39 @@ test("rollover retries only the D1 long-running import contention error", () => 
   assert.equal(isLongRunningImportError("long-running import"), false);
 });
 
+test("rollover derives a temporary staging config for an unbound target database", () => {
+  const overridden = JSON.parse(stagingDatabaseOverrideConfig(JSON.stringify({
+    name: "juro-legal-corpus-shard-development",
+    env: {
+      staging: {
+        d1_databases: [{
+          binding: "DB",
+          database_name: "juro-staging-corpus-shard-2",
+          database_id: "source-id",
+          migrations_dir: "./drizzle",
+        }],
+      },
+    },
+  }), "juro-staging-corpus-shard-3", "target-id")) as {
+    env: { staging: { d1_databases: Array<Record<string, unknown>> } };
+  };
+  assert.deepEqual(overridden.env.staging.d1_databases, [{
+    binding: "DB",
+    database_name: "juro-staging-corpus-shard-3",
+    database_id: "target-id",
+    migrations_dir: "./drizzle",
+  }]);
+  assert.throws(
+    () => stagingDatabaseOverrideConfig("{}", "juro-staging-corpus-shard-3", "target-id"),
+    /LEGAL_CORPUS_SHARD_ROLLOVER_CONFIG_STAGING_DB_INVALID/u,
+  );
+});
+
 test("rollover CLI is staging-only and activation requires handoff plus deployed target binding", () => {
   assert.match(rolloverSource, /const STAGING_ENVIRONMENT = "staging"/u);
   assert.match(rolloverSource, /required\(args, "confirm-handoff-id"\)/u);
+  assert.match(rolloverSource, /phase === "initialize"/u);
+  assert.match(rolloverSource, /withShardConfigs\(config, source, target/u);
   assert.match(rolloverSource, /deployedDatabaseBinding\(configs\.source, source\)/u);
   assert.match(rolloverSource, /deployedDatabaseBinding\(configs\.target, target\)/u);
   assert.match(rolloverSource, /LEGAL_CORPUS_SHARD_ROLLOVER_DEPLOYED_BINDING_MISMATCH/u);

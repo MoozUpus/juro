@@ -939,45 +939,123 @@ async function activate(args: ReadonlyMap<string, string>): Promise<void> {
   const handoffId = required(args, "confirm-handoff-id");
   assertShardPair(source, target);
   await withShardConfigs(config, source, target, async (configs) => {
-  const sourceControl = control(configs.source, source);
-  const targetControl = control(configs.target, target);
-  if (sourceControl.state !== "frozen" || sourceControl.handoffId !== handoffId) {
-    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_SOURCE_NOT_FROZEN");
-  }
-  const targetIsPrepared = targetControl.state === "handoff_prepared"
-    && targetControl.handoffId === handoffId;
-  const targetIsAlreadyActive = targetControl.state === "active"
-    && targetControl.handoffId === null && targetControl.peerDatabaseName === null;
-  if (!targetIsPrepared && !targetIsAlreadyActive) {
-    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_TARGET_NOT_PREPARED");
-  }
-  const sourceLedger = ledger(configs.source, source, handoffId);
-  const targetLedger = ledger(configs.target, target, handoffId);
-  if (!sourceLedger || !targetLedger
-    || sourceLedger.manifestSha256 !== targetLedger.manifestSha256
-    || sourceLedger.activeJobCount !== targetLedger.activeJobCount) {
-    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_ACTIVATION_LEDGER_INVALID");
-  }
-  const targetDeployment = deployedDatabaseBinding(configs.target, target);
-  if (!Number.isFinite(Date.parse(targetDeployment.createdOn))
-    || !Number.isFinite(Date.parse(targetLedger.createdAt))
-    || Date.parse(targetDeployment.createdOn) <= Date.parse(targetLedger.createdAt)) {
-    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_TARGET_DEPLOYMENT_STALE");
-  }
-  if (targetIsAlreadyActive) {
-    assertEventRecorded(configs.target, target, handoffId, "activated", targetLedger.manifestSha256);
-    const recoveryDirectory = await mkdtemp(join(tmpdir(), "juro-corpus-activate-recovery-"));
-    try {
-      await executeStatements(configs.source, source, [
-        eventSql(handoffId, "activated", sourceLedger.manifestSha256, new Date().toISOString()),
-      ], recoveryDirectory, "source-activated-event-recovery");
-    } finally {
-      await rm(recoveryDirectory, { recursive: true, force: true });
+    const sourceControl = control(configs.source, source);
+    const targetControl = control(configs.target, target);
+    if (sourceControl.state !== "frozen" || sourceControl.handoffId !== handoffId) {
+      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_SOURCE_NOT_FROZEN");
     }
-    assertEventRecorded(configs.source, source, handoffId, "activated", sourceLedger.manifestSha256);
+    const targetIsPrepared = targetControl.state === "handoff_prepared"
+      && targetControl.handoffId === handoffId;
+    const targetIsAlreadyActive = targetControl.state === "active"
+      && targetControl.handoffId === null && targetControl.peerDatabaseName === null;
+    if (!targetIsPrepared && !targetIsAlreadyActive) {
+      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_TARGET_NOT_PREPARED");
+    }
+    const sourceLedger = ledger(configs.source, source, handoffId);
+    const targetLedger = ledger(configs.target, target, handoffId);
+    if (!sourceLedger || !targetLedger
+      || sourceLedger.manifestSha256 !== targetLedger.manifestSha256
+      || sourceLedger.activeJobCount !== targetLedger.activeJobCount) {
+      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_ACTIVATION_LEDGER_INVALID");
+    }
+    const targetDeployment = deployedDatabaseBinding(configs.target, target);
+    if (!Number.isFinite(Date.parse(targetDeployment.createdOn))
+      || !Number.isFinite(Date.parse(targetLedger.createdAt))
+      || Date.parse(targetDeployment.createdOn) <= Date.parse(targetLedger.createdAt)) {
+      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_TARGET_DEPLOYMENT_STALE");
+    }
+    if (targetIsAlreadyActive) {
+      assertEventRecorded(
+        configs.target,
+        target,
+        handoffId,
+        "activated",
+        targetLedger.manifestSha256,
+      );
+      const recoveryDirectory = await mkdtemp(join(tmpdir(), "juro-corpus-activate-recovery-"));
+      try {
+        await executeStatements(configs.source, source, [
+          eventSql(handoffId, "activated", sourceLedger.manifestSha256, new Date().toISOString()),
+        ], recoveryDirectory, "source-activated-event-recovery");
+      } finally {
+        await rm(recoveryDirectory, { recursive: true, force: true });
+      }
+      assertEventRecorded(
+        configs.source,
+        source,
+        handoffId,
+        "activated",
+        sourceLedger.manifestSha256,
+      );
+      process.stdout.write(`${JSON.stringify({
+        phase: "activate",
+        status: "already_active",
+        handoffId,
+        source,
+        target,
+        manifestSha256: targetLedger.manifestSha256,
+        readyJobs: targetLedger.activeJobCount,
+        targetDeployment,
+      })}\n`);
+      return;
+    }
+    const targetState = query(configs.target, target, `SELECT
+        (SELECT count(*) FROM scheduled_locks
+          WHERE name='legal-corpus-worker' AND expires_at>${sqlValue(new Date().toISOString())}) AS liveLocks,
+        (SELECT count(*) FROM scheduled_runs
+          WHERE schedule_name='legal-corpus-worker' AND status='running') AS liveRuns,
+        (SELECT count(*) FROM legal_corpus_ingestion_jobs WHERE status='running') AS runningJobs,
+        (SELECT count(*) FROM legal_corpus_ingestion_jobs job
+          INNER JOIN legal_corpus_shard_handoff_jobs handoff_job ON handoff_job.job_id=job.id
+          WHERE handoff_job.handoff_id=${sqlValue(handoffId)}
+            AND job.status IN ('queued','retrying')) AS readyJobs,
+        (SELECT count(*) FROM legal_corpus_ingestion_jobs
+          WHERE status IN ('queued','retrying')) AS allReadyJobs`)[0];
+    if (!targetState
+      || Number(targetState.liveLocks) !== 0
+      || Number(targetState.liveRuns) !== 0
+      || Number(targetState.runningJobs) !== 0
+      || Number(targetState.readyJobs) !== targetLedger.activeJobCount
+      || Number(targetState.allReadyJobs) !== targetLedger.activeJobCount) {
+      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_ACTIVATION_STATE_INVALID");
+    }
+    const now = new Date().toISOString();
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "juro-corpus-activate-"));
+    try {
+      await executeStatements(configs.target, target, [
+        eventSql(handoffId, "activated", targetLedger.manifestSha256, now),
+        `UPDATE legal_corpus_shard_control
+          SET acquisition_state='active',active_handoff_id=NULL,target_database_name=NULL,
+            updated_at=${sqlValue(now)}
+          WHERE singleton_id=1 AND acquisition_state='handoff_prepared'
+            AND active_handoff_id=${sqlValue(handoffId)};`,
+      ], temporaryDirectory, "target-activate");
+      await executeStatements(configs.source, source, [
+        eventSql(handoffId, "activated", sourceLedger.manifestSha256, now),
+      ], temporaryDirectory, "source-activated-event");
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+    if (control(configs.target, target).state !== "active") {
+      throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_ACTIVATION_FAILED");
+    }
+    assertEventRecorded(
+      configs.target,
+      target,
+      handoffId,
+      "activated",
+      targetLedger.manifestSha256,
+    );
+    assertEventRecorded(
+      configs.source,
+      source,
+      handoffId,
+      "activated",
+      sourceLedger.manifestSha256,
+    );
     process.stdout.write(`${JSON.stringify({
       phase: "activate",
-      status: "already_active",
+      status: "active",
       handoffId,
       source,
       target,
@@ -985,60 +1063,6 @@ async function activate(args: ReadonlyMap<string, string>): Promise<void> {
       readyJobs: targetLedger.activeJobCount,
       targetDeployment,
     })}\n`);
-    return;
-  }
-  const targetState = query(configs.target, target, `SELECT
-      (SELECT count(*) FROM scheduled_locks
-        WHERE name='legal-corpus-worker' AND expires_at>${sqlValue(new Date().toISOString())}) AS liveLocks,
-      (SELECT count(*) FROM scheduled_runs
-        WHERE schedule_name='legal-corpus-worker' AND status='running') AS liveRuns,
-      (SELECT count(*) FROM legal_corpus_ingestion_jobs WHERE status='running') AS runningJobs,
-      (SELECT count(*) FROM legal_corpus_ingestion_jobs job
-        INNER JOIN legal_corpus_shard_handoff_jobs handoff_job ON handoff_job.job_id=job.id
-        WHERE handoff_job.handoff_id=${sqlValue(handoffId)}
-          AND job.status IN ('queued','retrying')) AS readyJobs,
-      (SELECT count(*) FROM legal_corpus_ingestion_jobs
-        WHERE status IN ('queued','retrying')) AS allReadyJobs`)[0];
-  if (!targetState
-    || Number(targetState.liveLocks) !== 0
-    || Number(targetState.liveRuns) !== 0
-    || Number(targetState.runningJobs) !== 0
-    || Number(targetState.readyJobs) !== targetLedger.activeJobCount
-    || Number(targetState.allReadyJobs) !== targetLedger.activeJobCount) {
-    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_ACTIVATION_STATE_INVALID");
-  }
-  const now = new Date().toISOString();
-  const temporaryDirectory = await mkdtemp(join(tmpdir(), "juro-corpus-activate-"));
-  try {
-    await executeStatements(configs.target, target, [
-      eventSql(handoffId, "activated", targetLedger.manifestSha256, now),
-      `UPDATE legal_corpus_shard_control
-        SET acquisition_state='active',active_handoff_id=NULL,target_database_name=NULL,
-          updated_at=${sqlValue(now)}
-        WHERE singleton_id=1 AND acquisition_state='handoff_prepared'
-          AND active_handoff_id=${sqlValue(handoffId)};`,
-    ], temporaryDirectory, "target-activate");
-    await executeStatements(configs.source, source, [
-      eventSql(handoffId, "activated", sourceLedger.manifestSha256, now),
-    ], temporaryDirectory, "source-activated-event");
-  } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
-  }
-  if (control(configs.target, target).state !== "active") {
-    throw new TypeError("LEGAL_CORPUS_SHARD_ROLLOVER_ACTIVATION_FAILED");
-  }
-  assertEventRecorded(configs.target, target, handoffId, "activated", targetLedger.manifestSha256);
-  assertEventRecorded(configs.source, source, handoffId, "activated", sourceLedger.manifestSha256);
-  process.stdout.write(`${JSON.stringify({
-    phase: "activate",
-    status: "active",
-    handoffId,
-    source,
-    target,
-    manifestSha256: targetLedger.manifestSha256,
-    readyJobs: targetLedger.activeJobCount,
-    targetDeployment,
-  })}\n`);
   });
 }
 

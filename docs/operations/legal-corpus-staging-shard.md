@@ -121,9 +121,20 @@ migration chain before attempting a handoff:
 
 ```powershell
 npx wrangler d1 create juro-staging-corpus-shard-3
-npx wrangler d1 migrations apply juro-staging-corpus-shard-3 --remote `
-  --config wrangler.legal-corpus-shard.jsonc --env staging
+npm run rollover:legal-corpus:staging-shard -- `
+  --phase initialize `
+  --source juro-staging-corpus-shard-2 `
+  --target juro-staging-corpus-shard-3
 ```
+
+The checked-in config intentionally binds only the active source. Wrangler
+therefore cannot address a newly created target by name through that config.
+The `initialize` phase resolves the exact target UUID from the account, writes
+a same-directory temporary config with only the staging `DB` binding changed,
+applies the full migration chain, verifies an `active` empty shard-control row
+and removes the temporary config. `prepare` and `activate` derive equivalent
+temporary source/target configs so both databases remain addressable before
+and after the checked-in binding switch. No temporary config is deployed.
 
 Wait for the current source run/lease and all active jobs belonging to already
 materialized source documents to finish, then prepare. The command is safe to
