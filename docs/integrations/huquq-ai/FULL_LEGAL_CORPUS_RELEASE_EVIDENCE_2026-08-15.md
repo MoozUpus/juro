@@ -12977,3 +12977,39 @@ were queued (28,380 queued jobs in total), and `acquisition_state` remained
 provisions short. Release snapshot, indexed 314-scenario evaluation,
 Qdrant/D1 restore, CI and federation activation remain pending; production was
 not changed.
+
+## Fenced lock-free shard quality snapshot (2026-08-26, 18:59Z)
+
+The checked-in command `npm run capture:legal-corpus:shard-quality` captured a
+read-only snapshot at `2026-08-26T18:59:33.164Z` after scheduled run
+`77997e7b-0549-430a-aeb1-1f75b481d05b` completed at
+`2026-08-26T18:59:06.130Z` with `error_code=NULL`. The preflight and
+postflight observed the same completed run ID and `lock_count=0`. The
+preflight had 52 seconds before the next `*/4` boundary and the postflight
+still had 26 seconds, proving the aggregate neither acquired nor crossed the
+scheduled ingestion boundary. Wrangler reported `rowsWritten=0`.
+
+The snapshot recorded 1,244 canonical documents, 1,484 variants, 11,566 exact
+unique current provisions, 46,155 physical current provisions and
+46,229/46,229 current/indexed chunks. All 44 checkpoints were completed and
+count-aligned, all 19 core targets were indexed, and checkpoint errors were
+zero. Fifty variants still lacked a current version and remained in the open
+queue. Empty version headers, broken current pointers, orphan variants,
+orphan versions, provision errors, chunk errors, current chunks missing sparse
+coverage and completion-revalidation candidates were all zero. The failure
+ledger retained 14 historical rows, with zero retrying jobs, failed jobs,
+terminal/unavailable failures and dead-letter jobs.
+
+The acquisition queue was not frozen: 25,615 fetch jobs and 2,744 version jobs
+were queued (28,359 queued jobs in total), and `acquisition_state` remained
+`active`. The release floors remain 256 documents and 10,434 exact unique
+provisions short. The D1 snapshot size was 3,896,709,120 bytes, below the
+documented rollover reserve. Release snapshot, federation/dedupe manifests,
+indexed 314-scenario evaluation, Qdrant/D1 restore and CI remain pending;
+production was not changed.
+
+Commits `860a2754`, `2be70edd` and `dae32bb3` fence the capture with a stable
+preflight/postflight run ID, empty distributed lock, a minimum 45-second
+preflight window and a still-future postflight cron boundary. Live checks
+rejected unsafe 20- and 38-second windows before running the aggregate; this
+52-to-26-second capture is the corresponding successful live path.

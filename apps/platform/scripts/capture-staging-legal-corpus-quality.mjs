@@ -55,14 +55,15 @@ function executeReadOnly(sql) {
 }
 
 const boundarySql = `WITH latest AS (
-  SELECT id,cron,status,error_code,started_at,finished_at
+  SELECT id,cron,status,error_code,scheduled_for,started_at,finished_at
   FROM scheduled_runs ORDER BY started_at DESC LIMIT 1
 )
 SELECT (SELECT COUNT(*) FROM scheduled_locks) AS lock_count,
-  id,cron,status,error_code,started_at,finished_at,
+  id,cron,status,error_code,scheduled_for,started_at,finished_at,
   unixepoch('now') AS now_epoch,
-  CAST((unixepoch(finished_at)+${scheduleSeconds - 1})/${scheduleSeconds} AS INTEGER)
-    * ${scheduleSeconds} AS next_due_epoch
+  unixepoch(scheduled_for)
+    + CAST((unixepoch('now')-unixepoch(scheduled_for)+${scheduleSeconds - 1})
+      /${scheduleSeconds} AS INTEGER)*${scheduleSeconds} AS next_due_epoch
 FROM latest;`;
 const preflight = executeReadOnly(boundarySql);
 const preflightRow = preflight.results?.[0];
