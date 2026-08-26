@@ -13020,3 +13020,36 @@ carried a 43-second delivery offset rather than the nominal minute-aligned
 nominal UTC `*/4` boundary after `finished_at`; `scheduled_for` remains visible
 as evidence but cannot shift the safety window. Postflight cannot hide a
 crossed boundary by advancing to a later slot.
+
+## Fenced lock-free shard quality snapshot (2026-08-26, 19:23Z)
+
+The checked-in command `npm run capture:legal-corpus:shard-quality` captured a
+read-only snapshot at `2026-08-26T19:23:43.244Z` after scheduled run
+`05e0b293-1243-43b7-a38f-7afcc330cdad` completed at
+`2026-08-26T19:22:51.224Z` with `error_code=NULL`. The preflight and
+postflight observed the same completed run ID and `lock_count=0`. The
+preflight had 46 seconds before the next nominal `*/4` boundary and the
+postflight still had 16 seconds; Wrangler reported `rowsWritten=0`.
+
+The snapshot recorded 1,266 canonical documents, 1,506 variants, 11,657 exact
+unique current provisions, 46,252 physical current provisions and
+46,326/46,326 current/indexed chunks. All 44 checkpoints remained completed
+and count-aligned, all 19 core targets remained indexed, and checkpoint errors
+were zero. Fifty variants still lacked a current version. Empty version
+headers, broken current pointers, orphan variants, orphan versions, provision
+errors, chunk errors, current chunks missing sparse coverage and
+completion-revalidation candidates were all zero. The failure ledger retained
+14 historical rows, with zero retrying jobs, failed jobs,
+terminal/unavailable failures and dead-letter jobs.
+
+The acquisition queue was not frozen: 25,615 fetch jobs and 2,734 version jobs
+were queued (28,349 queued jobs in total), and `acquisition_state` remained
+`active`. Relative to the preceding 18:59Z snapshot, the corpus gained 22
+documents and 91 exact unique provisions while the total queue fell by only
+10; the fetch queue itself stayed at 25,615. This proves that acquisition is
+still replenishing work and that the backlog cannot be treated as a simple
+linear drain. The release floors remain 234 documents and 10,343 exact unique
+provisions short. D1 size was 3,928,502,272 bytes, below the 8,000,000,000-byte
+rollover reserve. Release snapshot, federation/dedupe manifests, indexed
+314-scenario evaluation, Qdrant/D1 restore and CI remain pending; production
+was not changed.
