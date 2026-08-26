@@ -61,12 +61,12 @@ const DISCOVERY_PAGES_PER_RUN = 4;
 // authoritative: a document requiring a second official representation simply
 // leaves a later durable job queued rather than overlapping the next tick.
 const INGESTION_JOBS_PER_RUN = 5;
-// Live staging cadence showed that a 24-job batch crosses the twelve-minute
-// scheduler slot (about 12m15s), so the next usable four-minute cron tick is
-// missed and effective throughput falls below the 20-job baseline. Cap the
-// sequential budget at 22 so the bounded batch can finish before that slot
-// while preserving the same single-stream Lex pacing.
-const MAX_STAGING_INGESTION_JOBS_PER_RUN = 22;
+// Live staging cadence showed that both 24-job and 22-job batches cross the
+// twelve-minute scheduler slot (about 12m15s), so the next usable four-minute
+// cron tick is missed and effective throughput falls below the 20-job
+// baseline. Keep the proven 20-job cap so the bounded batch finishes before
+// that slot while preserving the same single-stream Lex pacing.
+const MAX_STAGING_INGESTION_JOBS_PER_RUN = 20;
 // Four of the five ingestion slots may prefer already-discovered official
 // catalogues. The order is the current operational legal-source policy:
 // enacted laws first; Cabinet of Ministers acts (ПКМ) second; then the
@@ -186,7 +186,7 @@ export function legalCorpusIngestionJobBudget(
   // Reuse only catalogue slots that were proved empty. A failed/disabled
   // discovery does not grant extra nominal source jobs. The nominal maximum
   // remains bounded by the configured ingestion limit (five for the primary
-  // Worker, at most 22 for the staging shard) plus four discovery pages and a
+  // Worker, at most 20 for the staging shard) plus four discovery pages and a
   // robots request. An earlier empty discovery page reclaims its capacity; the elapsed-time
   // start fence below is authoritative when a job discovers a secondary PDF
   // or ZIP representation and therefore consumes an additional paced fetch.

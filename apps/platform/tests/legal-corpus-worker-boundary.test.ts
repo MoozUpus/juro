@@ -214,7 +214,7 @@ test("the bounded acquisition phase prioritizes discovery and reuses only empty 
 test("staging shard may use a larger sequential budget without changing production", () => {
   assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "production", configured: "20" }), 5);
   assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "20" }), 20);
-  assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "999" }), 22);
+  assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "999" }), 20);
   assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "bogus" }), 5);
   assert.equal(legalCorpusIngestionJobBudget([], { ingestionJobsPerRun: 20 }), 20);
 });
