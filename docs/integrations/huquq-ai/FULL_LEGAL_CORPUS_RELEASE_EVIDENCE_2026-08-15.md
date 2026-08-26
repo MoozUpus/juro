@@ -12369,3 +12369,30 @@ failures and dead-letter jobs are both zero. The staging D1 size is
 3,145,568,256 bytes (approximately 2.93 GiB). Release floors, queue freeze and
 all post-ingestion snapshot/evaluation/restore/CI gates remain open; production
 is untouched.
+
+## Corrected cadence and lock-free quality snapshot (2026-08-26, 11:35Z)
+
+The three runs ending at 11:11Z, 11:23Z, and 11:35Z took 665.521, 666.574,
+and 657.693 seconds respectively. Their start intervals remained approximately
+12 minutes and each run released the distributed lock before the next slot.
+
+The compact read-only snapshot after the 11:35Z run explicitly observed an
+empty `scheduled_locks` table. It reports 927 canonical documents, 1,166
+variants, **10,073 exact unique current provisions** under the checked-in
+document/article-or-sequence formula, 43,959 physical current provision rows,
+and 44,029/44,029 current/indexed chunks, with zero unindexed current chunks.
+All 44 discovery checkpoints are `completed` and all 19 core-code targets are
+`indexed`. The lock-free queue composition is 1,118 completed and 25,607 queued
+fetch jobs plus 579 completed and 2,904 queued version jobs; no ingestion job is
+`running`, `failed`, or `dead_letter`. The five recorded failure rows remain in
+the non-terminal `retrying` state.
+
+Referential-integrity checks found zero broken or cross-owned current-version
+pointers, orphan variants or versions, provision document/variant/version
+orphans or ownership mismatches, and chunk provision/version orphans or version
+mismatches. Fifty variants do not yet have a current version while their active
+ingestion work remains queued. Acquisition remains `active`, the queue is not
+frozen, and query metadata reports `size_after=3,145,568,256` bytes. The
+document and exact-provision floors, queue/acquisition freeze, federation,
+snapshot, evaluation, restore, CI, and browser gates therefore remain open;
+production is untouched.
