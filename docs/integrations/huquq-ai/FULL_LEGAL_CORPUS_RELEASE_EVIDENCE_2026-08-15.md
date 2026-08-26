@@ -12702,3 +12702,24 @@ queue remains open (latest probe: 1,791 completed and 28,485 queued; 4,432
 live/manual or version jobs), and the next sequential run
 `e303d886-c5f4-4f4f-a008-765f36caaa54` started at `2026-08-26T13:20:39.951Z`.
 The release floors and queue freeze remain open; production is untouched.
+
+## Federated source overlap probe (2026-08-26, 16:17Z)
+
+The four staging D1 databases were queried sequentially by canonical
+`legal_corpus_documents.id`; the result is not a disjoint union. The probe
+returned 3,575 IDs in `juro-staging`, 599 in `juro-staging-corpus-v2`, 1,635
+in `juro-staging-corpus-shard-1`, and 1,103 in
+`juro-staging-corpus-shard-2` (6,912 rows in total, 4,850 distinct IDs and
+2,062 duplicate rows). Pairwise overlaps were 460 (legacy/v2), 380
+(legacy/shard-1), 233 (legacy/shard-2), 491 (v2/shard-1), 288 (v2/shard-2),
+and 1,074 (shard-1/shard-2). Therefore these databases must not be summed as
+new documents and the disjoint-partition federation release gate cannot be
+claimed from these raw bindings.
+
+The staging chat federation remains feature-gated. Its runtime identity key
+deduplicates overlapping source URL/document identity plus language and
+article number, then selects the highest-status, newest-version representative
+before RRF and citation validation. This permits a later all-source staging
+read without returning four copies of the same norm, but it does not waive the
+required frozen partition/snapshot evidence. `LEGAL_CORPUS_FEDERATED_ENABLED`
+remains `false`; no production binding or flag was changed.
