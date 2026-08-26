@@ -2,7 +2,7 @@
 
 Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
-## Batch cadence rollback and first 850-document milestone (2026-08-26, 09:32–10:03Z)
+## Batch cadence diagnosis and elapsed-time fence correction (2026-08-26, 09:32–10:49Z)
 
 Run `d4f502c5-b588-47dc-96e9-76cfe3893f4e` started before the batch-22
 deployment and was therefore the third batch-24 run. It closed normally from
@@ -17,9 +17,8 @@ The three batch-24 runs started at `09:00:39.950Z`, `09:16:39.947Z` and
 `09:32:39.947Z`. Their approximately 12-minute-15-second runtimes crossed the
 12-minute start slot, so each next usable four-minute cron tick was 16 minutes
 after the previous start. The nominal cadence was therefore only 24/16 = 1.5
-jobs per minute, below the previously verified batch-20 cadence of 20/12 =
-1.67 jobs per minute. The functional and integrity checks were healthy, but
-the larger batch did not improve throughput.
+jobs per minute. The functional and integrity checks were healthy, but the
+larger batch did not improve throughput.
 
 A bounded batch-22 trial was then deployed as identical Worker versions
 `d3979813-445b-4231-83f3-32c5826fa503` and
@@ -28,26 +27,44 @@ A bounded batch-22 trial was then deployed as identical Worker versions
 from `09:48:40.151Z` to `10:00:59.442Z`. The hypothesis that 22 jobs would fit
 the slot was therefore rejected from live evidence rather than retained.
 
-Commit `1163a3f2` restores and hard-caps the proven sequential batch at 20.
-The focused config/Worker boundary suite passed 24/24 and a Wrangler dry-run
-preserved the exact shard-2 D1 and staging-only bindings. Deployment
-`6de814b8-f46c-4d1e-861b-2e37612cc1ed` now serves Worker version
-`25688f1b-68f6-464e-af67-9ea35360ed73` at 100% with
-`LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN=20`. The 20-second Lex pacing,
-one-stream lock, shadow mode and disabled dense/sparse-compression flags are
-unchanged.
+Commit `1163a3f2` restored and hard-capped the sequential batch at 20 for a
+controlled live test. That test rejected the remaining batch-size hypothesis:
+run `b79fc4fe-3e32-4dc9-a937-1c17e8510eee` took 791.4 seconds
+(`10:04:40.103Z`–`10:17:51.462Z`) and run
+`a88e8344-267c-476f-bad0-ca82c54d88f5` took 795.9 seconds
+(`10:20:39.948Z`–`10:33:55.893Z`). Both completed without an error but still
+crossed the twelve-minute slot. Job timestamps showed the cause: the old
+twelve-minute claim fence admitted one last version job at the boundary, and
+that job needed approximately 75 additional seconds.
 
-The final lock-free rollback baseline contained 861 canonical documents,
-1,099 variants, **9,834 unique current provisions**, 43,709 physical current
-provision rows, and 43,778/43,778 current/indexed chunks. Fetch jobs were
-1,051 completed / 25,607 queued and version jobs were 542 completed / 2,941
-queued. The failure ledger remained at five historical retry rows, with zero
-terminal or technically unavailable failures, zero running/failed/dead-letter
-jobs and zero current unindexed chunks. Acquisition remained `active`, the
-queues remained open, and D1 size was 2,922,037,248 bytes.
+Commit `4dd3beef` moved the staging claim fence to ten minutes while retaining
+the 20-job hard cap. This leaves two minutes for the last already-claimed
+sequential source job and D1 finalization. The focused config/Worker boundary
+suite passed 24/24 and the Wrangler dry-run preserved the exact shard-2 D1 and
+staging-only bindings. Worker version
+`66b9a8b1-88e1-4c26-a2a8-ad77708d6500` was then deployed with the same
+20-second Lex pacing, one-stream lock, shadow mode and disabled dense/sparse-
+compression flags.
 
-This remains progress evidence only: the document floor is 861/1,500 and the
-exact unique-provision floor is 9,834/22,000. Federation, queue/acquisition
+The first corrected run, `c63df720-8d55-47b4-a799-1e9cc83bd5d9`, completed
+without an error in 669.6 seconds (`10:36:39.947Z`–`10:47:49.517Z`), releasing
+the lock 50.4 seconds before the twelve-minute boundary. The next scheduled
+run, `8cc47386-ccaa-493c-801d-73875481912b`, started at
+`10:48:39.947Z`: exactly 12 minutes after the prior start, rather than the
+regressed 16-minute interval. This is live cadence evidence, not a release
+gate shortcut.
+
+The lock-free snapshot after the first corrected run contained 891 canonical
+documents, 1,130 variants, **9,952 unique current provisions**, 43,836 physical
+current provision rows, and 43,905/43,905 current/indexed chunks. Fetch jobs
+were 1,082 completed / 25,607 queued and version jobs were 559 completed /
+2,924 queued. The failure ledger remained at five historical retry rows, with
+zero terminal or technically unavailable failures, zero running/failed/dead-
+letter ingestion jobs and zero current unindexed chunks. Acquisition remained
+`active`, the queues remained open, and D1 size was 3,025,850,368 bytes.
+
+This remains progress evidence only: the document floor is 891/1,500 and the
+exact unique-provision floor is 9,952/22,000. Federation, queue/acquisition
 freeze, snapshot, indexed 314-scenario evaluation, Qdrant/D1 restore gates,
 CI, release and production remain closed.
 
