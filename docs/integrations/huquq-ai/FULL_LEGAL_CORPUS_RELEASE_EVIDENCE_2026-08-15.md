@@ -12881,11 +12881,12 @@ The snapshot recorded 1,167 canonical documents, 1,407 variants, 11,284 exact
 unique current provisions, 45,868 physical current provisions, and 45,939
 current/indexed chunks. All 44 checkpoints were completed and aligned, all 19
 core targets were indexed, and there were no checkpoint errors. Integrity
-checks were clean: zero unversioned current pointers, empty version headers,
-broken current pointers, orphan variants, orphan versions, provision errors,
-chunk errors, or current chunks missing sparse coverage. The failure ledger had
-14 historical rows but zero retrying jobs, zero failed jobs, and zero
-terminal/unavailable failures; dead-letter jobs were zero.
+checks were clean: 50 variants still lacked a current version and remained in
+the open queue, while empty version headers, broken current pointers, orphan
+variants, orphan versions, provision errors, chunk errors, and current chunks
+missing sparse coverage were all zero. The failure ledger had 14 historical
+rows but zero retrying jobs, zero failed jobs, and zero terminal/unavailable
+failures; dead-letter jobs were zero.
 
 The acquisition queue was not frozen: the snapshot contained 25,611 queued
 fetch jobs and 2,779 queued version jobs (28,390 queued jobs in total); the
@@ -12894,3 +12895,34 @@ jobs. The release floors therefore remain 333 documents and 10,716 exact
 unique provisions short. Snapshot release, indexed 314-scenario evaluation,
 Qdrant/D1 restore, CI and federation activation remain pending; production was
 not changed.
+
+## Shard-3 standby and capacity uncertainty (2026-08-26, 17:36Z)
+
+Commit `098d8d54` makes rollover commands address an unbound target through a
+same-directory temporary staging config without deploying that config. The
+idempotent `initialize` verification resolved exact target
+`juro-staging-corpus-shard-3` / `ccf1f18e-66cf-4358-a7aa-f1d725b7653c`, found
+143 applied migrations through `0142_legal_corpus_shard_handoffs.sql`, an
+`active` empty shard-control row, and returned
+`wait_for_rollover_threshold_then_prepare`. The temporary config was removed;
+the checked-in and deployed Worker binding remained only
+`juro-staging-corpus-shard-2`. No `prepare`, binding switch, `activate`, or
+second Lex stream occurred.
+
+The lock-free shard-2 snapshot reported 3,778,301,952 bytes, leaving
+4,221,698,048 bytes below the 8,000,000,000-byte JURO rollover reserve. A
+linear extrapolation from the 1,091-document snapshot through the current one
+would put exact unique provisions near 22,485 at that reserve, but the same
+calculation before the latest high-provision batches was near 17,429. This
+variance makes the projection an operational risk signal only, not release or
+capacity evidence. The migrated empty shard-3 therefore remains a standby;
+the source must reach the documented lock-free rollover threshold before
+`prepare` is allowed.
+
+Commit `0aa4cc51` adds the reproducible quality capture used above. Its SQL is
+guarded by `scheduled_locks`, checks both legacy and compressed sparse formats,
+and the wrapper rejects any non-zero `rows_written` result. The focused
+rollover and quality suites passed 12/12, platform lint and type-check passed,
+and the exact Wrangler dry-run retained shard-2, 20 sequential jobs, dense
+retrieval disabled, and sparse backfill disabled. Production, DNS, production
+flags, merge state, and production data were not changed.
