@@ -212,6 +212,82 @@ test("large version writes renew the scheduler lease between D1 batches", async 
   }
 });
 
+test("an interrupted historical version resumes the same immutable materialization", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const sourceUrl = "https://lex.uz/ru/docs/12345?ONDATE=26.04.2023";
+  try {
+    const env = envFor(d1, bucket);
+    let persistedBatches = 0;
+    const interruptedDb = {
+      prepare: d1.prepare.bind(d1),
+      async batch(statements: D1PreparedStatement[]) {
+        const results = await d1.batch(statements);
+        persistedBatches += 1;
+        if (persistedBatches === 1) throw new Error("SIMULATED_WORKER_INTERRUPTION");
+        return results;
+      },
+    } as unknown as D1Database;
+    await assert.rejects(
+      ingestOfficialLexDocument({ ...env, DB: interruptedDb }, {
+        sourceUrl,
+        now,
+        fetchImpl: fetchFor(lexHtml()),
+      }),
+      /SIMULATED_WORKER_INTERRUPTION/u,
+    );
+    const partial = sqlite.prepare("SELECT id FROM legal_corpus_versions").get() as { id: string };
+    assert.ok(partial.id);
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_provisions").get() as { count: number }).count),
+      0,
+    );
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_chunks").get() as { count: number }).count),
+      0,
+    );
+
+    const resumed = await ingestOfficialLexDocument(env, {
+      sourceUrl,
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.equal(resumed.status, "indexed");
+    assert.equal(resumed.versionId, partial.id);
+    assert.equal(resumed.provisionCount, 2);
+    assert.equal(resumed.chunkCount, 2);
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_versions").get() as { count: number }).count),
+      1,
+    );
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_provisions").get() as { count: number }).count),
+      2,
+    );
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_chunks").get() as { count: number }).count),
+      2,
+    );
+    assert.equal(
+      Number((sqlite.prepare(`SELECT count(DISTINCT chunk_key.id) AS count
+        FROM legal_corpus_sparse_chunk_keys AS chunk_key
+        INNER JOIN legal_corpus_sparse_postings AS posting
+          ON posting.chunk_key_id=chunk_key.id`).get() as { count: number }).count),
+      2,
+    );
+
+    const unchanged = await ingestOfficialLexDocument(env, {
+      sourceUrl,
+      now: new Date(now.getTime() + 120_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.equal(unchanged.status, "unchanged");
+    assert.equal(unchanged.versionId, partial.id);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("known Lex reader controls are repaired from stored corpus titles without touching legal text", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const storedAt = now.toISOString();
@@ -440,7 +516,7 @@ test("a retryable Lex 5xx preserves its HTTP status and remains bounded retrying
   }
 });
 
-test("a stale running ingestion is recovered and completed idempotently", async () => {
+test("a stale running ingestion is recovered, completed and revalidated exactly once", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
   try {
@@ -484,6 +560,36 @@ test("a stale running ingestion is recovered and completed idempotently", async 
       retryable: 1,
       retryCount: 1,
       retryState: "retrying",
+    });
+
+    const revalidated = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(workerNow.getTime() + 60_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(revalidated, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const completed = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; errorCode: string | null;
+      };
+    assert.deepEqual({ ...completed }, {
+      status: "completed",
+      attemptCount: 3,
+      errorCode: null,
+    });
+    const noLoop = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(workerNow.getTime() + 120_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(noLoop, {
+      claimed: false,
+      status: "empty",
+      jobId: null,
+      safeErrorCode: null,
     });
   } finally {
     sqlite.close();

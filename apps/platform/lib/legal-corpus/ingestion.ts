@@ -59,6 +59,7 @@ const INITIAL_INGESTION_MAX_ATTEMPTS = 5;
 const WRITE_BATCH_SIZE = 90;
 const RETRYABLE_INTERNAL_ERROR_CODES = new Set([
   "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
+  "LEGAL_CORPUS_VERSION_MATERIALIZATION_INCOMPLETE",
 ]);
 const RECOVERABLE_DEAD_LETTER_CODES = [
   "LEGAL_CORPUS_INGESTION_FAILED",
@@ -146,6 +147,12 @@ type StoredVersion = {
   versionId: string;
   versionNumber: number;
   validFrom: string | null;
+};
+
+type StoredVersionMaterialization = {
+  provisionCount: number;
+  chunkCount: number;
+  sparseChunkCount: number;
 };
 
 type CorpusRepresentation = {
@@ -621,6 +628,54 @@ async function storedVersionByHash(
   `).bind(variantId, hash).first<StoredVersion>();
 }
 
+async function storedVersionMaterialization(
+  db: D1Database,
+  versionId: string,
+  mode: Awaited<ReturnType<typeof sparseStorageMode>>,
+): Promise<StoredVersionMaterialization> {
+  const compressedSparseClause = mode === "compressed" ? `
+      OR EXISTS (
+        SELECT 1
+        FROM legal_corpus_sparse_chunk_keys AS chunk_key
+        INNER JOIN legal_corpus_sparse_postings AS posting
+          ON posting.chunk_key_id=chunk_key.id
+        WHERE chunk_key.chunk_id=version_chunk.id
+      )` : "";
+  const row = await db.prepare(`WITH version_provision AS (
+      SELECT id FROM legal_corpus_provisions WHERE version_id=?
+    ), version_chunk AS (
+      SELECT chunk.id
+      FROM legal_corpus_chunks AS chunk
+      INNER JOIN version_provision AS provision ON provision.id=chunk.provision_id
+      WHERE chunk.version_id=?
+    )
+    SELECT
+      (SELECT count(*) FROM version_provision) AS provisionCount,
+      (SELECT count(*) FROM version_chunk) AS chunkCount,
+      (SELECT count(*) FROM version_chunk
+        WHERE EXISTS (
+          SELECT 1 FROM legal_corpus_sparse_terms AS sparse
+          WHERE sparse.chunk_id=version_chunk.id
+        )${compressedSparseClause}
+      ) AS sparseChunkCount
+  `).bind(versionId, versionId).first<StoredVersionMaterialization>();
+  return {
+    provisionCount: Number(row?.provisionCount ?? 0),
+    chunkCount: Number(row?.chunkCount ?? 0),
+    sparseChunkCount: Number(row?.sparseChunkCount ?? 0),
+  };
+}
+
+function versionMaterializationComplete(
+  stored: StoredVersionMaterialization,
+  expectedProvisions: number,
+  expectedChunks: number,
+): boolean {
+  return stored.provisionCount === expectedProvisions
+    && stored.chunkCount === expectedChunks
+    && stored.sparseChunkCount === expectedChunks;
+}
+
 async function nextVersionNumber(db: D1Database, variantId: string): Promise<number> {
   const row = await db.prepare(`SELECT coalesce(max(version_number),0)+1 AS nextNumber
     FROM legal_corpus_versions WHERE variant_id=?
@@ -726,6 +781,53 @@ async function reconcileStaleRunningJob(
     retryCount: stranded.attemptCount,
     retryState: exhausted ? "terminal" : "retrying",
   });
+}
+
+async function reconcileCompletedStaleRunningJob(
+  db: D1Database,
+  now: string,
+): Promise<void> {
+  // A Worker can be interrupted after inserting the immutable version header
+  // but before all article/chunk batches are durable. Older processors then
+  // treated the header hash as a completed version. Re-read each completion
+  // exactly once per recorded stale attempt so the materialization invariant
+  // below can verify or repair it without creating a permanent retry loop.
+  const candidate = await db.prepare(`SELECT job.id,
+      job.attempt_count AS attemptCount,max(failure.retry_count) AS staleAttempt
+    FROM legal_corpus_ingestion_jobs AS job
+    INNER JOIN legal_corpus_failures AS failure ON failure.job_id=job.id
+    WHERE job.status='completed' AND job.handoff_id IS NULL
+      AND failure.error_code=?
+    GROUP BY job.id,job.attempt_count
+    HAVING job.attempt_count=max(failure.retry_count)+1
+    ORDER BY min(failure.attempted_at) ASC,job.id ASC
+    LIMIT 1
+  `).bind(STALE_RUNNING_ERROR_CODE).first<{
+    id: string;
+    attemptCount: number;
+    staleAttempt: number;
+  }>();
+  if (!candidate) return;
+  await db.prepare(`UPDATE legal_corpus_ingestion_jobs
+    SET status='retrying',
+      max_attempts=CASE WHEN attempt_count>=max_attempts THEN attempt_count+1 ELSE max_attempts END,
+      next_attempt_at=?,last_error_code=?,updated_at=?
+    WHERE id=? AND status='completed' AND handoff_id IS NULL
+      AND attempt_count=?
+      AND EXISTS (
+        SELECT 1 FROM legal_corpus_failures
+        WHERE job_id=? AND error_code=? AND retry_count=?
+      )
+  `).bind(
+    now,
+    "LEGAL_CORPUS_STALE_COMPLETION_REVALIDATION",
+    now,
+    candidate.id,
+    candidate.attemptCount,
+    candidate.id,
+    STALE_RUNNING_ERROR_CODE,
+    candidate.staleAttempt,
+  ).run();
 }
 
 async function reconcileRecoverableDeadLetter(
@@ -965,8 +1067,20 @@ export async function ingestOfficialLexDocument(
       current.documentId,
     ).run();
   }
+  const sparseMode = await sparseStorageMode(env.DB);
   const alreadyStored = await storedVersionByHash(env.DB, variantId, versionHash);
-  if (alreadyStored) {
+  const alreadyStoredMaterialization = alreadyStored
+    ? await storedVersionMaterialization(env.DB, alreadyStored.versionId, sparseMode)
+    : null;
+  if (
+    alreadyStored
+    && alreadyStoredMaterialization
+    && versionMaterializationComplete(
+      alreadyStoredMaterialization,
+      provisions.length,
+      chunks.length,
+    )
+  ) {
     if (revision) {
       return {
         status: "unchanged", documentId, variantId,
@@ -1013,9 +1127,11 @@ export async function ingestOfficialLexDocument(
     };
   }
 
-  const previous = revision ? [] : await currentProvisions(env.DB, current?.currentVersionId ?? null);
+  const previous = alreadyStored || revision
+    ? []
+    : await currentProvisions(env.DB, current?.currentVersionId ?? null);
   const diff = diffCorpusProvisions(previous, provisions);
-  if (!revision && diff.suspiciousShrink) {
+  if (!alreadyStored && !revision && diff.suspiciousShrink) {
     await recordFailure({
       db: env.DB, documentId, sourceUrl,
       language: currentDocument.language, now, errorCode: "LEGAL_CORPUS_SUSPICIOUS_CHANGE",
@@ -1102,8 +1218,10 @@ export async function ingestOfficialLexDocument(
   });
   await input.heartbeat?.();
 
-  const versionNumber = await nextVersionNumber(env.DB, variantId);
-  const versionId = `${variantId}:v${versionNumber}:${versionHash.slice(0, 12)}`;
+  const versionNumber = alreadyStored?.versionNumber
+    ?? await nextVersionNumber(env.DB, variantId);
+  const versionId = alreadyStored?.versionId
+    ?? `${variantId}:v${versionNumber}:${versionHash.slice(0, 12)}`;
   const changeType = revision ? "modified" : previous.length === 0
     ? "new"
     : diff.changes.some((change) => change.change === "modified" || change.change === "renumbered")
@@ -1163,7 +1281,6 @@ export async function ingestOfficialLexDocument(
   // New Workers can run before the additive sparse migration. Resolve this
   // once per source so a deployment and schema migration can be rolled out in
   // either safe order without dropping a document's sparse evidence.
-  const sparseMode = await sparseStorageMode(env.DB);
   const provisionStatements: D1PreparedStatement[] = [];
   for (const [provisionIndex, provision] of provisions.entries()) {
     if (provisionIndex % 64 === 0) await input.heartbeat?.();
@@ -1211,6 +1328,18 @@ export async function ingestOfficialLexDocument(
   }
   await runBatches(env.DB, provisionStatements, input.heartbeat);
   await input.heartbeat?.();
+  const storedMaterialization = await storedVersionMaterialization(
+    env.DB,
+    versionId,
+    sparseMode,
+  );
+  if (!versionMaterializationComplete(
+    storedMaterialization,
+    provisions.length,
+    chunks.length,
+  )) {
+    throw new TypeError("LEGAL_CORPUS_VERSION_MATERIALIZATION_INCOMPLETE");
+  }
   if (!revision) {
     if (
       current?.currentVersionId
@@ -1354,6 +1483,7 @@ export async function runNextLegalCorpusIngestionJob(
   const nowDate = input.now ?? new Date();
   const now = nowIso(nowDate);
   await reconcileStaleRunningJob(env.DB, nowDate);
+  await reconcileCompletedStaleRunningJob(env.DB, now);
   await reconcileRecoverableSignedLexUnavailable(env.DB, now);
   await reconcileRecoverableLanguageTextUnavailable(env.DB, now);
   await reconcileRecoverableDeadLetter(env.DB, now);
