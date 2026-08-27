@@ -19,6 +19,7 @@
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },
   "dependencies": {
+    "@fontsource-variable/manrope": "5.3.0",
     "drizzle-orm": "0.45.2",
     "lucide-react": "^1.25.0",
     "motion": "^12.42.2",

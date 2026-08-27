@@ -2,16 +2,34 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-async function createWorker() {
+async function createWorkerModule() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${Math.random()}`);
-  return (await import(workerUrl.href)).default;
+  return import(workerUrl.href);
+}
+
+async function createWorker() {
+  return (await createWorkerModule()).default;
 }
 
 const runtime = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
 const context = { waitUntil() {}, passThroughOnException() {} };
 const legalStyles = fs.readFileSync("app/[locale]/legal/legal.module.css", "utf8");
 const trustStyles = fs.readFileSync("app/[locale]/trust/trust.module.css", "utf8");
+const homeStyles = fs.readFileSync("app/components/public/juro-home.module.css", "utf8");
+const motionDirector = fs.readFileSync("app/components/public/JuroMotionDirector.tsx", "utf8");
+const rootLayout = fs.readFileSync("app/layout.tsx", "utf8");
+
+function relativeLuminance(hex) {
+  const channels = hex.match(/[a-f\d]{2}/gi).map((channel) => Number.parseInt(channel, 16) / 255);
+  const [red, green, blue] = channels.map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(foreground, background) {
+  const values = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+}
 
 test("mobile legal document titles can wrap without widening the page", () => {
   assert.match(legalStyles, /\.documentHero h1\{font-size:clamp\(39px,10\.5vw,41px\);overflow-wrap:anywhere\}/);
@@ -21,6 +39,31 @@ test("Trust Center keeps narrow mobile grids and Uzbek headings inside the viewp
   assert.match(trustStyles, /\.hero\{grid-template-columns:minmax\(0,1fr\)\}/);
   assert.match(trustStyles, /\.details\{gap:3rem;grid-template-columns:minmax\(0,1fr\)\}/);
   assert.match(trustStyles, /\.details header h2,\.details article h3\{overflow-wrap:anywhere\}/);
+});
+
+test("public typography is self-hosted without leaking build-machine paths", () => {
+  assert.match(rootLayout, /@fontsource-variable\/manrope\/wght\.css/);
+  assert.doesNotMatch(rootLayout, /next\/font/);
+});
+
+test("small gold labels meet WCAG AA contrast on the warmest public surface", () => {
+  assert.match(homeStyles, /\.transitionRail article > span,[\s\S]*?\.faqSection summary span[\s\S]*?color: var\(--brand-gold-ink\)/);
+  assert.ok(contrastRatio("805d26", "f1eee8") >= 4.5);
+});
+
+test("scroll storytelling batches every layout read before DOM mutations", () => {
+  const updateScrollStory = motionDirector.slice(
+    motionDirector.indexOf("const updateScrollStory = () =>"),
+    motionDirector.indexOf("const onScroll = () =>"),
+  );
+  const lastLayoutRead = updateScrollStory.lastIndexOf("getBoundingClientRect");
+  const firstMutation = Math.min(
+    ...["root.style.setProperty", "root.dataset.footerVisible =", "node.dataset.revealState ="]
+      .map((needle) => updateScrollStory.indexOf(needle))
+      .filter((index) => index >= 0),
+  );
+  assert.ok(lastLayoutRead >= 0);
+  assert.ok(firstMutation > lastLayoutRead, { firstMutation, lastLayoutRead });
 });
 
 test("renders the production landing with localized canonical metadata and real actions", async () => {
@@ -33,8 +76,12 @@ test("renders the production landing with localized canonical metadata and real 
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     assert.match(response.headers.get("content-security-policy") ?? "", /default-src/);
     assert.match(response.headers.get("content-security-policy") ?? "", /img-src 'self' data: blob: https:\/\/app\.juro\.uz/);
+    assert.match(response.headers.get("content-security-policy") ?? "", /manifest-src 'self'/);
     assert.match(response.headers.get("permissions-policy") ?? "", /camera=\(\)/);
     const html = await response.text();
+    assert.match(html, /<link rel="icon" href="\/favicon\.png" type="image\/png"\/>/);
+    assert.match(html, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png"\/>/);
+    assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest"\/>/);
     assert.match(html, new RegExp(`<link rel="canonical" href="https://juro\\.uz/${locale}"`));
     assert.match(html, new RegExp(`https://app\\.juro\\.uz/register\\?lang=${locale}&amp;accountType=individual`));
     assert.doesNotMatch(html, /jurobek-avatar\.avif/);
@@ -48,7 +95,36 @@ test("renders the production landing with localized canonical metadata and real 
     assert.match(html, new RegExp(`href="/${locale}/trust"`));
     assert.doesNotMatch(html, /landing-test|lending-test/);
     assert.doesNotMatch(html, /\{PRICE_|\{OFFICIAL_EMAIL\}|\{COMPLAINT_URL\}/);
+    assert.doesNotMatch(html, /(?:[cd]:[\\/](?:users|chatgpt)|\.vinext[\\/]fonts)/i);
   }
+});
+
+test("fingerprinted public assets are cached immutably", async () => {
+  const { withSecurityHeaders } = await createWorkerModule();
+  const response = withSecurityHeaders(
+    new Response("asset", {
+      status: 200,
+      headers: { "cache-control": "public, max-age=0, must-revalidate" },
+    }),
+    new URL("http://localhost/assets/example-abcdefgh.js"),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
+});
+
+test("serves the public manifest from a same-origin route", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(
+    new Request("http://localhost/manifest.webmanifest", { headers: { accept: "application/manifest+json" } }),
+    runtime,
+    context,
+  );
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/i);
+  assert.equal(response.headers.get("cache-control"), "public, max-age=3600, must-revalidate");
+  const body = await response.json();
+  assert.equal(body.start_url, "/ru");
+  assert.equal(body.icons[0].src, "/favicon.png");
 });
 
 test("renders the complete English public landing and routes product actions to an available product locale", async () => {
