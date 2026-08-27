@@ -11,7 +11,7 @@ item in the wider ecosystem audit is complete.
 | Branch | `codex/investor-ready-ecosystem` |
 | Latest public website runtime commit | `286c8cec55695173b0ef623c31bee692f2349d68` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in both |
+| GitHub Actions | Client-link correction CI `33071334033`, v86 source CI `33067543449` and plaintext-cleanup evidence CI `33076094186`; Website and Platform successful in all three |
 | Production Worker | `juro` version `28dd4ac8-1ae2-4582-9697-8aa28e109cb5` (version 148), deployment `76e6f966-d069-4565-a7f9-9b2103a8ea47`, 100% traffic |
 | Immediate application rollback | `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147) |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
@@ -29,6 +29,15 @@ are never forwarded across hosts, and unknown Lawyer paths still fail closed
 with `404`. The exact commit passed local tests, the three-environment
 Cloudflare matrix and GitHub CI `33071334033` before deployment. Post-deploy
 HTTP smoke passed and status remained operational 8/8.
+
+A fresh production Chrome reload of the original failing URL followed the live
+redirect to `https://app.juro.uz/ru/individual/dashboard` and rendered the
+authenticated Client dashboard at 1920×945. It had one localized H1, loaded
+fonts, the private `noindex, nofollow, nocache` boundary, zero horizontal
+overflow, no role alert and an empty warning/error log. The same Chrome session
+reached the dedicated Lawyer re-authentication page without Client-data
+disclosure and the Admin fresh-session handoff; their signed-in route loops
+remain open until the corresponding protected sessions are established.
 
 ## 2026-08-27 Platform privacy correction
 

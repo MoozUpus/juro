@@ -16,7 +16,7 @@
 | Fail-closed Lawyer boundary | PASS — unknown path remains `404`; canonical Lawyer dashboard retains its Lawyer-host login destination |
 | Production health | PASS at capture — 8/8 operational, no incident at `2026-08-27T12:35:10.086Z` |
 | Error-only tail | OBSERVED — one deployment-time `MalwareScannerContainer` Durable Object reset caused by the code update; no route failure was observed and status remained operational |
-| Exact Chrome replay | OPEN — the Chrome extension exposed zero connected tabs after deployment, so no new signed-in visual claim is made |
+| Exact Chrome replay | PASS — a fresh reload of the original failing URL followed the live redirect to the authenticated Client dashboard at `app.juro.uz`. At 1920×945 it rendered one localized H1 with loaded fonts, private noindex metadata, zero overflow, no role alert and an empty warning/error log |
 
 ## Authenticated Client route and responsive smoke
 

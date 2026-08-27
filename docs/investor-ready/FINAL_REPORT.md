@@ -690,6 +690,16 @@ version 86 is live from runtime commit `286c8cec`, deployment
 provider-generated direct host now emits response-level `noindex` while the
 canonical apex remains indexable.
 
+Fresh production Chrome then reloaded the original failing
+`lawyer.juro.uz/ru/individual/dashboard` tab. It followed the live redirect to
+the exact authenticated `app.juro.uz` path and rendered the Client dashboard at
+1920×945 with one localized H1, loaded fonts, private noindex metadata, zero
+horizontal overflow, no role alert and no warning/error log. The dedicated
+Lawyer route still failed closed to its own re-authentication page without
+Client-data disclosure, and Admin reached its protected fresh-session handoff.
+Signed-in Lawyer and Admin route loops remain unclaimed until those protected
+sessions are established.
+
 The post-deploy public telemetry matrix returned `204` for a valid same-site
 event, `403` for a foreign origin, `403` without Fetch Metadata, `400` for an
 invalid event/page pair and `413` for an oversized body, all non-cacheable. Codex

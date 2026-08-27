@@ -81,6 +81,11 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
   rollback. Version 148 retains the font-path privacy correction and routes
   known misplaced Client links from the Lawyer host to the fixed Client origin
   for read methods while keeping writes and unknown paths fail closed.
+- Fresh production Chrome reloaded the exact original failing URL and followed
+  the live redirect to the authenticated Client dashboard. The 1920×945 render
+  had one localized H1, loaded fonts, private noindex metadata, zero overflow,
+  no role alert and an empty warning/error log. Lawyer and Admin retained their
+  separate re-authentication and fresh-session boundaries.
 - Sites version 86 deployed runtime commit `286c8cec`; deployment
   `appgdep_6a9027658100819189e6e6bc1a20bf1d`. Sites version 85 is rollback.
 - GitHub CI `33071334033` passed Website and Platform on the Client-link
