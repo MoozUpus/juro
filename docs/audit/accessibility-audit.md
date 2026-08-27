@@ -2,7 +2,9 @@
 
 ## Current implementation evidence
 
-- The product shell has a keyboard-visible skip link and a main-content target.
+- The product shell has a keyboard-visible skip link. Every public
+  `#main-content` target is programmatically focusable, and the built-site
+  Chrome runner now fails unless activating the link transfers focus to it.
 - Shell, topbar and mobile navigation controls enforce 44 px targets in their
   compact modes.
 - Worker 151 extends the 44 px floor to Client scenario pills, case-plan
@@ -37,6 +39,16 @@
   artificially low-contrast through inactive-state opacity. Header language
   choices in both the header and footer have an explicit 44×44 px floor on
   every desktop and mobile route.
+- A manual Google Chrome pass against the exact locally built Worker covered
+  RU home, Trust and Lawyers at `1280×900`, plus the RU home menu at
+  `390×844`. The three representative routes retained one H1, one main target,
+  no horizontal overflow and a working skip-focus transfer. Homepage tablists
+  wrapped with Arrow/End keys and retained visible 2.4 px focus outlines.
+- The mobile dialog moved focus to its close control, wrapped Shift+Tab/Tab
+  between the first and last controls, closed on Escape and returned focus to
+  the menu trigger. Its clickable scrim is now hidden and removed from the tab
+  order, leaving one accessible `Close menu` control rather than two duplicate
+  controls.
 
 These are implementation signals, not a WCAG conformance statement.
 
@@ -46,15 +58,15 @@ A Lighthouse 13.4.1 snapshot of the deployed Worker 151 login passed all 33
 checks and scored 100 for Accessibility, Best Practices, SEO and Agentic
 Browsing. The new pinned axe/Chrome smoke closes the missing public-site
 automation gate in source, but neither result is a WCAG conformance audit.
-Broader release QA still needs Chrome keyboard and accessibility-tree samples
+The bounded public-site Chrome sample is now retained for home, Trust and
+Lawyers. Broader release QA still needs keyboard and accessibility-tree samples
 for:
 
-1. public home, navigation, consent and scenario tabs;
-2. login/register/OTP errors;
-3. AI composer, clarification, streaming/cancel, source cards and feedback;
-4. document upload, analysis findings, comparison tabs and export actions;
-5. case deadlines and lawyer request/consultation dialogs;
-6. admin status/cost tables.
+1. login/register/OTP errors;
+2. AI composer, clarification, streaming/cancel, source cards and feedback;
+3. document upload, analysis findings, comparison tabs and export actions;
+4. case deadlines and lawyer request/consultation dialogs;
+5. admin status/cost tables.
 
 For each sample verify logical heading order, unique accessible names, focus
 order, visible focus, dialog focus containment/return, live-status announcement,
@@ -70,9 +82,9 @@ viewport emulation.
 - P1: finish the bounded target classification on the two Client routes whose
   direct navigation was blocked by browser control and on authenticated Lawyer
   and Admin surfaces after those protected Chrome sessions are established.
-- P1: replay the new public-site runner against the exact deployed Sites
-  candidate and retain manual keyboard/accessibility-tree evidence for the
-  representative routes.
+- P1: deploy the superseding saved Sites candidate only after action-time
+  approval, then replay both the automated runner and the retained manual
+  keyboard/accessibility-tree sample against that exact public artifact.
 - P2: add a visual/semantic regression matrix for light/dark themes and RU/UZ/EN
   expansion.
 

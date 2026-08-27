@@ -12,14 +12,18 @@
 | Mobile light `390×844` | PASS — RU/UZ/EN home, RU Trust and RU Lawyers |
 | Mobile dark `390×844` | PASS — RU home, RU Trust and RU Lawyers |
 | Aggregate | PASS — 16/16 route/profile combinations, zero automated violations; every page retained two manual-review candidates |
-| Corrected surfaces | Public-home labels and reduced-motion opacity; Trust navigation, summaries and muted copy; Lawyers filters and cards in dark theme; shared 44×44 px header/footer language targets |
-| GitHub Actions CI `33111271523` | PASS on exact source commit `0a120e2f445780059380e350e83a0a863dbbeaa3` — Website 1m22s and Platform 8m47s |
-| Saved Sites candidate | PASS — version 89 from exact source commit `c09f0d080092c787774bf5bc407766ac4548f097`; canonical archive hash `sha256:44b2d1bfa88b485bd3c62bf22adf2b46a64892a6fa1ab7a098a26dc7abe79529`, 79 files |
-| Public deployment boundary | UNCHANGED — version 89 is saved only; successful public deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86 |
+| Corrected surfaces | Public-home labels and reduced-motion opacity; Trust navigation, summaries and muted copy; Lawyers filters and cards in dark theme; shared 44×44 px header/footer language targets; focusable main targets; one semantic mobile-menu close control |
+| Skip-focus regression | PASS — every one of the 16 exact-built route/profile samples now activates the skip link and requires focus to land on `#main-content` |
+| Manual Chrome sample | PASS locally on exact built assets — RU home, Trust and Lawyers at `1280×900` retained one H1, one main target, no horizontal overflow and working skip focus; homepage tablists handled Arrow/End with visible focus; the `390×844` modal wrapped focus, closed on Escape and returned focus to its trigger; the accessibility tree exposed one close control |
+| GitHub Actions CI `33114696527` | PASS on exact focus-contract source commit `32947b37a15af1f2bd4c7ffecbfe3e260252ab37` — Website 1m27s and Platform 8m55s |
+| Focus-contract source | PASS — commit `32947b37a15af1f2bd4c7ffecbfe3e260252ab37` |
+| Saved Sites candidate | PASS — version 90 from exact Sites source commit `2510dfa9e5006d51d9c94d178f9bc58bfc449173`; canonical archive hash `sha256:66ec95e8b2ecbd1098b1c8559fab97807e661e61fad5fb6643bdf21e6ea02712`, 79 files; saved version 89 is superseded |
+| Public deployment boundary | UNCHANGED — version 90 is saved only; successful public deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86 |
 
 This is saved-candidate evidence, not deployed-Sites evidence and not a blanket
-WCAG conformance statement. Keyboard order, focus behavior, accessibility-tree
-semantics and assistive-technology behavior remain manual release checks.
+WCAG conformance statement. The named Chrome keyboard/accessibility-tree sample
+is retained, but the remaining authenticated workflows and assistive-technology
+behavior remain manual release checks.
 
 ## Lawyer catalogue performance and public-photo candidate
 

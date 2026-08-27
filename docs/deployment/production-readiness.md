@@ -10,21 +10,28 @@ The public website source now includes a pinned axe/Google Chrome release gate.
 The exact built Worker and client assets passed 16/16 desktop/mobile,
 light/dark and RU/UZ/EN route/profile combinations with zero automated WCAG
 A/AA violations. Theme-aware contrast corrections cover the public home,
-Trust and Lawyers surfaces. Every sampled page still reports two rule classes
-for manual review, so this is not represented as WCAG conformance or as live
-Sites evidence.
+Trust and Lawyers surfaces. Commit
+`32947b37a15af1f2bd4c7ffecbfe3e260252ab37` also makes every public main target
+focusable, gates skip-link focus transfer across the entire 16-sample matrix,
+and removes the mobile scrim's duplicate close control from the accessibility
+tree and tab order. A manual exact-build Chrome pass confirmed visible tablist
+focus, one H1, working skip focus and no horizontal overflow on RU home, Trust
+and Lawyers, plus mobile dialog focus wrap/Escape return at `390×844`. Every
+sampled page still reports two axe rule classes for manual review, so this is
+not represented as WCAG conformance or as live Sites evidence.
 
-Sites version 89 is saved from exact source commit
-`c09f0d080092c787774bf5bc407766ac4548f097`. Its canonical 79-file archive
+Sites version 90 is saved from exact source commit
+`2510dfa9e5006d51d9c94d178f9bc58bfc449173`. Its canonical 79-file archive
 hash is
-`sha256:44b2d1bfa88b485bd3c62bf22adf2b46a64892a6fa1ab7a098a26dc7abe79529`.
+`sha256:66ec95e8b2ecbd1098b1c8559fab97807e661e61fad5fb6643bdf21e6ea02712`.
 It is not deployed. The successful public deployment
 `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86; switching to
-version 89 requires separate action-time approval.
+version 90 requires separate action-time approval. Saved version 89 is now
+superseded and must not be selected for release.
 
-GitHub Actions CI `33111271523` passed the exact source commit
-`0a120e2f445780059380e350e83a0a863dbbeaa3`: Website completed in 1m22s and
-Platform in 8m47s, including locked installs, lint, types, tests, deployable
+GitHub Actions CI `33114696527` passed the exact focus-contract source commit
+`32947b37a15af1f2bd4c7ffecbfe3e260252ab37`: Website completed in 1m27s and
+Platform in 8m55s, including locked installs, lint, types, tests, deployable
 artifacts, the Cloudflare environment matrix, production dependency audit and
 licence policy.
 
@@ -34,13 +41,13 @@ licence policy.
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
 | Latest platform runtime commit | `847a839419c4d24f083b32b20351125335a05a22` |
-| Latest public website source candidate | `0a120e2f445780059380e350e83a0a863dbbeaa3` |
+| Latest public website source candidate | `32947b37a15af1f2bd4c7ffecbfe3e260252ab37` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current source CI `33111271523`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all four |
+| GitHub Actions | Current source CI `33114696527`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all four |
 | Production Worker | `juro` version `47671380-a8fe-4d8c-95e2-bd7778541b0c` (version 152), deployment `61882723-0234-4614-bd66-c0ad2b862ba3`, 100% traffic |
 | Immediate application rollback | `8a9accf5-31e6-4947-ab34-e0317b26e61e` (version 151) |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
-| Saved public Sites candidate | Version 89, source `c09f0d080092c787774bf5bc407766ac4548f097`; not deployed |
+| Saved public Sites candidate | Version 90, source `2510dfa9e5006d51d9c94d178f9bc58bfc449173`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
