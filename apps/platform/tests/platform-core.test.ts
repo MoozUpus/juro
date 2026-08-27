@@ -16,7 +16,7 @@ import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
 import { canEditWorkspaceContent, canManageTeam, isWorkspaceRole } from "../lib/platform/role-policy";
-import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath, workspaceForAccountRoute } from "../lib/platform/routing";
+import { INTERNAL_REQUEST_PATH_HEADER, isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath, safeWorkspaceReturnPath, workspaceForAccountRoute } from "../lib/platform/routing";
 import { actionPlanStepPatchSchema } from "../lib/platform/action-plan";
 import { taskStatusForPlanStep, taskStatusIsTerminal } from "../lib/platform/task-status";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
@@ -861,6 +861,26 @@ test("canonical platform route classifier is stable", () => {
   assert.ok(isWorkspaceId("ws_business_1"));
   assert.ok(!isWorkspaceId("workspace/escape"));
   assert.throws(() => platformBasePath("ru", "business", "workspace/escape"), /INVALID_WORKSPACE_ID/);
+  assert.equal(INTERNAL_REQUEST_PATH_HEADER, "x-juro-request-path");
+  assert.equal(
+    safeWorkspaceReturnPath(
+      "/ru/individual/settings/security?section=mfa",
+      "/ru/individual",
+      "/ru/individual/dashboard",
+    ),
+    "/ru/individual/settings/security?section=mfa",
+  );
+  for (const unsafe of [
+    "https://attacker.example/ru/individual/settings/security",
+    "//attacker.example/ru/individual/settings/security",
+    "/ru/admin/console",
+    "/uz/individual/settings/security",
+  ]) {
+    assert.equal(
+      safeWorkspaceReturnPath(unsafe, "/ru/individual", "/ru/individual/dashboard"),
+      "/ru/individual/dashboard",
+    );
+  }
 });
 
 test("legacy builder routing preserves every supported profile persona", async () => {

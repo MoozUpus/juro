@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import { getOrCreateUserProfile } from "../../lib/document-builder/storage/db";
@@ -12,7 +13,10 @@ import type {
   PlatformLocale,
 } from "../../lib/platform/routing";
 import {
+  INTERNAL_REQUEST_PATH_HEADER,
+  platformBasePath,
   platformPath,
+  safeWorkspaceReturnPath,
   workspaceForAccountRoute,
   workspaceTypeForAccountType,
 } from "../../lib/platform/routing";
@@ -31,11 +35,17 @@ export async function WorkspaceShellLayout({
   accountType: AccountType;
   requestedWorkspaceId?: string;
 }) {
-  const returnTo = platformPath(
+  const fallbackReturnTo = platformPath(
     locale,
     accountType,
     "dashboard",
     requestedWorkspaceId,
+  );
+  const incomingHeaders = await headers();
+  const returnTo = safeWorkspaceReturnPath(
+    incomingHeaders.get(INTERNAL_REQUEST_PATH_HEADER),
+    platformBasePath(locale, accountType, requestedWorkspaceId),
+    fallbackReturnTo,
   );
   const user = await requireChatGPTUser(returnTo);
   const userProfile = await getOrCreateUserProfile(user);
