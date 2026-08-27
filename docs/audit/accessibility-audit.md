@@ -29,12 +29,13 @@
   `playwright-core` 1.62.1. Its release test starts the exact built Worker and
   assets, launches the installed Google Chrome channel, and fails on automated
   WCAG 2.0/2.1 A/AA or WCAG 2.2 AA violations.
-- The current local matrix passed all 32 route/profile combinations. Desktop
-  and mobile light cover RU/UZ/EN home plus RU Trust, Lawyers, Legal Center, a
-  legal document, a knowledge article and video. Desktop and mobile dark cover
-  the same seven representative RU surfaces. Each page completed 23–29
-  automated checks with zero violation; two additional rule classes per page
-  remain explicitly marked for manual review, while video retains three.
+- The current local matrix passed all 56 route/profile combinations. Desktop
+  and mobile light each cover the same seven public page types in RU, UZ and
+  EN: home, Trust, Lawyers, Legal Center, a legal document, a knowledge article
+  and video. Desktop and mobile dark cover the seven representative RU
+  surfaces. Each page completed 23–29 automated checks with zero violation;
+  two additional rule classes per page remain explicitly marked for manual
+  review, while video retains three.
 - The same built-site runner now fails when visible text owned by a link,
   button, form field or disclosure falls below 12 CSS px. Public home actions,
   document tabs, resource cards, Trust breadcrumbs, Lawyer filters and card
@@ -100,9 +101,9 @@ viewport emulation.
 - P1: deploy the superseding saved Sites candidate only after action-time
   approval, then replay both the automated runner and the retained manual
   keyboard/accessibility-tree sample against that exact public artifact.
-- P2: expand the non-home localized route matrix from representative RU
-  content to the corresponding UZ/EN Trust, Lawyers, Legal, knowledge and video
-  routes.
+- P2: add retained visual snapshots for the full localized matrix if future
+  regressions require pixel-level comparison; the current gate is semantic,
+  contrast, focus-transfer, action-text and overflow evidence.
 
 No `WCAG AA passed` claim is made until automated and manual browser evidence is
 recorded for the deployed artifact.

@@ -52,7 +52,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | Product analytics | DEPLOYED | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. No conversion baseline is invented before an observation window exists. |
 | AI costs | ACTIVE CONFIGURATION | Four official, effective-dated production price rows passed pre/post D1 export, isolated restore, FK, private R2 and SHA-256 readback gates. No post-effective AI event exists yet, so no measured runtime cost baseline is claimed. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
-| Accessibility | PARTIAL | Static contracts present; no automated WCAG runner or completed deployed manual matrix. |
+| Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations, plus retained keyboard and visual samples. Protected authenticated workflows and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
 | Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Overdue billing and unavailable real CWV tracing remain explicit risks. |
 
 ## Definition of done for this candidate

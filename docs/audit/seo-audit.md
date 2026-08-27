@@ -46,6 +46,8 @@ content.
 - Public Lawyer profiles are represented in the current sitemap only after the
   existing publication/consent policy admits them; this crawl did not infer
   professional verification from sitemap inclusion.
-- Lighthouse SEO scoring is not claimed because `chrome-devtools` MCP was
-  unavailable. The deterministic metadata/status crawl passed, but it is not a
-  substitute for a Lighthouse run.
+- A controlled Lighthouse 13.4.1 run on the deployed Worker 151 login surface
+  scored SEO 100, and Chrome DevTools is now available for targeted checks.
+  That bounded result is not a substitute for fresh external structured-data,
+  social-preview and rendered-content validation across all 78 canonical URLs;
+  saved Sites version 93 is not deployed.

@@ -7,19 +7,19 @@
 | Runner | PASS — pinned `@axe-core/playwright` 4.13.0 with `playwright-core` 1.62.1; only the installed Google Chrome channel is launched |
 | Artifact boundary | PASS — the harness serves the exact verified `dist/client` assets and delegates documents to the built ESM Worker |
 | Standards tags | WCAG 2.0 A/AA, WCAG 2.1 A/AA and WCAG 2.2 AA automated axe rules |
-| Desktop light | PASS — RU/UZ/EN home; RU Trust, Lawyers, Legal Center, privacy policy, knowledge article and video |
+| Desktop light | PASS — home, Trust, Lawyers, Legal Center, privacy policy, knowledge article and video in RU, UZ and EN |
 | Desktop dark | PASS — RU home, Trust, Lawyers, Legal Center, privacy policy, knowledge article and video |
-| Mobile light `390×844` | PASS — RU/UZ/EN home; RU Trust, Lawyers, Legal Center, privacy policy, knowledge article and video |
+| Mobile light `390×844` | PASS — home, Trust, Lawyers, Legal Center, privacy policy, knowledge article and video in RU, UZ and EN |
 | Mobile dark `390×844` | PASS — RU home, Trust, Lawyers, Legal Center, privacy policy, knowledge article and video |
-| Aggregate | PASS — 32/32 route/profile combinations, zero automated violations; non-video pages retained two manual-review candidates and video retained three |
-| Readable action text | PASS — the runner rejects visible text owned by links, buttons, form fields and disclosures below 12 CSS px; all 32 profiles passed |
+| Aggregate | PASS — 56/56 route/profile combinations, zero automated violations; non-video pages retained two manual-review candidates and video retained three |
+| Readable action text | PASS — the runner rejects visible text owned by links, buttons, form fields and disclosures below 12 CSS px; all 56 profiles passed |
 | Corrected surfaces | Public-home actions and document tabs; resource/FAQ metadata; Trust breadcrumbs/status copy; Lawyer metadata/filters/actions; Legal Center version links and dark theme; legal document metadata/table/print action; knowledge metadata/source actions and dark theme; footer and mobile-menu controls |
-| Skip-focus regression | PASS — every one of the 32 exact-built route/profile samples activates the skip link and requires focus to land on `#main-content` |
-| Manual Chrome sample | PASS locally on exact built assets — the retained RU home/Trust/Lawyers keyboard sample passed at desktop/mobile. Dark Legal Center, privacy policy and knowledge article at `1280×900` and `390×844` retained one H1, one main target, no horizontal overflow and no visible interactive text below 12 px; headings, metadata, tables, print/source actions, breadcrumbs and cookie banner were visually checked |
-| GitHub Actions CI `33119221595` | PASS on exact public-legal accessibility source commit `58ba7bfa6386c6793644693a5c110b1927b99857` — Website 2m0s and Platform 8m31s |
-| Public-legal accessibility source | PASS — commit `58ba7bfa6386c6793644693a5c110b1927b99857` |
-| Saved Sites candidate | PASS — version 92 from exact Sites source commit `f10e3c7374376aa00b044914e7a3e34cc31dd887`; canonical archive hash `sha256:4f5f691a812ec9a3e75398ef5aa2b000cbe4250b0aa3bdcbcf72d651c7514754`, 82 files; saved version 91 is superseded |
-| Public deployment boundary | UNCHANGED — version 92 is saved only; successful public deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86 |
+| Skip-focus regression | PASS — every one of the 56 exact-built route/profile samples activates the skip link and requires focus to land on `#main-content` |
+| Manual Chrome sample | PASS locally on exact built assets — the retained RU keyboard/theme samples passed. UZ Trust/privacy and EN Lawyers/privacy/knowledge at `1280×900` and `390×844` retained the correct document language, one H1, one main target, no horizontal overflow and no visible interactive text below 12 px |
+| GitHub Actions CI `33120284413` | PASS on exact localized-matrix source commit `ed02018eccad42e0ecc1f3ba49694d1cf6734b35` — Website 2m31s and Platform 8m42s |
+| Localized-matrix source | PASS locally — commit `ed02018eccad42e0ecc1f3ba49694d1cf6734b35` |
+| Saved Sites candidate | PASS — version 93 from exact Sites source commit `bbee9ad86e24ea47ac63d6b3c5ddc659a2fd8d7d`; canonical archive hash `sha256:f752c1cf9e6835757592d8ec035590398f8d50e2417fe4a13dd557415f5ab5fe`, 82 files; saved version 92 is superseded |
+| Public deployment boundary | UNCHANGED — version 93 is saved only; successful public deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86 |
 
 This is saved-candidate evidence, not deployed-Sites evidence and not a blanket
 WCAG conformance statement. The named Chrome keyboard/accessibility-tree sample
