@@ -93,6 +93,14 @@
   margin-top: 1.3rem;
 }
 
+.bottom.bottom > span:last-child a {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+}
+
 @media (max-width: 980px) {
   .top.top {
     gap: 2rem 2.5rem;

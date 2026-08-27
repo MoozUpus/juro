@@ -35,7 +35,8 @@
 - Contrast corrections now use theme-aware text and label colors on the public
   home, Trust and Lawyers surfaces. Motion-reduced content no longer becomes
   artificially low-contrast through inactive-state opacity. Header language
-  choices have an explicit 44×44 px floor on every desktop and mobile route.
+  choices in both the header and footer have an explicit 44×44 px floor on
+  every desktop and mobile route.
 
 These are implementation signals, not a WCAG conformance statement.
 

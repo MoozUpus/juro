@@ -12,7 +12,7 @@
 | Mobile light `390×844` | PASS — RU/UZ/EN home, RU Trust and RU Lawyers |
 | Mobile dark `390×844` | PASS — RU home, RU Trust and RU Lawyers |
 | Aggregate | PASS — 16/16 route/profile combinations, zero automated violations; every page retained two manual-review candidates |
-| Corrected surfaces | Public-home labels and reduced-motion opacity; Trust navigation, summaries and muted copy; Lawyers filters and cards in dark theme; shared 44×44 px language targets |
+| Corrected surfaces | Public-home labels and reduced-motion opacity; Trust navigation, summaries and muted copy; Lawyers filters and cards in dark theme; shared 44×44 px header/footer language targets |
 
 This is a source-candidate gate, not deployed-Sites evidence and not a blanket
 WCAG conformance statement. Keyboard order, focus behavior, accessibility-tree
