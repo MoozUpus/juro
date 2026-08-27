@@ -32,7 +32,7 @@ export default async function LegalCenter({ params }: Props) {
   return (
     <div className={styles.page} lang={locale}>
       <SiteHeader languageHref={`/${locale === "ru" ? "uz" : "ru"}/legal`} locale={locale} />
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1}>
       <section className={styles.hero}>
         <p className={styles.eyebrow}>{ru ? "JURO · ЮРИДИЧЕСКИЙ ЦЕНТР" : "JURO · YURIDIK MARKAZ"}</p>
         <h1>{ru ? "Документы, которые легко найти и прочитать" : "Topish va o‘qish oson bo‘lgan hujjatlar"}</h1>

@@ -374,7 +374,7 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
       <nav aria-label={language === "ru" ? "Разделы истории JURO" : language === "uz" ? "JURO hikoyasi bo‘limlari" : "JURO story sections"} className={motionStyles.chapterNav}>
         {t.chapters.map(([label, id], index) => <a data-chapter-link href={`#${id}`} key={id} onClick={navigateToSection}><span>0{index + 1}</span><strong>{label}</strong></a>)}
       </nav>
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1}>
         <section className={`${styles.hero} ${motionStyles.heroMotion}`} data-motion-hero>
           <div aria-hidden="true" className={`${styles.heroAtmosphere} ${motionStyles.atmosphereMotion}`}><i /><i /><i /></div>
           <div className={`${styles.heroGrid} ${laptopStyles.heroGrid}`}>

@@ -77,7 +77,7 @@ export default async function KnowledgeArticlePage({ params }: Props) {
     <div className={styles.page} lang={parsed.locale}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }} />
       <SiteHeader languageHref={`/ru/knowledge/${parsed.slug}`} locale={parsed.locale} />
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1}>
         <article className={styles.article}>
           <div className={styles.breadcrumbs}>
             <Link href={`/${parsed.locale}`}>JURO</Link><span>/</span>

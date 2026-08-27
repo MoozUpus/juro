@@ -49,7 +49,7 @@ export default async function LegalDocumentPage({ params }: Props) {
   return (
     <div className={styles.page} lang={locale}>
       <SiteHeader languageHref={legalPath(locale === "ru" ? "uz" : "ru", legalSlug)} locale={locale} />
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1}>
       <article className={styles.document}>
         <nav className={styles.breadcrumb} aria-label={ru ? "Навигационная цепочка" : "Navigatsiya zanjiri"}><Link href={`/${locale}`}>JURO</Link><span aria-hidden="true">/</span><Link href={`/${locale}/legal`}>{ru ? "Юридический центр" : "Yuridik markaz"}</Link><span aria-hidden="true">/</span><span>{document.title}</span></nav>
         <header className={styles.documentHero}>

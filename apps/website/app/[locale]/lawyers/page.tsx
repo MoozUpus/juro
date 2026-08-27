@@ -47,7 +47,7 @@ export default async function LawyersPage({ params, searchParams }: Props) {
   const pending = results.filter((lawyer) => !lawyer.canReceiveRequests);
   return <div className={styles.page} lang={locale}>
     <SiteHeader languageHref="/ru/lawyers" locale={locale} tone="dark" />
-    <main id="main-content">
+    <main id="main-content" tabIndex={-1}>
       <section className={styles.hero}><span>{t.eyebrow}</span><h1>{t.heading}</h1><p>{t.lead}</p></section>
       <section className={styles.catalogue} aria-labelledby="catalogue-heading"><h2 id="catalogue-heading" className={styles.srOnly}>{t.catalogue}</h2>
         <form className={styles.filters} method="get" aria-label={t.filters}>

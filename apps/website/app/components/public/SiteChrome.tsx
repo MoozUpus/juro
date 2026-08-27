@@ -166,7 +166,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
       </div>
       {open ? (
         <div className={styles.mobileLayer}>
-          <button aria-label={t.close} className={styles.scrim} onClick={() => setOpen(false)} type="button" />
+          <button aria-hidden="true" className={styles.scrim} onClick={() => setOpen(false)} tabIndex={-1} type="button" />
           <div aria-label={t.nav} aria-modal="true" className={styles.mobilePanel} id={panelId} ref={panelRef} role="dialog">
             <div className={styles.mobileTop}>
               <div className={brandStyles.mobileBrand}>

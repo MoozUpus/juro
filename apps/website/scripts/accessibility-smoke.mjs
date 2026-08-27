@@ -102,6 +102,14 @@ function formatViolation(label, violation) {
   return `${label}: ${violation.id} (${violation.impact ?? "unknown"}, ${violation.nodes.length} nodes) ${targets}`;
 }
 
+async function verifySkipLink(page, label) {
+  const skipLink = page.locator('a[href="#main-content"]');
+  await skipLink.focus();
+  await page.keyboard.press("Enter");
+  const focusedId = await page.evaluate(() => document.activeElement?.id ?? "");
+  assert.equal(focusedId, "main-content", `${label} skip link must move keyboard focus to main content`);
+}
+
 const port = await reservePort();
 const origin = `http://${HOST}:${port}`;
 const server = await createSiteServer(port);
@@ -126,6 +134,7 @@ try {
       assert.equal(response.status(), 200, `${label} returned ${response.status()}`);
       const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
       failures.push(...results.violations.map((violation) => formatViolation(label, violation)));
+      await verifySkipLink(page, label);
       const verdict = results.violations.length === 0 ? "PASS" : "FAIL";
       console.log(`${verdict} a11y ${label}: ${results.passes.length} automated checks, ${results.incomplete.length} manual-review candidates`);
       await page.close();

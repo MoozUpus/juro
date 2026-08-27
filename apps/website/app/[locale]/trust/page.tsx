@@ -61,7 +61,7 @@ function EnglishTrustPage() {
   ] as const;
   return <div className={styles.page} lang="en">
     <SiteHeader languageHref="/ru/trust" locale="en" />
-    <main id="main-content">
+    <main id="main-content" tabIndex={-1}>
       <section className={styles.hero}><div className={styles.heroCopy}><div className={styles.breadcrumbs}><Link href="/en">JURO</Link><span>/</span><span>Trust Center</span></div><span className={styles.eyebrow}>TRUST CENTER</span><h1>Security, data and transparency</h1><p>JURO separates verified product facts from information that is still being clarified.</p><small>Last public review: 9 August 2026</small></div><aside className={styles.heroIndex} aria-label="Data-control map"><span>DATA FLOW</span><ol><li><b>01</b><strong>Public website</strong><small>no file upload</small></li><li><b>02</b><strong>Protected account</strong><small>session and permissions</small></li><li><b>03</b><strong>Professional handoff</strong><small>only with confirmation</small></li></ol></aside></section>
       <section className={styles.architecture} aria-labelledby="trust-flow-title"><header><span>HOW DATA MOVES</span><h2 id="trust-flow-title">The user remains in control at every transition</h2><p>The public website does not upload anything. Work on a question or document begins in a protected account, and handing context to a professional requires a separate action.</p></header><ol><li><span>01</span><strong>Public website</strong><p>Explore JURO without real files or personal case data.</p></li><li><span>02</span><strong>Protected account</strong><p>Session, role and permissions determine access.</p></li><li><span>03</span><strong>Work object</strong><p>A question, case and document remain private.</p></li><li><span>04</span><strong>Professional handoff</strong><p>Only selected context, with separate confirmation.</p></li></ol></section>
       <section className={styles.details}><header><span>DETAILS</span><h2>What is confirmed and what is still being clarified</h2></header><div>{sections.map(([title, body, state]) => <article key={title}><span>{state}</span><h3>{title}</h3><p>{body}</p></article>)}</div></section>
@@ -147,7 +147,7 @@ export default async function TrustPage({ params }: Props) {
   return (
     <div className={styles.page} lang={locale}>
       <SiteHeader languageHref={`/${locale === "ru" ? "uz" : "ru"}/trust`} locale={locale} />
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1}>
         <section className={styles.hero}>
           <div className={styles.heroCopy}>
             <div className={styles.breadcrumbs}><Link href={`/${locale}`}>JURO</Link><span>/</span><span>Trust Center</span></div>

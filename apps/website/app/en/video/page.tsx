@@ -39,7 +39,7 @@ export default function EnglishInvestorVideoPage() {
   return (
     <div className={styles.page} lang="en">
       <SiteHeader languageHref="/ru/video" locale="en" tone="dark" />
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1}>
         <section className={styles.hero}>
           <p>JURO VIDEO PRESENTATION</p>
           <h1>See how JURO turns a legal question into a clear next step</h1>

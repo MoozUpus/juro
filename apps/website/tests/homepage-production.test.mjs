@@ -62,6 +62,8 @@ test("production interactions have complete keyboard and reduced-motion contract
   assert.match(chrome, /aria-modal="true"/);
   assert.match(chrome, /event\.key === "Escape"/);
   assert.match(chrome, /trigger\?\.focus\(\)/);
+  assert.match(chrome, /<button aria-hidden="true" className=\{styles\.scrim\} onClick=\{\(\) => setOpen\(false\)\} tabIndex=\{-1\} type="button" \/>/);
+  assert.match(homepage, /<main id="main-content" tabIndex=\{-1\}>/);
   assert.match(homepageStyles, /prefers-reduced-motion:\s*reduce/);
   assert.match(motionStyles, /prefers-reduced-motion:\s*reduce/);
   assert.match(motionDirector, /IntersectionObserver/);

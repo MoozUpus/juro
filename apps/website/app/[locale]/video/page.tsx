@@ -84,7 +84,7 @@ export default async function InvestorVideoPage({ params }: Props) {
   return (
     <div className={styles.page} lang={locale}>
       <SiteHeader languageHref={content.languageHref} locale={locale} tone="dark" />
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1}>
       <section className={styles.hero}>
         <p>{content.eyebrow}</p>
         <h1>{content.heading}</h1>
