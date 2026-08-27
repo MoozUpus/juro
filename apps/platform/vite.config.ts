@@ -2,6 +2,7 @@ import vinext from "vinext";
 import { defineConfig } from "vite";
 import { normalizeSitesPrimaryBindings } from "./build/cloudflare-binding-normalizer";
 import { sites } from "./build/sites-vite-plugin";
+import { normalizeVinextFontUrls } from "./build/vinext-font-url-normalizer";
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -44,6 +45,7 @@ export default defineConfig(async ({ command }) => {
     },
     plugins: [
       vinext(),
+      normalizeVinextFontUrls(),
       sites(),
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },

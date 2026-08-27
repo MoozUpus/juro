@@ -511,6 +511,15 @@ for (const path of await filesBelow(resolve(projectRoot, "dist"))) {
     false,
     `secret file was packaged: ${path}`,
   );
+
+  if (/\.(?:css|html|js)$/i.test(path)) {
+    const source = await readFile(resolve(projectRoot, "dist", path), "utf8");
+    assert.doesNotMatch(
+      source,
+      /(?:[A-Za-z]:[\\/]|\/(?:Users|home|workspace)\/)[^\n"'`)]*?\.vinext[\\/]fonts[\\/]/iu,
+      `build-machine vinext font cache path was packaged: ${path}`,
+    );
+  }
 }
 
 const productionProbeChunks = [];
