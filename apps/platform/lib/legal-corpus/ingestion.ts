@@ -24,6 +24,7 @@ import {
   discoverLexRevisionHistory,
   lexLanguageFamilyId,
   LEX_CORPUS_CATEGORIES,
+  LEX_CORPUS_CATEGORY_PRIORITY,
   parseLexDocumentEffectivity,
   parseLexDocumentMetadata,
   parseLexDocumentUrl,
@@ -1429,6 +1430,48 @@ export async function enqueueOfficialLexCorpusRevision(
     jobId,
     canonicalDocumentId: parsed.canonicalDocumentId,
   };
+}
+
+/**
+ * Repair a handoff or interrupted discovery ledger whose durable catalogue
+ * rows were written without their corresponding fetch jobs.  Discovery rows
+ * are immutable evidence; this bounded reconciliation only materializes the
+ * missing queue entries and leaves already-created (including failed) jobs
+ * untouched.  Ordering follows the approved source-family priority so laws,
+ * Cabinet acts (ПКМ), and President acts (ПП/УП) are restored before lower
+ * priority catalogues.  Network work remains in runNextLegalCorpusIngestionJob
+ * and therefore still uses the single Lex host pacer.
+ */
+export async function reconcileLexCatalogFetchJobs(
+  env: LegalCorpusIngestionEnv,
+  input: { now?: Date; limit?: number } = {},
+): Promise<{ considered: number; queued: number }> {
+  if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
+    return { considered: 0, queued: 0 };
+  }
+  const limit = Math.max(1, Math.min(input.limit ?? 250, 500));
+  const priority = `CASE cp.category_key ${LEX_CORPUS_CATEGORY_PRIORITY
+    .map((category, index) => `WHEN '${category}' THEN ${index}`)
+    .join(" ")} ELSE ${LEX_CORPUS_CATEGORY_PRIORITY.length} END`;
+  const candidates = await env.DB.prepare(`
+    SELECT dd.source_url AS sourceUrl
+    FROM legal_corpus_discovery_checkpoints AS cp
+    INNER JOIN legal_corpus_discovery_documents AS dd ON dd.checkpoint_id=cp.id
+    LEFT JOIN legal_corpus_ingestion_jobs AS existing ON existing.source_url=dd.source_url
+    WHERE cp.status='completed' AND existing.id IS NULL
+    ORDER BY ${priority},dd.discovered_at ASC,dd.source_url ASC
+    LIMIT ?
+  `).bind(limit).all<{ sourceUrl: string }>();
+  let queued = 0;
+  for (const candidate of candidates.results) {
+    const result = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: candidate.sourceUrl,
+      now: input.now,
+      correlationId: "legal-corpus-discovery-reconcile",
+    });
+    if (result.created) queued += 1;
+  }
+  return { considered: candidates.results.length, queued };
 }
 
 /**

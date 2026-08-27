@@ -6,6 +6,7 @@ import {
   enqueueOfficialLexCorpusDocument,
   enqueueOfficialLexCorpusRevision,
   ingestOfficialLexDocument,
+  reconcileLexCatalogFetchJobs,
   reconcileLegalCorpusTitleUiNoise,
   runNextLegalCorpusIngestionJob,
 } from "../lib/legal-corpus/ingestion";
@@ -1776,6 +1777,51 @@ test("a bounded preferred slot advances discovered primary legislation before FI
     const untouched = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
       .get(backlog.jobId) as { status: string };
     assert.equal(untouched.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("reconciles missing discovery jobs in the approved laws, government and president order", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    await seedLexCatalogDiscoveryCheckpoints(env, now);
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET status='completed',completed_at=?,updated_at=?
+      WHERE id IN ('lex-catalog:laws:ru','lex-catalog:government:ru','lex-catalog:president:ru')`).run(
+      now.toISOString(), now.toISOString(),
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_discovery_documents
+      (checkpoint_id,source_url,provider_source_id,language,discovered_at)
+      VALUES
+        ('lex-catalog:president:ru',?,'lexuz:30003','ru',?),
+        ('lex-catalog:government:ru',?,'lexuz:30002','ru',?),
+        ('lex-catalog:laws:ru',?,'lexuz:30001','ru',?)`).run(
+      "https://lex.uz/ru/docs/30003", now.toISOString(),
+      "https://lex.uz/ru/docs/30002", now.toISOString(),
+      "https://lex.uz/ru/docs/30001", now.toISOString(),
+    );
+
+    const first = await reconcileLexCatalogFetchJobs(env, { now, limit: 1 });
+    assert.deepEqual(first, { considered: 1, queued: 1 });
+    const firstJob = sqlite.prepare(`SELECT source_url AS sourceUrl FROM legal_corpus_ingestion_jobs
+      WHERE source_url LIKE 'https://lex.uz/ru/docs/3000%'`).all() as Array<{ sourceUrl: string }>;
+    assert.deepEqual(firstJob.map((job) => job.sourceUrl), ["https://lex.uz/ru/docs/30001"]);
+    const second = await reconcileLexCatalogFetchJobs(env, { now, limit: 1 });
+    assert.deepEqual(second, { considered: 1, queued: 1 });
+    const secondJob = sqlite.prepare(`SELECT source_url AS sourceUrl FROM legal_corpus_ingestion_jobs
+      WHERE source_url LIKE 'https://lex.uz/ru/docs/3000%' AND source_url<>?`).all(
+      "https://lex.uz/ru/docs/30001",
+    ) as Array<{ sourceUrl: string }>;
+    assert.deepEqual(secondJob.map((job) => job.sourceUrl), ["https://lex.uz/ru/docs/30002"]);
+    const third = await reconcileLexCatalogFetchJobs(env, { now, limit: 1 });
+    assert.deepEqual(third, { considered: 1, queued: 1 });
+    const thirdJob = sqlite.prepare(`SELECT source_url AS sourceUrl FROM legal_corpus_ingestion_jobs
+      WHERE source_url LIKE 'https://lex.uz/ru/docs/3000%' AND source_url NOT IN (?,?)`).all(
+      "https://lex.uz/ru/docs/30001", "https://lex.uz/ru/docs/30002",
+    ) as Array<{ sourceUrl: string }>;
+    assert.deepEqual(thirdJob.map((job) => job.sourceUrl), ["https://lex.uz/ru/docs/30003"]);
   } finally {
     sqlite.close();
   }
