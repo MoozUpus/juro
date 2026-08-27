@@ -34,6 +34,10 @@
   dark and mobile dark for RU home, Trust and Lawyers. Each page completed 26
   or 29 automated checks with zero violation; two additional rule classes per
   page remain explicitly marked for manual review.
+- The same built-site runner now fails when visible text owned by a link,
+  button, form field or disclosure falls below 12 CSS px. Public home actions,
+  document tabs, resource cards, Trust breadcrumbs, Lawyer filters and card
+  actions, footer controls and the mobile menu were raised to that floor.
 - Contrast corrections now use theme-aware text and label colors on the public
   home, Trust and Lawyers surfaces. Motion-reduced content no longer becomes
   artificially low-contrast through inactive-state opacity. Header language
@@ -42,8 +46,11 @@
 - A manual Google Chrome pass against the exact locally built Worker covered
   RU home, Trust and Lawyers at `1280×900`, plus the RU home menu at
   `390×844`. The three representative routes retained one H1, one main target,
-  no horizontal overflow and a working skip-focus transfer. Homepage tablists
-  wrapped with Arrow/End keys and retained visible 2.4 px focus outlines.
+  no horizontal overflow and no visible interactive text below 12 px. The
+  open mobile menu exposed 18 text-bearing action elements with a 12 px
+  minimum. The prior pass also confirmed working skip-focus transfer; homepage
+  tablists wrapped with Arrow/End keys and retained visible 2.4 px focus
+  outlines.
 - The mobile dialog moved focus to its close control, wrapped Shift+Tab/Tab
   between the first and last controls, closed on Escape and returned focus to
   the menu trigger. Its clickable scrim is now hidden and removed from the tab
@@ -77,8 +84,9 @@ viewport emulation.
 
 ## Prioritized candidates
 
-- P1: review the 165 CSS declarations matching 11 px or smaller; essential legal
-  text and actionable metadata should meet the readable floor.
+- P1: classify the remaining CSS declarations matching 11 px or smaller. The
+  public actionable-text floor is now automated; essential explanatory/legal
+  text and intentionally decorative labels still require separate judgment.
 - P1: finish the bounded target classification on the two Client routes whose
   direct navigation was blocked by browser control and on authenticated Lawyer
   and Admin surfaces after those protected Chrome sessions are established.
