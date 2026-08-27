@@ -19,6 +19,12 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+const SITES_SERVICE_HOST_SUFFIX = ".chatgpt.site";
+
+export function isSitesServiceHost(hostname: string): boolean {
+  return hostname.toLowerCase().endsWith(SITES_SERVICE_HOST_SUFFIX);
+}
+
 export function withSecurityHeaders(response: Response, requestUrl: URL): Response {
   const headers = new Headers(response.headers);
   if (response.status === 200 && requestUrl.pathname.startsWith("/assets/")) {
@@ -34,6 +40,12 @@ export function withSecurityHeaders(response: Response, requestUrl: URL): Respon
   );
   if (requestUrl.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  // Sites keeps a provider hostname beside the custom domain. Canonical HTML
+  // still points to juro.uz, while this header prevents the provider surface
+  // from becoming a separately indexed copy of the public website.
+  if (isSitesServiceHost(requestUrl.hostname)) {
+    headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
