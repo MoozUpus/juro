@@ -11,7 +11,8 @@
     "build": "bash scripts/build-verified.sh",
     "deploy:production": "node scripts/deploy-production.mjs",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/*.test.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs && npm run test:a11y",
+    "test:a11y": "node scripts/accessibility-smoke.mjs",
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "type-check": "bash scripts/sites-env.sh -- tsc --noEmit",
@@ -27,6 +28,7 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "^4.20260702.1",
     "@tailwindcss/postcss": "4.2.1",
@@ -38,6 +40,7 @@
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.12",
+    "playwright-core": "1.62.1",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",

@@ -59,6 +59,7 @@ integrity, privacy-safe activation telemetry, and truthful production status.
   Cloudflare's 31-rule Free Managed Ruleset is `Always active`, and the scoped
   analytics rate rule is active. Custom rules remain 0/5 intentionally; an
   unrelated rule was not added merely to change the count.
-- Core Web Vitals could not be measured because the required Chrome DevTools
-  performance connector was unavailable. Artifact budgets are green but are not
-  an LCP/INP/CLS claim.
+- Bounded Chrome lab evidence now exists for the production login, public home
+  and lawyer catalogue, including LCP and CLS. It is route-specific lab
+  evidence rather than field CrUX or INP coverage, so it is not generalized to
+  the full product.

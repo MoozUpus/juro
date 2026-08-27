@@ -316,12 +316,12 @@
 }
 
 .storyStep[data-active="false"] {
-  opacity: .68;
+  opacity: 1;
   transform: translateX(0);
 }
 
 .storyStep[data-complete="true"] {
-  opacity: .9;
+  opacity: 1;
 }
 
 .storyStep[data-complete="true"]::after {
@@ -395,7 +395,7 @@
 }
 
 .documentCanvasMotion p {
-  opacity: .48;
+  opacity: 1;
   transition: background-color 360ms ease, border-color 360ms ease, opacity 360ms ease, transform 480ms var(--ease-premium);
 }
 
@@ -481,7 +481,7 @@
 }
 
 .continuitySteps li[data-current] button strong {
-  color: #102840;
+  color: var(--text-primary);
   transform: translateX(.3rem);
 }
 
@@ -491,7 +491,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .continuitySteps button:hover strong {
-    color: #8b6a32;
+    color: var(--gold-label);
     transform: translateX(.3rem);
   }
 }

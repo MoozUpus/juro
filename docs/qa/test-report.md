@@ -1,4 +1,22 @@
-# Test report — current evidence through 2026-08-27
+# Test report — current evidence through 2026-08-28
+
+## Public website automated accessibility candidate
+
+| Gate | Result |
+| --- | --- |
+| Runner | PASS — pinned `@axe-core/playwright` 4.13.0 with `playwright-core` 1.62.1; only the installed Google Chrome channel is launched |
+| Artifact boundary | PASS — the harness serves the exact verified `dist/client` assets and delegates documents to the built ESM Worker |
+| Standards tags | WCAG 2.0 A/AA, WCAG 2.1 A/AA and WCAG 2.2 AA automated axe rules |
+| Desktop light | PASS — RU/UZ/EN home, RU Trust and RU Lawyers |
+| Desktop dark | PASS — RU home, RU Trust and RU Lawyers |
+| Mobile light `390×844` | PASS — RU/UZ/EN home, RU Trust and RU Lawyers |
+| Mobile dark `390×844` | PASS — RU home, RU Trust and RU Lawyers |
+| Aggregate | PASS — 16/16 route/profile combinations, zero automated violations; every page retained two manual-review candidates |
+| Corrected surfaces | Public-home labels and reduced-motion opacity; Trust navigation, summaries and muted copy; Lawyers filters, cards and secondary actions in dark theme |
+
+This is a source-candidate gate, not deployed-Sites evidence and not a blanket
+WCAG conformance statement. Keyboard order, focus behavior, accessibility-tree
+semantics and assistive-technology behavior remain manual release checks.
 
 ## Lawyer catalogue performance and public-photo candidate
 

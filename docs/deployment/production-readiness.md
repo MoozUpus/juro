@@ -1,8 +1,19 @@
-# Production readiness — 2026-08-27
+# Production readiness — 2026-08-28
 
 This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
+
+## 2026-08-28 public accessibility candidate
+
+The public website source now includes a pinned axe/Google Chrome release gate.
+The exact built Worker and client assets passed 16/16 desktop/mobile,
+light/dark and RU/UZ/EN route/profile combinations with zero automated WCAG
+A/AA violations. Theme-aware contrast corrections cover the public home,
+Trust and Lawyers surfaces. Every sampled page still reports two rule classes
+for manual review, so this is not represented as WCAG conformance or as live
+Sites evidence. Public Sites remains version 86 until a newer exact-source
+candidate is saved and separately approved for deployment.
 
 ## Release identity
 

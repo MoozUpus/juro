@@ -36,3 +36,56 @@
     font-size: .7rem;
   }
 }
+
+.eyebrowDark {
+  color: var(--gold-label);
+}
+
+.transitionRail article > span,
+.audienceList article > span {
+  color: var(--gold-label);
+}
+
+.investorPanel > span {
+  color: var(--gold-400);
+}
+
+.page {
+  --gold-label: #765820;
+}
+
+:global(html[data-theme="dark"]) .page {
+  --gold-label: #d7b56f;
+}
+
+.audienceList li,
+.resourcesSection a > small {
+  color: var(--text-secondary);
+}
+
+.audienceList li,
+.continuityVisual li {
+  color: var(--text-primary);
+}
+
+.documentIntro > p:last-child,
+.clauseTabs button {
+  color: #b5c2cc;
+}
+
+.nextCard span {
+  color: var(--gold-400);
+}
+
+.resourcesSection a > span,
+.faqSection summary span {
+  color: var(--gold-label);
+}
+
+.documentToolbar {
+  color: #102840;
+}
+
+.caseCard small {
+  color: var(--gold-label);
+}

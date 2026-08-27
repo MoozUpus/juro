@@ -23,6 +23,18 @@
   bounded static pattern.
 - Focus-visible rules occur across 33 stylesheets, reduced-motion rules across
   38, and responsive rules across all 56 audited stylesheets.
+- The public website now pins `@axe-core/playwright` 4.13.0 and
+  `playwright-core` 1.62.1. Its release test starts the exact built Worker and
+  assets, launches the installed Google Chrome channel, and fails on automated
+  WCAG 2.0/2.1 A/AA or WCAG 2.2 AA violations.
+- The current local matrix passed all 16 route/profile combinations: desktop
+  light and mobile light for RU/UZ/EN home plus RU Trust and Lawyers; desktop
+  dark and mobile dark for RU home, Trust and Lawyers. Each page completed 26
+  or 29 automated checks with zero violation; two additional rule classes per
+  page remain explicitly marked for manual review.
+- Contrast corrections now use theme-aware text and label colors on the public
+  home, Trust and Lawyers surfaces. Motion-reduced content no longer becomes
+  artificially low-contrast through inactive-state opacity.
 
 These are implementation signals, not a WCAG conformance statement.
 
@@ -30,9 +42,10 @@ These are implementation signals, not a WCAG conformance statement.
 
 A Lighthouse 13.4.1 snapshot of the deployed Worker 151 login passed all 33
 checks and scored 100 for Accessibility, Best Practices, SEO and Agentic
-Browsing. This is a bounded automated snapshot, not a WCAG conformance audit;
-the repository still has no pinned axe/pa11y accessibility runner. Broader
-release QA still needs Chrome keyboard and accessibility-tree samples for:
+Browsing. The new pinned axe/Chrome smoke closes the missing public-site
+automation gate in source, but neither result is a WCAG conformance audit.
+Broader release QA still needs Chrome keyboard and accessibility-tree samples
+for:
 
 1. public home, navigation, consent and scenario tabs;
 2. login/register/OTP errors;
@@ -55,8 +68,9 @@ viewport emulation.
 - P1: finish the bounded target classification on the two Client routes whose
   direct navigation was blocked by browser control and on authenticated Lawyer
   and Admin surfaces after those protected Chrome sessions are established.
-- P1: add a bounded automated accessibility smoke after selecting a Worker/Sites-
-  compatible runner and pinning it through the normal dependency review.
+- P1: replay the new public-site runner against the exact deployed Sites
+  candidate and retain manual keyboard/accessibility-tree evidence for the
+  representative routes.
 - P2: add a visual/semantic regression matrix for light/dark themes and RU/UZ/EN
   expansion.
 
