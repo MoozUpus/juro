@@ -622,16 +622,18 @@ export async function handleLegalCorpusScheduled(
           discoveries.push(result);
           if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
         }
-        // A shard handoff can preserve immutable discovery rows while an
-        // interrupted source export omits their matching fetch jobs. Repair
-        // that durable gap before selecting ingestion work, retaining the
-        // approved laws → government → President ordering and the bounded
-        // single-stream fetch path.
-        await reconcileLexCatalogFetchJobs(env, {
-          now: new Date(controller.scheduledTime),
-          limit: MAX_STAGING_INGESTION_JOBS_PER_RUN * 12,
-        });
       }
+      // A shard handoff can preserve immutable discovery rows while an
+      // interrupted source export omits their matching fetch jobs. Repair
+      // that durable gap regardless of the core-code pager status: discovery
+      // rows already committed in a completed catalogue are safe to queue,
+      // and keeping this outside the code gate ensures laws/ПКМ/ПП/УП cannot
+      // be starved by a stale core target marker. Network work remains in the
+      // bounded single-stream fetch path below.
+      await reconcileLexCatalogFetchJobs(env, {
+        now: new Date(controller.scheduledTime),
+        limit: MAX_STAGING_INGESTION_JOBS_PER_RUN * 12,
+      });
       const preferredCoreCodeIds = [...new Set([
         ...LEX_CORE_CODE_SEED_IDS,
         ...coreCode.priorityCanonicalDocumentIds,
