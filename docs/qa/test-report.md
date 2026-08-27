@@ -12,14 +12,15 @@
 | Mobile light `390×844` | PASS — home, Trust, Lawyers, Legal Center, privacy policy, knowledge article and video in RU, UZ and EN |
 | Mobile dark `390×844` | PASS — RU home, Trust, Lawyers, Legal Center, privacy policy, knowledge article and video |
 | Aggregate | PASS — 56/56 route/profile combinations, zero automated violations; non-video pages retained two manual-review candidates and video retained three |
-| Readable action text | PASS — the runner rejects visible text owned by links, buttons, form fields and disclosures below 12 CSS px; all 56 profiles passed |
-| Corrected surfaces | Public-home actions and document tabs; resource/FAQ metadata; Trust breadcrumbs/status copy; Lawyer metadata/filters/actions; Legal Center version links and dark theme; legal document metadata/table/print action; knowledge metadata/source actions and dark theme; footer and mobile-menu controls |
+| Readable visible text | PASS — the runner rejects any visible public text below 12 CSS px and the static source gate rejects explicit smaller `px`/`rem` declarations; all 56 profiles passed after 77 declarations in 12 stylesheets were raised |
+| Corrected surfaces | Public-home action, decision-map, legal-basis/risk/next-step and handoff copy; document tabs; resource/FAQ metadata; Trust data-route/status copy; Lawyer metadata/filters/actions; Legal Center and knowledge actions/dark theme; footer and mobile-menu controls |
+| Functional/build gate | PASS — verified build plus 47/47 functional tests, including the new explicit CSS-size source guard |
 | Skip-focus regression | PASS — every one of the 56 exact-built route/profile samples activates the skip link and requires focus to land on `#main-content` |
-| Manual Chrome sample | PASS locally on exact built assets — the retained RU keyboard/theme samples passed. UZ Trust/privacy and EN Lawyers/privacy/knowledge at `1280×900` and `390×844` retained the correct document language, one H1, one main target, no horizontal overflow and no visible interactive text below 12 px |
-| GitHub Actions CI `33120284413` | PASS on exact localized-matrix source commit `ed02018eccad42e0ecc1f3ba49694d1cf6734b35` — Website 2m31s and Platform 8m42s |
-| Localized-matrix source | PASS locally — commit `ed02018eccad42e0ecc1f3ba49694d1cf6734b35` |
-| Saved Sites candidate | PASS — version 93 from exact Sites source commit `bbee9ad86e24ea47ac63d6b3c5ddc659a2fd8d7d`; canonical archive hash `sha256:f752c1cf9e6835757592d8ec035590398f8d50e2417fe4a13dd557415f5ab5fe`, 82 files; saved version 92 is superseded |
-| Public deployment boundary | UNCHANGED — version 93 is saved only; successful public deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86 |
+| Manual Chrome sample | PASS locally on exact built assets — retained RU keyboard/theme samples plus the revised RU home at `1280×900` and EN home/UZ Trust at `390×844` kept the correct language, one H1, one main target, zero horizontal overflow and no visible text below 12 px; dense decision-map and handoff labels did not clip |
+| GitHub Actions CI `33122475415` | PASS on exact readable-text source commit `5bdd905884834657cdb7223fc9419774c4085e61` — Website 2m15s and Platform 8m42s |
+| Readable-text source | PASS locally — commit `5bdd905884834657cdb7223fc9419774c4085e61` |
+| Saved Sites candidate | PASS — version 94 from exact Sites source commit `6f5c70f947df14597cca2e289c3b38bbd36b589d`; canonical archive hash `sha256:5896ac705db3ade8f7dcee18e7c8ed1520bbed5c19aa19dc301695ea2ff4d51b`, 83 files; saved version 93 is superseded |
+| Public deployment boundary | UNCHANGED — version 94 is saved only; successful public deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86 |
 
 This is saved-candidate evidence, not deployed-Sites evidence and not a blanket
 WCAG conformance statement. The named Chrome keyboard/accessibility-tree sample

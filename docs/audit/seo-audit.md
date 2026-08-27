@@ -50,4 +50,4 @@ content.
   scored SEO 100, and Chrome DevTools is now available for targeted checks.
   That bounded result is not a substitute for fresh external structured-data,
   social-preview and rendered-content validation across all 78 canonical URLs;
-  saved Sites version 93 is not deployed.
+  saved Sites version 94 is not deployed.

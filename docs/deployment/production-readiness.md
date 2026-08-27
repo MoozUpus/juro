@@ -23,26 +23,33 @@ initial public controls to that floor. Commit
 a legal document, knowledge and video; it corrects the newly exposed 11 px
 actions and full dark-theme contrast contract on the legal and knowledge
 surfaces. Commit `ed02018eccad42e0ecc1f3ba49694d1cf6734b35` then applies the
-same seven-page light-theme matrix to all three public languages. A manual
-exact-build Chrome pass confirmed one H1, one main target,
-no horizontal overflow and no visible interactive text below 12 px on the
-representative RU/UZ/EN desktop/mobile surfaces. The retained keyboard pass also
+same seven-page light-theme matrix to all three public languages. Commit
+`5bdd905884834657cdb7223fc9419774c4085e61` extends the computed-size gate to
+all visible public text and adds a static source guard; 77 legacy declarations
+across 12 public stylesheets now meet the 12 px floor. A manual exact-build
+Chrome pass confirmed one H1, one main target, no horizontal overflow and no
+visible text below 12 px on the representative RU/UZ/EN desktop/mobile
+surfaces. The retained keyboard pass also
 confirmed visible tablist focus, working skip focus and mobile dialog focus
 wrap/Escape return. Non-video pages still report two axe rule classes for
 manual review and video reports three, so this is not represented as WCAG
 conformance or as live Sites evidence.
 
-Sites version 93 is saved from exact source commit
-`bbee9ad86e24ea47ac63d6b3c5ddc659a2fd8d7d`. Its canonical 82-file archive
+Sites version 94 is saved from exact source commit
+`6f5c70f947df14597cca2e289c3b38bbd36b589d`. Its canonical 83-file archive
 hash is
-`sha256:f752c1cf9e6835757592d8ec035590398f8d50e2417fe4a13dd557415f5ab5fe`.
+`sha256:5896ac705db3ade8f7dcee18e7c8ed1520bbed5c19aa19dc301695ea2ff4d51b`.
+The Sites source tree and GitHub `HEAD:apps/website` both resolve to
+`da18d6e15db2676d5fff2df1360adbd27eb94bba`; the canonical archive is
+7,096,320 bytes. The local package was 4,715,119 bytes with SHA-256
+`add42268af05dda9e274b1db222d1caf5c1eb071570a99d7a6f8974bb4a1ab93`.
 It is not deployed. The successful public deployment
 `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86; switching to
-version 93 requires separate action-time approval. Saved version 92 is now
+version 94 requires separate action-time approval. Saved version 93 is now
 superseded and must not be selected for release.
 
-GitHub Actions CI `33120284413` passed the exact localized-matrix source commit
-`ed02018eccad42e0ecc1f3ba49694d1cf6734b35`: Website completed in 2m31s and
+GitHub Actions CI `33122475415` passed the exact readable-text source commit
+`5bdd905884834657cdb7223fc9419774c4085e61`: Website completed in 2m15s and
 Platform in 8m42s, including locked installs, lint, types, tests, deployable
 artifacts, the Cloudflare environment matrix, production dependency audit and
 licence policy.
@@ -53,13 +60,13 @@ licence policy.
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
 | Latest platform runtime commit | `847a839419c4d24f083b32b20351125335a05a22` |
-| Latest public website source candidate | `ed02018eccad42e0ecc1f3ba49694d1cf6734b35` |
+| Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current source CI `33120284413`, exact UI-source CI `33119221595`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all five |
+| GitHub Actions | Current source CI `33122475415`, localized-matrix CI `33120284413`, exact UI-source CI `33119221595`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all six |
 | Production Worker | `juro` version `47671380-a8fe-4d8c-95e2-bd7778541b0c` (version 152), deployment `61882723-0234-4614-bd66-c0ad2b862ba3`, 100% traffic |
 | Immediate application rollback | `8a9accf5-31e6-4947-ab34-e0317b26e61e` (version 151) |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
-| Saved public Sites candidate | Version 93, source `bbee9ad86e24ea47ac63d6b3c5ddc659a2fd8d7d`; not deployed |
+| Saved public Sites candidate | Version 94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |

@@ -36,11 +36,13 @@
   surfaces. Each page completed 23–29 automated checks with zero violation;
   two additional rule classes per page remain explicitly marked for manual
   review, while video retains three.
-- The same built-site runner now fails when visible text owned by a link,
-  button, form field or disclosure falls below 12 CSS px. Public home actions,
-  document tabs, resource cards, Trust breadcrumbs, Lawyer filters and card
-  actions, Legal Center version links, knowledge breadcrumbs/source actions,
-  footer controls and the mobile menu were raised to that floor.
+- The same built-site runner now fails when any visible public text falls below
+  12 CSS px. A static source test independently rejects explicit `px` or `rem`
+  declarations below the same floor. Seventy-seven legacy declarations across
+  12 public stylesheets were raised, including action copy, legal-basis/risk/
+  next-step labels, data-route explanations, status metadata and decorative
+  indices. Relative headline subcopy remains safe through its computed-size
+  runtime check rather than an invalid source-only inference.
 - Contrast corrections now use theme-aware text and label colors on the public
   home, Trust and Lawyers surfaces. Motion-reduced content no longer becomes
   artificially low-contrast through inactive-state opacity. Header language
@@ -59,6 +61,10 @@
   H1, one main target, zero horizontal overflow and no sub-12 px action. The
   dark palette was visually checked for headings, metadata, tables, print and
   source actions, breadcrumbs and the cookie banner.
+- A third exact-build Chrome pass covered the revised RU home at `1280×900`
+  and EN home plus UZ Trust at `390×844`. The dense decision-map and handoff
+  labels rendered at 12 px without clipping; all samples retained the correct
+  document language, one H1, one main target and zero horizontal overflow.
 - The mobile dialog moved focus to its close control, wrapped Shift+Tab/Tab
   between the first and last controls, closed on Escape and returned focus to
   the menu trigger. Its clickable scrim is now hidden and removed from the tab
@@ -92,9 +98,6 @@ viewport emulation.
 
 ## Prioritized candidates
 
-- P1: classify the remaining CSS declarations matching 11 px or smaller. The
-  public actionable-text floor is now automated; essential explanatory/legal
-  text and intentionally decorative labels still require separate judgment.
 - P1: finish the bounded target classification on the two Client routes whose
   direct navigation was blocked by browser control and on authenticated Lawyer
   and Admin surfaces after those protected Chrome sessions are established.
@@ -103,7 +106,7 @@ viewport emulation.
   keyboard/accessibility-tree sample against that exact public artifact.
 - P2: add retained visual snapshots for the full localized matrix if future
   regressions require pixel-level comparison; the current gate is semantic,
-  contrast, focus-transfer, action-text and overflow evidence.
+  contrast, focus-transfer, visible-text and overflow evidence.
 
 No `WCAG AA passed` claim is made until automated and manual browser evidence is
 recorded for the deployed artifact.
