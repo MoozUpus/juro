@@ -19,6 +19,7 @@ const trustStyles = fs.readFileSync("app/[locale]/trust/trust.module.css", "utf8
 const homeStyles = fs.readFileSync("app/components/public/juro-home.module.css", "utf8");
 const motionDirector = fs.readFileSync("app/components/public/JuroMotionDirector.tsx", "utf8");
 const rootLayout = fs.readFileSync("app/layout.tsx", "utf8");
+const chromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0 Safari/537.36";
 
 function relativeLuminance(hex) {
   const channels = hex.match(/[a-f\d]{2}/gi).map((channel) => Number.parseInt(channel, 16) / 255);
@@ -69,7 +70,7 @@ test("scroll storytelling batches every layout read before DOM mutations", () =>
 test("renders the production landing with localized canonical metadata and real actions", async () => {
   const worker = await createWorker();
   for (const locale of ["ru", "uz"]) {
-    const response = await worker.fetch(new Request(`http://localhost/${locale}`, { headers: { accept: "text/html" } }), runtime, context);
+    const response = await worker.fetch(new Request(`http://localhost/${locale}`, { headers: { accept: "text/html", "user-agent": chromeUserAgent } }), runtime, context);
     assert.equal(response.status, 200, locale);
     assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
     assert.equal(response.headers.get("x-frame-options"), "DENY");
@@ -79,10 +80,13 @@ test("renders the production landing with localized canonical metadata and real 
     assert.match(response.headers.get("content-security-policy") ?? "", /manifest-src 'self'/);
     assert.match(response.headers.get("permissions-policy") ?? "", /camera=\(\)/);
     const html = await response.text();
+    const head = html.slice(0, html.indexOf("</head>"));
     assert.match(html, /<link rel="icon" href="\/favicon\.png" type="image\/png"\/>/);
     assert.match(html, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png"\/>/);
     assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest"\/>/);
-    assert.match(html, new RegExp(`<link rel="canonical" href="https://juro\\.uz/${locale}"`));
+    assert.match(head, /<meta name="description" content="[^"]+"/);
+    assert.match(head, /<meta name="robots" content="index, follow"/);
+    assert.match(head, new RegExp(`<link rel="canonical" href="https://juro\\.uz/${locale}"`));
     assert.match(html, new RegExp(`https://app\\.juro\\.uz/register\\?lang=${locale}&amp;accountType=individual`));
     assert.doesNotMatch(html, /jurobek-avatar\.avif/);
     assert.match(html, /Контекст не теряется между инструментами|Kontekst vositalar o‘rtasida yo‘qolmaydi/);
