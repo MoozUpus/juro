@@ -678,8 +678,10 @@ Worker `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147), deployment
 `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) is immediate rollback.
 Version 147 removes absolute Windows build paths from generated font URLs;
 production HTML, font assets, Chrome and host-boundary smoke passed. Sites
-version 85 is live from runtime commit `7645f096`, deployment
-`appgdep_6a90125becc481918d66dcc53f333fe4`; version 84 is rollback.
+version 86 is live from runtime commit `286c8cec`, deployment
+`appgdep_6a9027658100819189e6e6bc1a20bf1d`; version 85 is rollback. The
+provider-generated direct host now emits response-level `noindex` while the
+canonical apex remains indexable.
 
 The post-deploy public telemetry matrix returned `204` for a valid same-site
 event, `403` for a foreign origin, `403` without Fetch Metadata, `400` for an

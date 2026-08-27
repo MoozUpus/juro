@@ -1,4 +1,4 @@
-# Rollback plan — Worker 147 / migration 0159 / Sites 85
+# Rollback plan — Worker 147 / migration 0159 / Sites 86
 
 ## Application rollback
 
@@ -6,8 +6,8 @@ The active application version is
 `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147), deployment
 `6f536ee9-9666-41bb-b0f3-6f174019692b`. The immediate application rollback is
 `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146). Confirm the currently
-active version before changing traffic. Sites version 85 is live and version
-84 is its immediate public rollback.
+active version before changing traffic. Sites version 86 is live and version
+85 is its immediate public rollback.
 
 Rollback is justified for a release-caused availability, authentication,
 routing, font loading or signed-share regression. After rollback, repeat the

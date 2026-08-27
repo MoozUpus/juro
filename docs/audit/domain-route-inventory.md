@@ -9,7 +9,7 @@ surfaces visible through those sources, not a claim that every DNS record type
 has been enumerated.
 
 Evidence was collected read-only from Cloudflare control-plane APIs, recursive
-DNS, unauthenticated HTTP probes, the v85 sitemap and the current PR source at
+DNS, unauthenticated HTTP probes, the v86 sitemap and the current PR source at
 `6503667cbf18f249656b29749040cda8b200fd47`. A source file is not treated as a
 live route merely because it exists.
 
@@ -17,7 +17,7 @@ live route merely because it exists.
 
 | Full URL | Environment and purpose | Role / auth / language | Discovery source | HTTP and redirect | Canonical, index and sitemap | Function / design / mobile | Data sensitivity / criticality | Problem and required action | Final status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `https://juro.uz/` and `/{ru|uz|en}` | Production public website, Sites v85 via `juro-legaltech` | Public; RU, UZ, EN | Zone Worker route, live HTML, sitemap | `200`; apex resolves to the localized public experience | Locale pages self-canonical, `index, follow`; 78 sitemap URLs | Public release smoke, responsive evidence and production Lighthouse recorded | Public / P0 entrypoint | Keep v84 as rollback; repeat crawl after every release | **VERIFIED** |
+| `https://juro.uz/` and `/{ru|uz|en}` | Production public website, Sites v86 via `juro-legaltech` | Public; RU, UZ, EN | Zone Worker route, live HTML, sitemap | `200`; apex resolves to the localized public experience | Locale pages self-canonical, `index, follow`; 78 sitemap URLs | Public release smoke, responsive evidence and production Lighthouse recorded | Public / P0 entrypoint | Keep v85 as rollback; repeat crawl after every release | **VERIFIED** |
 | `https://www.juro.uz/*` | Production canonical alias | Public; all public languages | Zone Worker route and HTTP | `308` to the apex; root verified live | Destination owns canonical and sitemap | Redirect only | Public / P1 | Preserve path and query in release smoke | **VERIFIED** |
 | `https://app.juro.uz/` and `/:locale/:accountType/*` | Production Client/Business application on Worker `juro` | Session plus tenant/workspace checks; RU and UZ | Worker domain API, source, HTTP, authenticated Chrome | Root `307` to `/uz/auth/login`; an existing Individual session retained authentication across 21 Client route visits | Private documents declare `noindex, nofollow, nocache`; not in sitemap | 21/21 Individual routes passed desktop and `390×844` read-only loops with one H1, loaded fonts and no overflow or role alert; desktop warning/error log stayed empty | Private legal/user data / P0 | Business, request-level network coverage and mutable workflow replay remain open | **PARTIAL** |
 | `https://lawyer.juro.uz/` and `/:locale/lawyer/*` | Production professional portal on Worker `juro` | Lawyer persona, role and workspace; RU and UZ | Worker domain API, source, HTTP, Chrome | Root `200`; dashboard reaches the dedicated Lawyer re-authentication page with Lawyer account type and return path | Noindex/noarchive; not in sitemap | Dedicated host persona and boundary verified; current signed-in route loop blocked on a Lawyer session | Private professional/client data / P0 | Sign in as Lawyer, then replay dashboard, case and document flows | **PARTIAL** |
@@ -26,7 +26,7 @@ live route merely because it exists.
 | `https://staging.app.juro.uz/` | Protected staging Platform Worker `juro-platform-staging` | Owner Access before application auth | Worker domain API, recursive DNS, HTTP | `302` to Cloudflare Access before content | Access response; must remain non-indexable and absent from sitemap | Deny-before-auth verified; signed-in staging journey not repeated | Staging private data / P0 | Complete an authenticated staging crawl without bypassing Access | **PARTIAL** |
 | `https://admin.staging.juro.uz/` | Protected staging Admin Worker `juro-admin-staging` | Owner Access, then staff/MFA | Worker domain API, recursive DNS, HTTP | `302` to Cloudflare Access before content | Access response; absent from sitemap | Deny-before-auth verified | Staging privileged data / P0 | Complete authenticated Admin staging smoke | **PARTIAL** |
 | `https://status.staging.juro.uz/` and `/api/status` | Staging public-safe status branch on `juro-platform-staging` | Public, no session | Worker domain API, recursive DNS, source, HTTP | Page and API `200`; sampled application route `404` | Noindex/noarchive; absent from sitemap | Route fence verified | Low-content staging health / P2 | Keep the response content-free; repeat route-fence tests after staging deploys | **VERIFIED** |
-| `https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/` | Provider-generated direct Sites hostname | Public | Sites release record and HTTP | `200` | Locale HTML canonicalizes to `juro.uz`, but currently says `index, follow`; not in sitemap | Same public UI as the apex | Public duplicate surface / P2 | Add host-aware `X-Robots-Tag: noindex` or an apex redirect if the provider permits it | **PARTIAL** |
+| `https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/` | Provider-generated direct Sites hostname | Public | Sites v86 release record and HTTP | `200` | Locale HTML canonicalizes to `juro.uz`; response adds `X-Robots-Tag: noindex, nofollow, noarchive`; not in sitemap | Same public UI as the apex | Public duplicate surface / P2 | Retain the host-aware noindex header in every release | **VERIFIED** |
 
 ## Inactive or source-only names
 
@@ -68,7 +68,7 @@ and live probes decide whether a route is usable.
 
 | Family | Canonical shape | Server boundary | Current evidence | Status |
 | --- | --- | --- | --- | --- |
-| Public marketing | `juro.uz/{ru|uz|en}/*` | Public content only | v85 sitemap contains 78 URLs (26 per locale); 78/78 production responses passed the release crawl | **VERIFIED** |
+| Public marketing | `juro.uz/{ru|uz|en}/*` | Public content only | v86 sitemap contains 78 URLs (26 per locale); 78/78 production responses passed the release crawl | **VERIFIED** |
 | Auth and onboarding | `/:locale/auth/*`, `/register`, `/onboarding` | OTP, Turnstile, server session | Root/login redirects and automated auth tests pass | **PARTIAL** — full live OTP journey not repeated here |
 | Client and Business | `/:locale/:accountType/*` and workspace-scoped modules | Session, active workspace, account type and tenant membership | 21/21 current Individual routes passed desktop and `390×844` read-only Chrome loops; private cases API returns `401` anonymously | **PARTIAL** — Business, request-level network coverage and mutable workflows remain open |
 | AI, document and case workflows | Localized UI plus `/api/platform/*` | Tenant, quotas, feature gates and provider controls | Source/build/CI coverage and prior production evidence; no paid prompt or private upload sent during this inventory | **PARTIAL** |
@@ -90,8 +90,6 @@ part of this read-only inventory.
 
 1. Grant the active audit credential Zone DNS Read, then export and classify
    every A, AAAA, CNAME, TXT, MX and other record.
-2. Add noindex or redirect handling for the provider-generated direct Sites
-   hostname.
-3. Complete authenticated Client, Business, Lawyer and Admin route-by-route
+2. Complete authenticated Client, Business, Lawyer and Admin route-by-route
    browser evidence on the exact deployed Platform version.
 4. Treat the inventory as **PARTIAL** until those gates have direct evidence.

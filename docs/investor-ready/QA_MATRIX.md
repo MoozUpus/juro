@@ -89,8 +89,8 @@ mode each survived a reload.
 | Authenticated Business/Lawyer/Admin QA | PARTIAL — Business was not available in the current account; Lawyer reached its dedicated re-authentication page and Admin reached its protected fresh-session handoff, but their authenticated route loops require the corresponding signed-in Chrome sessions |
 | Host/access smoke | VERIFIED for sampled boundaries — Client `307`, private API `401`, Lawyer `200/307`, Admin `303`, Status `200`, Status application route `404` |
 | Production health/logs | VERIFIED at checkpoint — 8/8 operational, zero active incidents at `2026-08-27T11:02:55Z`; error-only Worker tail emitted no event during the smoke window |
-| Public website | VERIFIED for v85 release evidence — deployment `appgdep_6a90125becc481918d66dcc53f333fe4`, 78/78 sitemap URLs, Website and Platform CI `33063833408`; v84 is rollback |
-| Domain/control-plane inventory | PARTIAL — Worker custom domains and zone routes are current, but the active credential receives HTTP 403 from the DNS-record endpoint; authenticated Business/Lawyer/Admin route-by-route replay and deployment of the saved direct Sites-host noindex correction remain open |
+| Public website | VERIFIED for v86 release evidence — deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`, 78/78 sitemap URLs, Website and Platform CI `33067543449`; v85 is rollback; the provider-generated direct host emits response-level `noindex` |
+| Domain/control-plane inventory | PARTIAL — Worker custom domains and zone routes are current, but the active credential receives HTTP 403 from the DNS-record endpoint; authenticated Business/Lawyer/Admin route-by-route replay remains open |
 
 ## 2026-08-25 analytics and cost release checkpoint
 

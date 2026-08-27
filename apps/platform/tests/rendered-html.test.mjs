@@ -113,6 +113,38 @@ const runtime = {
 };
 const context = { waitUntil() {}, passThroughOnException() {} };
 
+test("moves stale Client account links off the dedicated Lawyer host", async () => {
+  const worker = await createWorker();
+  const productionRuntime = {
+    APP_ENV: "production",
+    ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+  };
+  const route = "/ru/individual/dashboard?source=stale-lawyer-link";
+  const response = await worker.fetch(
+    new Request(`https://lawyer.juro.uz${route}`, { redirect: "manual" }),
+    productionRuntime,
+    context,
+  );
+  assert.equal(response.status, 307);
+  assert.equal(
+    response.headers.get("location"),
+    `https://app.juro.uz${route}`,
+  );
+  assert.match(response.headers.get("cache-control") ?? "", /no-store/u);
+
+  const write = await worker.fetch(
+    new Request("https://lawyer.juro.uz/ru/individual/dashboard", {
+      method: "POST",
+      body: "",
+      redirect: "manual",
+    }),
+    productionRuntime,
+    context,
+  );
+  assert.equal(write.status, 404);
+  assert.equal(write.headers.get("location"), null);
+});
+
 test("retired cinematic prototype path is absent from the production artifact", async () => {
   const worker = await createWorker();
   const assets = { fetch: async () => new Response("Not found", { status: 404 }) };

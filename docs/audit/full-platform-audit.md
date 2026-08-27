@@ -41,7 +41,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 | Area | State | Evidence / remaining gate |
 | --- | --- | --- |
-| Public routes and SEO | PASS in production | Sites version 85 is live; all 78 sitemap URLs returned `200` with exact canonical, complete RU/UZ/EN hreflang, Open Graph/Twitter preview metadata, single H1, valid present JSON-LD and expected indexability. `robots.txt` points to the canonical sitemap. |
+| Public routes and SEO | PASS in production | Sites version 86 is live; all 78 sitemap URLs returned `200` with exact canonical, complete RU/UZ/EN hreflang, Open Graph/Twitter preview metadata, single H1, valid present JSON-LD and expected indexability. `robots.txt` points to the canonical sitemap, while the provider-generated direct host is response-level `noindex`. |
 | Transport/security headers | PASS in production | HTTPS-first Worker redirects, private no-store/noindex and restricted permissions policy tested; public Sites uses Cloudflare canonical redirects. |
 | Auth/RBAC/tenant isolation | PASS for this delta | The exact commit passed the complete 1086-test core and 201-test Cloudflare suites; the 26/26-file security diff scan found no tenant/privacy issue. Historical authenticated journey coverage remains scoped in the QA matrix. |
 | Signed public shares | PASS at baseline | Signed authorization and bounded transport deployed in the hardened release. |
@@ -80,10 +80,10 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
   production traffic; `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) is
   rollback. Version 147 removes absolute build-machine font paths and passed
   post-deploy Chrome, host-boundary, font-asset, health and error-tail smoke.
-- Sites version 85 deployed runtime commit `7645f096`; deployment
-  `appgdep_6a90125becc481918d66dcc53f333fe4`. Sites version 84 is rollback.
+- Sites version 86 deployed runtime commit `286c8cec`; deployment
+  `appgdep_6a9027658100819189e6e6bc1a20bf1d`. Sites version 85 is rollback.
 - GitHub CI `33063995387` passed Website and Platform on Platform correction
-  `6503667c`; v85 evidence CI `33063833408` also passed both jobs. The earlier
+  `6503667c`; v86 source CI `33067543449` also passed both jobs. The earlier
   hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero
   findings; metadata diff scan `fa1b3e34-235b-48e6-8fb4-41e9f731f210` also
   retained zero findings with complete changed-source coverage. Social-preview

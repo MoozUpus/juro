@@ -176,6 +176,18 @@ const worker = {
     if (isLawyerHost && !lawyerPassthrough) {
       const target = lawyerHostTarget(url);
       if (!target) return withSecurityHeaders(new Response("Not Found", { status: 404 }), url);
+      if (target.origin !== url.origin) {
+        if (request.method !== "GET" && request.method !== "HEAD") {
+          return withSecurityHeaders(new Response("Not Found", { status: 404 }), url);
+        }
+        return withSecurityHeaders(new Response(null, {
+          status: 307,
+          headers: {
+            Location: target.toString(),
+            "Cache-Control": "private, no-store, max-age=0",
+          },
+        }), url);
+      }
       routeHeaders.set("x-juro-lawyer-host", "1");
       routeHeaders.set("x-juro-lawyer-original-path", `${url.pathname}${url.search}`);
       routedUrl = target;

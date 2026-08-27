@@ -83,6 +83,23 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/not-a-module")), null);
 });
 
+test("lawyer host sends known Client account paths to the canonical app host", () => {
+  for (const accountType of ["individual", "entrepreneur", "business"] as const) {
+    const target = lawyerHostTarget(new URL(
+      `https://lawyer.juro.uz/ru/${accountType}/dashboard?source=stale-lawyer-link`,
+    ));
+    assert.equal(target?.origin, "https://app.juro.uz");
+    assert.equal(target?.pathname, `/ru/${accountType}/dashboard`);
+    assert.equal(target?.search, "?source=stale-lawyer-link");
+  }
+
+  const staging = lawyerHostTarget(new URL(
+    "https://lawyer.staging.juro.uz/uz/individual/documents",
+  ));
+  assert.equal(staging?.origin, "https://app.staging.juro.uz");
+  assert.equal(staging?.pathname, "/uz/individual/documents");
+});
+
 test("lawyer host maps clean document-builder category and template deep links", () => {
   const category = lawyerHostTarget(
     new URL("https://lawyer.juro.uz/ru/document-builder/debt-receipts?caseId=case-1"),

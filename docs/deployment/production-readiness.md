@@ -9,12 +9,12 @@ item in the wider ecosystem audit is complete.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest public website runtime commit | `7645f09627ba698681b0a3037ab41815247327dd` |
-| Draft PRs | Platform `#64`; public website `#66` |
-| GitHub Actions | Platform-fix CI `33063995387` and v85 evidence CI `33063833408`; Website and Platform successful in both |
+| Latest public website runtime commit | `286c8cec55695173b0ef623c31bee692f2349d68` |
+| Draft PRs | Platform `#64`; public website `#67` |
+| GitHub Actions | Platform-fix CI `33063995387` and v86 source CI `33067543449`; Website and Platform successful in both |
 | Production Worker | `juro` version `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147), deployment `6f536ee9-9666-41bb-b0f3-6f174019692b`, 100% traffic |
 | Immediate application rollback | `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) |
-| Public Sites release | Version 85, deployment `appgdep_6a90125becc481918d66dcc53f333fe4`; rollback version 84 |
+| Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |

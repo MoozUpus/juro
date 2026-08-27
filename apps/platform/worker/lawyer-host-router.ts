@@ -53,6 +53,16 @@ export function lawyerHostTarget(url: URL): URL | null {
     target.pathname = `/${onboarding[1] || "ru"}/onboarding`;
     return target;
   }
+  // A stale/shared client link must leave the dedicated professional host
+  // instead of becoming a plaintext 404. Keep the path and query intact, but
+  // only ever move the known non-lawyer account spaces to the fixed Client
+  // origin; unknown paths continue to fail closed below.
+  if (/^\/(?:ru|uz)\/(?:individual|entrepreneur|business)(?:\/|$)/u.test(url.pathname)) {
+    target.hostname = url.hostname === "lawyer.staging.juro.uz"
+      ? "app.staging.juro.uz"
+      : "app.juro.uz";
+    return target;
+  }
   const documentBuilder = url.pathname.match(
     /^\/(?:(ru|uz)\/)?document-builder\/([a-z0-9-]+)(?:\/([a-z0-9-]+))?\/?$/u,
   );
