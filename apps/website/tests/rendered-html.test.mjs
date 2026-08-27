@@ -116,6 +116,21 @@ test("fingerprinted public assets are cached immutably", async () => {
   assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
 });
 
+test("Sites service hosts are noindex while the canonical custom domain stays indexable", async () => {
+  const { withSecurityHeaders } = await createWorkerModule();
+  const directResponse = withSecurityHeaders(
+    new Response("direct", { status: 200 }),
+    new URL("https://juro-legaltech.example.chatgpt.site/ru/legal/user-agreement"),
+  );
+  const canonicalResponse = withSecurityHeaders(
+    new Response("canonical", { status: 200 }),
+    new URL("https://juro.uz/ru/legal/user-agreement"),
+  );
+
+  assert.equal(directResponse.headers.get("x-robots-tag"), "noindex, nofollow, noarchive");
+  assert.equal(canonicalResponse.headers.get("x-robots-tag"), null);
+});
+
 test("serves the public manifest from a same-origin route", async () => {
   const worker = await createWorker();
   const response = await worker.fetch(
