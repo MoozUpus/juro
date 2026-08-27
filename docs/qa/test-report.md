@@ -14,8 +14,10 @@
 | Aggregate | PASS — 16/16 route/profile combinations, zero automated violations; every page retained two manual-review candidates |
 | Corrected surfaces | Public-home labels and reduced-motion opacity; Trust navigation, summaries and muted copy; Lawyers filters and cards in dark theme; shared 44×44 px header/footer language targets |
 | GitHub Actions CI `33111271523` | PASS on exact source commit `0a120e2f445780059380e350e83a0a863dbbeaa3` — Website 1m22s and Platform 8m47s |
+| Saved Sites candidate | PASS — version 89 from exact source commit `c09f0d080092c787774bf5bc407766ac4548f097`; canonical archive hash `sha256:44b2d1bfa88b485bd3c62bf22adf2b46a64892a6fa1ab7a098a26dc7abe79529`, 79 files |
+| Public deployment boundary | UNCHANGED — version 89 is saved only; successful public deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86 |
 
-This is a source-candidate gate, not deployed-Sites evidence and not a blanket
+This is saved-candidate evidence, not deployed-Sites evidence and not a blanket
 WCAG conformance statement. Keyboard order, focus behavior, accessibility-tree
 semantics and assistive-technology behavior remain manual release checks.
 

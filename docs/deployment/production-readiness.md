@@ -12,8 +12,15 @@ light/dark and RU/UZ/EN route/profile combinations with zero automated WCAG
 A/AA violations. Theme-aware contrast corrections cover the public home,
 Trust and Lawyers surfaces. Every sampled page still reports two rule classes
 for manual review, so this is not represented as WCAG conformance or as live
-Sites evidence. Public Sites remains version 86 until a newer exact-source
-candidate is saved and separately approved for deployment.
+Sites evidence.
+
+Sites version 89 is saved from exact source commit
+`c09f0d080092c787774bf5bc407766ac4548f097`. Its canonical 79-file archive
+hash is
+`sha256:44b2d1bfa88b485bd3c62bf22adf2b46a64892a6fa1ab7a098a26dc7abe79529`.
+It is not deployed. The successful public deployment
+`appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86; switching to
+version 89 requires separate action-time approval.
 
 GitHub Actions CI `33111271523` passed the exact source commit
 `0a120e2f445780059380e350e83a0a863dbbeaa3`: Website completed in 1m22s and
@@ -33,6 +40,7 @@ licence policy.
 | Production Worker | `juro` version `47671380-a8fe-4d8c-95e2-bd7778541b0c` (version 152), deployment `61882723-0234-4614-bd66-c0ad2b862ba3`, 100% traffic |
 | Immediate application rollback | `8a9accf5-31e6-4947-ab34-e0317b26e61e` (version 151) |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
+| Saved public Sites candidate | Version 89, source `c09f0d080092c787774bf5bc407766ac4548f097`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
