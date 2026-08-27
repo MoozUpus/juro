@@ -331,3 +331,11 @@
 @media (prefers-reduced-motion: reduce) {
   .trustItem.trustItem::after { transition: none; }
 }
+
+.resourceFeatureMeta > span,
+.resourceFeatureMeta > small,
+.resourceItem.resourceItem:not([data-primary]) > span,
+.resourceItem.resourceItem:not([data-primary]) > small,
+.watchSignal {
+  font-size: .75rem;
+}

@@ -12,6 +12,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { chromium } from "playwright-core";
 
 const HOST = "127.0.0.1";
+const MIN_INTERACTIVE_TEXT_PX = 12;
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const PROFILES = [
   { colorScheme: "light", name: "desktop-light", routes: ["/ru", "/uz", "/en", "/ru/trust", "/ru/lawyers"], viewport: { width: 1280, height: 900 } },
@@ -110,6 +111,41 @@ async function verifySkipLink(page, label) {
   assert.equal(focusedId, "main-content", `${label} skip link must move keyboard focus to main content`);
 }
 
+async function findSmallInteractiveText(page, label) {
+  const results = await page.evaluate((minimum) => {
+    const failures = [];
+    const controls = document.querySelectorAll("a[href],button,input,select,textarea,summary");
+    for (const control of controls) {
+      const controlRect = control.getBoundingClientRect();
+      const controlStyle = getComputedStyle(control);
+      const controlVisible = controlRect.width > 0
+        && controlRect.height > 0
+        && controlStyle.display !== "none"
+        && controlStyle.visibility !== "hidden"
+        && controlStyle.opacity !== "0";
+      if (!controlVisible || control.closest('[aria-hidden="true"]')) continue;
+
+      for (const element of [control, ...control.querySelectorAll("*")]) {
+        if (element.closest('[aria-hidden="true"]')) continue;
+        const isField = ["INPUT", "SELECT", "TEXTAREA"].includes(element.tagName);
+        const ownsVisibleText = [...element.childNodes]
+          .some((node) => node.nodeType === 3 && (node.textContent ?? "").trim());
+        if (!isField && !ownsVisibleText) continue;
+
+        const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
+        if (!Number.isFinite(fontSize) || fontSize + 0.01 >= minimum) continue;
+        const text = (element.getAttribute("placeholder") ?? element.textContent ?? "")
+          .trim()
+          .replace(/\s+/g, " ");
+        if (!text) continue;
+        failures.push(`${label}: ${element.tagName.toLowerCase()} "${text.slice(0, 80)}" is ${fontSize}px`);
+      }
+    }
+    return failures;
+  }, MIN_INTERACTIVE_TEXT_PX);
+  return [...new Set(results)];
+}
+
 const port = await reservePort();
 const origin = `http://${HOST}:${port}`;
 const server = await createSiteServer(port);
@@ -135,6 +171,7 @@ try {
       const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
       failures.push(...results.violations.map((violation) => formatViolation(label, violation)));
       await verifySkipLink(page, label);
+      failures.push(...await findSmallInteractiveText(page, label));
       const verdict = results.violations.length === 0 ? "PASS" : "FAIL";
       console.log(`${verdict} a11y ${label}: ${results.passes.length} automated checks, ${results.incomplete.length} manual-review candidates`);
       await page.close();
@@ -142,7 +179,7 @@ try {
     await context.close();
   }
 
-  assert.deepEqual(failures, [], `Automated WCAG smoke found violations:\n${failures.join("\n")}`);
+  assert.deepEqual(failures, [], `Automated accessibility smoke found violations:\n${failures.join("\n")}`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

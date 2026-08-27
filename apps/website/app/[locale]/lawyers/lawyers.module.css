@@ -10,3 +10,4 @@
 :global(html[data-theme="dark"]) .page .profileHead .specialties,
 :global(html[data-theme="dark"]) .page .profileGrid h2{color:var(--text-primary)}
 :global(html[data-theme="dark"]) .page .profileGrid>section>p{color:var(--text-secondary)}
+.filters label,.filters input,.filters select,.actions a,.actions span{font-size:.75rem}

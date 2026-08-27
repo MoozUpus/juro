@@ -89,3 +89,19 @@
 .caseCard small {
   color: var(--gold-label);
 }
+
+.audienceList a,
+.clauseTabs button,
+.clauseTabs button small,
+.continuityVisual li span,
+.resourcesSection a > span,
+.resourcesSection a > small,
+.faqSection summary span {
+  font-size: .75rem;
+}
+
+@media (max-width: 420px) {
+  .scenarioTabs button {
+    font-size: .75rem;
+  }
+}
