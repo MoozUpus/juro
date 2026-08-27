@@ -67,5 +67,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Audit website toolchain dependencies
+        if: matrix.app == 'apps/website'
+        run: npm audit --audit-level=high
+
       - name: Enforce dependency licence policy
         run: npm run license:check
