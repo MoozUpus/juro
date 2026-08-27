@@ -94,8 +94,8 @@ test("live Client work controls retain the 44px interaction target", async () =>
 
   assert.match(css, /\.scenario-pills button\{min-height:44px\}/);
   assert.match(css, /\.plan-section-title button\{width:44px;height:44px\}/);
-  assert.match(css, /\.history-filter select\{min-height:44px\}/);
-  assert.match(css, /\.profile-workspace>nav a,\.session-actions button\{min-height:44px\}/);
+  assert.match(css, /\.platform-shell \.history-filter select\{min-height:44px\}/);
+  assert.match(css, /\.platform-shell \.profile-workspace>nav a,\.platform-shell \.session-actions button\{min-height:44px\}/);
   assert.match(css, /\.cases-live-list article>a\{display:inline-flex;min-height:44px;align-items:center\}/);
   assert.match(css, /\.platform-shell \.dbt-brand\{min-height:44px\}/);
   assert.match(css, /\.platform-shell \.dbt-notification-list a,\.platform-shell \.dbt-notification-list button\{display:inline-flex;min-height:44px;/);
