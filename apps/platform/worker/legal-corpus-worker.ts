@@ -72,6 +72,13 @@ const INGESTION_JOBS_PER_RUN = 5;
 // elapsed-time fence above is authoritative and preserves the same
 // single-stream Lex pacing.
 const MAX_STAGING_INGESTION_JOBS_PER_RUN = 20;
+// The coverage-bootstrap join is useful only after the durable fetch queue is
+// close to drained. With tens of thousands of queued discovery rows, scanning
+// every checkpoint, alias and variant before each paced batch can exhaust the
+// bounded D1 CPU budget and strand the scheduler lease. A large queue already
+// has an authoritative source-family priority below, so defer this optional
+// balancing read until the queue is small enough to inspect safely.
+export const LEGAL_CORPUS_COVERAGE_BOOTSTRAP_SCAN_QUEUE_LIMIT = 2_000;
 // Four of the five ingestion slots may prefer already-discovered official
 // catalogues. The order is the current operational legal-source policy:
 // enacted laws first; Cabinet of Ministers acts (ПКМ) second; then the
@@ -117,6 +124,14 @@ type CorpusCoverageBootstrapRow = {
   currentDocuments: number;
   queuedDocuments: number;
 };
+
+export function legalCorpusCoverageBootstrapScanAllowed(
+  queuedFetchJobs: number,
+): boolean {
+  return Number.isFinite(queuedFetchJobs)
+    && queuedFetchJobs >= 0
+    && queuedFetchJobs <= LEGAL_CORPUS_COVERAGE_BOOTSTRAP_SCAN_QUEUE_LIMIT;
+}
 
 export type LegalCorpusCoverageBootstrapTarget = {
   categoryKey: LexCorpusCategoryKey;
@@ -167,6 +182,10 @@ export function legalCorpusCoverageBootstrapTarget(
 async function nextLegalCorpusCoverageBootstrapTarget(
   db: D1Database,
 ): Promise<LegalCorpusCoverageBootstrapTarget | null> {
+  const queued = await db.prepare(`SELECT count(*) AS count
+      FROM legal_corpus_ingestion_jobs
+      WHERE job_type='fetch' AND status IN ('queued','retrying')`).first<{ count: number }>();
+  if (!legalCorpusCoverageBootstrapScanAllowed(Number(queued?.count ?? 0))) return null;
   // One aggregate D1 read replaces per-category probing. It examines only
   // metadata and identifiers; the actual document remains behind the normal
   // host pacer and parser.

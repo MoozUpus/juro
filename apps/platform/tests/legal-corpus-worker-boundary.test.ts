@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   handleLegalCorpusScheduled,
   legalCorpusActionableRunErrorCode,
+  legalCorpusCoverageBootstrapScanAllowed,
   legalCorpusCoverageBootstrapTarget,
   legalCorpusCorePagerContinuationRequired,
   legalCorpusIngestionBudgetForCorePager,
@@ -347,6 +348,13 @@ test("every official Lex catalogue remains in the coverage priority", () => {
     [...LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES].sort(),
     LEX_CORPUS_CATEGORIES.map(({ key }) => key).sort(),
   );
+});
+
+test("coverage bootstrap defers its expensive join while the durable fetch queue is large", () => {
+  assert.equal(legalCorpusCoverageBootstrapScanAllowed(0), true);
+  assert.equal(legalCorpusCoverageBootstrapScanAllowed(2_000), true);
+  assert.equal(legalCorpusCoverageBootstrapScanAllowed(2_001), false);
+  assert.equal(legalCorpusCoverageBootstrapScanAllowed(Number.POSITIVE_INFINITY), false);
 });
 
 test("scheduled run errors exclude resolved technical source conditions but retain actionable retries", () => {
