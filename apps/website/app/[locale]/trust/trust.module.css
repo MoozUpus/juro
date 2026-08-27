@@ -52,6 +52,7 @@
 .page{--trust-label:#765820;--trust-muted:#5f707d;--trust-positive:#39775b}
 :global(html[data-theme="dark"]) .page{--trust-label:#d7b56f;--trust-muted:var(--text-secondary);--trust-positive:#8fd0ae}
 .breadcrumbs{font-size:.75rem}
+.heroCopy>small,.heroIndex li small,.summary span,.architecture li p,.details article>span{font-size:.75rem}
 :global(html[data-theme="dark"]) .page :global(header){--header-fg:var(--text-primary)}
 :global(html[data-theme="dark"]) .page :global(header) a[href*="/register"]{color:#071b2d}
 .breadcrumbs,.heroCopy>p,.summary p,.details article p{color:var(--trust-muted)}

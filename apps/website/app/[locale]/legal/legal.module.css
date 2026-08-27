@@ -10,3 +10,40 @@
 .documentContent p,.documentContent li{color:#334956}
 @media(max-width:760px){.hero{padding-top:112px}.document{padding-top:96px}.hero h1{font-size:clamp(42px,12vw,58px)}.documentHero h1{font-size:clamp(39px,10.5vw,41px);overflow-wrap:anywhere}}
 @media print{.page{background:var(--surface-raised)!important}.page>header,.page>footer,.header,.footer,.previewNotice,.contactPanel,.related,.mobileToc{display:none!important}.document{max-width:none;padding:0}.breadcrumb{margin-bottom:24px}.documentHero h1{font-size:34pt}.documentLayout{display:block;margin-top:30px}.toc{display:none}.documentContent{max-width:none}.documentContent section{break-inside:avoid}.documentContent p,.documentContent li{font-size:11pt}.tableWrap{overflow:visible}.metadata button{display:none}}
+.card small{font-size:12px}
+.eyebrow{color:#765820}
+.breadcrumb{color:#5f707d}
+:global(html[data-theme="dark"]) .page{color:var(--text-primary)}
+:global(html[data-theme="dark"]) .page :global(header){--header-fg:var(--text-primary)}
+:global(html[data-theme="dark"]) .page :global(header) a[href*="/register"]{color:#071b2d}
+:global(html[data-theme="dark"]) .page .hero h1,
+:global(html[data-theme="dark"]) .page .documentHero h1,
+:global(html[data-theme="dark"]) .page .group>header p,
+:global(html[data-theme="dark"]) .page .documentContent h2,
+:global(html[data-theme="dark"]) .page .documentContent h3,
+:global(html[data-theme="dark"]) .page .mobileToc summary,
+:global(html[data-theme="dark"]) .page .related>p{color:var(--text-primary)}
+:global(html[data-theme="dark"]) .page .hero>p:not(.eyebrow),
+:global(html[data-theme="dark"]) .page .documentHero>p:not(.eyebrow),
+:global(html[data-theme="dark"]) .page .group>header span,
+:global(html[data-theme="dark"]) .page .breadcrumb,
+:global(html[data-theme="dark"]) .page .breadcrumb a,
+:global(html[data-theme="dark"]) .page .toc a,
+:global(html[data-theme="dark"]) .page .mobileToc a,
+:global(html[data-theme="dark"]) .page .documentContent p,
+:global(html[data-theme="dark"]) .page .documentContent li{color:var(--text-secondary)}
+:global(html[data-theme="dark"]) .page .eyebrow,
+:global(html[data-theme="dark"]) .page .toc p{color:#e2c784}
+:global(html[data-theme="dark"]) .page .previewNotice{border-color:rgba(226,199,132,.3)}
+:global(html[data-theme="dark"]) .page .previewNotice strong{color:#e2c784}
+:global(html[data-theme="dark"]) .page .previewNotice span{color:var(--text-secondary)}
+:global(html[data-theme="dark"]) .page .card{background:var(--surface-raised);border-color:var(--border-subtle);color:var(--text-primary)}
+:global(html[data-theme="dark"]) .page .card small,
+:global(html[data-theme="dark"]) .page .card b{color:#e2c784}
+:global(html[data-theme="dark"]) .page .card span{color:var(--text-secondary)}
+:global(html[data-theme="dark"]) .page .metadata span{background:var(--surface-elevated);color:var(--text-secondary)}
+:global(html[data-theme="dark"]) .page .metadata span:last-child{background:rgba(226,199,132,.14);color:#e2c784}
+:global(html[data-theme="dark"]) .page .metadata button{background:var(--surface-elevated);border-color:var(--border-subtle);color:var(--text-secondary)}
+:global(html[data-theme="dark"]) .page .tableWrap th{background:var(--surface-elevated);color:var(--text-primary)}
+:global(html[data-theme="dark"]) .page .mobileToc,
+:global(html[data-theme="dark"]) .page .related a{background:var(--surface-raised);border-color:var(--border-subtle);color:var(--text-primary)}

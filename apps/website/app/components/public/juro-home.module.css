@@ -91,11 +91,18 @@
 }
 
 .audienceList a,
+.audienceList li,
 .clauseTabs button,
 .clauseTabs button small,
 .continuityVisual li span,
+.dossier p,
+.heroNote,
+.heroProof li,
 .resourcesSection a > span,
 .resourcesSection a > small,
+.trustGrid article > span,
+.accessPlans article > small,
+.accessNote,
 .faqSection summary span {
   font-size: .75rem;
 }

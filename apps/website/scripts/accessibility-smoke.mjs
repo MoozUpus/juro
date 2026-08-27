@@ -14,11 +14,17 @@ import { chromium } from "playwright-core";
 const HOST = "127.0.0.1";
 const MIN_INTERACTIVE_TEXT_PX = 12;
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+const EXTENDED_PUBLIC_ROUTES = [
+  "/ru/legal",
+  "/ru/legal/privacy-policy",
+  "/ru/knowledge/contract-review-preparation",
+  "/ru/video",
+];
 const PROFILES = [
-  { colorScheme: "light", name: "desktop-light", routes: ["/ru", "/uz", "/en", "/ru/trust", "/ru/lawyers"], viewport: { width: 1280, height: 900 } },
-  { colorScheme: "dark", name: "desktop-dark", routes: ["/ru", "/ru/trust", "/ru/lawyers"], viewport: { width: 1280, height: 900 } },
-  { colorScheme: "light", name: "mobile-light", routes: ["/ru", "/uz", "/en", "/ru/trust", "/ru/lawyers"], viewport: { width: 390, height: 844 } },
-  { colorScheme: "dark", name: "mobile-dark", routes: ["/ru", "/ru/trust", "/ru/lawyers"], viewport: { width: 390, height: 844 } },
+  { colorScheme: "light", name: "desktop-light", routes: ["/ru", "/uz", "/en", "/ru/trust", "/ru/lawyers", ...EXTENDED_PUBLIC_ROUTES], viewport: { width: 1280, height: 900 } },
+  { colorScheme: "dark", name: "desktop-dark", routes: ["/ru", "/ru/trust", "/ru/lawyers", ...EXTENDED_PUBLIC_ROUTES], viewport: { width: 1280, height: 900 } },
+  { colorScheme: "light", name: "mobile-light", routes: ["/ru", "/uz", "/en", "/ru/trust", "/ru/lawyers", ...EXTENDED_PUBLIC_ROUTES], viewport: { width: 390, height: 844 } },
+  { colorScheme: "dark", name: "mobile-dark", routes: ["/ru", "/ru/trust", "/ru/lawyers", ...EXTENDED_PUBLIC_ROUTES], viewport: { width: 390, height: 844 } },
 ];
 const PROJECT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLIENT_ROOT = path.resolve(PROJECT_ROOT, "dist/client");
@@ -165,14 +171,20 @@ try {
     for (const route of profile.routes) {
       const label = `${profile.name} ${route}`;
       const page = await context.newPage();
-      const response = await page.goto(`${origin}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
+      const response = await page.goto(`${origin}${route}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
       assert(response, `${label} did not return a document response`);
       assert.equal(response.status(), 200, `${label} returned ${response.status()}`);
+      await page.waitForLoadState("load", { timeout: 15_000 });
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      });
       const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
-      failures.push(...results.violations.map((violation) => formatViolation(label, violation)));
+      const routeFailures = results.violations.map((violation) => formatViolation(label, violation));
       await verifySkipLink(page, label);
-      failures.push(...await findSmallInteractiveText(page, label));
-      const verdict = results.violations.length === 0 ? "PASS" : "FAIL";
+      routeFailures.push(...await findSmallInteractiveText(page, label));
+      failures.push(...routeFailures);
+      const verdict = routeFailures.length === 0 ? "PASS" : "FAIL";
       console.log(`${verdict} a11y ${label}: ${results.passes.length} automated checks, ${results.incomplete.length} manual-review candidates`);
       await page.close();
     }
