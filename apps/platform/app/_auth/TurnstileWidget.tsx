@@ -5,6 +5,7 @@ import {
   turnstileClientFailure,
   turnstileClientLanguage,
   turnstileClientRetryMode,
+  turnstileClientSize,
 } from "../../lib/auth/turnstile-client";
 
 type TurnstileApi = {
@@ -48,7 +49,12 @@ export function TurnstileWidget({
 
   useEffect(() => {
     let cancelled = false;
+    let renderedSize: "compact" | "flexible" | null = null;
     const turnstileWindow = window as TurnstileWindow;
+    const availableWidth = () =>
+      container.current?.parentElement?.getBoundingClientRect().width ??
+      container.current?.getBoundingClientRect().width ??
+      0;
     const render = () => {
       if (cancelled || !container.current || !turnstileWindow.turnstile) {
         return;
@@ -57,6 +63,7 @@ export function TurnstileWidget({
         turnstileWindow.turnstile.remove(widgetId.current);
       }
       try {
+        renderedSize = turnstileClientSize(availableWidth());
         widgetId.current = turnstileWindow.turnstile.render(
           container.current,
           {
@@ -64,7 +71,7 @@ export function TurnstileWidget({
             action,
             language: turnstileClientLanguage(locale),
             theme: "light",
-            size: "flexible",
+            size: renderedSize,
             appearance: "interaction-only",
             retry: turnstileClientRetryMode,
             callback(token: string) {
@@ -93,6 +100,22 @@ export function TurnstileWidget({
         setStatus("error");
       }
     };
+
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => {
+        if (
+          widgetId.current &&
+          renderedSize &&
+          turnstileClientSize(availableWidth()) !== renderedSize
+        ) {
+          callback.current("");
+          render();
+        }
+      });
+    if (container.current) {
+      resizeObserver?.observe(container.current.parentElement ?? container.current);
+    }
 
     const scriptId = "juro-turnstile-script";
     let script = document.getElementById(scriptId) as HTMLScriptElement | null;
@@ -131,6 +154,7 @@ export function TurnstileWidget({
 
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
       if (timeout) window.clearTimeout(timeout);
       script?.removeEventListener("load", handleLoad);
       script?.removeEventListener("error", handleError);
@@ -165,7 +189,7 @@ export function TurnstileWidget({
   };
   return (
     <div className="auth-turnstile">
-      <div ref={container} />
+      <div ref={container} className="auth-turnstile-widget" />
       <span className="auth-turnstile-status" role="status">
         {status === "ready"
           ? (ru ? "Проверка пройдена." : "Tekshiruvdan o‘tildi.")

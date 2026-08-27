@@ -4,6 +4,7 @@ import {
   turnstileClientFailure,
   turnstileClientLanguage,
   turnstileClientRetryMode,
+  turnstileClientSize,
 } from "../lib/auth/turnstile-client";
 import { validateAuthTurnstile, validateTurnstile } from "../lib/auth/turnstile";
 
@@ -28,6 +29,12 @@ test("Turnstile client failures are bounded and distinguish configuration errors
     retryable: true,
     message: "Проверка безопасности не завершилась. Повторите проверку.",
   });
+});
+
+test("Turnstile uses the provider's compact widget below the flexible 300px floor", () => {
+  assert.equal(turnstileClientSize(299), "compact");
+  assert.equal(turnstileClientSize(300), "flexible");
+  assert.equal(turnstileClientSize(460), "flexible");
 });
 
 test("Turnstile verification binds token, IP, action, and hostname", async () => {

@@ -29,6 +29,27 @@ test("authentication surfaces inherit semantic light and dark theme tokens", () 
   assert.match(auth, /\.auth-unavailable\s*\{[^}]*padding-right:\s*0/s);
 });
 
+test("Turnstile reserves its final height and switches to compact mobile layout", () => {
+  const auth = source("app/_auth/auth.css");
+  const guest = source("app/_guest/guest-ai.css");
+  const widget = source("app/_auth/TurnstileWidget.tsx");
+
+  for (const styles of [auth, guest]) {
+    assert.match(
+      styles,
+      /\.auth-turnstile-widget\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*65px;/s,
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*361px\)\s*\{[\s\S]*?\.auth-turnstile-widget\s*\{[^}]*min-height:\s*140px;[^}]*justify-content:\s*center;/s,
+    );
+  }
+  assert.match(widget, /className="auth-turnstile-widget"/);
+  assert.match(widget, /turnstileClientSize\(availableWidth\(\)\)/);
+  assert.match(widget, /new ResizeObserver/);
+  assert.match(widget, /resizeObserver\?\.disconnect\(\)/);
+});
+
 test("compact theme controls retain a 44px touch target", () => {
   const globals = source("app/globals.css");
 

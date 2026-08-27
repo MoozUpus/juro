@@ -244,6 +244,10 @@
 .auth-turnstile {
   min-height: 4.5rem;
 }
+.auth-turnstile-widget {
+  width: 100%;
+  min-height: 65px;
+}
 .auth-turnstile-status {
   display: block;
   margin-top: 0.45rem;
@@ -278,6 +282,13 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 0.5rem;
+  }
+}
+@media (max-width: 361px) {
+  .auth-turnstile-widget {
+    min-height: 140px;
+    display: flex;
+    justify-content: center;
   }
 }
 @media (prefers-reduced-motion: reduce) {

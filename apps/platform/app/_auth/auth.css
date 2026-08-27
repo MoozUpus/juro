@@ -410,8 +410,9 @@
   margin: 14px 0;
 }
 
-.auth-turnstile > div:first-child {
+.auth-turnstile-widget {
   width: 100%;
+  min-height: 65px;
 }
 
 .auth-turnstile-status {
@@ -512,6 +513,14 @@
   .auth-code-actions { grid-template-columns: 1fr; }
   .auth-language { top: 14px; right: 16px; }
   .auth-row { gap: 12px; }
+}
+
+@media (max-width: 361px) {
+  .auth-turnstile-widget {
+    min-height: 140px;
+    display: flex;
+    justify-content: center;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

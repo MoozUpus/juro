@@ -2,6 +2,12 @@ export type TurnstileClientLocale = "ru" | "uz";
 
 export const turnstileClientRetryMode = "never" as const;
 
+export function turnstileClientSize(
+  availableWidth: number,
+): "compact" | "flexible" {
+  return availableWidth < 300 ? "compact" : "flexible";
+}
+
 // Turnstile does not currently publish an Uzbek widget translation. Passing
 // `uz` makes the provider warn and fall back implicitly, so keep the JURO form
 // localized while asking Turnstile to select a supported browser language.
