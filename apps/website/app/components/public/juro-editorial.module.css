@@ -142,7 +142,7 @@
 .resourceFeatureMeta > span,
 .resourceFeatureMeta > small {
   color: #d7b56f;
-  font-size: .66rem;
+  font-size: .75rem;
   font-weight: 800;
   letter-spacing: .08em;
   margin: 0;
@@ -226,7 +226,7 @@
   border-radius: 999px;
   color: #fff;
   display: inline-flex;
-  font-size: .7rem;
+  font-size: .75rem;
   font-weight: 750;
   gap: .5rem;
   min-height: 44px;

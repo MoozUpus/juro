@@ -11,7 +11,7 @@
 
 .heading > span:last-child {
   color: #536b7b;
-  font-size: .58rem;
+  font-size: .75rem;
   font-weight: 700;
   letter-spacing: .04em;
   text-align: right;
@@ -30,7 +30,7 @@
   border: 1px solid rgba(16, 40, 64, .13);
   border-radius: 999px;
   color: #536b7b;
-  font-size: .57rem;
+  font-size: .75rem;
   font-weight: 800;
   letter-spacing: .045em;
   min-width: 0;
@@ -77,7 +77,7 @@
 @media (max-width: 720px) {
   .heading > span:last-child,
   .flow li {
-    font-size: .7rem;
+    font-size: .75rem;
   }
 }
 

@@ -63,7 +63,7 @@
 }
 
 .chapterNav a span {
-  font-size: .58rem;
+  font-size: .75rem;
   font-weight: 800;
   letter-spacing: .08em;
   min-width: 1.55rem;
@@ -71,7 +71,7 @@
 }
 
 .chapterNav a strong {
-  font-size: .68rem;
+  font-size: .75rem;
   font-weight: 700;
   opacity: 0;
   white-space: nowrap;

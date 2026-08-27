@@ -294,8 +294,8 @@ test("hero demonstrates a short, anonymised question-to-action decision flow", (
 });
 
 test("mobile product labels retain a readable minimum visual scale", () => {
-  assert.match(homepageStyles, /@media \(max-width: 720px\)[\s\S]*?font-size: \.7rem/);
-  assert.match(scenarioStyles, /@media \(max-width: 720px\)[\s\S]*?font-size: \.7rem/);
+  assert.match(homepageStyles, /@media \(max-width: 720px\)[\s\S]*?font-size: \.75rem/);
+  assert.match(scenarioStyles, /@media \(max-width: 720px\)[\s\S]*?font-size: \.75rem/);
 });
 
 test("footer publishes the requested contact details and reveal states stay inside the viewport", () => {

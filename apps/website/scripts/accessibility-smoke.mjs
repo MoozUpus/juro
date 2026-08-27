@@ -12,7 +12,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { chromium } from "playwright-core";
 
 const HOST = "127.0.0.1";
-const MIN_INTERACTIVE_TEXT_PX = 12;
+const MIN_VISIBLE_TEXT_PX = 12;
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const PUBLIC_ROUTE_SUFFIXES = [
   "",
@@ -123,39 +123,33 @@ async function verifySkipLink(page, label) {
   assert.equal(focusedId, "main-content", `${label} skip link must move keyboard focus to main content`);
 }
 
-async function findSmallInteractiveText(page, label) {
+async function findSmallVisibleText(page, label) {
   const results = await page.evaluate((minimum) => {
-    const failures = [];
-    const controls = document.querySelectorAll("a[href],button,input,select,textarea,summary");
-    for (const control of controls) {
-      const controlRect = control.getBoundingClientRect();
-      const controlStyle = getComputedStyle(control);
-      const controlVisible = controlRect.width > 0
-        && controlRect.height > 0
-        && controlStyle.display !== "none"
-        && controlStyle.visibility !== "hidden"
-        && controlStyle.opacity !== "0";
-      if (!controlVisible || control.closest('[aria-hidden="true"]')) continue;
-
-      for (const element of [control, ...control.querySelectorAll("*")]) {
-        if (element.closest('[aria-hidden="true"]')) continue;
-        const isField = ["INPUT", "SELECT", "TEXTAREA"].includes(element.tagName);
-        const ownsVisibleText = [...element.childNodes]
-          .some((node) => node.nodeType === 3 && (node.textContent ?? "").trim());
-        if (!isField && !ownsVisibleText) continue;
-
-        const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
-        if (!Number.isFinite(fontSize) || fontSize + 0.01 >= minimum) continue;
-        const text = (element.getAttribute("placeholder") ?? element.textContent ?? "")
-          .trim()
-          .replace(/\s+/g, " ");
-        if (!text) continue;
-        failures.push(`${label}: ${element.tagName.toLowerCase()} "${text.slice(0, 80)}" is ${fontSize}px`);
-      }
+    const findings = [];
+    for (const element of document.querySelectorAll("body *")) {
+      if (element.closest('[aria-hidden="true"]')) continue;
+      const text = [...element.childNodes]
+        .filter((node) => node.nodeType === 3)
+        .map((node) => node.textContent ?? "")
+        .join(" ")
+        .trim()
+        .replace(/\s+/g, " ");
+      if (!text) continue;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      if (rect.width <= 0 || rect.height <= 0 || style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
+      const fontSize = Number.parseFloat(style.fontSize);
+      if (!Number.isFinite(fontSize) || fontSize + 0.01 >= minimum) continue;
+      const className = typeof element.className === "string"
+        ? element.className.split(/\s+/).filter(Boolean).slice(0, 3).join(".")
+        : "";
+      const selector = `${element.tagName.toLowerCase()}${className ? `.${className}` : ""}`;
+      const owner = element.closest("a[href],button,input,select,textarea,summary");
+      findings.push(`${selector} ${fontSize}px ${owner ? "interactive" : "noninteractive"} \"${text.slice(0, 80)}\"`);
     }
-    return failures;
-  }, MIN_INTERACTIVE_TEXT_PX);
-  return [...new Set(results)];
+    return findings;
+  }, MIN_VISIBLE_TEXT_PX);
+  return [...new Set(results)].map((finding) => `${label}: ${finding}`);
 }
 
 const port = await reservePort();
@@ -188,7 +182,7 @@ try {
       const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
       const routeFailures = results.violations.map((violation) => formatViolation(label, violation));
       await verifySkipLink(page, label);
-      routeFailures.push(...await findSmallInteractiveText(page, label));
+      routeFailures.push(...await findSmallVisibleText(page, label));
       failures.push(...routeFailures);
       const verdict = routeFailures.length === 0 ? "PASS" : "FAIL";
       console.log(`${verdict} a11y ${label}: ${results.passes.length} automated checks, ${results.incomplete.length} manual-review candidates`);
