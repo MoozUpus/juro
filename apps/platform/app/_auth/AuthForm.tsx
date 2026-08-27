@@ -22,6 +22,7 @@ import { authContinuationDestination } from "../../lib/platform/lawyer-entry-rou
 
 type AccountType = "individual" | "entrepreneur" | "lawyer";
 type Locale = "ru" | "uz";
+type AuthErrorTarget = "email" | "otp" | "mfa" | "resend";
 
 type Props = {
   mode: "login" | "register";
@@ -92,6 +93,7 @@ export function AuthForm({
   const [turnstileReset, setTurnstileReset] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [errorTarget, setErrorTarget] = useState<AuthErrorTarget | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const previousStep = useRef(step);
   const emailInput = useRef<HTMLInputElement>(null);
@@ -99,6 +101,7 @@ export function AuthForm({
   const mfaInput = useRef<HTMLInputElement>(null);
   const ru = locale === "ru";
   const lawyerProduct = initialAccountType === "lawyer";
+  const errorMessageId = error ? "auth-error" : undefined;
   const explicitReturnTo = safeReturnPath(returnTo);
   const protectedReturnTo = explicitReturnTo ?? "/";
   const localeHref = (nextLocale: Locale): string => {
@@ -111,6 +114,16 @@ export function AuthForm({
     const [name, domain] = email.split("@");
     return domain ? `${name.slice(0, 2)}•••@${domain}` : email;
   }, [email]);
+
+  function clearError() {
+    setError("");
+    setErrorTarget(null);
+  }
+
+  function showError(value: unknown, target: AuthErrorTarget) {
+    setError(value instanceof Error ? value.message : String(value));
+    setErrorTarget(target);
+  }
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -129,12 +142,12 @@ export function AuthForm({
     target?.focus();
   }, [step]);
 
-  async function sendCode() {
-    setError("");
+  async function sendCode(errorTargetOnFailure: AuthErrorTarget = "email") {
+    clearError();
     if (!turnstileToken) {
-      setError(ru
+      showError(ru
         ? "Дождитесь завершения проверки безопасности."
-        : "Xavfsizlik tekshiruvi tugashini kuting.");
+        : "Xavfsizlik tekshiruvi tugashini kuting.", errorTargetOnFailure);
       return;
     }
     setPending(true);
@@ -163,7 +176,7 @@ export function AuthForm({
       setStep("code");
       setCooldown(data.resendAfterSeconds ?? 60);
     } catch (value) {
-      setError(value instanceof Error ? value.message : String(value));
+      showError(value, errorTargetOnFailure);
     } finally {
       setTurnstileToken("");
       setTurnstileReset((value) => value + 1);
@@ -178,8 +191,9 @@ export function AuthForm({
 
   async function verifyCode(event: FormEvent) {
     event.preventDefault();
-    setError("");
+    clearError();
     setPending(true);
+    let returnedToDetails = false;
     try {
       const response = await fetch("/api/auth/verify-otp", {
         method: "POST",
@@ -214,6 +228,7 @@ export function AuthForm({
           setTurnstileToken("");
           setTurnstileReset((value) => value + 1);
           setStep("details");
+          returnedToDetails = true;
         }
         throw new Error(data.error || (ru ? "Не удалось подтвердить код." : "Kodni tasdiqlab bo‘lmadi."));
       }
@@ -233,7 +248,7 @@ export function AuthForm({
         explicitReturnTo,
       }));
     } catch (value) {
-      setError(value instanceof Error ? value.message : String(value));
+      showError(value, returnedToDetails ? "email" : "otp");
     } finally {
       setPending(false);
     }
@@ -241,7 +256,7 @@ export function AuthForm({
 
   async function verifySecondFactor(event: FormEvent) {
     event.preventDefault();
-    setError("");
+    clearError();
     setPending(true);
     try {
       const response = await fetch("/api/auth/verify-mfa", {
@@ -268,7 +283,7 @@ export function AuthForm({
           setCode("");
           setMfaCode("");
           setCooldown(0);
-          setError(message);
+          showError(message, "email");
           return;
         }
         throw new Error(message);
@@ -279,7 +294,7 @@ export function AuthForm({
         explicitReturnTo,
       }));
     } catch (value) {
-      setError(value instanceof Error ? value.message : String(value));
+      showError(value, "mfa");
     } finally {
       setPending(false);
     }
@@ -364,7 +379,7 @@ export function AuthForm({
               </>
             )}
 
-            <label>Email<input ref={emailInput} type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" inputMode="email" placeholder="name@example.com" /></label>
+            <label>Email<input ref={emailInput} type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" inputMode="email" placeholder="name@example.com" aria-invalid={errorTarget === "email"} aria-errormessage={errorTarget === "email" ? errorMessageId : undefined} aria-describedby={errorTarget === "email" ? errorMessageId : undefined} /></label>
 
             <label className="auth-remember">
               <input
@@ -410,7 +425,7 @@ export function AuthForm({
               </div>
             </header>
             <label>{ru ? "Шестизначный код" : "Olti xonali kod"}
-              <input ref={otpInput} className="auth-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} aria-describedby="otp-hint" />
+              <input ref={otpInput} className="auth-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} aria-invalid={errorTarget === "otp"} aria-errormessage={errorTarget === "otp" ? errorMessageId : undefined} aria-describedby={errorTarget === "otp" ? "otp-hint auth-error" : "otp-hint"} />
             </label>
             <small id="otp-hint" className="auth-hint">{ru ? "Не передавайте этот код другим людям." : "Bu kodni boshqa odamlarga bermang."}</small>
             <button className="auth-submit" disabled={pending || code.length !== 6} aria-busy={pending}>
@@ -418,7 +433,7 @@ export function AuthForm({
               {ru ? "Подтвердить" : "Tasdiqlash"}
             </button>
             <div className="auth-code-actions">
-              <button type="button" className="auth-back" onClick={() => { setStep("details"); setCode(""); setChallengeId(""); setError(""); }}>
+              <button type="button" className="auth-back" onClick={() => { setStep("details"); setCode(""); setChallengeId(""); clearError(); }}>
                 {ru ? "Изменить email" : "Emailni o‘zgartirish"}
               </button>
               {cooldown <= 0 && turnstileSiteKey && (
@@ -429,7 +444,7 @@ export function AuthForm({
                   onToken={setTurnstileToken}
                 />
               )}
-              <button type="button" className="auth-resend" onClick={() => void sendCode()} disabled={pending || cooldown > 0 || !turnstileToken}>
+              <button type="button" className="auth-resend" onClick={() => void sendCode("resend")} disabled={pending || cooldown > 0 || !turnstileToken} aria-describedby={errorTarget === "resend" ? errorMessageId : undefined}>
                 <RotateCcw aria-hidden="true" />{cooldown > 0
                   ? (ru ? `Повторить через ${cooldown} с` : `${cooldown} s dan keyin`)
                   : (ru ? "Отправить код повторно" : "Kodni qayta yuborish")}
@@ -464,7 +479,9 @@ export function AuthForm({
                 inputMode="text"
                 autoComplete="one-time-code"
                 maxLength={64}
-                aria-describedby="mfa-hint"
+                aria-invalid={errorTarget === "mfa"}
+                aria-errormessage={errorTarget === "mfa" ? errorMessageId : undefined}
+                aria-describedby={errorTarget === "mfa" ? "mfa-hint auth-error" : "mfa-hint"}
               />
             </label>
             <small id="mfa-hint" className="auth-hint">{ru
@@ -483,7 +500,7 @@ export function AuthForm({
                 setChallengeId("");
                 setCode("");
                 setMfaCode("");
-                setError("");
+                clearError();
               }}
             >
               {ru ? "Начать вход заново" : "Kirishni qaytadan boshlash"}
@@ -491,7 +508,7 @@ export function AuthForm({
           </form>
         )}
 
-        {error && <p className="auth-error" role="alert">{error}</p>}
+        {error && <p id="auth-error" className="auth-error" role="alert" aria-atomic="true">{error}</p>}
         <div className="auth-switch">
           {mode === "register"
             ? <>{ru ? "Уже есть аккаунт?" : "Hisobingiz bormi?"} <Link href={`/${locale}/auth/login${lawyerProduct ? "?accountType=lawyer" : ""}`}>{ru ? "Войти" : "Kirish"}</Link></>
