@@ -108,6 +108,14 @@ test("the www host permanently redirects to the canonical apex before app routin
   assert.match(productionDeploy, /pattern: "www\.juro\.uz\/\*", zone_name: "juro\.uz"/);
 });
 
+test("fingerprinted static assets are immutable without caching HTML", () => {
+  assert.match(worker, /requestUrl\.pathname\.startsWith\("\/_next\/static\/"\)/);
+  assert.match(worker, /requestUrl\.pathname\.startsWith\("\/assets\/"\)/);
+  assert.match(worker, /response\.ok \|\| response\.status === 304/);
+  assert.match(worker, /Cache-Control", "public, max-age=31536000, immutable"/);
+  assert.doesNotMatch(worker, /requestUrl\.pathname === "\/"[\s\S]*?immutable/);
+});
+
 test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(chromeStyles, /safe-area-inset-top/);
   assert.match(chromeStyles, /safe-area-inset-bottom/);

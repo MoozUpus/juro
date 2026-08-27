@@ -32,6 +32,12 @@ function withSecurityHeaders(response: Response, requestUrl: URL): Response {
   if (requestUrl.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
+  const isFingerprintedStaticAsset =
+    requestUrl.pathname.startsWith("/_next/static/") ||
+    requestUrl.pathname.startsWith("/assets/");
+  if ((response.ok || response.status === 304) && isFingerprintedStaticAsset) {
+    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
