@@ -7,19 +7,19 @@
 | Runner | PASS — pinned `@axe-core/playwright` 4.13.0 with `playwright-core` 1.62.1; only the installed Google Chrome channel is launched |
 | Artifact boundary | PASS — the harness serves the exact verified `dist/client` assets and delegates documents to the built ESM Worker |
 | Standards tags | WCAG 2.0 A/AA, WCAG 2.1 A/AA and WCAG 2.2 AA automated axe rules |
-| Desktop light | PASS — RU/UZ/EN home, RU Trust and RU Lawyers |
-| Desktop dark | PASS — RU home, RU Trust and RU Lawyers |
-| Mobile light `390×844` | PASS — RU/UZ/EN home, RU Trust and RU Lawyers |
-| Mobile dark `390×844` | PASS — RU home, RU Trust and RU Lawyers |
-| Aggregate | PASS — 16/16 route/profile combinations, zero automated violations; every page retained two manual-review candidates |
-| Readable action text | PASS — the runner rejects visible text owned by links, buttons, form fields and disclosures below 12 CSS px; all 16 profiles passed |
-| Corrected surfaces | Public-home actions and document tabs; resource/FAQ metadata; Trust breadcrumbs; Lawyer filters and card actions; footer and mobile-menu controls; prior theme contrast corrections; shared 44×44 px header/footer language targets; focusable main targets; one semantic mobile-menu close control |
-| Skip-focus regression | PASS — every one of the 16 exact-built route/profile samples now activates the skip link and requires focus to land on `#main-content` |
-| Manual Chrome sample | PASS locally on exact built assets — RU home, Trust and Lawyers at `1280×900` and `390×844` retained one H1, one main target, no horizontal overflow and no visible interactive text below 12 px; the open mobile menu had 18 text-bearing actions with a 12 px minimum. The retained keyboard pass also proved skip focus, tablist Arrow/End handling, visible focus, modal wrap/Escape return and one accessible close control |
-| GitHub Actions CI `33117155303` | PASS on exact readable-action source commit `befa80af5028c48fbc2018fd35f3bf34746c7d46` — Website 1m40s and Platform 8m42s |
-| Readable-action source | PASS — commit `befa80af5028c48fbc2018fd35f3bf34746c7d46` |
-| Saved Sites candidate | PASS — version 91 from exact Sites source commit `a19a97efe7fa16dc08a6a7e45d1dfc6301a0fc57`; canonical archive hash `sha256:94a30ce6c4f7ba5b1c21f3ad4ef574e25a2ca0d81b0346f4f03048d5e38c7b0c`, 82 files; saved version 90 is superseded |
-| Public deployment boundary | UNCHANGED — version 91 is saved only; successful public deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86 |
+| Desktop light | PASS — RU/UZ/EN home; RU Trust, Lawyers, Legal Center, privacy policy, knowledge article and video |
+| Desktop dark | PASS — RU home, Trust, Lawyers, Legal Center, privacy policy, knowledge article and video |
+| Mobile light `390×844` | PASS — RU/UZ/EN home; RU Trust, Lawyers, Legal Center, privacy policy, knowledge article and video |
+| Mobile dark `390×844` | PASS — RU home, Trust, Lawyers, Legal Center, privacy policy, knowledge article and video |
+| Aggregate | PASS — 32/32 route/profile combinations, zero automated violations; non-video pages retained two manual-review candidates and video retained three |
+| Readable action text | PASS — the runner rejects visible text owned by links, buttons, form fields and disclosures below 12 CSS px; all 32 profiles passed |
+| Corrected surfaces | Public-home actions and document tabs; resource/FAQ metadata; Trust breadcrumbs/status copy; Lawyer metadata/filters/actions; Legal Center version links and dark theme; legal document metadata/table/print action; knowledge metadata/source actions and dark theme; footer and mobile-menu controls |
+| Skip-focus regression | PASS — every one of the 32 exact-built route/profile samples activates the skip link and requires focus to land on `#main-content` |
+| Manual Chrome sample | PASS locally on exact built assets — the retained RU home/Trust/Lawyers keyboard sample passed at desktop/mobile. Dark Legal Center, privacy policy and knowledge article at `1280×900` and `390×844` retained one H1, one main target, no horizontal overflow and no visible interactive text below 12 px; headings, metadata, tables, print/source actions, breadcrumbs and cookie banner were visually checked |
+| GitHub Actions CI `33119221595` | PASS on exact public-legal accessibility source commit `58ba7bfa6386c6793644693a5c110b1927b99857` — Website 2m0s and Platform 8m31s |
+| Public-legal accessibility source | PASS — commit `58ba7bfa6386c6793644693a5c110b1927b99857` |
+| Saved Sites candidate | PASS — version 92 from exact Sites source commit `f10e3c7374376aa00b044914e7a3e34cc31dd887`; canonical archive hash `sha256:4f5f691a812ec9a3e75398ef5aa2b000cbe4250b0aa3bdcbcf72d651c7514754`, 82 files; saved version 91 is superseded |
+| Public deployment boundary | UNCHANGED — version 92 is saved only; successful public deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86 |
 
 This is saved-candidate evidence, not deployed-Sites evidence and not a blanket
 WCAG conformance statement. The named Chrome keyboard/accessibility-tree sample

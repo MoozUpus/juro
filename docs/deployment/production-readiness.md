@@ -7,37 +7,41 @@ item in the wider ecosystem audit is complete.
 ## 2026-08-28 public accessibility candidate
 
 The public website source now includes a pinned axe/Google Chrome release gate.
-The exact built Worker and client assets passed 16/16 desktop/mobile,
+The exact built Worker and client assets passed 32/32 desktop/mobile,
 light/dark and RU/UZ/EN route/profile combinations with zero automated WCAG
 A/AA violations. Theme-aware contrast corrections cover the public home,
-Trust and Lawyers surfaces. Commit
+Trust, Lawyers, Legal Center, legal-document and knowledge surfaces. Commit
 `32947b37a15af1f2bd4c7ffecbfe3e260252ab37` makes every public main target
-focusable, gates skip-link focus transfer across the entire 16-sample matrix,
+focusable, gates skip-link focus transfer across the initial 16-sample matrix,
 and removes the mobile scrim's duplicate close control from the accessibility
-tree and tab order. Commit
+tree and tab order; the current 32-sample gate retains that focus assertion.
+Commit
 `befa80af5028c48fbc2018fd35f3bf34746c7d46` adds a release guard that rejects
 visible text owned by actions or form fields below 12 CSS px and raises the
-affected public controls to that floor. A manual exact-build Chrome pass
-confirmed one H1, one main target, no horizontal overflow and no visible
-interactive text below 12 px on RU home, Trust and Lawyers at desktop and
-`390×844`; the open mobile menu had a 12 px minimum across 18 text-bearing
-actions. The retained keyboard pass also confirmed visible tablist focus,
-working skip focus and mobile dialog focus wrap/Escape return. Every sampled
-page still reports two axe rule classes for manual review, so this is not
-represented as WCAG conformance or as live Sites evidence.
+initial public controls to that floor. Commit
+`58ba7bfa6386c6793644693a5c110b1927b99857` expands the matrix to Legal Center,
+a legal document, knowledge and video; it corrects the newly exposed 11 px
+actions and full dark-theme contrast contract on the legal and knowledge
+surfaces. A manual exact-build Chrome pass confirmed one H1, one main target,
+no horizontal overflow and no visible interactive text below 12 px on the
+representative desktop/mobile surfaces. The retained keyboard pass also
+confirmed visible tablist focus, working skip focus and mobile dialog focus
+wrap/Escape return. Non-video pages still report two axe rule classes for
+manual review and video reports three, so this is not represented as WCAG
+conformance or as live Sites evidence.
 
-Sites version 91 is saved from exact source commit
-`a19a97efe7fa16dc08a6a7e45d1dfc6301a0fc57`. Its canonical 82-file archive
+Sites version 92 is saved from exact source commit
+`f10e3c7374376aa00b044914e7a3e34cc31dd887`. Its canonical 82-file archive
 hash is
-`sha256:94a30ce6c4f7ba5b1c21f3ad4ef574e25a2ca0d81b0346f4f03048d5e38c7b0c`.
+`sha256:4f5f691a812ec9a3e75398ef5aa2b000cbe4250b0aa3bdcbcf72d651c7514754`.
 It is not deployed. The successful public deployment
 `appgdep_6a9027658100819189e6e6bc1a20bf1d` still owns version 86; switching to
-version 91 requires separate action-time approval. Saved version 90 is now
+version 92 requires separate action-time approval. Saved version 91 is now
 superseded and must not be selected for release.
 
-GitHub Actions CI `33117155303` passed the exact readable-action source commit
-`befa80af5028c48fbc2018fd35f3bf34746c7d46`: Website completed in 1m40s and
-Platform in 8m42s, including locked installs, lint, types, tests, deployable
+GitHub Actions CI `33119221595` passed the exact public-legal accessibility
+source commit `58ba7bfa6386c6793644693a5c110b1927b99857`: Website completed in 2m0s and
+Platform in 8m31s, including locked installs, lint, types, tests, deployable
 artifacts, the Cloudflare environment matrix, production dependency audit and
 licence policy.
 
@@ -47,13 +51,13 @@ licence policy.
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
 | Latest platform runtime commit | `847a839419c4d24f083b32b20351125335a05a22` |
-| Latest public website source candidate | `befa80af5028c48fbc2018fd35f3bf34746c7d46` |
+| Latest public website source candidate | `58ba7bfa6386c6793644693a5c110b1927b99857` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current source CI `33117155303`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all four |
+| GitHub Actions | Current source CI `33119221595`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all four |
 | Production Worker | `juro` version `47671380-a8fe-4d8c-95e2-bd7778541b0c` (version 152), deployment `61882723-0234-4614-bd66-c0ad2b862ba3`, 100% traffic |
 | Immediate application rollback | `8a9accf5-31e6-4947-ab34-e0317b26e61e` (version 151) |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
-| Saved public Sites candidate | Version 91, source `a19a97efe7fa16dc08a6a7e45d1dfc6301a0fc57`; not deployed |
+| Saved public Sites candidate | Version 92, source `f10e3c7374376aa00b044914e7a3e34cc31dd887`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |

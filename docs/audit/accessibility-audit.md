@@ -29,15 +29,17 @@
   `playwright-core` 1.62.1. Its release test starts the exact built Worker and
   assets, launches the installed Google Chrome channel, and fails on automated
   WCAG 2.0/2.1 A/AA or WCAG 2.2 AA violations.
-- The current local matrix passed all 16 route/profile combinations: desktop
-  light and mobile light for RU/UZ/EN home plus RU Trust and Lawyers; desktop
-  dark and mobile dark for RU home, Trust and Lawyers. Each page completed 26
-  or 29 automated checks with zero violation; two additional rule classes per
-  page remain explicitly marked for manual review.
+- The current local matrix passed all 32 route/profile combinations. Desktop
+  and mobile light cover RU/UZ/EN home plus RU Trust, Lawyers, Legal Center, a
+  legal document, a knowledge article and video. Desktop and mobile dark cover
+  the same seven representative RU surfaces. Each page completed 23–29
+  automated checks with zero violation; two additional rule classes per page
+  remain explicitly marked for manual review, while video retains three.
 - The same built-site runner now fails when visible text owned by a link,
   button, form field or disclosure falls below 12 CSS px. Public home actions,
   document tabs, resource cards, Trust breadcrumbs, Lawyer filters and card
-  actions, footer controls and the mobile menu were raised to that floor.
+  actions, Legal Center version links, knowledge breadcrumbs/source actions,
+  footer controls and the mobile menu were raised to that floor.
 - Contrast corrections now use theme-aware text and label colors on the public
   home, Trust and Lawyers surfaces. Motion-reduced content no longer becomes
   artificially low-contrast through inactive-state opacity. Header language
@@ -51,6 +53,11 @@
   minimum. The prior pass also confirmed working skip-focus transfer; homepage
   tablists wrapped with Arrow/End keys and retained visible 2.4 px focus
   outlines.
+- A second exact-build Chrome pass covered the dark Legal Center, privacy
+  policy and knowledge article at `1280×900` and `390×844`. Each retained one
+  H1, one main target, zero horizontal overflow and no sub-12 px action. The
+  dark palette was visually checked for headings, metadata, tables, print and
+  source actions, breadcrumbs and the cookie banner.
 - The mobile dialog moved focus to its close control, wrapped Shift+Tab/Tab
   between the first and last controls, closed on Escape and returned focus to
   the menu trigger. Its clickable scrim is now hidden and removed from the tab
@@ -93,8 +100,9 @@ viewport emulation.
 - P1: deploy the superseding saved Sites candidate only after action-time
   approval, then replay both the automated runner and the retained manual
   keyboard/accessibility-tree sample against that exact public artifact.
-- P2: add a visual/semantic regression matrix for light/dark themes and RU/UZ/EN
-  expansion.
+- P2: expand the non-home localized route matrix from representative RU
+  content to the corresponding UZ/EN Trust, Lawyers, Legal, knowledge and video
+  routes.
 
 No `WCAG AA passed` claim is made until automated and manual browser evidence is
 recorded for the deployed artifact.
