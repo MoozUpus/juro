@@ -14,17 +14,23 @@ import { chromium } from "playwright-core";
 const HOST = "127.0.0.1";
 const MIN_INTERACTIVE_TEXT_PX = 12;
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
-const EXTENDED_PUBLIC_ROUTES = [
-  "/ru/legal",
-  "/ru/legal/privacy-policy",
-  "/ru/knowledge/contract-review-preparation",
-  "/ru/video",
+const PUBLIC_ROUTE_SUFFIXES = [
+  "",
+  "/trust",
+  "/lawyers",
+  "/legal",
+  "/legal/privacy-policy",
+  "/knowledge/contract-review-preparation",
+  "/video",
 ];
+const LOCALIZED_PUBLIC_ROUTES = ["ru", "uz", "en"]
+  .flatMap((locale) => PUBLIC_ROUTE_SUFFIXES.map((suffix) => `/${locale}${suffix}`));
+const REPRESENTATIVE_DARK_ROUTES = PUBLIC_ROUTE_SUFFIXES.map((suffix) => `/ru${suffix}`);
 const PROFILES = [
-  { colorScheme: "light", name: "desktop-light", routes: ["/ru", "/uz", "/en", "/ru/trust", "/ru/lawyers", ...EXTENDED_PUBLIC_ROUTES], viewport: { width: 1280, height: 900 } },
-  { colorScheme: "dark", name: "desktop-dark", routes: ["/ru", "/ru/trust", "/ru/lawyers", ...EXTENDED_PUBLIC_ROUTES], viewport: { width: 1280, height: 900 } },
-  { colorScheme: "light", name: "mobile-light", routes: ["/ru", "/uz", "/en", "/ru/trust", "/ru/lawyers", ...EXTENDED_PUBLIC_ROUTES], viewport: { width: 390, height: 844 } },
-  { colorScheme: "dark", name: "mobile-dark", routes: ["/ru", "/ru/trust", "/ru/lawyers", ...EXTENDED_PUBLIC_ROUTES], viewport: { width: 390, height: 844 } },
+  { colorScheme: "light", name: "desktop-light", routes: LOCALIZED_PUBLIC_ROUTES, viewport: { width: 1280, height: 900 } },
+  { colorScheme: "dark", name: "desktop-dark", routes: REPRESENTATIVE_DARK_ROUTES, viewport: { width: 1280, height: 900 } },
+  { colorScheme: "light", name: "mobile-light", routes: LOCALIZED_PUBLIC_ROUTES, viewport: { width: 390, height: 844 } },
+  { colorScheme: "dark", name: "mobile-dark", routes: REPRESENTATIVE_DARK_ROUTES, viewport: { width: 390, height: 844 } },
 ];
 const PROJECT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLIENT_ROOT = path.resolve(PROJECT_ROOT, "dist/client");
