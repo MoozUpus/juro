@@ -1,4 +1,5 @@
 import { Activity, CheckCircle2, Clock3, ShieldCheck } from "lucide-react";
+import type { Metadata } from "next";
 import type {
   PublicComponentState,
   PublicStatusSnapshot,
@@ -74,6 +75,15 @@ const copy = {
     disclosure: "Holat ro‘yxatga olingan voqealarni aks ettiradi va ichki infratuzilma yoki foydalanuvchi ma’lumotlarini oshkor qilmaydi.",
   },
 } as const;
+
+export function publicStatusMetadata(locale: StatusLocale): Metadata {
+  const t = copy[locale];
+  return {
+    title: t.title,
+    description: t.description,
+    robots: { index: false, follow: false, nocache: true },
+  };
+}
 
 function date(value: string, locale: StatusLocale): string {
   return new Intl.DateTimeFormat(locale === "uz" ? "uz-Latn-UZ" : "ru-RU", {

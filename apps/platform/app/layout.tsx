@@ -47,7 +47,7 @@ export default function RootLayout({
     >
       <body className="antialiased">
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
-        <script dangerouslySetInnerHTML={{ __html: `(function(){var m=location.pathname.match(/^\\/(ru|uz)(?:\\/|$)/);var q=new URLSearchParams(location.search).get("lang");document.documentElement.lang=m?m[1]:(q==="uz"?"uz":"ru");})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var m=location.pathname.match(/^\\/(ru|uz)(?:\\/|$)/);var q=new URLSearchParams(location.search).get("lang");var s=location.hostname.toLowerCase()==="status.juro.uz"||location.hostname.toLowerCase()==="status.staging.juro.uz";document.documentElement.lang=m?m[1]:(q==="uz"?"uz":q==="ru"?"ru":s?"uz":"ru");})();` }} />
         {children}
       </body>
     </html>

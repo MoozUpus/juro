@@ -212,6 +212,8 @@ test("status routes use a fresh-MFA operations boundary and a narrow public host
   const page = readFileSync(new URL("../app/[locale]/admin/system-status/page.tsx", import.meta.url), "utf8");
   const ui = readFileSync(new URL("../app/_staff/SystemStatusConsole.tsx", import.meta.url), "utf8");
   const publicUi = readFileSync(new URL("../app/_status/PublicStatusPage.tsx", import.meta.url), "utf8");
+  const publicRootPage = readFileSync(new URL("../app/status/page.tsx", import.meta.url), "utf8");
+  const publicLocalizedPage = readFileSync(new URL("../app/[locale]/status/page.tsx", import.meta.url), "utf8");
   const publicApi = readFileSync(new URL("../app/api/status/route.ts", import.meta.url), "utf8");
   const worker = readFileSync(new URL("../worker/index.ts", import.meta.url), "utf8");
   assert.match(route, /requirePlatformStaffRequest\(request, "staff\.operations\.manage", \{ freshMfaWithinMs: 15 \* 60 \* 1_000 \}\)/);
@@ -229,4 +231,9 @@ test("status routes use a fresh-MFA operations boundary and a narrow public host
   assert.match(publicUi, /public-status-dependencies/);
   assert.match(publicUi, /dependency\.safeErrorCode/);
   assert.match(publicUi, /className="public-status-shell" lang=\{locale\}/);
+  assert.match(publicUi, /export function publicStatusMetadata\(locale: StatusLocale\): Metadata/);
+  assert.match(publicRootPage, /generateMetadata/);
+  assert.match(publicRootPage, /publicStatusMetadata\(\(await searchParams\)\.lang === "uz" \? "uz" : "ru"\)/);
+  assert.match(publicLocalizedPage, /generateMetadata/);
+  assert.match(publicLocalizedPage, /publicStatusMetadata\(locale === "uz" \? "uz" : "ru"\)/);
 });
