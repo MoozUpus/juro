@@ -2,7 +2,7 @@
 
 :root {
   color-scheme: light dark;
-  --font-primary: var(--font-manrope), Manrope, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-primary: "Manrope Variable", Manrope, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-ui: var(--font-primary);
   --font-display: var(--font-primary);
   --surface-canvas: #f8f6f2;
@@ -16,6 +16,7 @@
   --border-strong: rgba(16, 40, 64, 0.24);
   --brand-navy: #061827;
   --brand-gold: #be974f;
+  --brand-gold-ink: #805d26;
   --interactive-primary: #0d2c47;
   --interactive-hover: #17415f;
   --focus-ring: #d7b56f;
@@ -47,6 +48,7 @@ html[data-theme="dark"] {
   --focus-ring: #e2c784;
   --overlay: rgba(0, 6, 12, 0.72);
   --shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.36);
+  --brand-gold-ink: #d7b56f;
   --juro-warm-50: var(--surface-canvas);
 }
 

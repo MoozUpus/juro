@@ -30,9 +30,10 @@ export function JuroMotionDirector() {
       return;
     }
 
-    reveals.forEach((node) => {
-      if (node.getBoundingClientRect().top < window.innerHeight * .96) node.dataset.revealState = "visible";
-    });
+    const initiallyVisible = reveals.filter(
+      (node) => node.getBoundingClientRect().top < window.innerHeight * .96,
+    );
+    initiallyVisible.forEach((node) => { node.dataset.revealState = "visible"; });
     root.dataset.motionReady = "true";
 
     const revealObserver = new IntersectionObserver(
@@ -70,40 +71,29 @@ export function JuroMotionDirector() {
       scrollFrame = 0;
       const viewport = window.innerHeight;
       const pageRange = Math.max(1, document.documentElement.scrollHeight - viewport);
-      root.style.setProperty("--page-progress", String(clamp(window.scrollY / pageRange)));
-      root.style.setProperty("--hero-scroll", String(clamp(window.scrollY / (viewport * 0.9))));
-      root.dataset.footerVisible = footer && footer.getBoundingClientRect().top < viewport * .92 ? "true" : "false";
-
-      reveals.forEach((node) => {
-        if (node.dataset.revealState !== "visible" && node.getBoundingClientRect().top < viewport * .96) {
-          node.dataset.revealState = "visible";
-          revealObserver.unobserve(node);
-        }
-      });
-
+      const footerVisible = Boolean(footer && footer.getBoundingClientRect().top < viewport * .92);
+      const revealsToShow = reveals.filter(
+        (node) => node.dataset.revealState !== "visible" && node.getBoundingClientRect().top < viewport * .96,
+      );
+      let activeChapter = 0;
       if (chapters.length && chapterLinks.length) {
-        let activeChapter = 0;
         chapters.forEach((chapter, index) => {
           if (chapter.getBoundingClientRect().top <= viewport * .48) activeChapter = index;
         });
-        chapterLinks.forEach((link, index) => {
-          const active = index === activeChapter;
-          link.dataset.active = active ? "true" : "false";
-          if (active) link.setAttribute("aria-current", "location");
-          else link.removeAttribute("aria-current");
-        });
       }
 
+      let storyState: null | {
+        active: number;
+        trackStart?: number;
+        trackHeight?: number;
+        trackProgress?: number;
+      } = null;
       if (storySteps.length) {
         const sectionRect = storySection?.getBoundingClientRect();
         const stickyOffset = Math.min(144, viewport * .14);
         const storyRange = Math.max(1, (sectionRect?.height ?? viewport) - viewport * .72);
         const storyProgress = sectionRect ? clamp((stickyOffset - sectionRect.top) / storyRange) : 0;
         const active = Math.round(storyProgress * (storySteps.length - 1));
-        storySteps.forEach((step, index) => {
-          step.dataset.active = index === active ? "true" : "false";
-          step.dataset.complete = index < active ? "true" : "false";
-        });
         const activeStep = storySteps[active];
         if (storyRail && activeStep) {
           const railRect = storyRail.getBoundingClientRect();
@@ -114,34 +104,78 @@ export function JuroMotionDirector() {
           const trackStart = stepCenter(storySteps[0]);
           const trackEnd = stepCenter(storySteps[storySteps.length - 1]);
           const activeCenter = stepCenter(activeStep);
-          storyRail.style.setProperty("--story-track-start-px", `${Math.round(trackStart)}px`);
-          storyRail.style.setProperty("--story-track-height-px", `${Math.round(trackEnd - trackStart)}px`);
-          storyRail.style.setProperty("--story-progress-px", `${Math.round(activeCenter - trackStart)}px`);
+          storyState = {
+            active,
+            trackStart,
+            trackHeight: trackEnd - trackStart,
+            trackProgress: activeCenter - trackStart,
+          };
+        } else {
+          storyState = { active };
         }
       }
 
-      if (documentStory) {
-        const rect = documentStory.getBoundingClientRect();
-        const progress = clamp((viewport * 0.76 - rect.top) / (rect.height + viewport * 0.34));
-        documentStory.style.setProperty("--document-progress", String(progress));
-      }
+      const documentRect = documentStory?.getBoundingClientRect();
+      const documentProgress = documentRect
+        ? clamp((viewport * 0.76 - documentRect.top) / (documentRect.height + viewport * 0.34))
+        : null;
+      const continuityRect = continuity?.getBoundingClientRect();
+      const continuityProgress = continuityRect
+        ? clamp((Math.min(56, viewport * .06) - continuityRect.top) / Math.max(1, continuityRect.height - viewport))
+        : null;
+      const continuityActive = continuityProgress === null
+        ? null
+        : Math.round(continuityProgress * (continuitySteps.length - 1));
+      const handoffRect = handoff?.getBoundingClientRect();
+      const handoffProgress = handoffRect
+        ? clamp((viewport * 0.78 - handoffRect.top) / (handoffRect.height + viewport * 0.25))
+        : null;
 
-      if (continuity) {
-        const rect = continuity.getBoundingClientRect();
-        const stickyOffset = Math.min(56, viewport * .06);
-        const progress = clamp((stickyOffset - rect.top) / Math.max(1, rect.height - viewport));
-        continuity.style.setProperty("--continuity-progress", String(progress));
-        const active = Math.round(progress * (continuitySteps.length - 1));
-        if (active !== lastContinuityStep) {
-          lastContinuityStep = active;
-          document.dispatchEvent(new CustomEvent("juro:continuity-step", { detail: active }));
+      // Commit state only after every layout read above, preventing read/write
+      // interleaving from forcing repeated synchronous reflows.
+      root.style.setProperty("--page-progress", String(clamp(window.scrollY / pageRange)));
+      root.style.setProperty("--hero-scroll", String(clamp(window.scrollY / (viewport * 0.9))));
+      root.dataset.footerVisible = footerVisible ? "true" : "false";
+      revealsToShow.forEach((node) => {
+        node.dataset.revealState = "visible";
+        revealObserver.unobserve(node);
+      });
+      if (chapters.length && chapterLinks.length) {
+        chapterLinks.forEach((link, index) => {
+          const active = index === activeChapter;
+          link.dataset.active = active ? "true" : "false";
+          if (active) link.setAttribute("aria-current", "location");
+          else link.removeAttribute("aria-current");
+        });
+      }
+      if (storyState) {
+        storySteps.forEach((step, index) => {
+          step.dataset.active = index === storyState.active ? "true" : "false";
+          step.dataset.complete = index < storyState.active ? "true" : "false";
+        });
+        if (
+          storyRail
+          && storyState.trackStart !== undefined
+          && storyState.trackHeight !== undefined
+          && storyState.trackProgress !== undefined
+        ) {
+          storyRail.style.setProperty("--story-track-start-px", `${Math.round(storyState.trackStart)}px`);
+          storyRail.style.setProperty("--story-track-height-px", `${Math.round(storyState.trackHeight)}px`);
+          storyRail.style.setProperty("--story-progress-px", `${Math.round(storyState.trackProgress)}px`);
         }
       }
-
-      if (handoff) {
-        const rect = handoff.getBoundingClientRect();
-        const progress = clamp((viewport * 0.78 - rect.top) / (rect.height + viewport * 0.25));
-        handoff.style.setProperty("--handoff-progress", String(progress));
+      if (documentStory && documentProgress !== null) {
+        documentStory.style.setProperty("--document-progress", String(documentProgress));
+      }
+      if (continuity && continuityProgress !== null) {
+        continuity.style.setProperty("--continuity-progress", String(continuityProgress));
+      }
+      if (continuityActive !== null && continuityActive !== lastContinuityStep) {
+        lastContinuityStep = continuityActive;
+        document.dispatchEvent(new CustomEvent("juro:continuity-step", { detail: continuityActive }));
+      }
+      if (handoff && handoffProgress !== null) {
+        handoff.style.setProperty("--handoff-progress", String(handoffProgress));
       }
     };
     const onScroll = () => {

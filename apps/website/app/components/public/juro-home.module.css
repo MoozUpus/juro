@@ -36,3 +36,8 @@
     font-size: .7rem;
   }
 }
+
+.transitionRail article > span,
+.faqSection summary span {
+  color: var(--brand-gold-ink);
+}
