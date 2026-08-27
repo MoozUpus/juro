@@ -13,6 +13,7 @@
 | Mobile dark `390×844` | PASS — RU home, RU Trust and RU Lawyers |
 | Aggregate | PASS — 16/16 route/profile combinations, zero automated violations; every page retained two manual-review candidates |
 | Corrected surfaces | Public-home labels and reduced-motion opacity; Trust navigation, summaries and muted copy; Lawyers filters and cards in dark theme; shared 44×44 px header/footer language targets |
+| GitHub Actions CI `33111271523` | PASS on exact source commit `0a120e2f445780059380e350e83a0a863dbbeaa3` — Website 1m22s and Platform 8m47s |
 
 This is a source-candidate gate, not deployed-Sites evidence and not a blanket
 WCAG conformance statement. Keyboard order, focus behavior, accessibility-tree

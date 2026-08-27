@@ -15,17 +15,23 @@ for manual review, so this is not represented as WCAG conformance or as live
 Sites evidence. Public Sites remains version 86 until a newer exact-source
 candidate is saved and separately approved for deployment.
 
+GitHub Actions CI `33111271523` passed the exact source commit
+`0a120e2f445780059380e350e83a0a863dbbeaa3`: Website completed in 1m22s and
+Platform in 8m47s, including locked installs, lint, types, tests, deployable
+artifacts, the Cloudflare environment matrix, production dependency audit and
+licence policy.
+
 ## Release identity
 
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest platform runtime commit | `0bdfe7c04830752e06049ace7afc7575db267499` |
-| Latest public website runtime commit | `286c8cec55695173b0ef623c31bee692f2349d68` |
+| Latest platform runtime commit | `847a839419c4d24f083b32b20351125335a05a22` |
+| Latest public website source candidate | `0a120e2f445780059380e350e83a0a863dbbeaa3` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current Worker 151 CI `33090467509`, Client-link correction CI `33071334033`, v86 source CI `33067543449` and plaintext-cleanup evidence CI `33076094186`; Website and Platform successful in all four |
-| Production Worker | `juro` version `8a9accf5-31e6-4947-ab34-e0317b26e61e` (version 151), deployment `a47ee184-655b-4ae5-af16-add701e1083a`, 100% traffic |
-| Immediate application rollback | `ab61380a-4045-4283-80f0-d5bcc1144be8` (version 150) |
+| GitHub Actions | Current source CI `33111271523`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all four |
+| Production Worker | `juro` version `47671380-a8fe-4d8c-95e2-bd7778541b0c` (version 152), deployment `61882723-0234-4614-bd66-c0ad2b862ba3`, 100% traffic |
+| Immediate application rollback | `8a9accf5-31e6-4947-ab34-e0317b26e61e` (version 151) |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
