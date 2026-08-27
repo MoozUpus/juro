@@ -27,6 +27,22 @@ WCAG conformance statement. The named Chrome keyboard/accessibility-tree sample
 is retained, but the remaining authenticated workflows and assistive-technology
 behavior remain manual release checks.
 
+## Authentication error-association candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `742ee6f2f7583a61b242310c79d1ef61cd1ecc9a` on Draft PR `#64` |
+| Error ownership | PASS — Email, OTP and MFA failures set `aria-invalid` and share the stable atomic alert through `aria-errormessage` plus `aria-describedby`; resend failures are associated with the resend action rather than mislabelling the OTP input |
+| Terminal challenge recovery | PASS — terminal OTP/MFA failures return to the email step and move the error relationship to the newly focused email field |
+| Focused regression | PASS — 2/2 auth accessibility source-contract tests |
+| Local Platform gates | PASS — type-check, lint, development build, rendered smoke, deployable artifact and budgets, full core 1094/1094 and Cloudflare/infrastructure 201/201 |
+| GitHub Actions CI `33125681307` | PASS — Website 2m22s and Platform 8m34s, including locked installs, lint, types, tests, artifacts, Cloudflare matrix, production-dependency audit and licence policy |
+| Production boundary | NOT DEPLOYED — production remains Worker 152; live screen-reader/error-state replay is still required after a controlled Platform release |
+
+No email, OTP, MFA code or consent was submitted for this candidate. The
+source and automated gates prove the association contract, not assistive-
+technology behavior on the current production Worker.
+
 ## Lawyer catalogue performance and public-photo candidate
 
 | Gate | Result |

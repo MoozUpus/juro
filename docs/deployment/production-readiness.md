@@ -54,15 +54,33 @@ Platform in 8m42s, including locked installs, lint, types, tests, deployable
 artifacts, the Cloudflare environment matrix, production dependency audit and
 licence policy.
 
+## 2026-08-28 authentication error-association candidate
+
+Commit `742ee6f2f7583a61b242310c79d1ef61cd1ecc9a` associates asynchronous auth
+errors with the exact live control: Email, OTP and MFA inputs expose
+`aria-invalid`, `aria-errormessage` and a descriptive relationship to the
+stable atomic alert, while resend failures belong to the resend action.
+Terminal OTP/MFA challenge failures return to the email step and move the
+relationship to the newly focused email input instead of leaving an orphaned
+code error.
+
+The focused contract passed 2/2, Platform type-check and lint passed, and the
+full local gate passed development build, rendered smoke, deployable artifact,
+budgets, 1094/1094 core tests and 201/201 Cloudflare/infrastructure tests.
+GitHub Actions CI `33125681307` passed the exact commit: Website completed in
+2m22s and Platform in 8m34s. This candidate is not deployed; production remains
+Worker 152 until a controlled Platform release and post-deploy auth-error QA.
+
 ## Release identity
 
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
 | Latest platform runtime commit | `847a839419c4d24f083b32b20351125335a05a22` |
+| Latest platform source candidate | `742ee6f2f7583a61b242310c79d1ef61cd1ecc9a`; not deployed |
 | Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current source CI `33122475415`, localized-matrix CI `33120284413`, exact UI-source CI `33119221595`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all six |
+| GitHub Actions | Current Platform candidate CI `33125681307`, public-source CI `33122475415`, localized-matrix CI `33120284413`, exact UI-source CI `33119221595`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all seven |
 | Production Worker | `juro` version `47671380-a8fe-4d8c-95e2-bd7778541b0c` (version 152), deployment `61882723-0234-4614-bd66-c0ad2b862ba3`, 100% traffic |
 | Immediate application rollback | `8a9accf5-31e6-4947-ab34-e0317b26e61e` (version 151) |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
