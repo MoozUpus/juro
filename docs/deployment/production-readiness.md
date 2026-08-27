@@ -11,13 +11,24 @@ item in the wider ecosystem audit is complete.
 | Branch | `codex/investor-ready-ecosystem` |
 | Latest public website runtime commit | `286c8cec55695173b0ef623c31bee692f2349d68` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Platform-fix CI `33063995387` and v86 source CI `33067543449`; Website and Platform successful in both |
-| Production Worker | `juro` version `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147), deployment `6f536ee9-9666-41bb-b0f3-6f174019692b`, 100% traffic |
-| Immediate application rollback | `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) |
+| GitHub Actions | Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in both |
+| Production Worker | `juro` version `28dd4ac8-1ae2-4582-9697-8aa28e109cb5` (version 148), deployment `76e6f966-d069-4565-a7f9-9b2103a8ea47`, 100% traffic |
+| Immediate application rollback | `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147) |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
+
+## 2026-08-27 Lawyer-host Client-link correction
+
+Worker 148 fixes the exact production defect where
+`lawyer.juro.uz/ru/individual/dashboard` returned a plaintext `404`. Known
+Client account paths now return a non-cacheable `307` to the fixed
+`app.juro.uz` origin for `GET` and `HEAD`; query strings are retained. Writes
+are never forwarded across hosts, and unknown Lawyer paths still fail closed
+with `404`. The exact commit passed local tests, the three-environment
+Cloudflare matrix and GitHub CI `33071334033` before deployment. Post-deploy
+HTTP smoke passed and status remained operational 8/8.
 
 ## 2026-08-27 Platform privacy correction
 

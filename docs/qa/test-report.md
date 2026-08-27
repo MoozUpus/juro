@@ -1,5 +1,23 @@
 # Test report — current evidence through 2026-08-27
 
+## Worker 148 Lawyer-host Client-link correction
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `b4c472332e49b9750ec696652281670efb89bb9b` |
+| Focused host-routing tests | PASS — 6/6 |
+| Rendered Worker tests | PASS — 35/35 |
+| Local release gates | PASS — full test command, lint, type-check, three-environment Cloudflare matrix, production artifact budgets and 730-package licence policy |
+| GitHub Actions CI `33071334033` | PASS — Website and Platform |
+| Production dry-run | PASS — required secrets present, production resources isolated and Container rollout disabled |
+| Production deployment | PASS — Worker 148 `28dd4ac8-1ae2-4582-9697-8aa28e109cb5`, deployment `76e6f966-d069-4565-a7f9-9b2103a8ea47`, 100%; Worker 147 is rollback |
+| Exact screenshot route | PASS over HTTP — `lawyer.juro.uz/ru/individual/dashboard` returns non-cacheable `307` to the exact `app.juro.uz` path |
+| Query and method fence | PASS — `HEAD` retains query; cross-host `POST` returns `404` without `Location` |
+| Fail-closed Lawyer boundary | PASS — unknown path remains `404`; canonical Lawyer dashboard retains its Lawyer-host login destination |
+| Production health | PASS at capture — 8/8 operational, no incident at `2026-08-27T12:35:10.086Z` |
+| Error-only tail | OBSERVED — one deployment-time `MalwareScannerContainer` Durable Object reset caused by the code update; no route failure was observed and status remained operational |
+| Exact Chrome replay | OPEN — the Chrome extension exposed zero connected tabs after deployment, so no new signed-in visual claim is made |
+
 ## Authenticated Client route and responsive smoke
 
 An existing production Individual session was used read-only in Chrome to visit

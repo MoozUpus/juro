@@ -72,18 +72,19 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 ## Candidate completion checkpoint
 
-- GitHub CI `32822786084` passed at exact commit `f42c48fcd67c8b24f3e27369401d3ae8b6c1be8a`:
+- GitHub CI `33071334033` passed at exact commit `b4c472332e49b9750ec696652281670efb89bb9b`:
   Website 42/42; Platform rendered HTML 34/34, core 1086/1086 and Cloudflare
   201/201, plus lint, type-check, artifact, environment, dependency and licence
   gates.
-- Worker `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147) receives 100%
-  production traffic; `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) is
-  rollback. Version 147 removes absolute build-machine font paths and passed
-  post-deploy Chrome, host-boundary, font-asset, health and error-tail smoke.
+- Worker `28dd4ac8-1ae2-4582-9697-8aa28e109cb5` (version 148) receives 100%
+  production traffic; `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147) is
+  rollback. Version 148 retains the font-path privacy correction and routes
+  known misplaced Client links from the Lawyer host to the fixed Client origin
+  for read methods while keeping writes and unknown paths fail closed.
 - Sites version 86 deployed runtime commit `286c8cec`; deployment
   `appgdep_6a9027658100819189e6e6bc1a20bf1d`. Sites version 85 is rollback.
-- GitHub CI `33063995387` passed Website and Platform on Platform correction
-  `6503667c`; v86 source CI `33067543449` also passed both jobs. The earlier
+- GitHub CI `33071334033` passed Website and Platform on the Client-link
+  correction `b4c47233`; v86 source CI `33067543449` also passed both jobs. The earlier
   hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero
   findings; metadata diff scan `fa1b3e34-235b-48e6-8fb4-41e9f731f210` also
   retained zero findings with complete changed-source coverage. Social-preview

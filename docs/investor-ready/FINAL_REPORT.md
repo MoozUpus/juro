@@ -673,11 +673,13 @@ and hashes matched under private R2 prefix
 no successful production provider event after the effective timestamp, so this
 release claims configured cost accounting, not a measured zero-cost baseline.
 
-Worker `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147), deployment
-`6f536ee9-9666-41bb-b0f3-6f174019692b`, receives 100% traffic;
-`c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) is immediate rollback.
-Version 147 removes absolute Windows build paths from generated font URLs;
-production HTML, font assets, Chrome and host-boundary smoke passed. Sites
+Worker `28dd4ac8-1ae2-4582-9697-8aa28e109cb5` (version 148), deployment
+`76e6f966-d069-4565-a7f9-9b2103a8ea47`, receives 100% traffic;
+`ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147) is immediate rollback.
+Version 148 retains the normalized font URLs and fixes misplaced Client links
+on the dedicated Lawyer host: `GET`/`HEAD` move to the fixed Client origin with
+`no-store`, while writes and unknown paths stay fail closed. Production HTTP,
+font assets and host-boundary smoke passed. Sites
 version 86 is live from runtime commit `286c8cec`, deployment
 `appgdep_6a9027658100819189e6e6bc1a20bf1d`; version 85 is rollback. The
 provider-generated direct host now emits response-level `noindex` while the
@@ -700,7 +702,7 @@ The public crawl returned 78/78 successful canonical RU/UZ/EN URLs, and
 home and lawyer catalogue, confirmed both consent actions are 44 pixels high and
 that essential-only dismissal removes the banner, then rendered the Client
 login, dedicated Lawyer login, fail-closed Admin re-auth boundary and status
-page. The status API generated at `2026-08-25T08:10:26.036Z` was operational
+page. The status API generated at `2026-08-27T12:35:10.086Z` was operational
 8/8 with no incident.
 
 Cloudflare zone origin encryption is now explicit `Full (strict)`. Sites

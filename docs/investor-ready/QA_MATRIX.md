@@ -81,14 +81,14 @@ mode each survived a reload.
 
 | Gate | Status |
 | --- | --- |
-| Exact source / CI | VERIFIED — commit `6503667cbf18f249656b29749040cda8b200fd47`; CI `33063995387`; Website and Platform successful |
-| Platform production deployment | VERIFIED — Worker 147 `ed0253e1-1c35-416e-9f2a-5bd8352c1936`, deployment `6f536ee9-9666-41bb-b0f3-6f174019692b`, receives 100%; Worker 146 `c3237f9e-a258-42eb-8b94-62f5045b7b03` is rollback |
+| Exact source / CI | VERIFIED — commit `b4c472332e49b9750ec696652281670efb89bb9b`; CI `33071334033`; Website and Platform successful |
+| Platform production deployment | VERIFIED — Worker 148 `28dd4ac8-1ae2-4582-9697-8aa28e109cb5`, deployment `76e6f966-d069-4565-a7f9-9b2103a8ea47`, receives 100%; Worker 147 `ed0253e1-1c35-416e-9f2a-5bd8352c1936` is rollback |
 | Font-path privacy correction | VERIFIED — production HTML has zero `C:/Users/` and zero `.vinext/fonts` matches; 12 normalized font URLs are present; three sampled WOFF2 assets return `200 font/woff2` |
 | Chrome production smoke | VERIFIED for sampled routes — public Status and the authenticated Client dashboard rendered their primary UI with fonts loaded, no absolute build path and empty warning/error logs |
 | Authenticated Client route QA | VERIFIED for the current read-only Individual surface — 21/21 routes passed desktop and `390×844` mobile loops with the authenticated shell, one H1 after asynchronous settling, loaded fonts, no role alert and no horizontal overflow; the desktop loop emitted zero Chrome warning/error entries. Opening the mobile menu moved focus to its close control and Escape restored focus to the trigger |
 | Authenticated Business/Lawyer/Admin QA | PARTIAL — Business was not available in the current account; Lawyer reached its dedicated re-authentication page and Admin reached its protected fresh-session handoff, but their authenticated route loops require the corresponding signed-in Chrome sessions |
-| Host/access smoke | VERIFIED for sampled boundaries — Client `307`, private API `401`, Lawyer `200/307`, Admin `303`, Status `200`, Status application route `404` |
-| Production health/logs | VERIFIED at checkpoint — 8/8 operational, zero active incidents at `2026-08-27T11:02:55Z`; error-only Worker tail emitted no event during the smoke window |
+| Host/access smoke | VERIFIED for sampled boundaries — misplaced Client path on Lawyer host `307` to the exact app path with query and `no-store`; cross-host `POST` and unknown Lawyer path `404`; canonical Lawyer route retained its Lawyer login; private API `401`, Admin `303`, Status `200` |
+| Production health/logs | VERIFIED at checkpoint — 8/8 operational and no incident at `2026-08-27T12:35:10.086Z`. Error-only tail observed one deployment-time `MalwareScannerContainer` Durable Object reset caused by the code update; no route failure was observed and public health remained operational |
 | Public website | VERIFIED for v86 release evidence — deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`, 78/78 sitemap URLs, Website and Platform CI `33067543449`; v85 is rollback; the provider-generated direct host emits response-level `noindex` |
 | Domain/control-plane inventory | PARTIAL — Worker custom domains and zone routes are current, but the active credential receives HTTP 403 from the DNS-record endpoint; authenticated Business/Lawyer/Admin route-by-route replay remains open |
 

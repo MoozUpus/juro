@@ -1,20 +1,20 @@
-# Rollback plan — Worker 147 / migration 0159 / Sites 86
+# Rollback plan — Worker 148 / migration 0159 / Sites 86
 
 ## Application rollback
 
 The active application version is
-`ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147), deployment
-`6f536ee9-9666-41bb-b0f3-6f174019692b`. The immediate application rollback is
-`c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146). Confirm the currently
+`28dd4ac8-1ae2-4582-9697-8aa28e109cb5` (version 148), deployment
+`76e6f966-d069-4565-a7f9-9b2103a8ea47`. The immediate application rollback is
+`ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147). Confirm the currently
 active version before changing traffic. Sites version 86 is live and version
 85 is its immediate public rollback.
 
 Rollback is justified for a release-caused availability, authentication,
 routing, font loading or signed-share regression. After rollback, repeat the
-six-host HTTPS probe, login/status smoke and `/api/status` read. The font-path
-disclosure will return with version 146, so a rollback must be followed by an
-incident fix rather than treated as a stable privacy resolution. Do not report
-overall recovery unless status evidence is fresh and operational.
+six-host HTTPS probe, login/status smoke and `/api/status` read. Version 147
+retains the font-path privacy correction but restores the prior plaintext
+`404` for misplaced Client links on the Lawyer host. Do not report overall
+recovery unless status evidence is fresh and operational.
 
 Migration 0159 is additive. An older application can ignore its new table and
 columns, so an application-only rollback should not edit D1. It would, however,
