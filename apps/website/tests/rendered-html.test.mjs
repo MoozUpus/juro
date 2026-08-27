@@ -176,9 +176,12 @@ test("serves all RU and UZ legal pages without authentication", async () => {
   };
   for (const locale of ["ru", "uz"]) for (const [slug, canonicalSlug] of Object.entries(routes)) {
     const route = `/${locale}/${slug}`;
-    const response = await worker.fetch(new Request(`http://localhost${route}`, { headers: { accept: "text/html" } }), runtime, context);
+    const requestUrl = `http://localhost${route}`;
+    const response = await worker.fetch(new Request(requestUrl, { headers: { accept: "text/html" } }), runtime, context);
     assert.equal(response.status, 308, route);
-    assert.equal(response.headers.get("location"), `http://localhost/${locale}/legal/${canonicalSlug}`);
+    const location = response.headers.get("location");
+    assert.ok(location, route);
+    assert.equal(new URL(location, requestUrl).href, `http://localhost/${locale}/legal/${canonicalSlug}`);
     const canonicalRoute = `/${locale}/legal/${canonicalSlug}`;
     const canonical = await worker.fetch(new Request(`http://localhost${canonicalRoute}`, { headers: { accept: "text/html" } }), runtime, context);
     assert.equal(canonical.status, 200, canonicalRoute);
