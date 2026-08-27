@@ -1,5 +1,27 @@
 # Test report — current evidence through 2026-08-27
 
+## Worker 151 responsive Turnstile and Client target closure
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commits `6fa7835e`, `a6008f43` and final Turnstile commit `0bdfe7c04830752e06049ace7afc7575db267499` on Draft PR `#64` |
+| Focused regression | PASS — 15/15 Turnstile and UI-resilience tests; the earlier Client target suite passed 10/10 |
+| Local release gates | PASS — type-check, lint, full core 1090/1090, Cloudflare/infrastructure 201/201, production build/artifact and all emitted-asset budgets |
+| GitHub Actions CI `33090467509` | PASS — Platform 8m29s and Website 41s |
+| Production deployment | PASS — Worker 151 `8a9accf5-31e6-4947-ab34-e0317b26e61e`, deployment `a47ee184-655b-4ae5-af16-add701e1083a`, 100%; Worker 150 `ab61380a-4045-4283-80f0-d5bcc1144be8` is rollback |
+| Production health | PASS at capture — `overallStatus=operational`, all eight components operational, zero active/recent incidents at `2026-08-27T16:06:24.644Z` |
+| Client target replay | PASS for six affected authenticated routes — Cases, Action plan, History, Profile, Security and Notifications exposed no sub-44 px target after Worker 150/151. The remaining 21 px search input is nested in a 44 px label target |
+| Desktop Chrome trace | PASS — login LCP 521 ms (TTFB 310 ms, render delay 211 ms), CLS 0.02, no horizontal overflow; render-blocking estimate was 0 ms for FCP/LCP |
+| Mobile Chrome trace | PASS — emulated Chrome 320x800, LCP 248 ms (TTFB 92 ms, render delay 156 ms), CLS 0.00, document `320/320` with no horizontal overflow, 296 px card and 150 px compact Turnstile |
+| Responsive breakpoint replay | PASS — changing the same live tab from 320 px to desktop caused `ResizeObserver` to replace compact with flexible Turnstile without page overflow |
+| Lighthouse snapshot | PASS — Lighthouse 13.4.1: Accessibility 100, Best Practices 100, SEO 100, Agentic Browsing 100; 33 passed, 0 failed. Reports: `docs/qa/artifacts/lighthouse-worker151-login/` |
+| Exact screenshot route | PASS — `lawyer.juro.uz/ru/individual/dashboard?qa=worker151` returns non-cacheable `307` to the exact `app.juro.uz` path; unauthenticated Client and Lawyer routes retain their own login destinations and Admin retains the protected `303` handoff |
+| Protected-role boundary | PARTIAL — the preserved Lawyer and Admin Chrome tabs still require the user to establish the corresponding authenticated sessions before their current route loops can be replayed |
+
+The Lighthouse snapshot and two lab traces establish the named deployed login
+state only. They do not supply field CrUX data, INP evidence, screen-reader
+coverage or a blanket WCAG conformance result.
+
 ## Worker 148 Lawyer-host Client-link correction
 
 | Gate | Result |
@@ -122,10 +144,11 @@ destructive production testing were unavailable. Neither scan is represented
 as an exhaustive proof that no vulnerability exists.
 
 No live share existed in production, so the fifth-failure 429 path was not
-rehearsed against user data. No Lighthouse/Chrome trace ran because the
-`chrome-devtools` MCP was unavailable. Physical iOS/Android, Edge, Firefox,
-Safari/WebKit and native page zoom remain intentionally not tested under the
-current QA boundary.
+rehearsed against user data. Worker 151 now has a Lighthouse snapshot plus
+desktop and 320 px Chrome traces for the login surface, but that bounded lab
+evidence does not cover field CrUX, INP, every application route or
+screen-reader behavior. Physical iOS/Android, Edge, Firefox, Safari/WebKit and
+native page zoom remain intentionally not tested under the current QA boundary.
 
 Post-deploy public QA for Sites version 82 verified affected RU/UZ/EN legal,
 lawyer and video DOM states, canonical/hreflang/Open Graph/Twitter metadata, no

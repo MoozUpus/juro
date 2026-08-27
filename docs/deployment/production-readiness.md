@@ -9,15 +9,50 @@ item in the wider ecosystem audit is complete.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
+| Latest platform runtime commit | `0bdfe7c04830752e06049ace7afc7575db267499` |
 | Latest public website runtime commit | `286c8cec55695173b0ef623c31bee692f2349d68` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Client-link correction CI `33071334033`, v86 source CI `33067543449` and plaintext-cleanup evidence CI `33076094186`; Website and Platform successful in all three |
-| Production Worker | `juro` version `28dd4ac8-1ae2-4582-9697-8aa28e109cb5` (version 148), deployment `76e6f966-d069-4565-a7f9-9b2103a8ea47`, 100% traffic |
-| Immediate application rollback | `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147) |
+| GitHub Actions | Current Worker 151 CI `33090467509`, Client-link correction CI `33071334033`, v86 source CI `33067543449` and plaintext-cleanup evidence CI `33076094186`; Website and Platform successful in all four |
+| Production Worker | `juro` version `8a9accf5-31e6-4947-ab34-e0317b26e61e` (version 151), deployment `a47ee184-655b-4ae5-af16-add701e1083a`, 100% traffic |
+| Immediate application rollback | `ab61380a-4045-4283-80f0-d5bcc1144be8` (version 150) |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
+
+## 2026-08-27 Worker 151 accessibility and performance closure
+
+Commits `6fa7835e` and `a6008f43` enforce the 44 px interaction floor across
+the affected Client routes. Commit
+`0bdfe7c04830752e06049ace7afc7575db267499` then reserves the Turnstile layout,
+selects the provider's compact mode below the flexible 300 px floor and
+re-renders it when a later resize crosses that boundary. Focused tests passed
+15/15, the full core suite passed 1090/1090, the infrastructure suite passed
+201/201, and production build/artifact budgets, lint and type-check passed.
+GitHub CI `33090467509` completed Website and Platform successfully before the
+100% deployment.
+
+Live Chrome evidence on the deployed Worker 151:
+
+- Desktop login trace: LCP 521 ms, TTFB 310 ms, render delay 211 ms and CLS
+  0.02. Before this correction, the same Turnstile path produced CLS 0.31.
+- Chrome 320x800 trace: LCP 248 ms, TTFB 92 ms, render delay 156 ms and CLS
+  0.00. The document remained exactly 320 px wide, the auth card was 296 px
+  and the compact widget was 150 px, with zero horizontal overflow.
+- Changing the same tab from compact mobile to desktop produced the flexible
+  widget through the resize observer without overflow.
+- Lighthouse 13.4.1 snapshot: 100 Accessibility, 100 Best Practices, 100 SEO
+  and 100 Agentic Browsing; 33 checks passed and 0 failed. The exact reports
+  are stored in `docs/qa/artifacts/lighthouse-worker151-login/`.
+- The six affected authenticated Client routes exposed no undersized public
+  target after deployment. The only 21 px candidate was the internal search
+  input inside its 44 px label target.
+- `/api/status` generated at `2026-08-27T16:06:24.644Z` was operational for
+  all eight components with zero active or recent incident.
+
+This is bounded lab and route evidence, not field CrUX, INP, screen-reader or
+blanket WCAG-conformance evidence. Authenticated Lawyer and Admin route loops
+remain pending until the corresponding protected Chrome sessions are signed in.
 
 ## 2026-08-27 Lawyer-host Client-link correction
 
@@ -235,8 +270,9 @@ added solely to change that count.
 
 - The Cloudflare account UI showed an overdue balance of USD 381.29 and warned
   about possible service interruption. No financial action was taken.
-- A real Lighthouse/Core Web Vitals trace is not claimed because the required
-  `chrome-devtools` MCP was unavailable in this session.
+- Worker 151 now has bounded Lighthouse and Chrome lab traces for the deployed
+  login surface. Field CrUX, INP, screen-reader coverage and all-route CWV
+  sampling remain unverified and must not be inferred from that snapshot.
 - Cleanup of the release-created public Sites snapshot and archive directories
   `C:\Users\A S U S\AppData\Local\Temp\juro-sites-source-v80-81aaf408` and
   `C:\Users\A S U S\AppData\Local\Temp\juro-sites-v80-81aaf408` was also
@@ -251,7 +287,7 @@ added solely to change that count.
   synthesis remain an operational privacy assurance question; repository code
   does not prove a zero-retention contractual boundary.
 
-Release status: the named analytics/cost and website dependency-hardening
-production releases are verified. This
-is not a blanket ecosystem Definition of Done: Cloudflare billing, CWV
-evidence and any explicitly PARTIAL browser/device rows remain open.
+Release status: the named analytics/cost, website dependency-hardening and
+Worker 151 accessibility/performance production releases are verified. This is
+not a blanket ecosystem Definition of Done: Cloudflare billing, field/INP
+performance evidence and any explicitly PARTIAL browser/device rows remain open.
