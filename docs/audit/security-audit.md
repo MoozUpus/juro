@@ -18,7 +18,7 @@ absent; `EXTERNAL` needs account-owner or provider action.
 | P3 | Website transitive PostCSS and Sharp advisories | CLOSED | Reachability validation found no production path that sends attacker-controlled CSS or images through these build-time dependencies. `apps/website` nevertheless pins PostCSS `8.5.23` and Sharp `0.35.3`; production `npm audit` is zero and website test, type-check, lint, licence and artifact gates pass. Exact diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` covered `e4f407a8..81aaf408` and retained zero findings |
 | P2 | Dormant remote URL document import could create an SSRF/DNS-rebinding boundary if enabled | OPEN | The flag is disabled in development, staging and production. It must remain disabled until a dedicated release gate revalidates the exact Cloudflare egress and DNS-rebinding behaviour |
 | P2 | Voice provider retention and regional handling are not contractually proven in repository evidence | OPEN | No code vulnerability was established. Before treating voice as zero-retention, obtain and record provider/account controls and data-processing terms |
-| P2 | Local plaintext price-gate exports remain after verified private R2 readback | OPEN | Exact directory `C:\Users\A S U S\AppData\Local\Temp\juro-production-price-config-f42c48fc-20260825T074158Z` remains because the execution policy blocked both recursive and exact-file deletion attempts. Private R2 is the verified recovery source; manual removal is still required |
+| P2 | Local plaintext price-gate exports remained after verified private R2 readback | CLOSED | On 2026-08-27, all four private R2 export/manifest objects were downloaded again and matched the recorded byte sizes and SHA-256 values. The exact source and verification directories were then deleted; both `Test-Path` checks returned false and exact parent-directory match counts were zero. Private R2 remains the recovery source |
 
 ## Confirmed boundaries
 
@@ -33,8 +33,9 @@ absent; `EXTERNAL` needs account-owner or provider action.
   permissions and `X-Robots-Tag: noindex`.
 - D1/R2 application data remain private. The signed-share migration backup was
   removed locally after verified readback. The later price-configuration backup
-  completed the same private R2 source/readback checks, but its exact local
-  plaintext directory remains as the explicit open item above.
+  completed the same private R2 source/readback checks; a fresh four-object
+  readback passed on 2026-08-27 before both exact local plaintext directories
+  were removed and independently shown absent.
 - Signed-share verification requires same-origin write proof and now adds a
   server-side D1 lock that cannot be bypassed by forged browser headers.
 

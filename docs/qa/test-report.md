@@ -133,3 +133,13 @@ horizontal overflow, an empty in-app browser log, 78/78 sitemap URLs passing
 every checked SEO/social field, canonical `robots.txt`, public security headers, private
 app/lawyer/admin no-store/noindex boundaries and an operational 8/8 status
 response. CDP screenshot capture timed out and is not claimed as evidence.
+
+## 2026-08-27 local plaintext backup cleanup
+
+The two price-configuration SQL exports and two manifests were downloaded again
+from private R2 prefix
+`d1/juro-production/20260825T074158Z-price-config-f42c48fc/`. Each file matched
+its recorded byte size and SHA-256 value. The exact local source directory and
+temporary verification directory were deleted after that proof; both
+`Test-Path` checks returned false and exact parent-directory match counts were
+zero. The private R2 objects remain the recovery source.

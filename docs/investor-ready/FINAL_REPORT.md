@@ -672,6 +672,11 @@ and hashes matched under private R2 prefix
 `d1/juro-production/20260825T074158Z-price-config-f42c48fc/`. A fresh read found
 no successful production provider event after the effective timestamp, so this
 release claims configured cost accounting, not a measured zero-cost baseline.
+On 2026-08-27, a fresh download of both SQL exports and both manifests matched
+the recorded byte sizes and SHA-256 values. The exact plaintext source and
+temporary verification directories were then deleted; both `Test-Path` checks
+returned false and exact parent-directory match counts were zero. Private R2
+remains the recovery source.
 
 Worker `28dd4ac8-1ae2-4582-9697-8aa28e109cb5` (version 148), deployment
 `76e6f966-d069-4565-a7f9-9b2103a8ea47`, receives 100% traffic;
@@ -714,11 +719,9 @@ Settings reports the 31-rule Free Managed Ruleset `Always active`, and the
 separate analytics rate limit is active. No unrelated custom rule was added
 solely to change the 0/5 count. The release does not conceal its remaining
 controls: the account UI still reports USD 381.29 overdue, and a real Core Web
-Vitals trace is not available. The execution policy also blocked deletion of
-exact local plaintext price-gate directory
-`C:\Users\A S U S\AppData\Local\Temp\juro-production-price-config-f42c48fc-20260825T074158Z`
-after verified private R2 readback. Manual removal remains required; no alternate
-shell was used to evade that safety boundary.
+Vitals trace is not available. The previously open local plaintext price-gate
+cleanup is closed by the fresh private-R2 readback and verified local deletion
+recorded above.
 
 ## 14. Repository security and public dependency hardening
 

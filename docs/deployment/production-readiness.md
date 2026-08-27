@@ -100,6 +100,13 @@ contained exactly four price rows. Source exports/manifests and downloaded
 readbacks matched byte size and SHA-256 under private prefix
 `d1/juro-production/20260825T074158Z-price-config-f42c48fc/`.
 
+On 2026-08-27, the two SQL exports and two manifests were downloaded again from
+that exact private prefix. All four files matched the recorded byte sizes and
+SHA-256 values. The exact plaintext source directory and the temporary
+verification directory were then deleted; `Test-Path` returned false and exact
+parent-directory match counts were zero for both. Private R2 remains the
+recovery source.
+
 No successful production provider event exists after the effective timestamp
 at this checkpoint. This means the prices are configured, not that current AI
 cost is proven to be zero. Historical unpriced append-only events remain
@@ -221,12 +228,6 @@ added solely to change that count.
   about possible service interruption. No financial action was taken.
 - A real Lighthouse/Core Web Vitals trace is not claimed because the required
   `chrome-devtools` MCP was unavailable in this session.
-- The verified private price-backup round trip completed, but the execution
-  policy blocked deletion of exact local directory
-  `C:\Users\A S U S\AppData\Local\Temp\juro-production-price-config-f42c48fc-20260825T074158Z`.
-  It contains plaintext export/restore/readback artifacts and still requires
-  manual removal. Switching shells to evade the policy was intentionally not
-  attempted.
 - Cleanup of the release-created public Sites snapshot and archive directories
   `C:\Users\A S U S\AppData\Local\Temp\juro-sites-source-v80-81aaf408` and
   `C:\Users\A S U S\AppData\Local\Temp\juro-sites-v80-81aaf408` was also
@@ -244,5 +245,4 @@ added solely to change that count.
 Release status: the named analytics/cost and website dependency-hardening
 production releases are verified. This
 is not a blanket ecosystem Definition of Done: Cloudflare billing, CWV
-evidence, the local plaintext cleanup and any explicitly PARTIAL browser/device
-rows remain open.
+evidence and any explicitly PARTIAL browser/device rows remain open.

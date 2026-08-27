@@ -95,6 +95,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
   foreign-origin, missing-fetch-metadata, invalid-pair and oversized requests.
 - `status.juro.uz/api/status`, generated at `2026-08-25T10:58:57.247Z`, was
   operational for all eight published components with no incident.
-- The price backup gate is complete in private R2, but the exact local plaintext
-  staging directory could not be deleted because the execution policy blocked
-  the removal operation. This remains an explicit local cleanup item.
+- The price backup gate is complete in private R2. On 2026-08-27, a fresh
+  four-object download matched every recorded byte size and SHA-256 value; the
+  exact plaintext source and verification directories were then deleted and
+  both absence checks passed.
