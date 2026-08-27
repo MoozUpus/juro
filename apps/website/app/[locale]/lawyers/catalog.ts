@@ -33,9 +33,33 @@ function asLawyer(value: unknown): PublicLawyer | null {
   return row as PublicLawyer;
 }
 
-export function publicPhotoUrl(value: string | null): string | null {
+export function publicPhotoUrl(value: string | null, width?: 128 | 288): string | null {
   if (!value) return null;
-  return value.startsWith("/") ? `${platformOrigin()}${value}` : value;
+  const resolved = value.startsWith("/") ? `${platformOrigin()}${value}` : value;
+  if (!width) return resolved;
+  const url = new URL(resolved);
+  if (
+    url.origin !== platformOrigin()
+    || !/^\/api\/public\/lawyers\/[^/]+\/photo\/?$/u.test(url.pathname)
+  ) return resolved;
+  url.searchParams.set("width", String(width));
+  url.searchParams.set("format", "webp");
+  return url.toString();
+}
+
+export function formatExperienceYears(value: number, locale: "ru" | "uz" | "en"): string {
+  if (locale === "uz") return `${value} yil`;
+  if (locale === "en") return `${value} ${value === 1 ? "year" : "years"}`;
+  const lastTwo = value % 100;
+  const last = value % 10;
+  const noun = lastTwo >= 11 && lastTwo <= 14
+    ? "лет"
+    : last === 1
+      ? "год"
+      : last >= 2 && last <= 4
+        ? "года"
+        : "лет";
+  return `${value} ${noun}`;
 }
 
 /**

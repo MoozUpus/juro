@@ -116,6 +116,21 @@ test("fingerprinted static assets are immutable without caching HTML", () => {
   assert.doesNotMatch(worker, /requestUrl\.pathname === "\/"[\s\S]*?immutable/);
 });
 
+test("public lawyer photos request bounded responsive WebP variants", () => {
+  assert.match(lawyerCatalog, /width\?: 128 \| 288/);
+  assert.match(lawyerCatalog, /url\.searchParams\.set\("format", "webp"\)/);
+  assert.match(lawyerCard, /publicPhotoUrl\(lawyer\.profilePhotoUrl, 128\)/);
+  assert.match(lawyerProfile, /publicPhotoUrl\(lawyer\.profilePhotoUrl, 288\)/);
+  assert.match(lawyerAvatar, /unoptimized/);
+});
+
+test("public lawyer experience uses locale-aware year grammar", () => {
+  assert.match(lawyerCatalog, /lastTwo >= 11 && lastTwo <= 14/);
+  assert.match(lawyerCatalog, /last >= 2 && last <= 4/);
+  assert.match(lawyerCard, /formatExperienceYears\(lawyer\.experienceYears, locale\)/);
+  assert.match(lawyerProfile, /formatExperienceYears\(lawyer\.experienceYears, locale\)/);
+});
+
 test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(chromeStyles, /safe-area-inset-top/);
   assert.match(chromeStyles, /safe-area-inset-bottom/);

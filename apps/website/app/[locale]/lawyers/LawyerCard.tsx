@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { PublicLawyer } from "./catalog";
 import type { PublicLanguage } from "../../../content/types";
-import { publicPhotoUrl } from "./catalog";
+import { formatExperienceYears, publicPhotoUrl } from "./catalog";
 import { LawyerAvatar } from "./LawyerAvatar";
 import styles from "./lawyers.module.css";
 
@@ -12,7 +12,7 @@ export function LawyerCard({ lawyer, locale }: { lawyer: PublicLawyer; locale: P
   const pending = lawyer.marketplaceStatus === "pending_review";
   const profileHref = `/${locale}/lawyers/${encodeURIComponent(lawyer.id)}`;
   const consultationHref = `https://app.juro.uz/${locale === "en" ? "ru" : locale}/individual/consultations?lawyer=${encodeURIComponent(lawyer.id)}`;
-  const photo = publicPhotoUrl(lawyer.profilePhotoUrl);
+  const photo = publicPhotoUrl(lawyer.profilePhotoUrl, 128);
   return <article className={styles.card} data-pending={pending || undefined}>
     <div className={styles.cardHead}>
       <LawyerAvatar className={styles.photo} fallbackClassName={styles.initials} initials={lawyer.displayName.slice(0, 1)} size={64} src={photo} />
@@ -25,7 +25,7 @@ export function LawyerCard({ lawyer, locale }: { lawyer: PublicLawyer; locale: P
     <p className={styles.specialties}>{lawyer.specialties.join(" · ")}</p>
     <dl className={styles.facts}>
       {lawyer.city && <div><dt>{t.city}</dt><dd>{[lawyer.city, lawyer.region].filter(Boolean).join(", ")}</dd></div>}
-      {lawyer.experienceYears !== null && <div><dt>{t.experience}</dt><dd>{`${lawyer.experienceYears} ${t.years}`}</dd></div>}
+      {lawyer.experienceYears !== null && <div><dt>{t.experience}</dt><dd>{formatExperienceYears(lawyer.experienceYears, locale)}</dd></div>}
       <div><dt>{t.languages}</dt><dd>{lawyer.languages.join(", ")}</dd></div>
       {lawyer.priceDescription && <div><dt>{t.price}</dt><dd>{lawyer.priceDescription}</dd></div>}
     </dl>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { PublicLanguage } from "../../../../content/types";
 import { SiteFooter, SiteHeader } from "../../../components/public/SiteChrome";
-import { getPublicLawyer, localizePublicLawyer, publicPhotoUrl } from "../catalog";
+import { formatExperienceYears, getPublicLawyer, localizePublicLawyer, publicPhotoUrl } from "../catalog";
 import { LawyerAvatar } from "../LawyerAvatar";
 import styles from "../lawyers.module.css";
 
@@ -37,13 +37,13 @@ export default async function LawyerProfilePage({ params }: Props) {
   const lawyer = localizePublicLawyer(sourceLawyer, locale);
   const t = copy[locale];
   const pending = lawyer.marketplaceStatus === "pending_review";
-  const photo = publicPhotoUrl(lawyer.profilePhotoUrl);
+  const photo = publicPhotoUrl(lawyer.profilePhotoUrl, 288);
   const platformLocale = locale === "en" ? "ru" : locale;
   return <div className={styles.page} lang={locale}><SiteHeader languageHref={`/ru/lawyers/${profileId}`} locale={locale} /><main id="main-content"><article className={styles.profile}>
     <Link className={styles.back} href={`/${locale}/lawyers`}>← {t.back}</Link>
     <div className={styles.profileHead}><LawyerAvatar className={styles.profilePhoto} fallbackClassName={styles.profileInitials} initials={lawyer.displayName.slice(0, 1)} size={144} src={photo} /><div><span className={styles.pending}>{pending ? t.pending : t.newProfile}</span><h1>{lawyer.displayName}</h1><p>{lawyer.firmName || t.independent}</p><p className={styles.specialties}>{lawyer.specialties.join(" · ")}</p></div></div>
     {pending && <aside className={styles.reviewNotice}>{t.pendingNotice}</aside>}
-    <div className={styles.profileGrid}><section><h2>{t.about}</h2><p>{lawyer.bio || t.unknown}</p>{lawyer.education && <><h2>{t.education}</h2><p>{lawyer.education}</p></>}</section><aside><dl className={styles.detailFacts}><div><dt>{t.languages}</dt><dd>{lawyer.languages.join(", ")}</dd></div>{lawyer.city && <div><dt>{t.city}</dt><dd>{[lawyer.city, lawyer.region].filter(Boolean).join(", ")}</dd></div>}{lawyer.experienceYears !== null && <div><dt>{t.experience}</dt><dd>{lawyer.experienceYears} {t.years}</dd></div>}{lawyer.priceDescription && <div><dt>{t.price}</dt><dd>{lawyer.priceDescription}</dd></div>}<div><dt>{t.format}</dt><dd>{lawyer.consultationFormats.join(", ") || "—"}</dd></div></dl>{!pending && <a className={styles.profileCta} href={`https://app.juro.uz/${platformLocale}/individual/consultations?lawyer=${encodeURIComponent(lawyer.id)}`}>{t.request}</a>}</aside></div>
+    <div className={styles.profileGrid}><section><h2>{t.about}</h2><p>{lawyer.bio || t.unknown}</p>{lawyer.education && <><h2>{t.education}</h2><p>{lawyer.education}</p></>}</section><aside><dl className={styles.detailFacts}><div><dt>{t.languages}</dt><dd>{lawyer.languages.join(", ")}</dd></div>{lawyer.city && <div><dt>{t.city}</dt><dd>{[lawyer.city, lawyer.region].filter(Boolean).join(", ")}</dd></div>}{lawyer.experienceYears !== null && <div><dt>{t.experience}</dt><dd>{formatExperienceYears(lawyer.experienceYears, locale)}</dd></div>}{lawyer.priceDescription && <div><dt>{t.price}</dt><dd>{lawyer.priceDescription}</dd></div>}<div><dt>{t.format}</dt><dd>{lawyer.consultationFormats.join(", ") || "—"}</dd></div></dl>{!pending && <a className={styles.profileCta} href={`https://app.juro.uz/${platformLocale}/individual/consultations?lawyer=${encodeURIComponent(lawyer.id)}`}>{t.request}</a>}</aside></div>
     <section className={styles.privacy}><h2>{t.privacy}</h2><p>{t.privacyLead}</p></section>
   </article></main><SiteFooter locale={locale} /></div>;
 }

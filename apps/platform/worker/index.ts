@@ -29,6 +29,11 @@ import {
   LegalCorpusQdrantContainer,
 } from "./legal-corpus-private-services";
 import { lawyerHostTarget } from "./lawyer-host-router";
+import {
+  applyPublicLawyerPhotoCache,
+  isPublicLawyerPhotoUrl,
+  publicLawyerPhotoVariant,
+} from "./public-lawyer-photo-policy";
 
 export { MalwareScannerContainer, LegalCorpusQdrantContainer };
 
@@ -244,14 +249,54 @@ const worker = {
     const internalAdminResponse = await handleInternalAdminRequest(routedRequest, env);
     if (internalAdminResponse) return withSecurityHeaders(internalAdminResponse, url);
 
-    const response = await handler.fetch(routedRequest, env, ctx);
+    let response = await handler.fetch(routedRequest, env, ctx);
     const isPrivateApi = routedUrl.pathname.startsWith("/api/document-builder/") || routedUrl.pathname.startsWith("/api/auth/") || routedUrl.pathname.startsWith("/api/platform/");
     const isPrivateShare = routedUrl.pathname.startsWith("/document-builder/share/")
       || routedUrl.pathname.startsWith("/document-builder/signed-share/");
+    const isPublicLawyerPhoto = isPublicLawyerPhotoUrl(routedUrl);
     const isPublicStatus = routedUrl.pathname === "/status"
       || routedUrl.pathname === "/api/status"
       || /^\/(?:ru|uz)\/status$/.test(routedUrl.pathname);
-    const headers = new Headers(response.headers);
+    const photoVariant = request.method === "GET" && response.ok
+      ? publicLawyerPhotoVariant(routedUrl)
+      : null;
+    if (photoVariant && response.body) {
+      try {
+        const transformed = await env.IMAGES
+          .input(response.clone().body!)
+          .transform({ width: photoVariant.width })
+          .output({ format: photoVariant.format, quality: photoVariant.quality });
+        const transformedResponse = await transformed.response();
+        const transformedHeaders = new Headers(response.headers);
+        transformedHeaders.set("Content-Type", photoVariant.format);
+        transformedHeaders.delete("Content-Length");
+        const sourceEtag = transformedHeaders.get("ETag")?.replace(/^W\//u, "") ?? null;
+        if (sourceEtag) {
+          transformedHeaders.set(
+            "ETag",
+            `W/"${sourceEtag.replace(/^"|"$/gu, "")}-w${photoVariant.width}-webp"`,
+          );
+        }
+        response = new Response(transformedResponse.body, {
+          status: transformedResponse.status,
+          statusText: transformedResponse.statusText,
+          headers: transformedHeaders,
+        });
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: "public_lawyer_photo_transform_failed",
+          errorCode: error instanceof Error && "code" in error
+            ? String(error.code)
+            : "IMAGES_TRANSFORM_FAILED",
+        }));
+        // The approved original remains a safe fallback if Images is
+        // temporarily unavailable; cache policy is still corrected below.
+      }
+    }
+    let headers = new Headers(response.headers);
+    const isCacheablePublicLawyerPhoto = isPublicLawyerPhoto
+      && (response.ok || response.status === 304)
+      && /^image\/(?:jpeg|png|webp)$/u.test(headers.get("Content-Type") ?? "");
     if (isPublicStatus) {
       headers.set(
         "Cache-Control",
@@ -260,6 +305,8 @@ const worker = {
           : "public, max-age=0, s-maxage=30, stale-while-revalidate=60",
       );
       headers.delete("Pragma");
+    } else if (isCacheablePublicLawyerPhoto) {
+      headers = applyPublicLawyerPhotoCache(headers);
     } else if (isPrivateApi || isPrivateShare || (!routedUrl.pathname.startsWith("/_next/") && !routedUrl.pathname.match(/\.(?:png|webp|svg|ico|css|js|woff2?)$/))) {
       headers.set("Cache-Control", "private, no-store, max-age=0");
       headers.set("Pragma", "no-cache");

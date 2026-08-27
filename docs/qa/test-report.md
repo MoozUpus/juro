@@ -1,5 +1,23 @@
 # Test report — current evidence through 2026-08-27
 
+## Lawyer catalogue performance and public-photo candidate
+
+| Gate | Result |
+| --- | --- |
+| Live v86 mobile traces | OBSERVED — three `390×844`, 4× CPU, Fast 4G reloads: LCP 2,818 / 1,154 / 1,380 ms; TTFB 1,856 / 240 / 198 ms; CLS 0.00 / 0.00 / 0.0004 |
+| Live image delivery | FAIL in v86 — 419×419 PNG, 82,109 bytes, displayed at about 80×80; 81 kB estimated waste; response incorrectly `private, no-store` |
+| Source correction | PASS locally — only fixed 128/288 px WebP variants are requested; the production Worker cache is enabled; only the exact approved public-photo route receives public cache policy; private photo/API routes remain excluded |
+| Focused regression | PASS — platform photo-policy 4/4; website production contracts 24/24 after adding locale-aware year grammar |
+| Static gates | PASS — Platform type-check/lint, generated Cloudflare types, three-environment matrix, rendered 35/35, full core 1094/1094, infrastructure 201/201 and production artifact budgets; Website type-check/lint, verified build/artifact and full 46/46 suite |
+| Controlled Lighthouse | PASS — Accessibility 100, Best Practices 100, SEO 100, Agentic Browsing 100; 58 passed, 0 failed; reports in `docs/qa/artifacts/performance-sites-v86-lawyers/` |
+| Accessibility snapshot | PASS for high-level semantics — one H1, labelled filters and named actions; it found the corrected RU grammar defect `4 лет` |
+| Production status | NOT YET DEPLOYED — live v86 still serves the original PNG and private no-store header |
+
+The first trace's server-latency outlier is retained. Two passing repeats do not
+erase it or prove field performance. The photo optimization requires both a
+new Platform Worker and a superseding public Sites release before it can be
+represented as live.
+
 ## Worker 151 responsive Turnstile and Client target closure
 
 | Gate | Result |

@@ -229,6 +229,7 @@ const coreTestFiles = [
   "tests/lawyer-host-routing.test.ts",
   "tests/lawyer-call-room.test.ts",
   "tests/lawyer-marketplace-lifecycle.test.ts",
+  "tests/public-lawyer-photo-policy.test.ts",
   "tests/legal-agent-tools.test.ts",
   "tests/legal-ai-gateway.test.ts",
   "tests/legal-applicability-date.test.ts",
