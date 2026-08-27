@@ -89,6 +89,18 @@ test("client dashboard and calendar actions retain 44px touch targets", async ()
   assert.match(calendar, /@media \(max-width:430px\)\{[\s\S]*?\.calendar-range button\{width:44px;height:44px\}/);
 });
 
+test("live Client work controls retain the 44px interaction target", async () => {
+  const css = await readFile(shellStylesheet, "utf8");
+
+  assert.match(css, /\.scenario-pills button\{min-height:44px\}/);
+  assert.match(css, /\.plan-section-title button\{width:44px;height:44px\}/);
+  assert.match(css, /\.history-filter select\{min-height:44px\}/);
+  assert.match(css, /\.profile-workspace>nav a,\.session-actions button\{min-height:44px\}/);
+  assert.match(css, /\.cases-live-list article>a\{display:inline-flex;min-height:44px;align-items:center\}/);
+  assert.match(css, /\.platform-shell \.dbt-brand\{min-height:44px\}/);
+  assert.match(css, /\.platform-shell \.dbt-notification-list a,\.platform-shell \.dbt-notification-list button\{display:inline-flex;min-height:44px;/);
+});
+
 test("canonical document routes load the builder styles and keep folder controls touchable", async () => {
   const [css, accountLayout, businessLayout] = await Promise.all([
     readFile(documentBuilderStylesheet, "utf8"),

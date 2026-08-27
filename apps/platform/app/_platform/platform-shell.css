@@ -96,6 +96,14 @@
 
 .platform-topbar button,.platform-topbar a,.platform-menu{min-width:44px;height:44px}
 .platform-sidebar nav a{min-height:44px}
+.scenario-pills button{min-height:44px}
+.plan-section-title button{width:44px;height:44px}
+.history-filter select{min-height:44px}
+.profile-workspace>nav a,.session-actions button{min-height:44px}
+.cases-live-list article>a{display:inline-flex;min-height:44px;align-items:center}
+.platform-shell .dbt-brand{min-height:44px}
+.platform-shell .dbt-notification-list a,.platform-shell .dbt-notification-list button{display:inline-flex;min-height:44px;align-items:center;gap:5px}
+.platform-shell .dbt-notification-list button{padding:0 10px;border:1px solid #cbd2d7;border-radius:7px;background:var(--surface-raised);color:var(--text-primary);font-size:11px;font-weight:800;cursor:pointer}
 @media(max-width:800px){.platform-brand button{width:44px;height:44px}}
 
 @media(prefers-reduced-transparency:reduce){.platform-topbar{background:var(--p-cream);backdrop-filter:none}}
