@@ -129,8 +129,11 @@ const legalCorpusLanguagesInBootstrapOrder = ["uz-Cyrl", "ru", "uz-Latn", "en"] 
  * The ordinary preference is intentionally laws -> Cabinet -> President ->
  * other authorities. Once discovery has settled, an unrepresented
  * category/language receives one existing sequential slot so a high-volume
- * catalogue cannot consume every bounded run forever. This never marks a
- * checkpoint complete or suppresses its remaining durable jobs.
+ * catalogue cannot consume every bounded run forever. A lower-priority
+ * bootstrap is suppressed while any higher-priority category still has a
+ * ready queued job; coverage balancing must not overtake the legal-source
+ * ingestion order. This never marks a checkpoint complete or suppresses its
+ * remaining durable jobs.
  */
 export function legalCorpusCoverageBootstrapTarget(
   rows: readonly CorpusCoverageBootstrapRow[],
@@ -144,13 +147,19 @@ export function legalCorpusCoverageBootstrapTarget(
     currentDocuments.set(key, Math.max(0, Number(row.currentDocuments) || 0));
     queuedDocuments.set(key, Math.max(0, Number(row.queuedDocuments) || 0));
   }
+  let higherPriorityQueued = false;
   for (const categoryKey of LEX_CORPUS_CATEGORY_PRIORITY) {
+    const categoryHasQueued = legalCorpusLanguagesInBootstrapOrder.some((language) =>
+      (queuedDocuments.get(`${categoryKey}:${language}`) ?? 0) > 0,
+    );
     for (const language of legalCorpusLanguagesInBootstrapOrder) {
       const key = `${categoryKey}:${language}`;
       if ((currentDocuments.get(key) ?? 0) === 0 && (queuedDocuments.get(key) ?? 0) > 0) {
-        return { categoryKey, language };
+        if (!higherPriorityQueued) return { categoryKey, language };
+        break;
       }
     }
+    higherPriorityQueued ||= categoryHasQueued;
   }
   return null;
 }

@@ -328,7 +328,11 @@ test("coverage bootstrap gives one existing slot to the earliest queued category
     { categoryKey: "laws", language: "uz-Cyrl", currentDocuments: 4, queuedDocuments: 20 },
     { categoryKey: "government", language: "uz-Cyrl", currentDocuments: 0, queuedDocuments: 9 },
     { categoryKey: "ministries", language: "uz-Cyrl", currentDocuments: 0, queuedDocuments: 8 },
-  ]), { categoryKey: "government", language: "uz-Cyrl" });
+  ]), null);
+  assert.deepEqual(legalCorpusCoverageBootstrapTarget([
+    { categoryKey: "laws", language: "uz-Cyrl", currentDocuments: 0, queuedDocuments: 20 },
+    { categoryKey: "government", language: "uz-Cyrl", currentDocuments: 0, queuedDocuments: 9 },
+  ]), { categoryKey: "laws", language: "uz-Cyrl" });
   assert.deepEqual(legalCorpusCoverageBootstrapTarget([
     { categoryKey: "government", language: "uz-Cyrl", currentDocuments: 0, queuedDocuments: 0 },
     { categoryKey: "ministries", language: "ru", currentDocuments: 0, queuedDocuments: 2 },
