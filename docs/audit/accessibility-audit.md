@@ -13,6 +13,14 @@
   Cases, Action plan, History, Profile, Security and Notifications found no
   undersized exposed interactive target; the one 21 px search input remains
   contained by its 44 px label target.
+- A fresh production Chrome replay on 2026-08-28 reconfirmed the original
+  misplaced `lawyer.juro.uz/ru/individual/dashboard` URL against the current
+  release. It reached the authenticated Client dashboard on `app.juro.uz`,
+  rendered the complete desktop shell without `Not Found`, overflow, a role
+  alert or warning/error log, and retained one H1, one main landmark, loaded
+  fonts and private `noindex` metadata. Attempts by the same Individual
+  session to open RU and UZ Business dashboards returned to the matching
+  localized Individual dashboard without exposing Business-only signals.
 - The production login reserves the Turnstile widget before the provider loads,
   uses its compact layout below the 300 px flexible floor and observes later
   breakpoint changes. At 320x800 the live document had zero horizontal
@@ -98,9 +106,10 @@ viewport emulation.
 
 ## Prioritized candidates
 
-- P1: finish the bounded target classification on the two Client routes whose
-  direct navigation was blocked by browser control and on authenticated Lawyer
-  and Admin surfaces after those protected Chrome sessions are established.
+- P1: finish the bounded target classification on authenticated Lawyer and
+  Admin surfaces after those protected Chrome sessions are established. The
+  affected Client target set and the current direct-navigation boundaries are
+  now covered by production Chrome evidence.
 - P1: deploy the superseding saved Sites candidate only after action-time
   approval, then replay both the automated runner and the retained manual
   keyboard/accessibility-tree sample against that exact public artifact.

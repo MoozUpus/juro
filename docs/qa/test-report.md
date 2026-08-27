@@ -104,14 +104,17 @@ security settings, privacy settings and help.
 | Mobile keyboard menu | PASS — opening moved focus to the close control; Escape closed the menu and restored focus to the trigger |
 | Private indexing boundary | PASS — all sampled application documents declared `noindex, nofollow, nocache` |
 | Chrome warning/error log | PASS — zero warning/error entries across the desktop route loop |
+| Misplaced Client link replay | PASS on 2026-08-28 — the original `lawyer.juro.uz/ru/individual/dashboard` URL again reached the exact authenticated `app.juro.uz` Client dashboard; the rendered page had one H1, one main landmark, loaded fonts, private noindex, zero overflow, no role alert and no warning/error log |
+| Individual → Business URL boundary | PASS for RU and UZ — direct Business dashboard attempts returned to the matching localized Individual dashboard, exposed no sampled Business-only signal and retained one H1, one main landmark, loaded fonts, private noindex, zero overflow, no role alert and no warning/error log |
 | Lawyer boundary | PARTIAL — `/ru/lawyer/dashboard` reached the dedicated Lawyer login with the expected Lawyer account type and return path; authenticated route replay requires a signed-in Lawyer session |
 | Admin boundary | PARTIAL — `/ru/admin/console` reached the protected fresh-session handoff; authenticated Admin replay requires a fresh protected session |
 
 No form was submitted, no file was uploaded and no production record was
 created or changed. This browser pass did not provide complete request-level
 network error coverage, so it is not represented as full workflow or API
-verification. Business routes and authenticated Lawyer/Admin routes remain
-outside this checkpoint.
+verification. Authenticated Business functionality and authenticated
+Lawyer/Admin routes remain outside this checkpoint; only the Individual-role
+containment of direct Business URLs is proven here.
 
 ## Worker 147 font-path correction
 
