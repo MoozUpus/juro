@@ -1,4 +1,28 @@
-# Test report — 2026-08-25 release evidence
+# Test report — current evidence through 2026-08-27
+
+## Worker 147 font-path correction
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `6503667cbf18f249656b29749040cda8b200fd47` |
+| Focused normalizer tests | PASS — 3/3 |
+| Local static gates | PASS — lint, type-check, production build, artifact validation and performance budgets |
+| GitHub Actions CI `33063995387` | PASS — Website and Platform |
+| Production dry-run | PASS — production bindings isolated; required secrets present; Container rollout disabled |
+| Artifact path regression | PASS — zero `C:/Users/` and zero `.vinext/fonts` matches |
+| Production deployment | PASS — Worker 147 `ed0253e1-1c35-416e-9f2a-5bd8352c1936`, deployment `6f536ee9-9666-41bb-b0f3-6f174019692b`, 100% |
+| Production HTML and fonts | PASS — zero absolute path matches, 12 normalized font URLs, three sampled WOFF2 files `200 font/woff2` |
+| Host/access smoke | PASS — expected Client `307`, API `401`, Lawyer `200/307`, Admin `303`, Status `200`, fenced application path `404` |
+| Production health | PASS at capture — 8/8 operational, zero active incidents at `2026-08-27T11:02:55Z` |
+| Chrome Status | PASS — complete DOM, fonts loaded, no absolute path, no warning/error log |
+| Chrome authenticated Client dashboard | PASS — primary UI rendered, fonts loaded, no absolute path, no warning/error log |
+| Worker error tail | PASS for smoke window — no error event observed |
+
+The immediate Worker rollback is version 146
+`c3237f9e-a258-42eb-8b94-62f5045b7b03`. Rollback would restore service code
+but also restore the disclosed font path, so it is an incident-only fallback.
+
+## 2026-08-25 release baseline
 
 ## Automated gates
 

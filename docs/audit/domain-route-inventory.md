@@ -1,60 +1,97 @@
-# Domain and route inventory — 2026-08-25
+# Domain and route inventory — 2026-08-27
 
-This inventory separates production, protected staging and DNS-only names. A
-source route is not treated as live merely because a page file exists.
+Status: **PARTIAL**. The production and staging web surfaces, Worker custom
+domains, zone Worker routes, public sitemap and source-declared route families
+were refreshed on 2026-08-27. The current Wrangler OAuth session can read the
+zone, Worker domains and Worker routes, but `GET /zones/{zone}/dns_records`
+returns HTTP 403. Consequently this is a complete inventory of the web
+surfaces visible through those sources, not a claim that every DNS record type
+has been enumerated.
 
-## Production hosts
+Evidence was collected read-only from Cloudflare control-plane APIs, recursive
+DNS, unauthenticated HTTP probes, the v85 sitemap and the current PR source at
+`6503667cbf18f249656b29749040cda8b200fd47`. A source file is not treated as a
+live route merely because it exists.
 
-| Host | Runtime | Access/index boundary | Current evidence |
+## Domain and URL matrix
+
+| Full URL | Environment and purpose | Role / auth / language | Discovery source | HTTP and redirect | Canonical, index and sitemap | Function / design / mobile | Data sensitivity / criticality | Problem and required action | Final status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `https://juro.uz/` and `/{ru|uz|en}` | Production public website, Sites v85 via `juro-legaltech` | Public; RU, UZ, EN | Zone Worker route, live HTML, sitemap | `200`; apex resolves to the localized public experience | Locale pages self-canonical, `index, follow`; 78 sitemap URLs | Public release smoke, responsive evidence and production Lighthouse recorded | Public / P0 entrypoint | Keep v84 as rollback; repeat crawl after every release | **VERIFIED** |
+| `https://www.juro.uz/*` | Production canonical alias | Public; all public languages | Zone Worker route and HTTP | `308` to the apex; root verified live | Destination owns canonical and sitemap | Redirect only | Public / P1 | Preserve path and query in release smoke | **VERIFIED** |
+| `https://app.juro.uz/` and `/:locale/:accountType/*` | Production Client/Business application on Worker `juro` | Session plus tenant/workspace checks; RU and UZ | Worker domain API, source, HTTP | Root `307` to `/uz/auth/login`; sampled dashboard and AI routes `307` with exact `returnTo` | `X-Robots-Tag: noindex, nofollow, noarchive`; not in sitemap | Login and access boundary verified; prior authenticated responsive matrix exists | Private legal/user data / P0 | Re-run the full authenticated E2E matrix on the next Platform release | **PARTIAL** |
+| `https://lawyer.juro.uz/` and `/:locale/lawyer/*` | Production professional portal on Worker `juro` | Lawyer persona, role and workspace; RU and UZ | Worker domain API, source, HTTP | Root `200`; sampled dashboard `307` to the dedicated login with `returnTo` | Noindex/noarchive; not in sitemap | Dedicated host persona and boundary verified; full current signed-in journey not repeated | Private professional/client data / P0 | Re-run signed-in Lawyer dashboard, case and document flows | **PARTIAL** |
+| `https://admin.juro.uz/` and `/:locale/admin/*` | Production admin entry on Worker `juro`, delegated internally to `juro-admin` | Staff capability and fresh MFA | Worker domain API, service binding, HTTP | Root and console return protected `303` handoff to the app admin console | Noindex/noarchive; not in sitemap | Unauthenticated handoff verified; prior authenticated Admin evidence exists | Highly privileged / P0 | Re-run current-MFA read/write scenarios before claiming full Admin coverage | **PARTIAL** |
+| `https://status.juro.uz/` and `/api/status` | Production public-safe status branch on Worker `juro` | Public, no session; RU labels | Worker domain API, source, HTTP, Chrome | Page and API `200`; non-status application route `404`; API reported 8/8 operational at `2026-08-27T11:02:55Z` | Noindex/noarchive; not in sitemap | Status fence works; Chrome rendered the page with loaded fonts and an empty warning/error log | Low-content operational metadata / P1 | Worker 147 removed all absolute font paths; 12 normalized URLs are present and sampled fonts return `200 font/woff2` | **VERIFIED** |
+| `https://staging.app.juro.uz/` | Protected staging Platform Worker `juro-platform-staging` | Owner Access before application auth | Worker domain API, recursive DNS, HTTP | `302` to Cloudflare Access before content | Access response; must remain non-indexable and absent from sitemap | Deny-before-auth verified; signed-in staging journey not repeated | Staging private data / P0 | Complete an authenticated staging crawl without bypassing Access | **PARTIAL** |
+| `https://admin.staging.juro.uz/` | Protected staging Admin Worker `juro-admin-staging` | Owner Access, then staff/MFA | Worker domain API, recursive DNS, HTTP | `302` to Cloudflare Access before content | Access response; absent from sitemap | Deny-before-auth verified | Staging privileged data / P0 | Complete authenticated Admin staging smoke | **PARTIAL** |
+| `https://status.staging.juro.uz/` and `/api/status` | Staging public-safe status branch on `juro-platform-staging` | Public, no session | Worker domain API, recursive DNS, source, HTTP | Page and API `200`; sampled application route `404` | Noindex/noarchive; absent from sitemap | Route fence verified | Low-content staging health / P2 | Keep the response content-free; repeat route-fence tests after staging deploys | **VERIFIED** |
+| `https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/` | Provider-generated direct Sites hostname | Public | Sites release record and HTTP | `200` | Locale HTML canonicalizes to `juro.uz`, but currently says `index, follow`; not in sitemap | Same public UI as the apex | Public duplicate surface / P2 | Add host-aware `X-Robots-Tag: noindex` or an apex redirect if the provider permits it | **PARTIAL** |
+
+## Inactive or source-only names
+
+| Name | Current evidence | Required treatment | Status |
 | --- | --- | --- | --- |
-| `juro.uz` | Public Sites/website | Public and indexable only for useful canonical content | 78 sitemap URLs, all 2xx with exact canonical metadata; RU/UZ/EN |
-| `www.juro.uz` | Cloudflare canonical redirect | Public | 308 to apex with path/query preservation in prior release evidence |
-| `app.juro.uz` | Platform Worker `juro` | Authenticated Client/Business; all application HTML/API noindex | HTTPS login 200; HTTP POST 308; production smoke passed |
-| `lawyer.juro.uz` | Platform Worker with server Lawyer-host routing | Professional persona, session + role/workspace checks | Dedicated RU login rendered; HTTP POST 308 |
-| `admin.juro.uz` | `juro` custom domain delegated to isolated Admin Worker | Staff capability, source session and fresh MFA | Unauthenticated console produced protected 303 handoff; HTTP POST 308 |
-| `status.juro.uz` | Restricted status-host branch of Platform Worker | Public status only, no application routes, noindex | API 200 and operational; HTTP POST 308 |
+| `api.juro.uz` | No A answer; not present in Worker domains or routes | Do not publish or document as live | **MISSING** |
+| `app.staging.juro.uz` | No A answer; not present in Worker domains or routes | Historical/source-only name | **MISSING** |
+| `lawyer.staging.juro.uz` | No A answer; not present in Worker domains or routes | Historical/source-only name | **MISSING** |
+| `staging.juro.uz` | No address answer; not present in Worker domains or routes | Do not confuse with `staging.app.juro.uz` | **MISSING** |
+| `local.juro.uz` | No public address answer | Local-development name only | **NOT APPLICABLE** |
 
-Mail/FTP records are DNS-only infrastructure and are not JURO web application
-surfaces. They must not be added to application route or SEO claims.
+Mail, FTP and verification records are DNS infrastructure, not JURO web
+application surfaces. They cannot be refreshed exhaustively until the active
+credential has Zone DNS Read access.
 
-## Protected staging and inactive names
+## Cloudflare routing topology
 
-`staging.app.juro.uz`, `admin.staging.juro.uz` and the other configured staging
-surfaces are separated from production by staging resources and Cloudflare
-Access where configured. Historical evidence lists `status.staging.juro.uz` as
-a status surface. Repository-only or inactive names such as
-`staging.juro.uz`, `app.staging.juro.uz`, `api.juro.uz` and `local.juro.uz` are
-not production surfaces. They require a fresh DNS/control-plane read before any
-future claim because hostname state can change.
+The active `juro.uz` zone is full, active and not paused.
 
-## Route families
+| Routing source | Pattern or hostname | Target |
+| --- | --- | --- |
+| Zone Worker route | `juro.uz/*` | `juro-legaltech` |
+| Zone Worker route | `www.juro.uz/*` | `juro-legaltech` |
+| Worker custom domain | `app.juro.uz` | `juro` |
+| Worker custom domain | `lawyer.juro.uz` | `juro` |
+| Worker custom domain | `admin.juro.uz` | `juro` |
+| Worker custom domain | `status.juro.uz` | `juro` |
+| Worker custom domain | `staging.app.juro.uz` | `juro-platform-staging` |
+| Worker custom domain | `admin.staging.juro.uz` | `juro-admin-staging` |
+| Worker custom domain | `status.staging.juro.uz` | `juro-platform-staging` |
 
-The current Platform source contains 164 `page.tsx` and 238 `route.ts` files
-(402 source-declared route files; 194 handlers are under `/api`). Dynamic
-locale/account/workspace parameters expand these patterns at runtime, and
-internal implementation routes can have a separate canonical wrapper. The
-production build and rendered suites, rather than this raw count, control
-deployability.
+## Route-family inventory
 
-| Family | Canonical shape | Boundary | Status |
-| --- | --- | --- | --- |
-| Auth/onboarding | `/{ru|uz}/auth/*`, `/onboarding` | Public entry; OTP/Turnstile/server session | VERIFIED for RU/UZ login render and automated auth boundaries |
-| Client/individual | `/:locale/:accountType/{module}` | Session + active workspace + account type | Existing 20-route responsive evidence; current release smoke only rechecked login |
-| Business | `/:locale/business/:workspaceId/{module}` | Session + explicit workspace membership | Automated tenant and creation/invitation tests pass |
-| Lawyer | clean paths on `lawyer.juro.uz/:locale/{module}` | Server host routing + Lawyer role/workspace | Existing 20-route responsive evidence; current release rechecked dedicated login persona |
-| Admin | `/:locale/admin/*` and isolated host | Capability + current MFA; feature flags hide disabled inboxes | Existing authenticated evidence; current release rechecked handoff only |
-| Document Builder/share | localized builder plus public invitation/share URLs | Owner/collaborator server checks; signed shares noindex/no-store | Automated suites and new signed-share production fail-closed smoke pass |
-| AI/voice/analysis | localized AI/analysis routes and private APIs | Tenant, quotas, provider circuit, verified sources | Automated and prior production evidence; no new paid user prompt sent in this release |
-| Status | `/api/status`, `/status` on status host | Public, content-free health | VERIFIED operational |
-| Legacy aliases | explicit redirect/rewrite allowlist only | Safe return paths; arbitrary aliases fail closed | Rendered suite passes; no blanket compatibility routing |
+The current Platform source declares 164 `page.tsx` files and 239 `route.ts`
+handlers: 195 under `/api` and 44 non-API compatibility/RSC handlers. Dynamic
+locale, account, workspace and ID segments expand those patterns at runtime.
+The counts describe source coverage; deployment builds, server authorization
+and live probes decide whether a route is usable.
 
-The public website sitemap currently lists 78 canonical RU/UZ/EN URLs across
-home, Trust, video, lawyer catalogue/profiles, knowledge and legal content. A
-fresh Sites-version-82 crawl followed every listed URL and found 78 final 2xx
-responses, exact canonical metadata, complete RU/UZ/EN hreflang, complete Open
-Graph/Twitter preview metadata, zero unexpected redirects and zero failures.
-`robots.txt` points to `https://juro.uz/sitemap.xml`.
+| Family | Canonical shape | Server boundary | Current evidence | Status |
+| --- | --- | --- | --- | --- |
+| Public marketing | `juro.uz/{ru|uz|en}/*` | Public content only | v85 sitemap contains 78 URLs (26 per locale); 78/78 production responses passed the release crawl | **VERIFIED** |
+| Auth and onboarding | `/:locale/auth/*`, `/register`, `/onboarding` | OTP, Turnstile, server session | Root/login redirects and automated auth tests pass | **PARTIAL** — full live OTP journey not repeated here |
+| Client and Business | `/:locale/:accountType/*` and workspace-scoped modules | Session, active workspace, account type and tenant membership | Dashboard deep link preserves `returnTo`; private cases API returns `401` anonymously | **PARTIAL** — current signed-in matrix open |
+| AI, document and case workflows | Localized UI plus `/api/platform/*` | Tenant, quotas, feature gates and provider controls | Source/build/CI coverage and prior production evidence; no paid prompt or private upload sent during this inventory | **PARTIAL** |
+| Lawyer | Clean paths on `lawyer.juro.uz` | Server host routing plus Lawyer role/workspace | Dedicated login redirect and noindex boundary verified | **PARTIAL** |
+| Admin | `/:locale/admin/*` plus isolated Admin Worker | Staff capability and fresh MFA | Protected cross-domain handoff verified | **PARTIAL** |
+| Status | `/`, `/status`, `/api/status` on status hosts | Explicit hostname route fence | Status returns `200`; sampled application path returns `404`; production fonts load from normalized URLs | **VERIFIED** |
+| Legacy aliases | Explicit redirect/rewrite allowlist | Safe return paths; arbitrary aliases fail closed | Rendered suite passes in CI | **VERIFIED** at source/build level |
 
-For historical authenticated route-by-route browser evidence, see
-`docs/investor-ready/QA_MATRIX.md`. This file deliberately distinguishes that
-evidence from what was re-run on the current release.
+## Cross-domain navigation
+
+The production RU homepage currently links only to `app.juro.uz` for login,
+registration, AI Lawyer, cases and document-analysis entrypoints. Sampled
+private deep links preserve the requested route through authentication. Theme
+cookie precedence and bidirectional persistence have separate production
+evidence in `docs/investor-ready/QA_MATRIX.md`; they were not re-executed as
+part of this read-only inventory.
+
+## Remaining evidence gates
+
+1. Grant the active audit credential Zone DNS Read, then export and classify
+   every A, AAAA, CNAME, TXT, MX and other record.
+2. Add noindex or redirect handling for the provider-generated direct Sites
+   hostname.
+3. Complete authenticated Client, Business, Lawyer and Admin route-by-route
+   browser evidence on the exact deployed Platform version.
+4. Treat the inventory as **PARTIAL** until those gates have direct evidence.

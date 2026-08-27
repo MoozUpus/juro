@@ -673,10 +673,13 @@ and hashes matched under private R2 prefix
 no successful production provider event after the effective timestamp, so this
 release claims configured cost accounting, not a measured zero-cost baseline.
 
-Worker `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) receives 100%
-traffic; `357d0438-1a5f-4b29-ba81-869cbc130c0a` is immediate rollback. Sites
-version 79 deployed the exact 121-file `apps/website` source extracted from
-`f42c48fc` with zero source differences; version 78 is rollback.
+Worker `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147), deployment
+`6f536ee9-9666-41bb-b0f3-6f174019692b`, receives 100% traffic;
+`c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) is immediate rollback.
+Version 147 removes absolute Windows build paths from generated font URLs;
+production HTML, font assets, Chrome and host-boundary smoke passed. Sites
+version 85 is live from runtime commit `7645f096`, deployment
+`appgdep_6a90125becc481918d66dcc53f333fe4`; version 84 is rollback.
 
 The post-deploy public telemetry matrix returned `204` for a valid same-site
 event, `403` for a foreign origin, `403` without Fetch Metadata, `400` for an
@@ -738,7 +741,8 @@ covered all seven changed source files in `3f2bf72e..d0310b90` and retained zero
 findings. GitHub CI `32838994132` passed Website and Platform on the final
 public source.
 
-Sites version 82 was saved from an exact 121-file source snapshot whose Git tree
+At the 2026-08-25 checkpoint, Sites version 82 was saved from an exact 121-file
+source snapshot whose Git tree
 matched `f35a8f36db9240a281e204f7d7e8b3675d2a18e7`, then published as deployment
 `appgdep_6a8d7522f25c8191a871d05e7677ef9d`; version 81 is rollback. Production
 verification returned 78/78 exact canonical sitemap URLs, complete RU/UZ/EN

@@ -1,6 +1,16 @@
-# Changelog — ecosystem audit release 2026-08-25
+# Changelog — ecosystem audit release through 2026-08-27
 
 ## Shipped to production
+
+- Public website Sites v85 is live from runtime commit `7645f096`; deployment
+  `appgdep_6a90125becc481918d66dcc53f333fe4`; Sites v84 is the immediate
+  public rollback.
+- Platform Worker version 147 (`ed0253e1-1c35-416e-9f2a-5bd8352c1936`),
+  deployment `6f536ee9-9666-41bb-b0f3-6f174019692b`, is at 100% traffic;
+  version 146 is the immediate application rollback.
+- Generated vinext font URLs no longer expose absolute Windows build-machine
+  paths. Production now emits `/assets/_vinext_fonts/...`, and the build gate
+  rejects future `C:/Users/` or `.vinext/fonts` regressions.
 
 - All JURO subdomains now redirect HTTP to the exact HTTPS URL with status 308
   before application or host routing.
@@ -18,13 +28,27 @@
   `357d0438-1a5f-4b29-ba81-869cbc130c0a`.
 - Public website dependency resolution now pins PostCSS `8.5.23` and Sharp
   `0.35.3`; production `npm audit` reports zero vulnerabilities.
-- Sites version 82 deployed exact 121-file source from `d0310b90`; version 81
-  is the immediate public rollback. The Platform Worker remains version 146
-  because this follow-up did not change `apps/platform`.
+- The earlier 2026-08-25 Sites version 82 checkpoint deployed exact 121-file
+  source from `d0310b90`; version 81 was its rollback. At that checkpoint the
+  Platform Worker remained version 146 because the follow-up did not change
+  `apps/platform`.
 - Zone origin encryption now uses explicit Cloudflare `Full (strict)` instead
   of automatic `Full`; the prior `Full` setting is the control-plane rollback.
 
 ## Verification
+
+- Worker 147: focused font-normalizer tests 3/3, production build/dry-run,
+  artifact validation, performance budgets, lint, type-check and GitHub CI
+  `33063995387` passed. Production HTML has zero absolute path matches; sampled
+  normalized fonts return `200 font/woff2`; Chrome Status and authenticated
+  Client smoke completed with loaded fonts and empty warning/error logs.
+- Post-deploy host smoke retained expected Client login redirects and private
+  API `401`, Lawyer persona, Admin protected handoff, Status `200`, Status route
+  fence `404`, 8/8 operational health and zero active incidents. Error-only
+  Worker tail was empty during the smoke window.
+- Sites v85: 78/78 sitemap URLs returned `200`; SEO and Accessibility were 100,
+  LCP 777 ms and CLS 0 in the recorded unthrottled production trace. Website
+  and Platform jobs passed in CI run `33063833408`.
 
 - Local: rendered 34/34, core 1083/1083 and Cloudflare 201/201; lint,
   type-check, production build/artifact and migration safety passed.

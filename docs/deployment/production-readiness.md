@@ -1,4 +1,4 @@
-# Production readiness — 2026-08-25
+# Production readiness — 2026-08-27
 
 This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
@@ -9,15 +9,43 @@ item in the wider ecosystem audit is complete.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest public website source commit | `d0310b9031b12bdc8846aba2328671574c4a0998` |
-| Draft PR | `#64` |
-| GitHub Actions | CI run `32838994132`, Website and Platform successful on exact public source |
-| Production Worker | `juro` version `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146), 100% traffic |
-| Immediate application rollback | `357d0438-1a5f-4b29-ba81-869cbc130c0a` (version 145) |
-| Public Sites release | Version 82, deployment `appgdep_6a8d7522f25c8191a871d05e7677ef9d`; rollback version 81 |
+| Latest public website runtime commit | `7645f09627ba698681b0a3037ab41815247327dd` |
+| Draft PRs | Platform `#64`; public website `#66` |
+| GitHub Actions | Platform-fix CI `33063995387` and v85 evidence CI `33063833408`; Website and Platform successful in both |
+| Production Worker | `juro` version `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147), deployment `6f536ee9-9666-41bb-b0f3-6f174019692b`, 100% traffic |
+| Immediate application rollback | `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) |
+| Public Sites release | Version 85, deployment `appgdep_6a90125becc481918d66dcc53f333fe4`; rollback version 84 |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
+
+## 2026-08-27 Platform privacy correction
+
+Production HTML had exposed absolute Windows build-machine paths in generated
+vinext font URLs. Commit `6503667cbf18f249656b29749040cda8b200fd47`
+adds a post-transform URL normalizer plus an artifact regression gate.
+
+- Focused tests: 3/3 passed.
+- Production build, dry-run, artifact validation, performance budgets,
+  type-check and lint passed.
+- GitHub CI `33063995387`: Website and Platform successful.
+- Built artifact: zero `C:/Users/` and zero `.vinext/fonts` matches.
+- Post-deploy production HTML: zero matches; 12 normalized
+  `/assets/_vinext_fonts/...` URLs.
+- Three sampled normalized WOFF2 assets returned `200 font/woff2`.
+- Chrome: Status and authenticated Client dashboard completed font loading,
+  rendered their primary headings, contained no absolute build path and
+  produced no warning/error log entries.
+- Production route smoke retained Client `307`, private API `401`, Lawyer
+  `200/307`, Admin `303`, Status `200` and Status application-route `404`.
+- `/api/status` reported 8/8 operational and zero active incidents at
+  `2026-08-27T11:02:55Z`.
+- Wrangler error-only tail produced no event during the post-deploy smoke
+  window.
+
+This proves the font-path correction and sampled host boundaries on Worker
+147. It does not prove every authenticated write path or the whole ecosystem
+Definition of Done.
 
 ## Database recovery gate
 
@@ -96,14 +124,15 @@ dedicated RU Lawyer persona. The accessibility tree contained localized
 headings, labels, theme controls, language links and the correct Lawyer account
 registration destination.
 
-## Analytics and public Sites release
+## Analytics and public Sites release — 2026-08-25 checkpoint
 
 GitHub CI `32822786084` passed exact commit `f42c48fc`. Website passed 42/42.
 Platform passed rendered HTML 34/34, core 1086/1086 and Cloudflare 201/201,
 plus generated types, lint, type-check, deployable artifact, environment matrix,
 production dependency audit and licence policy.
 
-Sites version 82 contains the exact 121-file `apps/website` source extracted
+At that checkpoint, Sites version 82 contained the exact 121-file
+`apps/website` source extracted
 from `d0310b90`; source-tree comparison reported identical Git tree
 `f35a8f36db9240a281e204f7d7e8b3675d2a18e7` before internal source commit
 `ec6b7868ea2a34fc60b609b0b707a153dc984e52` was pushed. The saved archive has
@@ -154,7 +183,7 @@ findings. Metadata diff scan `fa1b3e34-235b-48e6-8fb4-41e9f731f210` covered all
 six changed source files in `33d7f8e3..ee0687af` and retained zero findings.
 Social-preview diff scan `1985bd83-d685-4ae3-8978-60f4f469d1e7` covered all
 seven changed source files in `3f2bf72e..d0310b90` and retained zero findings.
-GitHub CI `32838994132` passed and Sites version 82 succeeded. The replacement
+GitHub CI `32838994132` passed and Sites version 82 succeeded at that checkpoint. The replacement
 crawl verified 78/78 exact canonical, RU/UZ/EN hreflang, complete Open Graph
 and Twitter metadata, single H1, valid present JSON-LD and indexability; the
 in-app browser rendered representative legal, lawyer and EN-video routes with

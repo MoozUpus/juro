@@ -41,7 +41,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 | Area | State | Evidence / remaining gate |
 | --- | --- | --- |
-| Public routes and SEO | PASS in production | Sites version 82 is live; all 78 sitemap URLs returned 2xx with exact canonical, complete RU/UZ/EN hreflang, Open Graph/Twitter preview metadata, single H1, valid present JSON-LD and expected indexability. `robots.txt` points to the canonical sitemap. |
+| Public routes and SEO | PASS in production | Sites version 85 is live; all 78 sitemap URLs returned `200` with exact canonical, complete RU/UZ/EN hreflang, Open Graph/Twitter preview metadata, single H1, valid present JSON-LD and expected indexability. `robots.txt` points to the canonical sitemap. |
 | Transport/security headers | PASS in production | HTTPS-first Worker redirects, private no-store/noindex and restricted permissions policy tested; public Sites uses Cloudflare canonical redirects. |
 | Auth/RBAC/tenant isolation | PASS for this delta | The exact commit passed the complete 1086-test core and 201-test Cloudflare suites; the 26/26-file security diff scan found no tenant/privacy issue. Historical authenticated journey coverage remains scoped in the QA matrix. |
 | Signed public shares | PASS at baseline | Signed authorization and bounded transport deployed in the hardened release. |
@@ -76,12 +76,14 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
   Website 42/42; Platform rendered HTML 34/34, core 1086/1086 and Cloudflare
   201/201, plus lint, type-check, artifact, environment, dependency and licence
   gates.
-- Worker `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) receives 100%
-  production traffic; `357d0438-1a5f-4b29-ba81-869cbc130c0a` is rollback.
-- Sites version 82 deployed the exact 121-file `apps/website` source from
-  `d0310b90`; Git tree `f35a8f36db9240a281e204f7d7e8b3675d2a18e7`
-  matched before save. Sites version 81 is rollback.
-- GitHub CI `32838994132` passed Website and Platform on `d0310b90`. The
+- Worker `ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147) receives 100%
+  production traffic; `c3237f9e-a258-42eb-8b94-62f5045b7b03` (version 146) is
+  rollback. Version 147 removes absolute build-machine font paths and passed
+  post-deploy Chrome, host-boundary, font-asset, health and error-tail smoke.
+- Sites version 85 deployed runtime commit `7645f096`; deployment
+  `appgdep_6a90125becc481918d66dcc53f333fe4`. Sites version 84 is rollback.
+- GitHub CI `33063995387` passed Website and Platform on Platform correction
+  `6503667c`; v85 evidence CI `33063833408` also passed both jobs. The earlier
   hardening diff scan `a2cb0d4a-7512-4b0a-aa5e-362681007619` retained zero
   findings; metadata diff scan `fa1b3e34-235b-48e6-8fb4-41e9f731f210` also
   retained zero findings with complete changed-source coverage. Social-preview

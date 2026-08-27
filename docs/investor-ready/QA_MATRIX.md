@@ -77,6 +77,19 @@ mode each survived a reload.
 | `/api/status` after deployment | VERIFIED — app/status-host reads generated at `2026-08-24T20:01:28.663Z` and `2026-08-24T20:01:30.26Z` after Worker `dbaeccc9-b13c-43bf-8637-06680faa0320` returned `overallStatus=operational`, exact components `platform`, `otp`, `ai`, `document_analysis`, `upload`, `document_builder`, `email`, `lawyer_area` all operational and no active or recent incident |
 | Authenticated Chrome QA | PARTIAL — Client and Lawyer non-call desktop suites complete; the Client dashboard and latest Admin overview passed all 13 requested widths, every top-level Client route passed fresh 390px mobile and 768px tablet loops, and all 20 top-level Lawyer routes passed 390×844 Light/Dark plus 768×1024 System without 404, overflow or browser warning/error. Live grounded Client AI/direct Lex.uz, role-private chat, monitoring→task, legal-policy, fresh-MFA Admin theme/data, protected document and backend role-boundary replays are recorded above. Earlier two-profile production calls proved selected-source public-tab screen sharing, explicit share stop, bounded forced reconnect and one-sided remote end propagation. The current accessible-account replay additionally proved exact `0158` conflict-clear→Client grant→Lawyer accept, consultation proposal/confirmation, both camera/microphone preflights, the canonical Lawyer call route from commit `8cf6af75`, a real two-party Cloudflare TURN connection, correct peers, synchronized timer, `Excellent` network state, mute/unmute and camera/audio-only restoration on both sides, and clean terminal propagation. D1 records two prepared, two joined, both `left_at`, one ended event and zero signals. After the exact confirmed result was transmitted, authenticated Lawyer Chrome rendered `Завершена`, `Итог консультации` and the exact approved text with no completion control or browser warning/error; D1 retained exactly one completion notification/audit/case event. The Client session expired before the final visual receipt replay, so that narrow visual remains unclaimed. Native page zoom remains intentionally `NOT TESTED` by user instruction |
 
+## 2026-08-27 route inventory and font-path release checkpoint
+
+| Gate | Status |
+| --- | --- |
+| Exact source / CI | VERIFIED — commit `6503667cbf18f249656b29749040cda8b200fd47`; CI `33063995387`; Website and Platform successful |
+| Platform production deployment | VERIFIED — Worker 147 `ed0253e1-1c35-416e-9f2a-5bd8352c1936`, deployment `6f536ee9-9666-41bb-b0f3-6f174019692b`, receives 100%; Worker 146 `c3237f9e-a258-42eb-8b94-62f5045b7b03` is rollback |
+| Font-path privacy correction | VERIFIED — production HTML has zero `C:/Users/` and zero `.vinext/fonts` matches; 12 normalized font URLs are present; three sampled WOFF2 assets return `200 font/woff2` |
+| Chrome production smoke | VERIFIED for sampled routes — public Status and the authenticated Client dashboard rendered their primary UI with fonts loaded, no absolute build path and empty warning/error logs |
+| Host/access smoke | VERIFIED for sampled boundaries — Client `307`, private API `401`, Lawyer `200/307`, Admin `303`, Status `200`, Status application route `404` |
+| Production health/logs | VERIFIED at checkpoint — 8/8 operational, zero active incidents at `2026-08-27T11:02:55Z`; error-only Worker tail emitted no event during the smoke window |
+| Public website | VERIFIED for v85 release evidence — deployment `appgdep_6a90125becc481918d66dcc53f333fe4`, 78/78 sitemap URLs, Website and Platform CI `33063833408`; v84 is rollback |
+| Domain/control-plane inventory | PARTIAL — Worker custom domains and zone routes are current, but the active credential receives HTTP 403 from the DNS-record endpoint; authenticated Business/Lawyer/Admin route-by-route replay and direct Sites-host noindex remain open |
+
 ## 2026-08-25 analytics and cost release checkpoint
 
 | Gate | Status |
