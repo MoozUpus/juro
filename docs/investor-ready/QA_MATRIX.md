@@ -85,10 +85,12 @@ mode each survived a reload.
 | Platform production deployment | VERIFIED — Worker 147 `ed0253e1-1c35-416e-9f2a-5bd8352c1936`, deployment `6f536ee9-9666-41bb-b0f3-6f174019692b`, receives 100%; Worker 146 `c3237f9e-a258-42eb-8b94-62f5045b7b03` is rollback |
 | Font-path privacy correction | VERIFIED — production HTML has zero `C:/Users/` and zero `.vinext/fonts` matches; 12 normalized font URLs are present; three sampled WOFF2 assets return `200 font/woff2` |
 | Chrome production smoke | VERIFIED for sampled routes — public Status and the authenticated Client dashboard rendered their primary UI with fonts loaded, no absolute build path and empty warning/error logs |
+| Authenticated Client route QA | VERIFIED for the current read-only Individual surface — 21/21 routes passed desktop and `390×844` mobile loops with the authenticated shell, one H1 after asynchronous settling, loaded fonts, no role alert and no horizontal overflow; the desktop loop emitted zero Chrome warning/error entries. Opening the mobile menu moved focus to its close control and Escape restored focus to the trigger |
+| Authenticated Business/Lawyer/Admin QA | PARTIAL — Business was not available in the current account; Lawyer reached its dedicated re-authentication page and Admin reached its protected fresh-session handoff, but their authenticated route loops require the corresponding signed-in Chrome sessions |
 | Host/access smoke | VERIFIED for sampled boundaries — Client `307`, private API `401`, Lawyer `200/307`, Admin `303`, Status `200`, Status application route `404` |
 | Production health/logs | VERIFIED at checkpoint — 8/8 operational, zero active incidents at `2026-08-27T11:02:55Z`; error-only Worker tail emitted no event during the smoke window |
 | Public website | VERIFIED for v85 release evidence — deployment `appgdep_6a90125becc481918d66dcc53f333fe4`, 78/78 sitemap URLs, Website and Platform CI `33063833408`; v84 is rollback |
-| Domain/control-plane inventory | PARTIAL — Worker custom domains and zone routes are current, but the active credential receives HTTP 403 from the DNS-record endpoint; authenticated Business/Lawyer/Admin route-by-route replay and direct Sites-host noindex remain open |
+| Domain/control-plane inventory | PARTIAL — Worker custom domains and zone routes are current, but the active credential receives HTTP 403 from the DNS-record endpoint; authenticated Business/Lawyer/Admin route-by-route replay and deployment of the saved direct Sites-host noindex correction remain open |
 
 ## 2026-08-25 analytics and cost release checkpoint
 

@@ -1,5 +1,29 @@
 # Test report — current evidence through 2026-08-27
 
+## Authenticated Client route and responsive smoke
+
+An existing production Individual session was used read-only in Chrome to visit
+21 Client routes: dashboard, AI chat, document builder, document review, cases,
+documents, document comparison, action plan, calendar, archive, history,
+consultations, lawyers, monitoring, notifications, billing, profile, settings,
+security settings, privacy settings and help.
+
+| Gate | Result |
+| --- | --- |
+| Desktop route loop | PASS — 21/21 retained the authenticated application shell, rendered one H1 after asynchronous settling, loaded fonts, exposed no role alert and had no horizontal overflow |
+| Mobile route loop | PASS — 21/21 at `390×844` retained one H1, loaded fonts, exposed no role alert or horizontal overflow, kept the closed navigation inert/hidden and showed the mobile menu control |
+| Mobile keyboard menu | PASS — opening moved focus to the close control; Escape closed the menu and restored focus to the trigger |
+| Private indexing boundary | PASS — all sampled application documents declared `noindex, nofollow, nocache` |
+| Chrome warning/error log | PASS — zero warning/error entries across the desktop route loop |
+| Lawyer boundary | PARTIAL — `/ru/lawyer/dashboard` reached the dedicated Lawyer login with the expected Lawyer account type and return path; authenticated route replay requires a signed-in Lawyer session |
+| Admin boundary | PARTIAL — `/ru/admin/console` reached the protected fresh-session handoff; authenticated Admin replay requires a fresh protected session |
+
+No form was submitted, no file was uploaded and no production record was
+created or changed. This browser pass did not provide complete request-level
+network error coverage, so it is not represented as full workflow or API
+verification. Business routes and authenticated Lawyer/Admin routes remain
+outside this checkpoint.
+
 ## Worker 147 font-path correction
 
 | Gate | Result |
