@@ -157,6 +157,24 @@ every checked SEO/social field, canonical `robots.txt`, public security headers,
 app/lawyer/admin no-store/noindex boundaries and an operational 8/8 status
 response. CDP screenshot capture timed out and is not claimed as evidence.
 
+## 2026-08-27 public Sites performance expansion
+
+Live Sites v86 RU-home Chrome evidence passed the goal thresholds under a
+`390×844` mobile/touch, 4× CPU and Fast 4G profile: LCP 1,956 ms, TTFB 234 ms
+and CLS 0.0001. A separate 16-second observer recorded CLS 0.0012. Controlled
+Lighthouse 13.4.1 scored 100 Accessibility, 100 Best Practices, 100 SEO and
+100 Agentic Browsing, with 59 passed and 0 failed. The raw JSON/HTML reports
+and hashes are in `docs/qa/artifacts/performance-sites-v86/`.
+
+Production v86 also revealed conditional revalidation on every fingerprinted
+static asset. Commit `5d543218` fixes both current `/_next/static/*` and newer
+`/assets/*` output while leaving HTML non-cacheable. Local website type-check,
+lint, production build, artifact validation and 44/44 tests passed. GitHub CI
+`33095467495` passed Website in 51 seconds and Platform in 7 minutes 34
+seconds. Sites v87 was saved from exact runtime commit `a60df03f` but is not
+represented as live until the required public-deployment approval and
+post-deploy checks complete.
+
 ## 2026-08-27 local plaintext backup cleanup
 
 The two price-configuration SQL exports and two manifests were downloaded again
