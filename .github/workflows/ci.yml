@@ -64,8 +64,7 @@ jobs:
         if: matrix.app == 'apps/platform'
         run: npm run validate:cloudflare:matrix
 
-      - name: Audit platform production dependencies
-        if: matrix.app == 'apps/platform'
+      - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
       - name: Enforce dependency licence policy
