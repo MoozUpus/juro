@@ -51,3 +51,19 @@ The stored JSON and HTML reports contain zero matches for `authorization`,
 
 This is lab evidence for the named public route. It is not field-performance,
 INP, screen-reader or blanket WCAG-conformance evidence.
+
+## Worker 152 follow-up
+
+After CI run `33104695509` passed, Platform Worker 152
+`47671380-a8fe-4d8c-95e2-bd7778541b0c` was deployed at 100%. The original photo
+now receives the approved public cache policy. The bounded
+`width=128&format=webp` response is `image/webp`, 2,106 bytes and changed from
+`CF-Cache-Status: MISS` to `HIT` on the immediate repeat. Invalid width/format
+values retained the 82,109-byte original PNG, while an unknown profile UUID
+returned `404` with `no-store` and `BYPASS`. Production health was 8/8
+operational with zero active/recent incidents at `2026-08-27T18:55:37.826Z`;
+an error-only tail stayed empty after the verification requests.
+
+Sites v86 still requests the original URL. The measured end-user WebP saving is
+therefore not claimed live until a superseding Sites version is approved,
+deployed and re-tested.

@@ -9,14 +9,18 @@
 | Source correction | PASS locally — only fixed 128/288 px WebP variants are requested; the production Worker cache is enabled; only the exact approved public-photo route receives public cache policy; private photo/API routes remain excluded |
 | Focused regression | PASS — platform photo-policy 4/4; website production contracts 24/24 after adding locale-aware year grammar |
 | Static gates | PASS — Platform type-check/lint, generated Cloudflare types, three-environment matrix, rendered 35/35, full core 1094/1094, infrastructure 201/201 and production artifact budgets; Website type-check/lint, verified build/artifact and full 46/46 suite |
+| GitHub Actions CI `33104695509` | PASS — Website 50s and Platform 8m40s, including tests, deployable artifacts, Cloudflare matrix, production-dependency audit and licence policy |
+| Platform deployment | PASS — Worker 152 `47671380-a8fe-4d8c-95e2-bd7778541b0c`, deployment `61882723-0234-4614-bd66-c0ad2b862ba3`, 100%; Worker 151 is rollback |
+| Live public-photo verification | PASS on Worker 152 — original 82,109-byte PNG is publicly cacheable; the approved 128 px WebP is 2,106 bytes (97.4% smaller) and changed from `MISS` to `HIT` on repeat; invalid variants retain the original; an unknown UUID is `404`, `no-store`, `BYPASS` |
+| Production health | PASS at capture — 8/8 operational, zero active/recent incidents at `2026-08-27T18:55:37.826Z`; error-only tail stayed empty after photo and routing probes |
 | Controlled Lighthouse | PASS — Accessibility 100, Best Practices 100, SEO 100, Agentic Browsing 100; 58 passed, 0 failed; reports in `docs/qa/artifacts/performance-sites-v86-lawyers/` |
 | Accessibility snapshot | PASS for high-level semantics — one H1, labelled filters and named actions; it found the corrected RU grammar defect `4 лет` |
-| Production status | NOT YET DEPLOYED — live v86 still serves the original PNG and private no-store header |
+| Sites production status | PARTIAL — public Sites v86 still requests the original 82,109-byte PNG and still predates the RU grammar fix; a superseding Sites version remains required for end-user WebP delivery |
 
 The first trace's server-latency outlier is retained. Two passing repeats do not
-erase it or prove field performance. The photo optimization requires both a
-new Platform Worker and a superseding public Sites release before it can be
-represented as live.
+erase it or prove field performance. Worker 152 now provides the bounded WebP
+and cache behavior, but the end-user catalogue remains on Sites v86 and will
+request the smaller variant only after a superseding public Sites release.
 
 ## Worker 151 responsive Turnstile and Client target closure
 

@@ -99,8 +99,10 @@ reports and hashes are in
 - P2 fixed in the current release candidate: the lawyer catalogue now requests
   bounded WebP photo variants; the platform Worker enables its production cache
   and no longer applies a private no-store policy to the exact approved
-  public-photo route. Production verification remains pending; the live v86
-  response is still the 82,109-byte PNG with `private, no-store`.
+  public-photo route. Worker 152 is live and verified: the 128 px WebP is 2,106
+  bytes versus 82,109 bytes for the original, and the second identical request
+  was a cache `HIT`. Sites v86 still requests the original PNG, so end-user byte
+  reduction remains pending the superseding Sites release.
 - PASS: production builds are minified and route chunks are emitted separately;
   the UI exposes skeleton/progress states in the exercised flows.
 - PARTIAL: LCP, CLS, render-blocking savings, DOM and network dependencies are
