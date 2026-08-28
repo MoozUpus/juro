@@ -767,7 +767,25 @@ export async function handleLegalCorpusScheduled(
     if (denseBackfillEnabled(env) && !ingestionClaimed) {
       for (let index = 0; index < QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN; index += 1) {
         await renewRunLease(env, run);
-        const result = await runNextLegalCorpusQdrantBackfillBatch(env);
+        log("info", {
+          event: "legal_corpus.qdrant_backfill_start",
+          environment: env.APP_ENV,
+          cron: controller.cron,
+          batch: index + 1,
+        });
+        let result: Awaited<ReturnType<typeof runNextLegalCorpusQdrantBackfillBatch>>;
+        try {
+          result = await runNextLegalCorpusQdrantBackfillBatch(env);
+        } catch (error) {
+          log("error", {
+            event: "legal_corpus.qdrant_backfill_failed",
+            environment: env.APP_ENV,
+            cron: controller.cron,
+            batch: index + 1,
+            errorCode: legalCorpusWorkerErrorCode(error),
+          });
+          throw error;
+        }
         qdrantBackfills.push(result);
         if (result.status === "empty" || result.status === "disabled") break;
       }
