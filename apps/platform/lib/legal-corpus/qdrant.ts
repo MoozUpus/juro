@@ -238,25 +238,21 @@ async function requestResponse(
     if (env.QDRANT_SERVICE) {
       phase = "service-request-build";
       try {
-        // Cloudflare service bindings reliably forward a Request object. Add
-        // the half-duplex hint only for streaming snapshot bodies; JSON
-        // mutations stay ordinary requests and never expose their payload in
-        // diagnostics.
+        // Service bindings accept URL + init directly. Avoid constructing a
+        // cross-realm Request in the Worker runtime, where that constructor
+        // rejects some private-host and body combinations before the binding
+        // is invoked. JSON mutations and bounded snapshot bodies are both
+        // validated by the private proxy.
         const serviceRequestInit = { ...requestInit };
         // AbortSignal is not transferable across Cloudflare Worker service
         // bindings in all runtimes. Keep the same upper bound locally while
         // forwarding a signal-free Request to the private service.
         delete serviceRequestInit.signal;
-        const request = new Request(endpoint(env, suffix), (
-          init.body instanceof ReadableStream
-            ? { ...serviceRequestInit, duplex: "half" as const }
-            : serviceRequestInit
-        ) as RequestInit);
         phase = "service-fetch";
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           response = await Promise.race([
-            env.QDRANT_SERVICE.fetch(request),
+            env.QDRANT_SERVICE.fetch(endpoint(env, suffix).toString(), serviceRequestInit),
             new Promise<Response>((_, reject) => {
               timer = setTimeout(() => reject(new Error("service_binding_timeout")),
                 options.timeoutMs ?? REQUEST_TIMEOUT_MS);
