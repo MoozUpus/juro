@@ -243,16 +243,25 @@ async function requestResponse(
         // rejects some private-host and body combinations before the binding
         // is invoked. JSON mutations and bounded snapshot bodies are both
         // validated by the private proxy.
-        const serviceRequestInit = { ...requestInit };
-        // AbortSignal is not transferable across Cloudflare Worker service
-        // bindings in all runtimes. Keep the same upper bound locally while
-        // forwarding a signal-free Request to the private service.
-        delete serviceRequestInit.signal;
+        // AbortSignal and redirect are not transferable across Cloudflare
+        // Worker service bindings in all runtimes. Keep the same upper bound
+        // locally while forwarding a minimal Request to the private service.
+        const serviceRequestInit: RequestInit = {
+          method: requestInit.method,
+          headers: requestInit.headers,
+          ...(requestInit.body !== undefined && requestInit.body !== null
+            ? { body: requestInit.body }
+            : {}),
+        };
+        if (init.body instanceof ReadableStream) {
+          (serviceRequestInit as RequestInit & { duplex?: "half" }).duplex = "half";
+        }
+        const serviceRequest = new Request(endpoint(env, suffix).toString(), serviceRequestInit);
         phase = "service-fetch";
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           response = await Promise.race([
-            env.QDRANT_SERVICE.fetch(endpoint(env, suffix).toString(), serviceRequestInit),
+            env.QDRANT_SERVICE.fetch(serviceRequest),
             new Promise<Response>((_, reject) => {
               timer = setTimeout(() => reject(new Error("service_binding_timeout")),
                 options.timeoutMs ?? REQUEST_TIMEOUT_MS);
