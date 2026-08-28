@@ -44,4 +44,16 @@ test("Anthropic error details retain only a bounded machine-readable code", () =
     error: { details: { error_code: "unsafe code with spaces" } },
   }), null);
   assert.equal(anthropicProviderErrorCode({ error: { details: null } }), null);
+  assert.equal(anthropicProviderErrorCode({
+    error: { message: "You have reached your specified workspace API usage limits." },
+  }), "spend_limit_reached");
+  assert.equal(anthropicProviderErrorCode({
+    error: { message: "Your credit balance is too low. Please purchase credits." },
+  }), "credit_balance_low");
+  assert.equal(anthropicProviderErrorCode({
+    error: { message: "tools.0.input_schema is invalid" },
+  }), "tool_or_schema_configuration");
+  assert.equal(anthropicProviderErrorCode({
+    error: { message: "unrecognized private diagnostic text" },
+  }), null);
 });
