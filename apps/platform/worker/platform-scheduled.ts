@@ -602,7 +602,7 @@ export async function handleScheduled(
     failureCode = "LEX_MONITORING_NOTIFICATION_DELIVERY_FAILED";
     const lexMonitoringDelivery = lexMetadataMonitorEnabled
       ? await dispatchDueMonitoringNotifications(env.DB, { now: new Date(now) })
-      : { initialized: 0, due: 0, notified: 0, events: 0 };
+      : { initialized: 0, due: 0, notified: 0, emailsQueued: 0, events: 0 };
     failureCode = "OUTBOX_DISPATCH_FAILED";
     const summary = await dispatchOutbox(env, 100);
     failureCode = "QUEUE_HEALTH_PROBE_ENQUEUE_FAILED";
@@ -700,6 +700,7 @@ export async function handleScheduled(
       lexMonitoringDeliveryInitialized: lexMonitoringDelivery.initialized,
       lexMonitoringDeliveryDue: lexMonitoringDelivery.due,
       lexMonitoringDeliveryNotified: lexMonitoringDelivery.notified,
+      lexMonitoringDeliveryEmailsQueued: lexMonitoringDelivery.emailsQueued,
       lexMonitoringDeliveryEvents: lexMonitoringDelivery.events,
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,

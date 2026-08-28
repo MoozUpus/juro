@@ -136,6 +136,7 @@ const copy = {
     inApp: "В приложении",
     email: "Email",
     emailUnavailable: "Email-канал мониторинга пока не введён в эксплуатацию.",
+    emailAvailable: "Дайджест отправляется через защищённую очередь; отключить канал можно в любой момент.",
     frequency: "Частота",
     frequencyWhenActive: "Желаемая частота после включения доставки",
     frequencyHint: "«Немедленно» — в течение пяти минут после завершения ежедневной сверки Lex.uz; дневная и недельная сводки отправляются по выбранному интервалу.",
@@ -208,6 +209,7 @@ const copy = {
     inApp: "Ilova ichida",
     email: "Email",
     emailUnavailable: "Monitoring email kanali hali ishga tushirilmagan.",
+    emailAvailable: "Jamlanma himoyalangan navbat orqali yuboriladi; kanalni istalgan vaqtda o‘chirish mumkin.",
     frequency: "Tezlik",
     frequencyWhenActive: "Yetkazib berish yoqilgandan keyingi kerakli tezlik",
     frequencyHint: "“Darhol” — Lex.uz kundalik tekshiruvi tugaganidan keyin besh daqiqa ichida; kunlik va haftalik jamlanmalar tanlangan oraliqda yuboriladi.",
@@ -446,7 +448,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
             {preferenceOnly && <p className="monitoring-field-hint">{t.deliveryInactive}</p>}
             <div className="monitoring-channels">
               <label className={preferenceOnly ? "disabled" : ""}><input type="checkbox" checked={!preferenceOnly} readOnly disabled={preferenceOnly} /><BellRing /><span><strong>{t.inApp}</strong>{preferenceOnly && <small>{t.inAppInactive}</small>}</span></label>
-              <label className={preferenceOnly || !status.emailConfigured ? "disabled" : ""}><input type="checkbox" checked={!preferenceOnly && preference.channels.includes("email")} disabled={preferenceOnly || !status.emailConfigured} onChange={event => setPreference(current => ({ ...current, channels: event.target.checked ? ["in_app", "email"] : ["in_app"] }))} /><Mail /><span><strong>{t.email}</strong>{preferenceOnly ? <small>{t.emailInactive}</small> : !status.emailConfigured && <small>{t.emailUnavailable}</small>}</span></label>
+              <label className={preferenceOnly || !status.emailConfigured ? "disabled" : ""}><input type="checkbox" checked={!preferenceOnly && preference.channels.includes("email")} disabled={preferenceOnly || !status.emailConfigured} onChange={event => setPreference(current => ({ ...current, channels: event.target.checked ? ["in_app", "email"] : ["in_app"] }))} /><Mail /><span><strong>{t.email}</strong>{preferenceOnly ? <small>{t.emailInactive}</small> : status.emailConfigured ? <small>{t.emailAvailable}</small> : <small>{t.emailUnavailable}</small>}</span></label>
             </div>
           </fieldset>
 

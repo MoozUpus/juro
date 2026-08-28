@@ -2,6 +2,7 @@ import {
   discoverLexRssDocuments,
   LegalSourceDiscoveryError,
 } from "./source-discovery";
+import { monitoringEmailJobId } from "../notifications/monitoring-email";
 
 export const LEX_METADATA_DISCOVERY_CRON = "0 19 * * *";
 export const LEX_METADATA_STALE_RUN_MS = 20 * 60 * 1_000;
@@ -61,12 +62,14 @@ type MonitoringDeliveryRecipient = {
   locale: string;
   frequency: MonitoringFrequency;
   lastDeliveredAt: string;
+  channelsJson: string;
 };
 
 export type MonitoringDeliverySummary = {
   initialized: number;
   due: number;
   notified: number;
+  emailsQueued: number;
   events: number;
 };
 
@@ -120,10 +123,12 @@ function localizedNotification(locale: string, events: MonitoringNotificationEve
 }
 
 /**
- * Delivers bounded in-app digests from persisted metadata events. The one-minute
- * cutoff keeps a five-minute outbox tick from racing the daily metadata writer.
- * New or legacy preferences without a cursor are initialized at the cutoff and
- * never receive the historical pre-cutover event backlog.
+ * Delivers bounded in-app digests and atomically creates durable email jobs
+ * from persisted metadata events. Queue envelopes are emitted later by the
+ * generic outbox dispatcher and contain identifiers only. The one-minute cutoff
+ * keeps a five-minute outbox tick from racing the daily metadata writer. New or
+ * legacy preferences without a cursor are initialized at the cutoff and never
+ * receive the historical pre-cutover event backlog.
  */
 export async function dispatchDueMonitoringNotifications(
   db: D1Database,
@@ -142,7 +147,7 @@ export async function dispatchDueMonitoringNotifications(
   const weeklyBefore = new Date(cutoff.getTime() - MONITORING_WEEKLY_INTERVAL_MS).toISOString();
   const recipients = await db.prepare(
     `SELECT id,workspace_id AS workspaceId,user_id AS userId,locale,frequency,
-            last_delivered_at AS lastDeliveredAt
+            last_delivered_at AS lastDeliveredAt,channels_json AS channelsJson
        FROM monitoring_preferences p
       WHERE instr(channels_json,'"in_app"')>0
         AND last_delivered_at IS NOT NULL
@@ -164,6 +169,7 @@ export async function dispatchDueMonitoringNotifications(
   ).all<MonitoringDeliveryRecipient>();
   const statements: D1PreparedStatement[] = [];
   let notified = 0;
+  let emailsQueued = 0;
   let eventCount = 0;
   for (const recipient of recipients.results) {
     const eventRows = await db.prepare(
@@ -195,6 +201,50 @@ export async function dispatchDueMonitoringNotifications(
         recipient.id,
         recipient.lastDeliveredAt,
       ));
+      if (monitoringEmailSelected(recipient.channelsJson)) {
+        const jobId = monitoringEmailJobId(id);
+        statements.push(db.prepare(
+          `INSERT OR IGNORE INTO monitoring_email_jobs (
+             id,preference_id,notification_id,workspace_id,user_id,frequency,
+             locale,cursor_from,cursor_through,event_count,official_url,status,
+             attempt_count,provider_message_id,error_code,sent_at,created_at,updated_at
+           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending',0,NULL,NULL,NULL,?,?)`,
+        ).bind(
+          jobId,
+          recipient.id,
+          id,
+          recipient.workspaceId,
+          recipient.userId,
+          recipient.frequency,
+          recipient.locale === "uz" ? "uz" : "ru",
+          recipient.lastDeliveredAt,
+          cutoffTimestamp,
+          events.length,
+          events[0]!.canonicalUrl,
+          now.toISOString(),
+          now.toISOString(),
+        ));
+        statements.push(db.prepare(
+          `INSERT OR IGNORE INTO job_outbox (
+             id,queue_binding,job_type,schema_version,idempotency_key,subject_id,
+             workspace_id,correlation_id,enqueued_at,available_at,status,
+             dispatch_attempts,created_at,updated_at
+           ) SELECT ?,'EMAIL_NOTIFICATIONS_QUEUE','email.send',1,?,?,workspace_id,
+             ?,?,?,'pending',0,?,?
+           FROM monitoring_email_jobs WHERE id=? AND status='pending'`,
+        ).bind(
+          jobId,
+          jobId,
+          jobId,
+          id,
+          now.toISOString(),
+          now.toISOString(),
+          now.toISOString(),
+          now.toISOString(),
+          jobId,
+        ));
+        emailsQueued += 1;
+      }
       notified += 1;
       eventCount += events.length;
     }
@@ -209,8 +259,18 @@ export async function dispatchDueMonitoringNotifications(
     initialized,
     due: recipients.results.length,
     notified,
+    emailsQueued,
     events: eventCount,
   };
+}
+
+function monitoringEmailSelected(channelsJson: string): boolean {
+  try {
+    const value = JSON.parse(channelsJson) as unknown;
+    return Array.isArray(value) && value.includes("email");
+  } catch {
+    return false;
+  }
 }
 
 function metadataWriteStatements(db: D1Database, rows: MetadataWrite[], timestamp: string): D1PreparedStatement[] {

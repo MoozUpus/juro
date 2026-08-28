@@ -64,6 +64,11 @@ import {
   TaskReminderEmailError,
 } from "../lib/notifications/task-reminder-email";
 import {
+  executeMonitoringEmail,
+  isMonitoringEmailJobId,
+  MonitoringEmailError,
+} from "../lib/notifications/monitoring-email";
+import {
   isStagingDeletionProbe,
   prepareStagingDeletionProbe,
   StagingDeletionProbeError,
@@ -890,7 +895,9 @@ async function executeJob(
     ).bind(envelope.subjectId, envelope.subjectId).first<{ found: number }>();
     try {
       let delivery: { providerMessageId: string | null; alreadySent: boolean };
-      if (isTaskReminderEmailJobId(envelope.subjectId)) {
+      if (isMonitoringEmailJobId(envelope.subjectId)) {
+        delivery = await executeMonitoringEmail(env, envelope.subjectId);
+      } else if (isTaskReminderEmailJobId(envelope.subjectId)) {
         delivery = await executeTaskReminderEmail(env, envelope.subjectId);
       } else if (operationalAlert?.found) {
         delivery = await executeOperationalAlertEmail(env, envelope.subjectId);
@@ -939,6 +946,21 @@ async function executeJob(
         throw new SafeJobError(error.code, error.retryable);
       }
       if (error instanceof TaskReminderEmailError) {
+        if (
+          error.code === "EMAIL_PROVIDER_REJECTED"
+          || error.code === "EMAIL_PROVIDER_UNAVAILABLE"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "resend",
+            state: "degraded",
+            safeErrorCode: "EMAIL_DELIVERY_FAILED",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
+        }
+        throw new SafeJobError(error.code, error.retryable);
+      }
+      if (error instanceof MonitoringEmailError) {
         if (
           error.code === "EMAIL_PROVIDER_REJECTED"
           || error.code === "EMAIL_PROVIDER_UNAVAILABLE"

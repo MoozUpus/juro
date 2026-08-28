@@ -66,6 +66,18 @@ function createDb() {
       frequency text,last_delivered_at text,created_at text,updated_at text
     );
     CREATE TABLE notifications (id text PRIMARY KEY,workspace_id text,user_id text,document_id text,type text,title text,body text,read_at text,created_at text);
+    CREATE TABLE monitoring_email_jobs (
+      id text PRIMARY KEY,preference_id text,notification_id text,workspace_id text,user_id text,
+      frequency text,locale text,cursor_from text,cursor_through text,event_count integer,
+      official_url text,status text,attempt_count integer,provider_message_id text,error_code text,
+      sent_at text,created_at text,updated_at text
+    );
+    CREATE TABLE job_outbox (
+      id text PRIMARY KEY,queue_binding text,job_type text,schema_version integer,
+      idempotency_key text UNIQUE,subject_id text,workspace_id text,correlation_id text,
+      enqueued_at text,available_at text,status text,dispatch_attempts integer,
+      created_at text,updated_at text
+    );
   `);
   sqlite.exec(`
     CREATE TABLE legal_monitoring_metadata (
@@ -174,6 +186,7 @@ test("Lex monitor ignores RSS delivery-date churn and emits one idempotent title
     initialized: 0,
     due: 1,
     notified: 1,
+    emailsQueued: 0,
     events: 1,
   });
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 1);
@@ -185,6 +198,7 @@ test("Lex monitor ignores RSS delivery-date churn and emits one idempotent title
     initialized: 0,
     due: 0,
     notified: 0,
+    emailsQueued: 0,
     events: 0,
   });
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 1);
@@ -225,6 +239,7 @@ test("monitoring delivery honors immediate, daily, and weekly cadence atomically
     initialized: 0,
     due: 3,
     notified: 3,
+    emailsQueued: 0,
     events: 3,
   });
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 3);
@@ -235,9 +250,70 @@ test("monitoring delivery honors immediate, daily, and weekly cadence atomically
     initialized: 0,
     due: 0,
     notified: 0,
+    emailsQueued: 0,
     events: 0,
   });
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 3);
+  sqlite.close();
+});
+
+test("monitoring delivery creates an identifiers-only email outbox job with the in-app digest", async () => {
+  const sqlite = createDb();
+  const db = new D1(sqlite);
+  sqlite.prepare(
+    `INSERT INTO monitoring_preferences
+      (id,workspace_id,user_id,locale,channels_json,frequency,last_delivered_at,created_at,updated_at)
+     VALUES ('email-preference','workspace','email-user','uz','["in_app","email"]','immediate',
+       '2026-08-20T11:00:00.000Z','2026-08-20T11:00:00.000Z','2026-08-20T11:00:00.000Z')`,
+  ).run();
+  sqlite.prepare(
+    `INSERT INTO legal_monitoring_change_events
+      (id,metadata_id,canonical_url,act_title,change_type,fingerprint,detected_at,created_at)
+     VALUES ('email-event','metadata','https://lex.uz/uz/docs/-42','Yangilangan hujjat',
+       'metadata_changed','email-fingerprint','2026-08-20T12:00:00.000Z','2026-08-20T12:00:00.000Z')`,
+  ).run();
+
+  assert.deepEqual(await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-20T12:05:00.000Z"),
+  }), {
+    initialized: 0,
+    due: 1,
+    notified: 1,
+    emailsQueued: 1,
+    events: 1,
+  });
+  const job = sqlite.prepare(
+    `SELECT id,notification_id AS notificationId,status,event_count AS eventCount,
+       official_url AS officialUrl FROM monitoring_email_jobs`,
+  ).get() as Record<string, unknown>;
+  assert.match(String(job.id), /^monitoring-email:lex_monitor_[a-f0-9]{64}$/u);
+  assert.match(String(job.notificationId), /^lex_monitor_[a-f0-9]{64}$/u);
+  assert.deepEqual({ status: job.status, eventCount: job.eventCount, officialUrl: job.officialUrl }, {
+    status: "pending",
+    eventCount: 1,
+    officialUrl: "https://lex.uz/uz/docs/-42",
+  });
+  const outbox = sqlite.prepare(
+    `SELECT queue_binding AS queueBinding,job_type AS jobType,subject_id AS subjectId,
+       workspace_id AS workspaceId FROM job_outbox`,
+  ).get() as Record<string, unknown>;
+  assert.deepEqual({ ...outbox }, {
+    queueBinding: "EMAIL_NOTIFICATIONS_QUEUE",
+    jobType: "email.send",
+    subjectId: job.id,
+    workspaceId: "workspace",
+  });
+  assert.doesNotMatch(JSON.stringify(outbox), /Yangilangan|@/u);
+  assert.deepEqual(await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-20T12:05:00.000Z"),
+  }), {
+    initialized: 0,
+    due: 0,
+    notified: 0,
+    emailsQueued: 0,
+    events: 0,
+  });
+  assert.equal((sqlite.prepare("SELECT count(*) AS total FROM monitoring_email_jobs").get() as { total: number }).total, 1);
   sqlite.close();
 });
 
@@ -266,6 +342,7 @@ test("monitoring delivery initializes a legacy cursor without sending historical
     initialized: 1,
     due: 0,
     notified: 0,
+    emailsQueued: 0,
     events: 0,
   });
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 0);
@@ -287,6 +364,7 @@ test("a daily empty window advances without turning the next event into an immed
     initialized: 0,
     due: 1,
     notified: 0,
+    emailsQueued: 0,
     events: 0,
   });
   sqlite.prepare(
@@ -308,6 +386,7 @@ test("a daily empty window advances without turning the next event into an immed
     initialized: 0,
     due: 1,
     notified: 1,
+    emailsQueued: 0,
     events: 1,
   });
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 1);

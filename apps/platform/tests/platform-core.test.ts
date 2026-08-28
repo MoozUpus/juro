@@ -1115,9 +1115,11 @@ test("legislation monitoring exposes only fresh official Lex metadata and does n
 });
 
 test("monitoring keeps delivery disabled until a fresh Lex metadata run is available", async () => {
-  const [shell, client] = await Promise.all([
+  const [shell, client, route, jobs] = await Promise.all([
     readFile(new URL("../app/_platform/PlatformShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/MonitoringClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/monitoring/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../worker/platform-jobs.ts", import.meta.url), "utf8"),
   ]);
   assert.match(shell, /\[\s*"monitoring",\s*Scale,\s*"Мониторинг законодательства",\s*"Qonunchilik monitoringi",?\s*\]/);
   assert.match(shell, /key: "help", ru: "Помощь", uz: "Yordam"/);
@@ -1127,7 +1129,15 @@ test("monitoring keeps delivery disabled until a fresh Lex metadata run is avail
   assert.match(client, /controlledBeta: status\.controlledBeta/);
   assert.match(client, /t\.preferenceOnlyNotice/);
   assert.match(client, /disabled=\{preferenceOnly \|\| !status\.emailConfigured\}/);
+  assert.match(client, /t\.emailAvailable/);
   assert.match(client, /preferenceOnly \? t\.savePreferences : t\.save/);
+  assert.match(route, /function monitoringEmailConfigured/);
+  assert.match(route, /env\.EMAIL_NOTIFICATIONS_QUEUE/);
+  assert.match(route, /env\.RESEND_API_KEY/);
+  assert.match(route, /selectedChannels\.includes\("email"\) && !emailConfigured/);
+  assert.doesNotMatch(route, /emailConfigured:\s*false/);
+  assert.match(jobs, /isMonitoringEmailJobId\(envelope\.subjectId\)/);
+  assert.match(jobs, /executeMonitoringEmail\(env, envelope\.subjectId\)/);
 });
 
 test("JURO motion tokens are bounded and the dashboard route is static", async () => {

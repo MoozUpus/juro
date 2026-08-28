@@ -70,6 +70,7 @@ const verifiedCorpusFreshnessEntry = journal.entries.find(({ idx }) => idx === 9
 const documentEvaluationReviewsEntry = journal.entries.find(({ idx }) => idx === 92);
 const caseLifecycleEvidenceEntry = journal.entries.find(({ idx }) => idx === 93);
 const caseLifecycleHashGuardEntry = journal.entries.find(({ idx }) => idx === 104);
+const monitoringEmailDeliveryEntry = journal.entries.find(({ idx }) => idx === 160);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -188,6 +189,10 @@ assert.ok(
 assert.ok(
   caseLifecycleHashGuardEntry,
   "Drizzle journal must contain migration 0104",
+);
+assert.ok(
+  monitoringEmailDeliveryEntry,
+  "Drizzle journal must contain migration 0160",
 );
 
 
@@ -4440,6 +4445,41 @@ test("0091 prevents unreviewed corpus fetches from claiming legal freshness", ()
       () => db.prepare("DELETE FROM source_sync_runs WHERE id='verified-success'").run(),
       /SOURCE_SYNC_RUN_IMMUTABLE/,
     );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0160 adds only durable content-minimized monitoring email evidence", () => {
+  const sql = migrationSql(monitoringEmailDeliveryEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 9);
+  assert.match(sql, /CREATE TABLE `monitoring_email_jobs`/);
+  assert.match(sql, /monitoring_email_jobs_insert_guard/);
+  assert.match(sql, /monitoring_email_jobs_identity_immutable/);
+  assert.match(sql, /monitoring_email_jobs_transition_guard/);
+  assert.match(sql, /monitoring_email_jobs_sent_guard/);
+  for (const forbidden of [
+    "recipient_email",
+    "email_ciphertext",
+    "email_lookup_hash",
+    "document_text",
+    "question_text",
+  ]) {
+    assert.doesNotMatch(sql, new RegExp(forbidden, "i"));
+  }
+  for (const statement of migrationStatements) {
+    const executable = statement.replace(/^(?:--[^\n]*(?:\n|$))+/, "");
+    assert.match(executable, /^CREATE (?:TABLE|INDEX|UNIQUE INDEX|TRIGGER)\b/i);
+    assert.doesNotMatch(executable, /(?:^|\n)\s*(?:DROP TABLE|DELETE FROM|ALTER TABLE)\b/im);
+  }
+
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    assert.ok(tableDefinitions(db).has("monitoring_email_jobs"));
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

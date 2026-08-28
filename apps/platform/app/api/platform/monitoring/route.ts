@@ -23,6 +23,19 @@ const topics = new Set([
 const frequencies = new Set(["immediate", "daily", "weekly"]);
 const channels = new Set(["in_app", "email"]);
 
+function monitoringEmailConfigured(env: Record<string, unknown>): boolean {
+  const identityMode = String(env.IDENTITY_PROTECTION_MODE || "legacy");
+  const identityReady = identityMode === "legacy"
+    || (identityMode === "dual_write" && typeof env.IDENTITY_KEYRING === "string" && env.IDENTITY_KEYRING.length > 0);
+  return env.ASYNC_RUNTIME_ENABLED === "true"
+    && Boolean(env.EMAIL_NOTIFICATIONS_QUEUE)
+    && typeof env.RESEND_API_KEY === "string"
+    && env.RESEND_API_KEY.length > 0
+    && typeof env.EMAIL_FROM === "string"
+    && env.EMAIL_FROM.length > 0
+    && identityReady;
+}
+
 function response(body: unknown, status = 200) {
   return Response.json(body, {
     status,
@@ -152,10 +165,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
         : freshness.state === "fresh" ? "active" : "degraded",
       automaticPublication: true,
       controlledBeta: false,
-      // Generic transactional email is configured, but legislation-monitor
-      // email delivery has no dedicated retry-safe outbox yet. Keep the UI
-      // honest and expose only the working in-app channel.
-      emailConfigured: false,
+      emailConfigured: monitoringEmailConfigured(env as Record<string, unknown>),
       lastCheckedAt: freshness.latestCheckedAt,
       verifiedSourceCount: freshness.freshSourceCount,
       freshness,
@@ -181,6 +191,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const locale = body?.locale === "uz" ? "uz" : "ru";
   const selectedTopics = Array.from(new Set(body?.topics || [])).filter((item) => topics.has(item));
   const selectedChannels = Array.from(new Set(body?.channels || [])).filter((item) => channels.has(item));
+  const emailConfigured = monitoringEmailConfigured(runtimeEnv() as Record<string, unknown>);
   if (!body || !["individual", "business"].includes(body.audience || "") || !frequencies.has(body.frequency || "")) {
     return response({ error: locale === "ru" ? "Проверьте аудиторию и частоту." : "Auditoriya va tezlikni tekshiring." }, 400);
   }
@@ -190,7 +201,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!selectedChannels.includes("in_app") || selectedChannels.length !== (body.channels || []).length) {
     return response({ error: locale === "ru" ? "In-app уведомления должны оставаться включёнными." : "Ilova ichidagi bildirishnomalar yoqilgan bo‘lishi kerak." }, 400);
   }
-  if (selectedChannels.includes("email")) {
+  if (selectedChannels.includes("email") && !emailConfigured) {
     return response({ error: locale === "ru" ? "Email-канал мониторинга пока не введён в эксплуатацию." : "Monitoring email kanali hali ishga tushirilmagan." }, 409);
   }
   const db = requireD1();
