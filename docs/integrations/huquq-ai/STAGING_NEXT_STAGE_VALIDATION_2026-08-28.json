@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-28T16:25:04.1271451Z",
+  "environment": "staging",
+  "applicationCommit": "48870db4d6f45e8ae0665e1c01233728ea438589",
+  "purpose": "Record the post-acquisition-stop local validation for the next release-evidence stage without collecting documents or mutating remote resources.",
+  "acquisition": {
+    "crawlStarted": false,
+    "ingestionStarted": false,
+    "retryStarted": false,
+    "providerEvaluationStarted": false,
+    "remoteD1Writes": 0,
+    "productionChanged": false
+  },
+  "artifactDryRuns": {
+    "staging": {
+      "command": "npm run validate:artifact:staging",
+      "status": "pass",
+      "exitCode": 0,
+      "notes": "Bounded vinext build completed; staging corpus acquisition, live Lex and dense-index flags remained disabled."
+    },
+    "production": {
+      "command": "npm run validate:artifact:production",
+      "status": "pass",
+      "exitCode": 0,
+      "notes": "Bindings, migrations, manifest, handlers and artifact budgets validated; no deployment or migration was run."
+    }
+  },
+  "focusedTests": {
+    "command": "node --experimental-loader ./scripts/cloudflare-workers-loader.mjs --import tsx --test tests/legal-corpus-release-gate.test.ts tests/legal-corpus-federated-release-gate.test.ts tests/legal-corpus-federated-release-evidence-builder.test.ts tests/legal-corpus-qdrant-snapshots.test.ts tests/legal-corpus-chat-retrieval.test.ts",
+    "status": "pass",
+    "passed": 37,
+    "failed": 0,
+    "skipped": 0,
+    "notes": "Covers federation safety, disjoint-manifest checks, citation/release evidence binding, Qdrant snapshot ledger behavior and chat routing. Tests use local fixtures only."
+  },
+  "releaseGates": {
+    "federatedSnapshot": "blocked",
+    "indexed314Evaluation": "blocked",
+    "fullCorpusQdrantBenchmarkRestore": "blocked",
+    "federatedD1BackupRestore": "blocked"
+  },
+  "blockingEvidence": [
+    "No current disjoint federated snapshot manifest has been verified; legacy and v2 retain historical active queues and shard 3 remains excluded.",
+    "The dense-index probe recorded zero dense_vector_id rows across the four configured retrieval sources; the dense feature flag remains disabled.",
+    "A current indexed 314-scenario run cannot be bound to a frozen federated snapshot.",
+    "The v2 full-database export/restore probe did not produce an artifact, so federated D1 backup/restore remains unproven."
+  ],
+  "interpretation": "This closes local validation for the next stage only. It is not a release approval, legal review, indexed evaluation result, snapshot, backup/restore pass or production rollout."
+}

@@ -13407,3 +13407,21 @@ shard with 31,159 active jobs. Immutable terminal/technically-unavailable
 failure records remain historical and were not rewritten. The release queue
 freeze therefore remains unproven. Machine-readable results are in
 `STAGING_READONLY_CYCLE_2026-08-28.json`.
+
+## Next-stage local validation after acquisition stop (2026-08-28, 16:25Z)
+
+No document collection, crawl, ingestion, retry or provider evaluation was
+started. The staging and production artifact dry-runs both exited `0`; the
+production check validated bindings, migrations, manifest, handlers and
+artifact budgets without deploying or migrating. A focused local suite passed
+`37/37` tests covering federation safety, release-evidence binding, Qdrant
+snapshot ledger behavior and chat routing. These checks use local fixtures and
+do not mutate remote resources.
+
+The federated snapshot, current indexed 314-scenario evaluation, full-corpus
+Qdrant benchmark/restore and federated D1 backup/restore gates remain blocked
+for the previously recorded reasons: no verified disjoint snapshot, zero dense
+vector coverage with dense retrieval disabled, no current evaluation bound to a
+frozen snapshot, and no v2 full-database export artifact. The complete
+machine-readable record is in
+`STAGING_NEXT_STAGE_VALIDATION_2026-08-28.json`.
