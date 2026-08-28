@@ -23,6 +23,18 @@ D1 before returning this contract.
 are interface names only until a source is legally available, verified and enabled. A
 browser never receives the retrieval-service key.
 
+Interactive chat applies a fixed legal-authority ladder: JURO's indexed official
+legal corpus, validated live Lex.uz when indexed coverage is insufficient or
+stale, then cited general-web material only when official coverage remains weak
+or absent. Tenant-authorized documents remain separate case-fact context. The last
+tier is always `SECONDARY_REFERENCE`; it may provide factual context but cannot
+validate legislation, normative deadlines, calculations or mandatory actions.
+The model has no arbitrary URL-fetch capability and cannot change this order.
+Before the ladder starts, a bounded structured model call converts colloquial
+wording into a request-scoped index query, Lex.uz searches and a last-resort web
+query. This replaces topic-specific synonym maps; its output may rank or
+discover candidates but never counts as legal evidence.
+
 ## Private user-document evidence
 
 Private uploads do not implement `LegalSourceRecord` and are never returned by

@@ -1,6 +1,6 @@
 "use client";
 
-import { Laptop, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useEffect, useSyncExternalStore } from "react";
 import { isThemeMode, type ThemeMode } from "./theme";
 
@@ -11,7 +11,6 @@ type Props = {
 };
 
 const options = [
-  ["system", Laptop, "Системная", "Tizim"],
   ["light", Sun, "Светлая", "Yorug‘"],
   ["dark", Moon, "Тёмная", "Qorong‘i"],
 ] as const;
@@ -31,7 +30,8 @@ function markThemeInteraction() {
 function readThemeMode(): ThemeMode {
   if (typeof document === "undefined") return "system";
   const value = document.documentElement.dataset.themeMode;
-  return isThemeMode(value) ? value : "system";
+  if (value === "system") return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  return isThemeMode(value) ? value : "light";
 }
 
 function subscribeThemeMode(onStoreChange: () => void) {

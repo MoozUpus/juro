@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { glob, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { entitlementsForSubscription } from "../lib/billing/entitlements";
+import { entitlementsForSubscription, resolveAiAnswerCycleLimit } from "../lib/billing/entitlements";
 import { billingPlanSelectionSchema } from "../lib/billing/input";
 import { consultationBookingSchema } from "../lib/platform/consultation";
 import { conflictCheckDecisionSchema, lawyerAccessGrantSchema, lawyerRequestSchema } from "../lib/platform/lawyer-request";
@@ -184,6 +184,13 @@ test("workspace entitlements fail closed without current paid evidence", () => {
   ]) {
     assert.equal(entitlementsForSubscription(evidence, now).lawyerHandoff, false);
   }
+});
+
+test("AI answer cycles are unlimited only in local development", () => {
+  assert.equal(resolveAiAnswerCycleLimit("development", 20), null);
+  assert.equal(resolveAiAnswerCycleLimit("staging", 120), 120);
+  assert.equal(resolveAiAnswerCycleLimit("production", 600), 600);
+  assert.equal(resolveAiAnswerCycleLimit(undefined, 20), 20);
 });
 
 test("consultation and billing requests are strict and tenant-context shaped", () => {
@@ -1024,10 +1031,16 @@ test("global search is tenant-scoped, escapes LIKE input and avoids document-tex
 });
 
 test("AI chat obtains its cycle limit from server-side workspace entitlements", async () => {
-  const route = await readFile(new URL("../app/api/platform/ai/route.ts", import.meta.url), "utf8");
+  const [route, client] = await Promise.all([
+    readFile(new URL("../app/api/platform/ai/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/AiLawyerClient.tsx", import.meta.url), "utf8"),
+  ]);
   assert.match(route, /workspaceEntitlements\(db, workspace\.id\)/);
-  assert.match(route, /monthlyLimit: entitlements\.aiAnswerCyclesMonthly/);
-  assert.match(route, /usageSummary\(db, workspace\.id, user\.id, entitlements\.aiAnswerCyclesMonthly\)/);
+  assert.match(route, /resolveAiAnswerCycleLimit/);
+  assert.match(route, /monthlyLimit: answerCycleLimit/);
+  assert.match(route, /usageSummary\(db, workspace\.id, user\.id, answerCycleLimit\)/);
+  assert.match(client, /usage\?\.limit === null/);
+  assert.match(client, /безлимитно \(локально\)/);
   assert.doesNotMatch(route, /MONTHLY_CHAT_LIMIT/);
 });
 

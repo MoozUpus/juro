@@ -1,30 +1,3 @@
-.ai-modes {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: minmax(10.5rem, 1fr) minmax(10.5rem, 1fr) minmax(14rem, 1.35fr);
-  align-items: end;
-  gap: .75rem;
-}
-
-.ai-modes label {
-  display: flex;
-  align-items: center;
-  gap: .4rem;
-  color: #526571;
-  font-size: .6875rem;
-  font-weight: 700;
-}
-
-.ai-modes select {
-  min-height: 2.75rem;
-  border: 1px solid rgba(6, 40, 68, .18);
-  border-radius: .5rem;
-  background: #fff;
-  color: #062844;
-  padding: 0 2rem 0 .625rem;
-  font: inherit;
-}
-
 .ai-answer-body {
   white-space: pre-wrap;
 }
@@ -53,17 +26,6 @@
   margin: 0;
 }
 
-.ai-result-block {
-  margin-top: .625rem;
-  padding: .75rem .875rem;
-  border-inline-start: 3px solid #6e8290;
-  background: #f7f8f7;
-}
-
-.ai-result-block > p {
-  margin: .25rem 0 0;
-}
-
 .ai-assumption {
   border-inline-start-color: #be974f;
   background: #fff9ed;
@@ -85,35 +47,6 @@
   background: #f1f8f4;
 }
 
-.ai-evidence a span {
-  margin-top: .5rem;
-  color: #51636e;
-  font-size: .625rem;
-  line-height: 1.5;
-}
-
-.ai-evidence a em {
-  margin-top: .375rem;
-  color: #527060;
-  font-size: .5625rem;
-  font-style: normal;
-}
-
-@media (max-width: 480px) {
-  .ai-modes {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .ai-modes label {
-    display: grid;
-  }
-
-  .ai-modes select {
-    width: 100%;
-  }
-}
-
 .ai-answer-actions,
 .ai-branch-history {
   display: flex;
@@ -125,6 +58,7 @@
 }
 
 .ai-answer-actions button,
+.ai-answer-actions a,
 .ai-branch-history button {
   display: inline-flex;
   min-width: 2.75rem;
@@ -189,6 +123,7 @@
 }
 
 .ai-answer-actions button:focus-visible,
+.ai-answer-actions a:focus-visible,
 .ai-plan-destination select:focus-visible,
 .ai-branch-history button:focus-visible,
 .ai-edit-notice button:focus-visible,
@@ -258,74 +193,6 @@
   width: 100%;
   height: .25rem;
   accent-color: var(--platform-accent, #be974f);
-}
-
-/* Idle voice input is a composer action, not a separate content panel. The
-   full status panel returns only after recording starts or needs attention. */
-.ai-composer:has(> .ai-voice-controls[data-phase="idle"]) {
-  grid-template-columns: 3.25rem minmax(0, 1fr) 3.25rem;
-}
-
-.ai-composer > .ai-voice-controls[data-phase="idle"] {
-  width: 3.25rem;
-  height: 3.25rem;
-  grid-column: 1;
-  align-self: start;
-  gap: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.ai-composer > .ai-voice-controls[data-phase="idle"] .ai-voice-actions {
-  display: block;
-}
-
-.ai-composer > .ai-voice-controls[data-phase="idle"] .ai-voice-actions button {
-  display: grid;
-  width: 3.25rem;
-  height: 3.25rem;
-  min-height: 0;
-  place-items: center;
-  border: 1px solid rgba(6, 40, 68, .18);
-  border-radius: .75rem;
-  background: linear-gradient(180deg, #fff, #f7f6f2);
-  box-shadow: 0 1px 2px rgba(6, 40, 68, .06);
-  color: #8a692a;
-  padding: 0;
-}
-
-.ai-composer > .ai-voice-controls[data-phase="idle"] .ai-voice-actions span,
-.ai-composer > .ai-voice-controls[data-phase="idle"] > p {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-}
-
-.ai-composer:has(> .ai-voice-controls[data-phase="idle"]) > textarea {
-  grid-column: 2;
-  width: 100%;
-  height: 3.25rem;
-  min-height: 3.25rem;
-  padding-block: .8rem;
-}
-
-.ai-composer:has(> .ai-voice-controls[data-phase="idle"]) > textarea + button {
-  grid-column: 3;
-  width: 3.25rem;
-  height: 3.25rem;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .ai-composer > .ai-voice-controls[data-phase="idle"] .ai-voice-actions button:not(:disabled):hover {
-    border-color: rgba(190, 151, 79, .65);
-    background: #fffaf0;
-    color: #062844;
-  }
 }
 
 .ai-speech-controls {
@@ -771,6 +638,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .ai-answer-actions button:not(:disabled):hover,
+  .ai-answer-actions a:hover,
   .ai-branch-history button:hover { background: #f4f0e8; }
 
   .ai-feedback-actions > button:not(:disabled):hover,
@@ -845,10 +713,6 @@
   background: #fff;
   box-shadow: 0 .18rem .5rem rgba(6, 40, 68, .1);
   color: #062844;
-}
-
-.ai-modes .ai-select {
-  width: 100%;
 }
 
 .ai-select-field > span {
@@ -973,20 +837,6 @@
 @media (hover: hover) and (pointer: fine) {
   :is(.ai-modes, .ai-plan-destination, .ai-feedback-form) .ai-select-option:hover {
     background: #f4f0e8;
-  }
-}
-
-@media (max-width: 480px) {
-  .ai-modes .ai-select-field {
-    display: grid;
-  }
-
-  .ai-modes .ai-select {
-    width: 100%;
-  }
-
-  .ai-modes > label {
-    grid-column: 1 / -1;
   }
 }
 
@@ -1763,142 +1613,72 @@
   }
 }
 
-/* The AI workspace owns its theme so the rest of the authenticated platform
-   keeps its existing visual contract. The dark palette preserves JURO navy and
-   gold while keeping source text and interactive controls at AA contrast. */
-.ai-workspace.ai-theme-dark {
-  color-scheme: dark;
-  background: #061a29;
-  color: #edf2f5;
+/* The AI workspace inherits the same global theme as every platform module. */
+html[data-theme=dark] .ai-workspace { color-scheme:dark; }
+html[data-theme=dark] :is(
+  .ai-plan-card,.ai-document-prefill,.ai-feedback,.ai-preliminary,
+  .ai-date-popover,.ai-conversation-delete-confirm,.ai-source-modal
+) {
+  border-color:#315064;
+  background:#102c3e;
+  color:#edf2f5;
+  box-shadow:none;
 }
-
-.ai-theme-dark .ai-dialog { background: #071d2c; }
-
-.ai-theme-dark .ai-conversations,
-.ai-theme-dark .ai-context,
-.ai-theme-dark .ai-dialog > header,
-.ai-theme-dark .ai-composer {
-  border-color: #294657;
-  background: #0b2537;
-  color: #edf2f5;
+html[data-theme=dark] :is(
+  .ai-dialog,.ai-conversations,.ai-context,.ai-answer,.ai-plan-card,
+  .ai-document-prefill,.ai-feedback,.ai-source-card,.ai-source-modal
+) :is(h1,h2,h3,strong,label) { color:#f4f7f9; }
+html[data-theme=dark] :is(
+  .ai-dialog header p,.ai-start p,.ai-answer p,.ai-answer li,
+  .ai-context section>p,.ai-plan-card li span,.ai-document-prefill-note,
+  .ai-feedback p,.ai-source-card-body small,.ai-source-bookmark label,
+  .ai-source-bookmark output,.ai-conversations small
+) { color:#b7c5ce; }
+html[data-theme=dark] :is(
+  .ai-composer textarea,.ai-composer-mode button,.ai-segmented button,
+  .ai-date-trigger,.ai-date-grid>button,.ai-date-popover>footer button,
+  .ai-source-actions button,.ai-source-actions a,.ai-source-bookmark select,
+  .ai-source-bookmark textarea,.ai-document-prefill input,
+  .ai-document-prefill textarea,.ai-feedback textarea
+) {
+  border-color:#3b5a6e;
+  background:#0b2233;
+  color:#edf2f5;
 }
-
-.ai-theme-dark .ai-answer,
-.ai-theme-dark .ai-plan-card,
-.ai-theme-dark .ai-document-prefill,
-.ai-theme-dark .ai-feedback,
-.ai-theme-dark .ai-result-block,
-.ai-theme-dark .ai-preliminary,
-.ai-theme-dark .ai-source-card,
-.ai-theme-dark .ai-date-popover,
-.ai-theme-dark .ai-conversation-delete-confirm {
-  border-color: #315064;
-  background: #102c3e;
-  color: #edf2f5;
-  box-shadow: none;
+html[data-theme=dark] :is(
+  .ai-composer-mode button[aria-pressed="true"],
+  .ai-segmented button[aria-pressed="true"],
+  .ai-branch-history a[aria-current="page"]
+) { border-color:#caa55d; background:#3a301d; color:#fff3d8; }
+html[data-theme=dark] .ai-conversation-list a {
+  border-color:#315064;
+  background:#102c3e;
+  color:#edf2f5;
+  box-shadow:none;
 }
-
-.ai-theme-dark :is(.ai-dialog, .ai-conversations, .ai-context, .ai-answer, .ai-plan-card, .ai-document-prefill, .ai-feedback, .ai-source-card) :is(h1, h2, h3, strong, label) {
-  color: #f4f7f9;
+html[data-theme=dark] .ai-conversation-list a[aria-current="page"] {
+  border-color:#caa55d;
+  background:linear-gradient(135deg,#17384b,#302a1d);
+  box-shadow:inset 3px 0 #be974f;
 }
-
-.ai-theme-dark :is(.ai-dialog header p, .ai-start p, .ai-answer p, .ai-answer li, .ai-context section > p, .ai-plan-card header p, .ai-plan-card li span, .ai-document-prefill-note, .ai-feedback p, .ai-source-card-body small, .ai-source-bookmark label, .ai-source-bookmark output, .ai-conversations small) {
-  color: #b7c5ce;
-}
-
-.ai-theme-dark :is(.ai-start h2, .ai-answer h2, .ai-answer h3, .ai-context h2, .ai-conversations > header, .ai-context > header, .ai-conversations > div a) {
-  color: #edf2f5;
-}
-
-.ai-theme-dark :is(.ai-composer textarea, .ai-composer-mode button, .ai-segmented button, .ai-date-trigger, .ai-date-grid > button, .ai-date-popover > footer button, .ai-source-actions button, .ai-source-actions a, .ai-source-bookmark select, .ai-source-bookmark textarea, .ai-document-prefill input, .ai-document-prefill textarea, .ai-feedback textarea) {
-  border-color: #3b5a6e;
-  background: #0b2233;
-  color: #edf2f5;
-}
-
-.ai-theme-dark :is(.ai-composer-mode button[aria-pressed="true"], .ai-segmented button[aria-pressed="true"], .ai-branch-history a[aria-current="page"]) {
-  border-color: #caa55d;
-  background: #3a301d;
-  color: #fff3d8;
-}
-
-.ai-theme-dark :is(.ai-conversations > div a:hover, .ai-conversations > div button:hover, .ai-composer-mode button:not(:disabled):hover) {
-  background: #17384b;
-}
-
-.ai-theme-dark .ai-conversation-list a {
-  border-color: #315064;
-  background: #102c3e;
-  color: #edf2f5;
-  box-shadow: none;
-}
-
-.ai-theme-dark .ai-conversation-list strong { color: #edf2f5; }
-.ai-theme-dark .ai-conversation-list small { color: #b7c5ce; }
-.ai-theme-dark .ai-conversation-list a[aria-current="page"] {
-  border-color: #caa55d;
-  background: linear-gradient(135deg, #17384b, #302a1d);
-  box-shadow: inset 3px 0 #be974f;
-}
-.ai-theme-dark .ai-conversation-marker {
-  background: #0b2233;
-  box-shadow: 0 0 0 .2rem #263646;
-}
-.ai-theme-dark .ai-conversation-delete { color: #b7c5ce; }
-.ai-theme-dark .ai-conversation-delete[aria-expanded="true"] {
-  border-color: #9f5b55;
-  background: #402522;
-  color: #ffd7d2;
-}
-.ai-theme-dark .ai-conversation-delete-confirm span { color: #ffd7d2; }
-.ai-theme-dark .ai-conversation-delete-confirm button:not(.is-danger) {
-  border-color: #3b5a6e;
-  background: #0b2233;
-  color: #edf2f5;
-}
-
-.ai-theme-dark .ai-cautions,
-.ai-theme-dark .ai-unavailable,
-.ai-theme-dark .ai-source-modal-warning,
-.ai-theme-dark .ai-document-sensitive-consent {
-  border-color: #7e693d;
-  background: #352d1f;
-  color: #f2dfb7;
-}
-
-.ai-theme-dark .ai-error {
-  background: #402522;
-  color: #ffd7d2;
-}
-
-.ai-theme-dark .ai-source-bookmark { border-color: #315064; }
-.ai-theme-dark .ai-evidence q { color: #d4dee4; }
-.ai-theme-dark .ai-source-card-body em,
-.ai-theme-dark .ai-source-bookmark summary { color: #e6c985; }
-
-.ai-theme-dark .ai-source-modal {
-  border-color: #476174;
-  background: #0d283a;
-  color: #edf2f5;
-}
-
-.ai-theme-dark .ai-source-modal > header {
-  border-color: #315064;
-  background: #041a2a;
-}
-
-.ai-theme-dark .ai-source-modal-heading span { color: #e6c985; }
-.ai-theme-dark .ai-source-modal-heading small,
-.ai-theme-dark .ai-source-modal dt { color: #b7c5ce; }
-.ai-theme-dark .ai-source-modal dl div { background: #17384b; }
-.ai-theme-dark .ai-source-modal-text {
-  border-color: #3b5a6e;
-  background: #081f30;
-  color: #edf2f5;
-}
-
-.ai-theme-dark .ai-source-modal > footer a { background: #be974f; color: #061a29; }
-
-@media (max-width: 560px) {
-  .ai-theme-control span { display: none; }
+html[data-theme=dark] .ai-conversation-marker { background:#0b2233; box-shadow:0 0 0 .2rem #263646; }
+html[data-theme=dark] .ai-conversation-delete { color:#b7c5ce; }
+html[data-theme=dark] :is(
+  .ai-cautions,.ai-unavailable,.ai-source-modal-warning,.ai-document-sensitive-consent
+) { border-color:#7e693d; background:#352d1f; color:#f2dfb7; }
+html[data-theme=dark] .ai-error { background:#402522; color:#ffd7d2; }
+html[data-theme=dark] :is(.ai-source-bookmark,.ai-source-modal-text) { border-color:#315064; }
+html[data-theme=dark] .ai-evidence q { color:#d4dee4; }
+html[data-theme=dark] :is(.ai-source-card-body em,.ai-source-bookmark summary,.ai-source-modal-heading span) { color:#e6c985; }
+html[data-theme=dark] .ai-source-modal>header { border-color:#315064; background:#041a2a; }
+html[data-theme=dark] :is(.ai-source-modal-heading small,.ai-source-modal dt) { color:#b7c5ce; }
+html[data-theme=dark] .ai-source-modal dl div { background:#17384b; }
+html[data-theme=dark] .ai-source-modal-text { background:#081f30; color:#edf2f5; }
+html[data-theme=dark] .ai-source-modal>footer a { background:#be974f; color:#061a29; }
+html[data-theme=dark] .ai-composer-input { border-color:#3b5a6e; background:#0b2233; }
+html[data-theme=dark] .ai-composer-options .ai-modes { border-color:#315064; background:#102c3e; }
+html[data-theme=dark] .ai-inline-citations :is(a,button) {
+  border-color:#caa55d;
+  background:rgba(202,165,93,.12);
+  color:#e6c985;
 }

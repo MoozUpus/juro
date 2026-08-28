@@ -20,7 +20,7 @@ type GuestResult = {
     originalUrl: string;
   }>;
   legalDatabaseAsOf: string;
-  sourceAccessMode?: "direct" | "approved_package";
+  sourceAccessMode?: "direct" | "approved_package" | "mixed";
   sourcesRetrievedAt?: string | null;
 };
 

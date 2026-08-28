@@ -31,7 +31,6 @@ import { retrieveCorpusAwareLegalSources } from "../../../../lib/legal-corpus/ch
 import { directSourceCards } from "../../../../lib/legal/direct-retrieval";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import {
-  AI_INTERACTIVE_FINALIZATION_RESERVE_MS,
   createAiExecutionBudget,
   type AiExecutionBudget,
 } from "../../../../lib/ai/execution-budget";
@@ -430,7 +429,10 @@ export async function POST(request: Request): Promise<Response> {
     // otherwise the existing request-scoped live validator remains exact.
     const configuredProvider = provider.name === "anthropic" ? "anthropic" : "openai";
     const configuredModel = providerStatus.model;
-    budget = createAiExecutionBudget({ callerSignal: request.signal });
+    budget = createAiExecutionBudget({
+      callerSignal: request.signal,
+      enforceOverallTimeout: false,
+    });
     telemetry = {
       db,
       budget,
@@ -624,11 +626,9 @@ export async function POST(request: Request): Promise<Response> {
       }, 422, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
     }
 
-    // Do not persist/consume a guest turn once the shared interactive deadline
-    // no longer leaves room for the atomic completion. The same provider
-    // reserve protects registered chat; this explicit boundary keeps the
-    // guest's one allowed answer equally non-chargeable on a late result.
-    if (budget.signal.aborted || budget.remainingMs < AI_INTERACTIVE_FINALIZATION_RESERVE_MS) {
+    // A disconnected guest request is released. Retrieval and LLM calls keep
+    // their own bounded timeouts, so there is no unrelated route-wide cutoff.
+    if (budget.signal.aborted) {
       await failGuestAiRun({ db, run: reservation.run, errorCode: "PROVIDER_TIMEOUT" });
       await recordGuestAiSlo({
         telemetry: telemetry && {

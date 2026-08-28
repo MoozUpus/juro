@@ -54,6 +54,23 @@ const source = JSON.parse(
 
 const environments = ["development", "staging", "production"] as const;
 
+test("local staging-corpus mode remotes only a separately named corpus D1 binding", () => {
+  const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+  const taskRunner = readFileSync(new URL("../scripts/platform-tasks.mjs", import.meta.url), "utf8");
+  assert.match(viteConfig, /JURO_STAGING_CORPUS_READS/u);
+  assert.match(viteConfig, /binding: "LEGAL_CORPUS_READ_DB"/u);
+  assert.match(viteConfig, /database_name: "juro-staging"/u);
+  assert.match(viteConfig, /database_id: "bb716a96-b2fb-4823-90d6-6c228fed181a"/u);
+  assert.match(viteConfig, /remote: true/u);
+  assert.doesNotMatch(viteConfig, /binding: "DB"[\s\S]{0,100}remote: true/u);
+  assert.match(taskRunner, /case "dev-staging-corpus"/u);
+  assert.match(taskRunner, /JURO_STAGING_CORPUS_READS: "true"/u);
+  assert.doesNotMatch(
+    taskRunner.slice(taskRunner.indexOf('case "dev-staging-corpus"'), taskRunner.indexOf('case "start"')),
+    /CLOUDFLARE_ENV/u,
+  );
+});
+
 const queueContract = [
   ["DOCUMENT_ANALYSIS_QUEUE", "document-analysis"],
   ["OCR_PROCESSING_QUEUE", "ocr-processing"],
@@ -187,6 +204,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       "LEGAL_CORPUS_SHADOW_MODE",
     ]) {
       const expected = environment === "staging" && stagingCorpusFlags.has(flag)
+        && flag !== "LEGAL_CORPUS_SHADOW_MODE"
         ? "true"
         : "false";
       assert.equal(
@@ -236,7 +254,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     assert.equal(
       config.d1_databases[0]?.migrations_pattern,
       environment === "production"
-        ? "./drizzle/{0121,012[4-9],013[0-9],014[0-4]}_*.sql"
+        ? "./drizzle/{0121,012[4-9],013[0-9],014[0-5]}_*.sql"
         : undefined,
     );
     assert.deepEqual(

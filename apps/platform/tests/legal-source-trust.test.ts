@@ -387,6 +387,18 @@ test("stale and unavailable legal databases cannot retain confirmed conclusions"
   assert.equal(stale.successOutlook, null);
   assert.equal(stale.suggestLawyer, true);
   assert.match(stale.answer, /более 7 дней/);
+  const staleAgain = enforceLegalDatabaseFreshness(stale, {
+    status: "stale",
+    asOf: "2026-07-20T09:00:00.000Z",
+    ageDays: 11,
+    maxAgeDays: 7,
+  }, { locale: "ru", answerMode: "detailed", reasoningMode: "fast" });
+  assert.deepEqual(staleAgain, stale, "freshness enforcement must be idempotent when a stored answer is loaded again");
+  assert.equal(staleAgain.answer.match(/Правовая база JURO не обновлялась/gu)?.length, 1);
+  assert.equal(
+    staleAgain.assumptions.filter((item) => item.statement === "Актуальность правовой базы требует подтверждения").length,
+    1,
+  );
 
   const unavailable = enforceLegalDatabaseFreshness(legalResult(), {
     status: "unavailable",

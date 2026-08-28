@@ -90,7 +90,9 @@ export async function discoverOfficialLexUrls(input: {
     schema: discoveryJsonSchema,
     parse: (value) => discoverySchema.parse(value),
     instructions: [
-      "Find only official Lex.uz document pages relevant to the supplied legal search query.",
+      "Research the supplied Uzbekistan legal issue using the official Lex.uz domain only.",
+      "Use the web-search tool iteratively when needed: translate everyday wording into legal concepts, inspect the results, and refine the next search if the first one does not identify the governing act.",
+      "Prefer the current parent code or base act whose provisions govern the issue; do not prefer an amendment notice, draft, commentary, PDF collection, search page, or news item merely because its title repeats more query words.",
       "Return candidate document URLs only. Do not answer the legal question, quote law, infer an article, or use snippets as evidence.",
       "Every URL must be an HTTPS lex.uz or www.lex.uz document URL in the requested language.",
     ].join(" "),
@@ -104,7 +106,11 @@ export async function discoverOfficialLexUrls(input: {
     reasoningEffort: "low",
     textVerbosity: "low",
     maxOutputTokens: 300,
-    webSearchAllowedDomains: ["lex.uz", "www.lex.uz"],
+    webSearch: {
+      purpose: "official_lex_discovery",
+      allowedDomains: ["lex.uz", "www.lex.uz"],
+    },
+    maxToolCalls: 4,
     signal: input.signal,
   });
   await input.onTelemetry?.({
@@ -115,5 +121,11 @@ export async function discoverOfficialLexUrls(input: {
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
   });
-  return validatedLexUrls(result.data.urls, input.locale);
+  // Prefer the model's deliberately ranked candidates, then salvage only
+  // provider-observed Lex URLs. Every value still passes the canonical route
+  // allowlist here and the caller's full fetch/parser/quality gates later.
+  return validatedLexUrls([
+    ...result.data.urls,
+    ...(result.webSources ?? []).map((source) => source.url),
+  ], input.locale);
 }

@@ -5,6 +5,7 @@ export const operationalFeatureKeys = [
   "ai_openai_primary",
   "ai_anthropic_fallback",
   "ai_lex_web_discovery",
+  "ai_secondary_web_research",
   "document_analysis_upload",
   "lawyer_handoff",
   "voice_mode",

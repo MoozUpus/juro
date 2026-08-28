@@ -121,13 +121,21 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const { messageId } = await context.params;
-  const sourceUrl = new URL(request.url).searchParams.get("sourceUrl") ?? "";
+  const searchParams = new URL(request.url).searchParams;
+  const sourceUrl = searchParams.get("sourceUrl") ?? "";
+  const requestedArticleRaw = searchParams.get("article");
+  const requestedArticle = normalizedArticle(requestedArticleRaw);
   const privateVectorId = parsePrivateDocumentLocator(sourceUrl);
-  if (!UUID.test(messageId) || sourceUrl.length > 2_000 || (!officialLexUrl(sourceUrl) && !privateVectorId)) {
+  if (
+    !UUID.test(messageId)
+    || sourceUrl.length > 2_000
+    || (requestedArticleRaw !== null && (requestedArticleRaw.length > 160 || !requestedArticle))
+    || (!officialLexUrl(sourceUrl) && !privateVectorId)
+  ) {
     return response({ code: "CITATION_UNAVAILABLE" }, 404);
   }
   const db = requireD1();
-  const citation = await db.prepare(`SELECT reference.title,
+  const citations = await db.prepare(`SELECT reference.title,
       reference.article_reference AS articleReference,reference.excerpt,
       reference.document_status AS documentStatus,reference.effective_date AS effectiveDate,
       reference.canonical_url AS canonicalUrl,reference.source_locale AS sourceLocale,
@@ -138,7 +146,12 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
     WHERE reference.message_id=? AND reference.canonical_url=?
       AND reference.citation_validation_status='validated'
       AND conversation.workspace_id=? AND conversation.owner_user_id=?
-    LIMIT 1`).bind(messageId, sourceUrl, workspace.id, user.id).first<CitationRow>();
+    ORDER BY reference.created_at ASC LIMIT 64`).bind(
+    messageId, sourceUrl, workspace.id, user.id,
+  ).all<CitationRow>();
+  const citation = requestedArticle
+    ? citations.results.find((candidate) => normalizedArticle(candidate.articleReference) === requestedArticle)
+    : citations.results[0];
   if (!citation) return response({ code: "CITATION_UNAVAILABLE" }, 404);
 
   if (privateVectorId) {

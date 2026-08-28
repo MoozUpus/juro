@@ -102,6 +102,14 @@ test("sparse retrieval returns only the current, scope-authorized version", asyn
       "SELECT sparse_terms_json AS sparseTermsJson FROM legal_corpus_chunks LIMIT 1",
     ).get() as { sparseTermsJson: string }).sparseTermsJson, "[]");
     assert.equal(assessLegalCorpusCoverage({ query: "статья 25", sources: results }), "good_coverage");
+    const sparseFallback = await retrieveLegalCorpus({
+      db: d1,
+      query: "статья 25 порядок проверки",
+      denseSearch: async () => { throw new Error("dense provider unavailable"); },
+    });
+    assert.equal(sparseFallback[0]?.chunkId, results[0]?.chunkId);
+    assert.equal(sparseFallback[0]?.sparseRank, 1);
+    assert.equal(sparseFallback[0]?.denseRank, undefined);
   } finally {
     sqlite.close();
   }

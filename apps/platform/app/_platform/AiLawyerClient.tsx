@@ -2,10 +2,11 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { AudioLines, BookmarkPlus, BookOpenCheck, Bot, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Moon, Pencil, Plus, RotateCcw, Send, ShieldAlert, Square, Sun, ThumbsUp, Trash2, X } from "lucide-react";
+import { AudioLines, BookmarkPlus, BookOpenCheck, Bot, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Pencil, Plus, RotateCcw, Send, Settings2, ShieldAlert, Square, ThumbsUp, Trash2, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryRequest, isRestartableAiTerminal, isUserCancelledAiRequest, shouldOfferAiRetry, shouldUseFreshAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
+import { nonRepeatingLegalDetail } from "../../lib/ai/legal-output-safety";
 import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
 import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, type VoiceSpeechPhase } from "../../lib/ai/voice-ui";
 import { formatPlatformDate, formatPlatformLongDate, formatPlatformMonth } from "../../lib/platform/date-time";
@@ -15,8 +16,20 @@ import { usePlatformBasePath } from "./PlatformRouteContext";
 import { AiSelect } from "./AiSelect";
 import { AssistantSpeechControls, VoiceMessageControls } from "./VoiceMessageControls";
 
+const SafeMarkdown = lazy(() => import("./SafeMarkdown").then((module) => ({ default: module.SafeMarkdown })));
+
+function GroundedMarkdown({ children, className, allowedLinks }: {
+  children: string;
+  className?: string;
+  allowedLinks: readonly string[];
+}) {
+  return <Suspense fallback={<p className={className} aria-busy="true">{children}</p>}>
+    <SafeMarkdown className={className} allowedLinks={allowedLinks}>{children}</SafeMarkdown>
+  </Suspense>;
+}
+
 type ProviderStatus = { configured: boolean; provider: string | null; model: string | null; fallbackConfigured: boolean };
-type Usage = { used: number; limit: number; periodEnd: string };
+type Usage = { used: number; limit: number | null; periodEnd: string };
 type SourceFreshness = { status: "fresh" | "stale" | "unavailable"; asOf: string; ageDays: number | null; maxAgeDays: number };
 type Conversation = { id: string; title: string; locale: string; status: string; updatedAt: string; lastAnswer: string | null; facts: Fact[] };
 type CaseOption = { id: string; title: string; status: string; updatedAt: string };
@@ -36,7 +49,7 @@ type Source = {
   adoptingAuthority?: string | null;
   sourceClass?: string;
   language?: "uz-Latn" | "uz-Cyrl" | "ru" | "en";
-  sourceOrigin?: "indexed" | "live";
+  sourceOrigin?: "indexed" | "live" | "web";
 };
 type ArticleDetails = {
   documentTitle: string;
@@ -89,18 +102,20 @@ type LegalResult = {
   summary: string;
   answer: string;
   clarificationQuestions: string[];
-  confirmedFindings: Array<{ title: string; explanation: string }>;
+  confirmedFindings: Array<{ title: string; explanation: string; sourceIds?: string[] }>;
   assumptions: Array<{ statement: string; impact: string }>;
-  risks: Array<{ level: "low" | "medium" | "high" | "critical"; title: string; explanation: string }>;
+  risks: Array<{ level: "low" | "medium" | "high" | "critical"; title: string; explanation: string; sourceIds?: string[] }>;
   sources: Source[];
   requiredDocuments: Array<{ name: string; reason: string; required: boolean }>;
-  actionPlan: Array<{ title: string; description: string }>;
-  deadlines: Array<{ title: string; dueDate: string | null; calculationMethod: string; confidence: string }>;
+  actionPlan: Array<{ title: string; description: string; sourceIds?: string[] }>;
+  deadlines: Array<{ title: string; dueDate: string | null; calculationMethod: string; confidence: string; sourceIds?: string[] }>;
   urgency: "normal" | "high" | "critical";
   suggestedDocument: { templateCode: string | null; title: string; reason: string } | null;
   suggestLawyer: boolean;
   legalDatabaseAsOf: string;
-  sourceAccessMode?: "direct" | "approved_package";
+  sourceAccessMode?: "direct" | "approved_package" | "mixed";
+  evidenceMode?: "official" | "mixed" | "secondary_only" | "private_only" | "none";
+  referenceNotes?: Array<{ title: string; note: string; sourceIds: string[] }>;
   sourcesRetrievedAt?: string | null;
   sourceValidationStatus?: "validated" | "unavailable";
   coverageStatus?: "good_coverage" | "partial_coverage" | "weak_coverage" | "no_coverage";
@@ -159,6 +174,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const streamAbortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const pendingAiRequestRef = useRef<AiRetryRequest<AiRequestPayload> | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [canRetry, setCanRetry] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
   const [targetCaseId, setTargetCaseId] = useState("");
@@ -183,7 +199,6 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [deleteCandidateId, setDeleteCandidateId] = useState("");
   const [deletingConversationId, setDeletingConversationId] = useState("");
   const [conversationDeleteError, setConversationDeleteError] = useState("");
-  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   function aiLocation(params = new URLSearchParams()): string {
     if (voiceMode) params.set("mode", "voice");
@@ -219,25 +234,6 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }, [ru, selectedBranchId, selectedConversationId]);
 
   useEffect(() => { void load(); }, [load]);
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem("juro-ai-theme");
-      setTheme(saved === "dark" || saved === "light"
-        ? saved
-        : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    } catch {
-      setTheme("light");
-    }
-  }, []);
-
-  function toggleTheme() {
-    setTheme((current) => {
-      const next = current === "dark" ? "light" : "dark";
-      try { window.localStorage.setItem("juro-ai-theme", next); } catch { /* Theme persistence is optional. */ }
-      return next;
-    });
-  }
 
   useEffect(() => {
     if (planConfirmationOpen) planConfirmationRef.current?.focus();
@@ -361,8 +357,12 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         terminal = await readAiEventStream(response, (progress) => {
           if (progress.stage === "accepted") {
             setStreamStatus(ru ? "Понимаю вопрос" : "Savolni tushunyapman");
+          } else if (progress.stage === "document_search_started") {
+            setStreamStatus(ru ? "Сначала проверяю юридические документы в базе JURO" : "Avval JURO bazasidagi yuridik hujjatlarni tekshiryapman");
           } else if (progress.stage === "lex_search_started") {
             setStreamStatus(ru ? "Ищу действующие нормы в Lex.uz" : "Lex.uz’dan amaldagi normalarni izlayapman");
+          } else if (progress.stage === "internet_search_started") {
+            setStreamStatus(ru ? "Дополняю поиск другими открытыми материалами" : "Qidiruvni boshqa ochiq materiallar bilan to‘ldiryapman");
           } else if (progress.stage === "source_verified") {
             setStreamStatus(ru ? "Проверяю официальный источник" : "Rasmiy manbani tekshiryapman");
           } else if (progress.stage === "provider_started") {
@@ -598,12 +598,13 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }
 
   const visibleSources = answer?.result.sources.filter((source) =>
-    safeOfficialUrl(source.originalUrl) || isTrustedPrivateSource(source)) ?? [];
+    safeOfficialUrl(source.originalUrl) || isTrustedPrivateSource(source) || isSafeSecondarySource(source)) ?? [];
   const hasPrivateSources = visibleSources.some(isTrustedPrivateSource);
+  const hasSecondarySources = visibleSources.some(isSafeSecondarySource);
 
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
   return (
-    <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""} ${theme === "dark" ? "ai-theme-dark" : "ai-theme-light"}`}>
+    <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""}`}>
       <aside className="ai-conversations">
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
         <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setOptimisticQuestion(""); setPreliminary(null); setVoiceRecordingId(""); setEditSourceMessageId(""); window.location.assign(aiLocation()); }}><Plus />{ru ? "Новый вопрос" : "Yangi savol"}</button>
@@ -617,7 +618,9 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         </nav>
       </aside>
       <section className="ai-dialog" aria-labelledby="ai-lawyer-heading">
-        <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения и тема" : "Muloqot usuli va mavzu"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button><button className="ai-theme-control" type="button" aria-pressed={theme === "dark"} aria-label={theme === "dark" ? (ru ? "Включить светлую тему" : "Yorug‘ mavzuni yoqish") : (ru ? "Включить тёмную тему" : "Qorong‘i mavzuni yoqish")} title={theme === "dark" ? (ru ? "Светлая тема" : "Yorug‘ mavzu") : (ru ? "Тёмная тема" : "Qorong‘i mavzu")} onClick={toggleTheme}>{theme === "dark" ? <Sun /> : <Moon />}<span>{theme === "dark" ? (ru ? "Светлая" : "Yorug‘") : (ru ? "Тёмная" : "Qorong‘i")}</span></button></nav></header>
+        <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (usage?.limit === null
+          ? (ru ? `Право Узбекистана · безлимитно (локально) · ${usage.used} ответов` : `O‘zbekiston huquqi · lokal cheklanmagan · ${usage.used} javob`)
+          : (ru ? `Право Узбекистана · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston huquqi · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`)) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button></nav></header>
         {voiceMode && <VoiceModeStage
           locale={locale}
           configured={Boolean(status?.configured)}
@@ -636,10 +639,13 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             <div className="ai-transcript">
               {(answer.turns ?? []).filter((turn) => turn.responseMessageId !== answer.messageId).map((turn) => <ConversationTurnPair key={turn.branchId} turn={turn} ru={ru} />)}
               <HumanMessage question={answer.question || answer.turns?.at(-1)?.question || ""} ru={ru} />
-              <LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} />
+              <LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} showActionPlan={false} onQuestionSelect={(selected) => {
+                setQuestion(selected);
+                requestAnimationFrame(() => composerRef.current?.focus());
+              }} />
             </div>
             {answer.result.responseKind === "answer" && answer.result.actionPlan.length > 0 && dismissedPlanMessageId !== answer.messageId && <section className="ai-plan-card" aria-labelledby="ai-plan-card-title">
-              <header><small>{ru ? "После ответа AI" : "AI javobidan so‘ng"}</small><h2 id="ai-plan-card-title">{ru ? "Создать план действий" : "Harakatlar rejasini yaratish"}</h2><p>{answer.result.summary}</p></header>
+              <header><small>{ru ? "После ответа AI" : "AI javobidan so‘ng"}</small><h2 id="ai-plan-card-title">{ru ? "Создать план действий" : "Harakatlar rejasini yaratish"}</h2></header>
               <ol>{answer.result.actionPlan.slice(0, 6).map((step, index) => <li key={`${step.title}-${index}`}><strong>{step.title}</strong><span>{step.description}</span></li>)}</ol>
               {planEditorOpen && <div className="ai-plan-destination"><label htmlFor="ai-plan-case">{ru ? "Куда добавить план" : "Rejani qayerga qo‘shish"}</label><AiSelect id="ai-plan-case" value={targetCaseId} disabled={savingPlan} onChange={setTargetCaseId} options={[{ value: "", label: ru ? "Новое дело" : "Yangi ish" }, ...cases.map((item) => ({ value: item.id, label: item.title }))]} /></div>}
               {!planConfirmationOpen ? <footer><button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => setPlanConfirmationOpen(true)}><ListPlus />{targetCaseId ? (ru ? "Создать в выбранном деле" : "Tanlangan ishda yaratish") : (ru ? "Создать план" : "Reja yaratish")}</button><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanEditorOpen((current) => !current)}>{ru ? "Изменить" : "O‘zgartirish"}</button><button type="button" className="quiet" disabled={savingPlan} onClick={() => setDismissedPlanMessageId(answer.messageId || "")}>{ru ? "Не предлагать" : "Taklif qilmaslik"}</button></footer> : <div className="ai-plan-confirmation" ref={planConfirmationRef} tabIndex={-1} role="group" aria-label={ru ? "Подтверждение сохранения плана" : "Rejani saqlashni tasdiqlash"}>
@@ -692,31 +698,37 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         </div>
         <form className="ai-composer" onSubmit={submit}>
           {editSourceMessageId && <div className="ai-edit-notice" role="status"><span>{ru ? "Редактирование создаст новую версию; исходный ответ сохранится." : "Tahrirlash yangi versiya yaratadi; oldingi javob saqlanadi."}</span><button type="button" onClick={() => { setEditSourceMessageId(""); setQuestion(""); }}>{ru ? "Отменить" : "Bekor qilish"}</button></div>}
-          <div className="ai-modes">
-            <div className="ai-mode-field"><span id="ai-answer-mode-label">{ru ? "Формат ответа" : "Javob formati"}</span><div className="ai-segmented" role="group" aria-labelledby="ai-answer-mode-label"><button type="button" aria-pressed={answerMode === "short"} onClick={() => setAnswerMode("short")}>{ru ? "Кратко" : "Qisqa"}</button><button type="button" aria-pressed={answerMode === "detailed"} onClick={() => setAnswerMode("detailed")}>{ru ? "Подробно" : "Batafsil"}</button></div></div>
-            <div className="ai-mode-field"><span id="ai-reasoning-mode-label">{ru ? "Глубина анализа" : "Tahlil chuqurligi"}</span><div className="ai-segmented" role="group" aria-labelledby="ai-reasoning-mode-label"><button type="button" aria-pressed={reasoningMode === "fast"} onClick={() => setReasoningMode("fast")}>{ru ? "Быстро" : "Tez"}</button><button type="button" aria-pressed={reasoningMode === "deep"} onClick={() => setReasoningMode("deep")}>{ru ? "Глубоко" : "Chuqur"}</button></div></div>
-            <AiDatePicker ru={ru} value={legalContextDate} max={uzbekistanCalendarDate()} onChange={(value) => { pendingAiRequestRef.current = null; setCanRetry(false); setLegalContextDate(value); }} />
+          <details className="ai-composer-options">
+            <summary><Settings2 aria-hidden="true" /><span>{ru ? "Настройки ответа" : "Javob sozlamalari"}</span><small>{answerMode === "short" ? (ru ? "Кратко" : "Qisqa") : (ru ? "Подробно" : "Batafsil")} · {reasoningMode === "fast" ? (ru ? "Быстро" : "Tez") : (ru ? "Глубоко" : "Chuqur")}{legalContextDate ? ` · ${formatDate(legalContextDate, ru)}` : ""}</small></summary>
+            <div className="ai-modes">
+              <div className="ai-mode-field"><span id="ai-answer-mode-label">{ru ? "Формат ответа" : "Javob formati"}</span><div className="ai-segmented" role="group" aria-labelledby="ai-answer-mode-label"><button type="button" aria-pressed={answerMode === "short"} onClick={() => setAnswerMode("short")}>{ru ? "Кратко" : "Qisqa"}</button><button type="button" aria-pressed={answerMode === "detailed"} onClick={() => setAnswerMode("detailed")}>{ru ? "Подробно" : "Batafsil"}</button></div></div>
+              <div className="ai-mode-field"><span id="ai-reasoning-mode-label">{ru ? "Глубина анализа" : "Tahlil chuqurligi"}</span><div className="ai-segmented" role="group" aria-labelledby="ai-reasoning-mode-label"><button type="button" aria-pressed={reasoningMode === "fast"} onClick={() => setReasoningMode("fast")}>{ru ? "Быстро" : "Tez"}</button><button type="button" aria-pressed={reasoningMode === "deep"} onClick={() => setReasoningMode("deep")}>{ru ? "Глубоко" : "Chuqur"}</button></div></div>
+              <AiDatePicker ru={ru} value={legalContextDate} max={uzbekistanCalendarDate()} onChange={(value) => { pendingAiRequestRef.current = null; setCanRetry(false); setLegalContextDate(value); }} />
+            </div>
+          </details>
+          <div className="ai-composer-input">
+            <VoiceMessageControls
+              locale={locale}
+              disabled={!status?.configured || sending}
+              recordingId={voiceRecordingId}
+              presentation={voiceMode ? "stage" : "inline"}
+              onPhaseChange={setVoiceRecorderPhase}
+              onTranscript={({ recordingId, transcript }) => { setVoiceRecordingId(recordingId); setQuestion(transcript); pendingAiRequestRef.current = null; setCanRetry(false); }}
+              onClear={() => setVoiceRecordingId("")}
+            />
+            <label className="sr-only" htmlFor="ai-question">{ru ? "Юридический вопрос" : "Yuridik savol"}</label>
+            <textarea ref={composerRef} id="ai-question" value={question} onChange={(event) => { pendingAiRequestRef.current = null; setCanRetry(false); setQuestion(event.target.value); }} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Опишите ситуацию или задайте вопрос…" : "Vaziyatni yozing yoki savol bering…"} />
+            {sending
+              ? <button type="button" onClick={() => streamAbortRef.current?.abort()} aria-label={ru ? "Остановить генерацию" : "Javob yaratishni to‘xtatish"}><Square /></button>
+              : <button disabled={!status?.configured || !question.trim()} aria-label={ru ? "Отправить" : "Yuborish"}><Send /></button>}
           </div>
-          <VoiceMessageControls
-            locale={locale}
-            disabled={!status?.configured || sending}
-            recordingId={voiceRecordingId}
-            presentation={voiceMode ? "stage" : "inline"}
-            onPhaseChange={setVoiceRecorderPhase}
-            onTranscript={({ recordingId, transcript }) => { setVoiceRecordingId(recordingId); setQuestion(transcript); pendingAiRequestRef.current = null; setCanRetry(false); }}
-            onClear={() => setVoiceRecordingId("")}
-          />
-          <label className="sr-only" htmlFor="ai-question">{ru ? "Юридический вопрос" : "Yuridik savol"}</label>
-          <textarea id="ai-question" value={question} onChange={(event) => { pendingAiRequestRef.current = null; setCanRetry(false); setQuestion(event.target.value); }} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Что произошло? Enter — отправить" : "Nima bo‘ldi? Enter — yuborish"} />
-          {sending
-            ? <button type="button" onClick={() => streamAbortRef.current?.abort()} aria-label={ru ? "Остановить генерацию" : "Javob yaratishni to‘xtatish"}><Square /></button>
-            : <button disabled={!status?.configured || !question.trim()} aria-label={ru ? "Отправить" : "Yuborish"}><Send /></button>}
+          <small className="ai-composer-hint">{ru ? "Enter — отправить · Shift + Enter — новая строка · не указывайте лишние персональные данные" : "Enter — yuborish · Shift + Enter — yangi satr · ortiqcha shaxsiy ma’lumotlarni kiritmang"}</small>
         </form>
       </section>
       <aside className="ai-context">
         <header><BookOpenCheck /><strong>{ru ? "Контекст" : "Kontekst"}</strong></header>
         <section><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section className="ai-evidence"><h2>{hasPrivateSources ? (ru ? "Источники" : "Manbalar") : (ru ? "Основания в Lex.uz" : "Lex.uz asoslari")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, ru)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
+        <section className="ai-evidence"><h2>{hasPrivateSources || hasSecondarySources ? (ru ? "Источники" : "Manbalar") : (ru ? "Основания в Lex.uz" : "Lex.uz asoslari")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, ru)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
       </aside>
     </section>
   );
@@ -862,6 +874,7 @@ function LegalSourceCard({
   const [error, setError] = useState("");
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const privateSource = isTrustedPrivateSource(source);
+  const secondarySource = isSafeSecondarySource(source);
 
   useEffect(() => {
     if (!open) return;
@@ -880,6 +893,7 @@ function LegalSourceCard({
     setLoading(true);
     try {
       const query = new URLSearchParams({ sourceUrl: source.originalUrl });
+      if (source.article) query.set("article", source.article);
       const response = await fetch(`/api/platform/ai/citations/${encodeURIComponent(messageId)}?${query}`, {
         cache: "no-store",
       });
@@ -928,7 +942,7 @@ function LegalSourceCard({
 
   const origin = source.sourceOrigin ?? (sourceAccessMode === "direct" ? "live" : "indexed");
 
-  return <article className="ai-source-card">
+  return <article className="ai-source-card" id={sourceCardDomId(source.sourceId)} tabIndex={-1}>
     <div className="ai-source-card-body">
       <strong>{source.actTitle}</strong>
       {source.article && <span>{source.article}</span>}
@@ -936,18 +950,20 @@ function LegalSourceCard({
       {source.adoptingAuthority && <small>{source.adoptingAuthority}</small>}
       {source.excerpt && <q>{source.excerpt}</q>}
       <em>{sourceStatusLabel(source.status, ru)}{source.effectiveDate ? ` · ${formatDate(source.effectiveDate, ru)}` : ""}</em>
-      <small>{sourceClassLabel(source.sourceClass, ru)} · {languageLabel(source.language ?? (locale === "uz" ? "uz-Latn" : "ru"), ru)} · {privateSource ? (ru ? "защищённый индекс" : "himoyalangan indeks") : origin === "live" ? "live Lex.uz" : (ru ? "локальный индекс" : "lokal indeks")}</small>
+      <small>{sourceClassLabel(source.sourceClass, ru)} · {languageLabel(source.language ?? (locale === "uz" ? "uz-Latn" : "ru"), ru)} · {privateSource ? (ru ? "защищённый индекс" : "himoyalangan indeks") : secondarySource ? (ru ? "открытый интернет" : "ochiq internet") : origin === "live" ? "live Lex.uz" : (ru ? "локальный индекс" : "lokal indeks")}</small>
       <small>{privateSource
         ? (ru ? "Доступ и целостность файла проверены для текущего пользователя" : "Faylga kirish va uning yaxlitligi joriy foydalanuvchi uchun tekshirildi")
-        : sourceAccessMode === "direct"
+        : secondarySource
+          ? (ru ? "Справочный материал: не заменяет норму Lex.uz" : "Ma’lumotnoma materiali: Lex.uz normasini almashtirmaydi")
+        : origin === "live"
           ? (ru ? "Проверено напрямую по Lex.uz" : "Lex.uz orqali bevosita tekshirildi")
           : (ru ? "Проверено по утверждённому пакету источников" : "Tasdiqlangan manbalar paketi bo‘yicha tekshirildi")}</small>
     </div>
     <div className="ai-source-actions">
-      <button type="button" onClick={() => void showArticle()}><BookOpenCheck aria-hidden="true" />{privateSource ? (ru ? "Текст документа" : "Hujjat matni") : (ru ? "Текст статьи" : "Modda matni")}</button>
-      {!privateSource && <a href={source.originalUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{ru ? "Открыть Lex.uz" : "Lex.uz saytini ochish"}</a>}
+      {!secondarySource && <button type="button" onClick={() => void showArticle()}><BookOpenCheck aria-hidden="true" />{privateSource ? (ru ? "Текст документа" : "Hujjat matni") : (ru ? "Текст статьи" : "Modda matni")}</button>}
+      {!privateSource && <a href={source.originalUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{secondarySource ? (ru ? "Открыть материал" : "Materialni ochish") : (ru ? "Открыть Lex.uz" : "Lex.uz saytini ochish")}</a>}
     </div>
-    {!privateSource && <SourceBookmarkControl source={source} cases={cases} locale={locale} />}
+    {!privateSource && !secondarySource && <SourceBookmarkControl source={source} cases={cases} locale={locale} />}
     {open && <div className="ai-source-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section className="ai-source-modal" role="dialog" aria-modal="true" aria-labelledby="ai-source-modal-title">
         <header>
@@ -1076,7 +1092,7 @@ function VoiceModeStage(props: {
 }
 
 type AiStreamStatus = {
-  stage?: "accepted" | "lex_search_started" | "source_verified" | "provider_started" | "provider_delta" | "preliminary" | "fallback";
+  stage?: "accepted" | "document_search_started" | "lex_search_started" | "internet_search_started" | "source_verified" | "provider_started" | "provider_delta" | "preliminary" | "fallback";
   provider?: string;
   model?: string;
   receivedCharacters?: number;
@@ -1126,9 +1142,183 @@ async function readAiEventStream(
   return terminal;
 }
 
-function LegalAnswer({ result, freshness, ru }: { result: LegalResult; freshness?: SourceFreshness; ru: boolean }) {
+function sourceCardDomId(sourceId: string) {
+  return `ai-source-${sourceId.replace(/[^A-Za-z0-9_-]/gu, "-")}`;
+}
+
+function focusSourceCard(sourceId: string) {
+  const card = document.getElementById(sourceCardDomId(sourceId));
+  card?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  card?.focus({ preventScroll: true });
+}
+
+function effectiveEvidenceMode(result: LegalResult): NonNullable<LegalResult["evidenceMode"]> {
+  if (result.evidenceMode) return result.evidenceMode;
+  const classes = new Set(result.sources.flatMap((source) => {
+    if (["OFFICIAL_LEGISLATION", "OFFICIAL_GOVERNMENT_GUIDANCE"].includes(source.sourceClass ?? "")) return ["official"];
+    if (source.sourceClass === "SECONDARY_REFERENCE" || source.sourceOrigin === "web") return ["secondary"];
+    if (["USER_TRUSTED_PRIVATE", "TENANT_TRUSTED_PRIVATE", "OWNER_TRUSTED_GLOBAL"].includes(source.sourceClass ?? "")) return ["private"];
+    try {
+      const url = new URL(source.originalUrl);
+      if (url.protocol === "juro-private:") return ["private"];
+      if (url.hostname === "lex.uz" || url.hostname === "www.lex.uz") return ["official"];
+    } catch { /* Legacy rows can contain a non-URL locator. */ }
+    return source.status === "unconfirmed" ? ["secondary"] : [];
+  }));
+  const official = classes.has("official");
+  const secondary = classes.has("secondary");
+  const privateEvidence = classes.has("private");
+  if (official && !secondary && !privateEvidence) return "official";
+  if (secondary && !official && !privateEvidence) return "secondary_only";
+  if (privateEvidence && !official && !secondary) return "private_only";
+  return classes.size ? "mixed" : "none";
+}
+
+function inlineCitationLabel(source: Source, ru: boolean) {
+  const article = source.article?.replace(/^(?:статья|ст\.?|modda)\s*/iu, "").trim();
+  const act = source.actTitle
+    .replace(/Республики Узбекистан/giu, ru ? "РУз" : "O‘zR")
+    .replace(/O‘zbekiston Respublikasi/giu, ru ? "РУз" : "O‘zR");
+  if (article) return ru ? `ст. ${article} · ${act}` : `${article}-modda · ${act}`;
+  if (source.documentNumber) return `${act} · № ${source.documentNumber}`;
+  return act;
+}
+
+function inlineCitations(
+  sourceIds: readonly string[] | undefined,
+  result: LegalResult,
+  ru: boolean,
+  excludedSourceIds: ReadonlySet<string> = new Set(),
+) {
+  const sources = (sourceIds ?? []).flatMap((sourceId) => {
+    const source = result.sources.find((candidate) => candidate.sourceId === sourceId);
+    return source && !excludedSourceIds.has(source.sourceId) ? [source] : [];
+  });
+  if (!sources.length) return null;
+  return <span className="ai-inline-citations" aria-label={ru ? "Правовые основания" : "Huquqiy asoslar"}>
+    {sources.map((source) => {
+      const label = inlineCitationLabel(source, ru);
+      const publicLink = safeOfficialUrl(source.originalUrl) || isSafeSecondarySource(source);
+      return publicLink
+        ? <a href={source.originalUrl} target="_blank" rel="noopener noreferrer" key={source.sourceId} title={ru ? "Открыть источник" : "Manbani ochish"}>
+          {label}<ExternalLink aria-hidden="true" />
+        </a>
+        : <button type="button" key={source.sourceId} onClick={() => focusSourceCard(source.sourceId)}>{label}</button>;
+    })}
+  </span>;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function linkedLegalText(text: string, sourceIds: readonly string[] | undefined, result: LegalResult, ru: boolean) {
+  const candidates = (sourceIds ?? []).flatMap((sourceId) => {
+    const source = result.sources.find((item) => item.sourceId === sourceId);
+    const article = source?.article?.match(/\d+(?:\s*[-.‐‑–—]\s*[\p{L}\d]+)?/u)?.[0];
+    if (!source || !article || !(safeOfficialUrl(source.originalUrl) || isSafeSecondarySource(source))) return [];
+    const number = escapeRegExp(article).replace(/\\\s\*/gu, "\\s*");
+    const pattern = ru
+      ? new RegExp(`(?:стат(?:ья|ьи|ье|ью|ей)|ст\\.?)\\s*${number}`, "giu")
+      : new RegExp(`${number}\\s*(?:[-‐‑–—]\\s*)?modda(?:si|ning|da|dan)?`, "giu");
+    return [{ source, pattern }];
+  });
+  const matches = candidates.flatMap(({ source, pattern }) => [...text.matchAll(pattern)].map((match) => ({
+    source,
+    index: match.index ?? 0,
+    text: match[0],
+  }))).sort((left, right) => left.index - right.index);
+  const linked = new Set<string>();
+  const nodes: Array<string | React.ReactElement> = [];
+  let cursor = 0;
+  for (const match of matches) {
+    if (match.index < cursor) continue;
+    if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
+    linked.add(match.source.sourceId);
+    nodes.push(<a className="ai-inline-law-link" href={match.source.originalUrl} target="_blank" rel="noopener noreferrer" key={`${match.source.sourceId}:${match.index}`} title={inlineCitationLabel(match.source, ru)}>{match.text}</a>);
+    cursor = match.index + match.text.length;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return { nodes: nodes.length ? nodes : [text], linked };
+}
+
+function LegalStatement({
+  title,
+  text,
+  sourceIds,
+  result,
+  ru,
+  allowedLinks,
+}: {
+  title: string;
+  text: string;
+  sourceIds: readonly string[] | undefined;
+  result: LegalResult;
+  ru: boolean;
+  allowedLinks: readonly string[];
+}) {
+  const plainText = !/[\n`*_#|\[\]<>]/u.test(text);
+  if (!plainText) return <><strong>{title}</strong><GroundedMarkdown allowedLinks={allowedLinks}>{text}</GroundedMarkdown>{inlineCitations(sourceIds, result, ru)}</>;
+  const linked = linkedLegalText(text, sourceIds, result, ru);
+  return <p><strong>{title}. </strong>{linked.nodes} {inlineCitations(sourceIds, result, ru, linked.linked)}</p>;
+}
+
+function uniqueAnswerDetail(result: LegalResult): string {
+  let detail = result.answer.trim();
+  const preliminaryAssumptionDetails = result.assumptions.map((item) => item.impact.replace(
+    /^(?:Ранее подтверждённый вывод переведён в предварительный до обновления базы|Oldin tasdiqlangan xulosa baza yangilanguncha dastlabki deb ko‘rsatiladi)\s*:\s*/iu,
+    "",
+  ).trim());
+  const known = [
+    result.summary.replace(/^(?:Краткий вывод|Qisqa xulosa)\s*:\s*/iu, "").trim(),
+    ...result.confirmedFindings.map((item) => `${item.title}. ${item.explanation}`.trim()),
+    ...result.confirmedFindings.map((item) => item.explanation.trim()),
+    ...result.assumptions.map((item) => `${item.statement}. ${item.impact}`.trim()),
+    ...result.assumptions.map((item) => item.impact.trim()),
+    ...result.assumptions.map((item, index) => `${item.statement}. ${preliminaryAssumptionDetails[index]}`.trim()),
+    ...preliminaryAssumptionDetails,
+    ...result.risks.map((item) => `${item.title}. ${item.explanation}`.trim()),
+    ...result.risks.map((item) => item.explanation.trim()),
+    ...result.deadlines.map((item) => `${item.title}. ${item.dueDate ?? ""} ${item.calculationMethod}`.replace(/\s+/gu, " ").trim()),
+    ...result.deadlines.map((item) => item.calculationMethod.trim()),
+    ...result.actionPlan.map((item) => `${item.title}. ${item.description}`.trim()),
+    ...result.actionPlan.map((item) => item.description.trim()),
+    ...(result.referenceNotes ?? []).map((item) => item.note.trim()),
+  ].filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
+  for (const value of known) detail = detail.split(value).join(" ");
+  return detail.replace(/^[\s.;:—-]+|[\s.;:—-]+$/gu, "").replace(/\s+/gu, " ").trim();
+}
+
+function LegalAnswer({
+  result,
+  freshness,
+  ru,
+  onQuestionSelect,
+  showActionPlan = true,
+}: {
+  result: LegalResult;
+  freshness?: SourceFreshness;
+  ru: boolean;
+  onQuestionSelect?: (question: string) => void;
+  showActionPlan?: boolean;
+}) {
+  const evidenceMode = effectiveEvidenceMode(result);
+  const allowedLinks = result.sources.flatMap((source) =>
+    safeOfficialUrl(source.originalUrl) || isSafeSecondarySource(source) ? [source.originalUrl] : [],
+  );
+  const answerDetail = uniqueAnswerDetail(result);
+  const authorityLabel = evidenceMode === "official"
+    ? (ru ? "Подтверждено официальными источниками" : "Rasmiy manbalar bilan tasdiqlangan")
+    : evidenceMode === "mixed"
+      ? (ru ? "Официальные и контекстные источники" : "Rasmiy va kontekst manbalari")
+      : evidenceMode === "secondary_only"
+        ? (ru ? "Только справочные источники" : "Faqat ma’lumotnoma manbalari")
+        : evidenceMode === "private_only"
+          ? (ru ? "Факты из ваших документов" : "Hujjatlaringizdagi faktlar")
+          : (ru ? "Источник не подтверждён" : "Manba tasdiqlanmagan");
   return <article className="ai-answer">
-    <small>JURO · {result.responseKind === "answer" ? (ru ? "структурированный ответ" : "tuzilgan javob") : (ru ? "нужно уточнение · лимит не списан" : "aniqlik kerak · limit yechilmadi")}</small>
+    <div className="ai-branch-history"><span className={`ai-authority-badge ai-authority-${evidenceMode}`} role="status"><BookOpenCheck aria-hidden="true" />{authorityLabel}</span></div>
+    <small>JURO · {result.responseKind === "answer" ? (ru ? "проверенный структурированный ответ" : "tekshirilgan tuzilgan javob") : (ru ? "источник не найден · можно уточнить · лимит не списан" : "manba topilmadi · aniqlashtirish mumkin · limit yechilmadi")}</small>
     {freshness && freshness.status !== "fresh" && result.sourceAccessMode !== "direct" && <div className={`ai-source-freshness ai-source-freshness-${freshness.status}`} role="status">
       <CircleAlert aria-hidden="true" />
       <p>{freshness.status === "unavailable"
@@ -1140,16 +1330,31 @@ function LegalAnswer({ result, freshness, ru }: { result: LegalResult; freshness
           : `Huquqiy baza ${freshness.maxAgeDays} kundan eski. Oxirgi tasdiqlangan to‘liq sinxronlash: ${formatDate(freshness.asOf, false)}.`)}</p>
     </div>}
     <h2>{result.summary}</h2>
-    <p className="ai-answer-body">{result.answer}</p>
-    {result.urgency !== "normal" && <div className="ai-cautions"><ShieldAlert /><p>{result.urgency === "critical" ? (ru ? "Критическая срочность: проверьте ближайший срок и возможность немедленной помощи." : "Juda shoshilinch: yaqin muddat va zudlik bilan yordam olish imkonini tekshiring.") : (ru ? "Вопрос требует приоритетного внимания." : "Masala ustuvor e’tiborni talab qiladi.")}</p></div>}
-    {result.clarificationQuestions.length > 0 && <><h3>{ru ? "Что уточнить" : "Nimani aniqlashtirish kerak"}</h3><ol>{result.clarificationQuestions.map((item) => <li key={item}>{item}</li>)}</ol></>}
-    {result.confirmedFindings.length > 0 && <><h3>{ru ? "Подтверждено источниками" : "Manbalar bilan tasdiqlangan"}</h3>{result.confirmedFindings.map((item) => <section className="ai-result-block" key={item.title}><strong>{item.title}</strong><p>{item.explanation}</p></section>)}</>}
+    {answerDetail && <GroundedMarkdown className="ai-answer-body" allowedLinks={allowedLinks}>{answerDetail}</GroundedMarkdown>}
+    {result.confirmedFindings.length > 0 && <section className="ai-confirmed-basis" aria-labelledby="ai-confirmed-basis-title">
+      <h3 id="ai-confirmed-basis-title">{evidenceMode === "private_only" ? (ru ? "Подтверждено вашими документами" : "Hujjatlaringiz bilan tasdiqlangan") : (ru ? "Подтверждённое правовое основание" : "Tasdiqlangan huquqiy asos")}</h3>
+      {result.confirmedFindings.map((item) => {
+        const explanation = nonRepeatingLegalDetail(item.title, item.explanation);
+        return <section className="ai-result-block ai-legal-statement" key={item.title}>{explanation
+          ? <LegalStatement title={item.title} text={explanation} sourceIds={item.sourceIds} result={result} ru={ru} allowedLinks={allowedLinks} />
+          : <><strong>{item.title}</strong>{inlineCitations(item.sourceIds, result, ru)}</>}</section>;
+      })}
+    </section>}
+    {(result.referenceNotes ?? []).length > 0 && <section className="ai-reference-context ai-result-block ai-assumption" aria-labelledby="ai-reference-context-title">
+      <h3 id="ai-reference-context-title">{ru ? "Справочный контекст — не норма права" : "Ma’lumotnoma konteksti — huquq normasi emas"}</h3>
+      <p>{ru ? "Эти материалы поясняют контекст, но не устанавливают сроки, расчёты или обязательные действия." : "Bu materiallar kontekstni tushuntiradi, lekin muddat, hisob-kitob yoki majburiy harakatni belgilamaydi."}</p>
+      {(result.referenceNotes ?? []).map((note) => <article key={`${note.title}:${note.sourceIds.join(":")}`}><strong>{note.title}</strong><GroundedMarkdown allowedLinks={allowedLinks}>{note.note}</GroundedMarkdown>{inlineCitations(note.sourceIds, result, ru)}</article>)}
+    </section>}
     {result.assumptions.length > 0 && <><h3>{ru ? "Предположения" : "Taxminlar"}</h3>{result.assumptions.map((item) => <section className="ai-result-block ai-assumption" key={item.statement}><strong>{item.statement}</strong><p>{item.impact}</p></section>)}</>}
-    {result.risks.length > 0 && <><h3>{ru ? "Риски" : "Xavflar"}</h3>{result.risks.map((risk) => <section className={`ai-result-block risk-${risk.level}`} key={`${risk.level}:${risk.title}`}><strong>{risk.title}</strong><p>{risk.explanation}</p></section>)}</>}
-    {result.actionPlan.length > 0 && <><h3>{ru ? "План действий" : "Harakatlar rejasi"}</h3><ol>{result.actionPlan.map((step) => <li key={step.title}><strong>{step.title}</strong><p>{step.description}</p></li>)}</ol></>}
+    {result.urgency !== "normal" && <div className="ai-cautions"><ShieldAlert /><p>{result.urgency === "critical" ? (ru ? "Критическая срочность: проверьте ближайший срок и возможность немедленной помощи." : "Juda shoshilinch: yaqin muddat va zudlik bilan yordam olish imkonini tekshiring.") : (ru ? "Вопрос требует приоритетного внимания." : "Masala ustuvor e’tiborni talab qiladi.")}</p></div>}
+    {result.risks.length > 0 && <><h3>{ru ? "Риски" : "Xavflar"}</h3>{result.risks.map((risk) => <section className={`ai-result-block risk-${risk.level}`} key={`${risk.level}:${risk.title}`}><strong>{risk.title}</strong><p>{risk.explanation} {inlineCitations(risk.sourceIds, result, ru)}</p></section>)}</>}
+    {result.deadlines.length > 0 && <><h3>{ru ? "Сроки" : "Muddatlar"}</h3>{result.deadlines.map((deadline) => <section className="ai-result-block" key={deadline.title}><strong>{deadline.title}{deadline.dueDate ? ` · ${deadline.dueDate}` : ""}</strong><p>{deadline.calculationMethod} {inlineCitations(deadline.sourceIds, result, ru)}</p></section>)}</>}
+    {showActionPlan && result.actionPlan.length > 0 && <><h3>{ru ? "План действий" : "Harakatlar rejasi"}</h3><ol>{result.actionPlan.map((step) => <li key={step.title}><strong>{step.title}</strong><p>{step.description}</p></li>)}</ol></>}
     {result.suggestedDocument && <section className="ai-result-block"><h3>{ru ? "Рекомендованный документ" : "Tavsiya etilgan hujjat"}</h3><strong>{result.suggestedDocument.title}</strong><p>{result.suggestedDocument.reason}</p></section>}
     {result.requiredDocuments.length > 0 && <><h3>{ru ? "Документы" : "Hujjatlar"}</h3><ul>{result.requiredDocuments.map((document) => <li key={document.name}><strong>{document.name}</strong> — {document.reason}</li>)}</ul></>}
-    {result.deadlines.length > 0 && <><h3>{ru ? "Сроки" : "Muddatlar"}</h3>{result.deadlines.map((deadline) => <section className="ai-result-block" key={deadline.title}><strong>{deadline.title}{deadline.dueDate ? ` · ${deadline.dueDate}` : ""}</strong><p>{deadline.calculationMethod}</p></section>)}</>}
+    {result.clarificationQuestions.length > 0 && <section className="ai-follow-up-prompts" aria-labelledby="ai-follow-up-title"><h3 id="ai-follow-up-title">{ru ? "Что уточнить для более точного ответа" : "Aniqroq javob uchun nimani aniqlashtirish kerak"}</h3><div className="ai-answer-actions">{result.clarificationQuestions.map((item) => onQuestionSelect
+      ? <button type="button" key={item} onClick={() => onQuestionSelect(item)}>{item}</button>
+      : <p key={item}>{item}</p>)}</div></section>}
   </article>;
 }
 
@@ -1208,6 +1413,28 @@ function isTrustedPrivateSource(source: Source): boolean {
       && /^\/ud_[a-f0-9]{61}$/u.test(url.pathname)
       && !url.search
       && !url.hash;
+  } catch {
+    return false;
+  }
+}
+
+function isSafeSecondarySource(source: Source): boolean {
+  return source.sourceClass === "SECONDARY_REFERENCE" && safeSecondaryUrl(source.originalUrl);
+}
+
+function safeSecondaryUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLocaleLowerCase().replace(/\.$/u, "");
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && (!url.port || url.port === "443")
+      && hostname.includes(".")
+      && !/^(?:\d{1,3}\.){3}\d{1,3}$/u.test(hostname)
+      && !hostname.includes(":")
+      && !["lex.uz", "www.lex.uz"].includes(hostname)
+      && ![".internal", ".invalid", ".local", ".localhost", ".onion", ".test", ".example"].some((suffix) => hostname.endsWith(suffix));
   } catch {
     return false;
   }

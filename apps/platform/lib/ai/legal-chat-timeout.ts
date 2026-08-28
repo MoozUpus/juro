@@ -4,9 +4,9 @@ import {
   type AiExecutionBudget,
 } from "./execution-budget";
 
-/** The short interactive response has room for validation and persistence. */
+/** Fast-chat provider watchdog; independent retrieval stages have smaller caps. */
 export const FAST_LEGAL_CHAT_PROVIDER_TIMEOUT_MS = 25_500;
-/** Deep mode still shares the route's 30-second absolute request deadline. */
+/** Deep-chat provider watchdog used when the upstream endpoint does not finish. */
 export const DEEP_LEGAL_CHAT_PROVIDER_TIMEOUT_MS = 120_000;
 export const MINIMUM_LEGAL_CHAT_PROVIDER_ATTEMPT_MS = 4_000;
 
@@ -22,10 +22,10 @@ function positiveTimeout(value: number, name: string): number {
  *
  * When the caller supplies `providerTimeoutMs`, it has already allocated a
  * post-provider reserve (the resilient fallback and staging probes do this).
- * A primary call without an explicit window reserves enough of the one
- * request deadline for validation, atomic persistence, and the terminal
- * response. `null` means that starting an AI provider call would be unable to
- * complete safely, so the caller must fail without consuming usage.
+ * A primary call without an explicit window keeps its provider-specific cap.
+ * Consumers that enable an overall execution deadline also reserve enough of
+ * that shared deadline for validation, atomic persistence, and the terminal
+ * response. `null` means the call cannot be started safely.
  */
 export function legalChatProviderTimeoutMs(input: {
   reasoningMode: "fast" | "deep";

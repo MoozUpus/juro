@@ -37,3 +37,6 @@ work/
 *.zip
 *.tar
 *.tar.gz
+
+# Local AI-agent analytics exports (may contain user/session metadata)
+docs/codemie/

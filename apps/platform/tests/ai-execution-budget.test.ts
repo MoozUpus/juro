@@ -137,6 +137,37 @@ test("propagates caller cancellation and cleans all deadline timers", () => {
   assert.equal(timers.pendingCount, 0);
 });
 
+test("can track chat stages without imposing a route-wide timeout", () => {
+  const timers = new ManualTimers();
+  const caller = new AbortController();
+  const budget = createAiExecutionBudget({
+    totalBudgetMs: 30_000,
+    enforceOverallTimeout: false,
+    callerSignal: caller.signal,
+    now: () => timers.now,
+    timers,
+  });
+  const provider = budget.beginStage("provider_execution");
+
+  assert.equal(budget.hasOverallDeadline, false);
+  assert.equal(timers.pendingCount, 0);
+  timers.advanceBy(120_000);
+  assert.equal(budget.signal.aborted, false);
+  assert.equal(budget.elapsedMs, 120_000);
+  assert.equal(budget.remainingMs, Number.MAX_SAFE_INTEGER);
+  assert.equal(provider.complete().elapsedMs, 120_000);
+
+  const retrieval = budget.beginStage("bounded_retrieval", { timeoutMs: 2_000 });
+  timers.advanceBy(2_000);
+  assert.equal(retrieval.signal.aborted, true, "operation-specific timeouts remain active");
+  assert.equal(budget.signal.aborted, false);
+
+  caller.abort();
+  assert.equal(budget.abortReason, "caller");
+  budget.dispose();
+  assert.equal(timers.pendingCount, 0);
+});
+
 test("allocates fallback only from the remaining common deadline", () => {
   const { budget, timers } = createBudget();
 

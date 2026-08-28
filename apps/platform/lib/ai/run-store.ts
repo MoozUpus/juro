@@ -1,9 +1,9 @@
 const CHAT_FEATURE = "legal_chat";
 const FREE_MONTHLY_CYCLES = 20;
-// Interactive requests share a hard 30 second execution budget. A short
-// recovery grace prevents an interrupted response from pinning a user's
-// idempotency key and reserved usage for fifteen minutes.
-const STALE_RESERVATION_MS = 90 * 1_000;
+// Provider-specific deadlines can legitimately outlive the old 30-second
+// route budget (especially in deep mode). Recovery stays bounded, but must not
+// expire a live provider/fallback chain and race its finalization.
+const STALE_RESERVATION_MS = 10 * 60 * 1_000;
 
 export type AiRunReservation = {
   kind: "reserved";
@@ -56,7 +56,8 @@ type ReserveInput = {
   legalDatabaseAsOf: string;
   instructionHash: string;
   sourceVersionHash: string;
-  monthlyLimit?: number;
+  /** Null explicitly disables the cycle cap for local development. */
+  monthlyLimit?: number | null;
 };
 
 export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservation | AiRunReplay | AiRunPending | AiRunExpired | AiRunFailed> {
@@ -84,7 +85,7 @@ export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservatio
   const ledgerId = crypto.randomUUID();
   const correlationId = crypto.randomUUID();
   const { periodStart, periodEnd } = monthlyPeriod(new Date());
-  const limit = input.monthlyLimit ?? FREE_MONTHLY_CYCLES;
+  const limit = input.monthlyLimit === undefined ? FREE_MONTHLY_CYCLES : input.monthlyLimit;
   const [runResult, ledgerResult] = await input.db.batch([
     input.db.prepare(
       `INSERT INTO ai_runs
@@ -105,13 +106,14 @@ export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservatio
          provider,model,input_tokens,output_tokens,cached_input_tokens,estimated_cost_microusd,
          released_at,consumed_at,created_at,updated_at)
        SELECT ?,?,?,?,?,?,?,?,1,'reserved',?,?,0,0,0,NULL,NULL,NULL,?,?
-       WHERE (SELECT COALESCE(SUM(units),0) FROM ai_usage_ledger
-              WHERE workspace_id=? AND user_id=? AND feature=? AND period_start=?
-                AND status IN ('reserved','consumed')) < ?`,
+       WHERE (? IS NULL OR
+              (SELECT COALESCE(SUM(units),0) FROM ai_usage_ledger
+               WHERE workspace_id=? AND user_id=? AND feature=? AND period_start=?
+                 AND status IN ('reserved','consumed')) < ?)`,
     ).bind(
       ledgerId, input.workspaceId, input.userId, runId, input.idempotencyKey, CHAT_FEATURE,
       periodStart, periodEnd, input.provider, input.model, now, now,
-      input.workspaceId, input.userId, CHAT_FEATURE, periodStart, limit,
+      limit, input.workspaceId, input.userId, CHAT_FEATURE, periodStart, limit,
     ),
   ]);
   if (!runResult.success) throw new Error("AI_RUN_RESERVATION_FAILED");

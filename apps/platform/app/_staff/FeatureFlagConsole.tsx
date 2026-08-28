@@ -16,8 +16,8 @@ type Dashboard = {
 };
 
 const labels: Record<OperationalLocale, Record<OperationalFeatureKey, string>> = {
-  ru: { ai_chat: "AI-чат", ai_openai_primary: "OpenAI — основной", ai_anthropic_fallback: "Anthropic — резерв", ai_lex_web_discovery: "OpenAI-поиск Lex.uz", document_analysis_upload: "Загрузка для анализа", lawyer_handoff: "Передача юристу", voice_mode: "Голосовой режим" },
-  uz: { ai_chat: "AI-chat", ai_openai_primary: "OpenAI — asosiy", ai_anthropic_fallback: "Anthropic — zaxira", ai_lex_web_discovery: "OpenAI orqali Lex.uz qidiruvi", document_analysis_upload: "Tahlil uchun yuklash", lawyer_handoff: "Yuristga topshirish", voice_mode: "Ovozli rejim" },
+  ru: { ai_chat: "AI-чат", ai_openai_primary: "OpenAI — основной", ai_anthropic_fallback: "Anthropic — резерв", ai_lex_web_discovery: "OpenAI-поиск Lex.uz", ai_secondary_web_research: "Дополнительный веб-поиск", document_analysis_upload: "Загрузка для анализа", lawyer_handoff: "Передача юристу", voice_mode: "Голосовой режим" },
+  uz: { ai_chat: "AI-chat", ai_openai_primary: "OpenAI — asosiy", ai_anthropic_fallback: "Anthropic — zaxira", ai_lex_web_discovery: "OpenAI orqali Lex.uz qidiruvi", ai_secondary_web_research: "Qo‘shimcha veb-qidiruv", document_analysis_upload: "Tahlil uchun yuklash", lawyer_handoff: "Yuristga topshirish", voice_mode: "Ovozli rejim" },
 };
 
 const copy = {

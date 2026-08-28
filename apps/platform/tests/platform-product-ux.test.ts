@@ -32,8 +32,18 @@ test("tablet shell uses the off-canvas navigation before content becomes cramped
 
 test("mobile AI composer ends above the fixed navigation", async () => {
   const styles = await source("../app/_platform/ai-lawyer.css");
-  assert.match(styles, /@media\(max-width:760px\)[\s\S]*?\.ai-dialog\{height:calc\(100dvh - 70px - 68px\);min-height:0;overflow:hidden\}/);
-  assert.match(styles, /\.ai-workspace\{display:block;min-height:0;padding-bottom:74px/);
+  assert.match(styles, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.ai-dialog\s*\{[^}]*height:\s*calc\(100dvh - 70px - 68px\);[^}]*min-height:\s*0;[^}]*overflow:\s*hidden/);
+  assert.match(styles, /\.ai-workspace\s*\{[^}]*display:\s*block;[^}]*min-height:\s*0;[^}]*padding-bottom:\s*74px/);
+});
+
+test("AI composer keeps idle voice, question, and send controls on one row", async () => {
+  const styles = await source("../app/_platform/ai-lawyer.css");
+
+  assert.match(styles, /\.ai-composer-input\s*\{[^}]*grid-template-areas:\s*"voice question send"/su);
+  assert.match(styles, /\.ai-composer-input\s*>\s*\.ai-voice-controls\[data-phase="idle"\][^{]*\{[^}]*grid-area:\s*voice\s*;/su);
+  assert.match(styles, /\.ai-composer-input\s*>\s*textarea\s*\{[^}]*grid-area:\s*question\s*;/su);
+  assert.match(styles, /\.ai-composer-input\s*>\s*button\s*\{[^}]*grid-area:\s*send\s*;/su);
+  assert.match(styles, /\.ai-composer-input:has\(> \.ai-voice-controls:not\(\[data-phase="idle"\]\)\)\s*\{[^}]*"voice voice voice"\s*"question question send"/su);
 });
 
 test("history presents human labels without exposing opaque entity ids", async () => {

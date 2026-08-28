@@ -26,6 +26,11 @@ export interface BuilderRuntimeEnv {
   LEGAL_CORPUS_HISTORICAL_ENABLED?: string;
   LEGAL_CORPUS_DENSE_ENABLED?: string;
   LEGAL_CORPUS_SHADOW_MODE?: string;
+  /** Vite-dev-only staging corpus binding, wrapped as read-only before use. */
+  LEGAL_CORPUS_READ_DB?: D1Database;
+  /** Optional private corpus Worker read service for deployed environments. */
+  LEGAL_CORPUS_READ_SERVICE?: Fetcher;
+  LEGAL_CORPUS_REMOTE_READ_ENABLED?: string;
   LAWYER_PROFILE_DIRECTORY_ENABLED?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;

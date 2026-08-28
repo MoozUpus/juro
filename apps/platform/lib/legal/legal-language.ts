@@ -86,6 +86,35 @@ export function transliterateUzbek(value: string): string {
   );
 }
 
+/** Query-only Latin-to-Cyrillic variant. Official quotations are never changed. */
+export function transliterateUzbekToCyrillic(value: string): string {
+  const normalizedValue = normalizeUzbekLatin(value).toLocaleLowerCase("uz");
+  const digraphs: ReadonlyArray<readonly [RegExp, string]> = [
+    [/oʻ/gu, "ў"], [/gʻ/gu, "ғ"], [/sh/gu, "ш"], [/ch/gu, "ч"],
+    [/yo/gu, "ё"], [/yu/gu, "ю"], [/ya/gu, "я"], [/ts/gu, "ц"],
+  ];
+  let converted = normalizedValue;
+  const protectedCharacters: string[] = [];
+  for (const [pattern, replacement] of digraphs) {
+    converted = converted.replace(pattern, () => {
+      const marker = String.fromCodePoint(0xE000 + protectedCharacters.length);
+      protectedCharacters.push(replacement);
+      return marker;
+    });
+  }
+  const latin = new Map<string, string>([
+    ["a", "а"], ["b", "б"], ["d", "д"], ["e", "е"], ["f", "ф"],
+    ["g", "г"], ["h", "ҳ"], ["i", "и"], ["j", "ж"], ["k", "к"],
+    ["l", "л"], ["m", "м"], ["n", "н"], ["o", "о"], ["p", "п"],
+    ["q", "қ"], ["r", "р"], ["s", "с"], ["t", "т"], ["u", "у"],
+    ["v", "в"], ["x", "х"], ["y", "й"], ["z", "з"],
+  ]);
+  converted = converted.replace(/[a-z]/gu, (character) => latin.get(character) ?? character);
+  return converted.replace(/[\uE000-\uF8FF]/gu, (marker) =>
+    protectedCharacters[marker.codePointAt(0)! - 0xE000] ?? marker,
+  );
+}
+
 /** Query-only Russian cleanup. It intentionally never changes stored quotations. */
 export function normalizeRussianLegal(value: string): string {
   return normalized(value)

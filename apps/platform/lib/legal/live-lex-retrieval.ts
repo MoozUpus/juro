@@ -33,12 +33,14 @@ export async function retrieveLiveLexSources(input: {
   limit?: number;
   signal?: AbortSignal;
   budgetMs?: number;
+  searchQueries?: readonly string[] | Promise<readonly string[]>;
   discoverOfficialUrls?: (query: string, locale: "ru" | "uz", signal: AbortSignal) => Promise<string[]>;
 }): Promise<LiveLexRetrievalResult> {
   const result = await retrieveDirectLegalSources(input.query, input.locale, {
     limit: Math.max(1, Math.min(input.limit ?? 3, 5)),
     signal: input.signal,
     budgetMs: input.budgetMs,
+    searchQueries: input.searchQueries,
     discoverOfficialUrls: input.discoverOfficialUrls,
   });
   return {
