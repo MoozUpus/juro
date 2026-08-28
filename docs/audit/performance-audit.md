@@ -120,3 +120,43 @@ public deployment, then verify both immutable static assets and responsive
 WebP lawyer photos in production. Production remains Sites v86 until that
 approval and deployment succeed. Trust and legal-centre performance route
 classes remain to be sampled.
+
+## 2026-08-28 homepage motion release candidate
+
+A fresh Chrome DevTools MCP baseline of live Sites v86 used a `390×844`
+mobile/touch viewport, 4× CPU slowdown and Fast 4G. The RU homepage produced
+LCP 2,041 ms (125 ms TTFB and 1,917 ms render delay), CLS 0.00 and 548 ms of
+forced reflow. The LCP element was the hero lead paragraph. The same production
+surface retained Lighthouse scores of 100 Accessibility, 100 Best Practices,
+100 SEO and 100 Agentic Browsing, with 59 passed and 0 failed audits.
+
+The release candidate removes the delayed opacity animation from that LCP
+paragraph and changes `JuroMotionDirector` to collect all layout measurements
+before applying DOM/style updates. Its first scroll-story measurement is
+deferred until the motion-ready style change has painted, avoiding a same-frame
+forced layout.
+
+The built candidate was served locally by the generated Cloudflare Worker with
+its emitted assets, then traced with the same Chrome device, CPU and network
+profile:
+
+| Metric | Live Sites v86 baseline | Local production candidate | Goal |
+| --- | ---: | ---: | ---: |
+| LCP | 2,041 ms | 1,335 ms | <=2,500 ms |
+| TTFB | 125 ms | 191 ms | <800 ms |
+| Render delay | 1,917 ms | 1,144 ms | Diagnose and reduce |
+| CLS | 0.00 | 0.00 | <=0.1 |
+| Total forced reflow | 548 ms | 99 ms | Diagnose and reduce |
+| Landing-page forced reflow attribution | 244 ms | 2 ms | Diagnose and reduce |
+
+This comparison is directional pre-release evidence, not a production
+after-measurement: the candidate used the local Worker origin while v86 used
+the public Cloudflare edge. Production improvement remains unverified until a
+separately authorized Sites publish and identical post-deploy trace.
+
+Candidate Lighthouse scored 100 Accessibility, 100 SEO and 100 Agentic
+Browsing. Best Practices was 92 solely because the localhost CSP correctly
+blocked canonical production favicon and manifest URLs as cross-origin; the
+same audit on live v86 scored 100. The full website gate passed a deployable
+production build, lint, type-check, 48/48 tests and the complete automated
+desktop/mobile, light/dark RU/UZ/EN accessibility matrix.

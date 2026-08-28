@@ -409,3 +409,25 @@ its recorded byte size and SHA-256 value. The exact local source directory and
 temporary verification directory were deleted after that proof; both
 `Test-Path` checks returned false and exact parent-directory match counts were
 zero. The private R2 objects remain the recovery source.
+
+## 2026-08-28 public homepage motion checkpoint
+
+| Gate | Result |
+| --- | --- |
+| LCP content contract | PASS — the hero lead remains server-rendered and is no longer included in the delayed support animation |
+| Layout read/write contract | PASS — `JuroMotionDirector` measures geometry before any scroll-frame DOM/style mutation; the initial measurement waits until the motion-ready style change has painted |
+| Focused regression suite | PASS — 25/25 |
+| Full website suite | PASS — 48/48 |
+| TypeScript | PASS |
+| ESLint | PASS |
+| Production build and artifact validation | PASS |
+| Accessibility smoke | PASS — desktop/mobile, light/dark and RU/UZ/EN route matrix; manual-review candidates remain explicitly manual |
+| Live Sites v86 mobile baseline | PASS threshold — LCP 2,041 ms, TTFB 125 ms, CLS 0.00; 548 ms forced reflow remains measured |
+| Local built-candidate mobile trace | PASS threshold — LCP 1,335 ms, TTFB 191 ms, CLS 0.00; total forced reflow 99 ms and landing-page attribution 2 ms |
+| Live Sites v86 Lighthouse | PASS — Accessibility 100, Best Practices 100, SEO 100, Agentic Browsing 100; 59 passed, 0 failed |
+| Local candidate Lighthouse | BOUNDED PASS — Accessibility/SEO/Agentic Browsing 100; Best Practices 92 only because localhost CSP blocks canonical production favicon/manifest URLs |
+| Production publish | NOT RUN — Sites v86 remains live; production after-measurement is still required |
+
+The live and local traces used the same Chrome `390×844`, mobile/touch, 4× CPU
+and Fast 4G profile, but different origins. The observed improvement is valid
+pre-release evidence and is not represented as a production result.

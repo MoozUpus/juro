@@ -73,6 +73,20 @@ test("production interactions have complete keyboard and reduced-motion contract
   assert.doesNotMatch(homepageStyles + motionStyles + editorialStyles + decisionStyles + laptopStyles + chromeStyles, /ease-in(?:\s|;|,|\))/);
 });
 
+test("homepage motion does not delay the LCP copy or interleave layout reads and writes", () => {
+  assert.match(homepage, /<p className=\{styles\.heroLead\}>/);
+  assert.doesNotMatch(motionStyles, /\.heroCopyMotion > p:nth-of-type\(2\)/);
+  assert.match(motionDirector, /const measureScrollStory = \(\) =>/);
+  assert.match(motionDirector, /const measurements = measureScrollStory\(\)/);
+
+  const mutateStart = motionDirector.indexOf("const updateScrollStory = () =>");
+  const mutateEnd = motionDirector.indexOf("const onScroll = () =>", mutateStart);
+  assert.ok(mutateStart >= 0 && mutateEnd > mutateStart);
+  assert.doesNotMatch(motionDirector.slice(mutateStart, mutateEnd), /getBoundingClientRect/);
+  assert.match(motionDirector, /scrollFrame = requestAnimationFrame\(updateScrollStory\)/);
+  assert.doesNotMatch(motionDirector, /\n\s*updateScrollStory\(\);/);
+});
+
 test("document review opens on the first clause and changes only by direct selection", () => {
   assert.match(homepage, /const \[clause, setClause\] = useState\(0\)/);
   assert.match(homepage, /const selectClause = \(index: number\) => \{\s*setClause\(index\);\s*\}/);

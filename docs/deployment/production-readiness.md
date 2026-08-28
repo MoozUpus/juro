@@ -655,3 +655,14 @@ Release status: the named analytics/cost, website dependency-hardening and
 Worker 151 accessibility/performance production releases are verified. This is
 not a blanket ecosystem Definition of Done: Cloudflare billing, field/INP
 performance evidence and any explicitly PARTIAL browser/device rows remain open.
+
+## 2026-08-28 Sites motion candidate
+
+The public homepage motion correction is source-, build-, test- and local
+Chrome-verified. Under the goal's mobile lab profile, the built Cloudflare
+Worker candidate produced LCP 1,335 ms, CLS 0.00 and 99 ms total forced reflow;
+the landing-page attribution was 2 ms. Live Sites v86 remains the production
+baseline at LCP 2,041 ms, CLS 0.00 and 548 ms total forced reflow in the latest
+trace. No Sites publish occurred in this checkpoint. A separately authorized
+publish, production smoke, identical after-trace and rollback capture remain
+mandatory before the motion improvement can be called live.
