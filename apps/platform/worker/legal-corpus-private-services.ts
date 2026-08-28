@@ -229,7 +229,6 @@ export async function handleLegalCorpusEmbeddingServiceRequest(
     try {
       upstream = await fetch("https://api.openai.com/v1/embeddings", {
         method: "POST",
-        redirect: "error",
         signal: controller.signal,
         headers: {
           authorization: `Bearer ${env.OPENAI_API_KEY}`,
