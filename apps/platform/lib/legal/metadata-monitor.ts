@@ -41,42 +41,126 @@ function safeErrorCode(error: unknown): string {
   return "LEX_METADATA_MONITOR_UNAVAILABLE";
 }
 
-function localizedNotification(locale: string, title: string, url: string) {
-  if (locale === "uz") {
-    return {
-      title: "Lex.uz’da qonunchilik yangilanishi",
-      body: `${title} · ${url}`.slice(0, 2_000),
-    };
-  }
-  return {
-    title: "Обновление законодательства в Lex.uz",
-    body: `${title} · ${url}`.slice(0, 2_000),
-  };
-}
-
-async function notifyMonitoringUsers(input: {
-  db: D1Database;
+type MonitoringNotificationEvent = {
   eventId: string;
   title: string;
   canonicalUrl: string;
+};
+
+type MetadataWrite = {
+  id: string;
+  canonicalUrl: string;
+  canonicalId: string;
+  locale: string;
+  title: string;
+  revisionDate: string | null;
+  fingerprint: string;
+};
+
+type ChangeEventWrite = MonitoringNotificationEvent & {
+  metadataId: string;
+  changeType: "new_act" | "metadata_changed";
+  fingerprint: string;
+};
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
+}
+
+function localizedNotification(locale: string, events: MonitoringNotificationEvent[]) {
+  const first = events[0];
+  if (!first) throw new TypeError("Monitoring notification requires at least one event.");
+  if (events.length === 1) {
+    if (locale === "uz") {
+      return {
+        title: "Lex.uz’da qonunchilik yangilanishi",
+        body: `${first.title} · ${first.canonicalUrl}`.slice(0, 2_000),
+      };
+    }
+    return {
+      title: "Обновление законодательства в Lex.uz",
+      body: `${first.title} · ${first.canonicalUrl}`.slice(0, 2_000),
+    };
+  }
+  if (locale === "uz") {
+    return {
+      title: `Lex.uz’da ${events.length} ta qonunchilik yangilanishi`,
+      body: `${first.title} · ${first.canonicalUrl} · yana ${events.length - 1} ta`.slice(0, 2_000),
+    };
+  }
+  return {
+    title: `${events.length} обновлений законодательства в Lex.uz`,
+    body: `${first.title} · ${first.canonicalUrl} · ещё ${events.length - 1}`.slice(0, 2_000),
+  };
+}
+
+async function monitoringNotificationStatements(input: {
+  db: D1Database;
+  events: MonitoringNotificationEvent[];
   now: string;
-}): Promise<void> {
+}): Promise<D1PreparedStatement[]> {
+  if (input.events.length === 0) return [];
   const recipients = await input.db.prepare(
     `SELECT workspace_id AS workspaceId,user_id AS userId,locale
        FROM monitoring_preferences
       WHERE instr(channels_json,'"in_app"')>0`,
   ).all<{ workspaceId: string; userId: string; locale: string }>();
   const statements: D1PreparedStatement[] = [];
+  const eventDigest = input.events.map((event) => event.eventId).sort().join(":");
   for (const recipient of recipients.results) {
-    const message = localizedNotification(recipient.locale, input.title, input.canonicalUrl);
-    const id = `lex_monitor_${await sha256(`${input.eventId}:${recipient.userId}`)}`.slice(0, 96);
+    const message = localizedNotification(recipient.locale, input.events);
+    const id = `lex_monitor_${await sha256(`${eventDigest}:${recipient.userId}`)}`.slice(0, 96);
     statements.push(input.db.prepare(
       `INSERT OR IGNORE INTO notifications
        (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
        VALUES (?,?,?,NULL,'legislation_monitor',?,?,NULL,?)`,
     ).bind(id, recipient.workspaceId, recipient.userId, message.title, message.body, input.now));
   }
-  if (statements.length) await input.db.batch(statements);
+  return statements;
+}
+
+function metadataWriteStatements(db: D1Database, rows: MetadataWrite[], timestamp: string): D1PreparedStatement[] {
+  return chunks(rows, 8).map((group) => db.prepare(
+    `INSERT INTO legal_monitoring_metadata
+      (id,canonical_url,canonical_id,locale,act_title,revision_date,effective_at,fingerprint,http_status,first_seen_at,last_seen_at,last_checked_at,last_error_code,created_at,updated_at)
+     VALUES ${group.map(() => "(?,?,?,?,?,?,NULL,?,200,?,?,?,NULL,?,?)").join(",")}
+     ON CONFLICT(canonical_url) DO UPDATE SET
+       canonical_id=excluded.canonical_id,locale=excluded.locale,act_title=excluded.act_title,
+       revision_date=excluded.revision_date,fingerprint=excluded.fingerprint,http_status=200,
+       last_seen_at=excluded.last_seen_at,last_checked_at=excluded.last_checked_at,last_error_code=NULL,updated_at=excluded.updated_at`,
+  ).bind(...group.flatMap((row) => [
+    row.id,
+    row.canonicalUrl,
+    row.canonicalId,
+    row.locale,
+    row.title,
+    row.revisionDate,
+    row.fingerprint,
+    timestamp,
+    timestamp,
+    timestamp,
+    timestamp,
+    timestamp,
+  ])));
+}
+
+function changeEventWriteStatements(db: D1Database, rows: ChangeEventWrite[], timestamp: string): D1PreparedStatement[] {
+  return chunks(rows, 12).map((group) => db.prepare(
+    `INSERT OR IGNORE INTO legal_monitoring_change_events
+      (id,metadata_id,canonical_url,act_title,change_type,fingerprint,detected_at,created_at)
+     VALUES ${group.map(() => "(?,?,?,?,?,?,?,?)").join(",")}`,
+  ).bind(...group.flatMap((row) => [
+    row.eventId,
+    row.metadataId,
+    row.canonicalUrl,
+    row.title,
+    row.changeType,
+    row.fingerprint,
+    timestamp,
+    timestamp,
+  ])));
 }
 
 /**
@@ -120,6 +204,20 @@ export async function runLexMetadataMonitor(
       now: () => now,
     });
     const entries = discovery.entries;
+    const existingRows = entries.length === 0 ? { results: [] } : await env.DB.prepare(
+      `SELECT id,canonical_url AS canonicalUrl,act_title AS actTitle,fingerprint
+         FROM legal_monitoring_metadata
+        WHERE canonical_url IN (${entries.map(() => "?").join(",")})`,
+    ).bind(...entries.map((entry) => entry.reference.canonicalUrl)).all<{
+      id: string;
+      canonicalUrl: string;
+      actTitle: string;
+      fingerprint: string;
+    }>();
+    const existingByUrl = new Map(existingRows.results.map((row) => [row.canonicalUrl, row]));
+    const metadataWrites: MetadataWrite[] = [];
+    const changeEventWrites: ChangeEventWrite[] = [];
+    const notificationEvents: MonitoringNotificationEvent[] = [];
     let processed = 0;
     let changed = 0;
     for (const entry of entries) {
@@ -127,60 +225,50 @@ export async function runLexMetadataMonitor(
       const fingerprint = await sha256([
         entry.reference.canonicalUrl,
         title,
-        entry.publishedAt ?? "",
       ].join("\n"));
-      const existing = await env.DB.prepare(
-        `SELECT id,fingerprint FROM legal_monitoring_metadata WHERE canonical_url=? LIMIT 1`,
-      ).bind(entry.reference.canonicalUrl).first<{ id: string; fingerprint: string }>();
+      const existing = existingByUrl.get(entry.reference.canonicalUrl);
       const metadataId = existing?.id ?? crypto.randomUUID();
-      const isChanged = Boolean(existing && existing.fingerprint !== fingerprint);
+      // Lex RSS pubDate is feed-delivery metadata and can change without a legal
+      // title change. It must not create a new customer event on every retry.
+      const isChanged = Boolean(existing && existing.actTitle !== title);
       const isNew = !existing;
-      await env.DB.prepare(
-        `INSERT INTO legal_monitoring_metadata
-          (id,canonical_url,canonical_id,locale,act_title,revision_date,effective_at,fingerprint,http_status,first_seen_at,last_seen_at,last_checked_at,last_error_code,created_at,updated_at)
-         VALUES (?,?,?,?,?,?,NULL,?,200,?,?,?,NULL,?,?)
-         ON CONFLICT(canonical_url) DO UPDATE SET
-           canonical_id=excluded.canonical_id,locale=excluded.locale,act_title=excluded.act_title,
-           revision_date=excluded.revision_date,fingerprint=excluded.fingerprint,http_status=200,
-           last_seen_at=excluded.last_seen_at,last_checked_at=excluded.last_checked_at,last_error_code=NULL,updated_at=excluded.updated_at`,
-      ).bind(
-        metadataId,
-        entry.reference.canonicalUrl,
-        entry.reference.canonicalId,
-        entry.reference.locale,
+      metadataWrites.push({
+        id: metadataId,
+        canonicalUrl: entry.reference.canonicalUrl,
+        canonicalId: entry.reference.canonicalId,
+        locale: entry.reference.locale,
         title,
-        entry.publishedAt,
+        revisionDate: entry.publishedAt,
         fingerprint,
-        timestamp,
-        timestamp,
-        timestamp,
-        timestamp,
-        timestamp,
-      ).run();
+      });
       processed += 1;
       if (!isNew && !isChanged) continue;
       changed += isChanged ? 1 : 0;
-      const eventId = crypto.randomUUID();
-      await env.DB.prepare(
-        `INSERT OR IGNORE INTO legal_monitoring_change_events
-         (id,metadata_id,canonical_url,act_title,change_type,fingerprint,detected_at,created_at)
-         VALUES (?,?,?,?,?,?,?,?)`,
-      ).bind(
+      const eventId = `lex_change_${await sha256(`${metadataId}:${fingerprint}`)}`.slice(0, 96);
+      const changeEvent = {
         eventId,
         metadataId,
-        entry.reference.canonicalUrl,
+        canonicalUrl: entry.reference.canonicalUrl,
         title,
-        isNew ? "new_act" : "metadata_changed",
+        changeType: isNew ? "new_act" as const : "metadata_changed" as const,
         fingerprint,
-        timestamp,
-        timestamp,
-      ).run();
+      };
+      changeEventWrites.push(changeEvent);
       // Initial discovery fills the feed without flooding customers. Subsequent
-      // metadata changes create an ordinary in-app notification.
-      if (isChanged) {
-        await notifyMonitoringUsers({ db: env.DB, eventId, title, canonicalUrl: entry.reference.canonicalUrl, now: timestamp });
-      }
+      // title changes create one digest notification per recipient and run.
+      if (isChanged) notificationEvents.push(changeEvent);
     }
+    const notificationStatements = await monitoringNotificationStatements({
+      db: env.DB,
+      events: notificationEvents,
+      now: timestamp,
+    });
+    const writes = [
+      ...metadataWriteStatements(env.DB, metadataWrites, timestamp),
+      ...changeEventWriteStatements(env.DB, changeEventWrites, timestamp),
+      ...notificationStatements,
+    ];
+    if (writes.length) await env.DB.batch(writes);
     await env.DB.prepare(
       `UPDATE source_sync_runs
           SET status='success',discovered_count=?,fetched_count=?,changed_count=?,verified_count=?,error_count=0,

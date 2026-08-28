@@ -45,6 +45,7 @@ type DashboardData = {
     documents: number;
     consultations: number;
     unreadNotifications: number;
+    unreadNotificationsCapped: boolean;
   };
   cases: Array<{ id: string; title: string; status: string; updatedAt: string; progressPercent: number | null }>;
   documents: Array<{ id: string; title: string; status: string; category: string; updatedAt: string }>;
@@ -385,7 +386,13 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
           <span><BriefcaseBusiness /><b>{data.counts.activeCases}</b>{ru ? "активных дел" : "faol ish"}</span>
           <span><Files /><b>{data.counts.documents}</b>{ru ? "документов" : "hujjat"}</span>
           <span><MessageSquareText /><b>{data.counts.consultations}</b>{ru ? "консультаций" : "maslahat"}</span>
-          <span><Bell /><b>{data.counts.unreadNotifications}</b>{ru ? "новых событий" : "yangi voqea"}</span>
+          <span aria-label={data.counts.unreadNotificationsCapped
+            ? (ru ? "Более 99 новых событий" : "99 tadan ortiq yangi voqea")
+            : undefined}>
+            <Bell />
+            <b>{data.counts.unreadNotificationsCapped ? "99+" : data.counts.unreadNotifications}</b>
+            {ru ? "новых событий" : "yangi voqea"}
+          </span>
         </section>
       )}
     </div>

@@ -29,9 +29,11 @@ class Statement {
 }
 
 class D1 {
+  readonly batchSizes: number[] = [];
   constructor(readonly sqlite: DatabaseSync) {}
   prepare(sql: string) { return new Statement(this, sql); }
   async batch(statements: Statement[]) {
+    this.batchSizes.push(statements.length);
     this.sqlite.exec("BEGIN");
     try {
       const results = [];
@@ -120,6 +122,105 @@ test("Lex monitor stores only RSS metadata and never reaches the retired legal c
   });
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM legal_monitoring_change_events").get() as { count: number }).count, 1);
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM sqlite_master WHERE type='table' AND name='legal_sources'").get() as { count: number }).count, 0);
+  sqlite.close();
+});
+
+test("Lex monitor ignores RSS delivery-date churn and emits one idempotent title-change notification", async () => {
+  const sqlite = createDb();
+  const db = new D1(sqlite);
+  sqlite.prepare(
+    "INSERT INTO monitoring_preferences (workspace_id,user_id,locale,channels_json) VALUES ('workspace','user','ru','[\"in_app\"]')",
+  ).run();
+
+  async function run(title: string, pubDate: string, now: string) {
+    let call = 0;
+    return runLexMetadataMonitor({
+      APP_ENV: "staging",
+      DB: db as unknown as D1Database,
+      LEGAL_LEX_METADATA_MONITOR_ENABLED: "true",
+      LEGAL_LEX_RSS_DISCOVERY_ENABLED: "true",
+    }, {
+      now: new Date(now),
+      maxDocuments: 1,
+      wait: async () => undefined,
+      fetchImpl: async () => {
+        call += 1;
+        if (call === 1) return new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain" } });
+        return new Response(
+          `<rss><channel><item><title>${title}</title><pubDate>${pubDate}</pubDate><link>/ru/docs/8372154</link></item></channel></rss>`,
+          { headers: { "content-type": "application/rss+xml" } },
+        );
+      },
+    });
+  }
+
+  assert.equal((await run("Регистрация бизнеса", "Tue, 11 Aug 2026 10:00:00 GMT", "2026-08-12T12:00:00.000Z")).status, "success");
+  assert.equal((await run("Регистрация бизнеса", "Wed, 12 Aug 2026 10:00:00 GMT", "2026-08-13T12:00:00.000Z")).changed, 0);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 0);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM legal_monitoring_change_events").get() as { count: number }).count, 1);
+
+  assert.equal((await run("Регистрация бизнеса — обновлено", "Thu, 13 Aug 2026 10:00:00 GMT", "2026-08-14T12:00:00.000Z")).changed, 1);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 1);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM legal_monitoring_change_events").get() as { count: number }).count, 2);
+
+  assert.equal((await run("Регистрация бизнеса — обновлено", "Fri, 14 Aug 2026 10:00:00 GMT", "2026-08-15T12:00:00.000Z")).changed, 0);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 1);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM legal_monitoring_change_events").get() as { count: number }).count, 2);
+  sqlite.close();
+});
+
+test("Lex monitor batches a full balanced feed below the legacy subrequest ceiling", async () => {
+  const sqlite = createDb();
+  const db = new D1(sqlite);
+
+  function rss(locale: "ru" | "uz", day: number) {
+    const items = Array.from({ length: 20 }, (_, index) => {
+      const id = locale === "ru" ? 8_372_000 + index : -(8_373_000 + index);
+      return `<item><title>${locale.toUpperCase()} акт ${index}</title><pubDate>Thu, ${day} Aug 2026 10:00:00 GMT</pubDate><link>/${locale}/docs/${id}</link></item>`;
+    }).join("");
+    return `<rss><channel>${items}</channel></rss>`;
+  }
+
+  async function run(day: number, now: string) {
+    const responses = [
+      new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain" } }),
+      new Response(rss("ru", day), { headers: { "content-type": "application/rss+xml" } }),
+      new Response(rss("uz", day), { headers: { "content-type": "application/rss+xml" } }),
+    ];
+    return runLexMetadataMonitor({
+      APP_ENV: "staging",
+      DB: db as unknown as D1Database,
+      LEGAL_LEX_METADATA_MONITOR_ENABLED: "true",
+      LEGAL_LEX_RSS_DISCOVERY_ENABLED: "true",
+    }, {
+      now: new Date(now),
+      maxDocuments: 40,
+      wait: async () => undefined,
+      fetchImpl: async () => {
+        const response = responses.shift();
+        if (!response) throw new Error("Unexpected source request");
+        return response;
+      },
+    });
+  }
+
+  const first = await run(13, "2026-08-13T12:00:00.000Z");
+  assert.deepEqual({ status: first.status, processed: first.processed, changed: first.changed }, {
+    status: "success",
+    processed: 40,
+    changed: 0,
+  });
+  assert.equal(db.batchSizes.at(-1), 9);
+
+  const second = await run(14, "2026-08-14T12:00:00.000Z");
+  assert.deepEqual({ status: second.status, processed: second.processed, changed: second.changed }, {
+    status: "success",
+    processed: 40,
+    changed: 0,
+  });
+  assert.equal(db.batchSizes.at(-1), 5);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM legal_monitoring_change_events").get() as { count: number }).count, 40);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 0);
   sqlite.close();
 });
 

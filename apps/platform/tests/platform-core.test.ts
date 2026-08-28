@@ -1342,15 +1342,19 @@ test("active sessions expose only privacy-safe approximate region evidence", asy
 });
 
 test("notification reads and read acknowledgements remain workspace-scoped", async () => {
-  const [notificationRoute, dashboardRoute] = await Promise.all([
+  const [notificationRoute, dashboardRoute, dashboardClient] = await Promise.all([
     readFile(new URL("../app/api/document-builder/notifications/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/dashboard/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/DashboardClient.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(notificationRoute, /workspaceForUser\(user\)/);
   assert.match(notificationRoute, /WHERE user_id = \? AND workspace_id = \?/);
   assert.match(notificationRoute, /id = \? AND user_id = \? AND workspace_id = \?/);
-  assert.match(dashboardRoute, /notifications WHERE user_id = \? AND workspace_id = \? AND read_at IS NULL/);
+  assert.match(dashboardRoute, /FROM notifications\s+WHERE user_id = \? AND workspace_id = \? AND read_at IS NULL/);
+  assert.match(dashboardRoute, /LIMIT 100/);
+  assert.match(dashboardRoute, /unreadNotificationsCapped: unreadNotifications >= 100/);
   assert.match(dashboardRoute, /WHERE user_id=\? AND workspace_id=\? ORDER BY created_at DESC LIMIT 4/);
+  assert.match(dashboardClient, /data\.counts\.unreadNotificationsCapped \? "99\+"/);
   assert.doesNotMatch(notificationRoute, /WHERE user_id = \? ORDER BY created_at DESC/);
 });
 test("handoff UI requires a fresh owner consent before grant and exposes revoke", async () => {

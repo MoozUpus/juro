@@ -16,7 +16,11 @@ export const GET = withApiErrors(async function GET() {
         (SELECT count(*) FROM cases WHERE workspace_id = ? AND archived_at IS NULL) AS activeCases,
         (SELECT count(*) FROM documents WHERE workspace_id = ? AND archived_at IS NULL) AS documents,
         (SELECT count(*) FROM consultation_bookings WHERE workspace_id = ? AND status NOT IN ('completed','cancelled')) AS consultations,
-        (SELECT count(*) FROM notifications WHERE user_id = ? AND workspace_id = ? AND read_at IS NULL) AS unreadNotifications`,
+        (SELECT count(*) FROM (
+          SELECT 1 FROM notifications
+          WHERE user_id = ? AND workspace_id = ? AND read_at IS NULL
+          LIMIT 100
+        )) AS unreadNotifications`,
     ).bind(workspace.id, workspace.id, workspace.id, user.id, workspace.id),
     db.prepare(
       `SELECT c.id,c.title,c.status,c.updated_at AS updatedAt,p.progress_percent AS progressPercent
@@ -61,9 +65,15 @@ export const GET = withApiErrors(async function GET() {
        ORDER BY c.updated_at DESC LIMIT 4`,
     ).bind(workspace.id, user.id),
   ]);
+  const countRow = counts.results[0] as Record<string, unknown> | undefined;
+  const unreadNotifications = Number(countRow?.unreadNotifications ?? 0);
   return response({
     serverNow: new Date().toISOString(),
-    counts: counts.results[0] ?? { activeCases: 0, documents: 0, consultations: 0, unreadNotifications: 0 },
+    counts: {
+      ...(countRow ?? { activeCases: 0, documents: 0, consultations: 0 }),
+      unreadNotifications,
+      unreadNotificationsCapped: unreadNotifications >= 100,
+    },
     cases: cases.results,
     documents: documents.results,
     deadlines: deadlines.results,
