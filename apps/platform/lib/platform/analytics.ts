@@ -25,6 +25,7 @@ export const productEventNames = [
 ] as const;
 
 export type ProductEventName = (typeof productEventNames)[number];
+type AnalyticsEventName = ProductEventName | "user_support_ticket_created";
 type ProductLocale = "ru" | "uz" | "unknown";
 type ProductSurface =
   | "public_site"
@@ -65,6 +66,39 @@ const supportCategories = new Set([
   "lawyer", "privacy", "security", "deletion", "workspace", "feedback", "other",
 ]);
 const supportSeverities = new Set(["low", "normal", "high", "critical"]);
+const aiFeedbackTypes = new Set([
+  "helpful", "not_helpful", "wrong_norm", "broken_link", "outdated",
+  "incomplete", "language", "unsafe", "ignored_facts",
+]);
+const aiFeedbackFailures = new Set([
+  "wrong_norm", "broken_link", "outdated", "unsafe", "ignored_facts",
+]);
+
+function writeProductAnalyticsPoint(input: {
+  event: AnalyticsEventName;
+  surface: ProductSurface;
+  locale: ProductLocale | "en";
+  outcome: ProductOutcome;
+  provider: ProductProvider;
+  variant: ProductFallback | PublicPageKind;
+  elapsedMs: number;
+  extraBlobs?: readonly string[];
+}): void {
+  runtimeEnv().PLATFORM_ANALYTICS?.writeDataPoint({
+    // The first six dimensions are a stable dataset-wide contract. Optional
+    // low-cardinality dimensions start at blob7 and never change their meaning.
+    blobs: [
+      input.event,
+      input.surface,
+      input.locale,
+      input.outcome,
+      input.provider,
+      input.variant,
+      ...(input.extraBlobs ?? []),
+    ],
+    doubles: [1, input.elapsedMs],
+  });
+}
 
 /**
  * Content-free product telemetry. Callers can provide only bounded enum
@@ -96,9 +130,14 @@ export function trackProductEvent(input: {
     ? Math.min(input.elapsedMs ?? 0, 3_600_000)
     : 0;
   try {
-    runtimeEnv().PLATFORM_ANALYTICS?.writeDataPoint({
-      blobs: [input.event, input.surface, locale, outcome, provider, fallback],
-      doubles: [1, elapsedMs],
+    writeProductAnalyticsPoint({
+      event: input.event,
+      surface: input.surface,
+      locale,
+      outcome,
+      provider,
+      variant: fallback,
+      elapsedMs,
     });
   } catch {
     // Telemetry never changes the product result.
@@ -117,9 +156,14 @@ export function trackPublicSiteEvent(input: {
     || !publicEventPages[input.event]?.has(input.page)
   ) return false;
   try {
-    runtimeEnv().PLATFORM_ANALYTICS?.writeDataPoint({
-      blobs: [input.event, "public_site", input.locale, "success", "none", input.page],
-      doubles: [1, 0],
+    writeProductAnalyticsPoint({
+      event: input.event,
+      surface: "public_site",
+      locale: input.locale as ProductLocale | "en",
+      outcome: "success",
+      provider: "none",
+      variant: input.page,
+      elapsedMs: 0,
     });
     return true;
   } catch {
@@ -138,11 +182,47 @@ export function trackSupportTicketCreated(input: {
 }): void {
   if (!supportCategories.has(input.category) || !supportSeverities.has(input.severity)) return;
   try {
-    runtimeEnv().PLATFORM_ANALYTICS?.writeDataPoint({
-      blobs: ["user_support_ticket_created", input.category, input.severity, input.locale],
-      doubles: [1],
+    writeProductAnalyticsPoint({
+      event: "user_support_ticket_created",
+      surface: "support",
+      locale: input.locale,
+      outcome: "success",
+      provider: "none",
+      variant: "none",
+      elapsedMs: 0,
+      extraBlobs: [input.category, input.severity],
     });
   } catch {
     // Metrics must never affect the durable support workflow.
+  }
+}
+
+/**
+ * Records the bounded feedback class, never the optional feedback comment.
+ * This makes user-reported error rate measurable without exporting content.
+ */
+export function trackAiFeedbackSubmitted(input: {
+  feedbackType: string;
+  locale?: ProductLocale;
+}): void {
+  if (!aiFeedbackTypes.has(input.feedbackType)) return;
+  const outcome: ProductOutcome = input.feedbackType === "helpful"
+    ? "success"
+    : aiFeedbackFailures.has(input.feedbackType)
+      ? "failure"
+      : "partial";
+  try {
+    writeProductAnalyticsPoint({
+      event: "feedback_submitted",
+      surface: "ai_chat",
+      locale: input.locale ?? "unknown",
+      outcome,
+      provider: "none",
+      variant: "none",
+      elapsedMs: 0,
+      extraBlobs: [input.feedbackType],
+    });
+  } catch {
+    // Metrics must never affect the durable feedback workflow.
   }
 }

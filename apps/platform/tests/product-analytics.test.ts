@@ -3,7 +3,13 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { env } from "cloudflare:workers";
 import { POST as collectPublicAnalytics } from "../app/api/public/analytics/route";
-import { productEventNames, trackProductEvent, trackPublicSiteEvent } from "../lib/platform/analytics";
+import {
+  productEventNames,
+  trackAiFeedbackSubmitted,
+  trackProductEvent,
+  trackPublicSiteEvent,
+  trackSupportTicketCreated,
+} from "../lib/platform/analytics";
 
 const requiredEvents = [
   "landing_view", "start_scenario", "signup_started", "signup_completed",
@@ -55,6 +61,11 @@ test("product telemetry writes only aggregate enum dimensions and ignores invali
     assert.equal(trackPublicSiteEvent({ event: "landing_view", locale: "en", page: "landing" }), true);
     assert.equal(trackPublicSiteEvent({ event: "landing_view", locale: "en", page: "lawyers" }), false);
     assert.equal(trackPublicSiteEvent({ event: "feedback_submitted", locale: "en", page: "landing" }), false);
+    trackSupportTicketCreated({ category: "technical", severity: "high", locale: "ru" });
+    trackSupportTicketCreated({ category: "not_allowlisted", severity: "high", locale: "ru" });
+    trackAiFeedbackSubmitted({ feedbackType: "helpful", locale: "uz" });
+    trackAiFeedbackSubmitted({ feedbackType: "wrong_norm", locale: "ru" });
+    trackAiFeedbackSubmitted({ feedbackType: "not_allowlisted", locale: "ru" });
     assert.deepEqual(points, [
       {
         blobs: ["document_analyzed", "document_analysis", "uz", "success", "openai", "none"],
@@ -66,6 +77,21 @@ test("product telemetry writes only aggregate enum dimensions and ignores invali
       },
       {
         blobs: ["landing_view", "public_site", "en", "success", "none", "landing"],
+        doubles: [1, 0],
+      },
+      {
+        blobs: [
+          "user_support_ticket_created", "support", "ru", "success", "none", "none",
+          "technical", "high",
+        ],
+        doubles: [1, 0],
+      },
+      {
+        blobs: ["feedback_submitted", "ai_chat", "uz", "success", "none", "none", "helpful"],
+        doubles: [1, 0],
+      },
+      {
+        blobs: ["feedback_submitted", "ai_chat", "ru", "failure", "none", "none", "wrong_norm"],
         doubles: [1, 0],
       },
     ]);

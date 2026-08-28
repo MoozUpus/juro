@@ -4,7 +4,7 @@ import { isoNow } from "../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
 import { AiFeedbackError, aiFeedbackInputSchema, listAiFeedback, saveAiFeedback } from "../../../../../lib/ai/feedback";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
-import { trackProductEvent } from "../../../../../lib/platform/analytics";
+import { trackAiFeedbackSubmitted } from "../../../../../lib/platform/analytics";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
@@ -36,7 +36,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!parsed.ok) return response({ code: "AI_FEEDBACK_INVALID", error: error("uz") }, parsed.error === "payload_too_large" ? 413 : 400);
   try {
     const result = await saveAiFeedback({ db: requireD1(), workspaceId: workspace.id, userId: user.id, now: isoNow(), ...parsed.data });
-    if (!result.replay) trackProductEvent({ event: "feedback_submitted", surface: "ai_chat" });
+    if (!result.replay) trackAiFeedbackSubmitted({ feedbackType: parsed.data.feedbackType });
     return response(result, result.replay ? 200 : 201);
   } catch (value) {
     if (value instanceof AiFeedbackError) return response({ code: value.code, error: error("uz") }, 404);

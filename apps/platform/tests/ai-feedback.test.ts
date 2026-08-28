@@ -75,6 +75,7 @@ test("AI feedback route requires a safe write, authenticated tenant scope and ne
   assert.match(service, /conversation\.workspace_id=\?\s+AND conversation\.owner_user_id=\?/);
   assert.match(service, /ai_feedback_saved/);
   assert.doesNotMatch(service, /track[A-Z]|analytics/);
+  assert.match(route, /trackAiFeedbackSubmitted\(\{ feedbackType: parsed\.data\.feedbackType \}\)/);
   assert.match(client, /\/api\/platform\/ai\/feedback/);
   assert.match(client, /assistantMessageId: answer\.messageId/);
 });
