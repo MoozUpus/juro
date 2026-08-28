@@ -221,16 +221,25 @@ export async function handleLegalCorpusEmbeddingServiceRequest(
     return privateJson("EMBEDDING_PRIVATE_REQUEST_REJECTED", 400);
   }
   try {
-    const upstream = await fetch("https://api.openai.com/v1/embeddings", {
-      method: "POST",
-      redirect: "error",
-      signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
-      headers: {
-        authorization: `Bearer ${env.OPENAI_API_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    // Some Workers runtimes reject AbortSignal.timeout() at request
+    // construction. Keep the same hard bound with an explicit controller.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), EMBEDDING_TIMEOUT_MS);
+    let upstream: Response;
+    try {
+      upstream = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        redirect: "error",
+        signal: controller.signal,
+        headers: {
+          authorization: `Bearer ${env.OPENAI_API_KEY}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     const headers = new Headers({
       "cache-control": "no-store",
       "content-type": upstream.headers.get("content-type") ?? "application/json",
