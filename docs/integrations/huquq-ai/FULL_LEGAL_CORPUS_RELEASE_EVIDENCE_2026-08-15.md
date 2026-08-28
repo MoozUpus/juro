@@ -13053,3 +13053,39 @@ provisions short. D1 size was 3,928,502,272 bytes, below the 8,000,000,000-byte
 rollover reserve. Release snapshot, federation/dedupe manifests, indexed
 314-scenario evaluation, Qdrant/D1 restore and CI remain pending; production
 was not changed.
+
+## Fenced lock-free shard quality snapshot (2026-08-28, 00:23Z)
+
+The checked-in `npm run capture:legal-corpus:shard-quality` command captured a
+read-only snapshot at `2026-08-28T00:23:21.771Z` after scheduled run
+`19b11c22-2ec3-4600-9ac6-62da6dba740a` completed at
+`2026-08-28T00:22:11.376Z` with `status=completed` and `error_code=NULL`.
+Both the preflight and postflight observed the same run ID with an empty
+`scheduled_locks` table; Wrangler reported `rowsWritten=0` and the postflight
+remained before the next nominal cron boundary.
+
+The snapshot recorded 2,473 canonical documents, 2,878 variants, 19,121 exact
+unique current provisions, 61,254 physical current provisions, and
+61,357/61,357 current/indexed chunks. All 44 discovery checkpoints were
+completed and count-aligned, all 19 core-code targets remained indexed, and
+checkpoint errors were zero. Integrity checks were clean: 17 variants still
+lacked a current version and remained in the open queue; empty version
+headers, broken current pointers, orphan variants, orphan versions, provision
+errors, chunk errors, current chunks missing sparse coverage, and completion
+revalidation candidates were all zero.
+
+The failure ledger contained 28 historical/source-condition rows, including
+eight `technically_unavailable` `LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE`
+records for EN-only Lex pages. There were zero retrying jobs, zero failed jobs,
+zero terminal-status jobs, zero dead-letter jobs and zero actionable terminal
+failures. These unavailable source representations are counted by the
+coverage rate but are not failed scheduled runs.
+
+The acquisition queue was not frozen: 25,299 fetch jobs and 2,013 version jobs
+were queued, with `acquisition_state=active`. The release floors remain met for
+documents and indexed chunks but the exact unique-provision floor is still
+2,879 short of 22,000. D1 size was 7,991,840,768 bytes, below the
+8,000,000,000-byte release reserve but close enough that the next lock-free
+capacity check remains mandatory. Release snapshot, indexed 314-scenario
+evaluation, Qdrant/D1 restore, CI, federation activation and production
+rollout remain pending; production was not changed.
