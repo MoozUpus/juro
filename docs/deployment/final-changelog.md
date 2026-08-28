@@ -1,13 +1,30 @@
-# Changelog — ecosystem audit release through 2026-08-27
+# Changelog — ecosystem audit release through 2026-08-28
 
 ## Shipped to production
 
-- Public website Sites v85 is live from runtime commit `7645f096`; deployment
-  `appgdep_6a90125becc481918d66dcc53f333fe4`; Sites v84 is the immediate
+- Platform Worker 155 (`eb132328-68c2-48f3-95d4-90cac0962119`), deployment
+  `24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4`, is at 100% traffic; Worker 154
+  (`3efdad51-d6c1-47f0-ad5b-fb24cd2adc99`) is the immediate rollback.
+- Worker 153 shipped the auth error-association contract. Worker 154 localized
+  RU/UZ status document metadata. Worker 155 makes root icon metadata use the
+  actual allow-listed JURO host, removing the status favicon CSP violation
+  without adding a CSP exception.
+- Exact CI `33129369444` passed Website in 2m30s and Platform in 6m48s. Final
+  local gates passed rendered HTML 35/35, core 1095/1095 and
+  Cloudflare/infrastructure 201/201.
+- Chrome verified both production status locales, same-origin favicon/Apple
+  icon delivery, private noindex, loaded fonts, no overflow and an empty status
+  console. Health was 8/8 operational with no incident at
+  `2026-08-28T00:30:50.972Z`. No migration or D1 write was part of this release.
+- Sites version 86 remains live. Saved Sites version 94 remains unpublished and
+  requires separate action-time approval.
+
+- Public website Sites v86 is live from runtime commit `286c8cec`; deployment
+  `appgdep_6a9027658100819189e6e6bc1a20bf1d`; Sites v85 is the immediate
   public rollback.
-- Platform Worker version 147 (`ed0253e1-1c35-416e-9f2a-5bd8352c1936`),
-  deployment `6f536ee9-9666-41bb-b0f3-6f174019692b`, is at 100% traffic;
-  version 146 is the immediate application rollback.
+- Earlier Worker 147 (`ed0253e1-1c35-416e-9f2a-5bd8352c1936`), deployment
+  `6f536ee9-9666-41bb-b0f3-6f174019692b`, shipped the font-path correction;
+  the Worker 155 checkpoint above supersedes it as the active release.
 - Generated vinext font URLs no longer expose absolute Windows build-machine
   paths. Production now emits `/assets/_vinext_fonts/...`, and the build gate
   rejects future `C:/Users/` or `.vinext/fonts` regressions.

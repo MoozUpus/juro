@@ -67,27 +67,63 @@ code error.
 The focused contract passed 2/2, Platform type-check and lint passed, and the
 full local gate passed development build, rendered smoke, deployable artifact,
 budgets, 1094/1094 core tests and 201/201 Cloudflare/infrastructure tests.
-GitHub Actions CI `33125681307` passed the exact commit: Website completed in
-2m22s and Platform in 8m34s. This candidate is not deployed; production remains
-Worker 152 until a controlled Platform release and post-deploy auth-error QA.
+GitHub Actions CI `33125681307` passed the exact auth commit. The correction was
+deployed in Worker 153 and remains live in Worker 155. The exact production
+auth asset contains `aria-errormessage`, `aria-invalid`, the stable `auth-error`
+target and an atomic alert. No OTP or MFA form was submitted, so live assistive-
+technology announcement remains a bounded manual check rather than a claimed
+conformance result.
 
 ## Release identity
 
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest platform runtime commit | `847a839419c4d24f083b32b20351125335a05a22` |
-| Latest platform source candidate | `742ee6f2f7583a61b242310c79d1ef61cd1ecc9a`; not deployed |
+| Latest platform runtime commit | `fcdb9e6f77ab5ee95f97314c939b780c3fcfdf4b` |
+| Latest platform source candidate | `fcdb9e6f77ab5ee95f97314c939b780c3fcfdf4b`; deployed |
 | Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current Platform candidate CI `33125681307`, public-source CI `33122475415`, localized-matrix CI `33120284413`, exact UI-source CI `33119221595`, Worker 152 CI `33104695509`, Client-link correction CI `33071334033` and v86 source CI `33067543449`; Website and Platform successful in all seven |
-| Production Worker | `juro` version `47671380-a8fe-4d8c-95e2-bd7778541b0c` (version 152), deployment `61882723-0234-4614-bd66-c0ad2b862ba3`, 100% traffic |
-| Immediate application rollback | `8a9accf5-31e6-4947-ab34-e0317b26e61e` (version 151) |
+| GitHub Actions | Current Platform CI `33129369444` on `fcdb9e6f` passed Website in 2m30s and Platform in 6m48s; status-localization CI `33128048066` and auth CI `33125681307` also passed both jobs |
+| Production Worker | `juro` version `eb132328-68c2-48f3-95d4-90cac0962119` (version 155), deployment `24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4`, 100% traffic |
+| Immediate application rollback | `3efdad51-d6c1-47f0-ad5b-fb24cd2adc99` (version 154), deployment `c1638cc6-a037-45c1-8e2d-36119c9dfbec` |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Saved public Sites candidate | Version 94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
 | Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
+
+## 2026-08-28 Worker 153-155 auth and status metadata closure
+
+Worker 153 deployed the auth error-association source from `742ee6f2`. Worker
+154 deployed `e2af1460`, making the public status title and document language
+follow RU/UZ while the bare production status host defaults to Uzbek. Chrome
+then found that the root metadata base still pointed status icons at
+`app.juro.uz`, which the existing same-origin CSP correctly blocked. Worker 155
+deploys `fcdb9e6f`; its allow-listed host-aware metadata base keeps favicon and
+Apple icon requests on their actual JURO application host without trusting an
+arbitrary Host header or weakening CSP.
+
+The final source passed the two focused root-layout tests, type-check, lint,
+development build, rendered HTML 35/35, artifact budgets, core 1095/1095 and
+Cloudflare/infrastructure 201/201. CI `33129369444` passed the exact commit.
+Chrome then verified on Worker 155:
+
+- bare `status.juro.uz` has `html[lang=uz]`, `main[lang=uz]`, the title
+  `Platforma holati — JURO`, one H1/main, private noindex metadata, loaded fonts,
+  no overflow and no warning/error/issue messages;
+- `/ru/status` has the matching Russian document and content language, localized
+  title and the same clean rendering boundary;
+- both icon links resolve to `status.juro.uz`, and the favicon and Apple icon
+  return `200 image/png`; a sampled application route on the status host remains
+  fenced with `404`;
+- the original Lawyer-host Client URL reaches the exact localized Client login
+  in a clean session rather than `Not Found`.
+
+`/api/status` generated at `2026-08-28T00:30:50.972Z` reported all eight
+components operational with zero active or recent incidents. No migration or
+D1 write was part of Workers 153-155. Worker 154 remains the immediate
+application rollback; Sites version 86 remains the independently deployed
+public release and saved version 94 remains unpublished.
 
 ## 2026-08-27 Worker 151 accessibility and performance closure
 

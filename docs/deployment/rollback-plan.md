@@ -1,25 +1,27 @@
-# Rollback plan — Worker 148 / migration 0159 / Sites 86
+# Rollback plan — Worker 155 / migration 0159 / Sites 86
 
 ## Application rollback
 
 The active application version is
-`28dd4ac8-1ae2-4582-9697-8aa28e109cb5` (version 148), deployment
-`76e6f966-d069-4565-a7f9-9b2103a8ea47`. The immediate application rollback is
-`ed0253e1-1c35-416e-9f2a-5bd8352c1936` (version 147). Confirm the currently
-active version before changing traffic. Sites version 86 is live and version
-85 is its immediate public rollback.
+`eb132328-68c2-48f3-95d4-90cac0962119` (version 155), deployment
+`24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4`. The immediate application rollback is
+`3efdad51-d6c1-47f0-ad5b-fb24cd2adc99` (version 154), deployment
+`c1638cc6-a037-45c1-8e2d-36119c9dfbec`. Confirm the currently active version
+before changing traffic. Sites version 86 is live and version 85 is its
+immediate public rollback.
 
 Rollback is justified for a release-caused availability, authentication,
-routing, font loading or signed-share regression. After rollback, repeat the
-six-host HTTPS probe, login/status smoke and `/api/status` read. Version 147
-retains the font-path privacy correction but restores the prior plaintext
-`404` for misplaced Client links on the Lawyer host. Do not report overall
-recovery unless status evidence is fresh and operational.
+routing, metadata, font loading or signed-share regression. After rollback,
+repeat the six-host HTTPS probe, login/status smoke and `/api/status` read.
+Version 154 retains the Lawyer-host redirect, auth error association and
+localized status document metadata, but restores the cross-host status favicon
+that CSP blocks. Do not report overall recovery unless status evidence is fresh
+and operational.
 
-Migration 0159 is additive. An older application can ignore its new table and
-columns, so an application-only rollback should not edit D1. It would, however,
-remove the new lockout/encryption behavior and is therefore a short-lived
-incident action, not a preferred steady state.
+Migration 0159 is additive. Worker 155 added no migration and an application-
+only rollback to Worker 154 must not edit D1. A rollback farther than the
+documented immediate version can remove later lockout/encryption behavior and
+is therefore a separate incident decision, not the ordinary rollback path.
 
 ## Zone TLS rollback
 

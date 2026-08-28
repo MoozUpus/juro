@@ -1,9 +1,11 @@
 # Full platform audit
 
-**Audit date:** 2026-08-25  
-**Branch:** `codex/investor-ready-ecosystem`  
-**Production baseline at start:** Worker version
-`357d0438-1a5f-4b29-ba81-869cbc130c0a`, status 8/8 operational.
+**Audit date:** 2026-08-28
+**Branch:** `codex/investor-ready-ecosystem`
+**Current production checkpoint:** Worker 155
+`eb132328-68c2-48f3-95d4-90cac0962119`, deployment
+`24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4`, 100% traffic; status 8/8
+operational at `2026-08-28T00:30:50.972Z`.
 
 ## Executive outcome
 
@@ -52,7 +54,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | Product analytics | DEPLOYED | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. No conversion baseline is invented before an observation window exists. |
 | AI costs | ACTIVE CONFIGURATION | Four official, effective-dated production price rows passed pre/post D1 export, isolated restore, FK, private R2 and SHA-256 readback gates. No post-effective AI event exists yet, so no measured runtime cost baseline is claimed. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
-| Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. The Platform auth candidate now associates asynchronous Email/OTP/MFA/resend errors with their active controls and passes focused, full-core and infrastructure regression gates. Protected authenticated workflows, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
+| Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Worker 155 delivers the auth error-association contract and matching localized RU/UZ status semantics; Chrome verified the status documents, but no real OTP/MFA error or screen reader was used. Protected authenticated workflows, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
 | Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Overdue billing and unavailable real CWV tracing remain explicit risks. |
 
 ## Definition of done for this candidate
@@ -71,6 +73,19 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
    overall healthy if service health is degraded.
 
 ## Candidate completion checkpoint
+
+- CI `33129369444` passed exact commit `fcdb9e6f` (Website 2m30s,
+  Platform 6m48s). The same source passed local rendered HTML 35/35, core
+  1095/1095, Cloudflare/infrastructure 201/201, type-check, lint and artifact
+  budgets before Worker 155 received 100% production traffic.
+- Worker 155 keeps status icon metadata on each allow-listed first-party host
+  without weakening CSP. Production Chrome verified the bare UZ and explicit
+  RU status pages with correct `html`/`main` language, localized title/H1,
+  loaded fonts, private noindex, same-origin icons, no overflow and an empty
+  warning/error/issue log. Worker 154 is the immediate rollback.
+- The original Lawyer-host Client URL still reaches the exact Client surface
+  instead of `Not Found`; a clean session correctly lands on localized Client
+  login. No form, OTP, MFA, file upload or data mutation was performed.
 
 - GitHub CI `33071334033` passed at exact commit `b4c472332e49b9750ec696652281670efb89bb9b`:
   Website 42/42; Platform rendered HTML 34/34, core 1086/1086 and Cloudflare
@@ -98,7 +113,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
   explicitly PARTIAL.
 - The live telemetry route returned exact `204/403/403/400/413` for valid,
   foreign-origin, missing-fetch-metadata, invalid-pair and oversized requests.
-- `status.juro.uz/api/status`, generated at `2026-08-25T10:58:57.247Z`, was
+- `status.juro.uz/api/status`, generated at `2026-08-28T00:30:50.972Z`, was
   operational for all eight published components with no incident.
 - The price backup gate is complete in private R2. On 2026-08-27, a fresh
   four-object download matched every recorded byte size and SHA-256 value; the

@@ -26,13 +26,21 @@
   breakpoint changes. At 320x800 the live document had zero horizontal
   overflow, a 150 px compact widget, LCP 248 ms and CLS 0.00. The desktop trace
   recorded LCP 521 ms and CLS 0.02.
-- The auth candidate now keeps each asynchronous error associated with the
+- The production auth release now keeps each asynchronous error associated with the
   control that failed. Email, OTP and MFA inputs expose both `aria-invalid`
   and a stable `aria-errormessage`/`aria-describedby` relationship while the
   retry action owns resend failures; terminal OTP/MFA challenges return the
   relationship to the newly focused email field. The alert remains atomic.
   A focused two-test contract, the 1094-test core suite and the 201-test
-  Cloudflare/infrastructure suite pass for this source candidate.
+  Cloudflare/infrastructure suite passed the source candidate; the exact
+  production Worker 155 auth asset contains the same ARIA contract. No OTP or
+  MFA was submitted, so live assistive-technology error announcement remains
+  open.
+- Worker 155 corrects status-document language and first-party icon metadata.
+  Chrome verified the bare UZ and explicit RU status surfaces with matching
+  `html`/`main` language, localized title and H1, one main landmark, loaded
+  fonts, private noindex, no overflow, same-origin icon links and an empty
+  warning/error/issue log.
 - Native links, buttons, forms and `details/summary` disclosures are preferred
   over custom interaction roles.
 - The TSX scan found 325 uses of labelled/live/current/expanded accessibility
@@ -98,8 +106,8 @@ The bounded public-site Chrome sample is now retained for home, Trust and
 Lawyers. Broader release QA still needs keyboard and accessibility-tree samples
 for:
 
-1. live login/register/OTP/MFA error announcement and focus behavior after the
-   source candidate is deployed;
+1. live login/register/OTP/MFA error announcement and focus behavior after an
+   authorized real asynchronous error is produced;
 2. AI composer, clarification, streaming/cancel, source cards and feedback;
 3. document upload, analysis findings, comparison tabs and export actions;
 4. case deadlines and lawyer request/consultation dialogs;

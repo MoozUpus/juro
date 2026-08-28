@@ -27,7 +27,30 @@ WCAG conformance statement. The named Chrome keyboard/accessibility-tree sample
 is retained, but the remaining authenticated workflows and assistive-technology
 behavior remain manual release checks.
 
-## Authentication error-association candidate
+## Worker 155 status metadata and same-origin asset closure
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — status localization `e2af1460cf6d79ce2ffaba3921dcf26c5f4878b6`; host-aware asset metadata `fcdb9e6f77ab5ee95f97314c939b780c3fcfdf4b` |
+| Focused/static gates | PASS — root layout 2/2, type-check and lint |
+| Full local release gate | PASS — development build, rendered HTML 35/35, artifact budgets, core 1095/1095 and Cloudflare/infrastructure 201/201 |
+| GitHub Actions CI `33129369444` | PASS on exact `fcdb9e6f` — Website 2m30s and Platform 6m48s |
+| Platform deployment | PASS — Worker 155 `eb132328-68c2-48f3-95d4-90cac0962119`, deployment `24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4`, 100%; Worker 154 `3efdad51-d6c1-47f0-ad5b-fb24cd2adc99` is rollback |
+| UZ Chrome root | PASS — localized title, `html[lang=uz]`, `main[lang=uz]`, one H1/main, loaded fonts, private noindex, no overflow and an empty warning/error/issue log |
+| RU Chrome route | PASS — localized title, `html[lang=ru]`, `main[lang=ru]`, one H1/main, loaded fonts, private noindex, no overflow and an empty warning/error/issue log |
+| Icon/CSP boundary | PASS — favicon and Apple icon resolve on `status.juro.uz`, return `200 image/png`, and no CSP issue remains; no `unsafe-eval` or cross-origin image exception was added |
+| Status route fence | PASS — sampled Client route on the status host remains `404` |
+| Production health | PASS — 8/8 operational, zero active/recent incidents at `2026-08-28T00:30:50.972Z` |
+
+The exact Lawyer-host screenshot URL was also replayed in a clean Chrome
+session. It reached the localized Client login at `app.juro.uz` with one H1 and
+main, loaded fonts, no overflow and private noindex metadata rather than a
+plaintext `Not Found`. The main document is in Standards Mode. CSP/eval and
+Quirks diagnostics attached to the third-party Cloudflare Turnstile challenge
+document are retained as provider-frame observations; JURO CSP was not weakened
+to suppress them.
+
+## Authentication error-association release
 
 | Gate | Result |
 | --- | --- |
@@ -37,11 +60,11 @@ behavior remain manual release checks.
 | Focused regression | PASS — 2/2 auth accessibility source-contract tests |
 | Local Platform gates | PASS — type-check, lint, development build, rendered smoke, deployable artifact and budgets, full core 1094/1094 and Cloudflare/infrastructure 201/201 |
 | GitHub Actions CI `33125681307` | PASS — Website 2m22s and Platform 8m34s, including locked installs, lint, types, tests, artifacts, Cloudflare matrix, production-dependency audit and licence policy |
-| Production boundary | NOT DEPLOYED — production remains Worker 152; live screen-reader/error-state replay is still required after a controlled Platform release |
+| Production boundary | PASS for source delivery — deployed in Worker 153 and retained in Worker 155; the exact production auth asset contains `aria-errormessage`, `aria-invalid`, `aria-atomic` and the stable `auth-error` target |
 
-No email, OTP, MFA code or consent was submitted for this candidate. The
-source and automated gates prove the association contract, not assistive-
-technology behavior on the current production Worker.
+No email, OTP, MFA code or consent was submitted for this release. The source,
+exact production asset and automated gates prove the delivered association
+contract, not live screen-reader announcement after an asynchronous error.
 
 ## Lawyer catalogue performance and public-photo candidate
 
