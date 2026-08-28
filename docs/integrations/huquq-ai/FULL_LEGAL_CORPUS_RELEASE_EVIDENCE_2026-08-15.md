@@ -13229,3 +13229,19 @@ The four runtime sources also cannot be represented as a disjoint numbered
 shard manifest without a documented deduplication and snapshot proof. The
 machine-readable transition record is
 `STAGING_RELEASE_STAGE_TRANSITION_2026-08-28.json`.
+
+## Post-stop D1 recheck (2026-08-28, 11:24Z)
+
+Sequential read-only D1 probes were repeated after the stage-transition
+commit. Shard 1 (`1,635` documents) and shard 2 (`2,495` documents) remain
+`acquisition_state=frozen` with zero open jobs, locks or running scheduled
+runs. Shard 3 remains at `113` documents and `31,159` durable queued jobs;
+v2 remains at `599` documents and `27,689` durable queued jobs. The legacy
+database remains at `3,575` documents with its historical `43,686` open jobs,
+two locks and three running-run rows; it is not bound to the corpus Worker.
+All five probes reported `rows_written=0` and `changed_database=false`.
+No new collection was started and no queue row was deleted or rewritten. This
+recheck is operational evidence only and does not close the snapshot,
+federated deduplication, current indexed evaluation, Qdrant or restore gates.
+Machine-readable results are in
+`STAGING_POST_STOP_D1_RECHECK_2026-08-28.json`.

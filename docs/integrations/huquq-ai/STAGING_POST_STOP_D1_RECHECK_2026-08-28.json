@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-08-28T11:24:00Z",
+  "applicationCommit": "639eb628b7637a3092a2540ab1916b34ea03d8b7",
+  "readOnly": true,
+  "queryShape": "document, open ingestion jobs, scheduled locks/runs and shard acquisition state where available",
+  "sources": [
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "documents": 1635,
+      "openJobs": 0,
+      "lockCount": 0,
+      "runningRuns": 0,
+      "acquisitionState": "frozen",
+      "latestFinishedAt": "2026-08-25T16:09:09.353Z",
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "documents": 2495,
+      "openJobs": 0,
+      "lockCount": 0,
+      "runningRuns": 0,
+      "acquisitionState": "frozen",
+      "latestFinishedAt": "2026-08-28T00:46:09.566Z",
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "documents": 113,
+      "openJobs": 31159,
+      "lockCount": 0,
+      "runningRuns": 0,
+      "acquisitionState": "active",
+      "latestFinishedAt": "2026-08-28T05:13:57.227Z",
+      "rowsWritten": 0,
+      "changedDatabase": false,
+      "note": "Worker auto-ingestion is disabled; durable queued jobs remain preserved and the control row was not mutated."
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "documents": 599,
+      "openJobs": 27689,
+      "lockCount": 0,
+      "runningRuns": 0,
+      "latestFinishedAt": "2026-08-24T01:13:00.605Z",
+      "rowsWritten": 0,
+      "changedDatabase": false,
+      "note": "Worker auto-ingestion is disabled; durable queued jobs remain preserved."
+    },
+    {
+      "databaseName": "juro-staging",
+      "documents": 3575,
+      "openJobs": 43686,
+      "lockCount": 2,
+      "runningRuns": 3,
+      "latestFinishedAt": "2026-08-21T07:30:03.973Z",
+      "rowsWritten": 0,
+      "changedDatabase": false,
+      "note": "Legacy/main staging source; not bound to the corpus Worker. Existing locks/runs are historical runtime state and were not altered."
+    }
+  ],
+  "conclusion": {
+    "newCollectionStarted": false,
+    "newDocumentsObservedAfterStop": false,
+    "queueRowsDeletedOrRewritten": false,
+    "productionChanged": false,
+    "releaseGateClosed": false
+  },
+  "limitations": [
+    "This read-only recheck does not create a corpus snapshot or prove disjoint federation.",
+    "Open durable queues and legacy historical locks/runs remain release-gate blockers.",
+    "No current indexed 314-scenario benchmark or full-corpus Qdrant benchmark is asserted."
+  ]
+}
