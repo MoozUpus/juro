@@ -185,3 +185,40 @@ the local-origin CSP blocked canonical production favicon/manifest URLs.
 The Trust contrast correction is therefore source- and candidate-verified but
 not live in Sites v86. It remains a production release gate alongside the
 homepage motion, immutable asset caching and responsive lawyer-photo delivery.
+
+## 2026-08-28 Client login CLS candidate
+
+A cold production Chrome trace of `https://app.juro.uz/ru/auth/login` used a
+`390×844` mobile/touch viewport at 3× DPR, 4× CPU slowdown and Fast 4G. It
+recorded LCP 2,344 ms (705 ms TTFB and 1,639 ms render delay) and CLS 0.2779,
+which fails the <=0.1 target. The trace identified the inherited
+`.auth-brand::after` pseudo-element as LCP. Source inspection confirmed that
+the legacy global auth treatment still rendered a decorative 620 px `J` on
+the current Client surface. A separate late shift occurred when the 65 px
+Turnstile reservation grew to approximately 70.1 px.
+
+The candidate explicitly neutralizes that pseudo-element only for
+`data-product="client"` and reserves 72 px for Turnstile on both authenticated
+and guest auth surfaces. Lawyer's separate decorative ring remains unchanged.
+The generated production Worker was served locally and confirmed
+`display:none`, `content:none` and CLS 0.00; local auth intentionally had no
+production secret or live Turnstile challenge.
+
+For a closer pre-release comparison, the same candidate rules were installed
+as a pre-document adopted stylesheet in a new isolated Chrome context while
+the unchanged production page loaded its real Turnstile. The LCP moved to the
+page `H2` at 1,692 ms. A 14-second `PerformanceObserver` run recorded one late
+shift totaling 0.0462, below the <=0.1 target; the pseudo-element remained
+disabled and the widget held exactly 72 px.
+
+| Metric | Live Worker 166 | Live page with isolated candidate rules | Goal |
+| --- | ---: | ---: | ---: |
+| LCP | 2,344 ms | 1,692 ms | <=2,500 ms |
+| TTFB | 705 ms | same production origin, not separately attributed | <800 ms |
+| CLS | 0.2779 | 0.0462 | <=0.1 |
+| Client pseudo-element | visible 620 px `J` | `display:none; content:none` | absent |
+| Turnstile reservation | 65 px before ~70.1 px render | 72 px before/after | no avoidable growth |
+
+The injected-rule result is controlled pre-release evidence, not a production
+after-measurement. Worker 166 remains live until the source commit passes its
+exact CI and a separate Worker deployment succeeds. Sites v86 was not changed.

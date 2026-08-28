@@ -34,6 +34,16 @@
   pointer-events: none;
 }
 
+/* The legacy global auth treatment still defines a giant decorative "J" on
+   .auth-brand::after. The current Client surface does not use it: leaving it
+   alive makes that pseudo-element the mobile LCP and causes a font-swap layout
+   shift. Keep the separate Lawyer ring above, and explicitly neutralize only
+   the Client pseudo-element. */
+.auth-brand[data-product="client"]::after {
+  display: none;
+  content: none;
+}
+
 .auth-brand img {
   width: 132px;
   height: 82px;
@@ -412,7 +422,7 @@
 
 .auth-turnstile-widget {
   width: 100%;
-  min-height: 65px;
+  min-height: 72px;
 }
 
 .auth-turnstile-status {

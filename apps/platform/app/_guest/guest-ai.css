@@ -246,7 +246,7 @@
 }
 .auth-turnstile-widget {
   width: 100%;
-  min-height: 65px;
+  min-height: 72px;
 }
 .auth-turnstile-status {
   display: block;

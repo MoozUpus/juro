@@ -1,5 +1,20 @@
 # Test report — current evidence through 2026-08-28
 
+## Client login mobile CLS candidate
+
+| Gate | Result |
+| --- | --- |
+| Live production baseline | FAIL observed — a cold Chrome trace of `https://app.juro.uz/ru/auth/login` at `390×844`, 3× DPR, 4× CPU and Fast 4G recorded LCP 2,344 ms, TTFB 705 ms and CLS 0.2779; the obsolete `.auth-brand::after` decorative `J` became the LCP element and the late Turnstile insertion contributed a second shift |
+| Root cause | CONFIRMED — the current Client auth surface inherited the legacy global 620 px pseudo-element, while the Turnstile widget reserved 65 px before rendering at approximately 70.1 px |
+| Source correction | PASS candidate — Client auth explicitly disables only its obsolete pseudo-element; Lawyer's separate ring is unchanged; authenticated and guest Turnstile widgets now reserve 72 px |
+| Live-page candidate replay | PASS threshold — the candidate CSS was injected before document rendering in an isolated Chrome context while loading the real production page and real Turnstile; LCP moved to the `H2` at 1,692 ms and the 14-second layout observer recorded total CLS 0.0462, below the <=0.1 target |
+| Local built Worker replay | PASS — the generated production Worker rendered the Client login with `display:none` / `content:none` on the pseudo-element and CLS 0.00 under the same mobile profile; local auth intentionally had no production secrets or Turnstile challenge |
+| Focused regression | PASS — 10/10 auth accessibility and theme-resilience tests |
+| Static and artifact gates | PASS — type-check, lint and production build; artifact budgets remain within limits, including client CSS 594.7 KiB of 600.0 KiB |
+| Cloudflare/infrastructure suite | PASS — 203/203 |
+| Broad core suite | PARTIAL by explicit scope — no failing assertion was observed, but the run reached its 300-second harness limit during the legal-corpus block; that block is excluded from this release step per the user's instruction to skip legislation-database work |
+| Production state | NOT YET DEPLOYED — Worker 166 remains live; this section records pre-release evidence only |
+
 ## Privacy-safe analytics schema and data-quality candidate
 
 | Gate | Result |

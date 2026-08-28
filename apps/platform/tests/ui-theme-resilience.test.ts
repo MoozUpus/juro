@@ -26,6 +26,7 @@ test("authentication surfaces inherit semantic light and dark theme tokens", () 
   assert.match(auth, /\.auth-card\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?background:\s*var\(--surface-raised\)/);
   assert.match(auth, /\.auth-brand\s*\{[\s\S]*?min-width:\s*0/);
   assert.match(auth, /\.auth-brand span\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-width:\s*0;[\s\S]*?flex-wrap:\s*wrap/);
+  assert.match(auth, /\.auth-brand\[data-product="client"\]::after\s*\{[^}]*display:\s*none;[^}]*content:\s*none;/s);
   assert.match(auth, /\.auth-unavailable\s*\{[^}]*padding-right:\s*0/s);
 });
 
@@ -37,7 +38,7 @@ test("Turnstile reserves its final height and switches to compact mobile layout"
   for (const styles of [auth, guest]) {
     assert.match(
       styles,
-      /\.auth-turnstile-widget\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*65px;/s,
+      /\.auth-turnstile-widget\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*72px;/s,
     );
     assert.match(
       styles,
