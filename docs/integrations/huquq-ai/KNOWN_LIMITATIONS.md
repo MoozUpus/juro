@@ -30,15 +30,21 @@
   has a separate private provider path; it does not promote owner material into
   global law or make a private document an official source.
 - Staging corpus acquisition is intentionally stopped for the current release
-  evidence phase. The read-only federated runtime routes the frozen legacy,
-  v2, shard-1 and shard-2 bindings; shard-3 remains excluded because its
-  acquisition control row is still active. Per-database totals, queue
-  reconciliation, duplicate identity findings and the remaining release gates
-  are recorded in `STAGING_FEDERATED_RETRIEVAL_2026-08-28.md`. These totals are
-  not summed as a unique-corpus metric: cross-source overlap requires a formal
+  evidence phase. The shard Worker was redeployed with
+  `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` (version
+  `d7641662-02a1-4611-a9ff-e3f505cd9770`); a post-deploy read-only probe found
+  no new documents and `rows_written=0`. The shard-3 control row remains
+  `active` and its durable queued jobs were not deleted or rewritten, so the
+  ingestion queue is not yet a release-frozen queue. The read-only federated
+  runtime routes the frozen legacy, v2, shard-1 and shard-2 bindings; shard-3
+  remains outside that release set. Per-database totals, queue reconciliation,
+  duplicate identity findings and the remaining release gates are recorded in
+  `STAGING_FEDERATED_RETRIEVAL_2026-08-28.md` and
+  `STAGING_ACQUISITION_FREEZE_2026-08-28.json`. These totals are not summed as
+  a unique-corpus metric: cross-source overlap requires a formal
   partition/deduplication manifest. The isolated shard-1 D1 export/restore now
-  has a verified local `quick_check=ok` and zero foreign-key violations, but
-  no federated snapshot, indexed 314-scenario benchmark or full-corpus Qdrant
+  has a verified local `quick_check=ok` and zero foreign-key violations, but no
+  federated snapshot, indexed 314-scenario benchmark or full-corpus Qdrant
   evidence has been claimed.
 - The new source-card and full-article modal passed type-check, focused boundary
   tests and staging artifact/deployment checks. Authenticated desktop QA passed

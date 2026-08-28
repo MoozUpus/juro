@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-08-28T10:46:22.6268995Z",
+  "purpose": "Record the staging acquisition stop before release-evidence work; this is not a corpus snapshot or release approval.",
+  "deployment": {
+    "worker": "juro-legal-corpus-shard-staging",
+    "versionId": "d7641662-02a1-4611-a9ff-e3f505cd9770",
+    "config": "apps/platform/wrangler.legal-corpus-shard.jsonc",
+    "flags": {
+      "LEGAL_CORPUS_ENABLED": true,
+      "LEGAL_CORPUS_AUTO_INGEST_ENABLED": false,
+      "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": false,
+      "LEGAL_CORPUS_SHADOW_MODE": false,
+      "LEGAL_CORPUS_DENSE_ENABLED": false
+    }
+  },
+  "database": {
+    "name": "juro-staging-corpus-shard-3",
+    "id": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+    "acquisitionState": "active",
+    "controlRowWasNotMutated": true
+  },
+  "readOnlyVerification": {
+    "verifiedAt": "2026-08-28T10:46:22.6268995Z",
+    "rowsWritten": 0,
+    "lockCount": 0,
+    "latestScheduledRunStatus": "completed",
+    "latestScheduledRunFinishedAt": "2026-08-28T05:13:57.227Z",
+    "documents": 113,
+    "uniqueCurrentProvisions": 7863,
+    "currentChunks": 24362,
+    "indexedCurrentChunks": 24362,
+    "openJobs": 31159,
+    "failedJobs": 0,
+    "deadLetterJobs": 0,
+    "terminalOrTechnicallyUnavailableFailures": 7,
+    "noNewDocumentsObservedAfterDeployment": true
+  },
+  "releaseInterpretation": {
+    "acquisitionNetworkWorkStoppedByWorkerFlag": true,
+    "queueFrozen": false,
+    "federatedSnapshotCreated": false,
+    "indexed314EvaluationRun": false,
+    "productionChanged": false,
+    "releaseApproved": false,
+    "notes": [
+      "Queued jobs remain durable and were not deleted, marked completed, or rewritten.",
+      "The active control row is preserved for auditability; release evidence must still account for the open queue.",
+      "This file contains metadata only and no legal text or user data."
+    ]
+  }
+}

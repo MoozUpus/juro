@@ -13185,3 +13185,21 @@ retrying language-text-unavailable evidence row attached to a completed job
 and projected as resolved by the dashboard; there were zero retrying jobs,
 failed jobs or dead-letter jobs. The queue remained open (26,238 fetch and
 3,289 version jobs), so release and evaluation gates remain pending.
+
+## Acquisition stopped for release-evidence work (2026-08-28, 10:46Z)
+
+At the owner's request, staging acquisition was stopped before moving to the
+release-evidence phase. The shard Worker was redeployed as version
+`d7641662-02a1-4611-a9ff-e3f505cd9770` with
+`LEGAL_CORPUS_AUTO_INGEST_ENABLED=false`, live Lex disabled, shadow mode
+disabled and dense retrieval disabled. A post-deploy read-only D1 probe of
+`juro-staging-corpus-shard-3` returned `rows_written=0`, an empty scheduled
+lock, the same completed run (`2026-08-28T05:13:57.227Z`), and unchanged
+counts of 113 documents, 7,863 exact current provisions and 24,362
+current/indexed chunks. There are 31,159 durable queued jobs; they were not
+deleted or rewritten, and the control row remains `active` for auditability.
+This is a stop-work/freeze observation, not a release snapshot: the queue is
+not frozen, the federated deduplication manifest does not exist, and the
+indexed 314-scenario evaluation, full-corpus Qdrant benchmark and D1 restore
+gates remain pending. Production was not changed. Machine-readable evidence is
+in `STAGING_ACQUISITION_FREEZE_2026-08-28.json`.
