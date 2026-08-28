@@ -15,6 +15,50 @@
       "LEGAL_CORPUS_DENSE_ENABLED": false
     }
   },
+  "additionalStagingSources": [
+    {
+      "worker": "juro-legal-corpus-staging",
+      "versionId": "72dd276b-4ba6-4275-aa12-a2a1b09f197f",
+      "database": {
+        "name": "juro-staging-corpus-v2",
+        "id": "62620fb3-3da3-4c76-a8e9-aa60858c1063"
+      },
+      "flags": {
+        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": false,
+        "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": false,
+        "LEGAL_CORPUS_SHADOW_MODE": false
+      },
+      "readOnlyVerification": {
+        "rowsWritten": 0,
+        "latestScheduledRunStatus": "failed",
+        "latestScheduledRunFinishedAt": "2026-08-24T01:13:00.605Z",
+        "documents": 599,
+        "openJobs": 27689,
+        "failedJobs": 0,
+        "deadLetterJobs": 0,
+        "terminalOrTechnicallyUnavailableFailures": 5,
+        "noNewDocumentsObservedAfterDeployment": true
+      }
+    },
+    {
+      "database": {
+        "name": "juro-staging",
+        "id": "bb716a96-b2fb-4823-90d6-6c228fed181a"
+      },
+      "bindingRole": "legacy/main staging database; not bound to the current corpus Worker",
+      "readOnlyVerification": {
+        "rowsWritten": 0,
+        "latestScheduledRunStatus": "failed",
+        "latestScheduledRunFinishedAt": "2026-08-21T07:30:03.973Z",
+        "documents": 3575,
+        "openJobs": 43686,
+        "failedJobs": 0,
+        "deadLetterJobs": 0,
+        "terminalOrTechnicallyUnavailableFailures": 230,
+        "noNewDocumentsObservedAfterDeployment": true
+      }
+    }
+  ],
   "database": {
     "name": "juro-staging-corpus-shard-3",
     "id": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",

@@ -13203,3 +13203,11 @@ not frozen, the federated deduplication manifest does not exist, and the
 indexed 314-scenario evaluation, full-corpus Qdrant benchmark and D1 restore
 gates remain pending. Production was not changed. Machine-readable evidence is
 in `STAGING_ACQUISITION_FREEZE_2026-08-28.json`.
+
+The primary staging corpus Worker was already on version
+`72dd276b-4ba6-4275-aa12-a2a1b09f197f` with the same acquisition, live-Lex and
+shadow flags disabled; its v2 database remained at 599 documents with no
+failed or dead-letter jobs in a read-only probe. The legacy `juro-staging`
+database is not bound to the current corpus Worker and likewise showed no
+post-freeze document acquisition. Its historical queue and source-condition
+ledger remain preserved for reconciliation, not silently discarded.
