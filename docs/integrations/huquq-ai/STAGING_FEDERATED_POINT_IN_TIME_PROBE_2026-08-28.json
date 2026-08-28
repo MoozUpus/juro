@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "environment": "staging",
-  "capturedAt": "2026-08-28T08:05:00.000Z",
+  "capturedAt": "2026-08-28T08:13:42.4440040Z",
   "pointInTime": "2026-08-28T05:50:00.000Z",
   "source": "wrangler d1 time-travel info",
   "readOnly": true,
