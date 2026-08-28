@@ -13366,3 +13366,19 @@ excluded continuation shard. Existing backlogs and failure-ledger records are
 unchanged. All five calls reported zero writes and `changed_db=false`.
 Machine-readable details are in
 `STAGING_SCHEDULER_STOP_RECHECK_2026-08-28.json`.
+
+## Next-stage gate recheck after acquisition stop (2026-08-28, 15:46Z)
+
+No crawl, ingestion or retry was started. A sequential read-only D1 query of
+frozen shard 2 recorded 2,495 canonical documents, 61,983 current provisions,
+62,089 current/indexed chunks, zero active/failed/dead-letter jobs and 44/44
+checkpoints. Wrangler reported `rows_written=0`, `changes=0` and
+`changed_db=false`. Shard-2 isolated restore remains proven by its existing
+evidence file.
+
+The workflow therefore moved to the release-evidence stage, but the
+federated snapshot, indexed 314-scenario evaluation, full-corpus Qdrant
+benchmark/restore and federated D1 backup/restore gates remain blocked by the
+previously recorded lack of a disjoint snapshot and dense index. The full
+machine-readable result is in
+`STAGING_NEXT_STAGE_GATE_RECHECK_2026-08-28.json`.

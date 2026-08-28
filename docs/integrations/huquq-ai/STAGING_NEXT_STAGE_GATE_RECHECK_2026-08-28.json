@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-28T15:46:26.1535754Z",
+  "purpose": "Record a read-only next-stage gate after the explicit acquisition stop; no new legal documents were collected.",
+  "source": {
+    "databaseName": "juro-staging-corpus-shard-2",
+    "config": "wrangler.legal-corpus.jsonc",
+    "environment": "staging",
+    "queryMode": "remote-read-only",
+    "query": "SELECT document, current provisions, current chunks, indexed chunks, active jobs, failed jobs, dead-letter jobs and completed/total checkpoints from the existing corpus tables."
+  },
+  "result": {
+    "canonicalDocuments": 2495,
+    "currentProvisions": 61983,
+    "currentChunks": 62089,
+    "indexedChunks": 62089,
+    "activeJobs": 0,
+    "failedJobs": 0,
+    "deadLetterJobs": 0,
+    "checkpointsCompleted": 44,
+    "checkpointsTotal": 44,
+    "databaseSizeBytes": 8116838400,
+    "rowsRead": 4187951,
+    "rowsWritten": 0,
+    "changes": 0,
+    "changedDatabase": false
+  },
+  "stageDecision": {
+    "acquisition": "stopped",
+    "newCrawlStarted": false,
+    "newIngestionStarted": false,
+    "retryStarted": false,
+    "shard2Integrity": "already-proven-by-STAGING_D1_SHARD2_ISOLATED_RESTORE_2026-08-28.json",
+    "nextStage": "release-evidence-gates"
+  },
+  "downstreamGates": {
+    "federatedSnapshot": "blocked",
+    "indexed314Evaluation": "blocked",
+    "qdrantFullCorpusBenchmarkRestore": "blocked",
+    "federatedD1BackupRestore": "blocked"
+  },
+  "blockers": [
+    "No current disjoint federated snapshot manifest has been verified.",
+    "The dense index probe found zero dense_vector_id rows across all four retrieval sources.",
+    "Federated release evidence requires disjoint shard IDs; the existing read-only probe recorded cross-shard overlaps.",
+    "Legacy and v2 queues/failure ledgers remain historical open state; they were not mutated after the acquisition stop."
+  ],
+  "production": {
+    "deploymentPerformed": false,
+    "migrationPerformed": false,
+    "featureFlagsChanged": false,
+    "dnsChanged": false
+  }
+}
