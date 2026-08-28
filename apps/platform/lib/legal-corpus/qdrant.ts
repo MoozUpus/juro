@@ -124,7 +124,10 @@ export class QdrantCorpusError extends Error {
       | "QDRANT_SNAPSHOT_REQUIRED"
       | "QDRANT_SNAPSHOT_INVALID"
       | "QDRANT_PRIVATE_ROUTE_REJECTED"
-      | "QDRANT_PRIVATE_SERVICE_UNAVAILABLE",
+      | "QDRANT_PRIVATE_SERVICE_UNAVAILABLE"
+      | "QDRANT_HTTP_4XX"
+      | "QDRANT_HTTP_5XX"
+      | "QDRANT_HTTP_OTHER",
     readonly retryable: boolean,
   ) {
     super(code);
@@ -274,7 +277,14 @@ async function requestResponse(
     const retryable = response.status === 408 || response.status === 409
       || response.status === 429 || response.status >= 500;
     await response.body?.cancel().catch(() => undefined);
-    throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", retryable);
+    throw new QdrantCorpusError(
+      response.status >= 500
+        ? "QDRANT_HTTP_5XX"
+        : response.status >= 400
+          ? "QDRANT_HTTP_4XX"
+          : "QDRANT_HTTP_OTHER",
+      retryable,
+    );
   }
   return response;
 }
