@@ -1,4 +1,4 @@
-# Performance audit — 2026-08-27
+# Performance audit — 2026-08-28
 
 ## What is measured
 
@@ -106,9 +106,9 @@ reports and hashes are in
 - PASS: production builds are minified and route chunks are emitted separately;
   the UI exposes skeleton/progress states in the exercised flows.
 - PARTIAL: LCP, CLS, render-blocking savings, DOM and network dependencies are
-  now measured for the RU home, lawyer catalogue and login surface. INP, field
-  CrUX, complete TBT/Speed Index, unused-JS coverage, remaining public route
-  classes and every
+  now measured for the RU home, Trust Center, Legal Center, video, lawyer
+  catalogue and login surface. INP, field CrUX, complete TBT/Speed Index,
+  unused-JS coverage, other public route classes and every
   authenticated route remain open.
 
 ## Required completion gate
@@ -118,8 +118,9 @@ no longer the complete current release candidate. After the current branch
 passes CI, save a superseding Sites version, request explicit approval for the
 public deployment, then verify both immutable static assets and responsive
 WebP lawyer photos in production. Production remains Sites v86 until that
-approval and deployment succeed. Trust and legal-centre performance route
-classes remain to be sampled.
+approval and deployment succeed. Trust and Legal Center now have bounded
+production samples; repeat the same profiles after the authorized Sites release
+to separate the saved caching/motion/contrast corrections from v86 variance.
 
 ## 2026-08-28 homepage motion release candidate
 
@@ -161,7 +162,7 @@ same audit on live v86 scored 100. The full website gate passed a deployable
 production build, lint, type-check, 48/48 tests and the complete automated
 desktop/mobile, light/dark RU/UZ/EN accessibility matrix.
 
-### Trust and video production route classes
+### Trust, Legal Center and video production route classes
 
 Three live Sites v86 Trust Center traces used the same `390×844`, 4× CPU and
 Fast 4G profile. LCP/TTFB results were `3,726/1,891 ms`, `1,551/117 ms` and
@@ -185,6 +186,25 @@ the local-origin CSP blocked canonical production favicon/manifest URLs.
 The Trust contrast correction is therefore source- and candidate-verified but
 not live in Sites v86. It remains a production release gate alongside the
 homepage motion, immutable asset caching and responsive lawyer-photo delivery.
+
+A later same-day replay retained the same Trust variance instead of silently
+promoting the two warm passes into a blanket result. Three more LCP/TTFB pairs
+were `4,519/1,981 ms`, `3,608/1,870 ms` and `2,120/121 ms`; CLS was 0.00 in
+all three. The first two traces failed the 2.5-second LCP goal because of high
+document latency, while the third passed. The H1 remained the text LCP and the
+stable trace still spent about 2.0 seconds in render delay.
+
+The first bounded Legal Center production sample used the same mobile, CPU and
+network profile. Its three LCP/TTFB pairs were `3,920/1,871 ms`,
+`2,623/125 ms` and `2,370/121 ms`; CLS was 0.00 in all three. The cold response
+failed primarily on document latency. Even with fast document responses, text
+render delay remained 2,249–2,498 ms, leaving one warm replay 123 ms over the
+goal and one 130 ms inside it. Production v86's content-hashed CSS and Manrope
+font responses were Cloudflare cache hits but still returned
+`Cache-Control: public, max-age=0, must-revalidate`; both sampled font responses
+used `application/octet-stream`. The already saved immutable-asset candidate
+addresses revalidation, but its real effect and any font MIME/preload follow-up
+must be measured on a separately authorized public Sites release.
 
 ## 2026-08-28 Client login CLS release
 
