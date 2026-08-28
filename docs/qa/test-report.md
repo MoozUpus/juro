@@ -1,5 +1,26 @@
 # Test report — current evidence through 2026-08-28
 
+## Worker 157 Lawyer interaction-floor closure
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `67bd679e39e2ce2357d879cc7d806e53e4ce2651` on Draft PR `#64` |
+| Focused regression | PASS — 11/11 Platform accessibility contracts, including the Lawyer professional-workflow 44 px source guard |
+| Full local release gate | PASS — lint, type-check, production build, artifact budgets, rendered Worker 35/35, core 1097/1097 and Cloudflare/infrastructure 201/201 |
+| GitHub Actions CI `33134728801` | PASS on exact `67bd679e` — Website 2m28s and Platform 8m47s |
+| Platform deployment | PASS — Worker 157 `2ec24c74-57b9-4c66-8afa-372cceb24767`, deployment `62266f40-fe05-423b-9916-7c4220bf66d3`, 100%; Worker 156 `b361ae62-1220-4fa3-b480-488d4791bda4` is rollback |
+| Delivered asset | PASS — production `/assets/index-CLgXbjP1.css` contains both Lawyer workspace and consultation target selectors with the 44 px floor |
+| Protected-role boundary | PASS fail-closed — anonymous Lawyer workspace API is `401`; a Client session is sent to the dedicated Lawyer re-authentication surface without Client-data disclosure |
+| Production Chrome | PASS for the re-authentication boundary — complete document, one H1, one main landmark and no horizontal overflow; signed-in Lawyer workflow rendering remains unverified because no production Lawyer session was fabricated |
+| Production health | PASS — both status endpoints agreed on 8/8 operational and zero active/recent incidents at `2026-08-28T02:14:34.121Z` |
+| Deployment boundary | UNCHANGED — no production D1, DNS or Sites change; Sites v86 remains live and saved v94 remains unpublished |
+
+Worker 157 raises the confirmed professional workflow controls in Lawyer
+offers, messages, AI assist, internal notes, consultations, scheduling,
+knowledge, time tools and source links. This proves source delivery and the
+fail-closed production boundary; it is not a signed-in Lawyer route-loop or a
+blanket WCAG conformance claim.
+
 ## Worker 156 document-comparison interaction-floor closure
 
 | Gate | Result |
@@ -84,7 +105,7 @@ to suppress them.
 | Focused regression | PASS — 2/2 auth accessibility source-contract tests |
 | Local Platform gates | PASS — type-check, lint, development build, rendered smoke, deployable artifact and budgets, full core 1094/1094 and Cloudflare/infrastructure 201/201 |
 | GitHub Actions CI `33125681307` | PASS — Website 2m22s and Platform 8m34s, including locked installs, lint, types, tests, artifacts, Cloudflare matrix, production-dependency audit and licence policy |
-| Production boundary | PASS for source delivery — deployed in Worker 153 and retained in Worker 156; the exact production auth asset contains `aria-errormessage`, `aria-invalid`, `aria-atomic` and the stable `auth-error` target |
+| Production boundary | PASS for source delivery — deployed in Worker 153 and retained in Worker 157; the exact production auth asset contains `aria-errormessage`, `aria-invalid`, `aria-atomic` and the stable `auth-error` target |
 
 No email, OTP, MFA code or consent was submitted for this release. The source,
 exact production asset and automated gates prove the delivered association

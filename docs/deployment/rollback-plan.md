@@ -1,27 +1,29 @@
-# Rollback plan — Worker 156 / migration 0159 / Sites 86
+# Rollback plan — Worker 157 / migration 0159 / Sites 86
 
 ## Application rollback
 
 The active application version is
+`2ec24c74-57b9-4c66-8afa-372cceb24767` (version 157), deployment
+`62266f40-fe05-423b-9916-7c4220bf66d3`. The immediate application rollback is
 `b361ae62-1220-4fa3-b480-488d4791bda4` (version 156), deployment
-`caaa6ee7-ec98-4ef8-80ac-7643cb2f53ca`. The immediate application rollback is
-`eb132328-68c2-48f3-95d4-90cac0962119` (version 155), deployment
-`24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4`. Confirm the currently active version
+`caaa6ee7-ec98-4ef8-80ac-7643cb2f53ca`. Confirm the currently active version
 before changing traffic. Sites version 86 is live and version 85 is its
 immediate public rollback.
 
 Rollback is justified for a release-caused availability, authentication,
-routing, metadata, font loading, signed-share or document-comparison regression.
+routing, metadata, font loading, signed-share, document-comparison or Lawyer
+interaction-target regression.
 After rollback, repeat the six-host HTTPS probe, login/status smoke,
-document-comparison compact-layout probe and `/api/status` read. Version 155
-retains the Lawyer-host redirect, auth error association, localized status
-metadata and same-origin icons, but restores the undersized compact comparison
-refresh control. Use that rollback only when the release regression is more
-severe than this known target-size defect. Do not report overall recovery
+document-comparison compact-layout probe, Lawyer re-auth/API boundary and
+`/api/status` read. Version 156 retains the Lawyer-host redirect, auth error
+association, localized status metadata, same-origin icons and corrected Client
+comparison target, but restores the smaller Lawyer professional controls. Use
+that rollback only when the release regression is more severe than this known
+target-size defect. Do not report overall recovery
 unless status evidence is fresh and operational.
 
-Migration 0159 is additive. Worker 156 added no migration and an application-
-only rollback to Worker 155 must not edit D1. A rollback farther than the
+Migration 0159 is additive. Worker 157 added no migration and an application-
+only rollback to Worker 156 must not edit D1. A rollback farther than the
 documented immediate version can remove later lockout/encryption behavior and
 is therefore a separate incident decision, not the ordinary rollback path.
 

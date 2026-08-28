@@ -21,6 +21,14 @@
   actions, metadata links, case controls, filters, change decisions, source
   links and compact version buttons. This bounded Chrome evidence is not a
   screen-reader or blanket WCAG conformance claim.
+- Worker 157 closes the source-level Lawyer professional-workflow target set.
+  Offer, message, AI-assist, internal-note, consultation, schedule, knowledge,
+  time-tool and source-link controls now retain a 44 px interaction floor, with
+  an 11/11 regression contract. The exact production CSS asset contains both
+  target groups. Anonymous access still fails closed with `401`, while an
+  existing Client session reaches the dedicated Lawyer re-authentication page
+  with one H1, one main landmark and no horizontal overflow. A signed-in Lawyer
+  render remains open because no production Lawyer identity was fabricated.
 - A fresh production Chrome replay on 2026-08-28 reconfirmed the original
   misplaced `lawyer.juro.uz/ru/individual/dashboard` URL against the current
   release. It reached the authenticated Client dashboard on `app.juro.uz`,
@@ -41,7 +49,7 @@
   relationship to the newly focused email field. The alert remains atomic.
   A focused two-test contract, the 1094-test core suite and the 201-test
   Cloudflare/infrastructure suite passed the source candidate; the exact
-  production Worker 156 auth asset contains the same ARIA contract. No OTP or
+  production Worker 157 auth asset contains the same ARIA contract. No OTP or
   MFA was submitted, so live assistive-technology error announcement remains
   open.
 - Worker 155 corrects status-document language and first-party icon metadata.
@@ -130,10 +138,10 @@ viewport emulation.
 
 ## Prioritized candidates
 
-- P1: finish the bounded target classification on authenticated Lawyer and
-  Admin surfaces after those protected Chrome sessions are established. The
-  affected Client target set and the current direct-navigation boundaries are
-  now covered by production Chrome evidence.
+- P1: finish rendered target classification on authenticated Lawyer and Admin
+  surfaces after those protected Chrome sessions are established. The Client
+  set, Lawyer source contract and current direct-navigation boundaries are now
+  covered; signed-in Lawyer and Admin rendering is not inferred from source.
 - P1: deploy the superseding saved Sites candidate only after action-time
   approval, then replay both the automated runner and the retained manual
   keyboard/accessibility-tree sample against that exact public artifact.

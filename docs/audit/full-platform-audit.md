@@ -2,10 +2,10 @@
 
 **Audit date:** 2026-08-28
 **Branch:** `codex/investor-ready-ecosystem`
-**Current production checkpoint:** Worker 156
-`b361ae62-1220-4fa3-b480-488d4791bda4`, deployment
-`caaa6ee7-ec98-4ef8-80ac-7643cb2f53ca`, 100% traffic; status 8/8
-operational at `2026-08-28T01:26:35.918Z`.
+**Current production checkpoint:** Worker 157
+`2ec24c74-57b9-4c66-8afa-372cceb24767`, deployment
+`62266f40-fe05-423b-9916-7c4220bf66d3`, 100% traffic; status 8/8
+operational at `2026-08-28T02:14:34.121Z`.
 
 ## Executive outcome
 
@@ -54,7 +54,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | Product analytics | DEPLOYED | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. No conversion baseline is invented before an observation window exists. |
 | AI costs | ACTIVE CONFIGURATION | Four official, effective-dated production price rows passed pre/post D1 export, isolated restore, FK, private R2 and SHA-256 readback gates. No post-effective AI event exists yet, so no measured runtime cost baseline is claimed. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
-| Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Worker 156 retains the auth/status semantics and closes the confirmed document-comparison target defect: Chrome measured the corrected control at exactly 44×44 px at 320 and 390 px with no overflow or console errors. No real OTP/MFA error, screen reader or physical mobile device was used. Protected authenticated workflows, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
+| Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Worker 156 closes the confirmed Client comparison target defect; Worker 157 extends the 44 px contract to confirmed Lawyer professional controls and delivers it in the exact production CSS asset. The Lawyer API remains fail-closed and the re-authentication surface has one H1/main and no overflow, but no signed-in Lawyer/Admin, real OTP/MFA error, screen reader or physical mobile device was used. Protected authenticated rendering, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
 | Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Overdue billing and unavailable real CWV tracing remain explicit risks. |
 
 ## Definition of done for this candidate
@@ -74,6 +74,19 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 ## Candidate completion checkpoint
 
+- CI `33134728801` passed exact runtime source
+  `67bd679e39e2ce2357d879cc7d806e53e4ce2651` (Website 2m28s, Platform
+  8m47s). Local gates passed lint, type-check, production build, artifact
+  budgets, rendered Worker 35/35, core 1097/1097 and Cloudflare/infrastructure
+  201/201.
+- Worker 157 receives 100% production traffic. The exact production CSS asset
+  contains the new Lawyer workspace and consultation 44 px contracts. Anonymous
+  workspace access returns `401`; a Client session reaches the dedicated Lawyer
+  re-authentication surface with one H1, one main landmark and no overflow.
+  Signed-in Lawyer workflow rendering remains open. Worker 156 is the immediate
+  rollback. Production D1, DNS and Sites were unchanged.
+- Both status endpoints reported all eight components operational and no active
+  or recent incident at `2026-08-28T02:14:34.121Z`.
 - CI `33132278871` passed exact runtime source
   `7123fb4b842c0d006f82a83b0e72263a0088020c` (Website 2m29s, Platform
   8m35s). Local gates passed type-check, lint, production build, artifact

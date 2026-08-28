@@ -37,6 +37,10 @@ integrity, privacy-safe activation telemetry, and truthful production status.
   event payloads.
 - Public funnel telemetry requires explicit analytics consent and sends no URL,
   identifier, content, or credentials.
+- Lawyer professional controls now share the 44 px interaction floor already
+  applied to confirmed Client workflows. Production proves the exact CSS asset
+  and fail-closed re-authentication boundary; signed-in Lawyer visual traversal
+  still requires a real protected session.
 
 ### P1 follow-up
 
@@ -46,7 +50,9 @@ integrity, privacy-safe activation telemetry, and truthful production status.
 - Static scan found 165 declarations matching 11 px or smaller and 63 possible
   sub-44 px minimum dimensions. These are review candidates, not 228 confirmed
   defects; icon geometry, decoration, and non-interactive metadata must be
-  separated from controls before changing them.
+  separated from controls before changing them. The confirmed Lawyer
+  professional-action subset is closed in Worker 157; authenticated Lawyer and
+  Admin rendering remains a separate evidence gate.
 - Compatibility aliases make the route tree large. Keep canonical redirects and
   analytics until safe retirement is proven.
 

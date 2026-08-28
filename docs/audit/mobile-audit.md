@@ -13,6 +13,20 @@ The mobile experience retains AI sources, case state, document workflows, lawyer
 requests, settings, and recovery actions. It is not intentionally reduced to a
 read-only dashboard.
 
+## Worker 157 production evidence
+
+Confirmed Lawyer professional controls now retain the same 44 px interaction
+floor as Client workflows: offers, chat and review actions, AI assist, internal
+notes, consultation fields, schedule controls, knowledge actions, time tools and
+source links. The 11/11 source regression passed, and the exact production CSS
+asset contains both Lawyer target groups. The anonymous Lawyer workspace API
+returns `401`; Chrome routes an existing Client session to the dedicated Lawyer
+re-authentication page with one H1/main and no horizontal overflow.
+
+This is source-delivery and access-boundary evidence. A signed-in Lawyer mobile
+render remains open because no production Lawyer identity or synthetic record
+was created.
+
 ## Worker 156 production evidence
 
 The document-comparison refresh action previously shrank below the interaction

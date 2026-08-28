@@ -4,6 +4,28 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Worker 157 Lawyer interaction floor
+
+Commit `67bd679e39e2ce2357d879cc7d806e53e4ce2651` applies the established 44 px
+interaction floor to confirmed Lawyer professional controls across offers,
+messages, AI assist, internal notes, consultations, scheduling, knowledge,
+time tools and source links. The focused contract passed 11/11.
+
+The exact source passed lint, type-check, production build, artifact budgets,
+rendered Worker 35/35, core 1097/1097 and Cloudflare/infrastructure 201/201.
+GitHub Actions CI `33134728801` passed Website in 2m28s and Platform in 8m47s.
+
+Worker 157 `2ec24c74-57b9-4c66-8afa-372cceb24767`, deployment
+`62266f40-fe05-423b-9916-7c4220bf66d3`, receives 100% production traffic. The
+exact production CSS asset contains both new selector groups. Anonymous Lawyer
+workspace access returns `401`, and Chrome sent an existing Client session to
+the dedicated Lawyer re-authentication page without disclosing Client data; the
+page retained one H1, one main landmark and no horizontal overflow. This does
+not claim a signed-in Lawyer route loop. Both status endpoints reported 8/8
+operational with no active/recent incident at `2026-08-28T02:14:34.121Z`.
+Worker 156 is the immediate rollback. No production D1, DNS or Sites change was
+made; Sites v86 remains live and saved v94 remains unpublished.
+
 ## 2026-08-28 Worker 156 document-comparison interaction floor
 
 Commit `7123fb4b842c0d006f82a83b0e72263a0088020c` closes a confirmed compact
@@ -92,7 +114,7 @@ The focused contract passed 2/2, Platform type-check and lint passed, and the
 full local gate passed development build, rendered smoke, deployable artifact,
 budgets, 1094/1094 core tests and 201/201 Cloudflare/infrastructure tests.
 GitHub Actions CI `33125681307` passed the exact auth commit. The correction was
-deployed in Worker 153 and remains live in Worker 156. The exact production
+deployed in Worker 153 and remains live in Worker 157. The exact production
 auth asset contains `aria-errormessage`, `aria-invalid`, the stable `auth-error`
 target and an atomic alert. No OTP or MFA form was submitted, so live assistive-
 technology announcement remains a bounded manual check rather than a claimed
@@ -103,13 +125,13 @@ conformance result.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest platform runtime commit | `7123fb4b842c0d006f82a83b0e72263a0088020c` |
-| Latest platform source candidate | `7123fb4b842c0d006f82a83b0e72263a0088020c`; deployed |
+| Latest platform runtime commit | `67bd679e39e2ce2357d879cc7d806e53e4ce2651` |
+| Latest platform source candidate | `67bd679e39e2ce2357d879cc7d806e53e4ce2651`; deployed |
 | Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current Platform CI `33132278871` on `7123fb4b` passed Website in 2m29s and Platform in 8m35s; status-metadata CI `33129369444` and auth CI `33125681307` also passed both jobs |
-| Production Worker | `juro` version `b361ae62-1220-4fa3-b480-488d4791bda4` (version 156), deployment `caaa6ee7-ec98-4ef8-80ac-7643cb2f53ca`, 100% traffic |
-| Immediate application rollback | `eb132328-68c2-48f3-95d4-90cac0962119` (version 155), deployment `24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4` |
+| GitHub Actions | Current Platform CI `33134728801` on `67bd679e` passed Website in 2m28s and Platform in 8m47s; Worker 156 CI `33132278871` and auth CI `33125681307` also passed both jobs |
+| Production Worker | `juro` version `2ec24c74-57b9-4c66-8afa-372cceb24767` (version 157), deployment `62266f40-fe05-423b-9916-7c4220bf66d3`, 100% traffic |
+| Immediate application rollback | `b361ae62-1220-4fa3-b480-488d4791bda4` (version 156), deployment `caaa6ee7-ec98-4ef8-80ac-7643cb2f53ca` |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Saved public Sites candidate | Version 94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
@@ -146,7 +168,7 @@ Chrome then verified on Worker 155:
 `/api/status` generated at `2026-08-28T00:30:50.972Z` reported all eight
 components operational with zero active or recent incidents. No migration or
 D1 write was part of Workers 153-155. Worker 154 was the rollback at that
-checkpoint; Worker 156 now uses Worker 155 as its immediate rollback. Sites
+checkpoint; Worker 157 now uses Worker 156 as its immediate rollback. Sites
 version 86 remains the independently deployed public release and saved version
 94 remains unpublished.
 
