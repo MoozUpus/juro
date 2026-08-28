@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "databaseName": "juro-staging-corpus-shard-1",
+  "databaseId": "e09e0682-0c2e-4458-a8f3-be9de28117e3",
+  "verifiedAt": "2026-08-28T09:10:48.0499927Z",
+  "readOnlySource": true,
+  "command": "node scripts/verify-d1-full-export-restore.mjs --input <temporary-export.sql> --output <isolated-restore.sqlite>",
+  "export": {
+    "inputBytes": 4447911164,
+    "sha256": "f1b1e843f733fbc68b3e4183492e38bf9b9fd5fa04356446d8f079c87653108e"
+  },
+  "restore": {
+    "outputBytes": 2846097408,
+    "statementCount": 18523926,
+    "tableCount": 262,
+    "indexCount": 565,
+    "triggerCount": 363,
+    "migrationCount": 143,
+    "quickCheck": "ok",
+    "foreignKeyViolations": 0
+  },
+  "scope": "isolated local SQLite restore; no production data or binding",
+  "limitations": [
+    "This proves the isolated export/restore integrity for shard-1 only.",
+    "It does not prove a federated partition manifest, current indexed evaluation, or Qdrant legal benchmark."
+  ]
+}

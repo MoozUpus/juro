@@ -234,3 +234,18 @@ node --experimental-loader ./scripts/cloudflare-workers-loader.mjs --import tsx 
 Result: 21 tests passed, 0 failed. These are deterministic contract/regression
 tests; they do not substitute for a real staging snapshot, current 314-scenario
 run or D1 restore verification.
+
+## Isolated D1 export/restore verification
+
+At `2026-08-28T09:10:48.0499927Z`, the full remote export of frozen
+`juro-staging-corpus-shard-1` was restored into an isolated local SQLite file
+using the repository verifier. The export was 4,447,911,164 bytes with SHA-256
+`f1b1e843f733fbc68b3e4183492e38bf9b9fd5fa04356446d8f079c87653108e`; the
+restore contained 18,523,926 statements, 262 tables, 565 indexes, 363
+triggers and 143 migrations. Local `quick_check` returned `ok` and
+`foreign_key_check` returned zero violations. Machine-readable details are in
+`STAGING_D1_ISOLATED_RESTORE_2026-08-28.json`.
+
+This closes the isolated shard-1 export/restore integrity probe only. It does
+not close the federated snapshot/partition, current indexed 314-scenario or
+federated Qdrant legal-benchmark gates.
