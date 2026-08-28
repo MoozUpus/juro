@@ -13394,3 +13394,16 @@ change was made. This proves the application routing contract only; it does
 not substitute for the still-blocked remote snapshot, indexed evaluation,
 Qdrant or federated D1 restore gates. Machine-readable details are in
 `STAGING_CHAT_ROUTING_REGRESSION_2026-08-28.json`.
+
+## Sequential read-only staging cycle (2026-08-28, 16:10Z)
+
+The scheduled-run, lock, queue, failure-ledger and checkpoint query was run
+sequentially against all five staging corpus databases. No ingestion or retry
+was started and every call returned zero writes with `changed_db=false`.
+Frozen shard 1 and shard 2 remain idle with 44/44 checkpoints and no failed or
+dead-letter jobs. Legacy retains two locks and 43,686 active queued/running
+jobs; v2 retains 27,689 active jobs; shard 3 remains the excluded continuation
+shard with 31,159 active jobs. Immutable terminal/technically-unavailable
+failure records remain historical and were not rewritten. The release queue
+freeze therefore remains unproven. Machine-readable results are in
+`STAGING_READONLY_CYCLE_2026-08-28.json`.

@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-28T16:10:17.5944889Z",
+  "environment": "staging",
+  "readOnly": true,
+  "ingestionStarted": false,
+  "query": "Sequential scheduled-run, lock, ingestion-job, failure-ledger and checkpoint counters",
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "latestRun": {
+        "id": "419b9efd-3c4e-45f1-a0a7-9d5fec5a4a82",
+        "cron": "*/5 * * * *",
+        "status": "failed",
+        "errorCode": "LEX_METADATA_MONITOR_RETRY_FAILED",
+        "startedAt": "2026-08-21T07:30:02.586Z",
+        "finishedAt": "2026-08-21T07:30:03.973Z"
+      },
+      "locks": 2,
+      "activeJobs": 43686,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 230,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44,
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "latestRun": {
+        "id": "e9844dfc-9245-4343-8e71-4c49d450c0ed",
+        "cron": "*/4 * * * *",
+        "status": "failed",
+        "errorCode": "D1_ERROR",
+        "startedAt": "2026-08-24T01:12:20.191Z",
+        "finishedAt": "2026-08-24T01:13:00.605Z"
+      },
+      "locks": 0,
+      "activeJobs": 27689,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 5,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44,
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "latestRun": {
+        "id": "52a2cd03-2353-4f70-b4b1-0faf66c989a6",
+        "cron": "*/4 * * * *",
+        "status": "completed",
+        "errorCode": null,
+        "startedAt": "2026-08-25T15:56:44.902Z",
+        "finishedAt": "2026-08-25T16:09:09.353Z"
+      },
+      "locks": 0,
+      "activeJobs": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 10,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44,
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "latestRun": {
+        "id": "5b8e91e3-7a67-4d0e-92bb-2bd8f0d948f6",
+        "cron": "*/4 * * * *",
+        "status": "completed",
+        "errorCode": null,
+        "startedAt": "2026-08-28T00:36:02.839Z",
+        "finishedAt": "2026-08-28T00:46:09.566Z"
+      },
+      "locks": 0,
+      "activeJobs": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 8,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44,
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "latestRun": {
+        "id": "1cd4e0f6-09e5-401e-996f-c00397065e7f",
+        "cron": "*/4 * * * *",
+        "status": "completed",
+        "errorCode": null,
+        "startedAt": "2026-08-28T05:04:02.838Z",
+        "finishedAt": "2026-08-28T05:13:57.227Z"
+      },
+      "locks": 0,
+      "activeJobs": 31159,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 7,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44,
+      "rowsWritten": 0,
+      "changedDatabase": false,
+      "releaseRole": "excluded-continuation-shard"
+    }
+  ],
+  "decision": {
+    "acquisition": "stopped",
+    "queuesFrozenForRelease": false,
+    "releaseGate": "open",
+    "reason": "Legacy, v2 and shard-3 retain active historical queues; immutable failure-ledger records remain. No queue was mutated."
+  },
+  "production": {
+    "deploymentPerformed": false,
+    "migrationPerformed": false,
+    "dnsChanged": false,
+    "featureFlagsChanged": false
+  }
+}
