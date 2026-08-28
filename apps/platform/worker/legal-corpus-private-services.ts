@@ -146,7 +146,18 @@ export async function handleLegalCorpusQdrantServiceRequest(
     event: "qdrant.container_ready",
   }));
   try {
-    const response = await container.fetch(request);
+    // A rotated QDRANT_API_KEY is picked up on the next container start. If
+    // an already-running instance still has the previous key, restart it once
+    // on the bounded 401 path and retry the same request. This never exposes
+    // the key and avoids restarting healthy requests.
+    const retryRequest = request.clone();
+    let response = await container.fetch(request);
+    if (response.status === 401) {
+      await response.body?.cancel().catch(() => undefined);
+      await container.stop();
+      await container.startAndWaitForPorts({});
+      response = await container.fetch(retryRequest);
+    }
     console.log(JSON.stringify({
       service: "legal-corpus-private-qdrant",
       event: "qdrant.container_response",
