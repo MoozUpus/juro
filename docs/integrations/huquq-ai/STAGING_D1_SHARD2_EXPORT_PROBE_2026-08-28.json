@@ -17,6 +17,15 @@
     "temporaryFilesRemaining": false
   },
   "reason": "The export did not produce a file while local free space approached the safety threshold; the process was stopped before any local artifact or restore could be produced.",
+  "scopedCorpusExportAttempt": {
+    "recordedAt": "2026-08-28T10:22:54.9818656Z",
+    "tableCount": 27,
+    "outcome": "aborted_safety",
+    "exportFileCreated": false,
+    "restoreAttempted": false,
+    "remoteDataMutation": false,
+    "reason": "The scoped legal_corpus_* export also reduced free disk to approximately 1 GB before an output file appeared; the process was stopped and the temporary directory was empty afterward."
+  },
   "limitations": [
     "No shard-2 export SHA-256, SQLite quick_check or foreign_key_check is available.",
     "The isolated shard-1 restore remains the only D1 restore pass; federated D1 backup/restore is open."

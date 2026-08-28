@@ -290,3 +290,9 @@ workspace. The temporary directory is empty and free space returned to
 29.49 GB. This is a failed safety probe, not a backup or integrity pass;
 machine-readable details are in
 `STAGING_D1_SHARD2_EXPORT_PROBE_2026-08-28.json`.
+
+A second attempt using the 27 `legal_corpus_*` tables allowed by the backup
+policy had the same safety outcome: Wrangler created no local file before free
+space approached approximately 1 GB. It was stopped before restore; the
+temporary directory was empty afterward. A larger isolated runner is required
+for this source's backup/restore evidence.
