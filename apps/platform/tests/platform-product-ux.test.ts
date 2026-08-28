@@ -65,6 +65,23 @@ test("document comparison and redline inherit the shared JURO UI font", async ()
   assert.doesNotMatch(styles, /font-family:(?:Arial|Helvetica|system-ui)/i);
 });
 
+test("document comparison controls keep the 44px interaction floor", async () => {
+  const styles = await source("../app/_platform/document-comparison.css");
+  assert.match(styles, /\.comparison-file-actions button\{[^}]*min-height:44px/);
+  assert.match(styles, /\.comparison-file-actions button:last-child\{width:44px;[^}]*flex:none/);
+  assert.match(styles, /\.comparison-recent header button\{[^}]*width:44px;height:44px;[^}]*flex:none/);
+  assert.match(styles, /\.comparison-recent-list article>a,\.comparison-recent-list article>button\{[^}]*min-height:44px/);
+  assert.match(styles, /\.comparison-version-metadata article>a\{[^}]*min-height:44px/);
+  assert.match(styles, /\.comparison-case-link select\{min-height:44px/);
+  assert.match(styles, /\.comparison-case-link>button,\.comparison-case-link>a\{[^}]*min-height:44px/);
+  assert.match(styles, /\.comparison-filters>header button\{min-height:44px/);
+  assert.match(styles, /\.comparison-filter-options label\{[^}]*min-height:44px/);
+  assert.match(styles, /\.comparison-select-filter select\{[^}]*min-height:44px/);
+  assert.match(styles, /\.comparison-change-card>footer>a,\.comparison-change-card>footer>button,\.comparison-unverified\{[^}]*min-height:44px/);
+  assert.match(styles, /\.comparison-sources a\{[^}]*min-height:44px/);
+  assert.match(styles, /\.comparison-mobile-version button\{min-height:44px/);
+});
+
 test("document workspace search fields expose localized accessible names", async () => {
   const [library, documents, contacts] = await Promise.all([
     source("../app/_document-builder/_components/DocumentLibraryClient.tsx"),

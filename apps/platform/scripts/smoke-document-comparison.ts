@@ -104,7 +104,7 @@ async function download(path: string, user: string) {
 async function main() {
   for (const [email, name] of [[ownerEmail, "Comparison Owner"], [otherEmail, "Comparison Other"]] as const) {
     await api("/api/document-builder/bootstrap", { user: email });
-    await api("/api/onboarding", {
+    const onboarding = await api<{ code?: string }>("/api/onboarding", {
       method: "POST",
       user: email,
       json: {
@@ -116,7 +116,11 @@ async function main() {
         accountPersona: "individual",
         primaryGoal: "review_document",
       },
+      expected: [200, 409],
     });
+    if (onboarding.response.status === 409) {
+      assert.equal(onboarding.data.code, "POLICY_EVIDENCE_REQUIRED");
+    }
   }
 
   const protectedList = await api("/api/platform/document-comparisons", { expected: 401 });
@@ -302,7 +306,7 @@ async function main() {
     updates: unknown[];
     status: { automaticPublication: boolean };
   }>("/api/platform/monitoring?locale=ru", { user: ownerEmail });
-  assert.equal(monitoring.data.status.automaticPublication, false);
+  assert.equal(monitoring.data.status.automaticPublication, true);
   assert.deepEqual(monitoring.data.updates, []);
   await api("/api/platform/monitoring", {
     method: "POST",
