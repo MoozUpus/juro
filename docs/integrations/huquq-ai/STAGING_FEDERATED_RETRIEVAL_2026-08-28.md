@@ -145,3 +145,15 @@ counters as unique-corpus totals. Federated retrieval keeps source records
 separate and performs deterministic deduplication; no destructive cross-DB
 merge was performed. A formal federated release snapshot still requires an
 explicit partition/deduplication manifest and a verified snapshot restore.
+
+## Queue reconciliation after freeze (2026-08-28T07:21Z)
+
+The follow-up read-only scheduler probe found durable historical backlog in
+the legacy and v2 databases: legacy has 43,683 queued and 3 stale `running`
+jobs; v2 has 27,686 queued, 1 retrying and 2 stale `running` jobs. Their
+latest updates are before the freeze window (legacy 2026-08-21, v2
+2026-08-24), and no live locks remain. Shard 1 and shard 2 remain frozen with
+zero queued/retrying/running jobs. All four probes returned `rows_written=0`.
+The staging feature flags prevent new claims, but the historical backlog is
+not silently reported as an empty queue; strict queue-drain evidence remains
+open for any release gate that includes legacy/v2.
