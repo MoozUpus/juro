@@ -68,6 +68,10 @@ test("worker errors preserve only safe actionable tokens", () => {
     legalCorpusWorkerErrorCode(new Error("EMBEDDING_PRIVATE_SERVICE_UNAVAILABLE")),
     "EMBEDDING_PRIVATE_SERVICE_UNAVAILABLE",
   );
+  assert.equal(
+    legalCorpusWorkerErrorCode({ code: "QDRANT_HTTP_4XX", message: "opaque upstream" }),
+    "QDRANT_HTTP_4XX",
+  );
 });
 
 test("corpus Worker is inert before both ingestion flags are enabled", async () => {
