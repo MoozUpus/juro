@@ -127,7 +127,9 @@ export class QdrantCorpusError extends Error {
       | "QDRANT_PRIVATE_SERVICE_UNAVAILABLE"
       | "QDRANT_HTTP_4XX"
       | "QDRANT_HTTP_5XX"
-      | "QDRANT_HTTP_OTHER",
+      | "QDRANT_HTTP_OTHER"
+      | "QDRANT_DIRECT_FETCH_FAILED"
+      | "QDRANT_CONTAINER_UNAVAILABLE",
     readonly retryable: boolean,
   ) {
     super(code);
@@ -241,11 +243,19 @@ async function requestResponse(
         throw new QdrantCorpusError("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", true);
       }
     } else if (env.QDRANT_CONTAINER) {
-      const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
-      await container.startAndWaitForPorts();
-      response = await container.fetch(request);
+      try {
+        const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
+        await container.startAndWaitForPorts();
+        response = await container.fetch(request);
+      } catch {
+        throw new QdrantCorpusError("QDRANT_CONTAINER_UNAVAILABLE", true);
+      }
     } else {
-      response = await fetchImpl(endpoint(env, suffix), requestInit);
+      try {
+        response = await fetchImpl(endpoint(env, suffix), requestInit);
+      } catch {
+        throw new QdrantCorpusError("QDRANT_DIRECT_FETCH_FAILED", true);
+      }
     }
   } catch (error) {
     if (error instanceof QdrantCorpusError) throw error;
