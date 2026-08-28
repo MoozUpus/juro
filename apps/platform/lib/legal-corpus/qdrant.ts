@@ -217,6 +217,11 @@ async function requestResponse(
 ): Promise<Response | undefined> {
   const timeout = AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS);
   let response: Response;
+  const transport = env.QDRANT_SERVICE
+    ? "service"
+    : env.QDRANT_CONTAINER
+      ? "container"
+      : "direct";
   try {
     const headers = new Headers(init.headers);
     if (env.QDRANT_API_KEY) headers.set("api-key", env.QDRANT_API_KEY);
@@ -240,6 +245,12 @@ async function requestResponse(
       } catch {
         // A failed service binding is distinct from an HTTP response from
         // Qdrant; keep that distinction in the bounded staging run ledger.
+        console.error(JSON.stringify({
+          service: "legal-corpus-qdrant-client",
+          event: "qdrant.transport_failed",
+          transport: "service",
+          errorCode: "QDRANT_PRIVATE_SERVICE_UNAVAILABLE",
+        }));
         throw new QdrantCorpusError("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", true);
       }
     } else if (env.QDRANT_CONTAINER) {
@@ -248,12 +259,24 @@ async function requestResponse(
         await container.startAndWaitForPorts();
         response = await container.fetch(request);
       } catch {
+        console.error(JSON.stringify({
+          service: "legal-corpus-qdrant-client",
+          event: "qdrant.transport_failed",
+          transport: "container",
+          errorCode: "QDRANT_CONTAINER_UNAVAILABLE",
+        }));
         throw new QdrantCorpusError("QDRANT_CONTAINER_UNAVAILABLE", true);
       }
     } else {
       try {
         response = await fetchImpl(endpoint(env, suffix), requestInit);
       } catch {
+        console.error(JSON.stringify({
+          service: "legal-corpus-qdrant-client",
+          event: "qdrant.transport_failed",
+          transport: "direct",
+          errorCode: "QDRANT_DIRECT_FETCH_FAILED",
+        }));
         throw new QdrantCorpusError("QDRANT_DIRECT_FETCH_FAILED", true);
       }
     }
@@ -266,6 +289,12 @@ async function requestResponse(
     return undefined;
   }
   if (!response.ok) {
+    console.error(JSON.stringify({
+      service: "legal-corpus-qdrant-client",
+      event: "qdrant.http_rejected",
+      transport,
+      statusClass: response.status >= 500 ? "5xx" : response.status >= 400 ? "4xx" : "other",
+    }));
     // The staging service-binding proxy returns a tiny, allow-listed error
     // envelope. Preserve that actionable code while keeping arbitrary
     // upstream response bodies out of logs and user-visible errors.
