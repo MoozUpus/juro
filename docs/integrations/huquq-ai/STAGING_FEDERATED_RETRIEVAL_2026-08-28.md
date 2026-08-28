@@ -195,3 +195,26 @@ matrix, production dependency audit and license policy). Qdrant snapshot and
 restore run `33152482152` also passed. These workflows do not access D1 legal
 content and do not close the indexed 314-scenario, federated D1 snapshot or
 isolated D1 restore gates.
+
+## Read-only restore and evaluation readiness probes
+
+At `2026-08-28T08:16:43.1403523Z`, a read-only `PRAGMA quick_check;` against
+the frozen `juro-staging-corpus-shard-1` database returned Cloudflare D1
+`SQLITE_NOMEM` (API code 7500). This is recorded as a failed integrity probe;
+no integrity pass or restore success is claimed. The point-in-time bookmarks
+in `STAGING_FEDERATED_POINT_IN_TIME_PROBE_2026-08-28.json` are recovery
+coordinates only, not exported snapshots.
+
+At `2026-08-28T08:17:00.5141593Z`, the read-only evaluation readiness probe
+found 314 historical human-review records and one historical human attestation.
+The available 314-scenario runs are historical: the codex run has 141/314
+answers with `legal_database_as_of=unavailable`, and the canonical run has
+124/314 with that value. They therefore are not evidence of a current
+federated-index evaluation. No new provider evaluation was started and no
+evaluation cost was incurred. A fresh indexed run remains a release gate and
+must use the frozen federated snapshot plus verified source availability.
+
+Document collection and ingestion remain stopped. The staging flags keep
+`LEGAL_CORPUS_AUTO_INGEST_ENABLED=false`, `LEGAL_CORPUS_LIVE_LEXUZ_ENABLED=false`
+and `LEGAL_CORPUS_SHADOW_MODE=false`; no production binding, corpus, DNS or
+rollout was changed.
