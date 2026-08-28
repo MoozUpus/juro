@@ -388,6 +388,7 @@ test("private dense services stay behind service bindings and staging-only flags
     "utf8",
   );
   const corpusConfig = readFileSync(new URL("../wrangler.legal-corpus.jsonc", import.meta.url), "utf8");
+  const platformConfig = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
   assert.match(platformWorker, /url\.hostname === "qdrant\.internal"/u);
   assert.match(platformWorker, /url\.hostname === "embeddings\.internal"/u);
   assert.match(privateServices, /secretMatches\(providedApiKey, expectedApiKey\)/u);
@@ -395,13 +396,16 @@ test("private dense services stay behind service bindings and staging-only flags
   assert.doesNotMatch(privateServices, /providedApiKey\s*!==\s*expectedApiKey/u);
   assert.match(privateServices, /enableInternet = false/u);
   assert.match(privateServices, /QDRANT__SERVICE__API_KEY/u);
+  assert.match(privateServices, /QDRANT_ALLOWED_COLLECTIONS/u);
   assert.match(corpusConfig, /"binding": "QDRANT_SERVICE"/u);
   assert.match(corpusConfig, /"binding": "LEGAL_CORPUS_EMBEDDING_SERVICE"/u);
+  assert.match(platformConfig, /"QDRANT_ALLOWED_COLLECTIONS": "juro_legal_staging,juro_legal_staging_v2,juro_legal_staging_shard_3"/u);
   assert.match(corpusConfig, /"binding": "BACKUP_BUCKET"/u);
   const production = corpusConfig.slice(corpusConfig.indexOf('"production"'));
   assert.doesNotMatch(production, /"binding": "QDRANT_SERVICE"/u);
   assert.match(production, /"LEGAL_CORPUS_DENSE_ENABLED": "false"/u);
 });
+
 
 test("process schedule self-seeds a fresh corpus and begins the code-first phase without an admin action", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();

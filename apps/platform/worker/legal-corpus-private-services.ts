@@ -14,6 +14,9 @@ type LegalCorpusPrivateServiceEnv = {
   QDRANT_CONTAINER?: DurableObjectNamespace<LegalCorpusQdrantContainer>;
   QDRANT_API_KEY?: string;
   QDRANT_COLLECTION?: string;
+  /** Comma-separated, explicitly allow-listed staging collections routed to
+   * the same private Qdrant container (for example v2 and shard-3). */
+  QDRANT_ALLOWED_COLLECTIONS?: string;
   OPENAI_API_KEY?: string;
 };
 
@@ -36,15 +39,18 @@ function privateJson(code: string, status: number): Response {
   });
 }
 
-function qdrantRequestAllowed(request: Request, collection: string): boolean {
+function qdrantRequestAllowed(request: Request, collections: readonly string[]): boolean {
   if (!["GET", "POST", "PUT", "DELETE"].includes(request.method)) return false;
   const url = new URL(request.url);
   if (url.pathname === "/healthz" && request.method === "GET") return true;
-  const prefix = `/collections/${encodeURIComponent(collection)}`;
-  if (request.method === "DELETE" && !url.pathname.startsWith(`${prefix}/snapshots/`)) {
-    return false;
+  for (const collection of collections) {
+    const prefix = `/collections/${encodeURIComponent(collection)}`;
+    if (request.method === "DELETE" && !url.pathname.startsWith(`${prefix}/snapshots/`)) {
+      continue;
+    }
+    if (url.pathname === prefix || url.pathname.startsWith(`${prefix}/`)) return true;
   }
-  return url.pathname === prefix || url.pathname.startsWith(`${prefix}/`);
+  return false;
 }
 
 async function secretMatches(provided: string, expected: string): Promise<boolean> {
@@ -85,14 +91,18 @@ export async function handleLegalCorpusQdrantServiceRequest(
   request: Request,
   env: LegalCorpusPrivateServiceEnv,
 ): Promise<Response> {
-  const collection = env.QDRANT_COLLECTION?.trim() ?? "";
+  const collections = [...new Set([
+    env.QDRANT_COLLECTION?.trim() ?? "",
+    ...(env.QDRANT_ALLOWED_COLLECTIONS ?? "").split(",").map((value) => value.trim()),
+  ].filter((value) => value.length > 0))];
   const expectedApiKey = env.QDRANT_API_KEY?.trim() ?? "";
   const providedApiKey = request.headers.get("api-key") ?? "";
   if (
     !env.QDRANT_CONTAINER
     || !expectedApiKey
-    || !COLLECTION_PATTERN.test(collection)
-    || !qdrantRequestAllowed(request, collection)
+    || collections.length === 0
+    || collections.some((collection) => !COLLECTION_PATTERN.test(collection))
+    || !qdrantRequestAllowed(request, collections)
   ) {
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
   }
