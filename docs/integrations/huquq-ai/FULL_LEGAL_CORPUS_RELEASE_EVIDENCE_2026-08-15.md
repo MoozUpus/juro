@@ -13337,3 +13337,21 @@ and dense indexing remain disabled. These are local reproducibility checks;
 they do not substitute for the still-open federated snapshot, indexed
 evaluation, Qdrant full-corpus benchmark/restore or federated D1 restore
 gates.
+
+## Post-stop gate recheck (2026-08-28, 15:03Z)
+
+The full guarded snapshot query was run sequentially against all staging
+sources without invoking ingestion. Frozen shard 1 and shard 2 remain at
+44/44 checkpoints, zero queued/running/retrying/failed/dead-letter jobs and
+zero relational integrity errors. The legacy source is blocked by two
+pre-existing locks, 43,683 queued and three running jobs; its follow-up
+status query reports 230 immutable terminal/technically-unavailable failure
+records. v2 reports 27,097 queued, one retrying and five immutable
+terminal/technically-unavailable records. Shard 3 remains `active` and
+excluded, with 27,905 queued jobs. Every query reported zero writes and
+`changed_db=false`.
+
+This confirms the stopped operational state and preserves the fail-closed
+release decision. It does not create a federated snapshot or close the
+indexed-evaluation, Qdrant or federated D1 restore gates. Full machine-
+readable results are in `STAGING_POST_STOP_GATE_RECHECK_2026-08-28.json`.
