@@ -128,3 +128,8 @@ After this probe was committed, exact-head checks also passed for commit
 `33148077161`. These checks validate the checked-in code and infrastructure
 fixture; they do not close the legal corpus release gate or substitute for
 indexed legal evaluation and D1 restore evidence.
+
+The follow-up documentation commit `12cde692ab0fd3407a01e04cc33833f206abbe60`
+was then validated on its exact head: CI workflow `33148541687` and Qdrant
+snapshot/restore workflow `33148543880` both passed. The same release-gate
+limitations continue to apply.
