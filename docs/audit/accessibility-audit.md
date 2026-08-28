@@ -1,5 +1,35 @@
 # Accessibility audit
 
+## 2026-08-29 deployed Sites v86 replay and source correction
+
+- A read-only Chrome replay of the live RU, UZ and EN home routes at
+  `390×844` and `1440×900` retained the exact canonical URL, matching document
+  language, four hreflang entries, valid JSON-LD, `index, follow`, one H1, one
+  main landmark, explicit image alternatives and zero horizontal overflow.
+- The same deployed-v86 replay found stale accessibility defects that are not
+  hidden by the broader green source matrix: visible labels reached
+  `8.96–11.84` px, header theme controls were `32×32` px, the closed menu
+  trigger referenced an absent panel, the open menu exposed the pointer scrim
+  as a second accessible close control, and skip-link activation did not move
+  programmatic focus to main.
+- Source commit `7e07b56280116bc2494223c7c9e650dc30535fff` corrects those findings and
+  extends the release gate to reject broken ARIA references and visible native
+  controls below 44 px. It keeps the pointer scrim out of the accessibility
+  tree/tab order, makes menu `aria-controls` conditional, gives the header
+  theme controls a 44 px target, keeps `main` programmatically focusable and
+  uses the compact menu between 981 and 1100 px.
+- The final local source passed 48/48 functional/route tests, the 56/56
+  axe/Chrome matrix, lint, type-check and deployable-artifact validation.
+  Exact-source GitHub Actions CI `33217112257` passed Website in 1m59s and
+  Platform in 8m54s.
+  Manual Chrome samples at 320, 390, 981 and 1101 px confirmed zero horizontal
+  overflow, zero exposed sub-44 px controls, a single accessible menu closer,
+  skip-link focus transfer, Escape focus return and clean compact/full header
+  transitions.
+- Sites v86 is still the live public artifact. No Sites publish or production
+  mutation was performed, so the source correction is not represented as live
+  production evidence or as a WCAG conformance result.
+
 ## Current implementation evidence
 
 - Worker 170 closes the authenticated Client shell findings from the fresh

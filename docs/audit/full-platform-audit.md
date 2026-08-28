@@ -9,6 +9,17 @@ authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
 the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
+**Public Sites checkpoint:** a read-only Chrome replay of live v86 preserved
+the RU/UZ/EN SEO/document structure but found stale accessibility defects:
+sub-12 px labels, 32 px theme targets, a closed-menu dangling `aria-controls`,
+a duplicate accessible scrim closer and skip-link activation without main
+focus. Commit `7e07b56280116bc2494223c7c9e650dc30535fff` fixes those findings in
+source and passes the 48/48 functional suite, 56/56 axe/Chrome matrix,
+lint, type-check, artifact validation and manual 320/390/981/1101 px Chrome
+samples. Exact-source CI `33217112257` passed Website in 1m59s and Platform in
+8m54s. It is not deployed; Sites v86 remains live pending an explicit publish
+instruction.
+
 ## Current production recovery
 
 Worker 161 safely classified the repeated Anthropic HTTP 400 as
@@ -131,7 +142,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | Product analytics | DEPLOYED / INSUFFICIENT SAMPLE | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. The 2026-08-28 read-only recheck retained 24 represented events from 25 August onward and found zero events at or after the Worker 166 release boundary, so no conversion baseline is invented. |
 | AI costs | ACTIVE MEASUREMENT / INSUFFICIENT SAMPLE | Four official, effective-dated production price rows passed backup/restore gates. The protected console now reports 100% current price coverage, `$0.104549` estimated cost and 4/30 priced successes; it refuses to call the sample ready and explicitly shows that production cost-guard policies are not configured. The 30% reduction target remains `UNVERIFIED`. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
-| Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Workers 156–158 close confirmed Client comparison, Lawyer professional and non-corpus Admin interaction-target defects. Worker 168 closes the confirmed Client dashboard composer visible-focus defect with an authenticated production keyboard replay. Lawyer/Admin anonymous boundaries remain fail-closed and their re-authentication surfaces have one H1/main and no overflow, but no signed-in Lawyer/Admin, real OTP/MFA error, screen reader or physical mobile device was used. Protected Lawyer/Admin rendering, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
+| Accessibility | PARTIAL | The exact public candidate source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix, the 44 px and ARIA-reference runtime guards, and retained 320/390/981/1101 px keyboard/visual samples. The deployed Sites v86 replay is now complete and recorded as a live FAIL for its stale sub-12 px labels, 32 px theme targets, dangling menu reference, duplicate accessible closer and missing skip-to-main focus transfer; commit `7e07b562` fixes them only in the unpublished candidate. Workers 156–158 close confirmed Client comparison, Lawyer professional and non-corpus Admin interaction-target defects, and Workers 168–170 close the sampled Client focus/shell defects in production. No signed-in Lawyer/Admin, real OTP/MFA error, screen reader or physical mobile device was used. Protected Lawyer/Admin rendering and live auth-error assistive-technology replay remain open, so this is not a WCAG conformance claim. |
 | Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Fresh app/status reads reconfirmed Anthropic and document analysis operational after the reported account top-up. The active zone can be read, but exhaustive DNS inventory is still externally gated: the current credential receives HTTP 403 / Cloudflare code `10000` when listing DNS records because it lacks dedicated Zone DNS Read. Overdue infrastructure billing and unavailable real CWV tracing remain explicit risks. |
 
 ## Definition of done for this candidate

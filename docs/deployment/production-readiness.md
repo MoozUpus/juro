@@ -4,6 +4,33 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 public Sites v86 replay and unpublished correction
+
+A read-only Chrome replay of the deployed Sites v86 artifact covered RU, UZ
+and EN home routes at `390×844` and `1440×900`. Exact canonical URLs, matching
+document language, four hreflangs, valid JSON-LD, `index, follow`, one H1/main,
+explicit image alternatives and zero horizontal overflow passed. The same
+artifact failed the accessibility replay: visible labels reached
+`8.96–11.84` px, header theme controls were `32×32` px, the closed menu trigger
+referenced an absent panel, the open menu exposed the pointer scrim as a second
+accessible close control, and activating the skip link did not place focus on
+main.
+
+Commit `7e07b56280116bc2494223c7c9e650dc30535fff` corrects the findings in the
+source candidate and adds runtime release guards for broken ARIA references and
+visible native controls below 44 px. The exact candidate passed build/artifact
+validation, 48/48 functional/route tests, the 56/56 axe/Chrome matrix, lint and
+type-check. Exact-source GitHub Actions CI `33217112257` passed Website in
+1m59s and Platform in 8m54s. Manual Chrome at 320, 390, 981 and 1101 px, plus the
+320/620/621/768/981/1024/1101 breakpoint matrix, confirmed zero overflow,
+zero exposed sub-44 px controls, one accessible menu closer, skip-link focus
+transfer, Escape focus return and clean compact/full header transitions.
+
+No production change was made. Sites v86 remains live and therefore retains
+the observed stale defects. Publishing a superseding Sites version, recording
+its immutable version/deployment identity and repeating the same production
+replay require a separate explicit publish instruction.
+
 ## 2026-08-29 Worker 170 authenticated Client shell closure
 
 Commits `36aa369416c991fb9cbf9dd2ae62350a42194fba` and

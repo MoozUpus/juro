@@ -1,5 +1,21 @@
 # Test report — current evidence through 2026-08-29
 
+## Public Sites v86 replay and superseding source candidate
+
+| Gate | Result |
+| --- | --- |
+| Live v86 localized replay | PASS for document/SEO structure — RU/UZ/EN at 390×844 and 1440×900 retained exact canonical, matching `lang`, four hreflangs, valid JSON-LD, `index, follow`, one H1/main, explicit image alternatives and no horizontal overflow |
+| Live v86 accessibility replay | FAIL observed — visible text reached 8.96–11.84 px; header theme buttons were 32×32 px; the closed menu trigger had a dangling `aria-controls`; the open menu exposed two accessible close controls; skip activation did not focus main |
+| Source correction | PASS candidate — commit `7e07b56280116bc2494223c7c9e650dc30535fff` raises theme and legal controls to 44 px, makes menu `aria-controls` conditional, hides/excludes the scrim, keeps main programmatically focusable and uses the compact header at 981–1100 px |
+| Full local website gate | PASS — build and deployable artifact, 48/48 functional/route tests, 56/56 axe/Chrome combinations, lint and type-check |
+| Exact-source CI | PASS — run `33217112257` on `7e07b56280116bc2494223c7c9e650dc30535fff`; Website 1m59s and Platform 8m54s |
+| New runtime safeguards | PASS — the built-site runner now rejects broken ARIA ID references and visible button/input/select/textarea/summary/tab targets below 44 px |
+| Manual candidate Chrome | PASS — 320/390/981/1101 px samples and the 320/620/621/768/981/1024/1101 breakpoint matrix had no overflow, undersized exposed controls or header overlap; menu focus/one-close/Escape-return and skip-link focus transfer passed |
+| Production boundary | NOT DEPLOYED — Sites v86 remains live; no Sites publish, Worker release, DNS, D1 or notification mutation was made |
+
+This is exact-source candidate evidence. It does not convert the observed live
+v86 failures into production passes and is not a WCAG conformance claim.
+
 ## Worker 170 authenticated Client shell accessibility closure
 
 | Gate | Result |
