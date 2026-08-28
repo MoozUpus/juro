@@ -13245,3 +13245,20 @@ recheck is operational evidence only and does not close the snapshot,
 federated deduplication, current indexed evaluation, Qdrant or restore gates.
 Machine-readable results are in
 `STAGING_POST_STOP_D1_RECHECK_2026-08-28.json`.
+
+## Post-stop failure-ledger recheck (2026-08-28, 11:36Z)
+
+The sequential read-only failure-ledger probes show that preserved
+`retrying` and `technically_unavailable` records remain: shard 1 has 23
+retrying and 10 technically unavailable, shard 2 has 21 and 8, shard 3 has 1
+and 7, v2 has 28 and 5, and legacy has 70 retryable plus 5 non-retryable
+retrying records and 230 technically unavailable records. Every probe reported
+`rows_written=0` and `changed_database=false`. One initial metadata probe
+returned Cloudflare API code `7403`; a follow-up `SELECT 1` succeeded, so this
+was recorded as a transient access anomaly rather than an ingestion failure.
+
+No retry, failure rewrite or code change was performed: no repeatable code
+cause has been proven, and the project rule forbids mutating transient failure
+records without that proof. The zero-unresolved-failures gate therefore
+remains open. Machine-readable results are in
+`STAGING_POST_STOP_FAILURE_RECHECK_2026-08-28.json`.

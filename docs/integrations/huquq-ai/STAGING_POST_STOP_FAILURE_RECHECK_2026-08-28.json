@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-08-28T11:36:35.2101440Z",
+  "applicationCommit": "94163b438966bc7187db503791b3dd8f41b869da",
+  "readOnly": true,
+  "table": "legal_corpus_failures",
+  "sources": [
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "retryingRetryable": 23,
+      "technicallyUnavailable": 10,
+      "terminalOrTechnicallyUnavailable": 10,
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "retryingRetryable": 21,
+      "technicallyUnavailable": 8,
+      "terminalOrTechnicallyUnavailable": 8,
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "retryingRetryable": 1,
+      "technicallyUnavailable": 7,
+      "terminalOrTechnicallyUnavailable": 7,
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "retryingRetryable": 28,
+      "technicallyUnavailable": 5,
+      "terminalOrTechnicallyUnavailable": 5,
+      "rowsWritten": 0,
+      "changedDatabase": false
+    },
+    {
+      "databaseName": "juro-staging",
+      "retryingRetryable": 70,
+      "retryingNonRetryable": 5,
+      "technicallyUnavailable": 230,
+      "terminalOrTechnicallyUnavailable": 230,
+      "rowsWritten": 0,
+      "changedDatabase": false,
+      "note": "Legacy/main staging source; not bound to the current corpus Worker."
+    }
+  ],
+  "probe": {
+    "initialReadOnlyFailure": "Cloudflare API code 7403 on one sqlite_master query",
+    "followUpMinimalProbe": "SELECT 1 succeeded",
+    "interpretation": "Transient access probe anomaly; no database mutation and no ingestion action."
+  },
+  "action": {
+    "newRetryStarted": false,
+    "failureRowsModified": false,
+    "codeFixApplied": false,
+    "reason": "The observed retrying rows are not a proven reproducible code failure; the project rule forbids retrying or rewriting transient failures without that proof."
+  },
+  "releaseImpact": {
+    "zeroUnresolvedFailures": false,
+    "releaseGateClosed": false
+  }
+}
