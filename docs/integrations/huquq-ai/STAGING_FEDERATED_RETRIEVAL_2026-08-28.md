@@ -262,6 +262,13 @@ returned Cloudflare API error `code 7500` (`internal error`) even for a minimal
 This is recorded as a failed read-only probe; no retry rows were rewritten and
 no ingestion was started.
 
+The follow-up grouped probes at `2026-08-28T09:56:01.1610836Z`–
+`2026-08-28T09:56:26.1199592Z` succeeded for legacy: `44/44` checkpoints,
+`10,171` completed jobs, `43,683` queued jobs and `3` running jobs. Its
+immutable failure ledger contains `235` non-retryable and `70` retryable
+records. All calls reported `rows_written=0`. This improves observability but
+does not close the queue-freeze or failure-ledger gates.
+
 ## Read-only D1 capacity observations (2026-08-28T09:45–09:46Z)
 
 `wrangler d1 info` was run without a write operation for each runtime source.

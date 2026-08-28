@@ -48,6 +48,25 @@
       "countersAsserted": false
     }
   ],
+  "legacyFollowUp": {
+    "startedAt": "2026-08-28T09:56:01.1610836Z",
+    "finishedAt": "2026-08-28T09:56:26.1199592Z",
+    "readOnly": true,
+    "rowsWritten": 0,
+    "jobStatusCounts": {
+      "completed": 10171,
+      "queued": 43683,
+      "running": 3
+    },
+    "checkpointStatusCounts": {
+      "completed": 44
+    },
+    "failureRetryableCounts": {
+      "nonRetryable": 235,
+      "retryable": 70
+    },
+    "note": "Follow-up grouped read-only queries succeeded after the earlier minimal-probe 7500 failure; queue and immutable failure-ledger findings remain open."
+  },
   "limitations": [
     "The legacy database probe failed and therefore does not provide current counters.",
     "The v2 backlog remains open for any gate that includes that source.",
