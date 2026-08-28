@@ -13211,3 +13211,21 @@ failed or dead-letter jobs in a read-only probe. The legacy `juro-staging`
 database is not bound to the current corpus Worker and likewise showed no
 post-freeze document acquisition. Its historical queue and source-condition
 ledger remain preserved for reconciliation, not silently discarded.
+
+## Release-evidence stage transition after acquisition stop (2026-08-28, 11:12Z)
+
+The owner-confirmed stop on new document collection was preserved. No queue
+rows, corpus rows or failure records were deleted, rewritten or retried. The
+checked-in head `c4d2f17ea786764af4a9fcb90e3a905d1ca86175` passed the exact-head
+CI workflow `33165677922`: both platform and website jobs completed
+successfully, including lint, type-check, tests, deployable-artifact checks,
+the Cloudflare environment matrix, production dependency audit and license
+policy. This CI result is code-quality evidence only.
+
+The next stage is therefore evidence closure, not further acquisition. A
+current federated snapshot, a current indexed 314-scenario run, a full-corpus
+Qdrant relevance benchmark and federated D1 backup/restore remain unproven.
+The four runtime sources also cannot be represented as a disjoint numbered
+shard manifest without a documented deduplication and snapshot proof. The
+machine-readable transition record is
+`STAGING_RELEASE_STAGE_TRANSITION_2026-08-28.json`.

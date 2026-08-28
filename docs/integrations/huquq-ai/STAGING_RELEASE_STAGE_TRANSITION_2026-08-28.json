@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-08-28T11:12:30.1476314Z",
+  "purpose": "Record the transition from bounded acquisition to release-evidence work after the owner requested that document collection stop.",
+  "applicationCommit": "c4d2f17ea786764af4a9fcb90e3a905d1ca86175",
+  "acquisition": {
+    "newDocumentCollectionRequested": false,
+    "shardWorkerAutoIngest": false,
+    "v2WorkerAutoIngest": false,
+    "liveLexFallback": false,
+    "shadowMode": false,
+    "noProductionChange": true,
+    "queueRowsDeletedOrRewritten": false,
+    "note": "Queued jobs remain durable for auditability; stopping the Worker path does not claim that the durable queues are empty."
+  },
+  "ci": {
+    "workflow": "CI",
+    "runId": 33165677922,
+    "url": "https://github.com/MoozUpus/juro/actions/runs/33165677922",
+    "headSha": "c4d2f17ea786764af4a9fcb90e3a905d1ca86175",
+    "status": "completed",
+    "conclusion": "success",
+    "platform": "success",
+    "website": "success",
+    "scope": "lint, type-check, tests, deployable artifact, Cloudflare environment matrix, production dependency audit and license policy"
+  },
+  "releaseGates": {
+    "acquisitionStopped": true,
+    "federatedSnapshot": "unproven",
+    "currentIndexed314Evaluation": "unproven",
+    "fullCorpusQdrantBenchmark": "unproven",
+    "federatedD1BackupRestore": "unproven",
+    "humanLegalReview": "historical evidence exists; no new attestation asserted",
+    "releaseApproved": false
+  },
+  "remainingBlockers": [
+    "The four runtime sources are not a disjoint numbered-shard manifest: legacy and v2 are unnumbered and cross-source duplicate IDs are present.",
+    "Durable queues remain open in legacy, v2 and shard-3 observations; no queue drain or destructive rewrite was performed.",
+    "Only isolated shard-1 D1 export/restore has a verified quick_check; shard-2 export/restore remains unavailable after the safe probe.",
+    "No current indexed 314-scenario benchmark is bound to a frozen federated snapshot.",
+    "The available Qdrant workflow validates infrastructure fixtures, not a full-corpus legal relevance benchmark."
+  ],
+  "evidenceFiles": [
+    "STAGING_ACQUISITION_FREEZE_2026-08-28.json",
+    "STAGING_FEDERATED_RECHECK_2026-08-28.json",
+    "STAGING_D1_ISOLATED_RESTORE_2026-08-28.json",
+    "STAGING_D1_SHARD2_EXPORT_PROBE_2026-08-28.json"
+  ],
+  "dataHandling": {
+    "legalTextIncluded": false,
+    "userDataIncluded": false,
+    "secretsIncluded": false
+  }
+}
