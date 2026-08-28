@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Manrope } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import "./invite/invite.css";
 import "./legal/legal.css";
@@ -17,18 +18,35 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL("https://app.juro.uz"),
-  title: { default: "JURO — защищённое юридическое пространство", template: "%s — JURO" },
-  description: "Личный кабинет цифровой юридической платформы JURO.",
-  robots: { index: false, follow: false, nocache: true },
-  referrer: "strict-origin-when-cross-origin",
-  icons: {
-    icon: "/favicon.png",
-    shortcut: "/favicon.png",
-    apple: "/apple-touch-icon.png",
-  },
-};
+const metadataHosts = new Set([
+  "app.juro.uz",
+  "app.staging.juro.uz",
+  "lawyer.juro.uz",
+  "lawyer.staging.juro.uz",
+  "status.juro.uz",
+  "status.staging.juro.uz",
+]);
+
+export function metadataBaseForHost(hostHeader: string | null): URL {
+  const hostname = hostHeader?.trim().toLowerCase().replace(/:\d+$/u, "") ?? "";
+  return new URL(`https://${metadataHosts.has(hostname) ? hostname : "app.juro.uz"}`);
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const requestHeaders = await headers();
+  return {
+    metadataBase: metadataBaseForHost(requestHeaders.get("host")),
+    title: { default: "JURO — защищённое юридическое пространство", template: "%s — JURO" },
+    description: "Личный кабинет цифровой юридической платформы JURO.",
+    robots: { index: false, follow: false, nocache: true },
+    referrer: "strict-origin-when-cross-origin",
+    icons: {
+      icon: "/favicon.png",
+      shortcut: "/favicon.png",
+      apple: "/apple-touch-icon.png",
+    },
+  };
+}
 
 export default function RootLayout({
   children,
