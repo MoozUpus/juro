@@ -249,3 +249,15 @@ triggers and 143 migrations. Local `quick_check` returned `ok` and
 This closes the isolated shard-1 export/restore integrity probe only. It does
 not close the federated snapshot/partition, current indexed 314-scenario or
 federated Qdrant legal-benchmark gates.
+
+## Read-only gate recheck after ingestion stop (2026-08-28T09:32Z)
+
+Sequential remote D1 probes were run after the collection stop. The successful
+queries reported `rows_written=0`: shard-1 and shard-2 each remain at `44/44`
+checkpoints with zero queued/running/retrying, failed, dead-letter or terminal
+jobs; v2 remains at `44/44` with `27,689` queued/running/retrying jobs and zero
+failed, dead-letter or terminal jobs. The legacy `juro-staging` database
+returned Cloudflare API error `code 7500` (`internal error`) even for a minimal
+`SELECT 1` probe, so its current counters are not asserted by this recheck.
+This is recorded as a failed read-only probe; no retry rows were rewritten and
+no ingestion was started.

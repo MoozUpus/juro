@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-28T09:32:33.6304076Z",
+  "environment": "staging",
+  "readOnly": true,
+  "ingestionStarted": false,
+  "query": "SELECT checkpoint and ingestion-job status counters",
+  "sources": [
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "querySucceeded": true,
+      "rowsWritten": 0,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "activeQueue": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalJobs": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "querySucceeded": true,
+      "rowsWritten": 0,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "activeQueue": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalJobs": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "querySucceeded": true,
+      "rowsWritten": 0,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "activeQueue": 27689,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalJobs": 0
+    },
+    {
+      "databaseName": "juro-staging",
+      "querySucceeded": false,
+      "rowsWritten": null,
+      "errorCode": 7500,
+      "error": "Cloudflare API internal error; minimal SELECT 1 probe failed",
+      "countersAsserted": false
+    }
+  ],
+  "limitations": [
+    "The legacy database probe failed and therefore does not provide current counters.",
+    "The v2 backlog remains open for any gate that includes that source.",
+    "This recheck does not prove a federated snapshot, partition/deduplication manifest, indexed 314-scenario benchmark, or Qdrant legal benchmark."
+  ]
+}
