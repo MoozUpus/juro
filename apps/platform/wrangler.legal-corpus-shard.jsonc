@@ -61,7 +61,7 @@
       "vars": {
         "APP_ENV": "staging",
         "LEGAL_CORPUS_ENABLED": "true",
-        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "true",
+        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
         "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "true",
         "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "true",
         "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "true",
