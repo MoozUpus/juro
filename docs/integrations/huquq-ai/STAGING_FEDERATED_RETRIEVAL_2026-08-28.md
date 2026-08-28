@@ -17,6 +17,9 @@ release approval and not a legal-coverage claim.
 - `LEGAL_CORPUS_FEDERATED_SOURCE_SET=all-staging-d1`
 - `LEGAL_CORPUS_LIVE_LEXUZ_ENABLED=false`
 - `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false`
+- `LEGAL_LEX_INGESTION_ENABLED=false`
+- `LEGAL_LEX_METADATA_MONITOR_ENABLED=false`
+- `LEGAL_LEX_RSS_DISCOVERY_ENABLED=false`
 - `LEGAL_CORPUS_SHADOW_MODE=false`
 
 The production environment remains unchanged and keeps the corpus and
@@ -64,6 +67,9 @@ created by the freeze.
 - Staging deployment: completed successfully.
 - Dedicated corpus Worker staging deployment: completed successfully with
   ingestion disabled.
+- The platform staging Worker was redeployed with legacy Lex ingestion,
+  metadata monitoring and RSS discovery disabled as well; this prevents new
+  acquisition through the older queue while retaining read-only retrieval.
 - The release gate is not claimed: the federated snapshot/manifests,
   cross-source deduplication proof, indexed 314-scenario evaluation, Qdrant
   benchmark/restore and D1 backup/restore gates remain open.

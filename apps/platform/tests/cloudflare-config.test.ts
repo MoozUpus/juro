@@ -144,7 +144,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.equal(
       config.vars.LEGAL_LEX_INGESTION_ENABLED,
-      environment === "development" ? "false" : "true",
+      environment === "production" ? "true" : "false",
     );
     assert.equal(
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
@@ -181,11 +181,11 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     }
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
-      "true",
+      environment === "staging" ? "false" : "true",
     );
     assert.equal(
       config.vars.LEGAL_LEX_METADATA_MONITOR_ENABLED,
-      "true",
+      environment === "staging" ? "false" : "true",
     );
     assert.equal(
       config.vars.LEGAL_SOURCE_STAFF_API_ENABLED,
