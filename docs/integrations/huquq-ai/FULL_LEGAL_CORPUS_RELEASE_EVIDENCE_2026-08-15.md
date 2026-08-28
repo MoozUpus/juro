@@ -13275,3 +13275,20 @@ private-service routing, 1,536-dimensional dense plus named sparse schema and
 incompatible-collection refusal. These are deterministic code and
 infrastructure-contract results; they do not substitute for a current
 full-corpus Qdrant relevance benchmark or a federated snapshot/restore.
+
+## Isolated shard-2 D1 export/restore verification (2026-08-28, 12:44Z)
+
+The previous safe export probe was retried with Wrangler TEMP/TMP redirected
+to a dedicated `D:` volume. The remote source remained read-only. The full
+export completed at `12,780,843,225` bytes with SHA-256
+`10721b4274669266890dd1552826052b0f1ef2798904a9cfe5a537b2a8b6a25d`. The
+repository verifier restored it into isolated SQLite (`7,988,486,144` bytes,
+55,356,083 statements, 262 tables, 565 indexes, 363 triggers and 143
+migrations). Local `PRAGMA quick_check` returned `ok` and
+`foreign_key_check` returned zero violations. Temporary export and restore
+files were removed after verification. Machine-readable evidence is in
+`STAGING_D1_SHARD2_ISOLATED_RESTORE_2026-08-28.json`.
+
+This closes isolated shard-2 D1 integrity. It does not prove a federated
+snapshot, current indexed 314-scenario evaluation, full-corpus Qdrant
+benchmark or production readiness.

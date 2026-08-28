@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "recordedAt": "2026-08-28T12:44:34.3644173Z",
+  "databaseName": "juro-staging-corpus-shard-2",
+  "databaseId": "36fa1cfe-6d00-47b7-a980-864020028d86",
+  "readOnlySource": true,
+  "export": {
+    "inputBytes": 12780843225,
+    "sha256": "10721b4274669266890dd1552826052b0f1ef2798904a9cfe5a537b2a8b6a25d",
+    "temporaryPath": "D:\\JuroLegalCorpusTemp\\juro-staging-corpus-shard-2.sql"
+  },
+  "restore": {
+    "outputBytes": 7988486144,
+    "temporaryPath": "D:\\JuroLegalCorpusTemp\\juro-staging-corpus-shard-2.restore.sqlite",
+    "statementCount": 55356083,
+    "tableCount": 262,
+    "indexCount": 565,
+    "triggerCount": 363,
+    "migrationCount": 143,
+    "quickCheck": "ok",
+    "foreignKeyViolations": 0
+  },
+  "verificationCommand": "node scripts/verify-d1-full-export-restore.mjs --input D:\\JuroLegalCorpusTemp\\juro-staging-corpus-shard-2.sql --output D:\\JuroLegalCorpusTemp\\juro-staging-corpus-shard-2.restore.sqlite",
+  "cleanup": {
+    "temporaryPlaintextRemovedAfterVerification": true,
+    "remoteDataMutated": false
+  },
+  "scope": "This closes isolated shard-2 export/restore integrity only; it is not a federated snapshot or release approval."
+}
