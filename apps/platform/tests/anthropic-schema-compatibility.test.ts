@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { anthropicCompatibleJsonSchema } from "../lib/ai/anthropic-schema";
+import { anthropicProviderErrorCode } from "../lib/ai/anthropic-error";
 
 test("Anthropic schema adapter removes only provider-incompatible annotations", () => {
   const source = {
@@ -29,4 +30,18 @@ test("Anthropic schema adapter removes only provider-incompatible annotations", 
   assert.deepEqual(result.properties.status, { type: "string", enum: ["ok", "failed"] });
   assert.deepEqual(result.properties.url, { type: "string" });
   assert.deepEqual(result.properties.items, { type: "array", items: { type: "string" } });
+});
+
+test("Anthropic error details retain only a bounded machine-readable code", () => {
+  assert.equal(anthropicProviderErrorCode({
+    error: {
+      type: "invalid_request_error",
+      message: "must not be persisted or logged",
+      details: { error_code: "enforced_spend_limit_reached" },
+    },
+  }), "enforced_spend_limit_reached");
+  assert.equal(anthropicProviderErrorCode({
+    error: { details: { error_code: "unsafe code with spaces" } },
+  }), null);
+  assert.equal(anthropicProviderErrorCode({ error: { details: null } }), null);
 });

@@ -183,9 +183,16 @@ test("provider probes publish operational evidence only for exact non-fallback r
 test("provider probe failures retain only bounded HTTP diagnostics", async () => {
   assert.equal(productionProviderFailureCode({
     code: "PROVIDER_UNAVAILABLE",
+    providerStatus: 400,
+    providerErrorType: "invalid_request_error",
+    providerErrorCode: "enforced_spend_limit_reached",
+    message: "must not be persisted or logged",
+  }), "PROBE_PROVIDER_HTTP_400_INVALID_REQUEST_ERROR_ENFORCED_SPEND_LIMIT_REACHED");
+  assert.equal(productionProviderFailureCode({
+    code: "PROVIDER_UNAVAILABLE",
     providerStatus: 401,
     providerErrorType: "authentication_error",
-    message: "must not be persisted or logged",
+    providerErrorCode: "unsafe value with spaces",
   }), "PROBE_PROVIDER_HTTP_401_AUTHENTICATION_ERROR");
   assert.equal(productionProviderFailureCode(new TypeError("secret transport detail")), "PROBE_PROVIDER_NETWORK_ERROR");
 

@@ -285,11 +285,17 @@ export function productionProviderFailureCode(error: unknown): string {
     const type = "providerErrorType" in error
       ? (error as { providerErrorType?: unknown }).providerErrorType
       : null;
+    const detail = "providerErrorCode" in error
+      ? (error as { providerErrorCode?: unknown }).providerErrorCode
+      : null;
     if (typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 599) {
       const safeType = typeof type === "string" && /^[a-zA-Z0-9_.-]{3,48}$/u.test(type)
         ? `_${type.toUpperCase().replace(/[^A-Z0-9]+/gu, "_")}`
         : "";
-      return `PROBE_PROVIDER_HTTP_${status}${safeType}`.slice(0, 64);
+      const safeDetail = typeof detail === "string" && /^[a-zA-Z0-9_.-]{3,64}$/u.test(detail)
+        ? `_${detail.toUpperCase().replace(/[^A-Z0-9]+/gu, "_")}`
+        : "";
+      return `PROBE_PROVIDER_HTTP_${status}${safeType}${safeDetail}`.slice(0, 96);
     }
     const code = "code" in error ? (error as { code?: unknown }).code : null;
     if (typeof code === "string" && /^[A-Z0-9_]{3,64}$/u.test(code)) return code;

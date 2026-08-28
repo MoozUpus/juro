@@ -1,4 +1,5 @@
 import { anthropicCompatibleJsonSchema } from "../../ai/anthropic-schema";
+import { anthropicProviderErrorCode } from "../../ai/anthropic-error";
 import { runtimeEnv } from "../storage/runtime";
 import { resolveAiRuntimeSettings } from "../../ai/runtime-settings";
 import {
@@ -21,7 +22,11 @@ interface AnthropicMessagesPayload {
     output_tokens?: number;
     cache_read_input_tokens?: number;
   };
-  error?: { type?: string; message?: string };
+  error?: {
+    type?: string;
+    message?: string;
+    details?: { error_code?: string };
+  };
 }
 
 export function hasAnthropicConfiguration(): boolean {
@@ -149,6 +154,7 @@ export async function callAnthropicStructured<T>(options: {
           retryable,
           response.status,
           payload.error?.type ?? null,
+          anthropicProviderErrorCode(payload),
         );
       }
       if (payload.stop_reason === "refusal") {
