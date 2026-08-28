@@ -109,9 +109,18 @@ export async function handleLegalCorpusQdrantServiceRequest(
   if (!(await secretMatches(providedApiKey, expectedApiKey))) {
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
   }
+  const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
   try {
-    const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
     await container.startAndWaitForPorts();
+  } catch {
+    console.error(JSON.stringify({
+      service: "legal-corpus-private-qdrant",
+      event: "qdrant.container_start_failed",
+      errorCode: "QDRANT_CONTAINER_START_FAILED",
+    }));
+    return privateJson("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", 503);
+  }
+  try {
     const response = await container.fetch(request);
     const headers = new Headers(response.headers);
     headers.set("cache-control", "no-store");
@@ -122,6 +131,11 @@ export async function handleLegalCorpusQdrantServiceRequest(
       headers,
     });
   } catch {
+    console.error(JSON.stringify({
+      service: "legal-corpus-private-qdrant",
+      event: "qdrant.container_fetch_failed",
+      errorCode: "QDRANT_CONTAINER_FETCH_FAILED",
+    }));
     return privateJson("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", 503);
   }
 }
