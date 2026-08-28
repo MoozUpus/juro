@@ -13262,3 +13262,16 @@ cause has been proven, and the project rule forbids mutating transient failure
 records without that proof. The zero-unresolved-failures gate therefore
 remains open. Machine-readable results are in
 `STAGING_POST_STOP_FAILURE_RECHECK_2026-08-28.json`.
+
+## Release-contract regression checks after stop (2026-08-28)
+
+On the stopped-acquisition head, the supported Cloudflare test runner passed
+33/33 federated-chat, retrieval and release-gate tests with zero failures. The
+suite covered all-staging bindings, RRF duplicate suppression, point-in-time
+selection, source-scope enforcement and fail-closed release conditions. The
+Qdrant contract/indexing/snapshot suites separately passed 19/19 tests,
+including disabled-dense safety, checksum-verified snapshot lifecycle,
+private-service routing, 1,536-dimensional dense plus named sparse schema and
+incompatible-collection refusal. These are deterministic code and
+infrastructure-contract results; they do not substitute for a current
+full-corpus Qdrant relevance benchmark or a federated snapshot/restore.
