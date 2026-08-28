@@ -51,8 +51,10 @@ integrity, privacy-safe activation telemetry, and truthful production status.
   sub-44 px minimum dimensions. These are review candidates, not 228 confirmed
   defects; icon geometry, decoration, and non-interactive metadata must be
   separated from controls before changing them. The confirmed Lawyer
-  professional-action subset is closed in Worker 157; authenticated Lawyer and
-  Admin rendering remains a separate evidence gate.
+  professional-action subset is closed in Worker 157. Worker 158 also closes
+  the confirmed non-corpus Admin retry, Knowledge Base and cost-checkbox source
+  targets. Authenticated Lawyer and Admin rendering remains a separate evidence
+  gate, and legal-source review controls were excluded from this iteration.
 - Compatibility aliases make the route tree large. Keep canonical redirects and
   analytics until safe retirement is proven.
 

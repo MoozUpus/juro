@@ -13,6 +13,18 @@ The mobile experience retains AI sources, case state, document workflows, lawyer
 requests, settings, and recovery actions. It is not intentionally reduced to a
 read-only dashboard.
 
+## Worker 158 production evidence
+
+Confirmed non-corpus Admin controls now retain the 44 px interaction floor:
+shared retry actions, Knowledge Base header and fieldset buttons, and the Cost
+console checkbox label. The 12/12 source regression passed, and production
+`/assets/index-C92iLqdd.css` contains the exact selector group.
+
+Anonymous production Chrome reached the protected Admin re-authentication
+screen with one H1/main and no horizontal overflow. This is source-delivery and
+anonymous access-boundary evidence, not a signed-in Admin mobile rendering
+claim. Legal-source review controls were excluded from this iteration.
+
 ## Worker 157 production evidence
 
 Confirmed Lawyer professional controls now retain the same 44 px interaction

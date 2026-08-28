@@ -1,5 +1,26 @@
 # Test report — current evidence through 2026-08-28
 
+## Worker 158 Admin interaction-floor closure
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `93bb6abf48478af8de5bb86bbc38df3e6dcdbe15` on Draft PR `#64` |
+| Focused regression | PASS — 12/12 Platform accessibility contracts, including the non-corpus Admin 44 px source guard |
+| Full local release gate | PASS — lint, type-check, production build, artifact budgets, rendered Worker 35/35, core 1098/1098 and Cloudflare/infrastructure 201/201 |
+| GitHub Actions CI `33136790049` | PASS on exact `93bb6abf` — Website 2m15s and Platform 6m32s |
+| Platform deployment | PASS — Worker 158 `6ebf3a20-ca4d-4751-8283-22bcc9b10988`, deployment `f7e89714-43be-4450-b232-6b988e8f7f86`, 100%; Worker 157 `2ec24c74-57b9-4c66-8afa-372cceb24767` is rollback |
+| Delivered asset | PASS — production `/assets/index-C92iLqdd.css` returns `200` and contains the Admin retry, knowledge-base and cost-checkbox selector group with a 44 px floor |
+| Protected-role boundary | PASS fail-closed — anonymous Admin console and costs requests return non-cacheable `303` handoffs to the app Admin surface without privileged content |
+| Production Chrome | PASS for the anonymous boundary — isolated Chrome reached the protected re-authentication screen with one H1, one main landmark, no horizontal overflow, no console warnings/errors and no staff-data disclosure |
+| Production health | PASS — both status endpoints agreed on 8/8 operational and zero active/recent incidents at `2026-08-28T02:53:33.522Z` |
+| Deployment boundary | UNCHANGED — no production D1, DNS or Sites change; Sites v86 remains live and saved v94 remains unpublished |
+
+Worker 158 raises confirmed non-corpus Admin controls: shared retry buttons,
+Knowledge Base header/fieldset actions and the Cost console checkbox target.
+Legal-source review controls were intentionally excluded from this iteration.
+This proves source delivery and the fail-closed anonymous boundary; it is not a
+signed-in Admin route-loop or a blanket WCAG conformance claim.
+
 ## Worker 157 Lawyer interaction-floor closure
 
 | Gate | Result |

@@ -29,6 +29,15 @@
   existing Client session reaches the dedicated Lawyer re-authentication page
   with one H1, one main landmark and no horizontal overflow. A signed-in Lawyer
   render remains open because no production Lawyer identity was fabricated.
+- Worker 158 closes the confirmed non-corpus Admin source-level target subset.
+  Shared retry buttons, Knowledge Base header and fieldset actions, and the Cost
+  console checkbox label now retain a 44 px interaction floor. The focused
+  accessibility contract passed 12/12, and the exact production CSS asset
+  contains the selector group. In isolated Chrome, anonymous Admin requests
+  failed closed at the protected re-authentication screen with one H1/main, no
+  overflow, no console warnings/errors and no staff-data disclosure. Signed-in
+  Admin rendering remains open; legal-source review controls were excluded from
+  this iteration as requested.
 - A fresh production Chrome replay on 2026-08-28 reconfirmed the original
   misplaced `lawyer.juro.uz/ru/individual/dashboard` URL against the current
   release. It reached the authenticated Client dashboard on `app.juro.uz`,
@@ -140,8 +149,9 @@ viewport emulation.
 
 - P1: finish rendered target classification on authenticated Lawyer and Admin
   surfaces after those protected Chrome sessions are established. The Client
-  set, Lawyer source contract and current direct-navigation boundaries are now
-  covered; signed-in Lawyer and Admin rendering is not inferred from source.
+  set, Lawyer source contract, non-corpus Admin source contract and current
+  direct-navigation boundaries are covered; signed-in Lawyer and Admin
+  rendering is not inferred from source.
 - P1: deploy the superseding saved Sites candidate only after action-time
   approval, then replay both the automated runner and the retained manual
   keyboard/accessibility-tree sample against that exact public artifact.
