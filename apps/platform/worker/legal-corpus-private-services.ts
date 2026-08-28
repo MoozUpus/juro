@@ -106,6 +106,11 @@ export async function handleLegalCorpusQdrantServiceRequest(
   ) {
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
   }
+  console.log(JSON.stringify({
+    service: "legal-corpus-private-qdrant",
+    event: "qdrant.private_request",
+    method: request.method,
+  }));
   if (!(await secretMatches(providedApiKey, expectedApiKey))) {
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
   }
@@ -121,8 +126,17 @@ export async function handleLegalCorpusQdrantServiceRequest(
     }));
     return privateJson("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", 503);
   }
+  console.log(JSON.stringify({
+    service: "legal-corpus-private-qdrant",
+    event: "qdrant.container_ready",
+  }));
   try {
     const response = await container.fetch(request);
+    console.log(JSON.stringify({
+      service: "legal-corpus-private-qdrant",
+      event: "qdrant.container_response",
+      statusClass: response.status >= 500 ? "5xx" : response.status >= 400 ? "4xx" : "2xx",
+    }));
     const headers = new Headers(response.headers);
     headers.set("cache-control", "no-store");
     headers.set("x-content-type-options", "nosniff");
