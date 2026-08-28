@@ -218,3 +218,19 @@ Document collection and ingestion remain stopped. The staging flags keep
 `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false`, `LEGAL_CORPUS_LIVE_LEXUZ_ENABLED=false`
 and `LEGAL_CORPUS_SHADOW_MODE=false`; no production binding, corpus, DNS or
 rollout was changed.
+
+## Federated gate regression tests
+
+At `2026-08-28T08:28:18.8184013Z`, the supported Cloudflare test runner was
+executed for the federated release-gate, evidence-builder and retrieval suites:
+
+```text
+node --experimental-loader ./scripts/cloudflare-workers-loader.mjs --import tsx --test \
+  tests/legal-corpus-federated-release-gate.test.ts \
+  tests/legal-corpus-federated-release-evidence-builder.test.ts \
+  tests/legal-corpus-retrieval.test.ts
+```
+
+Result: 21 tests passed, 0 failed. These are deterministic contract/regression
+tests; they do not substitute for a real staging snapshot, current 314-scenario
+run or D1 restore verification.
