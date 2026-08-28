@@ -61,3 +61,9 @@
 .staff-bulk-confirm{width:min(40rem,calc(100% - 2rem));padding:1.2rem;border:1px solid var(--staff-border-strong);border-radius:.75rem;background:var(--surface-raised);color:var(--staff-text);box-shadow:0 1.5rem 4rem rgba(6,26,44,.25)}.staff-bulk-confirm::backdrop{background:rgba(6,26,44,.58)}.staff-bulk-confirm h2{margin:0;font-size:1.1rem}.staff-bulk-confirm>p{color:var(--staff-muted);font-size:.76rem;line-height:1.5}.staff-bulk-confirm>label{display:grid;gap:.35rem;margin-top:.8rem;color:var(--staff-muted);font-size:.7rem;font-weight:800}.staff-bulk-confirm textarea{padding:.75rem;border:1px solid var(--staff-border-strong);border-radius:.5rem;resize:vertical}.staff-bulk-confirm>div:last-child{display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem}.staff-bulk-confirm button{min-height:2.75rem;padding:0 .85rem;display:inline-flex;align-items:center;justify-content:center;gap:.4rem;border:1px solid var(--staff-border-strong);border-radius:.45rem;background:var(--surface-raised);font-weight:800}.staff-bulk-confirm button svg{width:1rem}.staff-bulk-confirm .staff-approve{border-color:var(--staff-shell);background:var(--staff-shell);color:#fff}
 @media(max-width:600px){.staff-bulk-toolbar{align-items:stretch;flex-direction:column}.staff-bulk-toolbar span{margin-inline-start:0}.staff-bulk-toolbar button{justify-content:center}.staff-bulk-confirm>div:last-child{flex-direction:column-reverse}.staff-bulk-confirm button{width:100%}.staff-table-row .staff-select-cell{display:flex;grid-template-columns:6.5rem 1fr}}
 .staff-console,.staff-console *,.staff-console *::before,.staff-console *::after{box-sizing:border-box}
+
+/* Non-corpus Admin workflows share the platform interaction floor. */
+.staff-error button,
+.kb-sections>header button,
+.kb-sections>fieldset>button,
+.cost-checkbox{min-height:2.75rem}
