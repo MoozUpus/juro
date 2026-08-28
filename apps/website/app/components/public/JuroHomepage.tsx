@@ -457,7 +457,7 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
 
         <section className={`${styles.handoffSection} ${motionStyles.handoffMotion}`} data-chapter data-handoff-story id="lawyer-handoff">
           <div className={`${styles.jurobekStage} ${motionStyles.jurobekMotion}`} data-reveal="left"><div aria-hidden="true" className={styles.jurobekHalo} /><Image alt={content.hero.jurobekAlt} height={1672} src="/jurobek-point.webp" unoptimized width={941} /></div>
-          <div className={styles.handoffCopy} data-reveal><p className={styles.eyebrowLight}>{t.handoff.eyebrow}</p><h2>{t.handoff.title}</h2><p>{t.handoff.lead}</p><Link href={`/${language}/lawyers`}>{t.handoff.cta}<ArrowRight aria-hidden="true" size={18} /></Link></div>
+          <div className={styles.handoffCopy} data-reveal><p className={styles.eyebrowLight}>{t.handoff.eyebrow}</p><h2>{t.handoff.title}</h2><p>{t.handoff.lead}</p><Link href={`/${language}/lawyers`}><span>{t.handoff.cta}</span><ArrowRight aria-hidden="true" size={18} /></Link></div>
           <div className={`${styles.dossier} ${motionStyles.dossierMotion}`}><div><span>{t.handoff.dossier}</span><small><ShieldCheck aria-hidden="true" size={15} />{t.handoff.ready}</small></div>{t.handoff.items.map((item, index) => <p key={item}><i>0{index + 1}</i><Check aria-hidden="true" size={15} />{item}</p>)}</div>
         </section>
 

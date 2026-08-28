@@ -21,6 +21,7 @@ const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.c
 const footerRailStyles = fs.readFileSync("app/components/public/footer-rail.module.css", "utf8");
 const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-targets.module.css", "utf8");
 const globalStyles = fs.readFileSync("app/globals.css", "utf8");
+const rootLayout = fs.readFileSync("app/layout.tsx", "utf8");
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
@@ -29,6 +30,7 @@ const lawyerCataloguePage = fs.readFileSync("app/[locale]/lawyers/page.tsx", "ut
 const lawyerProfile = fs.readFileSync("app/[locale]/lawyers/[profileId]/page.tsx", "utf8");
 const worker = fs.readFileSync("worker/index.ts", "utf8");
 const productionDeploy = fs.readFileSync("scripts/deploy-production.mjs", "utf8");
+const accessibilitySmoke = fs.readFileSync("scripts/accessibility-smoke.mjs", "utf8");
 
 test("selected JURO direction is the only public homepage implementation", () => {
   assert.match(rootPage, /CinematicLandingPage language="ru"/);
@@ -161,6 +163,22 @@ test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(globalStyles, /\.public-theme-switcher button\s*\{[\s\S]*?width: 44px;[\s\S]*?height: 44px;/);
   assert.match(chromeStyles, /\.actions > :global\(\.public-theme-switcher\)\s*\{[\s\S]*?display: none;/);
   assert.match(chromeStyles, /@media \(min-width: 981px\) and \(max-width: 1100px\)[\s\S]*?\.desktopNav,[\s\S]*?\.menuButton[\s\S]*?display: flex;/);
+});
+
+test("public Chrome release gate covers the required responsive widths", () => {
+  for (const width of [320, 360, 375, 390, 393, 430, 768, 1024, 1280, 1440, 1920]) {
+    assert.match(accessibilitySmoke, new RegExp(`width: ${width}\\b`));
+  }
+  assert.match(accessibilitySmoke, /for \(const viewport of RESPONSIVE_ONLY_VIEWPORTS\)/);
+  assert.match(accessibilitySmoke, /for \(const route of LOCALIZED_PUBLIC_ROUTES\)/);
+  assert.match(accessibilitySmoke, /findHorizontallyClippedInteractiveTargets/);
+  assert.match(accessibilitySmoke, /verifyResponsiveMenu/);
+  assert.match(accessibilitySmoke, /workerHeaders\.set\("x-juro-request-path", url\.pathname\)/);
+  assert.match(rootLayout, /requestPath\.replace\(\/\\\.rsc\$\/, ""\)/);
+  assert.match(homepage, /<span>\{t\.handoff\.cta\}<\/span><ArrowRight/);
+  assert.match(homepageStyles, /\.handoffSection\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(homepageStyles, /\.handoffCopy a\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(homepageStyles, /\.handoffCopy a span\s*\{[\s\S]*?overflow-wrap: anywhere;/);
 });
 
 test("Jurobek uses a lightweight, reduced-motion-safe ambient treatment", () => {

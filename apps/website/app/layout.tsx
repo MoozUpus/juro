@@ -40,7 +40,8 @@ export default async function RootLayout({
 }>) {
   const requestHeaders = await headers();
   const requestPath = requestHeaders.get("x-juro-request-path") ?? "";
-  const locale = /^\/uz(?:\/|$)/.test(requestPath) ? "uz" : /^\/en(?:\/|$)/.test(requestPath) ? "en" : "ru";
+  const documentPath = requestPath.replace(/\.rsc$/, "");
+  const locale = /^\/uz(?:\/|$)/.test(documentPath) ? "uz" : /^\/en(?:\/|$)/.test(documentPath) ? "en" : "ru";
   return (
     <html className={manrope.variable} lang={locale} suppressHydrationWarning>
       <body>

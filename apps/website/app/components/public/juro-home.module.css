@@ -116,4 +116,28 @@
   .scenarioTabs button {
     font-size: .75rem;
   }
+
+  .handoffSection {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .handoffCopy {
+    min-width: 0;
+  }
+
+  .handoffCopy a {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .handoffCopy a span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .handoffCopy a svg {
+    flex: 0 0 auto;
+  }
 }
