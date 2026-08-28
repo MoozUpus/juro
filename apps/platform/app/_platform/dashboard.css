@@ -92,7 +92,7 @@
 }
 .dashboard-voice-entry > small {
   color: #b9c8d1;
-  font-size: 10px;
+  font-size: 12px;
 }
 .dashboard-voice-entry > svg:last-child {
   grid-column: 3;
@@ -743,7 +743,7 @@
 }
 .dashboard-today > header span {
   color: #e1bd6d;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -787,7 +787,7 @@
 .dashboard-today > a small,
 .dashboard-today > a time {
   color: #b9c8d1;
-  font-size: 11px;
+  font-size: 12px;
 }
 .dashboard-today > a time {
   grid-column: 2;

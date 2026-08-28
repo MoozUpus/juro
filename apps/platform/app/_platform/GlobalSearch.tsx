@@ -162,7 +162,7 @@ export function GlobalSearch({
 
   return (
     <>
-      <button ref={triggerRef} className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={ru ? "Глобальный поиск" : "Global qidiruv"} aria-expanded={open} aria-controls="global-search-workspace">
+      <button ref={triggerRef} className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={ru ? "Глобальный поиск" : "Global qidiruv"} aria-expanded={open} aria-controls={open ? "global-search-workspace" : undefined}>
         <Search /><span>{ru ? "Поиск" : "Qidiruv"}</span><kbd>⌘K</kbd>
       </button>
       {open && (

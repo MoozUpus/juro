@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const shellSource = new URL("../app/_platform/PlatformShell.tsx", import.meta.url);
+const globalSearchSource = new URL("../app/_platform/GlobalSearch.tsx", import.meta.url);
 const searchStylesheet = new URL("../app/_platform/global-search.css", import.meta.url);
 const shellStylesheet = new URL("../app/_platform/platform-shell.css", import.meta.url);
 const profileStylesheet = new URL("../app/_platform/profile-settings.css", import.meta.url);
@@ -69,6 +70,20 @@ test("lawyer calendar actions retain a 44px touch target", async () => {
   const css = await readFile(lawyerStylesheet, "utf8");
 
   assert.match(css, /\.lawyer-schedule-section>header>button\{min-height:44px\}/);
+});
+
+test("Client shell controls keep valid ARIA references and a 12px text floor", async () => {
+  const [searchSource, searchCss, shellCss, dashboardCss] = await Promise.all([
+    readFile(globalSearchSource, "utf8"),
+    readFile(searchStylesheet, "utf8"),
+    readFile(shellStylesheet, "utf8"),
+    readFile(dashboardStylesheet, "utf8"),
+  ]);
+
+  assert.match(searchSource, /aria-controls=\{open \? "global-search-workspace" : undefined\}/);
+  for (const css of [searchCss, shellCss, dashboardCss]) {
+    assert.doesNotMatch(css, /font-size:\s*(?:[0-9]|1[01])px/);
+  }
 });
 
 test("lawyer professional workflows retain the 44px interaction floor", async () => {
