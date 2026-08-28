@@ -13,6 +13,14 @@
   Cases, Action plan, History, Profile, Security and Notifications found no
   undersized exposed interactive target; the one 21 px search input remains
   contained by its 44 px label target.
+- Worker 156 closes the remaining confirmed comparison-workflow target defect.
+  Before release, the compact refresh control shrank to about `19.6×42` px at
+  320 px and `23.4×42` px at 390 px. The corrected production control is
+  exactly `44×44` px at both widths, with no horizontal overflow or Chrome
+  console errors. The same source guard covers comparison file actions, recent
+  actions, metadata links, case controls, filters, change decisions, source
+  links and compact version buttons. This bounded Chrome evidence is not a
+  screen-reader or blanket WCAG conformance claim.
 - A fresh production Chrome replay on 2026-08-28 reconfirmed the original
   misplaced `lawyer.juro.uz/ru/individual/dashboard` URL against the current
   release. It reached the authenticated Client dashboard on `app.juro.uz`,
@@ -33,7 +41,7 @@
   relationship to the newly focused email field. The alert remains atomic.
   A focused two-test contract, the 1094-test core suite and the 201-test
   Cloudflare/infrastructure suite passed the source candidate; the exact
-  production Worker 155 auth asset contains the same ARIA contract. No OTP or
+  production Worker 156 auth asset contains the same ARIA contract. No OTP or
   MFA was submitted, so live assistive-technology error announcement remains
   open.
 - Worker 155 corrects status-document language and first-party icon metadata.

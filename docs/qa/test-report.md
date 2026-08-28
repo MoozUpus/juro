@@ -1,5 +1,29 @@
 # Test report — current evidence through 2026-08-28
 
+## Worker 156 document-comparison interaction-floor closure
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `7123fb4b842c0d006f82a83b0e72263a0088020c` on Draft PR `#64` |
+| Focused regression | PASS — 11/11 Platform product-UX contracts, including the document-comparison 44 px source guard |
+| Full local release gate | PASS — type-check, lint, production build, artifact budgets, rendered Worker 35/35, core 1096/1096 and Cloudflare/infrastructure 201/201 |
+| Document-comparison smoke | PASS — upload, three-change comparison, decision, PDF/DOCX export, download, tenant isolation, MIME/same-file rejection, monitoring, search and deletion; no production D1 write was used |
+| GitHub Actions CI `33132278871` | PASS on exact `7123fb4b` — Website 2m29s and Platform 8m35s |
+| Platform deployment | PASS — Worker 156 `b361ae62-1220-4fa3-b480-488d4791bda4`, deployment `caaa6ee7-ec98-4ef8-80ac-7643cb2f53ca`, 100%; Worker 155 `eb132328-68c2-48f3-95d4-90cac0962119` is rollback |
+| Production Chrome at `320×800` | PASS — the comparison refresh control is exactly `44×44` CSS px; document width 305 px inside the viewport, no horizontal overflow |
+| Production Chrome at `390×844` | PASS — the same control is exactly `44×44` CSS px; document width 375 px inside the viewport, no horizontal overflow |
+| Browser diagnostics | PASS — no Chrome console errors after the production replay |
+| Production health | PASS — 8/8 operational, zero active/recent incidents at `2026-08-28T01:26:35.918Z` |
+| Deployment boundary | UNCHANGED — no production D1, DNS or Sites change; Sites v86 remains live and saved v94 remains unpublished |
+
+Before the correction, the refresh control measured about `19.6×42` px at
+320 px and `23.4×42` px at 390 px because its flex item could shrink. The
+production replay proves the corrected named workflow, not blanket WCAG
+conformance or assistive-technology behavior. Screenshots:
+`docs/investor-ready/screenshots/before/client-document-comparison-touch-target-320.png`
+and
+`docs/investor-ready/screenshots/after/client-document-comparison-touch-target-320.png`.
+
 ## Public website automated accessibility candidate
 
 | Gate | Result |
@@ -60,7 +84,7 @@ to suppress them.
 | Focused regression | PASS — 2/2 auth accessibility source-contract tests |
 | Local Platform gates | PASS — type-check, lint, development build, rendered smoke, deployable artifact and budgets, full core 1094/1094 and Cloudflare/infrastructure 201/201 |
 | GitHub Actions CI `33125681307` | PASS — Website 2m22s and Platform 8m34s, including locked installs, lint, types, tests, artifacts, Cloudflare matrix, production-dependency audit and licence policy |
-| Production boundary | PASS for source delivery — deployed in Worker 153 and retained in Worker 155; the exact production auth asset contains `aria-errormessage`, `aria-invalid`, `aria-atomic` and the stable `auth-error` target |
+| Production boundary | PASS for source delivery — deployed in Worker 153 and retained in Worker 156; the exact production auth asset contains `aria-errormessage`, `aria-invalid`, `aria-atomic` and the stable `auth-error` target |
 
 No email, OTP, MFA code or consent was submitted for this release. The source,
 exact production asset and automated gates prove the delivered association

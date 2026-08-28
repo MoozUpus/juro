@@ -2,10 +2,10 @@
 
 **Audit date:** 2026-08-28
 **Branch:** `codex/investor-ready-ecosystem`
-**Current production checkpoint:** Worker 155
-`eb132328-68c2-48f3-95d4-90cac0962119`, deployment
-`24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4`, 100% traffic; status 8/8
-operational at `2026-08-28T00:30:50.972Z`.
+**Current production checkpoint:** Worker 156
+`b361ae62-1220-4fa3-b480-488d4791bda4`, deployment
+`caaa6ee7-ec98-4ef8-80ac-7643cb2f53ca`, 100% traffic; status 8/8
+operational at `2026-08-28T01:26:35.918Z`.
 
 ## Executive outcome
 
@@ -54,7 +54,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | Product analytics | DEPLOYED | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. No conversion baseline is invented before an observation window exists. |
 | AI costs | ACTIVE CONFIGURATION | Four official, effective-dated production price rows passed pre/post D1 export, isolated restore, FK, private R2 and SHA-256 readback gates. No post-effective AI event exists yet, so no measured runtime cost baseline is claimed. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
-| Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Worker 155 delivers the auth error-association contract and matching localized RU/UZ status semantics; Chrome verified the status documents, but no real OTP/MFA error or screen reader was used. Protected authenticated workflows, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
+| Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Worker 156 retains the auth/status semantics and closes the confirmed document-comparison target defect: Chrome measured the corrected control at exactly 44×44 px at 320 and 390 px with no overflow or console errors. No real OTP/MFA error, screen reader or physical mobile device was used. Protected authenticated workflows, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
 | Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Overdue billing and unavailable real CWV tracing remain explicit risks. |
 
 ## Definition of done for this candidate
@@ -74,6 +74,18 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 ## Candidate completion checkpoint
 
+- CI `33132278871` passed exact runtime source
+  `7123fb4b842c0d006f82a83b0e72263a0088020c` (Website 2m29s, Platform
+  8m35s). Local gates passed type-check, lint, production build, artifact
+  budgets, rendered Worker 35/35, core 1096/1096, Cloudflare/infrastructure
+  201/201 and the end-to-end document-comparison smoke.
+- Worker 156 receives 100% production traffic. Chrome verified the comparison
+  refresh action at exactly 44×44 px at 320 and 390 px, with no horizontal
+  overflow or console errors. Worker 155 is the immediate rollback. Production
+  D1, DNS and Sites were unchanged; Sites v86 remains live and saved v94 remains
+  unpublished.
+- Both status endpoints reported all eight components operational and no active
+  or recent incident at `2026-08-28T01:26:35.918Z`.
 - CI `33129369444` passed exact commit `fcdb9e6f` (Website 2m30s,
   Platform 6m48s). The same source passed local rendered HTML 35/35, core
   1095/1095, Cloudflare/infrastructure 201/201, type-check, lint and artifact

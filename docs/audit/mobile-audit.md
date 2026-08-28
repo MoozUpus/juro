@@ -13,6 +13,23 @@ The mobile experience retains AI sources, case state, document workflows, lawyer
 requests, settings, and recovery actions. It is not intentionally reduced to a
 read-only dashboard.
 
+## Worker 156 production evidence
+
+The document-comparison refresh action previously shrank below the interaction
+floor inside its compact flex header: about `19.6×42` px at 320 px and
+`23.4×42` px at 390 px. Worker 156 makes the control non-shrinking and exactly
+`44×44` px at both widths. Chrome measured document/viewport widths of 305/320
+and 375/390 respectively, with no horizontal overflow and no console errors.
+The source-level 44 px contract also covers the other comparison workflow
+actions and filters.
+
+The retained before/after evidence is in
+`docs/investor-ready/screenshots/before/client-document-comparison-touch-target-320.png`
+and
+`docs/investor-ready/screenshots/after/client-document-comparison-touch-target-320.png`.
+This is Chrome responsive emulation evidence for the named workflow; physical
+mobile-device and non-Chrome browser coverage remain excluded.
+
 ## Acceptance matrix
 
 | Width | Required checks |
