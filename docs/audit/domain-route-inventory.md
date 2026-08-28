@@ -1,17 +1,35 @@
-# Domain and route inventory — 2026-08-28
+# Domain and route inventory — 2026-08-29
 
-Status: **PARTIAL**. The production and staging web surfaces, Worker custom
-domains, zone Worker routes, public sitemap and source-declared route families
-were refreshed on 2026-08-27. The current Wrangler OAuth session can read the
-zone, Worker domains and Worker routes, but `GET /zones/{zone}/dns_records`
-returns HTTP 403. Consequently this is a complete inventory of the web
-surfaces visible through those sources, not a claim that every DNS record type
-has been enumerated.
+Status: **PARTIAL** for the wider authenticated route matrix. The production
+and staging web surfaces, Worker custom domains, zone Worker routes, public
+sitemap and source-declared route families were refreshed on 2026-08-27. On
+2026-08-29 the authenticated Cloudflare dashboard also enumerated the complete
+22/22 DNS-record table. The current Wrangler OAuth session can still read the
+zone, Worker domains and Worker routes but receives HTTP 403 from
+`GET /zones/{zone}/dns_records`; dashboard evidence closes the record-inventory
+gap without overstating the OAuth token's scope.
 
 Evidence was collected read-only from Cloudflare control-plane APIs, recursive
-DNS, unauthenticated HTTP probes, the v86 sitemap and the current Platform
-runtime source at `75064bee61909baa0e1a05dabdedc6268f86ed29`. A source file is not treated as a
-live route merely because it exists.
+DNS, the authenticated Cloudflare dashboard, unauthenticated HTTP probes, the
+v86 sitemap and the current Platform runtime source. A source file is not
+treated as a live route merely because it exists.
+
+## 2026-08-29 DNS control-plane refresh
+
+At `2026-08-28T23:55Z` the authenticated Cloudflare dashboard showed 22 of 200
+available records in use: three A, two CNAME, four MX, six TXT and seven
+Worker-managed records. Ten records were proxied and twelve were DNS-only; all
+showed automatic TTL. The seven Worker rows exactly matched the Worker Domains
+API for production `app`, `lawyer`, `admin` and `status`, protected staging
+`staging.app` and `admin.staging`, and public-safe `status.staging`. The zone
+Workers Routes API independently retained only `juro.uz/*` and
+`www.juro.uz/*`, both on `juro-legaltech`.
+
+The dashboard also displayed one recommendation: an origin IP address is
+partially exposed by a DNS-only record. This is recorded as an open
+infrastructure review, not automatically remediated: FTP and mail-related
+records must be mapped to their real service owners before any proxy or record
+change. No DNS, proxy, TTL, mail or Worker-domain mutation was made.
 
 ## Domain and URL matrix
 
@@ -39,11 +57,12 @@ live route merely because it exists.
 | `local.juro.uz` | No public address answer | Local-development name only | **NOT APPLICABLE** |
 
 Mail, FTP and verification records are DNS infrastructure, not JURO web
-application surfaces. They cannot be refreshed exhaustively until the active
-credential has Zone DNS Read access. A fresh read-only Cloudflare API check on
-2026-08-28 resolved the active zone successfully, then the DNS-record listing
-failed with HTTP 403 and Cloudflare code `10000` (`Authentication error`). This
-is direct scope evidence; no DNS record or value was inferred from the failure.
+application surfaces. The dashboard refresh enumerated them without copying
+their values into this repository. A same-session API check resolved the
+active full, unpaused zone successfully, then the DNS-record listing failed
+with HTTP 403 and Cloudflare code `10000` (`Authentication error`). This is
+direct OAuth-scope evidence, while the authenticated dashboard is the source
+for the complete 22-record count and type/status summary.
 
 ## Cloudflare routing topology
 

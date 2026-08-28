@@ -28,6 +28,16 @@ also closes the newly detected 320 px CTA clipping and Vinext `.rsc` locale
 hydration defects. Exact-source CI `33220671747` passed Website in 3m58s and
 Platform in 8m17s. This follow-up is also unpublished.
 
+**DNS checkpoint:** a read-only authenticated Cloudflare dashboard pass at
+`2026-08-28T23:55Z` enumerated all 22 DNS rows: 3 A, 2 CNAME, 4 MX, 6 TXT and
+7 Worker records; 10 were proxied and 12 DNS-only. The seven Worker rows and
+two zone routes matched independent control-plane API reads. The Wrangler OAuth
+token still receives 403/code 10000 from the DNS-record endpoint, but that no
+longer prevents a complete record-count/type/status inventory. Cloudflare
+shows one partially exposed origin-IP recommendation. It remains an explicit
+infrastructure review because FTP/mail ownership must be established before
+any proxy change. No DNS mutation was made.
+
 ## Current production recovery
 
 Worker 161 safely classified the repeated Anthropic HTTP 400 as

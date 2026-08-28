@@ -17,6 +17,17 @@ These results describe the exact unpublished branch candidate. They do not
 convert the known Sites v86 findings into production passes and are not a WCAG
 conformance claim.
 
+## Read-only Cloudflare DNS inventory
+
+| Gate | Result |
+| --- | --- |
+| Zone | PASS — `juro.uz` is active, full and unpaused |
+| Complete record table | PASS via authenticated dashboard — 22/22 rows: 3 A, 2 CNAME, 4 MX, 6 TXT and 7 Worker; 10 proxied, 12 DNS-only; automatic TTL |
+| Worker topology | PASS — seven dashboard Worker rows match the Worker Domains API; zone routes remain only `juro.uz/*` and `www.juro.uz/*` on `juro-legaltech` |
+| OAuth boundary | EXPECTED LIMIT — the same Wrangler session reads zone/domains/routes but `GET /zones/{zone}/dns_records` returns 403/code 10000 because DNS Read is absent |
+| Cloudflare recommendation | OPEN REVIEW — the dashboard reports one partially exposed origin-IP recommendation; FTP/mail ownership must be confirmed before any proxy change |
+| Mutation boundary | PASS — no DNS record, proxy, TTL, mail, Worker-domain or route change was made |
+
 ## Public Sites v86 replay and superseding source candidate
 
 | Gate | Result |

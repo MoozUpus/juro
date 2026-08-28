@@ -102,7 +102,7 @@ mode each survived a reload.
 | Host/access smoke | VERIFIED for sampled boundaries — misplaced Client path on Lawyer host `307` to the exact app path with query and `no-store`; cross-host `POST` and unknown Lawyer path `404`; canonical Lawyer route retained its Lawyer login; private API `401`, Admin `303`, Status `200` |
 | Production health/logs | VERIFIED at checkpoint — 8/8 operational and no incident at `2026-08-27T12:35:10.086Z`. Error-only tail observed one deployment-time `MalwareScannerContainer` Durable Object reset caused by the code update; no route failure was observed and public health remained operational |
 | Public website | VERIFIED for v86 release evidence — deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`, 78/78 sitemap URLs, Website and Platform CI `33067543449`; v85 is rollback; the provider-generated direct host emits response-level `noindex` |
-| Domain/control-plane inventory | PARTIAL — Worker custom domains and zone routes are current, but the active credential receives HTTP 403 from the DNS-record endpoint; authenticated Business/Lawyer/Admin route-by-route replay remains open |
+| Domain/control-plane inventory | VERIFIED read-only — the authenticated Cloudflare dashboard enumerated 22/22 records (3 A, 2 CNAME, 4 MX, 6 TXT, 7 Worker; 10 proxied and 12 DNS-only), while Worker Domains and zone routes matched the recorded topology. The OAuth DNS endpoint still returns 403/code 10000, proving its narrower scope. Cloudflare flags one partially exposed origin-IP recommendation for owner review; no DNS change was made. Authenticated Business/Lawyer/Admin route-by-route replay remains a separate open gate |
 
 ## 2026-08-25 analytics and cost release checkpoint
 

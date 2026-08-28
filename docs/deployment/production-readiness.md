@@ -24,6 +24,22 @@ stale accessibility defects. A superseding Sites publish and production replay
 still require a separate explicit publish instruction; this checkpoint is not
 a WCAG conformance statement.
 
+## 2026-08-29 read-only DNS inventory closure
+
+The authenticated Cloudflare dashboard enumerated all 22/22 `juro.uz` DNS
+rows at `2026-08-28T23:55Z`: 3 A, 2 CNAME, 4 MX, 6 TXT and 7 Worker records,
+with 10 proxied, 12 DNS-only and automatic TTL throughout. Independent API
+reads confirmed the active full/unpaused zone, the same seven Worker custom
+domains and the two public Sites Worker routes. The current Wrangler OAuth
+token still returns 403/code 10000 for the DNS-record endpoint; this is a token
+scope limit rather than a missing dashboard inventory.
+
+Cloudflare reports one recommendation that an origin IP is partially exposed
+by a DNS-only record. No proxy, record, TTL, mail or Worker-domain change was
+made. Production release readiness therefore records a required owner/network
+review of FTP and mail service ownership before any narrowly approved DNS
+remediation.
+
 ## 2026-08-29 public Sites v86 replay and unpublished correction
 
 A read-only Chrome replay of the deployed Sites v86 artifact covered RU, UZ
