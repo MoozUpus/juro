@@ -1,5 +1,22 @@
 # Test report — current evidence through 2026-08-28
 
+## Client dashboard keyboard-focus release candidate
+
+| Gate | Result |
+| --- | --- |
+| Production baseline | FAIL observed on Worker 167 — in an existing authenticated Client session, the first Tab focused the visible skip link and Enter transferred focus to `main#main-content`; the next Tab reached `#dashboard-legal-task`, where `:focus-visible` matched but outline, border and box shadow were all absent |
+| Accessible name | PASS — the textarea is associated with the visually hidden label `Опишите ситуацию или задайте юридический вопрос` |
+| Source correction | PASS candidate — `.dashboard-command-form textarea:focus-visible` now uses the shared focus color with a `3px` outline and `3px` offset |
+| Focused regression | PASS — 1/1 dashboard mobile/zoom/keyboard accessibility safeguard test |
+| Static and artifact gates | PASS — type-check, lint and production build; artifact budgets remain within limits, including client CSS 594.8 KiB of 600.0 KiB |
+| Exact CI | PENDING — publication is gated on the exact pushed source commit |
+| Production deployment | NOT STARTED — Worker 167 remains live and is the rollback candidate |
+| Deployment boundary | PASS — no D1 mutation, migration, DNS, notification or Sites change; Sites v86 remains live |
+
+This is a bounded manual keyboard finding and release candidate, not a blanket
+WCAG conformance claim. No form was submitted and no authenticated customer
+data was changed during the sample.
+
 ## Worker 167 Client login mobile CLS closure
 
 | Gate | Result |

@@ -1197,6 +1197,7 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(dashboard, /max-width:\s*820px/);
   assert.match(dashboard, /max-width:\s*460px/);
   assert.match(dashboard, /\.dashboard-command-form textarea\s*\{[\s\S]*?min-height:\s*96px;[\s\S]*?grid-column:\s*1\/-1;[\s\S]*?grid-row:\s*1;[\s\S]*?resize:\s*none;/);
+  assert.match(dashboard, /\.dashboard-command-form textarea:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--focus-ring\);[^}]*outline-offset:\s*3px;/s);
   assert.match(dashboard, /\.dashboard-voice-action\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?grid-row:\s*2;/);
   assert.match(dashboard, /\.dashboard-start\s*\{[\s\S]*?grid-column:\s*3;[\s\S]*?grid-row:\s*2;/);
   assert.match(dashboard, /\.dashboard-attach\s*\{[\s\S]*?grid-column:\s*1;[\s\S]*?grid-row:\s*2;/);

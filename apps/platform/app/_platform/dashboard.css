@@ -703,6 +703,11 @@
   caret-color: var(--brand-gold);
   -webkit-text-fill-color: var(--text-primary);
 }
+.dashboard-command-form textarea:focus-visible {
+  border-radius: 10px;
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
 .dashboard-command-form textarea::placeholder {
   color: var(--text-secondary);
 }
