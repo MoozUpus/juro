@@ -528,7 +528,8 @@ export function PlatformShell({
           <button
             type="button"
             className="platform-backdrop"
-            aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"}
+            aria-hidden="true"
+            tabIndex={-1}
             onClick={closeMobileMenu}
           />
         )}

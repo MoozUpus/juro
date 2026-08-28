@@ -73,7 +73,8 @@ test("lawyer calendar actions retain a 44px touch target", async () => {
 });
 
 test("Client shell controls keep valid ARIA references and a 12px text floor", async () => {
-  const [searchSource, searchCss, shellCss, dashboardCss] = await Promise.all([
+  const [shellComponent, searchSource, searchCss, shellCss, dashboardCss] = await Promise.all([
+    readFile(shellSource, "utf8"),
     readFile(globalSearchSource, "utf8"),
     readFile(searchStylesheet, "utf8"),
     readFile(shellStylesheet, "utf8"),
@@ -81,6 +82,7 @@ test("Client shell controls keep valid ARIA references and a 12px text floor", a
   ]);
 
   assert.match(searchSource, /aria-controls=\{open \? "global-search-workspace" : undefined\}/);
+  assert.match(shellComponent, /className="platform-backdrop"\s+aria-hidden="true"\s+tabIndex=\{-1\}/);
   for (const css of [searchCss, shellCss, dashboardCss]) {
     assert.doesNotMatch(css, /font-size:\s*(?:[0-9]|1[01])px/);
   }
