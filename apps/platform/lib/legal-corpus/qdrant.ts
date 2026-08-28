@@ -238,10 +238,16 @@ async function requestResponse(
     if (env.QDRANT_SERVICE) {
       phase = "service-fetch";
       try {
-        // Service bindings accept RequestInfo + init directly. Avoiding a
-        // cross-runtime Request constructor keeps Cloudflare's private
-        // binding path compatible with streaming/body implementations.
-        response = await env.QDRANT_SERVICE.fetch(endpoint(env, suffix), requestInit);
+        // Cloudflare service bindings reliably forward a Request object. Add
+        // the half-duplex hint only for streaming snapshot bodies; JSON
+        // mutations stay ordinary requests and never expose their payload in
+        // diagnostics.
+        const request = new Request(endpoint(env, suffix), (
+          init.body instanceof ReadableStream
+            ? { ...requestInit, duplex: "half" as const }
+            : requestInit
+        ) as RequestInit);
+        response = await env.QDRANT_SERVICE.fetch(request);
       } catch (error) {
         // A failed service binding is distinct from an HTTP response from
         // Qdrant; keep that distinction in the bounded staging run ledger.
