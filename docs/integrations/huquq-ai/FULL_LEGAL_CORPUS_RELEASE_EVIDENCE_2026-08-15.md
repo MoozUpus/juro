@@ -13292,3 +13292,13 @@ files were removed after verification. Machine-readable evidence is in
 This closes isolated shard-2 D1 integrity. It does not prove a federated
 snapshot, current indexed 314-scenario evaluation, full-corpus Qdrant
 benchmark or production readiness.
+
+## Evaluation packet preparation after acquisition stop (2026-08-28)
+
+The canonical JURO evaluation packet was materialized and independently
+verified without starting provider calls or changing staging data. It contains
+314 synthetic scenarios (157 Russian, 157 Uzbek, 50 ambiguous, across 12 legal
+areas); the scenario and instruction hashes are recorded in
+`STAGING_EVALUATION_PREP_2026-08-28.json`. This closes packet-integrity
+preparation only. The indexed evaluation remains unproven until a current
+disjoint federated snapshot and full-corpus Qdrant index are available.

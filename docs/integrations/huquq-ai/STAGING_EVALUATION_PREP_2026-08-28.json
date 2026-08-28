@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-08-28T12:51:00.000Z",
+  "purpose": "Record evaluation-packet preparation after acquisition was stopped; this is not an indexed benchmark result.",
+  "acquisitionStopped": true,
+  "artifactManifest": {
+    "corpusVersion": "2026-08-13.1",
+    "corpusSize": 314,
+    "russianScenarioCount": 157,
+    "uzbekScenarioCount": 157,
+    "ambiguousScenarioCount": 50,
+    "legalAreaCount": 12,
+    "scenariosSha256": "e10b824adc439c5a1a414c830610c605fd3556c3ed1ab9d91ae58cf50c089239",
+    "instructionsSha256": "75bea2a45fd81f816afb43f88b32f49361136f72448266785623b9fac0ea995c",
+    "verification": "materializeLegalEvaluationArtifacts plus verifyLegalEvaluationArtifactManifest"
+  },
+  "currentIndexedEvaluation": {
+    "status": "unproven",
+    "providerCallsStarted": false,
+    "reason": "A current indexed run must be bound to a frozen disjoint federated snapshot; that snapshot and a full-corpus Qdrant index are not available."
+  },
+  "humanReview": {
+    "historicalEvidenceAvailable": true,
+    "newAttestationAsserted": false,
+    "note": "The existing fresh-MFA 314-scenario evidence is retained separately and is not relabeled as current federated-index evaluation."
+  },
+  "remoteDataMutated": false,
+  "legalTextIncluded": false,
+  "userDataIncluded": false,
+  "secretsIncluded": false
+}
