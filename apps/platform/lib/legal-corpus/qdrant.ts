@@ -236,18 +236,35 @@ async function requestResponse(
       headers,
     };
     if (env.QDRANT_SERVICE) {
-      phase = "service-fetch";
+      phase = "service-request-build";
       try {
         // Cloudflare service bindings reliably forward a Request object. Add
         // the half-duplex hint only for streaming snapshot bodies; JSON
         // mutations stay ordinary requests and never expose their payload in
         // diagnostics.
+        const serviceRequestInit = { ...requestInit };
+        // AbortSignal is not transferable across Cloudflare Worker service
+        // bindings in all runtimes. Keep the same upper bound locally while
+        // forwarding a signal-free Request to the private service.
+        delete serviceRequestInit.signal;
         const request = new Request(endpoint(env, suffix), (
           init.body instanceof ReadableStream
-            ? { ...requestInit, duplex: "half" as const }
-            : requestInit
+            ? { ...serviceRequestInit, duplex: "half" as const }
+            : serviceRequestInit
         ) as RequestInit);
-        response = await env.QDRANT_SERVICE.fetch(request);
+        phase = "service-fetch";
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          response = await Promise.race([
+            env.QDRANT_SERVICE.fetch(request),
+            new Promise<Response>((_, reject) => {
+              timer = setTimeout(() => reject(new Error("service_binding_timeout")),
+                options.timeoutMs ?? REQUEST_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+        }
       } catch (error) {
         // A failed service binding is distinct from an HTTP response from
         // Qdrant; keep that distinction in the bounded staging run ledger.
@@ -255,6 +272,7 @@ async function requestResponse(
           service: "legal-corpus-qdrant-client",
           event: "qdrant.transport_failed",
           transport: "service",
+          phase,
           errorType: error instanceof Error ? error.name : typeof error,
           errorCode: "QDRANT_PRIVATE_SERVICE_UNAVAILABLE",
         }));
