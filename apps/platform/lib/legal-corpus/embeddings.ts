@@ -169,9 +169,26 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
           encoding_format: "float",
         }),
       };
-      response = this.env.LEGAL_CORPUS_EMBEDDING_SERVICE
-        ? await this.env.LEGAL_CORPUS_EMBEDDING_SERVICE.fetch(new Request(endpoint, init))
-        : await this.fetchImpl(endpoint, init);
+      if (this.env.LEGAL_CORPUS_EMBEDDING_SERVICE) {
+        // AbortSignal is not transferable across Worker service bindings in
+        // every runtime. Keep the bounded timeout locally while forwarding a
+        // signal-free URL + init request to the private relay.
+        const serviceInit = { ...init };
+        delete serviceInit.signal;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          response = await Promise.race([
+            this.env.LEGAL_CORPUS_EMBEDDING_SERVICE.fetch(endpoint, serviceInit),
+            new Promise<Response>((_, reject) => {
+              timer = setTimeout(() => reject(new Error("embedding_service_timeout")), REQUEST_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+        }
+      } else {
+        response = await this.fetchImpl(endpoint, init);
+      }
     } catch {
       await recordFailure("PROVIDER_NETWORK_ERROR");
       throw new LegalCorpusEmbeddingError("LEGAL_CORPUS_EMBEDDING_REQUEST_FAILED", true);
