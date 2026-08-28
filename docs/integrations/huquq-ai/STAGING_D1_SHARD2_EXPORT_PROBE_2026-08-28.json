@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "recordedAt": "2026-08-28T10:10:30.2767098Z",
+  "databaseName": "juro-staging-corpus-shard-2",
+  "databaseId": "36fa1cfe-6d00-47b7-a980-864020028d86",
+  "readOnlySource": true,
+  "command": "npx wrangler d1 export juro-staging-corpus-shard-2 --remote --output <temporary-export.sql>",
+  "outcome": "aborted_safety",
+  "cloudflareWarning": "The remote D1 may be unavailable while creating the export.",
+  "exportFileCreated": false,
+  "restoreAttempted": false,
+  "remoteDataMutation": false,
+  "diskSpace": {
+    "lowestObserved": "approximately 1 GB free during the running export",
+    "afterProcessStopped": "29.49 GB free",
+    "temporaryFilesRemaining": false
+  },
+  "reason": "The export did not produce a file while local free space approached the safety threshold; the process was stopped before any local artifact or restore could be produced.",
+  "limitations": [
+    "No shard-2 export SHA-256, SQLite quick_check or foreign_key_check is available.",
+    "The isolated shard-1 restore remains the only D1 restore pass; federated D1 backup/restore is open."
+  ]
+}

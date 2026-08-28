@@ -278,3 +278,15 @@ The observed sizes were: legacy `9,999,998,976` bytes, v2
 `STAGING_D1_CAPACITY_2026-08-28.json`. These values are capacity observations,
 not exports or snapshots; v2 is at the configured 10 GB limit and retains its
 historical queue backlog.
+
+## Shard-2 export safety probe (2026-08-28)
+
+An isolated `wrangler d1 export` of `juro-staging-corpus-shard-2` was started
+as a backup/restore gate. Wrangler warned that the remote database may be
+temporarily unavailable while creating the export. No output file appeared;
+while the process was running, the local disk approached approximately 1 GB
+free, so the process was stopped before restore to avoid exhausting the
+workspace. The temporary directory is empty and free space returned to
+29.49 GB. This is a failed safety probe, not a backup or integrity pass;
+machine-readable details are in
+`STAGING_D1_SHARD2_EXPORT_PROBE_2026-08-28.json`.
