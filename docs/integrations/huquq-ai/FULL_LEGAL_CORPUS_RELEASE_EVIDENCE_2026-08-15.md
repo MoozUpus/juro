@@ -13128,3 +13128,22 @@ ingestion. Existing source text remains on frozen shard-2; cross-shard
 deduplication/federated retrieval, release snapshot, indexed 314-scenario
 evaluation, Qdrant/D1 restore, CI and production rollout remain pending.
 No production binding, migration, flag or DNS record was changed.
+
+## Shard-3 priority ingestion quality snapshot (2026-08-28, 01:50Z)
+
+The first post-activation scheduled run `d2f76758-0aeb-4d7b-ad8e-44218c7841a4`
+completed at `2026-08-28T01:50:07.972Z`. The checked-in quality command
+captured shard-3 at `2026-08-28T01:50:47.849Z` with a lock-free preflight and
+postflight (74 and 71 seconds before the next nominal `*/4` boundary) and
+`rowsWritten=0`.
+
+The target snapshot contained 15 documents, 21 variants, 4,981 exact unique
+current provisions, 15,993 physical current provisions and 16,003
+current/indexed chunks. All 44 checkpoints were completed and count-aligned;
+the nine core-code targets materialized on this continuation shard were
+indexed. Unversioned variants, empty version headers, broken pointers, orphan
+rows, provision/chunk integrity errors and missing sparse coverage were zero.
+The failure ledger was empty, with zero retrying, failed, terminal or
+dead-letter jobs. The queue remains open (25,776 fetch and 3,276 version jobs)
+and `acquisition_state=active`, so this is not a release snapshot or completion
+claim. Existing shard-2 corpus text remains frozen and is not duplicated.
