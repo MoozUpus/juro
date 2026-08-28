@@ -61,15 +61,15 @@
       "vars": {
         "APP_ENV": "staging",
         "LEGAL_CORPUS_ENABLED": "true",
-        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "true",
-        "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "true",
+        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
+        "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "false",
         "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "true",
         "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "true",
         "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "true",
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
         "LEGAL_CORPUS_DENSE_ENABLED": "false",
         "LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED": "false",
-        "LEGAL_CORPUS_SHADOW_MODE": "true",
+        "LEGAL_CORPUS_SHADOW_MODE": "false",
         "QDRANT_URL": "https://qdrant.internal",
         "QDRANT_COLLECTION": "juro_legal_staging_v2",
         "EMBEDDING_MODEL": "text-embedding-3-large"

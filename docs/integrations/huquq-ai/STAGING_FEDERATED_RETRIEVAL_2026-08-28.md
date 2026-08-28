@@ -11,6 +11,8 @@ release approval and not a legal-coverage claim.
 - Shard-ingestion freeze commit: `0e016a31`
 - Staging Worker deployment: `juro-platform-staging`, version
   `27929406-8454-4eb3-9e1e-bc04ed7650ec`
+- Dedicated corpus Worker deployment: `juro-legal-corpus-staging`, version
+  `72dd276b-4ba6-4275-aa12-a2a1b09f197f`
 - `LEGAL_CORPUS_FEDERATED_ENABLED=true`
 - `LEGAL_CORPUS_FEDERATED_SOURCE_SET=all-staging-d1`
 - `LEGAL_CORPUS_LIVE_LEXUZ_ENABLED=false`
@@ -48,6 +50,11 @@ live/shadow flags disabled; the last run completed at
 It is intentionally excluded from `all-staging-d1` until a formal shard
 freeze, snapshot, point-in-time and parity evidence pass is available.
 
+The older `juro-legal-corpus-staging` Worker bound to v2 was also deployed with
+auto-ingestion, live and shadow flags disabled. Its two pre-existing running
+job rows are retained as lease-recovery evidence; no new scheduler run was
+created by the freeze.
+
 ## Verification
 
 - Federated/chat/retrieval/shard boundary tests: 43 passed, 0 failed.
@@ -55,6 +62,8 @@ freeze, snapshot, point-in-time and parity evidence pass is available.
 - Platform lint: passed.
 - Staging artifact dry-run and performance budgets: passed.
 - Staging deployment: completed successfully.
+- Dedicated corpus Worker staging deployment: completed successfully with
+  ingestion disabled.
 - The release gate is not claimed: the federated snapshot/manifests,
   cross-source deduplication proof, indexed 314-scenario evaluation, Qdrant
   benchmark/restore and D1 backup/restore gates remain open.
