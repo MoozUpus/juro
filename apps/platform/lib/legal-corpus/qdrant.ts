@@ -282,6 +282,13 @@ async function requestResponse(
     }
   } catch (error) {
     if (error instanceof QdrantCorpusError) throw error;
+    console.error(JSON.stringify({
+      service: "legal-corpus-qdrant-client",
+      event: "qdrant.request_failed",
+      transport,
+      errorType: error instanceof Error ? error.name : typeof error,
+      errorCode: "QDRANT_REQUEST_FAILED",
+    }));
     throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", true);
   }
   if (options.allowNotFound && response.status === 404) {
