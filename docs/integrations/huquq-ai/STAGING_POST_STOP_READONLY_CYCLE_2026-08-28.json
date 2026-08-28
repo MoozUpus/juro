@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-28T17:16:58.7646417Z",
+  "environment": "staging",
+  "applicationCommit": "193a19652430c16aa2e8eb70691401316d904a34",
+  "purpose": "Sequential read-only post-stop reconciliation of ingestion queues, failure ledger and discovery checkpoints.",
+  "collectionStopped": true,
+  "ingestionStarted": false,
+  "query": "SELECT counts from legal_corpus_ingestion_jobs, legal_corpus_failures and legal_corpus_discovery_checkpoints; no INSERT/UPDATE/DELETE/DDL.",
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "activeJobs": 43686,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 230,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "changes": 0,
+      "changedDatabase": false,
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "activeJobs": 27689,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 5,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "changes": 0,
+      "changedDatabase": false,
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "activeJobs": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 10,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "changes": 0,
+      "changedDatabase": false,
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "activeJobs": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 8,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "changes": 0,
+      "changedDatabase": false,
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "activeJobs": 31159,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 7,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "changes": 0,
+      "changedDatabase": false,
+      "rowsWritten": 0
+    }
+  ],
+  "interpretation": "All five probes succeeded without writes. The historical queues in legacy, v2 and excluded shard-3 remain non-empty, while immutable terminal/technically-unavailable failure records remain unchanged. The release queue-freeze and zero-terminal-failure gates are therefore not proven."
+}

@@ -13444,3 +13444,16 @@ The follow-up documentation head `b2553b18` also passed exact-head CI in
 [33192175689](https://github.com/MoozUpus/juro/actions/runs/33192175689):
 platform and website validation completed successfully. No deployment,
 migration or production flag change was performed.
+
+## Post-stop read-only staging cycle (2026-08-28, 17:16Z)
+
+After the owner-requested acquisition stop, sequential `SELECT` probes were
+run against all five staging D1 databases. Every query succeeded with
+`changes=0`, `rows_written=0` and `changed_db=false`; no crawl, ingestion or
+retry was started. Legacy remains at 43,686 active queued/running jobs, v2 at
+27,689, and excluded shard 3 at 31,159. Frozen shards 1 and 2 remain idle.
+All five databases report 44/44 checkpoints and zero `failed`/`dead_letter`
+jobs, but immutable terminal/technically-unavailable failure records remain
+230, 5, 10, 8 and 7 respectively. Queue freeze and the zero-terminal-failure
+release gate therefore remain unproven. Machine-readable details are in
+`STAGING_POST_STOP_READONLY_CYCLE_2026-08-28.json`.
