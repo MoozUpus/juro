@@ -2,14 +2,36 @@
 
 ## Shipped to production
 
-- Platform Worker 163 (`e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd`), deployment
-  `dc3efbec-6909-4f56-80ef-0d964cdea027`, is at 100% traffic; Worker 162
-  (`d2146684-bd77-4a33-a2a2-8d47042e473e`) is the immediate rollback.
-- Worker 163 makes `immediate`, `daily` and `weekly` monitoring preferences
-  operational through the existing scheduler. It initializes legacy cursors
-  without replaying history, batches digest creation with cursor advance and
-  uses deterministic retry-safe IDs. Monitoring email remains visibly and
-  truthfully unavailable until it has a dedicated retry-safe outbox.
+- Platform Worker 164 (`3ba45422-86e9-4502-8ad2-8468bec57a78`), deployment
+  `46613e55-f973-4199-a825-e2c576ac63e1`, is at 100% traffic; Worker 163
+  (`e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd`) is the immediate rollback.
+- Worker 164 adds a dedicated monitoring-email job/outbox path with
+  identifiers-only queue messages, delivery-time identity/preference/source
+  checks, safe cancellation and stable Resend idempotency. RU/UZ messages link
+  only to official Lex.uz and do not claim to be legal conclusions.
+- Production migration `0160_monitoring_email_delivery.sql` was applied after a
+  verified 232,377,843-byte full backup was uploaded to private R2 and verified
+  by download, SHA-256 match and a second isolated restore. The postflight found
+  the table, four indexes, four triggers, zero FK violations and no pending
+  migration.
+- Two post-release scheduler runs completed without historical replay: all four
+  cursors, the 222,329 legislation-monitor notification total/max and the 19
+  dispatched legacy email outbox rows remained stable; monitoring-email jobs
+  remained zero. No customer email was forced without a new qualifying Lex
+  event.
+- Exact CI `33164955029` passed Worker 164 source `52f579ca`: Website 2m09s and
+  Platform 8m53s. Local gates passed focused 149/149, core 1105/1105,
+  Cloudflare/infrastructure 203/203, lint, type-check and artifact validation.
+- The six-host matrix and `/api/status` returned 200 with operational status.
+  Authenticated Chrome confirmed RU/UZ monitoring copy and the original Lawyer
+  dashboard URL redirecting to the rendered app dashboard, not `Not Found`.
+  Sites v86 was not changed; staging migrations 0142-0160 were intentionally
+  left untouched under the legal-corpus/database exclusion.
+- Worker 163 previously made `immediate`, `daily` and `weekly` monitoring
+  preferences operational through the existing scheduler. It initializes
+  legacy cursors without replaying history, batches digest creation with cursor
+  advance and uses deterministic retry-safe IDs. Monitoring email remains
+  visibly and truthfully unavailable in that rollback version.
 - The first production cadence run initialized all four existing preference
   cursors. A second completed run left the cursors and historical
   legislation-monitor total/max unchanged at 222,329 /

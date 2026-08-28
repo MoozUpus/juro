@@ -4,6 +4,55 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Worker 164 monitoring email delivery
+
+Commits `1a71ff9833878fba68958a708fb8bc227fd0a552` and
+`52f579ca346c170fc31c4ce7125306d4074d117b` add a dedicated, retry-safe
+monitoring-email delivery path. Cadence delivery now creates the in-app
+notification, a content-minimized `monitoring_email_jobs` row and an
+identifiers-only generic outbox item atomically. The queue consumer resolves
+the protected recipient identity only at delivery, rechecks active membership,
+source freshness and the current email preference, cancels disabled delivery,
+and uses a stable Resend idempotency key. RU/UZ email copy links only to the
+official Lex.uz source and explicitly describes the message as a metadata
+notification rather than a legal conclusion.
+
+Migration `0160_monitoring_email_delivery.sql` was applied to production after
+a full D1 export was restored locally twice: once from the direct export and
+once from a private-R2 readback. Both restorations reported 343,965 statements,
+282 tables, 608 indexes, 380 triggers, `quick_check=ok` and zero foreign-key
+violations. The 232,377,843-byte SQL has SHA-256
+`4d339e3fcb5f31eecdfcaddb2f0b7fb642503b6cd4464a6172f56889278a41a8` and is
+preserved at private R2 key
+`d1/juro-production/20260828T105200Z-pre-0160-52f579ca/production-pre-0160.sql`
+with its adjacent manifest. Post-migration checks found the table, four indexes,
+four guard triggers, no pending migration and zero foreign-key violations.
+
+Focused tests passed 149/149. Full local gates passed lint, type-check, build,
+artifact budgets, core 1105/1105 and Cloudflare/infrastructure 203/203. GitHub
+Actions CI `33164955029` passed exact release source `52f579ca`: Website 2m09s
+and Platform 8m53s. Worker 164
+`3ba45422-86e9-4502-8ad2-8468bec57a78`, deployment
+`46613e55-f973-4199-a825-e2c576ac63e1`, receives 100% traffic.
+
+The first two post-release scheduler runs completed at
+`2026-08-28T11:11:02.509Z` and `2026-08-28T11:16:42.817Z`. All four monitoring
+cursors stayed at `2026-08-28T07:54:51.699Z`, the legislation-monitor
+notification total/max stayed 222,329 / `2026-08-28T06:40:50.995Z`, and
+monitoring-email jobs stayed at zero. No historical event was replayed and no
+customer email was forced. The existing transactional email outbox remained
+19/19 dispatched.
+
+The six-host HTTPS matrix and `/api/status` returned 200; public status was
+operational, including fresh OpenAI, Anthropic, Resend and queue evidence.
+Authenticated Chrome confirmed localized RU/UZ monitoring copy and the honest
+disabled-delivery state while Lex metadata monitoring has no fresh active run.
+It also confirmed that `lawyer.juro.uz/ru/individual/dashboard` redirects to and
+renders the authenticated app dashboard rather than plaintext `Not Found`.
+Sites v86 remains unchanged. Worker 163 is the immediate application rollback.
+Staging was not migrated because its unrelated pending range 0142-0160 falls
+inside the user-skipped legal-corpus/database work.
+
 ## 2026-08-28 Worker 163 monitoring cadence
 
 Commit `810432eac9c1159c4cbd60fddaab7c1c1131b655` makes the stored monitoring
@@ -253,17 +302,17 @@ conformance result.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest platform runtime commit | `75064bee61909baa0e1a05dabdedc6268f86ed29` |
-| Latest platform source candidate | `75064bee61909baa0e1a05dabdedc6268f86ed29`; deployed |
+| Latest platform runtime commit | `52f579ca346c170fc31c4ce7125306d4074d117b` |
+| Latest platform source candidate | `52f579ca346c170fc31c4ce7125306d4074d117b`; deployed |
 | Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current Platform CI `33148425519` on `75064bee` passed Website in 2m15s and Platform in 6m57s; Worker 161 CI `33144330811` also passed both jobs |
-| Production Worker | `juro` version `d2146684-bd77-4a33-a2a2-8d47042e473e` (version 162), deployment `0c8ec9f3-cd7f-4a0c-9e99-e0b1d91fc998`, 100% traffic |
-| Immediate application rollback | `34c54357-0878-4637-b533-1fa1afa36336` (version 161), deployment `72c5d2be-e417-4dcf-a4eb-8022a59a1b61` |
+| GitHub Actions | Current Platform CI `33164955029` on `52f579ca` passed Website in 2m09s and Platform in 8m53s |
+| Production Worker | `juro` version `3ba45422-86e9-4502-8ad2-8468bec57a78` (version 164), deployment `46613e55-f973-4199-a825-e2c576ac63e1`, 100% traffic |
+| Immediate application rollback | `e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd` (version 163), deployment `dc3efbec-6909-4f56-80ef-0d964cdea027` |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Saved public Sites candidate | Version 94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
-| Applied migration | `0159_signed_share_verification_guard.sql`; no migration remains pending |
+| Applied migrations | `0159_signed_share_verification_guard.sql` and `0160_monitoring_email_delivery.sql`; no migration remains pending |
 | Effective price configuration | Four append-only rows effective `2026-08-25T07:44:49.444Z` |
 
 ## 2026-08-28 Worker 153-155 auth and status metadata closure
