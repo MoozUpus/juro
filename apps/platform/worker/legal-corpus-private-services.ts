@@ -97,13 +97,23 @@ export async function handleLegalCorpusQdrantServiceRequest(
   ].filter((value) => value.length > 0))];
   const expectedApiKey = env.QDRANT_API_KEY?.trim() ?? "";
   const providedApiKey = request.headers.get("api-key") ?? "";
-  if (
-    !env.QDRANT_CONTAINER
-    || !expectedApiKey
-    || collections.length === 0
-    || collections.some((collection) => !COLLECTION_PATTERN.test(collection))
-    || !qdrantRequestAllowed(request, collections)
-  ) {
+  const rejectionReason = !env.QDRANT_CONTAINER
+    ? "container_binding_missing"
+    : !expectedApiKey
+      ? "credential_unavailable"
+      : collections.length === 0
+        ? "collection_unavailable"
+        : collections.some((collection) => !COLLECTION_PATTERN.test(collection))
+          ? "collection_invalid"
+          : !qdrantRequestAllowed(request, collections)
+            ? "request_not_allowlisted"
+            : null;
+  if (rejectionReason) {
+    console.error(JSON.stringify({
+      service: "legal-corpus-private-qdrant",
+      event: "qdrant.route_rejected",
+      reason: rejectionReason,
+    }));
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
   }
   console.log(JSON.stringify({
@@ -112,6 +122,11 @@ export async function handleLegalCorpusQdrantServiceRequest(
     method: request.method,
   }));
   if (!(await secretMatches(providedApiKey, expectedApiKey))) {
+    console.error(JSON.stringify({
+      service: "legal-corpus-private-qdrant",
+      event: "qdrant.route_rejected",
+      reason: "credential_mismatch",
+    }));
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
   }
   const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
