@@ -157,3 +157,30 @@ zero queued/retrying/running jobs. All four probes returned `rows_written=0`.
 The staging feature flags prevent new claims, but the historical backlog is
 not silently reported as an empty queue; strict queue-drain evidence remains
 open for any release gate that includes legacy/v2.
+
+## Filtered scheduler-history probe after freeze (2026-08-28T07:34Z)
+
+To separate scheduler history from durable ingestion jobs, a sequential
+read-only query filtered `scheduled_runs.schedule_name='legal-corpus-worker'`.
+Both D1 calls reported `rows_written=0` and no `running` row:
+
+| Database | Completed scheduler rows | Failed scheduler rows | Latest failed scheduler row | Error code | Post-freeze run observed |
+| --- | ---: | ---: | --- | --- | --- |
+| `juro-staging` | 1,745 | 51 | 2026-08-21T07:28:02.584Z | `LEGAL_CORPUS_WORKER_FAILED` | No |
+| `juro-staging-corpus-v2` | 475 | 31 | 2026-08-24T01:12:20.191Z | `D1_ERROR` | No |
+
+The failed scheduler rows are historical technical outcomes, not evidence of
+a new post-freeze claim. They remain visible and are not rewritten or marked
+successful. Durable queue state is reported separately above; the staging
+flags remain disabled, so no new legal-corpus claim can be created. This probe
+does not close the queue-drain, snapshot, indexed-evaluation or restore gates.
+
+The staging corpus Worker artifact was rechecked after the probe. Wrangler
+dry-run reported 3,739.42 KiB uncompressed / 821.43 KiB gzip and confirmed
+`LEGAL_CORPUS_AUTO_INGEST_ENABLED=false`, `LEGAL_CORPUS_LIVE_LEXUZ_ENABLED=false`
+and `LEGAL_CORPUS_SHADOW_MODE=false` for the dedicated v2 Worker. The broader
+platform staging Worker remains in the read-only federated configuration.
+
+Local platform checks on the exact head `138b1ae3d9c0009119d9acb4e81647c207ff005d`
+also passed: type-check, lint and 186 Cloudflare tests. These are code-quality
+results only and do not substitute for the still-open legal release gates.
