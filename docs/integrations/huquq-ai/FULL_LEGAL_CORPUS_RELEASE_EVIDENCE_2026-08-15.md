@@ -13147,3 +13147,23 @@ The failure ledger was empty, with zero retrying, failed, terminal or
 dead-letter jobs. The queue remains open (25,776 fetch and 3,276 version jobs)
 and `acquisition_state=active`, so this is not a release snapshot or completion
 claim. Existing shard-2 corpus text remains frozen and is not duplicated.
+
+## Shard-3 priority ingestion quality snapshot (2026-08-28, 02:02Z)
+
+The scheduled run `0238492a-3321-4e1d-a996-5dbf36e4a209` completed at
+`2026-08-28T02:00:31.415Z`. The read-only quality command captured shard-3 at
+`2026-08-28T02:02:10.079Z`; both lock checks were empty and the capture stayed
+114/108 seconds before the next nominal `*/4` boundary. Wrangler reported
+`rowsWritten=0`.
+
+The target contained 26 documents, 32 variants, 5,578 exact unique current
+provisions, 16,732 physical current provisions and 16,742 current/indexed
+chunks. All 44 checkpoints were completed and count-aligned; 13 of 19 core
+code targets were materialized on this continuation shard. Unversioned
+variants, empty version headers, pointer/orphan/integrity errors, missing
+sparse coverage and completion-revalidation candidates were zero. The failure
+ledger had one retrying language-text-unavailable evidence row that belonged
+to a completed job and is projected as resolved by the dashboard; there were
+zero retrying jobs, failed jobs or dead-letter jobs. The queue remained open
+(26,009 fetch and 3,295 version jobs) with `acquisition_state=active`, so the
+release gate and evaluation gates remain pending.
