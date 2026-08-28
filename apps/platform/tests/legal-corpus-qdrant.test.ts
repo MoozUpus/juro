@@ -102,6 +102,24 @@ test("Qdrant requests prefer the private service binding over public fetch", asy
   assert.equal(serviceRequests[0]?.headers.get("api-key"), "test-secret");
 });
 
+test("private service errors remain bounded and preserve actionable staging codes", async () => {
+  const routeRejected = new QdrantLegalCorpusClient({
+    ...configured,
+    QDRANT_URL: "https://qdrant.internal",
+    QDRANT_SERVICE: { fetch: async () => Response.json({ error: "QDRANT_PRIVATE_ROUTE_REJECTED" }, { status: 404 }) } as Fetcher,
+  });
+  await assert.rejects(() => routeRejected.queryDense(denseVector(), 1), (error: unknown) =>
+    error instanceof QdrantCorpusError && error.code === "QDRANT_PRIVATE_ROUTE_REJECTED");
+
+  const unavailable = new QdrantLegalCorpusClient({
+    ...configured,
+    QDRANT_URL: "https://qdrant.internal",
+    QDRANT_SERVICE: { fetch: async () => Response.json({ error: "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" }, { status: 503 }) } as Fetcher,
+  });
+  await assert.rejects(() => unavailable.queryDense(denseVector(), 1), (error: unknown) =>
+    error instanceof QdrantCorpusError && error.code === "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" && error.retryable);
+});
+
 test("platform requests can address the singleton private Container without public DNS", async () => {
   const requests: Request[] = [];
   const names: string[] = [];

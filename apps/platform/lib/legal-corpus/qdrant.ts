@@ -122,7 +122,9 @@ export class QdrantCorpusError extends Error {
       | "QDRANT_RESPONSE_REJECTED"
       | "QDRANT_COLLECTION_INCOMPATIBLE"
       | "QDRANT_SNAPSHOT_REQUIRED"
-      | "QDRANT_SNAPSHOT_INVALID",
+      | "QDRANT_SNAPSHOT_INVALID"
+      | "QDRANT_PRIVATE_ROUTE_REJECTED"
+      | "QDRANT_PRIVATE_SERVICE_UNAVAILABLE",
     readonly retryable: boolean,
   ) {
     super(code);
@@ -244,6 +246,24 @@ async function requestResponse(
     return undefined;
   }
   if (!response.ok) {
+    // The staging service-binding proxy returns a tiny, allow-listed error
+    // envelope. Preserve that actionable code while keeping arbitrary
+    // upstream response bodies out of logs and user-visible errors.
+    try {
+      const body = await response.clone().json() as { error?: unknown };
+      if (body.error === "QDRANT_PRIVATE_ROUTE_REJECTED") {
+        await response.body?.cancel().catch(() => undefined);
+        throw new QdrantCorpusError("QDRANT_PRIVATE_ROUTE_REJECTED", false);
+      }
+      if (body.error === "QDRANT_PRIVATE_SERVICE_UNAVAILABLE") {
+        await response.body?.cancel().catch(() => undefined);
+        throw new QdrantCorpusError("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", true);
+      }
+    } catch (error) {
+      if (error instanceof QdrantCorpusError) throw error;
+      // Ignore malformed or oversized upstream bodies and use the bounded
+      // status-based classification below.
+    }
     const retryable = response.status === 408 || response.status === 409
       || response.status === 429 || response.status >= 500;
     await response.body?.cancel().catch(() => undefined);
