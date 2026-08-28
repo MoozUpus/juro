@@ -5,6 +5,11 @@ import {
 
 export const LEX_METADATA_DISCOVERY_CRON = "0 19 * * *";
 export const LEX_METADATA_STALE_RUN_MS = 20 * 60 * 1_000;
+export const MONITORING_DELIVERY_CUTOFF_LAG_MS = 60_000;
+
+const MONITORING_DELIVERY_BATCH_SIZE = 100;
+const MONITORING_DAILY_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+const MONITORING_WEEKLY_INTERVAL_MS = 7 * MONITORING_DAILY_INTERVAL_MS;
 
 type LexMetadataEnv = {
   APP_ENV: string;
@@ -45,6 +50,24 @@ type MonitoringNotificationEvent = {
   eventId: string;
   title: string;
   canonicalUrl: string;
+};
+
+type MonitoringFrequency = "immediate" | "daily" | "weekly";
+
+type MonitoringDeliveryRecipient = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  locale: string;
+  frequency: MonitoringFrequency;
+  lastDeliveredAt: string;
+};
+
+export type MonitoringDeliverySummary = {
+  initialized: number;
+  due: number;
+  notified: number;
+  events: number;
 };
 
 type MetadataWrite = {
@@ -96,29 +119,98 @@ function localizedNotification(locale: string, events: MonitoringNotificationEve
   };
 }
 
-async function monitoringNotificationStatements(input: {
-  db: D1Database;
-  events: MonitoringNotificationEvent[];
-  now: string;
-}): Promise<D1PreparedStatement[]> {
-  if (input.events.length === 0) return [];
-  const recipients = await input.db.prepare(
-    `SELECT workspace_id AS workspaceId,user_id AS userId,locale
-       FROM monitoring_preferences
-      WHERE instr(channels_json,'"in_app"')>0`,
-  ).all<{ workspaceId: string; userId: string; locale: string }>();
+/**
+ * Delivers bounded in-app digests from persisted metadata events. The one-minute
+ * cutoff keeps a five-minute outbox tick from racing the daily metadata writer.
+ * New or legacy preferences without a cursor are initialized at the cutoff and
+ * never receive the historical pre-cutover event backlog.
+ */
+export async function dispatchDueMonitoringNotifications(
+  db: D1Database,
+  options: { now?: Date; cutoffLagMs?: number; batchSize?: number } = {},
+): Promise<MonitoringDeliverySummary> {
+  const now = options.now ?? new Date();
+  const cutoff = new Date(now.getTime() - Math.max(1_000, options.cutoffLagMs ?? MONITORING_DELIVERY_CUTOFF_LAG_MS));
+  const cutoffTimestamp = cutoff.toISOString();
+  const initializedResult = await db.prepare(
+    `UPDATE monitoring_preferences
+        SET last_delivered_at=?,updated_at=?
+      WHERE last_delivered_at IS NULL`,
+  ).bind(cutoffTimestamp, now.toISOString()).run();
+  const initialized = Number(initializedResult.meta.changes ?? 0);
+  const dailyBefore = new Date(cutoff.getTime() - MONITORING_DAILY_INTERVAL_MS).toISOString();
+  const weeklyBefore = new Date(cutoff.getTime() - MONITORING_WEEKLY_INTERVAL_MS).toISOString();
+  const recipients = await db.prepare(
+    `SELECT id,workspace_id AS workspaceId,user_id AS userId,locale,frequency,
+            last_delivered_at AS lastDeliveredAt
+       FROM monitoring_preferences p
+      WHERE instr(channels_json,'"in_app"')>0
+        AND last_delivered_at IS NOT NULL
+        AND (
+          (frequency='immediate' AND EXISTS (
+            SELECT 1 FROM legal_monitoring_change_events e
+             WHERE e.detected_at>p.last_delivered_at AND e.detected_at<=?
+          ))
+          OR (frequency='daily' AND last_delivered_at<=?)
+          OR (frequency='weekly' AND last_delivered_at<=?)
+        )
+      ORDER BY last_delivered_at,id
+      LIMIT ?`,
+  ).bind(
+    cutoffTimestamp,
+    dailyBefore,
+    weeklyBefore,
+    Math.max(1, Math.min(options.batchSize ?? MONITORING_DELIVERY_BATCH_SIZE, MONITORING_DELIVERY_BATCH_SIZE)),
+  ).all<MonitoringDeliveryRecipient>();
   const statements: D1PreparedStatement[] = [];
-  const eventDigest = input.events.map((event) => event.eventId).sort().join(":");
+  let notified = 0;
+  let eventCount = 0;
   for (const recipient of recipients.results) {
-    const message = localizedNotification(recipient.locale, input.events);
-    const id = `lex_monitor_${await sha256(`${eventDigest}:${recipient.userId}`)}`.slice(0, 96);
-    statements.push(input.db.prepare(
-      `INSERT OR IGNORE INTO notifications
-       (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
-       VALUES (?,?,?,NULL,'legislation_monitor',?,?,NULL,?)`,
-    ).bind(id, recipient.workspaceId, recipient.userId, message.title, message.body, input.now));
+    const eventRows = await db.prepare(
+      `SELECT id AS eventId,act_title AS title,canonical_url AS canonicalUrl
+         FROM legal_monitoring_change_events
+        WHERE detected_at>? AND detected_at<=?
+        ORDER BY detected_at,id`,
+    ).bind(recipient.lastDeliveredAt, cutoffTimestamp).all<MonitoringNotificationEvent>();
+    const events = eventRows.results;
+    if (events.length > 0) {
+      const message = localizedNotification(recipient.locale, events);
+      const eventDigest = events.map((event) => event.eventId).join(":");
+      const id = `lex_monitor_${await sha256(`${recipient.frequency}:${eventDigest}:${recipient.userId}`)}`.slice(0, 96);
+      statements.push(db.prepare(
+        `INSERT OR IGNORE INTO notifications
+         (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
+         SELECT ?,?,?,NULL,'legislation_monitor',?,?,NULL,?
+          WHERE EXISTS (
+            SELECT 1 FROM monitoring_preferences
+             WHERE id=? AND last_delivered_at=?
+          )`,
+      ).bind(
+        id,
+        recipient.workspaceId,
+        recipient.userId,
+        message.title,
+        message.body,
+        now.toISOString(),
+        recipient.id,
+        recipient.lastDeliveredAt,
+      ));
+      notified += 1;
+      eventCount += events.length;
+    }
+    statements.push(db.prepare(
+      `UPDATE monitoring_preferences
+          SET last_delivered_at=?,updated_at=?
+        WHERE id=? AND last_delivered_at=?`,
+    ).bind(cutoffTimestamp, now.toISOString(), recipient.id, recipient.lastDeliveredAt));
   }
-  return statements;
+  if (statements.length > 0) await db.batch(statements);
+  return {
+    initialized,
+    due: recipients.results.length,
+    notified,
+    events: eventCount,
+  };
 }
 
 function metadataWriteStatements(db: D1Database, rows: MetadataWrite[], timestamp: string): D1PreparedStatement[] {
@@ -217,7 +309,6 @@ export async function runLexMetadataMonitor(
     const existingByUrl = new Map(existingRows.results.map((row) => [row.canonicalUrl, row]));
     const metadataWrites: MetadataWrite[] = [];
     const changeEventWrites: ChangeEventWrite[] = [];
-    const notificationEvents: MonitoringNotificationEvent[] = [];
     let processed = 0;
     let changed = 0;
     for (const entry of entries) {
@@ -254,19 +345,10 @@ export async function runLexMetadataMonitor(
         fingerprint,
       };
       changeEventWrites.push(changeEvent);
-      // Initial discovery fills the feed without flooding customers. Subsequent
-      // title changes create one digest notification per recipient and run.
-      if (isChanged) notificationEvents.push(changeEvent);
     }
-    const notificationStatements = await monitoringNotificationStatements({
-      db: env.DB,
-      events: notificationEvents,
-      now: timestamp,
-    });
     const writes = [
       ...metadataWriteStatements(env.DB, metadataWrites, timestamp),
       ...changeEventWriteStatements(env.DB, changeEventWrites, timestamp),
-      ...notificationStatements,
     ];
     if (writes.length) await env.DB.batch(writes);
     await env.DB.prepare(

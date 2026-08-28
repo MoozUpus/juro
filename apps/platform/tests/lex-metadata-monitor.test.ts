@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import {
+  dispatchDueMonitoringNotifications,
   reconcileStaleLexMetadataMonitorRuns,
   runLexMetadataMonitor,
 } from "../lib/legal/metadata-monitor";
@@ -60,7 +61,10 @@ function createDb() {
       id text PRIMARY KEY,run_id text NOT NULL,source_url text,external_id text,error_code text NOT NULL,
       retryable integer NOT NULL,safe_summary text NOT NULL,occurred_at text NOT NULL
     );
-    CREATE TABLE monitoring_preferences (workspace_id text,user_id text,locale text,channels_json text);
+    CREATE TABLE monitoring_preferences (
+      id text PRIMARY KEY,workspace_id text,user_id text,locale text,channels_json text,
+      frequency text,last_delivered_at text,created_at text,updated_at text
+    );
     CREATE TABLE notifications (id text PRIMARY KEY,workspace_id text,user_id text,document_id text,type text,title text,body text,read_at text,created_at text);
   `);
   sqlite.exec(`
@@ -129,7 +133,9 @@ test("Lex monitor ignores RSS delivery-date churn and emits one idempotent title
   const sqlite = createDb();
   const db = new D1(sqlite);
   sqlite.prepare(
-    "INSERT INTO monitoring_preferences (workspace_id,user_id,locale,channels_json) VALUES ('workspace','user','ru','[\"in_app\"]')",
+    `INSERT INTO monitoring_preferences
+      (id,workspace_id,user_id,locale,channels_json,frequency,last_delivered_at,created_at,updated_at)
+     VALUES ('preference','workspace','user','ru','["in_app"]','immediate','2026-08-12T12:00:00.000Z','2026-08-12T12:00:00.000Z','2026-08-12T12:00:00.000Z')`,
   ).run();
 
   async function run(title: string, pubDate: string, now: string) {
@@ -160,12 +166,151 @@ test("Lex monitor ignores RSS delivery-date churn and emits one idempotent title
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM legal_monitoring_change_events").get() as { count: number }).count, 1);
 
   assert.equal((await run("Регистрация бизнеса — обновлено", "Thu, 13 Aug 2026 10:00:00 GMT", "2026-08-14T12:00:00.000Z")).changed, 1);
-  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 1);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 0);
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM legal_monitoring_change_events").get() as { count: number }).count, 2);
+  assert.deepEqual(await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-14T12:05:00.000Z"),
+  }), {
+    initialized: 0,
+    due: 1,
+    notified: 1,
+    events: 1,
+  });
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 1);
 
   assert.equal((await run("Регистрация бизнеса — обновлено", "Fri, 14 Aug 2026 10:00:00 GMT", "2026-08-15T12:00:00.000Z")).changed, 0);
+  assert.deepEqual(await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-15T12:05:00.000Z"),
+  }), {
+    initialized: 0,
+    due: 0,
+    notified: 0,
+    events: 0,
+  });
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 1);
   assert.equal((sqlite.prepare("SELECT count(*) AS count FROM legal_monitoring_change_events").get() as { count: number }).count, 2);
+  sqlite.close();
+});
+
+test("monitoring delivery honors immediate, daily, and weekly cadence atomically", async () => {
+  const sqlite = createDb();
+  const db = new D1(sqlite);
+  const preferences = [
+    ["immediate", "user-immediate", "immediate", "2026-08-20T11:00:00.000Z"],
+    ["daily", "user-daily", "daily", "2026-08-19T11:00:00.000Z"],
+    ["weekly", "user-weekly", "weekly", "2026-08-13T11:00:00.000Z"],
+    ["daily-not-due", "user-daily-later", "daily", "2026-08-19T12:10:00.000Z"],
+  ];
+  for (const [id, userId, frequency, lastDeliveredAt] of preferences) {
+    sqlite.prepare(
+      `INSERT INTO monitoring_preferences
+        (id,workspace_id,user_id,locale,channels_json,frequency,last_delivered_at,created_at,updated_at)
+       VALUES (?,'workspace',?,'ru','["in_app"]',?,?,?,?)`,
+    ).run(id, userId, frequency, lastDeliveredAt, lastDeliveredAt, lastDeliveredAt);
+  }
+  sqlite.prepare(
+    `INSERT INTO legal_monitoring_metadata
+      (id,canonical_url,canonical_id,locale,act_title,revision_date,effective_at,fingerprint,http_status,first_seen_at,last_seen_at,last_checked_at,last_error_code,created_at,updated_at)
+     VALUES ('metadata','https://lex.uz/ru/docs/1','1','ru','Акт',NULL,NULL,'fingerprint',200,?,?,?,NULL,?,?)`,
+  ).run(...Array(5).fill("2026-08-20T12:00:00.000Z"));
+  sqlite.prepare(
+    `INSERT INTO legal_monitoring_change_events
+      (id,metadata_id,canonical_url,act_title,change_type,fingerprint,detected_at,created_at)
+     VALUES ('event','metadata','https://lex.uz/ru/docs/1','Акт изменён','metadata_changed','changed','2026-08-20T12:00:00.000Z','2026-08-20T12:00:00.000Z')`,
+  ).run();
+
+  assert.deepEqual(await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-20T12:05:00.000Z"),
+  }), {
+    initialized: 0,
+    due: 3,
+    notified: 3,
+    events: 3,
+  });
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 3);
+  assert.equal((sqlite.prepare("SELECT last_delivered_at AS value FROM monitoring_preferences WHERE id='daily-not-due'").get() as { value: string }).value, "2026-08-19T12:10:00.000Z");
+  assert.deepEqual(await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-20T12:05:00.000Z"),
+  }), {
+    initialized: 0,
+    due: 0,
+    notified: 0,
+    events: 0,
+  });
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 3);
+  sqlite.close();
+});
+
+test("monitoring delivery initializes a legacy cursor without sending historical noise", async () => {
+  const sqlite = createDb();
+  const db = new D1(sqlite);
+  sqlite.prepare(
+    `INSERT INTO monitoring_preferences
+      (id,workspace_id,user_id,locale,channels_json,frequency,last_delivered_at,created_at,updated_at)
+     VALUES ('legacy','workspace','user','uz','["in_app"]','immediate',NULL,'2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')`,
+  ).run();
+  sqlite.prepare(
+    `INSERT INTO legal_monitoring_metadata
+      (id,canonical_url,canonical_id,locale,act_title,revision_date,effective_at,fingerprint,http_status,first_seen_at,last_seen_at,last_checked_at,last_error_code,created_at,updated_at)
+     VALUES ('metadata','https://lex.uz/uz/docs/1','1','uz','Hujjat',NULL,NULL,'fingerprint',200,?,?,?,NULL,?,?)`,
+  ).run(...Array(5).fill("2026-08-01T00:00:00.000Z"));
+  sqlite.prepare(
+    `INSERT INTO legal_monitoring_change_events
+      (id,metadata_id,canonical_url,act_title,change_type,fingerprint,detected_at,created_at)
+     VALUES ('historic','metadata','https://lex.uz/uz/docs/1','Eski shovqin','metadata_changed','historic','2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')`,
+  ).run();
+
+  assert.deepEqual(await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-20T12:05:00.000Z"),
+  }), {
+    initialized: 1,
+    due: 0,
+    notified: 0,
+    events: 0,
+  });
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 0);
+  assert.equal((sqlite.prepare("SELECT last_delivered_at AS value FROM monitoring_preferences WHERE id='legacy'").get() as { value: string }).value, "2026-08-20T12:04:00.000Z");
+  sqlite.close();
+});
+
+test("a daily empty window advances without turning the next event into an immediate alert", async () => {
+  const sqlite = createDb();
+  const db = new D1(sqlite);
+  sqlite.prepare(
+    `INSERT INTO monitoring_preferences
+      (id,workspace_id,user_id,locale,channels_json,frequency,last_delivered_at,created_at,updated_at)
+     VALUES ('daily','workspace','user','ru','["in_app"]','daily','2026-08-19T11:00:00.000Z','2026-08-19T11:00:00.000Z','2026-08-19T11:00:00.000Z')`,
+  ).run();
+  assert.deepEqual(await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-20T12:05:00.000Z"),
+  }), {
+    initialized: 0,
+    due: 1,
+    notified: 0,
+    events: 0,
+  });
+  sqlite.prepare(
+    `INSERT INTO legal_monitoring_metadata
+      (id,canonical_url,canonical_id,locale,act_title,revision_date,effective_at,fingerprint,http_status,first_seen_at,last_seen_at,last_checked_at,last_error_code,created_at,updated_at)
+     VALUES ('metadata','https://lex.uz/ru/docs/2','2','ru','Акт',NULL,NULL,'fingerprint',200,?,?,?,NULL,?,?)`,
+  ).run(...Array(5).fill("2026-08-20T12:06:00.000Z"));
+  sqlite.prepare(
+    `INSERT INTO legal_monitoring_change_events
+      (id,metadata_id,canonical_url,act_title,change_type,fingerprint,detected_at,created_at)
+     VALUES ('event','metadata','https://lex.uz/ru/docs/2','Новый акт','new_act','event','2026-08-20T12:06:00.000Z','2026-08-20T12:06:00.000Z')`,
+  ).run();
+  assert.equal((await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-20T12:10:00.000Z"),
+  })).notified, 0);
+  assert.deepEqual(await dispatchDueMonitoringNotifications(db as unknown as D1Database, {
+    now: new Date("2026-08-21T12:10:00.000Z"),
+  }), {
+    initialized: 0,
+    due: 1,
+    notified: 1,
+    events: 1,
+  });
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM notifications").get() as { count: number }).count, 1);
   sqlite.close();
 });
 

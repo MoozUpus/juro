@@ -152,7 +152,10 @@ export const GET = withApiErrors(async function GET(request: Request) {
         : freshness.state === "fresh" ? "active" : "degraded",
       automaticPublication: true,
       controlledBeta: false,
-      emailConfigured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
+      // Generic transactional email is configured, but legislation-monitor
+      // email delivery has no dedicated retry-safe outbox yet. Keep the UI
+      // honest and expose only the working in-app channel.
+      emailConfigured: false,
       lastCheckedAt: freshness.latestCheckedAt,
       verifiedSourceCount: freshness.freshSourceCount,
       freshness,
@@ -187,9 +190,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!selectedChannels.includes("in_app") || selectedChannels.length !== (body.channels || []).length) {
     return response({ error: locale === "ru" ? "In-app уведомления должны оставаться включёнными." : "Ilova ichidagi bildirishnomalar yoqilgan bo‘lishi kerak." }, 400);
   }
-  const env = runtimeEnv();
-  if (selectedChannels.includes("email") && !(env.RESEND_API_KEY && env.EMAIL_FROM)) {
-    return response({ error: locale === "ru" ? "Email-инфраструктура пока не подключена." : "Email infratuzilmasi hali ulanmagan." }, 409);
+  if (selectedChannels.includes("email")) {
+    return response({ error: locale === "ru" ? "Email-канал мониторинга пока не введён в эксплуатацию." : "Monitoring email kanali hali ishga tushirilmagan." }, 409);
   }
   const db = requireD1();
   const now = isoNow();
@@ -209,17 +211,18 @@ export const POST = withApiErrors(async function POST(request: Request) {
     db.prepare(
       `INSERT INTO monitoring_preferences
        (id,workspace_id,user_id,audience,topics_json,channels_json,frequency,locale,
-        document_impact_consent,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        document_impact_consent,last_delivered_at,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(workspace_id,user_id) DO UPDATE SET
         audience=excluded.audience,topics_json=excluded.topics_json,
         channels_json=excluded.channels_json,frequency=excluded.frequency,
         locale=excluded.locale,document_impact_consent=excluded.document_impact_consent,
+        last_delivered_at=coalesce(monitoring_preferences.last_delivered_at,excluded.last_delivered_at),
         updated_at=excluded.updated_at`,
     ).bind(
       id, workspace.id, user.id, body.audience, JSON.stringify(selectedTopics),
       JSON.stringify(selectedChannels), body.frequency, locale,
-      body.documentImpactConsent ? 1 : 0, now, now,
+      body.documentImpactConsent ? 1 : 0, now, now, now,
     ),
     db.prepare(
       `INSERT INTO workspace_audit_events

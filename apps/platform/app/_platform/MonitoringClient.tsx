@@ -135,9 +135,10 @@ const copy = {
     emailInactive: "Email не будет отправляться, пока мониторинг не станет активен.",
     inApp: "В приложении",
     email: "Email",
-    emailUnavailable: "Email станет доступен после подключения почтовой инфраструктуры.",
+    emailUnavailable: "Email-канал мониторинга пока не введён в эксплуатацию.",
     frequency: "Частота",
     frequencyWhenActive: "Желаемая частота после включения доставки",
+    frequencyHint: "«Немедленно» — в течение пяти минут после завершения ежедневной сверки Lex.uz; дневная и недельная сводки отправляются по выбранному интервалу.",
     immediate: "Немедленно",
     daily: "Ежедневно",
     weekly: "Еженедельно",
@@ -206,9 +207,10 @@ const copy = {
     emailInactive: "Monitoring faollashmaguncha email yuborilmaydi.",
     inApp: "Ilova ichida",
     email: "Email",
-    emailUnavailable: "Email pochta infratuzilmasi ulangandan keyin mavjud bo‘ladi.",
+    emailUnavailable: "Monitoring email kanali hali ishga tushirilmagan.",
     frequency: "Tezlik",
     frequencyWhenActive: "Yetkazib berish yoqilgandan keyingi kerakli tezlik",
+    frequencyHint: "“Darhol” — Lex.uz kundalik tekshiruvi tugaganidan keyin besh daqiqa ichida; kunlik va haftalik jamlanmalar tanlangan oraliqda yuboriladi.",
     immediate: "Darhol",
     daily: "Har kuni",
     weekly: "Har hafta",
@@ -324,15 +326,19 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
         error?: string;
       };
       if (!response.ok) throw new Error(body.error || (locale === "ru" ? "Мониторинг не загрузился." : "Monitoring yuklanmadi."));
+      const loadedStatus = body.status ?? defaultStatus;
       if (body.preference) {
         setPreference({
           ...body.preference,
           audience: normalizeMonitoringAudience(body.preference.audience),
+          channels: loadedStatus.emailConfigured
+            ? body.preference.channels
+            : body.preference.channels.filter(channel => channel !== "email"),
         });
       }
       setUpdates(body.updates ?? []);
       setTaskCases(body.taskCases ?? []);
-      setStatus(body.status ?? defaultStatus);
+      setStatus(loadedStatus);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
@@ -446,6 +452,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
 
           <fieldset>
             <legend>{preferenceOnly ? t.frequencyWhenActive : t.frequency}</legend>
+            <p className="monitoring-field-hint">{t.frequencyHint}</p>
             <div className="monitoring-segmented three">
               {(["immediate", "daily", "weekly"] as const).map(frequency => <label key={frequency} className={preference.frequency === frequency ? "selected" : ""}><input type="radio" name="frequency" value={frequency} checked={preference.frequency === frequency} onChange={() => setPreference(current => ({ ...current, frequency }))} /><CalendarClock />{t[frequency]}</label>)}
             </div>
