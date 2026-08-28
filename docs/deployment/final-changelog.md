@@ -2,9 +2,23 @@
 
 ## Shipped to production
 
-- Platform Worker 166 (`4bd03261-df05-4e5b-9f91-66bd6d8cfdcd`), deployment
-  `3579b110-a09d-4f53-8563-34ec0d2d5c4e`, is at 100% traffic; Worker 165 is
+- Platform Worker 167 (`b67a2ed8-74f8-4d62-968e-87bff9d3e4dc`), deployment
+  `7f1431fd-3e89-491d-aacc-f1c630ca020e`, is at 100% traffic; Worker 166 is
   the immediate rollback.
+- Worker 167 removes the obsolete 620 px Client auth pseudo-element and reserves
+  the real 72 px Turnstile height on authenticated and guest login surfaces.
+  The separate Lawyer decoration is unchanged.
+- A cold live baseline failed at CLS 0.2779. The released production page,
+  measured in a new isolated Chrome context without CSS overrides, recorded
+  CLS 0.0462 over 15 seconds and LCP on the `H2` at 2,680 ms. The page had no
+  horizontal overflow.
+- Exact CI `33192562472` passed source `4eba97ce`: Website 2m14s and Platform
+  6m54s. Post-release routing remained private and role-correct; public health
+  was 8/8 operational with OpenAI and Anthropic operational and no incidents.
+  No migration, D1/notification mutation, DNS or Sites change was made.
+- Platform Worker 166 (`4bd03261-df05-4e5b-9f91-66bd6d8cfdcd`), deployment
+  `3579b110-a09d-4f53-8563-34ec0d2d5c4e`, was the prior production release and
+  is now the immediate rollback.
 - Worker 166 gives Analytics Engine a stable privacy-safe first-six dimension
   contract and records only bounded support/feedback classifications. Feedback
   comments, legal questions, chat/document content and personal data are not

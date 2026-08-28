@@ -186,7 +186,7 @@ The Trust contrast correction is therefore source- and candidate-verified but
 not live in Sites v86. It remains a production release gate alongside the
 homepage motion, immutable asset caching and responsive lawyer-photo delivery.
 
-## 2026-08-28 Client login CLS candidate
+## 2026-08-28 Client login CLS release
 
 A cold production Chrome trace of `https://app.juro.uz/ru/auth/login` used a
 `390×844` mobile/touch viewport at 3× DPR, 4× CPU slowdown and Fast 4G. It
@@ -219,6 +219,16 @@ disabled and the widget held exactly 72 px.
 | Client pseudo-element | visible 620 px `J` | `display:none; content:none` | absent |
 | Turnstile reservation | 65 px before ~70.1 px render | 72 px before/after | no avoidable growth |
 
-The injected-rule result is controlled pre-release evidence, not a production
-after-measurement. Worker 166 remains live until the source commit passes its
-exact CI and a separate Worker deployment succeeds. Sites v86 was not changed.
+The injected-rule result was controlled pre-release evidence. Source commit
+`4eba97cead5c56d47c51dbc1965b5b440871dd5b` then passed exact CI
+`33192562472` and shipped as Worker 167
+`b67a2ed8-74f8-4d62-968e-87bff9d3e4dc` at 100% traffic.
+
+A new isolated production run loaded the released CSS without an override and
+observed the same 0.0462 CLS across 15 seconds, including the late real
+Turnstile render. LCP moved from the obsolete pseudo-element to the page `H2`
+at 2,680 ms. The Client pseudo-element computed to `display:none` and
+`content:none`, the widget retained 72 px, and the document remained exactly
+390 px wide with no horizontal overflow. This is the production
+after-measurement for the scoped CLS defect; it does not establish field CrUX
+or an INP result. Sites v86 was not changed.

@@ -4,6 +4,41 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Worker 167 Client login layout stability
+
+Commit `4eba97cead5c56d47c51dbc1965b5b440871dd5b` removes an obsolete
+legacy `.auth-brand::after` decoration from the current Client login surface
+and increases the authenticated and guest Turnstile reservation from 65 px to
+72 px. The separate Lawyer decoration is unchanged. A cold production baseline
+at `390×844`, 3× DPR, 4× CPU and Fast 4G recorded CLS 0.2779 and identified the
+620 px pseudo-element as LCP. An isolated live-page candidate replay reduced
+the 14-second observer result to CLS 0.0462 before deployment.
+
+Focused auth tests passed 10/10; type-check, lint, production build, artifact
+budgets and Cloudflare/infrastructure 203/203 passed locally. The broad local
+core run had no failing assertion but reached its 300-second harness limit in
+the explicitly excluded legal-corpus block. Exact GitHub Actions CI
+`33192562472` passed the complete source SHA: Website in 2m14s and Platform in
+6m54s.
+
+Worker 167 `b67a2ed8-74f8-4d62-968e-87bff9d3e4dc`, deployment
+`7f1431fd-3e89-491d-aacc-f1c630ca020e`, receives 100% traffic. A new isolated
+production run without an injected stylesheet observed LCP on the `H2` at
+2,680 ms and CLS 0.0462 over 15 seconds. The obsolete pseudo-element computed
+to `display:none`/`content:none`, Turnstile held 72 px and the document had no
+horizontal overflow.
+
+Client and Lawyer dashboards retained private/no-store `307` login boundaries;
+the original Lawyer-host Client URL returned the exact App redirect; Admin
+retained its protected `303`. Public status generated at
+`2026-08-28T17:11:28.991Z` was 8/8 operational with no incidents. OpenAI was
+operational at `2026-08-28T17:10:27.975Z` (`8303 ms`, no safe error) and
+Anthropic at `2026-08-28T17:00:55.699Z` (`7815 ms`, no safe error).
+
+No D1 migration or mutation, DNS change, notification mutation or Sites
+release was made. Sites v86 remains live. Worker 166 is the immediate
+application rollback.
+
 ## 2026-08-28 Worker 166 privacy-safe analytics normalization
 
 Commits `aaba59828a967aded926c1fe79b3e5c80936460d` and
@@ -389,13 +424,13 @@ conformance result.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest platform runtime commit | `aaba59828a967aded926c1fe79b3e5c80936460d` |
-| Latest platform source candidate | `14ecae9a475c75d54c92e8c69d96a3c12290af8e`; deployed |
+| Latest platform runtime commit | `4eba97cead5c56d47c51dbc1965b5b440871dd5b` |
+| Latest platform source candidate | `4eba97cead5c56d47c51dbc1965b5b440871dd5b`; deployed |
 | Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current Platform CI `33187593245` on `14ecae9a` passed Website in 2m05s and Platform in 9m21s |
-| Production Worker | `juro` version `4bd03261-df05-4e5b-9f91-66bd6d8cfdcd` (version 166), deployment `3579b110-a09d-4f53-8563-34ec0d2d5c4e`, 100% traffic |
-| Immediate application rollback | `a75c0337-da48-49fd-8adf-6a721fb24088` (version 165), deployment `ee0465b5-fb83-4ebb-87a5-3b40b0be7f83` |
+| GitHub Actions | Current Platform CI `33192562472` on `4eba97ce` passed Website in 2m14s and Platform in 6m54s |
+| Production Worker | `juro` version `b67a2ed8-74f8-4d62-968e-87bff9d3e4dc` (version 167), deployment `7f1431fd-3e89-491d-aacc-f1c630ca020e`, 100% traffic |
+| Immediate application rollback | `4bd03261-df05-4e5b-9f91-66bd6d8cfdcd` (version 166), deployment `3579b110-a09d-4f53-8563-34ec0d2d5c4e` |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Saved public Sites candidate | Version 94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |

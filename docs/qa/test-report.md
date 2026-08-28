@@ -1,6 +1,6 @@
 # Test report — current evidence through 2026-08-28
 
-## Client login mobile CLS candidate
+## Worker 167 Client login mobile CLS closure
 
 | Gate | Result |
 | --- | --- |
@@ -13,7 +13,12 @@
 | Static and artifact gates | PASS — type-check, lint and production build; artifact budgets remain within limits, including client CSS 594.7 KiB of 600.0 KiB |
 | Cloudflare/infrastructure suite | PASS — 203/203 |
 | Broad core suite | PARTIAL by explicit scope — no failing assertion was observed, but the run reached its 300-second harness limit during the legal-corpus block; that block is excluded from this release step per the user's instruction to skip legislation-database work |
-| Production state | NOT YET DEPLOYED — Worker 166 remains live; this section records pre-release evidence only |
+| Exact CI | PASS — run `33192562472` on source `4eba97cead5c56d47c51dbc1965b5b440871dd5b`; Website 2m14s and Platform 6m54s |
+| Production deployment | PASS — Worker 167 `b67a2ed8-74f8-4d62-968e-87bff9d3e4dc`, deployment `7f1431fd-3e89-491d-aacc-f1c630ca020e`, receives 100%; Worker 166 is rollback |
+| Production after-trace | PASS — a new isolated cold Chrome run without injected CSS recorded LCP on the `H2` at 2,680 ms and 15-second observer CLS 0.0462; the Client pseudo-element was absent, Turnstile held 72 px and document width remained exactly 390 px |
+| Route/auth boundary | PASS — Client and Lawyer dashboards retain private/no-store `307` login boundaries, the original Lawyer-host Client URL redirects to the exact App route, and Admin retains its protected `303` handoff |
+| Production health | PASS — public status generated at `2026-08-28T17:11:28.991Z` was 8/8 operational with no incidents; OpenAI and Anthropic were operational without safe errors |
+| Deployment boundary | PASS — no D1 migration/mutation, DNS, notification or Sites change; Sites v86 remains live |
 
 ## Privacy-safe analytics schema and data-quality candidate
 
