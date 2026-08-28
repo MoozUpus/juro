@@ -2,29 +2,38 @@
 
 **Audit date:** 2026-08-28
 **Branch:** `codex/investor-ready-ecosystem`
-**Current production checkpoint:** Worker 161
-`34c54357-0878-4637-b533-1fa1afa36336`, deployment
-`72c5d2be-e417-4dcf-a4eb-8022a59a1b61`, 100% traffic; status 6/8 with `ai`
-and `document_analysis` degraded at `2026-08-28T05:36:31.571Z`.
+**Current production checkpoint:** Worker 162
+`d2146684-bd77-4a33-a2a2-8d47042e473e`, deployment
+`0c8ec9f3-cd7f-4a0c-9e99-e0b1d91fc998`, 100% traffic; both public status APIs
+agreed on 8/8 operational at `2026-08-28T06:49:05.922Z`.
 
-## Current production exception
+## Current production recovery
 
 Worker 161 safely classified the repeated Anthropic HTTP 400 as
 `PROBE_PROVIDER_HTTP_400_INVALID_REQUEST_ERROR_CREDIT_BALANCE_LOW`. The raw
-provider message, prompts and secrets are not logged. OpenAI and the Lawyer
-area remain operational, but JURO is not represented as fully healthy while
-Anthropic-dependent AI and document analysis are degraded. Restoring the
-Anthropic API balance is an external account action; after that, a fresh
-scheduled probe and both public status endpoints must return operational before
-the exception can close.
+provider message, prompts and secrets were not logged. After the account balance
+was restored, fresh production probes recorded Anthropic operational at
+`2026-08-28T06:47:17.754Z`; AI and document analysis are operational and the
+exception is closed by current 8/8 evidence rather than by the balance action
+alone.
+
+The same recovery window exposed a separate P1 operational defect: Lex RSS
+delivery-time churn had generated repeated metadata changes and 222,329
+historical `legislation_monitor` notifications. Worker 162 uses a stable
+title/URL fingerprint, deterministic event and notification IDs, one atomic
+per-recipient digest per run and a bounded dashboard count. Its first retry
+processed 40/40 entries with `changed=0`, `error=0`; the notification count did
+not grow. Authenticated Chrome shows `99+` with the accessible label `Более 99
+новых событий`. Historical rows and user read state were not deleted or edited.
 
 The original screenshot route is not part of the outage. A fresh raw probe
 returned private/no-store `307` from
 `lawyer.juro.uz/ru/individual/dashboard` to the exact app path, and isolated
 Chrome rendered the localized Client login instead of plaintext `Not Found`.
-No D1 write, migration, DNS or Sites release was made. Sites v86 remains live,
-saved v94 remains unpublished, and Worker 160 is the immediate application
-rollback.
+No migration, manual D1 cleanup, DNS or Sites release was made. Sites v86
+remains live, saved v94 remains unpublished, and Worker 161 is the immediate
+application rollback. That rollback would reintroduce the notification fan-out
+defect, so it is reserved for a more severe Worker 162 regression.
 
 ## Executive outcome
 
@@ -74,7 +83,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | AI costs | ACTIVE CONFIGURATION | Four official, effective-dated production price rows passed pre/post D1 export, isolated restore, FK, private R2 and SHA-256 readback gates. No post-effective AI event exists yet, so no measured runtime cost baseline is claimed. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
 | Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Worker 156 closes the confirmed Client comparison target defect; Worker 157 extends the 44 px contract to confirmed Lawyer professional controls; Worker 158 extends it to confirmed non-corpus Admin retry, Knowledge Base and cost-checkbox controls. The exact production CSS contains both role-specific contracts. Lawyer/Admin anonymous boundaries remain fail-closed and their re-authentication surfaces have one H1/main and no overflow, but no signed-in Lawyer/Admin, real OTP/MFA error, screen reader or physical mobile device was used. Protected authenticated rendering, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
-| Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Anthropic API credit is currently insufficient, so AI and document analysis are degraded; overdue infrastructure billing and unavailable real CWV tracing also remain explicit risks. |
+| Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Anthropic and document analysis recovered to operational after API credit restoration. Overdue infrastructure billing and unavailable real CWV tracing remain explicit risks. |
 
 ## Definition of done for this candidate
 
@@ -93,6 +102,15 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 ## Candidate completion checkpoint
 
+- CI `33148425519` passed exact Worker 162 source
+  `75064bee61909baa0e1a05dabdedc6268f86ed29` (Website 2m15s, Platform
+  6m57s), including rendered 35/35, core 1101/1101 and
+  Cloudflare/infrastructure 202/202. Worker 162 receives 100% production
+  traffic. The first new-runtime metadata retry processed 40/40 with no change,
+  error or notification growth; authenticated Chrome shows the bounded `99+`
+  count. Both status APIs agreed on 8/8 operational. Worker 161 is rollback;
+  no migration or manual D1 cleanup occurred, notification history/read state
+  was preserved, and DNS/Sites were unchanged.
 - CI `33136790049` passed exact runtime source
   `93bb6abf48478af8de5bb86bbc38df3e6dcdbe15` (Website 2m15s, Platform
   6m32s). Local gates passed lint, type-check, production build, artifact

@@ -1,32 +1,34 @@
-# Rollback plan — Worker 161 / migration 0159 / Sites 86
+# Rollback plan — Worker 162 / migration 0159 / Sites 86
 
 ## Application rollback
 
 The active application version is
+`d2146684-bd77-4a33-a2a2-8d47042e473e` (version 162), deployment
+`0c8ec9f3-cd7f-4a0c-9e99-e0b1d91fc998`. The immediate application rollback is
 `34c54357-0878-4637-b533-1fa1afa36336` (version 161), deployment
-`72c5d2be-e417-4dcf-a4eb-8022a59a1b61`. The immediate application rollback is
-`3d029e81-c477-4215-b182-356985b00e6a` (version 160), deployment
-`f4065d40-b96f-47fb-85a0-704d634b656b`. Confirm the currently active version
+`72c5d2be-e417-4dcf-a4eb-8022a59a1b61`. Confirm the currently active version
 before changing traffic. Sites version 86 is live and version 85 is its
 immediate public rollback.
 
 Rollback is justified for a release-caused availability, authentication,
 routing, metadata, font loading, signed-share, document-comparison, Lawyer or
 Admin interaction-target regression.
-Anthropic `CREDIT_BALANCE_LOW` is not release-caused and is not a reason to
-roll back Worker 161; restore API credit and wait for a fresh scheduled health
-probe instead. After any genuine release rollback, repeat the six-host HTTPS
+Anthropic `CREDIT_BALANCE_LOW` was not release-caused, was resolved by restoring
+API credit and is not a reason to roll back Worker 162. After any genuine
+release rollback, repeat the six-host HTTPS
 probe, login/status smoke, document-comparison compact-layout probe, Lawyer
-re-auth/API boundary, Admin re-auth boundary and `/api/status` read. Worker 160
-retains the Lawyer-host
-redirect, auth error association, localized status metadata, same-origin icons,
-corrected Client comparison target, Lawyer and non-corpus Admin interaction
-floors, and safe provider machine-code propagation. It does not contain the
-final message-category fallback. Do not report overall recovery unless status
-evidence is fresh and operational.
+re-auth/API boundary, Admin re-auth boundary, authenticated dashboard count and
+`/api/status` read. Worker 161 retains the Lawyer-host redirect, auth error
+association, localized status metadata, same-origin icons, corrected Client
+comparison target, Lawyer/non-corpus Admin interaction floors and safe provider
+error classification. It does not contain the stable Lex monitoring
+fingerprint, atomic digest fan-out or bounded unread-count query. A rollback may
+therefore restart notification growth; record the exact count before and after
+the next cron and prefer a forward fix. Do not report overall recovery unless
+status evidence is fresh and operational.
 
-Migration 0159 is additive. Worker 161 added no migration and an application-
-only rollback to Worker 160 must not edit D1. A rollback farther than the
+Migration 0159 is additive. Worker 162 added no migration and an application-
+only rollback to Worker 161 must not edit D1. A rollback farther than the
 documented immediate version can remove later lockout/encryption behavior and
 is therefore a separate incident decision, not the ordinary rollback path.
 

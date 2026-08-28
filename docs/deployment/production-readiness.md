@@ -4,6 +4,37 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Worker 162 provider recovery and notification stability
+
+Commit `75064bee61909baa0e1a05dabdedc6268f86ed29` removes the unstable Lex RSS
+delivery timestamp from monitoring fingerprints, treats only real title changes
+as customer events, uses deterministic retry-safe event/notification IDs, emits
+one per-recipient digest per run and commits its writes as one D1 batch. The
+dashboard's unread-count query stops at 100 and renders `99+` rather than
+scanning and exposing an unbounded historical count. No notification was
+deleted or marked read.
+
+Focused monitoring/dashboard tests passed 81/81. Full local tests, lint,
+type-check and the bounded production artifact gate passed. GitHub Actions CI
+`33148425519` passed the exact commit: Website 2m15s and Platform 6m57s,
+including rendered 35/35, core 1101/1101 and Cloudflare/infrastructure 202/202.
+
+Worker 162 `d2146684-bd77-4a33-a2a2-8d47042e473e`, deployment
+`0c8ec9f3-cd7f-4a0c-9e99-e0b1d91fc998`, receives 100% production traffic. The
+last pre-release Worker 161 retry at `2026-08-28T06:40:50.995Z` increased the
+historical legislation-notification count to 222,329. Worker 162's first retry
+at `06:45:53.618Z` processed 40/40, recorded `changed=0`, `error=0`, and left
+that count and its maximum `created_at` unchanged. Authenticated Chrome showed
+the new `99+` summary with accessible `Более 99 новых событий` text.
+
+After Anthropic credit restoration, a fresh scheduled synthetic probe recorded
+Anthropic operational at `2026-08-28T06:47:17.754Z`. Both public status APIs
+agreed on 8/8 operational at `06:49:05.922Z`; document analysis also remained
+operational. No migration, manual D1 cleanup, DNS or Sites release was part of
+Worker 162. Worker 161 is the immediate application rollback, but it does not
+contain the stable monitoring fingerprint/batching fix. Sites v86 remains live;
+saved v94 remains unpublished.
+
 ## 2026-08-28 Worker 161 Anthropic health diagnostic
 
 Commit `316ef335a0dfd0e1acd57be2e4cfd014d53be01f` adds bounded,
@@ -184,13 +215,13 @@ conformance result.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest platform runtime commit | `316ef335a0dfd0e1acd57be2e4cfd014d53be01f` |
-| Latest platform source candidate | `316ef335a0dfd0e1acd57be2e4cfd014d53be01f`; deployed |
+| Latest platform runtime commit | `75064bee61909baa0e1a05dabdedc6268f86ed29` |
+| Latest platform source candidate | `75064bee61909baa0e1a05dabdedc6268f86ed29`; deployed |
 | Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current Platform CI `33144330811` on `316ef335` passed Website in 2m10s and Platform in 8m38s; Worker 160 CI `33140377036` and Worker 159 CI `33139057050` also passed both jobs |
-| Production Worker | `juro` version `34c54357-0878-4637-b533-1fa1afa36336` (version 161), deployment `72c5d2be-e417-4dcf-a4eb-8022a59a1b61`, 100% traffic |
-| Immediate application rollback | `3d029e81-c477-4215-b182-356985b00e6a` (version 160), deployment `f4065d40-b96f-47fb-85a0-704d634b656b` |
+| GitHub Actions | Current Platform CI `33148425519` on `75064bee` passed Website in 2m15s and Platform in 6m57s; Worker 161 CI `33144330811` also passed both jobs |
+| Production Worker | `juro` version `d2146684-bd77-4a33-a2a2-8d47042e473e` (version 162), deployment `0c8ec9f3-cd7f-4a0c-9e99-e0b1d91fc998`, 100% traffic |
+| Immediate application rollback | `34c54357-0878-4637-b533-1fa1afa36336` (version 161), deployment `72c5d2be-e417-4dcf-a4eb-8022a59a1b61` |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Saved public Sites candidate | Version 94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |

@@ -1,5 +1,28 @@
 # Test report — current evidence through 2026-08-28
 
+## Worker 162 Anthropic recovery and notification-fan-out closure
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `75064bee61909baa0e1a05dabdedc6268f86ed29` on Draft PR `#64` |
+| Regression coverage | PASS — 81/81 focused monitoring/dashboard tests; full local `npm test`, lint, type-check and bounded production artifact validation passed |
+| GitHub Actions CI `33148425519` | PASS on exact `75064bee` — Website 2m15s and Platform 6m57s; Platform included rendered 35/35, core 1101/1101, Cloudflare/infrastructure 202/202 and deployable artifact checks |
+| Platform deployment | PASS — Worker 162 `d2146684-bd77-4a33-a2a2-8d47042e473e`, deployment `0c8ec9f3-cd7f-4a0c-9e99-e0b1d91fc998`, 100%; Worker 161 `34c54357-0878-4637-b533-1fa1afa36336` is rollback |
+| Anthropic recovery | PASS — a fresh scheduled probe recorded Anthropic operational with no safe error at `2026-08-28T06:47:17.754Z`; document analysis remained operational |
+| Production health | PASS — `status.juro.uz` and `app.juro.uz` agreed on 8/8 operational at `2026-08-28T06:49:05.922Z` |
+| Fan-out diagnosis | CONFIRMED — before Worker 162, delivery-time RSS `pubDate` churn produced repeated metadata-change events and 222,329 `legislation_monitor` notifications; the last Worker 161 retry at `06:40:50.995Z` added 800 rows |
+| First post-release retry | PASS — Worker 162 processed 40/40 Lex RSS metadata rows at `06:45:53.618Z`, recorded `changed=0` and `error=0`, and notification count remained exactly 222,329 with no later `created_at` |
+| Authenticated Chrome | PASS — the real Individual dashboard displays `99+ новых событий` with accessible label `Более 99 новых событий`, replacing the prior 47,544 exact-count rendering |
+| Data boundary | PASS — no migration, manual D1 mutation, notification deletion or read-state change; historical rows remain intact. Verification queries were read-only |
+| Deployment boundary | UNCHANGED — no DNS or Sites release; Sites v86 remains live and saved v94 remains unpublished |
+
+Worker 162 removes RSS delivery time from the stable fingerprint, treats only a
+real title change as a customer event, writes metadata/events/one per-recipient
+digest atomically and uses deterministic retry-safe IDs. The dashboard count is
+bounded at 100 and represented as `99+`; this prevents an unbounded count scan
+without rewriting user-owned notification history. Monitoring preference
+frequency semantics remain a separate product gap and are not claimed complete.
+
 ## Worker 161 Anthropic health diagnostic
 
 | Gate | Result |
@@ -15,10 +38,10 @@
 | Chrome diagnostics | OBSERVED — the Cloudflare Turnstile frame reported its known deprecation/CSP/Quirks issues, and two opaque `NaN` console entries had no attributable source; the JURO login document rendered successfully, so no clean-console claim is made for this replay |
 | Deployment boundary | UNCHANGED — no production D1 write, migration, DNS or Sites change; Sites v86 remains live and saved v94 remains unpublished |
 
-Restoring full health requires adding Anthropic API credit, then allowing a
-fresh scheduled probe and rechecking both public status endpoints. Rotating the
-key or changing the model is not justified by the captured evidence. Historical
-8/8 entries below remain valid point-in-time records, not the current state.
+This section is retained as point-in-time incident evidence. API credit was
+subsequently restored and Worker 162's fresh scheduled probes returned the
+current 8/8 operational state recorded above. Rotating the key or changing the
+model was not required.
 
 ## Worker 158 Admin interaction-floor closure
 

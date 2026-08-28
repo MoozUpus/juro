@@ -2,9 +2,23 @@
 
 ## Shipped to production
 
+- Platform Worker 162 (`d2146684-bd77-4a33-a2a2-8d47042e473e`), deployment
+  `0c8ec9f3-cd7f-4a0c-9e99-e0b1d91fc998`, is at 100% traffic; Worker 161
+  (`34c54357-0878-4637-b533-1fa1afa36336`) is the immediate rollback.
+- Worker 162 stabilizes Lex monitoring fingerprints, batches metadata/event
+  writes, emits one retry-safe digest per recipient and bounds the dashboard
+  unread count at `99+`. Its first production retry processed 40/40 with zero
+  changes/errors and no notification growth; authenticated Chrome confirmed the
+  bounded UI. Historical notification rows and read state were preserved.
+- Anthropic credit recovery was confirmed by a fresh production synthetic
+  probe, and both public status APIs agreed on 8/8 operational at
+  `2026-08-28T06:49:05.922Z`.
+- Exact CI `33148425519` passed Worker 162 source `75064bee`: Website 2m15s and
+  Platform 6m57s, including rendered 35/35, core 1101/1101,
+  Cloudflare/infrastructure 202/202 and deployable artifact validation.
 - Platform Worker 155 (`eb132328-68c2-48f3-95d4-90cac0962119`), deployment
-  `24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4`, is at 100% traffic; Worker 154
-  (`3efdad51-d6c1-47f0-ad5b-fb24cd2adc99`) is the immediate rollback.
+  `24e52e75-c687-4d12-9b9c-3f9c7d3e0cd4`, was an earlier checkpoint; Worker
+  154 (`3efdad51-d6c1-47f0-ad5b-fb24cd2adc99`) was its rollback.
 - Worker 153 shipped the auth error-association contract. Worker 154 localized
   RU/UZ status document metadata. Worker 155 makes root icon metadata use the
   actual allow-listed JURO host, removing the status favicon CSP violation
