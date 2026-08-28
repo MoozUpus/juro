@@ -1,5 +1,28 @@
 # Test report — current evidence through 2026-08-28
 
+## Privacy-safe analytics schema and data-quality candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `aaba59828a967aded926c1fe79b3e5c80936460d` on Draft PR `#64` |
+| Production dataset read | PASS read-only — the Analytics Engine SQL API returned 24 stored/represented events from `2026-08-25 08:10:02Z` through `2026-08-28 01:46:27Z`; every `_sample_interval` was 1 |
+| Observed schema | PASS for the 24-row window — all rows used one of the 21 canonical product events and the expected first-six dimensions |
+| Data-quality result | PARTIAL — only one consented `landing_view`, zero signup start/completion events and no privacy-safe cohort linkage; activation, return, drop-off and conversion remain `UNVERIFIED` |
+| Fixed defect | PASS candidate — operational support telemetry now preserves the common event/surface/locale/outcome/provider/variant positions and moves only allowlisted category/severity to `blob7`/`blob8` |
+| Feedback metric | PASS candidate — `feedback_submitted` now maps the allowlisted type to success/partial/failure and stores only that bounded type in `blob7`; comments never enter analytics |
+| Focused regression | PASS — 83/83 product-analytics, feedback and platform-core tests |
+| Full local release gate | PASS — core 1106/1106, Cloudflare/infrastructure 203/203, lint, type-check and production artifact validation; emitted CSS remains 594.6 KiB of the 600.0 KiB limit |
+| Provider recovery | PASS current — production OpenAI and Anthropic content-free probes are operational; the public status API returned 8/8 operational with zero incidents |
+| Cost measurement | UNCHANGED — 4/30 real priced successes, `$0.104549` estimated cost and two zero-token failures; the 30% reduction target remains `UNVERIFIED` |
+| Deployment | PENDING — no Worker, D1, DNS or Sites mutation was made while validating this candidate; Sites v86 remains live |
+
+The dataset contains aggregate occurrences, not unique people. In particular,
+the 13 `lawyer_viewed` rows cannot be promoted to 13 unique prospects, and the
+three first-question rows cannot be joined to the downstream error, fallback,
+source-open or feedback rows. The KPI framework now records an explicit
+definition and readiness state for every requested metric instead of deriving
+rates from mismatched denominators.
+
 ## Worker 163 monitoring cadence closure
 
 | Gate | Result |
