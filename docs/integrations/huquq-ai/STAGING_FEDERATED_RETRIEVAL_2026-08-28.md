@@ -261,3 +261,13 @@ returned Cloudflare API error `code 7500` (`internal error`) even for a minimal
 `SELECT 1` probe, so its current counters are not asserted by this recheck.
 This is recorded as a failed read-only probe; no retry rows were rewritten and
 no ingestion was started.
+
+## Read-only D1 capacity observations (2026-08-28T09:45–09:46Z)
+
+`wrangler d1 info` was run without a write operation for each runtime source.
+The observed sizes were: legacy `9,999,998,976` bytes, v2
+`9,999,998,976` bytes, shard-1 `2,890,203,136` bytes and shard-2
+`8,116,838,400` bytes. Machine-readable output is in
+`STAGING_D1_CAPACITY_2026-08-28.json`. These values are capacity observations,
+not exports or snapshots; v2 is at the configured 10 GB limit and retains its
+historical queue backlog.

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-08-28T09:46:49.4248587Z",
+  "readOnly": true,
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "databaseId": "bb716a96-b2fb-4823-90d6-6c228fed181a",
+      "observedAt": "2026-08-28T09:46:49.4248587Z",
+      "databaseSizeBytes": 9999998976,
+      "probe": "npx wrangler d1 info juro-staging --json"
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "databaseId": "62620fb3-3da3-4c76-a8e9-aa60858c1063",
+      "observedAt": "2026-08-28T09:45:34.432Z",
+      "databaseSizeBytes": 9999998976,
+      "probe": "capture-legal-corpus-d1-capacity.mjs"
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "databaseId": "e09e0682-0c2e-4458-a8f3-be9de28117e3",
+      "observedAt": "2026-08-28T09:45:38.889Z",
+      "databaseSizeBytes": 2890203136,
+      "probe": "capture-legal-corpus-d1-capacity.mjs"
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "databaseId": "36fa1cfe-6d00-47b7-a980-864020028d86",
+      "observedAt": "2026-08-28T09:45:43.281Z",
+      "databaseSizeBytes": 8116838400,
+      "probe": "capture-legal-corpus-d1-capacity.mjs"
+    }
+  ],
+  "limitations": [
+    "These are capacity observations only; they are not D1 exports, snapshots, or restore proofs.",
+    "The strict federated release schema accepts only numbered shard names; legacy and v2 are retained here as runtime-source observations.",
+    "The v2 database is at the configured 10 GB limit and retains an ingestion backlog; no ingestion was started."
+  ]
+}
