@@ -13425,3 +13425,17 @@ vector coverage with dense retrieval disabled, no current evaluation bound to a
 frozen snapshot, and no v2 full-database export artifact. The complete
 machine-readable record is in
 `STAGING_NEXT_STAGE_VALIDATION_2026-08-28.json`.
+
+## Post-stop failure-ledger reconciliation (2026-08-28, 16:43Z)
+
+A corrected sequential read-only SELECT probe checked scheduler locks,
+active/failed/dead-letter jobs, immutable terminal/technically-unavailable
+failure records and all discovery checkpoints in each staging D1. Every call
+reported `rows_written=0` and `changed_db=false`; the first draft probe was
+stopped after a schema-only `created_at` error and made no remote change. The
+latest failure timestamps remain historical (legacy 2026-08-21, v2 2026-08-24,
+shard 1 2026-08-25, shard 2 2026-08-28 00:42Z, shard 3 2026-08-28 05:11Z).
+Legacy, v2 and excluded shard 3 still have active historical queues, so the
+release queue freeze remains unproven. No failure row was rewritten and no
+retry or ingestion was started. Machine-readable details are in
+`STAGING_POST_STOP_FAILURE_LEDGER_RECHECK_2026-08-28.json`.

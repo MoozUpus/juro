@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-28T16:43:39.2113256Z",
+  "environment": "staging",
+  "applicationCommit": "20026c8c504643ff25030839a51abaab0bcde63c",
+  "purpose": "Sequential read-only post-stop reconciliation of locks, ingestion jobs, failure ledger and checkpoints.",
+  "query": "SELECT counts from scheduled_locks, legal_corpus_ingestion_jobs, legal_corpus_failures and legal_corpus_discovery_checkpoints; no INSERT/UPDATE/DELETE/DDL.",
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "locks": 2,
+      "activeJobs": 43686,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 230,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "latestFailureAt": "2026-08-21T07:21:07.834Z",
+      "changedDatabase": false,
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "locks": 0,
+      "activeJobs": 27689,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 5,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "latestFailureAt": "2026-08-24T01:08:32.505Z",
+      "changedDatabase": false,
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "locks": 0,
+      "activeJobs": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 10,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "latestFailureAt": "2026-08-25T15:57:03.796Z",
+      "changedDatabase": false,
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "locks": 0,
+      "activeJobs": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 8,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "latestFailureAt": "2026-08-28T00:42:44.622Z",
+      "changedDatabase": false,
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "locks": 0,
+      "activeJobs": 31159,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 7,
+      "checkpointsTotal": 44,
+      "checkpointsCompleted": 44,
+      "latestFailureAt": "2026-08-28T05:11:29.044Z",
+      "changedDatabase": false,
+      "rowsWritten": 0
+    }
+  ],
+  "interpretation": "All observed terminal/technically-unavailable records predate the acquisition stop; they remain immutable. Active historical queues in legacy, v2 and excluded shard 3 mean the release queue freeze is not proven. This is monitoring evidence only and does not authorize retries or ingestion."
+}
