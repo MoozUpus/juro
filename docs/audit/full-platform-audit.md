@@ -18,7 +18,15 @@ source and passes the 48/48 functional suite, 56/56 axe/Chrome matrix,
 lint, type-check, artifact validation and manual 320/390/981/1101 px Chrome
 samples. Exact-source CI `33217112257` passed Website in 1m59s and Platform in
 8m54s. It is not deployed; Sites v86 remains live pending an explicit publish
-instruction.
+instruction. Follow-up commit
+`1e25c1aeaedad1daff964d1cc08714bece814bee` expands the exact-build release
+gate to all required 320/360/375/390/393/430/768/1024/1280/1440/1920 px
+widths. The final source passed 49/49 functional/route tests, 56 full axe
+route/profile combinations, 189 additional localized route-width checks,
+seven compact-menu scenarios, lint, type-check and artifact validation. It
+also closes the newly detected 320 px CTA clipping and Vinext `.rsc` locale
+hydration defects. Exact-source CI `33220671747` passed Website in 3m58s and
+Platform in 8m17s. This follow-up is also unpublished.
 
 ## Current production recovery
 

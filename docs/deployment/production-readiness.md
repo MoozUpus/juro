@@ -4,6 +4,26 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 full public responsive candidate
+
+Commit `1e25c1aeaedad1daff964d1cc08714bece814bee` extends the built-site Chrome
+release gate to 320, 360, 375, 390, 393, 430, 768, 1024, 1280, 1440 and 1920
+px. The corrected candidate passed 56 full axe route/profile combinations, 189
+additional RU/UZ/EN route-width checks and seven compact-menu interaction
+scenarios. Build, deployable-artifact validation, 49/49 functional/route tests,
+26/26 focused source contracts, lint and type-check also passed. Exact-source
+GitHub Actions CI `33220671747` passed Website in 3m58s and Platform in 8m17s.
+
+The expanded matrix first found a 2.2 px clipped RU lawyer-catalogue CTA at
+320 px and a Vinext hydration path ending in `.rsc` that could revert UZ/EN
+document language to RU. The source now gives the CTA a shrinkable wrapping
+text cell and normalizes the terminal `.rsc` suffix before locale selection.
+
+No production change was made. Sites v86 remains live with the already recorded
+stale accessibility defects. A superseding Sites publish and production replay
+still require a separate explicit publish instruction; this checkpoint is not
+a WCAG conformance statement.
+
 ## 2026-08-29 public Sites v86 replay and unpublished correction
 
 A read-only Chrome replay of the deployed Sites v86 artifact covered RU, UZ

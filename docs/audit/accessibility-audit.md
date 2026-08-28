@@ -1,5 +1,29 @@
 # Accessibility audit
 
+## 2026-08-29 full public responsive release gate
+
+- Source commit `1e25c1aeaedad1daff964d1cc08714bece814bee` expands the
+  built-site Chrome gate to every required public width: 320, 360, 375, 390,
+  393, 430, 768, 1024, 1280, 1440 and 1920 px across RU, UZ and EN.
+- The final candidate passed 56 full axe route/profile combinations, 189
+  additional route-width checks and seven compact-menu keyboard/dialog
+  scenarios. The gate also verifies document language, one H1/main,
+  `main#main-content`, skip-link focus transfer, horizontal overflow, clipped
+  interactive targets, broken ARIA references, the 44 px target floor and
+  Escape focus return.
+- The expanded gate found and closed two real source defects: the long RU
+  lawyer-catalogue CTA was clipped by 2.2 px at 320 px, and Vinext's localized
+  `.rsc` request path could reset `html[lang]` to RU during hydration. The CTA
+  now has a shrinkable wrapping text cell, and root locale selection normalizes
+  the terminal `.rsc` suffix before matching RU/UZ/EN.
+- The final local gate passed build and deployable-artifact validation, 49/49
+  functional/route tests, 26/26 focused source contracts, lint and type-check.
+  Exact-source GitHub Actions CI `33220671747` passed Website in 3m58s and
+  Platform in 8m17s.
+- This is candidate evidence, not a WCAG conformance claim. No Sites publish or
+  production mutation was made; Sites v86 remains live with the previously
+  observed stale defects.
+
 ## 2026-08-29 deployed Sites v86 replay and source correction
 
 - A read-only Chrome replay of the live RU, UZ and EN home routes at

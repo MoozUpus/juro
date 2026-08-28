@@ -1,5 +1,25 @@
 # Mobile audit
 
+## 2026-08-29 complete public width matrix
+
+The built public artifact now has an automated Chrome release gate at 320,
+360, 375, 390, 393, 430, 768, 1024, 1280, 1440 and 1920 px. RU, UZ and EN
+routes passed 56 full axe route/profile combinations plus 189 additional
+route-width checks; seven compact widths also passed menu target, focus,
+dialog linkage, one-close-control, Escape-return and clipping checks.
+
+The first expanded run exposed a 2.2 px clipped RU lawyer-catalogue CTA at
+320 px and a locale regression on Vinext `.rsc` hydration requests. Commit
+`1e25c1aeaedad1daff964d1cc08714bece814bee` makes the CTA text wrap inside a
+shrinkable grid cell and normalizes `.rsc` before selecting `html[lang]`.
+The corrected candidate passed build/artifact validation, 49/49
+functional/route tests, 26/26 focused contracts, lint, type-check and exact CI
+`33220671747` (Website 3m58s, Platform 8m17s).
+
+This remains Chrome responsive-emulation and exact-build evidence, not
+physical-device or blanket accessibility evidence. Sites v86 is still live;
+the correction has not been published.
+
 ## Implemented mobile contract
 
 The platform uses a drawer and five-destination bottom navigation at 800 px and

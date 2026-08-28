@@ -1,5 +1,22 @@
 # Test report — current evidence through 2026-08-29
 
+## Full public responsive release gate
+
+| Gate | Result |
+| --- | --- |
+| Required widths | PASS candidate — 320, 360, 375, 390, 393, 430, 768, 1024, 1280, 1440 and 1920 px are automated across the localized public route set |
+| Full accessibility profiles | PASS — 56/56 axe/Chrome route/profile combinations at 390 and 1280 px, including RU/UZ/EN light coverage and representative dark coverage |
+| Additional responsive matrix | PASS — 189/189 route-width combinations: 21 RU/UZ/EN routes across the nine required widths not duplicated by the full axe profiles |
+| Compact-menu interaction | PASS — seven width scenarios retained one trigger/dialog/close control, exact `aria-controls`, 44 px targets, focus entry, Escape close/return, no broken ARIA and no clipped interactive target |
+| Findings closed | PASS candidate — the 320 px RU handoff CTA no longer clips; locale selection strips Vinext's terminal `.rsc` suffix so UZ/EN hydration retains the correct `html[lang]` |
+| Local release gate | PASS — build and deployable artifact, 49/49 functional/route tests, 26/26 focused source contracts, lint and type-check |
+| Exact-source CI | PASS — run `33220671747` on `1e25c1aeaedad1daff964d1cc08714bece814bee`; Website 3m58s and Platform 8m17s |
+| Production boundary | NOT DEPLOYED — Sites v86 remains live; no Sites publish, Worker release, DNS, D1 or notification mutation was made |
+
+These results describe the exact unpublished branch candidate. They do not
+convert the known Sites v86 findings into production passes and are not a WCAG
+conformance claim.
+
 ## Public Sites v86 replay and superseding source candidate
 
 | Gate | Result |
