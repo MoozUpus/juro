@@ -13327,3 +13327,13 @@ disabled and there is no current full-corpus Qdrant collection to evaluate or
 restore. The full-corpus Qdrant and indexed-evaluation gates therefore remain
 open. Machine-readable evidence is in
 `STAGING_DENSE_INDEX_PROBE_2026-08-28.json`.
+
+## Post-probe local validation (2026-08-28)
+
+On commit `8822d1ff`, the Cloudflare test suite passed `186/186` tests with
+zero failures. The legal-corpus staging artifact dry-run also passed
+(`3739.42 KiB`, gzip `821.43 KiB`) and confirmed that acquisition, live Lex
+and dense indexing remain disabled. These are local reproducibility checks;
+they do not substitute for the still-open federated snapshot, indexed
+evaluation, Qdrant full-corpus benchmark/restore or federated D1 restore
+gates.
