@@ -164,12 +164,26 @@ export async function handleLegalCorpusEmbeddingServiceRequest(
   env: LegalCorpusPrivateServiceEnv,
 ): Promise<Response> {
   if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/embeddings") {
+    console.warn(JSON.stringify({
+      service: "legal-corpus-private-embedding",
+      event: "embedding.route_rejected",
+      reason: "method_or_path",
+    }));
     return privateJson("EMBEDDING_PRIVATE_ROUTE_REJECTED", 404);
   }
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
   if (declaredLength > MAX_EMBEDDING_REQUEST_BYTES || !env.OPENAI_API_KEY?.trim()) {
+    console.error(JSON.stringify({
+      service: "legal-corpus-private-embedding",
+      event: "embedding.configuration_rejected",
+      reason: declaredLength > MAX_EMBEDDING_REQUEST_BYTES ? "request_too_large" : "credential_unavailable",
+    }));
     return privateJson("EMBEDDING_PRIVATE_SERVICE_UNAVAILABLE", 503);
   }
+  console.log(JSON.stringify({
+    service: "legal-corpus-private-embedding",
+    event: "embedding.private_request",
+  }));
   let body: z.infer<typeof embeddingRequestSchema>;
   try {
     const text = await request.text();
@@ -198,12 +212,22 @@ export async function handleLegalCorpusEmbeddingServiceRequest(
     });
     const requestId = upstream.headers.get("x-request-id");
     if (requestId) headers.set("x-request-id", requestId);
+    console.log(JSON.stringify({
+      service: "legal-corpus-private-embedding",
+      event: "embedding.upstream_response",
+      statusClass: upstream.status >= 500 ? "5xx" : upstream.status >= 400 ? "4xx" : "2xx",
+    }));
     return new Response(upstream.body, {
       status: upstream.status,
       statusText: upstream.statusText,
       headers,
     });
-  } catch {
+  } catch (error) {
+    console.error(JSON.stringify({
+      service: "legal-corpus-private-embedding",
+      event: "embedding.upstream_failed",
+      errorType: error instanceof Error ? error.name : typeof error,
+    }));
     return privateJson("EMBEDDING_PRIVATE_SERVICE_UNAVAILABLE", 503);
   }
 }
