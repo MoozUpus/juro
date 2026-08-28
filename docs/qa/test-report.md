@@ -1,5 +1,29 @@
 # Test report — current evidence through 2026-08-28
 
+## Worker 163 monitoring cadence closure
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `810432eac9c1159c4cbd60fddaab7c1c1131b655` on Draft PR `#64` |
+| Cadence regression coverage | PASS — 7/7 focused metadata/cadence tests; `daily`, `weekly` and `immediate` delivery windows, legacy cursor initialization, empty-window cursor advance and deterministic retry safety are covered |
+| Full local release gate | PASS — lint, type-check, production build, artifact budgets, rendered Worker 35/35, core 1104/1104 and Cloudflare/infrastructure 202/202 |
+| GitHub Actions CI `33152530994` | PASS on exact `810432ea` — Website 2m41s and Platform 6m58s |
+| Platform deployment | PASS — Worker 163 `e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd`, deployment `dc3efbec-6909-4f56-80ef-0d964cdea027`, 100%; Worker 162 `d2146684-bd77-4a33-a2a2-8d47042e473e` is rollback |
+| First production cadence run | PASS — run `a2d24c2d-751a-4690-8569-c284880289a7` completed at `2026-08-28T07:55:58.100Z`; all four legacy `daily`/`weekly` preferences received the safe cutoff cursor `2026-08-28T07:54:51.699Z` without historical delivery |
+| Idempotent repeat | PASS — run `5aba731e-7c60-4c7f-b7d4-de793476c505` completed at `2026-08-28T08:01:53.188Z`; the four cursors remained unchanged and legislation-monitor notification count/max remained exactly 222,329 / `2026-08-28T06:40:50.995Z` |
+| Production route matrix | PASS — `juro`, `www`, `app`, `lawyer`, `admin`, `status` and `status/api/status` returned HTTP 200 after release |
+| Authenticated Chrome | PASS — RU and UZ Monitoring show fresh 40/40/0 state, selected daily cadence and localized cadence guidance; monitoring email is visibly disabled and not claimed operational. The original Lawyer-host dashboard URL redirects to and renders the exact app dashboard instead of plaintext `Not Found` |
+| Data boundary | PASS — no migration, notification deletion or read-state change; the only production preference writes were the four scheduled legacy cursor initializations |
+| Deployment boundary | UNCHANGED — no DNS or Sites release; Sites v86 remains live and saved v94 remains unpublished |
+
+Worker 163 closes the previously recorded monitoring-frequency gap. The
+existing five-minute scheduler now dispatches only due preferences: immediate
+after a successful daily source check, daily after one day and weekly after
+seven days. Notification creation and cursor advance share one D1 batch, while
+deterministic digest IDs make retries safe. Monitoring email remains
+intentionally unavailable until a dedicated retry-safe email outbox exists;
+the API rejects it and the RU/UZ interface states that boundary.
+
 ## Worker 162 Anthropic recovery and notification-fan-out closure
 
 | Gate | Result |
@@ -20,8 +44,9 @@ Worker 162 removes RSS delivery time from the stable fingerprint, treats only a
 real title change as a customer event, writes metadata/events/one per-recipient
 digest atomically and uses deterministic retry-safe IDs. The dashboard count is
 bounded at 100 and represented as `99+`; this prevents an unbounded count scan
-without rewriting user-owned notification history. Monitoring preference
-frequency semantics remain a separate product gap and are not claimed complete.
+without rewriting user-owned notification history. Worker 163 subsequently
+closed the monitoring-preference frequency gap; this section remains as the
+Worker 162 release checkpoint.
 
 ## Worker 161 Anthropic health diagnostic
 

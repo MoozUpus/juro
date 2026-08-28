@@ -2,6 +2,25 @@
 
 ## Shipped to production
 
+- Platform Worker 163 (`e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd`), deployment
+  `dc3efbec-6909-4f56-80ef-0d964cdea027`, is at 100% traffic; Worker 162
+  (`d2146684-bd77-4a33-a2a2-8d47042e473e`) is the immediate rollback.
+- Worker 163 makes `immediate`, `daily` and `weekly` monitoring preferences
+  operational through the existing scheduler. It initializes legacy cursors
+  without replaying history, batches digest creation with cursor advance and
+  uses deterministic retry-safe IDs. Monitoring email remains visibly and
+  truthfully unavailable until it has a dedicated retry-safe outbox.
+- The first production cadence run initialized all four existing preference
+  cursors. A second completed run left the cursors and historical
+  legislation-monitor total/max unchanged at 222,329 /
+  `2026-08-28T06:40:50.995Z`. No notification was deleted or marked read.
+- Exact CI `33152530994` passed Worker 163 source `810432ea`: Website 2m41s and
+  Platform 6m58s. Full local gates passed rendered 35/35, core 1104/1104,
+  Cloudflare/infrastructure 202/202, lint, type-check and artifact validation.
+- The post-release six-host matrix plus `/api/status` returned 200.
+  Authenticated Chrome confirmed RU/UZ monitoring cadence and the original
+  Lawyer-host dashboard URL redirecting to the rendered app dashboard instead
+  of plaintext `Not Found`.
 - Platform Worker 162 (`d2146684-bd77-4a33-a2a2-8d47042e473e`), deployment
   `0c8ec9f3-cd7f-4a0c-9e99-e0b1d91fc998`, is at 100% traffic; Worker 161
   (`34c54357-0878-4637-b533-1fa1afa36336`) is the immediate rollback.

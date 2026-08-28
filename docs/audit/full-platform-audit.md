@@ -2,10 +2,11 @@
 
 **Audit date:** 2026-08-28
 **Branch:** `codex/investor-ready-ecosystem`
-**Current production checkpoint:** Worker 162
-`d2146684-bd77-4a33-a2a2-8d47042e473e`, deployment
-`0c8ec9f3-cd7f-4a0c-9e99-e0b1d91fc998`, 100% traffic; both public status APIs
-agreed on 8/8 operational at `2026-08-28T06:49:05.922Z`.
+**Current production checkpoint:** Worker 163
+`e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd`, deployment
+`dc3efbec-6909-4f56-80ef-0d964cdea027`, 100% traffic. Its six-host HTTPS
+matrix plus `/api/status` returned 200 after deployment; Worker 162 remains the
+immediate application rollback.
 
 ## Current production recovery
 
@@ -26,14 +27,27 @@ processed 40/40 entries with `changed=0`, `error=0`; the notification count did
 not grow. Authenticated Chrome shows `99+` with the accessible label `Более 99
 новых событий`. Historical rows and user read state were not deleted or edited.
 
+Worker 163 closes the follow-on cadence gap. Monitoring preferences now drive
+real `immediate`, `daily` or `weekly` delivery windows through the existing
+five-minute scheduler. Legacy null cursors initialize at a one-minute-safe
+cutoff without sending old events; due delivery creates the in-app digest and
+advances its cursor in one D1 batch with a deterministic digest ID. The first
+production run initialized all four existing daily/weekly cursors. A second
+completed run left every cursor and the 222,329 historical-notification count
+unchanged, proving the no-event path is idempotent. Monitoring email is still
+explicitly disabled in API and RU/UZ UI because there is no dedicated
+retry-safe email outbox; generic transactional-email capability is not treated
+as proof of monitoring email delivery.
+
 The original screenshot route is not part of the outage. A fresh raw probe
 returned private/no-store `307` from
 `lawyer.juro.uz/ru/individual/dashboard` to the exact app path, and isolated
 Chrome rendered the localized Client login instead of plaintext `Not Found`.
 No migration, manual D1 cleanup, DNS or Sites release was made. Sites v86
-remains live, saved v94 remains unpublished, and Worker 161 is the immediate
-application rollback. That rollback would reintroduce the notification fan-out
-defect, so it is reserved for a more severe Worker 162 regression.
+remains live, saved v94 remains unpublished, and Worker 162 is the immediate
+application rollback. That rollback preserves the stable monitoring
+fingerprint and bounded count but removes cadence-aware delivery, so any
+rollback requires scheduled-run and notification-growth verification.
 
 ## Executive outcome
 

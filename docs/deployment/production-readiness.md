@@ -4,6 +4,44 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Worker 163 monitoring cadence
+
+Commit `810432eac9c1159c4cbd60fddaab7c1c1131b655` makes the stored monitoring
+frequency operational. The existing five-minute scheduler dispatches
+`immediate` preferences after a successful daily Lex metadata check and applies
+one-day or seven-day intervals to `daily` and `weekly` preferences. A
+one-minute cutoff prevents a race with the metadata writer. New digests use
+deterministic IDs; notification creation and cursor advance are committed in
+one D1 batch. Legacy null cursors initialize at the cutoff without replaying
+historical events, and empty due windows advance safely.
+
+Monitoring email is deliberately unavailable: there is no dedicated
+retry-safe monitoring-email outbox. The API accepts only in-app delivery and
+the RU/UZ client disables the email option with an explicit explanation. This
+does not downgrade the separately configured transactional-email capability,
+but it avoids claiming a monitoring channel that is not end-to-end proven.
+
+Focused cadence tests passed 7/7. Full local release gates passed lint,
+type-check, the production build, artifact budgets, rendered Worker 35/35, core
+1104/1104 and Cloudflare/infrastructure 202/202. GitHub Actions CI
+`33152530994` passed exact source `810432ea`: Website 2m41s and Platform 6m58s.
+
+Worker 163 `e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd`, deployment
+`dc3efbec-6909-4f56-80ef-0d964cdea027`, receives 100% traffic. Its first
+production cadence run completed at `2026-08-28T07:55:58.100Z` and initialized
+all four existing daily/weekly cursors to `2026-08-28T07:54:51.699Z` without
+historical delivery. The repeat run completed at `08:01:53.188Z`; cursors did
+not move and the legislation-monitor total/max remained exactly 222,329 /
+`2026-08-28T06:40:50.995Z`. No notification was deleted or marked read.
+
+The post-release `juro`, `www`, `app`, `lawyer`, `admin`, `status` and
+`status/api/status` matrix returned 200. Authenticated Chrome confirmed the RU
+and UZ Monitoring cadence state and localized copy. It also confirmed that the
+original `lawyer.juro.uz/ru/individual/dashboard` screenshot URL redirects to
+and renders the exact app dashboard instead of plaintext `Not Found`. No
+migration, DNS or Sites release was made. Sites v86 remains live; saved v94
+remains unpublished. Worker 162 is the immediate application rollback.
+
 ## 2026-08-28 Worker 162 provider recovery and notification stability
 
 Commit `75064bee61909baa0e1a05dabdedc6268f86ed29` removes the unstable Lex RSS
