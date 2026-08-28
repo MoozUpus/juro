@@ -29,16 +29,17 @@
   and do not affect legal-answer freshness. User-upload factual grounding now
   has a separate private provider path; it does not promote owner material into
   global law or make a private document an official source.
-- Staging corpus acquisition is still in progress. The read-only snapshot at
-  2026-08-15 21:52 +05:00 had 418 canonical documents, 698 language variants,
-  10,272 unique current provisions and 27,535 current/indexed chunks. There were
-  771 completed jobs, 4,307 queued jobs, one running job at the sampled instant,
-  zero failed/dead-letter jobs and 13 preserved technically-unavailable failure
-  records representing four documents. Only 7/44 category/language checkpoints
-  passed the full
-  release formula. This is below the 1,500 / 22,000 release floors and is not
-  evidence that coverage is complete; exceeding the chunk minimum alone does
-  not satisfy the gate.
+- Staging corpus acquisition is intentionally stopped for the current release
+  evidence phase. The read-only federated runtime routes the frozen legacy,
+  v2, shard-1 and shard-2 bindings; shard-3 remains excluded because its
+  acquisition control row is still active. Per-database totals, queue
+  reconciliation, duplicate identity findings and the remaining release gates
+  are recorded in `STAGING_FEDERATED_RETRIEVAL_2026-08-28.md`. These totals are
+  not summed as a unique-corpus metric: cross-source overlap requires a formal
+  partition/deduplication manifest. The isolated shard-1 D1 export/restore now
+  has a verified local `quick_check=ok` and zero foreign-key violations, but
+  no federated snapshot, indexed 314-scenario benchmark or full-corpus Qdrant
+  evidence has been claimed.
 - The new source-card and full-article modal passed type-check, focused boundary
   tests and staging artifact/deployment checks. Authenticated desktop QA passed
   for the AI-chat light/dark empty state and caught one dark-history contrast
