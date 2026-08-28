@@ -133,3 +133,15 @@ The follow-up documentation commit `12cde692ab0fd3407a01e04cc33833f206abbe60`
 was then validated on its exact head: CI workflow `33148541687` and Qdrant
 snapshot/restore workflow `33148543880` both passed. The same release-gate
 limitations continue to apply.
+
+## Cross-source identity probe (2026-08-28T07:07Z)
+
+Read-only D1 queries enumerated canonical document IDs from the four runtime
+sources (8,304 IDs in total). The sets are not disjoint: 1,617 IDs occur in
+more than one database. Pairwise repeated-ID counts were: legacy/v2 460,
+legacy/shard-1 380, legacy/shard-2 312, v2/shard-1 491, v2/shard-2 374 and
+shard-1/shard-2 1,335. These observations are evidence against summing database
+counters as unique-corpus totals. Federated retrieval keeps source records
+separate and performs deterministic deduplication; no destructive cross-DB
+merge was performed. A formal federated release snapshot still requires an
+explicit partition/deduplication manifest and a verified snapshot restore.
