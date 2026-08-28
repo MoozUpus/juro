@@ -155,6 +155,8 @@ test("0081 cost admin boundary is administrator-only, fresh-MFA-gated and CSRF-p
   assert.match(page, /requirePlatformStaffAccess\(runtime\.DB, session, "staff\.operations\.manage", \{ now, freshMfaWithinMs: 15 \* 60 \* 1000 \}\)/);
   assert.match(page, /robots: \{ index: false, follow: false, nocache: true \}/);
   assert.match(client, /"x-juro-csrf": "1"/);
+  assert.match(client, /data\.measurement\.pricingCoverageBps/);
+  assert.match(client, /protectionMissingDetail/);
   assert.doesNotMatch(client, /dangerouslySetInnerHTML|transition:\s*all/);
   assert.match(migration, /ai_provider_usage_events_no_update/);
   assert.match(migration, /ai_provider_usage_events_no_delete/);
@@ -217,6 +219,100 @@ test("0081 price sources are provider-bound and dashboard reports unpriced calls
     assert.equal(dashboard.prices.length, 1);
     assert.equal(dashboard.daily.length, 1);
     assert.equal(dashboard.unpricedEvents, 1);
+    assert.deepEqual(dashboard.measurement, {
+      windowStart: now,
+      windowEnd: now,
+      firstEventAt: now,
+      lastEventAt: now,
+      successfulRequests: 1,
+      failedRequests: 0,
+      pricedSuccessfulRequests: 0,
+      unpricedSuccessfulRequests: 1,
+      pricingCoverageBps: 0,
+      estimatedCostMicrousd: 0,
+      costPerPricedSuccessMicrousd: null,
+      minimumPricedSuccessfulRequests: 30,
+      status: "incomplete_pricing",
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("0081 cost measurement becomes ready only after a complete priced sample", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    await createAiModelPriceVersion({
+      db: d1,
+      actorUserId: "cost-user",
+      now: new Date(now),
+      value: {
+        provider: "openai",
+        model: "text-embedding-3-large",
+        operation: "embeddings",
+        inputMicrousdPerMillionTokens: 130_000,
+        effectiveFrom: now,
+        sourceUrl: "https://openai.com/api/pricing/",
+      },
+    });
+    for (let index = 0; index < 29; index += 1) {
+      const completedAt = new Date(Date.parse(now) + index * 1_000).toISOString();
+      await recordProviderUsage({
+        db: d1,
+        environment: "production",
+        workspaceId: "cost-workspace",
+        userId: "cost-user",
+        feature: "document_search",
+        operation: "embeddings",
+        provider: "openai",
+        model: "text-embedding-3-large",
+        inputTokens: 1_000,
+        itemCount: 1,
+        dimensions: 1_536,
+        status: "succeeded",
+        startedAt: completedAt,
+        completedAt,
+        eventId: `usage-ready-${index}`,
+      });
+    }
+    const insufficient = await readAiCostDashboard({
+      db: d1,
+      environment: "production",
+      now: new Date(Date.parse(now) + 29_000),
+    });
+    assert.equal(insufficient.measurement.status, "insufficient_sample");
+    assert.equal(insufficient.measurement.pricedSuccessfulRequests, 29);
+    assert.equal(insufficient.measurement.pricingCoverageBps, 10_000);
+
+    const completedAt = new Date(Date.parse(now) + 30_000).toISOString();
+    await recordProviderUsage({
+      db: d1,
+      environment: "production",
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      feature: "document_search",
+      operation: "embeddings",
+      provider: "openai",
+      model: "text-embedding-3-large",
+      inputTokens: 1_000,
+      itemCount: 1,
+      dimensions: 1_536,
+      status: "succeeded",
+      startedAt: completedAt,
+      completedAt,
+      eventId: "usage-ready-29",
+    });
+    const ready = await readAiCostDashboard({
+      db: d1,
+      environment: "production",
+      now: new Date(Date.parse(now) + 31_000),
+    });
+    assert.equal(ready.measurement.status, "ready");
+    assert.equal(ready.measurement.pricedSuccessfulRequests, 30);
+    assert.equal(ready.measurement.unpricedSuccessfulRequests, 0);
+    assert.equal(ready.measurement.estimatedCostMicrousd, 3_900);
+    assert.equal(ready.measurement.costPerPricedSuccessMicrousd, 130);
   } finally {
     sqlite.close();
   }

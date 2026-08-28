@@ -23,6 +23,17 @@ const copy = {
     fresh: "Недавняя 2FA",
     refresh: "Обновить",
     unpriced: "Вызовы без цены",
+    measurement: "Готовность измерения",
+    coverage: "Покрытие ценами",
+    costPerSuccess: "Стоимость успешного вызова",
+    sample: "Сопоставимая выборка",
+    measurementNoData: "Нет данных после начала окна цен",
+    measurementIncomplete: "Есть успешные вызовы без цены",
+    measurementInsufficient: "Выборка ещё недостаточна",
+    measurementReady: "Выборка собрана",
+    measurementCaveat: "Готовая выборка позволяет сравнивать стоимость, но сама по себе не доказывает сохранение качества.",
+    protectionMissing: "Автозащита не настроена",
+    protectionMissingDetail: "Укажите согласованный дневной бюджет и порог ошибок — без политики circuit не откроется автоматически.",
     prices: "Версии цен",
     usage: "Дневное использование",
     addPrice: "Добавить версию цены",
@@ -68,6 +79,17 @@ const copy = {
     fresh: "Yaqindagi 2FA",
     refresh: "Yangilash",
     unpriced: "Narxsiz chaqiruvlar",
+    measurement: "O‘lchash tayyorligi",
+    coverage: "Narx bilan qamrov",
+    costPerSuccess: "Muvaffaqiyatli chaqiruv narxi",
+    sample: "Taqqoslanadigan namuna",
+    measurementNoData: "Narx oynasi boshlanganidan keyin ma’lumot yo‘q",
+    measurementIncomplete: "Narxsiz muvaffaqiyatli chaqiruvlar bor",
+    measurementInsufficient: "Namuna hali yetarli emas",
+    measurementReady: "Namuna yig‘ildi",
+    measurementCaveat: "Tayyor namuna xarajatni taqqoslashga imkon beradi, ammo sifat saqlanganini o‘zi isbotlamaydi.",
+    protectionMissing: "Avtohimoya sozlanmagan",
+    protectionMissingDetail: "Kelishilgan kunlik budjet va xato chegarasini kiriting — siyosatsiz circuit avtomatik ochilmaydi.",
     prices: "Narx versiyalari",
     usage: "Kunlik foydalanish",
     addPrice: "Narx versiyasini qo‘shish",
@@ -214,6 +236,13 @@ export function CostConsole({
   }
 
   const currentPolicy = (provider: Provider) => data.policies.find((policy) => policy.provider === provider);
+  const measurementStatus = {
+    no_data: t.measurementNoData,
+    incomplete_pricing: t.measurementIncomplete,
+    insufficient_sample: t.measurementInsufficient,
+    ready: t.measurementReady,
+  }[data.measurement.status];
+  const coverage = `${(data.measurement.pricingCoverageBps / 100).toFixed(2)}%`;
 
   return <div className="staff-console cost-console" aria-busy={busy}>
     <header className="staff-topbar">
@@ -225,7 +254,19 @@ export function CostConsole({
         <div><p>{t.eyebrow}</p><h1>{t.title}</h1></div>
         <button type="button" onClick={() => void refresh()} disabled={busy}><RefreshCw aria-hidden="true"/>{t.refresh}</button>
       </section>
-      <div className="cost-summary" role="status"><BarChart3 aria-hidden="true"/><span>{t.unpriced}</span><b>{data.unpricedEvents}</b></div>
+      <section className={`cost-measurement cost-measurement--${data.measurement.status}`} aria-labelledby="cost-measurement-title">
+        <div className="cost-measurement-heading">
+          <div><BarChart3 aria-hidden="true"/><h2 id="cost-measurement-title">{t.measurement}</h2></div>
+          <strong>{measurementStatus}</strong>
+        </div>
+        <div className="cost-summary-grid" role="status">
+          <div className="cost-summary"><span>{t.coverage}</span><b>{coverage}</b></div>
+          <div className="cost-summary"><span>{t.costPerSuccess}</span><b>{data.measurement.costPerPricedSuccessMicrousd === null ? "—" : usd(data.measurement.costPerPricedSuccessMicrousd)}</b></div>
+          <div className="cost-summary"><span>{t.sample}</span><b>{data.measurement.pricedSuccessfulRequests}/{data.measurement.minimumPricedSuccessfulRequests}</b></div>
+          <div className="cost-summary"><span>{t.unpriced}</span><b>{data.measurement.unpricedSuccessfulRequests}</b></div>
+        </div>
+        <p>{t.measurementCaveat}</p>
+      </section>
       {error && <p className="staff-error" role="alert">{error}</p>}
       {notice && <p className="cost-success" role="status">{notice}</p>}
 
@@ -234,9 +275,9 @@ export function CostConsole({
         <div className="cost-circuit-grid">
           {data.circuits.map((circuit) => {
             const policy = currentPolicy(circuit.provider);
-            return <article className={`cost-circuit cost-circuit--${circuit.state}`} key={circuit.provider}>
-              <div><strong>{circuit.provider === "openai" ? "OpenAI" : "Anthropic"}</strong><span>{circuit.state === "open" ? t.open : t.closed}</span></div>
-              <p>{t.latestPolicy}: {policy ? `${usd(policy.dailyCostLimitMicrousd)} · ${policy.rollingFailureLimit}/${policy.rollingWindowMinutes}m` : "—"}</p>
+            return <article className={`cost-circuit cost-circuit--${policy ? circuit.state : "unconfigured"}`} key={circuit.provider}>
+              <div><strong>{circuit.provider === "openai" ? "OpenAI" : "Anthropic"}</strong><span>{policy ? (circuit.state === "open" ? t.open : t.closed) : t.protectionMissing}</span></div>
+              <p>{policy ? `${t.latestPolicy}: ${usd(policy.dailyCostLimitMicrousd)} · ${policy.rollingFailureLimit}/${policy.rollingWindowMinutes}m` : t.protectionMissingDetail}</p>
               <button
                 type="button"
                 disabled={busy}

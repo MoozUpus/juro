@@ -36,6 +36,27 @@ This is a reconstructed cost baseline, not a provider invoice. Failed requests
 with zero recorded tokens contribute no estimated token cost, which may understate
 billed work if a provider charged tokens before failure.
 
+## Measurement readiness
+
+The protected Admin cost console evaluates the rolling window that begins no
+earlier than the first effective price version. It reports successful and failed
+requests, price coverage, estimated cost per priced success and progress toward
+a minimum sample of 30 priced successful calls. The state is fail-honest:
+
+- `no_data` when the measurement window has no calls;
+- `incomplete_pricing` when any successful call has no effective price;
+- `insufficient_sample` until 30 fully priced successes exist;
+- `ready` only after the sample threshold is met with no unpriced success.
+
+`ready` means only that a cost sample can be compared. It does not prove the
+target 30% reduction or preservation of answer quality; that decision still
+requires matched routing/quality evidence under the model-evaluation scorecard.
+
+The production snapshot on 2026-08-28 after the current prices became effective
+contained four priced successes, two zero-token failures, zero unpriced
+successes and `$0.104549` estimated cost. Coverage was 100%, but the sample was
+only 4/30, so the reduction target remains `UNVERIFIED`.
+
 ## Controls and alerts
 
 - Preserve per-request token dimensions, provider/model/operation, result, and
@@ -48,3 +69,9 @@ billed work if a provider charged tokens before failure.
 - Treat caching as a measured optimization, never as an assumed discount.
 - Review official pricing before each production release and create a new
   effective-dated version when it changes.
+
+Production currently has no effective provider cost-guard policy. The Admin
+console must show this as **not configured**, never as a closed/healthy automatic
+circuit. An operator must approve the daily provider budget and rolling failure
+threshold before creating an immutable production policy; no arbitrary threshold
+is inferred from historical spend.

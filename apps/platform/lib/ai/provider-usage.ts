@@ -75,10 +75,35 @@ export type AiCostDailyView = {
   unpricedRequestCount: number;
 };
 
+export const AI_COST_MINIMUM_PRICED_SUCCESS_SAMPLE = 30;
+
+export type AiCostMeasurementStatus =
+  | "no_data"
+  | "incomplete_pricing"
+  | "insufficient_sample"
+  | "ready";
+
+export type AiCostMeasurementView = {
+  windowStart: string;
+  windowEnd: string;
+  firstEventAt: string | null;
+  lastEventAt: string | null;
+  successfulRequests: number;
+  failedRequests: number;
+  pricedSuccessfulRequests: number;
+  unpricedSuccessfulRequests: number;
+  pricingCoverageBps: number;
+  estimatedCostMicrousd: number;
+  costPerPricedSuccessMicrousd: number | null;
+  minimumPricedSuccessfulRequests: number;
+  status: AiCostMeasurementStatus;
+};
+
 export type AiCostDashboard = {
   prices: AiModelPriceView[];
   daily: AiCostDailyView[];
   unpricedEvents: number;
+  measurement: AiCostMeasurementView;
 } & ProviderCostControlDashboard;
 
 export class ProviderUsageError extends Error {
@@ -380,7 +405,9 @@ export async function readAiCostDashboard(input: {
   const days = Math.min(Math.max(input.days ?? 30, 1), 93);
   const now = input.now ?? new Date();
   const cutoff = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const [prices, daily, unpriced, control] = await Promise.all([
+  const cutoffTimestamp = `${cutoff}T00:00:00.000Z`;
+  const windowEnd = now.toISOString();
+  const [prices, daily, unpriced, measurementRow, control] = await Promise.all([
     input.db.prepare(
       `SELECT id,provider,model,operation,
         input_microusd_per_million_tokens AS inputMicrousdPerMillionTokens,
@@ -405,12 +432,71 @@ export async function readAiCostDashboard(input: {
       `SELECT count(*) AS count FROM ai_provider_usage_events
        WHERE environment=? AND status='succeeded' AND price_version_id IS NULL`,
     ).bind(input.environment).first<{ count: number }>(),
+    input.db.prepare(
+      `WITH boundary AS (
+         SELECT CASE
+           WHEN min(effective_from) IS NULL OR min(effective_from)<? THEN ?
+           ELSE min(effective_from)
+         END AS windowStart
+         FROM ai_model_price_versions
+       )
+       SELECT boundary.windowStart AS windowStart,
+        min(events.created_at) AS firstEventAt,max(events.created_at) AS lastEventAt,
+        COALESCE(sum(CASE WHEN events.status='succeeded' THEN 1 ELSE 0 END),0) AS successfulRequests,
+        COALESCE(sum(CASE WHEN events.status='failed' THEN 1 ELSE 0 END),0) AS failedRequests,
+        COALESCE(sum(CASE WHEN events.status='succeeded' AND events.price_version_id IS NOT NULL THEN 1 ELSE 0 END),0) AS pricedSuccessfulRequests,
+        COALESCE(sum(CASE WHEN events.status='succeeded' AND events.price_version_id IS NULL THEN 1 ELSE 0 END),0) AS unpricedSuccessfulRequests,
+        COALESCE(sum(CASE WHEN events.status='succeeded' AND events.price_version_id IS NOT NULL THEN events.estimated_cost_microusd ELSE 0 END),0) AS estimatedCostMicrousd
+       FROM boundary
+       LEFT JOIN ai_provider_usage_events AS events
+        ON events.environment=? AND events.created_at>=boundary.windowStart AND events.created_at<=?`,
+    ).bind(cutoffTimestamp, cutoffTimestamp, input.environment, windowEnd).first<{
+      windowStart: string;
+      firstEventAt: string | null;
+      lastEventAt: string | null;
+      successfulRequests: number;
+      failedRequests: number;
+      pricedSuccessfulRequests: number;
+      unpricedSuccessfulRequests: number;
+      estimatedCostMicrousd: number;
+    }>(),
     readProviderCostControlDashboard({ db: input.db, environment: input.environment }),
   ]);
+  const successfulRequests = Number(measurementRow?.successfulRequests ?? 0);
+  const failedRequests = Number(measurementRow?.failedRequests ?? 0);
+  const pricedSuccessfulRequests = Number(measurementRow?.pricedSuccessfulRequests ?? 0);
+  const unpricedSuccessfulRequests = Number(measurementRow?.unpricedSuccessfulRequests ?? 0);
+  const estimatedCostMicrousd = Number(measurementRow?.estimatedCostMicrousd ?? 0);
+  const status: AiCostMeasurementStatus = successfulRequests + failedRequests === 0
+    ? "no_data"
+    : unpricedSuccessfulRequests > 0
+      ? "incomplete_pricing"
+      : pricedSuccessfulRequests < AI_COST_MINIMUM_PRICED_SUCCESS_SAMPLE
+        ? "insufficient_sample"
+        : "ready";
   return {
     prices: prices.results,
     daily: daily.results,
     unpricedEvents: Number(unpriced?.count ?? 0),
+    measurement: {
+      windowStart: measurementRow?.windowStart ?? cutoffTimestamp,
+      windowEnd,
+      firstEventAt: measurementRow?.firstEventAt ?? null,
+      lastEventAt: measurementRow?.lastEventAt ?? null,
+      successfulRequests,
+      failedRequests,
+      pricedSuccessfulRequests,
+      unpricedSuccessfulRequests,
+      pricingCoverageBps: successfulRequests > 0
+        ? Math.floor(pricedSuccessfulRequests * 10_000 / successfulRequests)
+        : 0,
+      estimatedCostMicrousd,
+      costPerPricedSuccessMicrousd: pricedSuccessfulRequests > 0
+        ? Math.round(estimatedCostMicrousd / pricedSuccessfulRequests)
+        : null,
+      minimumPricedSuccessfulRequests: AI_COST_MINIMUM_PRICED_SUCCESS_SAMPLE,
+      status,
+    },
     ...control,
   };
 }
