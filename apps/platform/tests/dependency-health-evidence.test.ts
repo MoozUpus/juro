@@ -77,6 +77,16 @@ test("dependency evidence classifies provider configuration/auth failures withou
     state: "outage",
     safeErrorCode: "PROBE_AUTH_ERROR",
   });
+  assert.deepEqual(providerFailureEvidence("anthropic", "PROBE_PROVIDER_HTTP_400_INVALID_REQUEST_ERROR"), {
+    key: "anthropic",
+    state: "degraded",
+    safeErrorCode: "PROBE_HTTP_ERROR",
+  });
+  assert.deepEqual(providerFailureEvidence("anthropic", "PROBE_PROVIDER_NETWORK_ERROR"), {
+    key: "anthropic",
+    state: "degraded",
+    safeErrorCode: "PROBE_NETWORK_ERROR",
+  });
   assert.equal(dependencyHealthLatencyMs(0, 120_000), 60_000);
 });
 

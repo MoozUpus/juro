@@ -206,5 +206,11 @@ export function providerFailureEvidence(
   if (normalized.includes("TIMEOUT")) {
     return { key, state: "degraded", safeErrorCode: "PROVIDER_TIMEOUT" };
   }
+  if (/HTTP_4\d\d/u.test(normalized)) {
+    return { key, state: "degraded", safeErrorCode: "PROBE_HTTP_ERROR" };
+  }
+  if (normalized.includes("NETWORK")) {
+    return { key, state: "degraded", safeErrorCode: "PROBE_NETWORK_ERROR" };
+  }
   return { key, state: "degraded", safeErrorCode: "PROVIDER_UNAVAILABLE" };
 }

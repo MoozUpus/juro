@@ -277,12 +277,24 @@ function providerRequest() {
   };
 }
 
-function safeProviderCode(error: unknown): string {
-  if (typeof error === "object" && error !== null && "code" in error) {
-    const code = (error as { code?: unknown }).code;
+export function productionProviderFailureCode(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    const status = "providerStatus" in error
+      ? (error as { providerStatus?: unknown }).providerStatus
+      : null;
+    const type = "providerErrorType" in error
+      ? (error as { providerErrorType?: unknown }).providerErrorType
+      : null;
+    if (typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 599) {
+      const safeType = typeof type === "string" && /^[a-zA-Z0-9_.-]{3,48}$/u.test(type)
+        ? `_${type.toUpperCase().replace(/[^A-Z0-9]+/gu, "_")}`
+        : "";
+      return `PROBE_PROVIDER_HTTP_${status}${safeType}`.slice(0, 64);
+    }
+    const code = "code" in error ? (error as { code?: unknown }).code : null;
     if (typeof code === "string" && /^[A-Z0-9_]{3,64}$/u.test(code)) return code;
   }
-  return "PROVIDER_UNAVAILABLE";
+  return error instanceof TypeError ? "PROBE_PROVIDER_NETWORK_ERROR" : "PROVIDER_UNAVAILABLE";
 }
 
 async function defaultOpenAiProbe(): Promise<ProviderProbeResult> {
@@ -328,8 +340,14 @@ async function runOneProviderProbe(
     await recordOperational(env, provider, startedAt);
     return "succeeded";
   } catch (error) {
+    const safeCode = productionProviderFailureCode(error);
+    console.error(JSON.stringify({
+      event: "production_dependency_probe.provider_failed",
+      provider,
+      safeCode,
+    }));
     await recordDependencyHealthEvidence(env, {
-      ...providerFailureEvidence(provider, safeProviderCode(error)),
+      ...providerFailureEvidence(provider, safeCode),
       evidenceKind: "synthetic_probe",
       startedAt,
     });

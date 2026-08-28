@@ -6,6 +6,7 @@ import { recordDependencyHealthEvidence } from "../worker/dependency-health-evid
 import type { PlatformJobEnv } from "../worker/platform-jobs";
 import {
   PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS,
+  productionProviderFailureCode,
   productionDependencyProbesEnabled,
   runProductionDependencyProbes,
 } from "../worker/production-dependency-probes";
@@ -174,6 +175,55 @@ test("provider probes publish operational evidence only for exact non-fallback r
       { dependencyKey: "anthropic", state: "operational", evidenceKind: "synthetic_probe" },
       { dependencyKey: "openai", state: "operational", evidenceKind: "synthetic_probe" },
     ]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("provider probe failures retain only bounded HTTP diagnostics", async () => {
+  assert.equal(productionProviderFailureCode({
+    code: "PROVIDER_UNAVAILABLE",
+    providerStatus: 401,
+    providerErrorType: "authentication_error",
+    message: "must not be persisted or logged",
+  }), "PROBE_PROVIDER_HTTP_401_AUTHENTICATION_ERROR");
+  assert.equal(productionProviderFailureCode(new TypeError("secret transport detail")), "PROBE_PROVIDER_NETWORK_ERROR");
+
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const env = probeEnv(d1);
+    await seedOperational(env, ["anthropic"]);
+    const originalConsoleError = console.error;
+    const errors: string[] = [];
+    console.error = (...values: unknown[]) => { errors.push(values.join(" ")); };
+    let summary;
+    try {
+      summary = await runProductionDependencyProbes(env, {
+        anthropic: async () => {
+          throw {
+            code: "PROVIDER_UNAVAILABLE",
+            providerStatus: 401,
+            providerErrorType: "authentication_error",
+            message: "must not be persisted or logged",
+          };
+        },
+      });
+    } finally {
+      console.error = originalConsoleError;
+    }
+    assert.equal(summary?.anthropic, "failed");
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='anthropic'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "outage",
+      safeErrorCode: "PROBE_AUTH_ERROR",
+    });
+    assert.deepEqual(JSON.parse(errors[0]), {
+      event: "production_dependency_probe.provider_failed",
+      provider: "anthropic",
+      safeCode: "PROBE_PROVIDER_HTTP_401_AUTHENTICATION_ERROR",
+    });
+    assert.doesNotMatch(errors.join("\n"), /must not be persisted or logged/u);
   } finally {
     sqlite.close();
   }
