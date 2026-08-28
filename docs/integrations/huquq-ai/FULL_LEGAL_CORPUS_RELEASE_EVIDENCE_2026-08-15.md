@@ -13313,3 +13313,17 @@ an artifact: one ended with `FETCH_FAILED`, and the next with Cloudflare's
 data was mutated. The complete result is recorded in
 `STAGING_D1_V2_EXPORT_PROBE_2026-08-28.json`; the v2 full backup/restore gate
 remains unproven.
+
+## Dense-index coverage probe after acquisition stop (2026-08-28, 14:44Z)
+
+Sequential read-only queries against the four sources used by the staging
+all-source retrieval path found `3,886,748` chunks and the same number with
+`indexed_at`, but `0` rows with a `dense_vector_id`. The per-source counts
+were: legacy `1,211,479`, v2 `1,308,850`, shard 1 `369,081`, and shard 2
+`997,338`. Each query reported zero writes and `changed_db=false`.
+
+This is a coverage probe, not a benchmark: the dense feature flag remains
+disabled and there is no current full-corpus Qdrant collection to evaluate or
+restore. The full-corpus Qdrant and indexed-evaluation gates therefore remain
+open. Machine-readable evidence is in
+`STAGING_DENSE_INDEX_PROBE_2026-08-28.json`.

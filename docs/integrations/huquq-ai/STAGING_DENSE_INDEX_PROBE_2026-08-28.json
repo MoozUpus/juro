@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-08-28T14:44:55.5721693Z",
+  "readOnly": true,
+  "query": "SELECT COUNT(*) and dense_vector_id/indexed_at coverage from legal_corpus_chunks",
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "chunkCount": 1211479,
+      "denseVectorCount": 0,
+      "indexedCount": 1211479,
+      "rowsWritten": 0,
+      "changedDatabase": false,
+      "querySucceeded": true
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "chunkCount": 1308850,
+      "denseVectorCount": 0,
+      "indexedCount": 1308850,
+      "rowsWritten": 0,
+      "changedDatabase": false,
+      "querySucceeded": true
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "chunkCount": 369081,
+      "denseVectorCount": 0,
+      "indexedCount": 369081,
+      "rowsWritten": 0,
+      "changedDatabase": false,
+      "querySucceeded": true
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "chunkCount": 997338,
+      "denseVectorCount": 0,
+      "indexedCount": 997338,
+      "rowsWritten": 0,
+      "changedDatabase": false,
+      "querySucceeded": true
+    }
+  ],
+  "totals": {
+    "chunkCount": 3886748,
+    "denseVectorCount": 0,
+    "indexedCount": 3886748
+  },
+  "fullCorpusQdrant": {
+    "status": "unproven",
+    "reason": "All four D1 sources report zero dense_vector_id values; LEGAL_CORPUS_DENSE_ENABLED remains false and no full-corpus Qdrant collection has been benchmarked."
+  },
+  "remoteDataMutated": false,
+  "legalTextIncluded": false,
+  "userDataIncluded": false,
+  "secretsIncluded": false,
+  "releaseGate": "open"
+}
