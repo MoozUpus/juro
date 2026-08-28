@@ -172,9 +172,16 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
       if (this.env.LEGAL_CORPUS_EMBEDDING_SERVICE) {
         // AbortSignal is not transferable across Worker service bindings in
         // every runtime. Keep the bounded timeout locally while forwarding a
-        // signal-free URL + init request to the private relay.
-        const serviceInit = { ...init };
-        delete serviceInit.signal;
+        // minimal URL + init request to the private relay. Redirect handling
+        // is intentionally local; the private relay uses a fixed upstream.
+        const serviceInit: RequestInit = {
+          method: init.method,
+          headers: init.headers,
+          ...(init.body !== undefined && init.body !== null ? { body: init.body } : {}),
+        };
+        if (init.body instanceof ReadableStream) {
+          (serviceInit as RequestInit & { duplex?: "half" }).duplex = "half";
+        }
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           response = await Promise.race([
