@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-08-28T08:05:00.000Z",
+  "pointInTime": "2026-08-28T05:50:00.000Z",
+  "source": "wrangler d1 time-travel info",
+  "readOnly": true,
+  "databases": [
+    {
+      "databaseName": "juro-staging",
+      "databaseId": "bb716a96-b2fb-4823-90d6-6c228fed181a",
+      "bookmark": "00001c4a-00000002-000050d5-bc5324990142765cad94464a528319e1"
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "databaseId": "62620fb3-3da3-4c76-a8e9-aa60858c1063",
+      "bookmark": "000002e0-00000002-000050d5-ae92977274ec05539a97724ae8bf94c0"
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "databaseId": "e09e0682-0c2e-4458-a8f3-be9de28117e3",
+      "bookmark": "00000072-0000000a-000050d5-1e1734bfeea8fcdb34839b9b2f08e68e"
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "databaseId": "36fa1cfe-6d00-47b7-a980-864020028d86",
+      "bookmark": "0000005d-00000006-000050d5-e21d8d05804918b2b73be0290aa4df15"
+    }
+  ],
+  "limitations": [
+    "A Time Travel bookmark is a point-in-time locator, not a D1 export or restore verification.",
+    "No quick_check, foreign_key_check, row-count parity, or Qdrant binding is claimed by this probe.",
+    "The historical legacy/v2 queue backlog and cross-source duplicate IDs remain unchanged."
+  ]
+}
