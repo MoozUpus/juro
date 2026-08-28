@@ -13302,3 +13302,14 @@ areas); the scenario and instruction hashes are recorded in
 `STAGING_EVALUATION_PREP_2026-08-28.json`. This closes packet-integrity
 preparation only. The indexed evaluation remains unproven until a current
 disjoint federated snapshot and full-corpus Qdrant index are available.
+
+## v2 D1 full-export probe after acquisition stop (2026-08-28)
+
+A bounded read-only export of `legal_corpus_documents` succeeded (739,560
+bytes), confirming that the Wrangler/D1 channel is reachable; its temporary
+file was removed. Two sequential full-database export attempts did not produce
+an artifact: one ended with `FETCH_FAILED`, and the next with Cloudflare's
+`NOT_CURRENTLY_EXPORTING_ANYTHING`. No restore was attempted and no remote
+data was mutated. The complete result is recorded in
+`STAGING_D1_V2_EXPORT_PROBE_2026-08-28.json`; the v2 full backup/restore gate
+remains unproven.

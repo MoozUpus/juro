@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-08-28T14:29:46.2681468Z",
+  "databaseName": "juro-staging-corpus-v2",
+  "databaseId": "62620fb3-3da3-4c76-a8e9-aa60858c1063",
+  "readOnlySource": true,
+  "scopedDiagnostic": {
+    "table": "legal_corpus_documents",
+    "outcome": "success",
+    "exportBytes": 739560,
+    "localFileRemoved": true
+  },
+  "fullExportAttempts": [
+    {
+      "outcome": "network_failure",
+      "errorCode": "FETCH_FAILED",
+      "restoreAttempted": false,
+      "localFileCreated": false
+    },
+    {
+      "outcome": "cloudflare_export_unavailable",
+      "errorCode": "NOT_CURRENTLY_EXPORTING_ANYTHING",
+      "restoreAttempted": false,
+      "localFileCreated": false
+    }
+  ],
+  "remoteDataMutated": false,
+  "releaseGate": "unproven",
+  "note": "The scoped export proves the D1 channel can serve a bounded read-only export; it does not prove full-database backup or restore integrity."
+}
