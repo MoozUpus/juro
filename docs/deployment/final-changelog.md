@@ -2,6 +2,25 @@
 
 ## Shipped to production
 
+- Platform Worker 165 (`a75c0337-da48-49fd-8adf-6a721fb24088`), deployment
+  `ee0465b5-fb83-4ebb-87a5-3b40b0be7f83`, is at 100% traffic; Worker 164 is
+  the immediate rollback.
+- Worker 165 adds an Admin-only AI cost measurement gate: pricing coverage,
+  priced-sample progress, estimated cost per successful call and fail-honest
+  readiness states. Missing automatic cost-guard policies are now explicitly
+  shown as not configured instead of appearing healthy.
+- Production currently has 4/4 priced successes, two zero-token failures,
+  `$0.104549` estimated cost and a 4/30 sample. The 30% reduction target remains
+  `UNVERIFIED`; no arbitrary production budget threshold was created.
+- Exact CI `33169181945` passed commit `6af3cff4`: Website 1m46s and Platform
+  8m57s. Local gates passed focused 4/4, core 1106/1106,
+  Cloudflare/infrastructure 203/203, lint, type-check and production artifact
+  validation.
+- Post-release assets and seven HTTP boundaries passed. Isolated Chrome reached
+  the protected Admin re-auth surface with no warning/error logs. Public health
+  was 8/8 operational with no incident; Anthropic retained fresh operational
+  probe evidence. No migration, DNS or Sites change was made; Sites v86 remains
+  live.
 - Platform Worker 164 (`3ba45422-86e9-4502-8ad2-8468bec57a78`), deployment
   `46613e55-f973-4199-a825-e2c576ac63e1`, is at 100% traffic; Worker 163
   (`e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd`) is the immediate rollback.

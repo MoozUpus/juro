@@ -4,6 +4,46 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Worker 165 AI cost measurement readiness
+
+Commit `6af3cff4572f83e8f31b40858b5708a6b510f27e` adds a protected,
+content-free measurement gate to the Admin cost console. The rolling window
+starts no earlier than the first effective price version and reports pricing
+coverage, priced successes, estimated cost per priced success and progress
+toward a minimum 30-call sample. It returns `no_data`,
+`incomplete_pricing`, `insufficient_sample` or `ready`; even `ready` is
+explicitly not proof that answer quality was preserved. A provider without an
+effective cost-guard policy is now shown as **not configured** instead of
+looking like a healthy closed automatic circuit. No budget threshold was
+invented.
+
+Focused cost tests passed 4/4. Full local gates passed core 1106/1106,
+Cloudflare/infrastructure 203/203, lint, type-check and production artifact
+validation. Emitted CSS remained inside the artifact budget at 594.6 KiB of
+600.0 KiB. Exact CI `33169181945` passed Website in 1m46s and Platform in
+8m57s.
+
+Worker 165 `a75c0337-da48-49fd-8adf-6a721fb24088`, deployment
+`ee0465b5-fb83-4ebb-87a5-3b40b0be7f83`, receives 100% traffic. Production
+assets returned 200 and contained the measurement and unconfigured-policy
+contracts. The seven-route HTTP matrix returned the expected public 200s and
+private redirects. Isolated Chrome reached the protected Admin re-auth page
+with one H1/main and no console warnings or errors; no privileged session or
+MFA was fabricated.
+
+The production measurement window begins at
+`2026-08-25T07:44:49.444Z`: four successes are priced, zero successes are
+unpriced, two zero-token failures are retained and estimated cost is
+`$0.104549`. Coverage is 100%, but 4/30 is insufficient; the target 30% cost
+reduction remains `UNVERIFIED`. Production still has zero effective cost-guard
+policies, now surfaced truthfully for operator action. Anthropic's latest
+content-free probe was operational at `2026-08-28T12:01:44.053Z` with no safe
+error code. Public status generated at `2026-08-28T12:13:55.505Z` was 8/8
+operational with zero incidents.
+
+No D1 migration, data mutation, DNS or Sites release was made. Sites v86
+remains live and Worker 164 is the immediate application rollback.
+
 ## 2026-08-28 Worker 164 monitoring email delivery
 
 Commits `1a71ff9833878fba68958a708fb8bc227fd0a552` and
@@ -302,13 +342,13 @@ conformance result.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest platform runtime commit | `52f579ca346c170fc31c4ce7125306d4074d117b` |
-| Latest platform source candidate | `52f579ca346c170fc31c4ce7125306d4074d117b`; deployed |
+| Latest platform runtime commit | `6af3cff4572f83e8f31b40858b5708a6b510f27e` |
+| Latest platform source candidate | `6af3cff4572f83e8f31b40858b5708a6b510f27e`; deployed |
 | Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current Platform CI `33164955029` on `52f579ca` passed Website in 2m09s and Platform in 8m53s |
-| Production Worker | `juro` version `3ba45422-86e9-4502-8ad2-8468bec57a78` (version 164), deployment `46613e55-f973-4199-a825-e2c576ac63e1`, 100% traffic |
-| Immediate application rollback | `e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd` (version 163), deployment `dc3efbec-6909-4f56-80ef-0d964cdea027` |
+| GitHub Actions | Current Platform CI `33169181945` on `6af3cff4` passed Website in 1m46s and Platform in 8m57s |
+| Production Worker | `juro` version `a75c0337-da48-49fd-8adf-6a721fb24088` (version 165), deployment `ee0465b5-fb83-4ebb-87a5-3b40b0be7f83`, 100% traffic |
+| Immediate application rollback | `3ba45422-86e9-4502-8ad2-8468bec57a78` (version 164), deployment `46613e55-f973-4199-a825-e2c576ac63e1` |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Saved public Sites candidate | Version 94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
@@ -480,10 +520,12 @@ verification directory were then deleted; `Test-Path` returned false and exact
 parent-directory match counts were zero for both. Private R2 remains the
 recovery source.
 
-No successful production provider event exists after the effective timestamp
-at this checkpoint. This means the prices are configured, not that current AI
-cost is proven to be zero. Historical unpriced append-only events remain
-historical evidence.
+Four successful production provider events exist after the effective timestamp
+at the Worker 165 checkpoint. All four are priced, two zero-token failures are
+retained, and the estimated priced cost is `$0.104549`. This 4/30 sample is
+insufficient to verify the target reduction or preserved quality. Historical
+unpriced append-only events remain historical evidence outside the current
+measurement window.
 
 ## Post-migration verification
 

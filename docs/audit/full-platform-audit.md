@@ -2,11 +2,11 @@
 
 **Audit date:** 2026-08-28
 **Branch:** `codex/investor-ready-ecosystem`
-**Current production checkpoint:** Worker 163
-`e7c8ec49-bba6-4abd-ac00-89bfd1cd4acd`, deployment
-`dc3efbec-6909-4f56-80ef-0d964cdea027`, 100% traffic. Its six-host HTTPS
-matrix plus `/api/status` returned 200 after deployment; Worker 162 remains the
-immediate application rollback.
+**Current production checkpoint:** Worker 165
+`a75c0337-da48-49fd-8adf-6a721fb24088`, deployment
+`ee0465b5-fb83-4ebb-87a5-3b40b0be7f83`, 100% traffic. Its seven-route HTTP
+matrix plus production assets and `/api/status` passed after deployment;
+Worker 164 is the immediate application rollback.
 
 ## Current production recovery
 
@@ -34,20 +34,29 @@ cutoff without sending old events; due delivery creates the in-app digest and
 advances its cursor in one D1 batch with a deterministic digest ID. The first
 production run initialized all four existing daily/weekly cursors. A second
 completed run left every cursor and the 222,329 historical-notification count
-unchanged, proving the no-event path is idempotent. Monitoring email is still
-explicitly disabled in API and RU/UZ UI because there is no dedicated
-retry-safe email outbox; generic transactional-email capability is not treated
-as proof of monitoring email delivery.
+unchanged, proving the no-event path is idempotent. Worker 164 then added a
+dedicated, identifiers-only monitoring-email job/outbox with delivery-time
+identity, membership, preference and source checks. Migration 0160 and two
+post-release scheduler windows passed without historical replay or a forced
+customer email.
+
+Worker 165 adds the Admin-only AI cost measurement gate and makes missing
+automatic cost-guard policies explicit. The current post-price window contains
+four priced successes, zero unpriced successes, two zero-token failures and
+`$0.104549` estimated cost. Pricing coverage is 100%, but the sample is only
+4/30; the target 30% reduction remains `UNVERIFIED`. No arbitrary production
+budget threshold was created. Anthropic's latest content-free probe remained
+operational after the balance restoration.
 
 The original screenshot route is not part of the outage. A fresh raw probe
 returned private/no-store `307` from
 `lawyer.juro.uz/ru/individual/dashboard` to the exact app path, and isolated
 Chrome rendered the localized Client login instead of plaintext `Not Found`.
-No migration, manual D1 cleanup, DNS or Sites release was made. Sites v86
-remains live, saved v94 remains unpublished, and Worker 162 is the immediate
-application rollback. That rollback preserves the stable monitoring
-fingerprint and bounded count but removes cadence-aware delivery, so any
-rollback requires scheduled-run and notification-growth verification.
+No migration, D1 mutation, DNS or Sites release was made for Worker 165. Sites
+v86 remains live, saved v94 remains unpublished, and Worker 164 is the
+immediate application rollback. That rollback preserves monitoring cadence and
+email delivery but removes the cost measurement readiness UI and the explicit
+unconfigured-policy warning.
 
 ## Executive outcome
 
@@ -94,7 +103,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | Document/case/lawyer workflows | PASS from prior authenticated release evidence; PARTIAL for this delta | The analytics delta is covered by server-side success-boundary tests. Fresh in-app browser checks proved guest, Client login, dedicated Lawyer login, Admin re-auth and status boundaries; no new OTP-authenticated mutable workflow was submitted for this delta. |
 | Payments | DEMO / NOT APPROVED | Production approval flag false; no live-payment claim. |
 | Product analytics | DEPLOYED | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. No conversion baseline is invented before an observation window exists. |
-| AI costs | ACTIVE CONFIGURATION | Four official, effective-dated production price rows passed pre/post D1 export, isolated restore, FK, private R2 and SHA-256 readback gates. No post-effective AI event exists yet, so no measured runtime cost baseline is claimed. |
+| AI costs | ACTIVE MEASUREMENT / INSUFFICIENT SAMPLE | Four official, effective-dated production price rows passed backup/restore gates. The protected console now reports 100% current price coverage, `$0.104549` estimated cost and 4/30 priced successes; it refuses to call the sample ready and explicitly shows that production cost-guard policies are not configured. The 30% reduction target remains `UNVERIFIED`. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
 | Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Worker 156 closes the confirmed Client comparison target defect; Worker 157 extends the 44 px contract to confirmed Lawyer professional controls; Worker 158 extends it to confirmed non-corpus Admin retry, Knowledge Base and cost-checkbox controls. The exact production CSS contains both role-specific contracts. Lawyer/Admin anonymous boundaries remain fail-closed and their re-authentication surfaces have one H1/main and no overflow, but no signed-in Lawyer/Admin, real OTP/MFA error, screen reader or physical mobile device was used. Protected authenticated rendering, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
 | Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Anthropic and document analysis recovered to operational after API credit restoration. Overdue infrastructure billing and unavailable real CWV tracing remain explicit risks. |
@@ -116,6 +125,14 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 
 ## Candidate completion checkpoint
 
+- CI `33169181945` passed exact Worker 165 source
+  `6af3cff4572f83e8f31b40858b5708a6b510f27e` (Website 1m46s, Platform
+  8m57s). Local gates passed focused cost 4/4, core 1106/1106,
+  Cloudflare/infrastructure 203/203, lint, type-check and production artifact
+  validation. Worker 165 receives 100% production traffic. Deployed assets,
+  seven HTTP boundaries, protected Admin Chrome replay, operational 8/8 status
+  and current priced usage all passed. Worker 164 is rollback; production D1,
+  DNS and Sites were unchanged.
 - CI `33148425519` passed exact Worker 162 source
   `75064bee61909baa0e1a05dabdedc6268f86ed29` (Website 2m15s, Platform
   6m57s), including rendered 35/35, core 1101/1101 and
