@@ -235,15 +235,13 @@ async function requestResponse(
       signal: timeout,
       headers,
     };
-    const request = new Request(endpoint(env, suffix), (
-      init.body instanceof ReadableStream
-        ? { ...requestInit, duplex: "half" as const }
-        : requestInit
-    ) as RequestInit);
     if (env.QDRANT_SERVICE) {
       phase = "service-fetch";
       try {
-        response = await env.QDRANT_SERVICE.fetch(request);
+        // Service bindings accept RequestInfo + init directly. Avoiding a
+        // cross-runtime Request constructor keeps Cloudflare's private
+        // binding path compatible with streaming/body implementations.
+        response = await env.QDRANT_SERVICE.fetch(endpoint(env, suffix), requestInit);
       } catch {
         // A failed service binding is distinct from an HTTP response from
         // Qdrant; keep that distinction in the bounded staging run ledger.
@@ -261,6 +259,11 @@ async function requestResponse(
         const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
         await container.startAndWaitForPorts();
         phase = "container-fetch";
+        const request = new Request(endpoint(env, suffix), (
+          init.body instanceof ReadableStream
+            ? { ...requestInit, duplex: "half" as const }
+            : requestInit
+        ) as RequestInit);
         response = await container.fetch(request);
       } catch {
         console.error(JSON.stringify({
