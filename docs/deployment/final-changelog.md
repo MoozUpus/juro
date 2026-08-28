@@ -2,6 +2,26 @@
 
 ## Shipped to production
 
+- Platform Worker 166 (`4bd03261-df05-4e5b-9f91-66bd6d8cfdcd`), deployment
+  `3579b110-a09d-4f53-8563-34ec0d2d5c4e`, is at 100% traffic; Worker 165 is
+  the immediate rollback.
+- Worker 166 gives Analytics Engine a stable privacy-safe first-six dimension
+  contract and records only bounded support/feedback classifications. Feedback
+  comments, legal questions, chat/document content and personal data are not
+  added to analytics.
+- A read-only production snapshot contained 24 represented events with no
+  sampling. It is too sparse and lacks privacy-safe cohort linkage: activation,
+  return, drop-off and conversion remain `UNVERIFIED`, and event occurrences
+  are not promoted to unique people.
+- Exact CI `33187593245` passed release source `14ecae9a`: Website 2m05s and
+  Platform 9m21s. Local gates passed focused 83/83, core 1106/1106,
+  Cloudflare/infrastructure 203/203, lint, type-check and production artifact
+  validation.
+- Post-release route/auth boundaries passed. Public health was 8/8 operational
+  with zero incidents, including operational OpenAI, Anthropic and document
+  analysis evidence. The cost sample remains 4/30 and the 30% reduction target
+  remains `UNVERIFIED`. No migration, D1/notification mutation, DNS or Sites
+  change was made; Sites v86 remains live.
 - Platform Worker 165 (`a75c0337-da48-49fd-8adf-6a721fb24088`), deployment
   `ee0465b5-fb83-4ebb-87a5-3b40b0be7f83`, is at 100% traffic; Worker 164 is
   the immediate rollback.

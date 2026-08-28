@@ -1,12 +1,12 @@
-# Rollback plan — Worker 165 / migrations 0159-0160 / Sites 86
+# Rollback plan — Worker 166 / migrations 0159-0160 / Sites 86
 
 ## Application rollback
 
 The active application version is
+`4bd03261-df05-4e5b-9f91-66bd6d8cfdcd` (version 166), deployment
+`3579b110-a09d-4f53-8563-34ec0d2d5c4e`. The immediate application rollback is
 `a75c0337-da48-49fd-8adf-6a721fb24088` (version 165), deployment
-`ee0465b5-fb83-4ebb-87a5-3b40b0be7f83`. The immediate application rollback is
-`3ba45422-86e9-4502-8ad2-8468bec57a78` (version 164), deployment
-`46613e55-f973-4199-a825-e2c576ac63e1`. Confirm the currently active version
+`ee0465b5-fb83-4ebb-87a5-3b40b0be7f83`. Confirm the currently active version
 before changing traffic. Sites version 86 is live and version 85 is its
 immediate public rollback.
 
@@ -14,21 +14,22 @@ Rollback is justified for a release-caused availability, authentication,
 routing, metadata, font loading, signed-share, document-comparison, Lawyer or
 Admin interaction-target regression.
 Anthropic `CREDIT_BALANCE_LOW` was not release-caused, was resolved by restoring
-API credit and is not a reason to roll back Worker 165. After any genuine
+API credit and is not a reason to roll back Worker 166. After any genuine
 release rollback, repeat the six-host HTTPS
 probe, login/status smoke, document-comparison compact-layout probe, Lawyer
 re-auth/API boundary, Admin re-auth boundary, authenticated dashboard count and
-`/api/status` read. Worker 164 retains the Lawyer-host redirect, stable Lex
+`/api/status` read. Worker 165 retains the Lawyer-host redirect, stable Lex
 fingerprint, deterministic per-run digest, bounded unread-count query, safe
 provider error classification, saved monitoring cadence and dedicated
-monitoring-email outbox. It does not contain the cost measurement readiness UI
-or the explicit unconfigured-policy warning. Record all preference cursors,
+monitoring-email outbox, cost measurement readiness UI and explicit
+unconfigured-policy warning. It does not contain the stable Analytics Engine
+dimension normalization or feedback-outcome metric. Record all preference cursors,
 monitoring-email job states, AI usage totals and the exact notification count
 before rollback; prefer a forward fix. Do not report overall recovery unless
 status evidence is fresh and operational.
 
 Migrations 0159 and 0160 are additive. An application-only rollback to Worker
-164 must not edit D1. A
+165 must not edit D1. A
 rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.

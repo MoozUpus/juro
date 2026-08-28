@@ -4,7 +4,7 @@
 
 | Gate | Result |
 | --- | --- |
-| Exact source | PASS — commit `aaba59828a967aded926c1fe79b3e5c80936460d` on Draft PR `#64` |
+| Exact source | PASS — runtime commit `aaba59828a967aded926c1fe79b3e5c80936460d`, release evidence commit `14ecae9a475c75d54c92e8c69d96a3c12290af8e`, Draft PR `#64` |
 | Production dataset read | PASS read-only — the Analytics Engine SQL API returned 24 stored/represented events from `2026-08-25 08:10:02Z` through `2026-08-28 01:46:27Z`; every `_sample_interval` was 1 |
 | Observed schema | PASS for the 24-row window — all rows used one of the 21 canonical product events and the expected first-six dimensions |
 | Data-quality result | PARTIAL — only one consented `landing_view`, zero signup start/completion events and no privacy-safe cohort linkage; activation, return, drop-off and conversion remain `UNVERIFIED` |
@@ -12,9 +12,12 @@
 | Feedback metric | PASS candidate — `feedback_submitted` now maps the allowlisted type to success/partial/failure and stores only that bounded type in `blob7`; comments never enter analytics |
 | Focused regression | PASS — 83/83 product-analytics, feedback and platform-core tests |
 | Full local release gate | PASS — core 1106/1106, Cloudflare/infrastructure 203/203, lint, type-check and production artifact validation; emitted CSS remains 594.6 KiB of the 600.0 KiB limit |
-| Provider recovery | PASS current — production OpenAI and Anthropic content-free probes are operational; the public status API returned 8/8 operational with zero incidents |
+| GitHub Actions CI `33187593245` | PASS on exact `14ecae9a` — Website 2m05s and Platform 9m21s |
+| Provider recovery | PASS post-release — public status generated at `2026-08-28T16:15:50.194Z` was 8/8 operational with zero incidents; Anthropic was operational at `16:15:50.040Z` and OpenAI at `16:10:23.388Z`, both without a safe error |
 | Cost measurement | UNCHANGED — 4/30 real priced successes, `$0.104549` estimated cost and two zero-token failures; the 30% reduction target remains `UNVERIFIED` |
-| Deployment | PENDING — no Worker, D1, DNS or Sites mutation was made while validating this candidate; Sites v86 remains live |
+| Deployment | PASS — Worker 166 `4bd03261-df05-4e5b-9f91-66bd6d8cfdcd`, deployment `3579b110-a09d-4f53-8563-34ec0d2d5c4e`, receives 100%; Worker 165 is rollback |
+| Route/auth boundary | PASS — the original Lawyer-host Client URL returns a private/no-store `307` to the exact App route; Client/Lawyer preserve separate login destinations, Admin preserves its protected `303`, and an unauthenticated same-origin feedback POST was rejected `403` with `no-store` |
+| Deployment boundary | PASS — no D1 migration/mutation, DNS, notification or Sites change; Sites v86 remains live |
 
 The dataset contains aggregate occurrences, not unique people. In particular,
 the 13 `lawyer_viewed` rows cannot be promoted to 13 unique prospects, and the

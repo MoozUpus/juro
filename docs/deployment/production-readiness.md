@@ -4,6 +4,53 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Worker 166 privacy-safe analytics normalization
+
+Commits `aaba59828a967aded926c1fe79b3e5c80936460d` and
+`14ecae9a475c75d54c92e8c69d96a3c12290af8e` make the existing Analytics
+Engine stream comparable without adding user content or identifiers. Product
+and operational events now keep a stable first-six contract of
+event/surface/locale/outcome/provider/variant. Support-ticket category and
+severity remain bounded dimensions in `blob7`/`blob8`. AI feedback records only
+the allowlisted feedback type and its success/partial/failure outcome; optional
+comments never enter analytics.
+
+A read-only production query found 24 stored and represented events from
+`2026-08-25 08:10:02Z` through `2026-08-28 01:46:27Z`, all with
+`_sample_interval=1`. All 24 used one of the 21 canonical product event names
+and the expected first-six layout. The sample contains one consented
+`landing_view`, three `first_question_sent` occurrences and zero
+`signup_started`/`signup_completed` events. There is no privacy-safe cohort
+linkage, so activation, return, step drop-off and conversion remain
+`UNVERIFIED`; 13 `lawyer_viewed` occurrences are not claimed as 13 unique
+people.
+
+Focused analytics/feedback/platform tests passed 83/83. Full local gates passed
+core 1106/1106, Cloudflare/infrastructure 203/203, lint, type-check and
+production artifact validation. Emitted CSS remained inside the artifact
+budget at 594.6 KiB of 600.0 KiB. Exact CI `33187593245` passed source
+`14ecae9a`: Website in 2m05s and Platform in 9m21s.
+
+Worker 166 `4bd03261-df05-4e5b-9f91-66bd6d8cfdcd`, deployment
+`3579b110-a09d-4f53-8563-34ec0d2d5c4e`, receives 100% traffic. The original
+`lawyer.juro.uz/ru/individual/dashboard` URL returns a private/no-store `307`
+to the exact Client route; the Client and Lawyer dashboards retain their own
+login destinations, and Admin retains its protected `303` handoff. An
+unauthenticated feedback POST with the correct origin was rejected `403` with
+`no-store`; no session, CSRF token or analytics write was fabricated.
+
+Public status generated at `2026-08-28T16:15:50.194Z` was 8/8 operational with
+zero incidents. The first post-release checks recorded Anthropic operational at
+`2026-08-28T16:15:50.040Z` (`6020 ms`, no safe error) and OpenAI operational at
+`2026-08-28T16:10:23.388Z` (`4780 ms`, no safe error); document analysis
+remained operational. A read-only D1 verification wrote zero rows and confirmed
+the priced-success sample remains 4/30 with `$0.104549` estimated cost and two
+zero-token failures. The 30% reduction target remains `UNVERIFIED`.
+
+No D1 migration or mutation, DNS change, notification mutation or Sites release
+was made. Sites v86 remains live. Worker 165 is the immediate application
+rollback.
+
 ## 2026-08-28 Worker 165 AI cost measurement readiness
 
 Commit `6af3cff4572f83e8f31b40858b5708a6b510f27e` adds a protected,
@@ -342,13 +389,13 @@ conformance result.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest platform runtime commit | `6af3cff4572f83e8f31b40858b5708a6b510f27e` |
-| Latest platform source candidate | `6af3cff4572f83e8f31b40858b5708a6b510f27e`; deployed |
+| Latest platform runtime commit | `aaba59828a967aded926c1fe79b3e5c80936460d` |
+| Latest platform source candidate | `14ecae9a475c75d54c92e8c69d96a3c12290af8e`; deployed |
 | Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current Platform CI `33169181945` on `6af3cff4` passed Website in 1m46s and Platform in 8m57s |
-| Production Worker | `juro` version `a75c0337-da48-49fd-8adf-6a721fb24088` (version 165), deployment `ee0465b5-fb83-4ebb-87a5-3b40b0be7f83`, 100% traffic |
-| Immediate application rollback | `3ba45422-86e9-4502-8ad2-8468bec57a78` (version 164), deployment `46613e55-f973-4199-a825-e2c576ac63e1` |
+| GitHub Actions | Current Platform CI `33187593245` on `14ecae9a` passed Website in 2m05s and Platform in 9m21s |
+| Production Worker | `juro` version `4bd03261-df05-4e5b-9f91-66bd6d8cfdcd` (version 166), deployment `3579b110-a09d-4f53-8563-34ec0d2d5c4e`, 100% traffic |
+| Immediate application rollback | `a75c0337-da48-49fd-8adf-6a721fb24088` (version 165), deployment `ee0465b5-fb83-4ebb-87a5-3b40b0be7f83` |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Saved public Sites candidate | Version 94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
