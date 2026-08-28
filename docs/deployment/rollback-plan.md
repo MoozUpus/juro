@@ -1,12 +1,12 @@
-# Rollback plan — Worker 168 / migrations 0159-0160 / Sites 86
+# Rollback plan — Worker 170 / migrations 0159-0160 / Sites 86
 
 ## Application rollback
 
 The active application version is
-`9cbfccd2-ec57-4839-9209-061d216ec1b3` (version 168), deployment
-`eae00573-f828-446d-8780-415603e4eced`. The immediate application rollback is
-`b67a2ed8-74f8-4d62-968e-87bff9d3e4dc` (version 167), deployment
-`7f1431fd-3e89-491d-aacc-f1c630ca020e`. Confirm the currently active version
+`8a51f26c-2011-4ea0-a8f9-2e5a80316ce6` (version 170), deployment
+`8dc989ba-014b-4a40-87e5-d017d8a4488e`. The immediate application rollback is
+`a5978f48-b424-4846-aa72-6fe42ef47cc0` (version 169), deployment
+`cee1ff1a-8029-44ef-a6f7-eeb532e95601`. Confirm the currently active version
 before changing traffic. Sites version 86 is live and version 85 is its
 immediate public rollback.
 
@@ -14,23 +14,24 @@ Rollback is justified for a release-caused availability, authentication,
 routing, metadata, font loading, signed-share, document-comparison, Lawyer or
 Admin interaction-target regression.
 Anthropic `CREDIT_BALANCE_LOW` was not release-caused, was resolved by restoring
-API credit and is not a reason to roll back Worker 168. After any genuine
+API credit and is not a reason to roll back Worker 170. After any genuine
 release rollback, repeat the six-host HTTPS
 probe, login/status smoke, document-comparison compact-layout probe, Lawyer
 re-auth/API boundary, Admin re-auth boundary, authenticated dashboard count and
-`/api/status` read. Worker 167 retains the Lawyer-host redirect, stable Lex
+`/api/status` read. Worker 169 retains the Lawyer-host redirect, stable Lex
 fingerprint, deterministic per-run digest, bounded unread-count query, safe
 provider error classification, saved monitoring cadence and dedicated
 monitoring-email outbox, cost measurement readiness UI, stable Analytics Engine
 dimension normalization, feedback-outcome metric, Client pseudo-element removal
-and the 72 px Turnstile reservation. It does not contain the dashboard composer
-focus-ring correction. Record all
+and the 72 px Turnstile reservation, dashboard composer focus ring, conditional
+search ARIA reference and 12 px Client shell text floor. It does not remove the
+mobile pointer scrim from the accessibility/tab order. Record all
 preference cursors, monitoring-email job states, AI usage totals and the exact
 notification count before rollback; prefer a forward fix. Do not report
 overall recovery unless status evidence is fresh and operational.
 
 Migrations 0159 and 0160 are additive. An application-only rollback to Worker
-167 must not edit D1. A
+169 must not edit D1. A
 rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.

@@ -1,8 +1,47 @@
-# Production readiness — 2026-08-28
+# Production readiness — 2026-08-29
 
 This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
+
+## 2026-08-29 Worker 170 authenticated Client shell closure
+
+Commits `36aa369416c991fb9cbf9dd2ae62350a42194fba` and
+`31ca216095cd5b09cde25b781c79d9d4a604751e` correct three production Client
+shell findings: a closed search trigger no longer references an absent dialog,
+explicit 10–11 px labels use the 12 px floor, and the clickable mobile-menu
+scrim is hidden from accessibility APIs and removed from the tab order while
+the real close button remains available.
+
+The local gate passed rendered HTML 35/35, core 1107/1107,
+Cloudflare/infrastructure 203/203, focused accessibility 13/13, lint,
+type-check and production artifact validation. Exact final-source CI
+`33208687185` passed Website in 1m57s and Platform in 8m57s. Final CI artifact
+budgets remained green: CSS 594.8 KiB, initial JS 295.1 KiB, largest lazy
+increment 200.5 KiB, fonts 453.6 KiB, images 564.4 KiB and Worker entry
+3799.5 KiB. These are emitted-byte limits, not Core Web Vitals.
+
+Worker 170 `8a51f26c-2011-4ea0-a8f9-2e5a80316ce6`, deployment
+`8dc989ba-014b-4a40-87e5-d017d8a4488e`, receives 100% traffic. In the existing
+signed-in Chrome profile, the production Client dashboard passed 390 px and
+320 px overflow/target/text-floor checks, search-dialog ARIA and focus wrapping,
+mobile-menu single-close behavior, Escape focus return and the skip-link → main
+→ labelled composer keyboard path. No warning/error log was present. Three
+authenticated controller-observed navigations were 2,874, 2,256 and 1,587 ms
+(median 2,256 ms); no authenticated LCP/INP/CLS claim is made because the
+DevTools MCP context cannot reuse that signed-in profile.
+
+The first post-release status snapshot was conservatively degraded after a
+single malware-scanner probe returned `SCANNER_UNAVAILABLE`. Cloudflare still
+reported the production container active with one instance. The next scheduled
+probe recovered without intervention: independent app/status reads generated
+at `2026-08-28T20:51:55.490Z` agreed on all eight components operational and
+zero active/recent incidents. The scanner was operational at
+`20:50:42.909Z`; Anthropic remained operational at `20:45:53.351Z`.
+
+No migration or D1 mutation, DNS change, notification mutation or Sites release
+was made. Sites v86 remains live. Worker 169 is the immediate application
+rollback.
 
 ## 2026-08-28 Anthropic account recovery recheck
 

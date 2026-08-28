@@ -1,4 +1,28 @@
-# Test report — current evidence through 2026-08-28
+# Test report — current evidence through 2026-08-29
+
+## Worker 170 authenticated Client shell accessibility closure
+
+| Gate | Result |
+| --- | --- |
+| Confirmed production findings | FAIL on the prior shell — the closed search trigger referenced an absent dialog; visible Client shell/search/dashboard labels reached 10–11 px; the open mobile menu exposed two `Закрыть меню` buttons to accessibility APIs |
+| Source correction | PASS — search `aria-controls` exists only while the dialog exists; explicit shell text uses a 12 px floor; the clickable menu scrim is `aria-hidden` and `tabIndex=-1` while the real close button remains focusable |
+| Focused regression | PASS — 13/13 shell accessibility contracts |
+| Full local release gate | PASS — rendered HTML 35/35, core 1107/1107, Cloudflare/infrastructure 203/203, type-check, lint and production artifact validation |
+| Final artifact budgets | PASS — CSS 594.8/600.0 KiB; initial JS 295.1/320.0 KiB; largest lazy increment 200.5/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3799.5/6144.0 KiB. These are emitted bytes, not Core Web Vitals |
+| Exact CI | PASS — run `33208687185` on final source `31ca216095cd5b09cde25b781c79d9d4a604751e`; Website 1m57s and Platform 8m57s |
+| Production deployment | PASS — Worker 170 `8a51f26c-2011-4ea0-a8f9-2e5a80316ce6`, deployment `8dc989ba-014b-4a40-87e5-d017d8a4488e`, receives 100%; Worker 169 is rollback |
+| Authenticated Chrome at 390 px | PASS — one H1/main, private noindex metadata, no horizontal overflow, no unnamed/sub-44 px controls, no visible text below 12 px, no broken ARIA references and no warning/error log |
+| Search keyboard/dialog | PASS — closed trigger has no dangling `aria-controls`; open state has `role=dialog`, `aria-modal=true` and the exact target; autofocus, Shift+Tab/Tab wrap, Escape close and trigger focus return passed |
+| Authenticated Chrome at 320 px | PASS — one H1/main, no overflow or sub-44 px control; menu moved focus to the real close button, exposed exactly one accessible closer, kept the scrim hidden/tab-excluded and returned focus on Escape |
+| Skip-link keyboard path | PASS — first Tab visibly focused the 44 px skip link, Enter focused `main#main-content`, and the next Tab reached the associated `#dashboard-legal-task` textarea with a solid visible outline |
+| Authenticated wall-clock sample | OBSERVED — 2,874 / 2,256 / 1,587 ms, median 2,256 ms. The signed-in Chrome controller does not expose DevTools performance observers, so no LCP/INP/CLS claim is made |
+| Route/auth boundaries | PASS — Client/Lawyer private redirects, the Lawyer-host Client redirect, Admin protected handoff and public status route retained expected no-store/cache boundaries |
+| Production health | PASS after one transient — the first post-release snapshot was degraded only by `SCANNER_UNAVAILABLE`; the next scheduled probe recovered without intervention and both status APIs agreed at `2026-08-28T20:51:55.490Z` on 8/8 operational with zero incidents. Anthropic remained operational |
+| Deployment boundary | PASS — no D1 mutation or migration, DNS change, notification mutation or Sites release; Sites v86 remains live |
+
+No private card text, screenshot, form submission or customer-data mutation was
+used. This is bounded browser evidence, not a blanket WCAG or Core Web Vitals
+claim.
 
 ## Anthropic account recovery recheck
 

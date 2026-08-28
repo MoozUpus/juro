@@ -1,4 +1,4 @@
-# Changelog — ecosystem audit release through 2026-08-28
+# Changelog — ecosystem audit release through 2026-08-29
 
 ## Current operational verification
 
@@ -11,6 +11,22 @@
 
 ## Shipped to production
 
+- Platform Worker 170 (`8a51f26c-2011-4ea0-a8f9-2e5a80316ce6`), deployment
+  `8dc989ba-014b-4a40-87e5-d017d8a4488e`, is at 100% traffic; Worker 169 is
+  the immediate rollback.
+- Worker 170 makes the Client global-search ARIA reference conditional on the
+  dialog being present, raises explicit 10–11 px Client shell/search/dashboard
+  labels to 12 px and leaves exactly one accessible mobile-menu close control.
+- Final-source CI `33208687185` passed `31ca2160`: Website 1m57s and Platform
+  8m57s, including core 1107/1107, Cloudflare/infrastructure 203/203 and all
+  emitted-byte budgets. Authenticated Chrome passed the 390/320 px, search
+  focus, mobile menu, skip-link and visible-focus replays without console
+  warnings/errors or private-data mutation.
+- A first post-release `SCANNER_UNAVAILABLE` status was retained as evidence;
+  the next scheduled probe recovered without intervention. At
+  `2026-08-28T20:51:55.490Z`, both status APIs agreed on 8/8 operational and
+  zero incidents, with Anthropic operational. No D1/migration, DNS,
+  notification or Sites change was made; Sites v86 remains live.
 - Platform Worker 168 (`9cbfccd2-ec57-4839-9209-061d216ec1b3`), deployment
   `eae00573-f828-446d-8780-415603e4eced`, is at 100% traffic; Worker 167 is
   the immediate rollback.

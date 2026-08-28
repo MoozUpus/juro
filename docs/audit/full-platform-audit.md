@@ -1,12 +1,13 @@
 # Full platform audit
 
-**Audit date:** 2026-08-28
+**Audit date:** 2026-08-29
 **Branch:** `codex/investor-ready-ecosystem`
-**Current production checkpoint:** Worker 168
-`9cbfccd2-ec57-4839-9209-061d216ec1b3`, deployment
-`eae00573-f828-446d-8780-415603e4eced`, 100% traffic. Its route matrix,
-authenticated Client keyboard replay, exact production CSS and `/api/status`
-passed after deployment; Worker 167 is the immediate application rollback.
+**Current production checkpoint:** Worker 170
+`8a51f26c-2011-4ea0-a8f9-2e5a80316ce6`, deployment
+`8dc989ba-014b-4a40-87e5-d017d8a4488e`, 100% traffic. Its route matrix,
+authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
+the recovered scheduled `/api/status` snapshot passed after deployment; Worker
+169 is the immediate application rollback.
 
 ## Current production recovery
 
@@ -69,6 +70,19 @@ visible shared-color focus outline to the labelled Client dashboard composer;
 the exact CI, 100% deployment, production Tab/Enter/Tab replay and fresh 8/8
 operational status passed. No D1, DNS, notification or Sites change was part of
 Workers 166–168; Sites v86 remains live.
+
+Workers 169–170 close the next authenticated Client shell findings. Worker 169
+made the search `aria-controls` reference conditional and raised explicit
+10–11 px Client shell/search/dashboard labels to 12 px. Production Chrome then
+revealed that the open mobile menu still exposed both its real close button and
+the full-screen pointer scrim under the same accessible name. Worker 170 keeps
+the real close button and removes only the scrim from accessibility and tab
+order. Exact CI `33208687185`, 100% deployment, authenticated 390/320 px,
+search focus wrap, menu Escape/focus return and skip-link replay passed. The
+first scanner probe was degraded, but the next scheduled probe recovered
+without intervention; both status hosts then agreed on 8/8 operational and
+zero incidents. Sites v86, DNS, D1/migrations and notification state were not
+changed.
 
 ## Executive outcome
 

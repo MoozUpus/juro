@@ -1,4 +1,4 @@
-# Performance audit — 2026-08-28
+# Performance audit — current evidence through 2026-08-29
 
 ## What is measured
 
@@ -6,12 +6,27 @@ The production artifact passed raw emitted-byte regression budgets:
 
 | Surface | Current | Limit | Status |
 | --- | ---: | ---: | --- |
-| Client CSS | 592.7 KiB | 600 KiB | PASS, only 7.3 KiB headroom |
-| Initial browser JS | 295.3 KiB | 320 KiB | PASS |
-| Largest lazy route increment | 208.1 KiB | 240 KiB | PASS; Document Builder is the largest increment |
+| Client CSS | 594.8 KiB | 600 KiB | PASS, only 5.2 KiB headroom |
+| Initial browser JS | 295.1 KiB | 320 KiB | PASS |
+| Largest lazy route increment | 200.5 KiB | 240 KiB | PASS; Document Builder is the largest increment |
 | Fonts | 453.6 KiB | 512 KiB | PASS |
 | Images | 564.4 KiB | 640 KiB | PASS |
-| Worker entry | 3779.3 KiB | 6144 KiB | PASS |
+| Worker entry | 3799.5 KiB | 6144 KiB | PASS |
+
+These final Worker 170 values come from exact-source CI `33208687185`. They are
+emitted raw-byte regression budgets, not HTTP transfer sizes or Core Web
+Vitals.
+
+### Authenticated Client dashboard sample
+
+The Chrome DevTools MCP browser context is isolated from the existing signed-in
+Chrome profile and redirected this protected route to login. It therefore did
+not produce an authenticated LCP, INP, CLS or request-waterfall claim. In the
+real signed-in Chrome profile, three Worker 170 navigations completed at 2,874,
+2,256 and 1,587 ms (median 2,256 ms), each with `readyState=complete`, one H1,
+one main landmark and the authenticated route retained. These are
+controller-observed wall-clock navigation durations only; they are not paint,
+interaction or field-performance metrics.
 
 Three direct production samples from the current workstation produced these
 median HTTP timings. They include network/location effects and are not browser

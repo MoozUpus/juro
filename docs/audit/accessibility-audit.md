@@ -2,6 +2,20 @@
 
 ## Current implementation evidence
 
+- Worker 170 closes the authenticated Client shell findings from the fresh
+  Chrome sample. The closed global-search trigger no longer points at a dialog
+  that is absent from the DOM; while open it exposes the exact dialog target,
+  moves focus to the input, wraps Shift+Tab/Tab through the close control and
+  returns focus to the trigger on Escape. Explicit 10–11 px Client shell,
+  dashboard and search labels now use the project 12 px floor. At `390×844`
+  and `320×844`, the signed-in production dashboard retained one H1, one main
+  landmark, zero horizontal overflow, zero exposed sub-44 px controls and no
+  visible text below 12 px. The mobile menu now exposes one accessible close
+  control; its pointer scrim is `aria-hidden` and removed from the tab order.
+  The skip-link → `main#main-content` → labelled composer keyboard path and
+  visible focus outlines passed after release. No form was submitted and no
+  private account content or screenshot was retained. This is a bounded Chrome
+  sample, not a screen-reader test or WCAG conformance claim.
 - Worker 168 closes the confirmed Client dashboard composer focus defect. On
   Worker 167, a signed-in Chrome keyboard sample found that the skip link was
   first, visibly focused and transferred focus to `main#main-content`, but the
