@@ -230,7 +230,13 @@ async function requestResponse(
         : requestInit
     ) as RequestInit);
     if (env.QDRANT_SERVICE) {
-      response = await env.QDRANT_SERVICE.fetch(request);
+      try {
+        response = await env.QDRANT_SERVICE.fetch(request);
+      } catch {
+        // A failed service binding is distinct from an HTTP response from
+        // Qdrant; keep that distinction in the bounded staging run ledger.
+        throw new QdrantCorpusError("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", true);
+      }
     } else if (env.QDRANT_CONTAINER) {
       const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
       await container.startAndWaitForPorts();
@@ -238,7 +244,8 @@ async function requestResponse(
     } else {
       response = await fetchImpl(endpoint(env, suffix), requestInit);
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof QdrantCorpusError) throw error;
     throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", true);
   }
   if (options.allowNotFound && response.status === 404) {

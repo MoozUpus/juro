@@ -118,6 +118,14 @@ test("private service errors remain bounded and preserve actionable staging code
   });
   await assert.rejects(() => unavailable.queryDense(denseVector(), 1), (error: unknown) =>
     error instanceof QdrantCorpusError && error.code === "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" && error.retryable);
+
+  const bindingFailure = new QdrantLegalCorpusClient({
+    ...configured,
+    QDRANT_URL: "https://qdrant.internal",
+    QDRANT_SERVICE: { fetch: async () => { throw new Error("service binding unavailable"); } } as Fetcher,
+  });
+  await assert.rejects(() => bindingFailure.queryDense(denseVector(), 1), (error: unknown) =>
+    error instanceof QdrantCorpusError && error.code === "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" && error.retryable);
 });
 
 test("platform requests can address the singleton private Container without public DNS", async () => {
