@@ -6,7 +6,27 @@
   font-size: .75rem;
 }
 
+@media (min-width: 981px) and (max-width: 1100px) {
+  .desktopNav,
+  .actions > .login,
+  .actions > .primary {
+    display: none;
+  }
+
+  .menuButton {
+    display: flex;
+  }
+
+  .headerInner {
+    height: 70px;
+  }
+}
+
 @media (max-width: 620px) {
+  .actions > :global(.public-theme-switcher) {
+    display: none;
+  }
+
   .language {
     font-size: .75rem;
   }

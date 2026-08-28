@@ -13,6 +13,7 @@ import { chromium } from "playwright-core";
 
 const HOST = "127.0.0.1";
 const MIN_VISIBLE_TEXT_PX = 12;
+const MIN_CONTROL_TARGET_PX = 44;
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const PUBLIC_ROUTE_SUFFIXES = [
   "",
@@ -152,6 +153,43 @@ async function findSmallVisibleText(page, label) {
   return [...new Set(results)].map((finding) => `${label}: ${finding}`);
 }
 
+async function findBrokenAriaReferences(page, label) {
+  const results = await page.evaluate(() => {
+    const findings = [];
+    for (const element of document.querySelectorAll("[aria-controls],[aria-labelledby],[aria-describedby]")) {
+      for (const attribute of ["aria-controls", "aria-labelledby", "aria-describedby"]) {
+        const value = element.getAttribute(attribute);
+        if (!value) continue;
+        for (const id of value.trim().split(/\s+/)) {
+          if (document.getElementById(id)) continue;
+          const name = element.getAttribute("aria-label") ?? element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+          findings.push(`${element.tagName.toLowerCase()}[${attribute}="${id}"] "${name.slice(0, 80)}"`);
+        }
+      }
+    }
+    return findings;
+  });
+  return [...new Set(results)].map((finding) => `${label}: broken ARIA reference ${finding}`);
+}
+
+async function findSmallControlTargets(page, label) {
+  const results = await page.evaluate((minimum) => {
+    const findings = [];
+    const selector = "button,input:not([type=hidden]),select,textarea,summary,[role=tab]";
+    for (const element of document.querySelectorAll(selector)) {
+      if (element.closest('[aria-hidden="true"]')) continue;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      if (rect.width <= 0 || rect.height <= 0 || style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
+      if (rect.width + 0.01 >= minimum && rect.height + 0.01 >= minimum) continue;
+      const name = element.getAttribute("aria-label") ?? element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+      findings.push(`${element.tagName.toLowerCase()} ${rect.width.toFixed(1)}x${rect.height.toFixed(1)} "${name.slice(0, 80)}"`);
+    }
+    return findings;
+  }, MIN_CONTROL_TARGET_PX);
+  return [...new Set(results)].map((finding) => `${label}: control target below ${MIN_CONTROL_TARGET_PX}px ${finding}`);
+}
+
 const port = await reservePort();
 const origin = `http://${HOST}:${port}`;
 const server = await createSiteServer(port);
@@ -183,6 +221,8 @@ try {
       const routeFailures = results.violations.map((violation) => formatViolation(label, violation));
       await verifySkipLink(page, label);
       routeFailures.push(...await findSmallVisibleText(page, label));
+      routeFailures.push(...await findBrokenAriaReferences(page, label));
+      routeFailures.push(...await findSmallControlTargets(page, label));
       failures.push(...routeFailures);
       const verdict = routeFailures.length === 0 ? "PASS" : "FAIL";
       console.log(`${verdict} a11y ${label}: ${results.passes.length} automated checks, ${results.incomplete.length} manual-review candidates`);

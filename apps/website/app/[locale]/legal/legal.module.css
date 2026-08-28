@@ -11,6 +11,8 @@
 @media(max-width:760px){.hero{padding-top:112px}.document{padding-top:96px}.hero h1{font-size:clamp(42px,12vw,58px)}.documentHero h1{font-size:clamp(39px,10.5vw,41px);overflow-wrap:anywhere}}
 @media print{.page{background:var(--surface-raised)!important}.page>header,.page>footer,.header,.footer,.previewNotice,.contactPanel,.related,.mobileToc{display:none!important}.document{max-width:none;padding:0}.breadcrumb{margin-bottom:24px}.documentHero h1{font-size:34pt}.documentLayout{display:block;margin-top:30px}.toc{display:none}.documentContent{max-width:none}.documentContent section{break-inside:avoid}.documentContent p,.documentContent li{font-size:11pt}.tableWrap{overflow:visible}.metadata button{display:none}}
 .card small{font-size:12px}
+.metadata button{align-items:center;display:inline-flex;min-height:44px}
+@media(max-width:760px){.mobileToc summary{align-items:center;display:flex;min-height:44px}}
 .eyebrow{color:#765820}
 .breadcrumb{color:#5f707d}
 :global(html[data-theme="dark"]) .page{color:var(--text-primary)}

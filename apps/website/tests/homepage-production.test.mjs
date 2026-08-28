@@ -20,6 +20,7 @@ const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
 const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.css", "utf8");
 const footerRailStyles = fs.readFileSync("app/components/public/footer-rail.module.css", "utf8");
 const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-targets.module.css", "utf8");
+const globalStyles = fs.readFileSync("app/globals.css", "utf8");
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
@@ -63,6 +64,8 @@ test("production interactions have complete keyboard and reduced-motion contract
   assert.match(chrome, /event\.key === "Escape"/);
   assert.match(chrome, /trigger\?\.focus\(\)/);
   assert.match(chrome, /<button aria-hidden="true" className=\{styles\.scrim\} onClick=\{\(\) => setOpen\(false\)\} tabIndex=\{-1\} type="button" \/>/);
+  assert.match(chrome, /aria-controls=\{open \? panelId : undefined\}/);
+  assert.doesNotMatch(chrome, /aria-controls=\{panelId\}/);
   assert.match(homepage, /<main id="main-content" tabIndex=\{-1\}>/);
   assert.match(homepageStyles, /prefers-reduced-motion:\s*reduce/);
   assert.match(motionStyles, /prefers-reduced-motion:\s*reduce/);
@@ -155,6 +158,9 @@ test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(chrome, /headerTouchStyles\.language/);
   assert.match(headerTouchStyles, /min-height: 44px/);
   assert.match(headerTouchStyles, /aria-current="page"/);
+  assert.match(globalStyles, /\.public-theme-switcher button\s*\{[\s\S]*?width: 44px;[\s\S]*?height: 44px;/);
+  assert.match(chromeStyles, /\.actions > :global\(\.public-theme-switcher\)\s*\{[\s\S]*?display: none;/);
+  assert.match(chromeStyles, /@media \(min-width: 981px\) and \(max-width: 1100px\)[\s\S]*?\.desktopNav,[\s\S]*?\.menuButton[\s\S]*?display: flex;/);
 });
 
 test("Jurobek uses a lightweight, reduced-motion-safe ambient treatment", () => {
