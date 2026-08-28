@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-28T15:33:00.9638231Z",
+  "environment": "staging",
+  "readOnly": true,
+  "ingestionStarted": false,
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "latestScheduledRun": {
+        "status": "failed",
+        "errorCode": "LEX_METADATA_MONITOR_RETRY_FAILED",
+        "startedAt": "2026-08-21T07:30:02.586Z",
+        "finishedAt": "2026-08-21T07:30:03.973Z"
+      },
+      "locks": 2,
+      "activeJobs": 43686,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 230,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "latestScheduledRun": {
+        "status": "failed",
+        "errorCode": "D1_ERROR",
+        "startedAt": "2026-08-24T01:12:20.191Z",
+        "finishedAt": "2026-08-24T01:13:00.605Z"
+      },
+      "locks": 0,
+      "activeJobs": 27689,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 5,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "latestScheduledRun": {
+        "status": "completed",
+        "errorCode": null,
+        "startedAt": "2026-08-25T15:56:44.902Z",
+        "finishedAt": "2026-08-25T16:09:09.353Z"
+      },
+      "locks": 0,
+      "activeJobs": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 10,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "latestScheduledRun": {
+        "status": "completed",
+        "errorCode": null,
+        "startedAt": "2026-08-28T00:36:02.839Z",
+        "finishedAt": "2026-08-28T00:46:09.566Z"
+      },
+      "locks": 0,
+      "activeJobs": 0,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 8,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "latestScheduledRun": {
+        "status": "completed",
+        "errorCode": null,
+        "startedAt": "2026-08-28T05:04:02.838Z",
+        "finishedAt": "2026-08-28T05:13:57.227Z"
+      },
+      "locks": 0,
+      "activeJobs": 31159,
+      "failedJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalOrUnavailableFailures": 7,
+      "checkpointsCompleted": 44,
+      "checkpointsTotal": 44
+    }
+  ],
+  "interpretation": {
+    "newPostStopSchedulerRunObserved": false,
+    "remoteDataMutated": false,
+    "rowsWritten": 0,
+    "changedDatabase": false,
+    "releaseGate": "open"
+  }
+}

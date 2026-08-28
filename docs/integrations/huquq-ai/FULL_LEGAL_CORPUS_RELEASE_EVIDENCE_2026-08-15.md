@@ -13355,3 +13355,14 @@ This confirms the stopped operational state and preserves the fail-closed
 release decision. It does not create a federated snapshot or close the
 indexed-evaluation, Qdrant or federated D1 restore gates. Full machine-
 readable results are in `STAGING_POST_STOP_GATE_RECHECK_2026-08-28.json`.
+
+## Scheduler stop recheck (2026-08-28, 15:33Z)
+
+The sequential scheduler query found no run after the acquisition stop. The
+latest legacy and v2 runs are historical failures from 2026-08-21 and
+2026-08-24; shard 1 and shard 2 have completed runs before the stop and zero
+active jobs; shard 3's last completed run ended at 05:13Z and remains an
+excluded continuation shard. Existing backlogs and failure-ledger records are
+unchanged. All five calls reported zero writes and `changed_db=false`.
+Machine-readable details are in
+`STAGING_SCHEDULER_STOP_RECHECK_2026-08-28.json`.
