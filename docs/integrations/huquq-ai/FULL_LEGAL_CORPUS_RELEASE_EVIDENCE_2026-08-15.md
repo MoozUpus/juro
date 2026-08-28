@@ -13382,3 +13382,15 @@ benchmark/restore and federated D1 backup/restore gates remain blocked by the
 previously recorded lack of a disjoint snapshot and dense index. The full
 machine-readable result is in
 `STAGING_NEXT_STAGE_GATE_RECHECK_2026-08-28.json`.
+
+## Staging chat routing regression after acquisition stop (2026-08-28, 15:59Z)
+
+The local Cloudflare contract test suite for chat federation passed `18/18`
+tests with zero failures. It covers the four configured staging sources
+(`juro-staging`, v2, shard 1 and shard 2), RRF de-duplication, current and
+point-in-time version selection, dense hydration/tenant scope and fail-closed
+shard errors. No remote D1 query, provider call, ingestion or production
+change was made. This proves the application routing contract only; it does
+not substitute for the still-blocked remote snapshot, indexed evaluation,
+Qdrant or federated D1 restore gates. Machine-readable details are in
+`STAGING_CHAT_ROUTING_REGRESSION_2026-08-28.json`.

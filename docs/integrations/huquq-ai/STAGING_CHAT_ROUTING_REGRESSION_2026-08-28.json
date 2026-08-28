@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-28T15:59:03.0508222Z",
+  "environment": "local-staging-contract",
+  "purpose": "Verify that the JURO chat retrieval contract can address every configured staging corpus source without starting ingestion.",
+  "command": "node --experimental-loader ./scripts/cloudflare-workers-loader.mjs --import tsx --test tests/legal-corpus-chat-retrieval.test.ts tests/legal-corpus-retrieval.test.ts",
+  "result": {
+    "tests": 18,
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 28815.836,
+    "coveredSources": [
+      "juro-staging",
+      "juro-staging-corpus-v2",
+      "juro-staging-corpus-shard-1",
+      "juro-staging-corpus-shard-2"
+    ],
+    "coveredBehaviors": [
+      "all-staging-d1 routing",
+      "staging-only contiguous shard validation",
+      "federated RRF deduplication",
+      "current-version and point-in-time selection",
+      "dense hydration and tenant scope",
+      "fail-closed shard error handling",
+      "live fallback queue boundary"
+    ]
+  },
+  "dataBoundary": {
+    "remoteD1Queried": false,
+    "providerCalls": false,
+    "ingestionStarted": false,
+    "productionChanged": false
+  },
+  "limitations": [
+    "This is a local contract/regression result, not proof that the remote federated release gate has passed.",
+    "It does not create a snapshot, dense Qdrant index, indexed 314-scenario result or D1 backup/restore artifact."
+  ]
+}
