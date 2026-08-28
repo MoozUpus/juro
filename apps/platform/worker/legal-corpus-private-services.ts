@@ -111,7 +111,7 @@ export async function handleLegalCorpusQdrantServiceRequest(
   }
   const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
   try {
-    await container.startAndWaitForPorts();
+    await container.startAndWaitForPorts({});
   } catch {
     console.error(JSON.stringify({
       service: "legal-corpus-private-qdrant",

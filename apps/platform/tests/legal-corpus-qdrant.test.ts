@@ -139,6 +139,7 @@ test("private service errors remain bounded and preserve actionable staging code
 test("platform requests can address the singleton private Container without public DNS", async () => {
   const requests: Request[] = [];
   const names: string[] = [];
+  const startOptions: unknown[] = [];
   let starts = 0;
   const client = new QdrantLegalCorpusClient({
     ...configured,
@@ -147,7 +148,10 @@ test("platform requests can address the singleton private Container without publ
       getByName(name: string) {
         names.push(name);
         return {
-          async startAndWaitForPorts() { starts += 1; },
+          async startAndWaitForPorts(options: unknown) {
+            startOptions.push(options);
+            starts += 1;
+          },
           async fetch(request: Request) {
             requests.push(request);
             return response([{ chunkId: "chunk:container", score: 0.91 }]);
@@ -163,6 +167,7 @@ test("platform requests can address the singleton private Container without publ
   ]);
   assert.deepEqual(names, ["juro-legal-corpus-qdrant-v1"]);
   assert.equal(starts, 1);
+  assert.deepEqual(startOptions, [{}]);
   assert.equal(requests[0]?.url,
     "https://qdrant.internal/collections/juro_legal_staging/points/query");
 });

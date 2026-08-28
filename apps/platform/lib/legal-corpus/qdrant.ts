@@ -36,7 +36,7 @@ export type QdrantCorpusEnv = {
   QDRANT_SERVICE?: Fetcher;
   QDRANT_CONTAINER?: {
     getByName(name: string): {
-      startAndWaitForPorts(): Promise<unknown>;
+      startAndWaitForPorts(options?: Record<string, unknown>): Promise<unknown>;
       fetch(request: Request): Promise<Response>;
     };
   };
@@ -257,7 +257,7 @@ async function requestResponse(
       phase = "container-start";
       try {
         const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
-        await container.startAndWaitForPorts();
+        await container.startAndWaitForPorts({});
         phase = "container-fetch";
         const request = new Request(endpoint(env, suffix), (
           init.body instanceof ReadableStream
