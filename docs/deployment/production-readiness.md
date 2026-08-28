@@ -666,3 +666,11 @@ baseline at LCP 2,041 ms, CLS 0.00 and 548 ms total forced reflow in the latest
 trace. No Sites publish occurred in this checkpoint. A separately authorized
 publish, production smoke, identical after-trace and rollback capture remain
 mandatory before the motion improvement can be called live.
+
+Live Sites v86 Trust Center has an additional release reason: Lighthouse found
+two light-theme contrast failures and scored 96 Accessibility. The built branch
+candidate scored 100 Accessibility because it already includes the corrected
+Trust palette from `4b104c1c`. No production change was made. The superseding
+Sites release must verify both named text nodes at or above 4.5:1 and repeat the
+mobile Trust trace; one retained cold trace reached LCP 3,726 ms because TTFB
+spiked to 1,891 ms even though two immediate repeats passed.

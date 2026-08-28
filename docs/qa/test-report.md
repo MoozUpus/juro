@@ -431,3 +431,19 @@ zero. The private R2 objects remain the recovery source.
 The live and local traces used the same Chrome `390×844`, mobile/touch, 4× CPU
 and Fast 4G profile, but different origins. The observed improvement is valid
 pre-release evidence and is not represented as a production result.
+
+### Trust and video route expansion
+
+| Gate | Result |
+| --- | --- |
+| Live Trust mobile trace series | PARTIAL — LCP 3,726/1,551/1,803 ms, TTFB 1,891/117/121 ms and CLS 0.00/0.00/0.00; median passes, retained cold sample fails |
+| Live video mobile trace | PASS — LCP 940 ms, TTFB 110 ms, CLS 0.00 |
+| Live Trust Lighthouse | FAIL — Accessibility 96 because two light-theme text colors are below 4.5:1; other categories 100 |
+| Built-candidate Trust Lighthouse | PASS for Accessibility — 100; the higher-contrast palette is already present in branch source |
+| Candidate Best Practices | BOUNDED 92 — localhost-only CSP blocks canonical production favicon/manifest URLs; live route is 100 |
+| Production correction | NOT LIVE — Sites v86 remains unchanged |
+
+The production Trust accessibility failure is not hidden by the broader green
+automated accessibility matrix. That matrix verifies the branch candidate;
+this live Lighthouse pass demonstrates that the older Sites v86 runtime still
+needs the already-saved contrast correction published and re-tested.

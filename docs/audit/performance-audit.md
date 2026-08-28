@@ -160,3 +160,28 @@ blocked canonical production favicon and manifest URLs as cross-origin; the
 same audit on live v86 scored 100. The full website gate passed a deployable
 production build, lint, type-check, 48/48 tests and the complete automated
 desktop/mobile, light/dark RU/UZ/EN accessibility matrix.
+
+### Trust and video production route classes
+
+Three live Sites v86 Trust Center traces used the same `390×844`, 4× CPU and
+Fast 4G profile. LCP/TTFB results were `3,726/1,891 ms`, `1,551/117 ms` and
+`1,803/121 ms`; CLS was 0.00 in all three. The median LCP was 1,803 ms and two
+warm repeats passed, but the retained cold sample exceeded the goal because of
+document latency. Public HTML is intentionally `no-store, must-revalidate`, so
+this variance is not hidden or represented as a universal pass.
+
+The live RU video route produced LCP 940 ms, TTFB 110 ms and CLS 0.00. Its LCP
+image needed 174 ms discovery delay and 2 ms load duration; the overall route
+still remained comfortably inside the goal in this bounded trace.
+
+Live Trust Center Lighthouse scored 96 Accessibility and 100 Best Practices,
+SEO and Agentic Browsing. It found two light-theme contrast failures: the
+`Trust Center` breadcrumb at 3.76:1 and the `УТОЧНЯЕТСЯ` state label at 4.18:1,
+both below 4.5:1. The current built candidate already contains the higher-
+contrast Trust palette from commit `4b104c1c`; its identical localhost audit
+scored 100 Accessibility. Localhost Best Practices remained 92 only because
+the local-origin CSP blocked canonical production favicon/manifest URLs.
+
+The Trust contrast correction is therefore source- and candidate-verified but
+not live in Sites v86. It remains a production release gate alongside the
+homepage motion, immutable asset caching and responsive lawyer-photo delivery.
