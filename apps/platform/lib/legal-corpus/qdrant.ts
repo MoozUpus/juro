@@ -217,6 +217,7 @@ async function requestResponse(
 ): Promise<Response | undefined> {
   const timeout = AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS);
   let response: Response;
+  let phase = "request-build";
   const transport = env.QDRANT_SERVICE
     ? "service"
     : env.QDRANT_CONTAINER
@@ -240,6 +241,7 @@ async function requestResponse(
         : requestInit
     ) as RequestInit);
     if (env.QDRANT_SERVICE) {
+      phase = "service-fetch";
       try {
         response = await env.QDRANT_SERVICE.fetch(request);
       } catch {
@@ -254,9 +256,11 @@ async function requestResponse(
         throw new QdrantCorpusError("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", true);
       }
     } else if (env.QDRANT_CONTAINER) {
+      phase = "container-start";
       try {
         const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
         await container.startAndWaitForPorts();
+        phase = "container-fetch";
         response = await container.fetch(request);
       } catch {
         console.error(JSON.stringify({
@@ -268,6 +272,7 @@ async function requestResponse(
         throw new QdrantCorpusError("QDRANT_CONTAINER_UNAVAILABLE", true);
       }
     } else {
+      phase = "direct-fetch";
       try {
         response = await fetchImpl(endpoint(env, suffix), requestInit);
       } catch {
@@ -286,6 +291,7 @@ async function requestResponse(
       service: "legal-corpus-qdrant-client",
       event: "qdrant.request_failed",
       transport,
+      phase,
       errorType: error instanceof Error ? error.name : typeof error,
       errorCode: "QDRANT_REQUEST_FAILED",
     }));
