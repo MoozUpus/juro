@@ -1,5 +1,25 @@
 # Test report — current evidence through 2026-08-28
 
+## Worker 161 Anthropic health diagnostic
+
+| Gate | Result |
+| --- | --- |
+| Exact source | PASS — commit `316ef335a0dfd0e1acd57be2e4cfd014d53be01f` on Draft PR `#64` |
+| Focused regression | PASS — 10/10 safe Anthropic error-classification tests; raw provider messages are neither returned nor logged |
+| Full local release gate | PASS — lint, type-check, core 1099/1099 and Cloudflare/infrastructure 202/202; the bounded production build also completed during deployment |
+| GitHub Actions CI `33144330811` | PASS on exact `316ef335` — Website 2m10s and Platform 8m38s |
+| Platform deployment | PASS — Worker 161 `34c54357-0878-4637-b533-1fa1afa36336`, deployment `72c5d2be-e417-4dcf-a4eb-8022a59a1b61`, 100%; Worker 160 `3d029e81-c477-4215-b182-356985b00e6a` is rollback |
+| Provider diagnosis | BLOCKED EXTERNALLY — the 10:35 Tashkent scheduled probe classified Anthropic's HTTP 400 as `PROBE_PROVIDER_HTTP_400_INVALID_REQUEST_ERROR_CREDIT_BALANCE_LOW`; no secret, prompt or provider message was recorded |
+| Production health | DEGRADED — `status.juro.uz` and `app.juro.uz` agreed on 6/8 operational at `2026-08-28T05:36:31.571Z`; only `ai` and `document_analysis` were degraded, while OpenAI and the Lawyer area remained operational |
+| Exact screenshot route | PASS — the Lawyer-host URL returns private/no-store `307` to the exact app path; isolated Chrome reached the localized Client login with the requested path retained, one H1, one main landmark, no horizontal overflow and private `noindex` metadata rather than plaintext `Not Found` |
+| Chrome diagnostics | OBSERVED — the Cloudflare Turnstile frame reported its known deprecation/CSP/Quirks issues, and two opaque `NaN` console entries had no attributable source; the JURO login document rendered successfully, so no clean-console claim is made for this replay |
+| Deployment boundary | UNCHANGED — no production D1 write, migration, DNS or Sites change; Sites v86 remains live and saved v94 remains unpublished |
+
+Restoring full health requires adding Anthropic API credit, then allowing a
+fresh scheduled probe and rechecking both public status endpoints. Rotating the
+key or changing the model is not justified by the captured evidence. Historical
+8/8 entries below remain valid point-in-time records, not the current state.
+
 ## Worker 158 Admin interaction-floor closure
 
 | Gate | Result |

@@ -1,30 +1,32 @@
-# Rollback plan — Worker 158 / migration 0159 / Sites 86
+# Rollback plan — Worker 161 / migration 0159 / Sites 86
 
 ## Application rollback
 
 The active application version is
-`6ebf3a20-ca4d-4751-8283-22bcc9b10988` (version 158), deployment
-`f7e89714-43be-4450-b232-6b988e8f7f86`. The immediate application rollback is
-`2ec24c74-57b9-4c66-8afa-372cceb24767` (version 157), deployment
-`62266f40-fe05-423b-9916-7c4220bf66d3`. Confirm the currently active version
+`34c54357-0878-4637-b533-1fa1afa36336` (version 161), deployment
+`72c5d2be-e417-4dcf-a4eb-8022a59a1b61`. The immediate application rollback is
+`3d029e81-c477-4215-b182-356985b00e6a` (version 160), deployment
+`f4065d40-b96f-47fb-85a0-704d634b656b`. Confirm the currently active version
 before changing traffic. Sites version 86 is live and version 85 is its
 immediate public rollback.
 
 Rollback is justified for a release-caused availability, authentication,
 routing, metadata, font loading, signed-share, document-comparison, Lawyer or
 Admin interaction-target regression.
-After rollback, repeat the six-host HTTPS probe, login/status smoke,
-document-comparison compact-layout probe, Lawyer re-auth/API boundary, Admin
-re-auth boundary and `/api/status` read. Version 157 retains the Lawyer-host
+Anthropic `CREDIT_BALANCE_LOW` is not release-caused and is not a reason to
+roll back Worker 161; restore API credit and wait for a fresh scheduled health
+probe instead. After any genuine release rollback, repeat the six-host HTTPS
+probe, login/status smoke, document-comparison compact-layout probe, Lawyer
+re-auth/API boundary, Admin re-auth boundary and `/api/status` read. Worker 160
+retains the Lawyer-host
 redirect, auth error association, localized status metadata, same-origin icons,
-corrected Client comparison target and Lawyer professional controls, but
-restores the smaller non-corpus Admin controls. Use that rollback only when the
-release regression is more severe than this known target-size defect. Do not
-report overall recovery
-unless status evidence is fresh and operational.
+corrected Client comparison target, Lawyer and non-corpus Admin interaction
+floors, and safe provider machine-code propagation. It does not contain the
+final message-category fallback. Do not report overall recovery unless status
+evidence is fresh and operational.
 
-Migration 0159 is additive. Worker 158 added no migration and an application-
-only rollback to Worker 157 must not edit D1. A rollback farther than the
+Migration 0159 is additive. Worker 161 added no migration and an application-
+only rollback to Worker 160 must not edit D1. A rollback farther than the
 documented immediate version can remove later lockout/encryption behavior and
 is therefore a separate incident decision, not the ordinary rollback path.
 

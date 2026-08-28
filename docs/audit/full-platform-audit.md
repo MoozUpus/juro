@@ -2,10 +2,29 @@
 
 **Audit date:** 2026-08-28
 **Branch:** `codex/investor-ready-ecosystem`
-**Current production checkpoint:** Worker 158
-`6ebf3a20-ca4d-4751-8283-22bcc9b10988`, deployment
-`f7e89714-43be-4450-b232-6b988e8f7f86`, 100% traffic; status 8/8
-operational at `2026-08-28T02:53:33.522Z`.
+**Current production checkpoint:** Worker 161
+`34c54357-0878-4637-b533-1fa1afa36336`, deployment
+`72c5d2be-e417-4dcf-a4eb-8022a59a1b61`, 100% traffic; status 6/8 with `ai`
+and `document_analysis` degraded at `2026-08-28T05:36:31.571Z`.
+
+## Current production exception
+
+Worker 161 safely classified the repeated Anthropic HTTP 400 as
+`PROBE_PROVIDER_HTTP_400_INVALID_REQUEST_ERROR_CREDIT_BALANCE_LOW`. The raw
+provider message, prompts and secrets are not logged. OpenAI and the Lawyer
+area remain operational, but JURO is not represented as fully healthy while
+Anthropic-dependent AI and document analysis are degraded. Restoring the
+Anthropic API balance is an external account action; after that, a fresh
+scheduled probe and both public status endpoints must return operational before
+the exception can close.
+
+The original screenshot route is not part of the outage. A fresh raw probe
+returned private/no-store `307` from
+`lawyer.juro.uz/ru/individual/dashboard` to the exact app path, and isolated
+Chrome rendered the localized Client login instead of plaintext `Not Found`.
+No D1 write, migration, DNS or Sites release was made. Sites v86 remains live,
+saved v94 remains unpublished, and Worker 160 is the immediate application
+rollback.
 
 ## Executive outcome
 
@@ -55,7 +74,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | AI costs | ACTIVE CONFIGURATION | Four official, effective-dated production price rows passed pre/post D1 export, isolated restore, FK, private R2 and SHA-256 readback gates. No post-effective AI event exists yet, so no measured runtime cost baseline is claimed. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
 | Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Worker 156 closes the confirmed Client comparison target defect; Worker 157 extends the 44 px contract to confirmed Lawyer professional controls; Worker 158 extends it to confirmed non-corpus Admin retry, Knowledge Base and cost-checkbox controls. The exact production CSS contains both role-specific contracts. Lawyer/Admin anonymous boundaries remain fail-closed and their re-authentication surfaces have one H1/main and no overflow, but no signed-in Lawyer/Admin, real OTP/MFA error, screen reader or physical mobile device was used. Protected authenticated rendering, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
-| Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Overdue billing and unavailable real CWV tracing remain explicit risks. |
+| Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Anthropic API credit is currently insufficient, so AI and document analysis are degraded; overdue infrastructure billing and unavailable real CWV tracing also remain explicit risks. |
 
 ## Definition of done for this candidate
 

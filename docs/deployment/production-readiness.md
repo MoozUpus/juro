@@ -4,6 +4,38 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Worker 161 Anthropic health diagnostic
+
+Commit `316ef335a0dfd0e1acd57be2e4cfd014d53be01f` adds bounded,
+content-free classification for Anthropic request failures. It prefers the
+provider's safe machine code and otherwise maps only known message categories;
+it never returns or logs the raw provider message. Focused tests passed 10/10,
+the complete local suites passed core 1099/1099 and Cloudflare/infrastructure
+202/202, and lint plus type-check passed. GitHub Actions CI `33144330811`
+passed Website in 2m10s and Platform in 8m38s.
+
+Worker 161 `34c54357-0878-4637-b533-1fa1afa36336`, deployment
+`72c5d2be-e417-4dcf-a4eb-8022a59a1b61`, receives 100% production traffic. The
+first captured scheduled probe classified Anthropic's HTTP 400 as
+`PROBE_PROVIDER_HTTP_400_INVALID_REQUEST_ERROR_CREDIT_BALANCE_LOW`. Both public
+status endpoints agreed on 6/8 operational at
+`2026-08-28T05:36:31.571Z`: only `ai` and `document_analysis` were degraded;
+OpenAI and the Lawyer area remained operational. This is an external Anthropic
+account-balance blocker, not a healthy release claim. Add API credit, wait for
+a fresh scheduled probe, and require both endpoints to return operational
+before closing it.
+
+The exact screenshot route returns private/no-store `307` to the preserved app
+path. Isolated Chrome reached the localized Client login with one H1, one main
+landmark, no horizontal overflow and private noindex metadata instead of
+plaintext `Not Found`. The Cloudflare Turnstile frame emitted known provider
+issues and two opaque `NaN` console entries had no attributable source, so this
+replay does not claim a clean console.
+
+No production D1 write, migration, DNS or Sites change was made. Worker 160 is
+the immediate application rollback. Sites v86 remains live; saved v94 remains
+unpublished.
+
 ## 2026-08-28 Worker 158 Admin interaction floor
 
 Commit `93bb6abf48478af8de5bb86bbc38df3e6dcdbe15` applies the established
@@ -152,13 +184,13 @@ conformance result.
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/investor-ready-ecosystem` |
-| Latest platform runtime commit | `93bb6abf48478af8de5bb86bbc38df3e6dcdbe15` |
-| Latest platform source candidate | `93bb6abf48478af8de5bb86bbc38df3e6dcdbe15`; deployed |
+| Latest platform runtime commit | `316ef335a0dfd0e1acd57be2e4cfd014d53be01f` |
+| Latest platform source candidate | `316ef335a0dfd0e1acd57be2e4cfd014d53be01f`; deployed |
 | Latest public website source candidate | `5bdd905884834657cdb7223fc9419774c4085e61` |
 | Draft PRs | Platform `#64`; public website `#67` |
-| GitHub Actions | Current Platform CI `33136790049` on `93bb6abf` passed Website in 2m15s and Platform in 6m32s; Worker 157 CI `33134728801` and Worker 156 CI `33132278871` also passed both jobs |
-| Production Worker | `juro` version `6ebf3a20-ca4d-4751-8283-22bcc9b10988` (version 158), deployment `f7e89714-43be-4450-b232-6b988e8f7f86`, 100% traffic |
-| Immediate application rollback | `2ec24c74-57b9-4c66-8afa-372cceb24767` (version 157), deployment `62266f40-fe05-423b-9916-7c4220bf66d3` |
+| GitHub Actions | Current Platform CI `33144330811` on `316ef335` passed Website in 2m10s and Platform in 8m38s; Worker 160 CI `33140377036` and Worker 159 CI `33139057050` also passed both jobs |
+| Production Worker | `juro` version `34c54357-0878-4637-b533-1fa1afa36336` (version 161), deployment `72c5d2be-e417-4dcf-a4eb-8022a59a1b61`, 100% traffic |
+| Immediate application rollback | `3d029e81-c477-4215-b182-356985b00e6a` (version 160), deployment `f4065d40-b96f-47fb-85a0-704d634b656b` |
 | Public Sites release | Version 86, deployment `appgdep_6a9027658100819189e6e6bc1a20bf1d`; rollback version 85 |
 | Saved public Sites candidate | Version 94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`; not deployed |
 | Production D1 | `juro-production`, binding `DB` |
