@@ -88,3 +88,36 @@ from the federated source set until a separately evidenced formal freeze.
 - The release gate is not claimed: the federated snapshot/manifests,
   cross-source deduplication proof, indexed 314-scenario evaluation, Qdrant
   benchmark/restore and D1 backup/restore gates remain open.
+
+## Post-freeze release-gate probe (2026-08-28T06:27Z)
+
+The collection phase remains stopped. Sequential remote D1 queries were
+read-only (`rows_written=0`) and observed the following current state:
+
+| Database | Canonical documents | Exact current provisions | Indexed chunks | Active failed/dead-letter jobs | Historical terminal/technical failures | Locks | Checkpoints | Acquisition |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `juro-staging` | 3,575 | 62,075 | 151,499 | 0 | 230 | 2 pre-existing | 44/44 | legacy |
+| `juro-staging-corpus-v2` | 599 | 15,899 | 55,814 | 0 | 5 | 0 | 44/44 | frozen |
+| `juro-staging-corpus-shard-1` | 1,635 | 18,724 | 52,370 | 0 | 10 | 0 | 44/44 | frozen |
+| `juro-staging-corpus-shard-2` | 2,495 | 19,484 | 62,089 | 0 | 8 | 0 | 44/44 | frozen |
+| `juro-staging-corpus-shard-3` | 113 | 7,863 | 24,362 | 0 | 7 | 0 | 44/44 | active, excluded |
+
+The terminal/technical-failure column is the immutable failure ledger, not an
+active queue claim. It is therefore not silently reclassified as success. No
+new scheduler run was observed after the freeze deployments; shard-3 remains
+excluded because its control row is still `active`.
+
+The two owner-provided human-review exports were verified locally against the
+checked-in schema and hash-chain verifier: corpus `2026-08-13.1`, run
+`staging-20260814-canonical`, 314/314 records, zero verifier failures. The raw
+exports were not copied into the repository. This is valid human-review
+evidence for that historical canonical run; it does not prove a new indexed
+federated benchmark or current corpus snapshot.
+
+The current-head CI workflow `33146651604` and Qdrant snapshot/restore gate
+`33146653364` passed. A staging browser smoke attempt redirected to Cloudflare
+Access login, so authenticated post-deploy UI QA is not claimed. The quality
+snapshot guard correctly returned `LEGAL_CORPUS_QUALITY_SNAPSHOT_WINDOW_UNSAFE`
+and no snapshot was fabricated. D1 full export/restore remains open after the
+previous `SQLITE_NOMEM` probe; production, corpus ingestion, and rollout remain
+disabled.
