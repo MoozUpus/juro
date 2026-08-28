@@ -802,6 +802,18 @@ test("production deployment cannot activate a development-bound container follow
   ]);
 });
 
+test("staging deployment provisions the approved dense-Qdrant Container", () => {
+  const deployment = readFileSync(
+    new URL("../scripts/deploy-staging.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    deployment,
+    /"deploy",\s*"--config",\s*configPath,\s*"--containers-rollout",\s*"immediate"/s,
+  );
+  assert.doesNotMatch(deployment, /"--containers-rollout",\s*"none"/s);
+});
+
 test("ignores every supported local secret-file convention", () => {
   const candidates = [
     ".env",
