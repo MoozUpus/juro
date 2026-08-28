@@ -2,6 +2,19 @@
 
 ## Shipped to production
 
+- Platform Worker 168 (`9cbfccd2-ec57-4839-9209-061d216ec1b3`), deployment
+  `eae00573-f828-446d-8780-415603e4eced`, is at 100% traffic; Worker 167 is
+  the immediate rollback.
+- Worker 168 restores a visible shared-color focus outline to the labelled
+  Client dashboard AI-composer textarea. The Worker 167 keyboard baseline had
+  `:focus-visible` but no outline, border or shadow; the same production
+  Tab/Enter/Tab path now visibly focuses the field after skip-link transfer to
+  `main#main-content`, without horizontal overflow.
+- Exact CI `33195687549` passed source `0791a088`: Website 2m12s and Platform
+  8m44s. Public health was 8/8 operational with no incident, and the route
+  matrix retained its public/login/protected boundaries. No migration,
+  D1/notification mutation, DNS or Sites change was made; Sites v86 remains
+  live.
 - Platform Worker 167 (`b67a2ed8-74f8-4d62-968e-87bff9d3e4dc`), deployment
   `7f1431fd-3e89-491d-aacc-f1c630ca020e`, is at 100% traffic; Worker 166 is
   the immediate rollback.

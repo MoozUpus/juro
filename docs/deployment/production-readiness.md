@@ -4,6 +4,39 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Worker 168 Client dashboard keyboard focus
+
+Commit `0791a0884a7b9491cc0b8313faf79227bd826a66` restores a dedicated
+visible focus indicator to the Client dashboard AI-composer textarea. On the
+production Worker 167 baseline, the first Tab visibly focused the skip link and
+Enter transferred focus to `main#main-content`, but the next Tab reached the
+correctly labelled textarea with `:focus-visible` true and no outline, border
+or shadow.
+
+The focused source regression passed 1/1, followed by type-check, lint and the
+production build. All artifact budgets remained within their limits, including
+594.8 KiB of the 600.0 KiB client CSS budget. Exact GitHub Actions CI
+`33195687549` passed the source SHA: Website in 2m12s and Platform in 8m44s.
+
+Worker 168 `9cbfccd2-ec57-4839-9209-061d216ec1b3`, deployment
+`eae00573-f828-446d-8780-415603e4eced`, receives 100% traffic. The exact
+production CSS asset contains the `3px` shared-color outline and `3px` offset.
+In the same authenticated Chrome session, the post-release Tab/Enter/Tab replay
+again reached the labelled textarea, now with a solid visible outline. The
+page retained one H1, one main landmark, private `noindex` metadata and no
+horizontal overflow at 1521 CSS px. No form was submitted and no customer data
+was changed.
+
+The public route matrix retained the expected public 200s and redirects.
+Status generated at `2026-08-28T17:53:44.842Z` was 8/8 operational with no
+active or recent incident. OpenAI was operational at
+`2026-08-28T17:45:51.052Z` (`3484 ms`, no safe error) and Anthropic at
+`2026-08-28T17:45:57.449Z` (`6025 ms`, no safe error).
+
+No D1 migration or mutation, DNS change, notification mutation or Sites
+release was made. Sites v86 remains live. Worker 167 is the immediate
+application rollback.
+
 ## 2026-08-28 Worker 167 Client login layout stability
 
 Commit `4eba97cead5c56d47c51dbc1965b5b440871dd5b` removes an obsolete

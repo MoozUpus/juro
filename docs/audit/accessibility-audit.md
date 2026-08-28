@@ -2,14 +2,16 @@
 
 ## Current implementation evidence
 
-- A signed-in production Chrome keyboard sample of the Client dashboard
-  confirmed that the skip link is first in the tab order, has a visible
-  `2.4px` outline and transfers focus to `main#main-content`. The next focusable
-  control, the labelled AI-composer textarea, had no outline, border or shadow
-  even though `:focus-visible` matched. The source candidate adds a dedicated
-  `3px` focus ring with `3px` offset and a regression contract. Focused test,
-  type-check, lint and the production build pass locally; this remains a
-  pre-release result until exact CI and a post-deploy Chrome replay pass.
+- Worker 168 closes the confirmed Client dashboard composer focus defect. On
+  Worker 167, a signed-in Chrome keyboard sample found that the skip link was
+  first, visibly focused and transferred focus to `main#main-content`, but the
+  next focusable control, the labelled AI-composer textarea, had no outline,
+  border or shadow even though `:focus-visible` matched. After release, the
+  same Tab/Enter/Tab sequence reached the same textarea with a solid visible
+  focus outline in the shared focus color. The field retained its associated
+  label and the desktop document retained zero horizontal overflow. The exact
+  production CSS asset contains the dedicated `3px`/`3px` source rule. This is
+  a bounded keyboard sample, not a blanket assistive-technology or WCAG claim.
 - The product shell has a keyboard-visible skip link. Every public
   `#main-content` target is programmatically focusable, and the built-site
   Chrome runner now fails unless activating the link transfers focus to it.
@@ -141,9 +143,9 @@ for:
 
 1. live login/register/OTP/MFA error announcement and focus behavior after an
    authorized real asynchronous error is produced;
-2. AI composer clarification, streaming/cancel, source cards and feedback; the
-   dashboard composer label and visible-focus defect are covered by the current
-   release candidate, but the rest of this workflow remains open;
+2. AI composer, clarification, streaming/cancel, source cards and feedback; the
+   dashboard composer label and visible-focus defect are covered on Worker 168,
+   but the rest of this workflow remains open;
 3. document upload, analysis findings, comparison tabs and export actions;
 4. case deadlines and lawyer request/consultation dialogs;
 5. admin status/cost tables.

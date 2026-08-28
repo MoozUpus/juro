@@ -1,19 +1,21 @@
 # Test report — current evidence through 2026-08-28
 
-## Client dashboard keyboard-focus release candidate
+## Worker 168 Client dashboard keyboard-focus closure
 
 | Gate | Result |
 | --- | --- |
 | Production baseline | FAIL observed on Worker 167 — in an existing authenticated Client session, the first Tab focused the visible skip link and Enter transferred focus to `main#main-content`; the next Tab reached `#dashboard-legal-task`, where `:focus-visible` matched but outline, border and box shadow were all absent |
 | Accessible name | PASS — the textarea is associated with the visually hidden label `Опишите ситуацию или задайте юридический вопрос` |
-| Source correction | PASS candidate — `.dashboard-command-form textarea:focus-visible` now uses the shared focus color with a `3px` outline and `3px` offset |
+| Source correction | PASS — `.dashboard-command-form textarea:focus-visible` uses the shared focus color with a `3px` outline and `3px` offset; the exact production CSS asset contains this rule |
 | Focused regression | PASS — 1/1 dashboard mobile/zoom/keyboard accessibility safeguard test |
 | Static and artifact gates | PASS — type-check, lint and production build; artifact budgets remain within limits, including client CSS 594.8 KiB of 600.0 KiB |
-| Exact CI | PENDING — publication is gated on the exact pushed source commit |
-| Production deployment | NOT STARTED — Worker 167 remains live and is the rollback candidate |
+| Exact CI | PASS — run `33195687549` on source `0791a0884a7b9491cc0b8313faf79227bd826a66`; Website 2m12s and Platform 8m44s |
+| Production deployment | PASS — Worker 168 `9cbfccd2-ec57-4839-9209-061d216ec1b3`, deployment `eae00573-f828-446d-8780-415603e4eced`, receives 100%; Worker 167 is rollback |
+| Production keyboard replay | PASS — the same Tab/Enter/Tab path focused the skip link, transferred focus to `main#main-content` and then reached the labelled textarea with a solid visible shared-color outline; document width equalled client width at 1521 px |
+| Production route/health | PASS — public surfaces returned their expected 200/redirect boundaries; status generated at `2026-08-28T17:53:44.842Z` was 8/8 operational with no active or recent incidents |
 | Deployment boundary | PASS — no D1 mutation, migration, DNS, notification or Sites change; Sites v86 remains live |
 
-This is a bounded manual keyboard finding and release candidate, not a blanket
+This is a bounded manual keyboard finding and release result, not a blanket
 WCAG conformance claim. No form was submitted and no authenticated customer
 data was changed during the sample.
 
