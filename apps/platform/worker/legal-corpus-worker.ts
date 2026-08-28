@@ -113,10 +113,20 @@ const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"]
 // sequential invocation. The shared robots policy and 20-second host pacer
 // remain authoritative for every source request.
 const INGESTION_START_CUTOFF_MS = 195_000;
-// Dense activation happens only after the source queue is frozen. Four
-// 64-chunk batches cap one invocation at eight embedding calls while allowing
-// the complete current corpus to resume from D1 after a Worker restart.
-const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;
+// Dense activation happens only after the source queue is frozen. Keep the
+// production/default budget conservative and allow staging to opt into a
+// larger sequential budget explicitly. This changes throughput only; each
+// batch remains bounded at 64 chunks and all provider calls stay behind the
+// existing cost circuit.
+const DEFAULT_QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;
+const MAX_STAGING_QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 16;
+
+export function qdrantBackfillBatchesPerIdleRun(env: Pick<LegalCorpusWorkerEnv, "APP_ENV" | "LEGAL_CORPUS_QDRANT_BACKFILL_BATCHES_PER_RUN">): number {
+  if (env.APP_ENV !== "staging") return DEFAULT_QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN;
+  const configured = Number(env.LEGAL_CORPUS_QDRANT_BACKFILL_BATCHES_PER_RUN ?? "");
+  if (!Number.isInteger(configured) || configured < 1) return DEFAULT_QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN;
+  return Math.min(configured, MAX_STAGING_QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN);
+}
 
 type CorpusCoverageBootstrapRow = {
   categoryKey: string;
@@ -324,6 +334,7 @@ type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   /** Additive compressed sparse migration remains an explicit capacity gate. */
   LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED?: string;
   LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN?: string;
+  LEGAL_CORPUS_QDRANT_BACKFILL_BATCHES_PER_RUN?: string;
 };
 
 type ClaimedRun = {
@@ -765,7 +776,7 @@ export async function handleLegalCorpusScheduled(
       : 0;
     const ingestionClaimed = ingestions.some((result) => result.claimed);
     if (denseBackfillEnabled(env) && !ingestionClaimed) {
-      for (let index = 0; index < QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN; index += 1) {
+      for (let index = 0; index < qdrantBackfillBatchesPerIdleRun(env); index += 1) {
         await renewRunLease(env, run);
         log("info", {
           event: "legal_corpus.qdrant_backfill_start",

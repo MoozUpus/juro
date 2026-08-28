@@ -14,6 +14,7 @@ import {
   legalCorpusIngestionStartAllowed,
   legalCorpusWorkerErrorCode,
   legalCorpusVersionSlotIndexes,
+  qdrantBackfillBatchesPerIdleRun,
   renewRunLease,
   LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES,
   LEGAL_CORPUS_PROCESS_CRON,
@@ -230,6 +231,20 @@ test("staging shard may use a larger sequential budget without changing producti
   assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "999" }), 20);
   assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "bogus" }), 5);
   assert.equal(legalCorpusIngestionJobBudget([], { ingestionJobsPerRun: 20 }), 20);
+});
+
+test("dense backfill throughput is explicitly bounded to staging", () => {
+  assert.equal(qdrantBackfillBatchesPerIdleRun({ APP_ENV: "production" }), 4);
+  assert.equal(qdrantBackfillBatchesPerIdleRun({ APP_ENV: "staging" }), 4);
+  assert.equal(qdrantBackfillBatchesPerIdleRun({
+    APP_ENV: "staging", LEGAL_CORPUS_QDRANT_BACKFILL_BATCHES_PER_RUN: "16",
+  }), 16);
+  assert.equal(qdrantBackfillBatchesPerIdleRun({
+    APP_ENV: "staging", LEGAL_CORPUS_QDRANT_BACKFILL_BATCHES_PER_RUN: "999",
+  }), 16);
+  assert.equal(qdrantBackfillBatchesPerIdleRun({
+    APP_ENV: "staging", LEGAL_CORPUS_QDRANT_BACKFILL_BATCHES_PER_RUN: "0",
+  }), 4);
 });
 
 test("long historical batches reserve one bounded slot to continue a live core-code pager", () => {
@@ -504,7 +519,8 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /const VERSION_INGESTION_SLOT_INDEX = 3;/u);
   assert.match(corpusWorker, /const INGESTION_START_CUTOFF_MS = 195_000;/u);
   assert.match(corpusWorker, /LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS = 10 \* 60_000;/u);
-  assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
+  assert.match(corpusWorker, /const DEFAULT_QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
+  assert.match(corpusWorker, /const MAX_STAGING_QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 16;/u);
   assert.doesNotMatch(corpusWorker, /afterIngest:/u);
 });
 
