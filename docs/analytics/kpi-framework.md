@@ -94,6 +94,12 @@ The four-day window contained 24 stored rows representing exactly 24 events;
 counts. The observed range was `2026-08-25 08:10:02Z` through
 `2026-08-28 01:46:27Z`.
 
+A later read-only checkpoint on the same date used an exact
+`toDateTime('2026-08-25 00:00:00')` boundary and returned the same 24 rows and
+event totals. A separate boundary at the Worker 166 release time,
+`2026-08-28 16:07:52Z`, returned zero stored and represented events. The live
+contract is deployed, but no post-release observation growth is claimed yet.
+
 | Event | Count |
 | --- | ---: |
 | `lawyer_viewed` | 13 |

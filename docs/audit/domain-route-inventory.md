@@ -40,7 +40,10 @@ live route merely because it exists.
 
 Mail, FTP and verification records are DNS infrastructure, not JURO web
 application surfaces. They cannot be refreshed exhaustively until the active
-credential has Zone DNS Read access.
+credential has Zone DNS Read access. A fresh read-only Cloudflare API check on
+2026-08-28 resolved the active zone successfully, then the DNS-record listing
+failed with HTTP 403 and Cloudflare code `10000` (`Authentication error`). This
+is direct scope evidence; no DNS record or value was inferred from the failure.
 
 ## Cloudflare routing topology
 
@@ -92,4 +95,4 @@ part of this read-only inventory.
    every A, AAAA, CNAME, TXT, MX and other record.
 2. Complete authenticated Client, Business, Lawyer and Admin route-by-route
    browser evidence on the exact deployed Platform version.
-4. Treat the inventory as **PARTIAL** until those gates have direct evidence.
+3. Treat the inventory as **PARTIAL** until those gates have direct evidence.

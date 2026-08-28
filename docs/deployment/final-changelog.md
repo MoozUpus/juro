@@ -1,5 +1,14 @@
 # Changelog — ecosystem audit release through 2026-08-28
 
+## Current operational verification
+
+- After the owner reported replenishing the Anthropic account, independent
+  production app/status reads generated at `2026-08-28T18:32:32.114Z` agreed
+  on 8/8 operational with no incident. Anthropic was operational at
+  `18:30:54.428Z` (5,895 ms, no safe error) and document analysis at
+  `18:31:06.053Z` (11,256 ms, no safe error). This was a read-only recovery
+  verification, not a new release.
+
 ## Shipped to production
 
 - Platform Worker 168 (`9cbfccd2-ec57-4839-9209-061d216ec1b3`), deployment

@@ -4,6 +4,20 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-28 Anthropic account recovery recheck
+
+After the owner reported replenishing the Anthropic account, independent reads
+through `app.juro.uz/api/status` and `status.juro.uz/api/status` returned the
+same snapshot generated at `2026-08-28T18:32:32.114Z`: all eight published
+components were operational and there was no active incident. Anthropic's fresh
+synthetic probe was operational at `2026-08-28T18:30:54.428Z` (5,895 ms, no
+safe error); the dependent document-analysis probe was operational at
+`2026-08-28T18:31:06.053Z` (11,256 ms, no safe error).
+
+This was a read-only recovery check. No provider prompt, private upload,
+customer-data access, D1 mutation, DNS change, notification or release was
+performed. Worker 168 and Sites v86 remain live.
+
 ## 2026-08-28 Worker 168 Client dashboard keyboard focus
 
 Commit `0791a0884a7b9491cc0b8313faf79227bd826a66` restores a dedicated

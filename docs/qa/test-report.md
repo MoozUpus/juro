@@ -1,5 +1,15 @@
 # Test report — current evidence through 2026-08-28
 
+## Anthropic account recovery recheck
+
+| Gate | Result |
+| --- | --- |
+| Independent production reads | PASS — `app.juro.uz/api/status` and `status.juro.uz/api/status` returned the same snapshot generated at `2026-08-28T18:32:32.114Z` |
+| Anthropic | PASS — fresh synthetic probe operational at `2026-08-28T18:30:54.428Z`, 5,895 ms, no safe error |
+| Dependent document analysis | PASS — operational at `2026-08-28T18:31:06.053Z`, 11,256 ms, no safe error |
+| Aggregate health | PASS — all eight published components operational and no active incident |
+| Scope | READ-ONLY — no prompt, upload, customer data, D1 mutation, DNS change, notification or release |
+
 ## Worker 168 Client dashboard keyboard-focus closure
 
 | Gate | Result |
@@ -45,6 +55,7 @@ data was changed during the sample.
 | --- | --- |
 | Exact source | PASS — runtime commit `aaba59828a967aded926c1fe79b3e5c80936460d`, release evidence commit `14ecae9a475c75d54c92e8c69d96a3c12290af8e`, Draft PR `#64` |
 | Production dataset read | PASS read-only — the Analytics Engine SQL API returned 24 stored/represented events from `2026-08-25 08:10:02Z` through `2026-08-28 01:46:27Z`; every `_sample_interval` was 1 |
+| Observation-window recheck | PASS read-only — the exact `2026-08-25 00:00:00Z` boundary still returned 24 represented events; the exact Worker 166 release boundary at `2026-08-28 16:07:52Z` returned zero, so no post-release growth or conversion baseline is claimed |
 | Observed schema | PASS for the 24-row window — all rows used one of the 21 canonical product events and the expected first-six dimensions |
 | Data-quality result | PARTIAL — only one consented `landing_view`, zero signup start/completion events and no privacy-safe cohort linkage; activation, return, drop-off and conversion remain `UNVERIFIED` |
 | Fixed defect | PASS candidate — operational support telemetry now preserves the common event/surface/locale/outcome/provider/variant positions and moves only allowlisted category/severity to `blob7`/`blob8` |

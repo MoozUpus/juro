@@ -14,9 +14,12 @@ Worker 161 safely classified the repeated Anthropic HTTP 400 as
 `PROBE_PROVIDER_HTTP_400_INVALID_REQUEST_ERROR_CREDIT_BALANCE_LOW`. The raw
 provider message, prompts and secrets were not logged. After the account balance
 was restored, fresh production probes recorded Anthropic operational at
-`2026-08-28T06:47:17.754Z`; AI and document analysis are operational and the
-exception is closed by current 8/8 evidence rather than by the balance action
-alone.
+`2026-08-28T06:47:17.754Z`. After the owner's latest account top-up report,
+independent app/status-host reads generated at `2026-08-28T18:32:32.114Z`
+again agreed on 8/8 operational with no incident. Anthropic was operational at
+`18:30:54.428Z` (5,895 ms, no safe error) and document analysis at
+`18:31:06.053Z` (11,256 ms, no safe error). The exception is closed by live
+provider evidence rather than by the balance action alone.
 
 The same recovery window exposed a separate P1 operational defect: Lex RSS
 delivery-time churn had generated repeated metadata changes and 222,329
@@ -111,11 +114,11 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | Full legal corpus/vector retrieval | NOT RELEASED | Separate 44/44 snapshot/evaluation gate open; production flags disabled. |
 | Document/case/lawyer workflows | PASS from prior authenticated release evidence; PARTIAL for this delta | The analytics delta is covered by server-side success-boundary tests. Fresh in-app browser checks proved guest, Client login, dedicated Lawyer login, Admin re-auth and status boundaries; no new OTP-authenticated mutable workflow was submitted for this delta. |
 | Payments | DEMO / NOT APPROVED | Production approval flag false; no live-payment claim. |
-| Product analytics | DEPLOYED | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. No conversion baseline is invented before an observation window exists. |
+| Product analytics | DEPLOYED / INSUFFICIENT SAMPLE | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. The 2026-08-28 read-only recheck retained 24 represented events from 25 August onward and found zero events at or after the Worker 166 release boundary, so no conversion baseline is invented. |
 | AI costs | ACTIVE MEASUREMENT / INSUFFICIENT SAMPLE | Four official, effective-dated production price rows passed backup/restore gates. The protected console now reports 100% current price coverage, `$0.104549` estimated cost and 4/30 priced successes; it refuses to call the sample ready and explicitly shows that production cost-guard policies are not configured. The 30% reduction target remains `UNVERIFIED`. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
 | Accessibility | PARTIAL | The exact public source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix with zero automated violations and no visible text below the project 12 px floor, plus retained keyboard and visual samples. Workers 156–158 close confirmed Client comparison, Lawyer professional and non-corpus Admin interaction-target defects. Worker 168 closes the confirmed Client dashboard composer visible-focus defect with an authenticated production keyboard replay. Lawyer/Admin anonymous boundaries remain fail-closed and their re-authentication surfaces have one H1/main and no overflow, but no signed-in Lawyer/Admin, real OTP/MFA error, screen reader or physical mobile device was used. Protected Lawyer/Admin rendering, live auth-error assistive-technology replay and the deployed-Sites replay remain open, so this is not a WCAG conformance claim. |
-| Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Anthropic and document analysis recovered to operational after API credit restoration. Overdue infrastructure billing and unavailable real CWV tracing remain explicit risks. |
+| Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Fresh app/status reads reconfirmed Anthropic and document analysis operational after the reported account top-up. The active zone can be read, but exhaustive DNS inventory is still externally gated: the current credential receives HTTP 403 / Cloudflare code `10000` when listing DNS records because it lacks dedicated Zone DNS Read. Overdue infrastructure billing and unavailable real CWV tracing remain explicit risks. |
 
 ## Definition of done for this candidate
 
@@ -142,6 +145,13 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
   CI `33196973919` then passed the release-evidence tip `f70eb412` (Website
   2m12s, Platform 9m05s). Worker 167 is rollback; D1, DNS, notifications and
   Sites were unchanged.
+- After the owner reported replenishing the Anthropic account, two independent
+  production status reads agreed on 8/8 operational at
+  `2026-08-28T18:32:32.114Z`; the fresh Anthropic and document-analysis probes
+  were operational without safe errors. The Analytics Engine recheck remained
+  at 24 represented events from 25 August onward and zero after the Worker 166
+  release boundary. The active Cloudflare zone lookup succeeded, while DNS
+  record listing returned the documented HTTP 403 / code `10000` scope gate.
 - CI `33169181945` passed exact Worker 165 source
   `6af3cff4572f83e8f31b40858b5708a6b510f27e` (Website 1m46s, Platform
   8m57s). Local gates passed focused cost 4/4, core 1106/1106,
