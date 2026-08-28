@@ -9,8 +9,9 @@ release approval and not a legal-coverage claim.
 - JURO branch: `feature/full-legal-corpus`
 - Retrieval commit: `5ba3352d`
 - Shard-ingestion freeze commit: `0e016a31`
+- Legacy-ingestion freeze commit: `9aa68342`
 - Staging Worker deployment: `juro-platform-staging`, version
-  `27929406-8454-4eb3-9e1e-bc04ed7650ec`
+  `562ff94b-9c0d-497b-ace9-45405d16c8e5` (2026-08-28T05:54:54Z)
 - Dedicated corpus Worker deployment: `juro-legal-corpus-staging`, version
   `72dd276b-4ba6-4275-aa12-a2a1b09f197f`
 - `LEGAL_CORPUS_FEDERATED_ENABLED=true`
@@ -58,6 +59,17 @@ auto-ingestion, live and shadow flags disabled. Its two pre-existing running
 job rows are retained as lease-recovery evidence; no new scheduler run was
 created by the freeze.
 
+## Read-only post-freeze probe
+
+Sequential remote D1 probes on 2026-08-28 after the platform redeploy
+confirmed that the four federated sources retain their indexed totals and no
+terminal/dead-letter ingestion jobs. The dedicated v2 and shard-3 workers have
+no new scheduler run after the freeze. Legacy `juro-staging` still contains
+three pre-existing running version rows and two expired lock rows from the
+older acquisition path; they were not mutated or force-completed. The
+shard-3 control row remains `acquisition_state=active`, so it stays excluded
+from the federated source set until a separately evidenced formal freeze.
+
 ## Verification
 
 - Federated/chat/retrieval/shard boundary tests: 43 passed, 0 failed.
@@ -70,6 +82,9 @@ created by the freeze.
 - The platform staging Worker was redeployed with legacy Lex ingestion,
   metadata monitoring and RSS discovery disabled as well; this prevents new
   acquisition through the older queue while retaining read-only retrieval.
+- CI workflow run `33146232319` completed successfully for commit `9aa68342`;
+  website and platform jobs passed their configured checks. Qdrant snapshot /
+  restore workflow run `33146234786` also completed successfully.
 - The release gate is not claimed: the federated snapshot/manifests,
   cross-source deduplication proof, indexed 314-scenario evaluation, Qdrant
   benchmark/restore and D1 backup/restore gates remain open.
