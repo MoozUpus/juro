@@ -7,14 +7,18 @@ per-database limit. The staging-only continuation database
 `juro-staging-corpus-shard-1` (`e09e0682-0c2e-4458-a8f3-be9de28117e3`) let the
 bounded Lex.uz ingestion continue without deleting or rewriting the v2 corpus.
 On 2026-08-25 its continuation state was atomically handed to
-`juro-staging-corpus-shard-2` (`36fa1cfe-6d00-47b7-a980-864020028d86`). Shard 1
-is durably frozen and shard 2 is the only active acquisition database.
+`juro-staging-corpus-shard-2` (`36fa1cfe-6d00-47b7-a980-864020028d86`). On
+2026-08-28, after shard-2 crossed the documented D1 rollover reserve, its
+continuation queue was atomically handed to
+`juro-staging-corpus-shard-3` (`ccf1f18e-66cf-4358-a7aa-f1d725b7653c`). Shard 1
+and shard 2 are durably frozen; shard 3 is now the only active acquisition
+database.
 
 ## Isolation
 
 - Worker: `juro-legal-corpus-shard-staging`.
 - Config: `apps/platform/wrangler.legal-corpus-shard.jsonc`.
-- Binding: `DB` points only to `juro-staging-corpus-shard-2` in the staging
+- Binding: `DB` points only to `juro-staging-corpus-shard-3` in the staging
   environment.
 - There is no production environment in the shard config.
 - `LEGAL_CORPUS_DENSE_ENABLED=false`; the private Qdrant and embedding
@@ -22,6 +26,11 @@ is durably frozen and shard 2 is the only active acquisition database.
   gate is approved.
 - The primary legal-corpus Worker still points to v2; its capacity guard fails
   closed before source work. It does not share a crawl stream with the shard.
+
+The shard Worker is currently deployed against shard 3 with Qdrant collection
+suffix `juro_legal_staging_shard_3`. Shard 2 remains a read-only historical
+source of corpus text; activating cross-shard retrieval requires the separate
+federation/deduplication release gate.
 
 ## Seed contract
 
