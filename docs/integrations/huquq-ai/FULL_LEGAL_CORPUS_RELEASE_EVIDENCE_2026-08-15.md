@@ -13167,3 +13167,21 @@ to a completed job and is projected as resolved by the dashboard; there were
 zero retrying jobs, failed jobs or dead-letter jobs. The queue remained open
 (26,009 fetch and 3,295 version jobs) with `acquisition_state=active`, so the
 release gate and evaluation gates remain pending.
+
+## Shard-3 priority ingestion quality snapshot (2026-08-28, 02:12Z)
+
+Scheduled run `5b84a135-b6e8-4dfc-9e81-605b04515f06` completed at
+`2026-08-28T02:12:25.735Z`. The read-only quality command captured shard-3 at
+`2026-08-28T02:12:51.931Z`, with empty locks and a 190/187-second window before
+the next nominal `*/4` boundary; Wrangler reported `rowsWritten=0`.
+
+The target contained 37 documents, 43 variants, 5,765 exact unique current
+provisions, 17,067 physical current provisions and 17,078 current/indexed
+chunks. All 44 checkpoints were completed and count-aligned; 14 of 19 core
+code targets were indexed on this continuation shard. Unversioned variants,
+version/pointer/orphan/integrity errors, missing sparse coverage and
+completion-revalidation candidates were zero. The failure ledger retained one
+retrying language-text-unavailable evidence row attached to a completed job
+and projected as resolved by the dashboard; there were zero retrying jobs,
+failed jobs or dead-letter jobs. The queue remained open (26,238 fetch and
+3,289 version jobs), so release and evaluation gates remain pending.
