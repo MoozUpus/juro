@@ -60,6 +60,14 @@ test("worker errors preserve only safe actionable tokens", () => {
     legalCorpusWorkerErrorCode(new Error("provider response contained an unsafe message")),
     "LEGAL_CORPUS_WORKER_FAILED",
   );
+  assert.equal(
+    legalCorpusWorkerErrorCode(new Error("QDRANT_PRIVATE_SERVICE_UNAVAILABLE")),
+    "QDRANT_PRIVATE_SERVICE_UNAVAILABLE",
+  );
+  assert.equal(
+    legalCorpusWorkerErrorCode(new Error("EMBEDDING_PRIVATE_SERVICE_UNAVAILABLE")),
+    "EMBEDDING_PRIVATE_SERVICE_UNAVAILABLE",
+  );
 });
 
 test("corpus Worker is inert before both ingestion flags are enabled", async () => {

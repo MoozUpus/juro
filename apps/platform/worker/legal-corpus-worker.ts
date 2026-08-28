@@ -370,7 +370,11 @@ export function legalCorpusWorkerErrorCode(error: unknown): string {
   if (/\b(?:exceeded maximum db size|maximum database size|database is full|sqlite_full)\b/iu.test(message)) {
     return "LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED";
   }
-  const match = message.match(/\b(?:D1|LEGAL|SQLITE)_[A-Z0-9_]+\b/u);
+  // Preserve allow-listed subsystem codes so a failed private Qdrant or
+  // embedding relay run is diagnosable without persisting provider URLs,
+  // SQL, or source text.  These are intentionally limited to the same
+  // machine-readable error-code convention used by the subsystem classes.
+  const match = message.match(/\b(?:D1|LEGAL|SQLITE|QDRANT|EMBEDDING|PROVIDER)_[A-Z0-9_]+\b/u);
   return match?.[0] ?? "LEGAL_CORPUS_WORKER_FAILED";
 }
 
