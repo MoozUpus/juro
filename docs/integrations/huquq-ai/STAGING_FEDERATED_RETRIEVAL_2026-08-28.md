@@ -121,3 +121,10 @@ snapshot guard correctly returned `LEGAL_CORPUS_QUALITY_SNAPSHOT_WINDOW_UNSAFE`
 and no snapshot was fabricated. D1 full export/restore remains open after the
 previous `SQLITE_NOMEM` probe; production, corpus ingestion, and rollout remain
 disabled.
+
+After this probe was committed, exact-head checks also passed for commit
+`95402442c7e7587729f13796109c2a3eb6ce3c40`: CI workflow `33148074850`
+(Website and Platform validation) and Qdrant snapshot/restore workflow
+`33148077161`. These checks validate the checked-in code and infrastructure
+fixture; they do not close the legal corpus release gate or substitute for
+indexed legal evaluation and D1 restore evidence.
