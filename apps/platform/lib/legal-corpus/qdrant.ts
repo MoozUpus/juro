@@ -242,13 +242,14 @@ async function requestResponse(
         // cross-runtime Request constructor keeps Cloudflare's private
         // binding path compatible with streaming/body implementations.
         response = await env.QDRANT_SERVICE.fetch(endpoint(env, suffix), requestInit);
-      } catch {
+      } catch (error) {
         // A failed service binding is distinct from an HTTP response from
         // Qdrant; keep that distinction in the bounded staging run ledger.
         console.error(JSON.stringify({
           service: "legal-corpus-qdrant-client",
           event: "qdrant.transport_failed",
           transport: "service",
+          errorType: error instanceof Error ? error.name : typeof error,
           errorCode: "QDRANT_PRIVATE_SERVICE_UNAVAILABLE",
         }));
         throw new QdrantCorpusError("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", true);
@@ -265,11 +266,12 @@ async function requestResponse(
             : requestInit
         ) as RequestInit);
         response = await container.fetch(request);
-      } catch {
+      } catch (error) {
         console.error(JSON.stringify({
           service: "legal-corpus-qdrant-client",
           event: "qdrant.transport_failed",
           transport: "container",
+          errorType: error instanceof Error ? error.name : typeof error,
           errorCode: "QDRANT_CONTAINER_UNAVAILABLE",
         }));
         throw new QdrantCorpusError("QDRANT_CONTAINER_UNAVAILABLE", true);
@@ -278,11 +280,12 @@ async function requestResponse(
       phase = "direct-fetch";
       try {
         response = await fetchImpl(endpoint(env, suffix), requestInit);
-      } catch {
+      } catch (error) {
         console.error(JSON.stringify({
           service: "legal-corpus-qdrant-client",
           event: "qdrant.transport_failed",
           transport: "direct",
+          errorType: error instanceof Error ? error.name : typeof error,
           errorCode: "QDRANT_DIRECT_FETCH_FAILED",
         }));
         throw new QdrantCorpusError("QDRANT_DIRECT_FETCH_FAILED", true);

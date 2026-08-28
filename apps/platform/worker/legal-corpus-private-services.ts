@@ -112,10 +112,11 @@ export async function handleLegalCorpusQdrantServiceRequest(
   const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
   try {
     await container.startAndWaitForPorts({});
-  } catch {
+  } catch (error) {
     console.error(JSON.stringify({
       service: "legal-corpus-private-qdrant",
       event: "qdrant.container_start_failed",
+      errorType: error instanceof Error ? error.name : typeof error,
       errorCode: "QDRANT_CONTAINER_START_FAILED",
     }));
     return privateJson("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", 503);
@@ -130,10 +131,11 @@ export async function handleLegalCorpusQdrantServiceRequest(
       statusText: response.statusText,
       headers,
     });
-  } catch {
+  } catch (error) {
     console.error(JSON.stringify({
       service: "legal-corpus-private-qdrant",
       event: "qdrant.container_fetch_failed",
+      errorType: error instanceof Error ? error.name : typeof error,
       errorCode: "QDRANT_CONTAINER_FETCH_FAILED",
     }));
     return privateJson("QDRANT_PRIVATE_SERVICE_UNAVAILABLE", 503);
