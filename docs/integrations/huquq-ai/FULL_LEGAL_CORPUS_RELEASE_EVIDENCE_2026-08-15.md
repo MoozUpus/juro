@@ -13089,3 +13089,42 @@ documents and indexed chunks but the exact unique-provision floor is still
 capacity check remains mandatory. Release snapshot, indexed 314-scenario
 evaluation, Qdrant/D1 restore, CI, federation activation and production
 rollout remain pending; production was not changed.
+
+## Staging shard-2 rollover and shard-3 activation (2026-08-28, 00:36–01:30Z)
+
+After the 00:36 scheduled run completed, the lock-free quality probe measured
+2,495 documents, 19,484 exact unique current provisions and 62,089
+current/indexed chunks on `juro-staging-corpus-shard-2`. The D1 size was
+8,103,514,112 bytes, above the documented rollover reserve; terminal and
+dead-letter jobs were zero, with eight intentional
+`technically_unavailable` EN-only source-condition rows. The first prepare
+attempt encountered a transient Wrangler `fetch failed` during a remote
+import. The resumable retry reused the same handoff and completed without
+manual SQL mutation.
+
+Prepare completed with handoff id
+`cba36e1c-30b7-4f32-a0f8-e73321c66ac1` and manifest SHA-256
+`3849c1935c8cb0e1b9388ef49cef202533cbebef503e1240dcb7fef11106fc1d`.
+The manifest covered 44 checkpoints, 27,900 discovery URLs, 27,269 active
+jobs and zero failure rows. Source shard-2 now has 27,269 immutable handoff
+tombstones and zero remaining unhanded active jobs; its shard-control row is
+`frozen`. Target shard-3 contains the matching 44 checkpoints, 27,900
+discovery URLs and 27,269 claimable job copies with a matching handoff ledger;
+it intentionally contains no copied corpus text, provisions or chunks.
+
+The staging Worker was then deployed as version
+`22d00bd0-781a-47d8-a9c1-94c40335c7ac` with `DB` bound to
+`juro-staging-corpus-shard-3` (`ccf1f18e-66cf-4358-a7aa-f1d725b7653c`) and a
+separate dormant Qdrant collection suffix. Activation completed with the same
+handoff id and target deployment metadata; the first target run
+`f9f0ae95-84ae-411a-8f0e-122f6dd934e5` started at 01:28Z. Its active fetch was
+the Russian/Cyrillic representation of Lex document `97664`, an administrative
+responsibility code target; at the next probe target had one materialized
+document, two variants, zero retrying/failed/dead-letter jobs and 44 aligned
+checkpoints. The target queue remains open and acquisition is not frozen.
+
+This proves only a staging continuation handoff and priority-preserving
+ingestion. Existing source text remains on frozen shard-2; cross-shard
+deduplication/federated retrieval, release snapshot, indexed 314-scenario
+evaluation, Qdrant/D1 restore, CI and production rollout remain pending.
+No production binding, migration, flag or DNS record was changed.
