@@ -184,3 +184,14 @@ platform staging Worker remains in the read-only federated configuration.
 Local platform checks on the exact head `138b1ae3d9c0009119d9acb4e81647c207ff005d`
 also passed: type-check, lint and 186 Cloudflare tests. These are code-quality
 results only and do not substitute for the still-open legal release gates.
+
+## Exact-head CI after the documentation probe
+
+The documentation-only follow-up commit
+`4b2e7c2ece5d40c06645e855dd8b332d6871cbe7` was checked explicitly with manual
+workflow dispatches. CI run `33152479507` passed both `apps/platform` and
+`apps/website` (lint, type-check, tests, deployable artifact, environment
+matrix, production dependency audit and license policy). Qdrant snapshot and
+restore run `33152482152` also passed. These workflows do not access D1 legal
+content and do not close the indexed 314-scenario, federated D1 snapshot or
+isolated D1 restore gates.
