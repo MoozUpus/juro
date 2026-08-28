@@ -1,0 +1,60 @@
+# Staging federated legal retrieval — 2026-08-28
+
+This note records the staging-only handoff from bounded corpus acquisition to
+read-only federated retrieval. It is operational evidence, not a production
+release approval and not a legal-coverage claim.
+
+## Runtime boundary
+
+- JURO branch: `feature/full-legal-corpus`
+- Retrieval commit: `5ba3352d`
+- Shard-ingestion freeze commit: `0e016a31`
+- Staging Worker deployment: `juro-platform-staging`, version
+  `27929406-8454-4eb3-9e1e-bc04ed7650ec`
+- `LEGAL_CORPUS_FEDERATED_ENABLED=true`
+- `LEGAL_CORPUS_FEDERATED_SOURCE_SET=all-staging-d1`
+- `LEGAL_CORPUS_LIVE_LEXUZ_ENABLED=false`
+- `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false`
+- `LEGAL_CORPUS_SHADOW_MODE=false`
+
+The production environment remains unchanged and keeps the corpus and
+federation flags disabled. No production deployment, migration, DNS change or
+corpus publication was performed.
+
+## Sources used by staging chat
+
+`all-staging-d1` currently routes read-only indexed retrieval through these
+four explicit D1 bindings:
+
+| Binding | Database | Exact current provisions | Indexed chunks | Canonical documents |
+| --- | --- | ---: | ---: | ---: |
+| `LEGAL_CORPUS_LEGACY_DB` | `juro-staging` | 62,075 | 151,499 | 3,575 |
+| `LEGAL_CORPUS_V2_DB` | `juro-staging-corpus-v2` | 15,899 | 55,814 | 599 |
+| `LEGAL_CORPUS_SHARD_1_DB` | `juro-staging-corpus-shard-1` | 18,724 | 52,370 | 1,635 |
+| `LEGAL_CORPUS_SHARD_2_DB` | `juro-staging-corpus-shard-2` | 19,484 | 62,089 | 2,495 |
+
+These rows are per-database counts. They must not be summed as a release
+metric: overlap and version identity are resolved at retrieval time by the
+stable evidence key, current-status/version ordering and federated RRF.
+
+## Shard 3 exclusion
+
+`juro-staging-corpus-shard-3` is a continuation acquisition shard and is not
+yet a frozen release source. At the handoff it contained 113 canonical
+documents, 7,863 exact current provisions and 24,362 indexed chunks, with
+31,159 queued jobs. Its dedicated Worker was deployed with auto-ingestion and
+live/shadow flags disabled; the last run completed at
+`2026-08-28T05:13:57.227Z`, after which no new scheduler run was observed.
+It is intentionally excluded from `all-staging-d1` until a formal shard
+freeze, snapshot, point-in-time and parity evidence pass is available.
+
+## Verification
+
+- Federated/chat/retrieval/shard boundary tests: 43 passed, 0 failed.
+- Platform type-check: passed.
+- Platform lint: passed.
+- Staging artifact dry-run and performance budgets: passed.
+- Staging deployment: completed successfully.
+- The release gate is not claimed: the federated snapshot/manifests,
+  cross-source deduplication proof, indexed 314-scenario evaluation, Qdrant
+  benchmark/restore and D1 backup/restore gates remain open.
