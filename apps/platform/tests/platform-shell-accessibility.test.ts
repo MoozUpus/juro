@@ -7,6 +7,7 @@ const searchStylesheet = new URL("../app/_platform/global-search.css", import.me
 const shellStylesheet = new URL("../app/_platform/platform-shell.css", import.meta.url);
 const profileStylesheet = new URL("../app/_platform/profile-settings.css", import.meta.url);
 const lawyerStylesheet = new URL("../app/_platform/lawyer-workspace.css", import.meta.url);
+const lawyerConsultationsStylesheet = new URL("../app/_platform/consultations-phase7.css", import.meta.url);
 const dashboardStylesheet = new URL("../app/_platform/dashboard.css", import.meta.url);
 const calendarStylesheet = new URL("../app/_platform/calendar.css", import.meta.url);
 const documentBuilderStylesheet = new URL("../app/_document-builder/document-builder.css", import.meta.url);
@@ -67,6 +68,19 @@ test("lawyer calendar actions retain a 44px touch target", async () => {
   const css = await readFile(lawyerStylesheet, "utf8");
 
   assert.match(css, /\.lawyer-schedule-section>header>button\{min-height:44px\}/);
+});
+
+test("lawyer professional workflows retain the 44px interaction floor", async () => {
+  const [workspace, consultations] = await Promise.all([
+    readFile(lawyerStylesheet, "utf8"),
+    readFile(lawyerConsultationsStylesheet, "utf8"),
+  ]);
+
+  assert.match(workspace, /\.lawyer-status-banner a,[\s\S]*?\.lawyer-task-source\{min-height:44px\}/);
+  assert.match(workspace, /\.lawyer-time-tool summary\{display:flex;align-items:center\}/);
+  assert.match(workspace, /\.lawyer-knowledge-grid article header button\{width:44px;min-height:44px\}/);
+  assert.match(consultations, /\.lawyer-offer-form :is\(input,button\),[\s\S]*?\.lawyer-internal-notes button\{min-height:44px\}/);
+  assert.match(consultations, /\.lawyer-message-actions button,[\s\S]*?\.lawyer-reply-preview>button\{width:44px;height:44px\}/);
 });
 
 test("lawyer trial banner keeps readable theme-aware foregrounds", async () => {

@@ -207,3 +207,17 @@
 .lawyer-review-ratings { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.5rem; }
 .lawyer-review-ratings label { display:grid; gap:.25rem; font-size:.82rem; }
 @media(max-width:640px){.lawyer-review-ratings{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* Keep professional chat, offer and review actions usable without precision taps. */
+.lawyer-offer-form :is(input,button),
+.lawyer-offer-actions button,
+.lawyer-chat-search,
+.lawyer-chat-context article>a,
+.lawyer-chat-pinned,
+.lawyer-message-list article>a,
+.lawyer-request-messages select,
+.lawyer-ai-actions button,
+.lawyer-ai-result button,
+.lawyer-internal-notes button{min-height:44px}
+.lawyer-message-actions button,
+.lawyer-reply-preview>button{width:44px;height:44px}
