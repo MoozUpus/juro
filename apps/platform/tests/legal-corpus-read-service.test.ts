@@ -93,6 +93,7 @@ test("renamed JURO tools search, inspect and hydrate through the read-only bound
     findLegalSources: "find_juro_legal_sources",
     inspectLegalAct: "inspect_juro_legal_act",
     readLegalProvisions: "read_juro_legal_provisions",
+    hydrateLegalSources: "hydrate_juro_legal_sources",
   });
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
@@ -104,10 +105,7 @@ test("renamed JURO tools search, inspect and hydrate through the read-only bound
       limit: 8,
     });
     assert.equal(sources[0]?.chunkId, chunkId);
-    const [act, spans] = await Promise.all([
-      tools.inspectLegalAct({ anchorChunkId: chunkId }),
-      tools.readLegalProvisions({ anchorChunkId: chunkId }),
-    ]);
+    const [{ act, spans }] = await tools.hydrateLegalSources!({ anchorChunkIds: [chunkId] });
     assert.equal(act?.title, "Трудовой кодекс");
     assert.equal(spans[0]?.id, chunkId);
     assert.equal(spans[0]?.textSha256, sources[0]?.contentHash);

@@ -4,22 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 
 import { TurnstileWidget } from "../_auth/TurnstileWidget";
+import { LegalAnswerView, type LegalAnswerViewResult } from "../_platform/LegalAnswerView";
 
-type GuestResult = {
-  responseKind: "answer" | "clarification_required";
-  summary: string;
-  answer: string;
-  clarificationQuestions: string[];
-  confirmedFindings: Array<{ title: string; explanation: string }>;
-  risks: Array<{ title: string; explanation: string; level: "low" | "medium" | "high" | "critical" }>;
-  actionPlan: Array<{ title: string; description: string }>;
-  sources: Array<{
-    sourceId: string;
-    actTitle: string;
-    article?: string | null;
-    originalUrl: string;
-  }>;
-  legalDatabaseAsOf: string;
+type GuestResult = LegalAnswerViewResult & {
   sourceAccessMode?: "direct" | "approved_package" | "mixed";
   sourcesRetrievedAt?: string | null;
 };
@@ -45,10 +32,6 @@ type SubmitResponse = {
   code?: string;
   error?: string;
 };
-
-function paragraphs(value: string) {
-  return value.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
-}
 
 async function fetchBootstrap(locale: "ru" | "uz"): Promise<Bootstrap> {
   const response = await fetch(`/api/guest/ai?locale=${locale}`, {
@@ -245,38 +228,16 @@ function GuestResultView({ result, locale }: { result: GuestResult; locale: "ru"
   const sourceDate = new Date(sourceTimestamp);
   const hasSourceDate = Number.isFinite(sourceDate.getTime());
   return (
-    <article className="guest-ai-result" aria-labelledby="guest-result-title">
+    <article className="guest-ai-result" aria-label={ru ? "Проверенный ответ JURO" : "JURO tekshirgan javob"}>
       <div className="guest-ai-result-heading">
         <span>{ru ? "AI-ответ" : "AI javobi"}</span>
         {hasSourceDate && <time dateTime={sourceTimestamp}>{result.sourceAccessMode === "direct" ? (ru ? "Получено напрямую" : "Bevosita olindi") : (ru ? "База на" : "Baza sanasi")}: {sourceDate.toLocaleDateString(ru ? "ru-RU" : "uz-UZ")}</time>}
       </div>
-      <h2 id="guest-result-title">{result.summary}</h2>
-      {paragraphs(result.answer).map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-
-      {result.clarificationQuestions.length > 0 ? <section>
-        <h3>{ru ? "Уточните" : "Aniqlashtiring"}</h3>
-        <ol>{result.clarificationQuestions.map((item) => <li key={item}>{item}</li>)}</ol>
-      </section> : null}
-
-      {result.confirmedFindings.length > 0 ? <section>
-        <h3>{ru ? "Подтверждено источниками" : "Manbalar bilan tasdiqlangan"}</h3>
-        <ul>{result.confirmedFindings.map((item) => <li key={item.title}><strong>{item.title}.</strong> {item.explanation}</li>)}</ul>
-      </section> : null}
-
-      {result.risks.length > 0 ? <section>
-        <h3>{ru ? "Риски" : "Xavflar"}</h3>
-        <ul>{result.risks.map((risk) => <li key={`${risk.level}:${risk.title}`}><strong>{risk.title}.</strong> {risk.explanation}</li>)}</ul>
-      </section> : null}
-
-      {result.actionPlan.length > 0 ? <section>
-        <h3>{ru ? "Следующие шаги" : "Keyingi qadamlar"}</h3>
-        <ol>{result.actionPlan.map((step) => <li key={step.title}><strong>{step.title}</strong>{step.description ? ` — ${step.description}` : ""}</li>)}</ol>
-      </section> : null}
-
-      {result.sources.length > 0 ? <section>
-        <h3>{ru ? "Официальные источники" : "Rasmiy manbalar"}</h3>
+      <LegalAnswerView result={result} locale={locale} className="guest-legal-answer" />
+      {result.sources.length > 0 ? <section className="guest-ai-sources" aria-labelledby="guest-ai-sources-title">
+        <h2 id="guest-ai-sources-title">{ru ? "Источники ответа" : "Javob manbalari"}</h2>
         <ul>{result.sources.map((source) => <li key={source.sourceId}>
-          <a href={source.originalUrl} target="_blank" rel="noreferrer noopener">{source.actTitle}{source.article ? ` — ${source.article}` : ""}</a>
+          <a href={source.originalUrl} target="_blank" rel="noreferrer noopener"><strong>{source.article ? `${source.article} · ` : ""}{source.actTitle}</strong><span>{source.sourceClass === "SECONDARY_REFERENCE" ? (ru ? "Дополнительный материал" : "Qo‘shimcha material") : (ru ? "Официальный источник" : "Rasmiy manba")}</span></a>
         </li>)}</ul>
       </section> : null}
     </article>

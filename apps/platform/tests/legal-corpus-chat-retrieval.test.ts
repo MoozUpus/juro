@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { retrieveCorpusAwareLegalSources } from "../lib/legal-corpus/chat-retrieval";
+import {
+  retrieveCorpusAwareLegalSources,
+  shouldRetrieveSecondaryInternet,
+} from "../lib/legal-corpus/chat-retrieval";
 import { ingestOfficialLexDocument } from "../lib/legal-corpus/ingestion";
 import { createReadOnlyLegalCorpusDatabase } from "../lib/legal-corpus/read-only-d1";
 import type { LiveLexRetrievalResult } from "../lib/legal/live-lex-retrieval";
@@ -131,6 +134,37 @@ test("indexed corpus is preferred and emits a verified exact-span packet", async
   } finally {
     sqlite.close();
   }
+});
+
+test("partial indexed coverage continues to live Lex before any secondary source is considered", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  let liveCalls = 0;
+  try {
+    await seedIndexedSource(d1);
+    const result = await retrieveCorpusAwareLegalSources({
+      env: { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_LIVE_LEXUZ_ENABLED: "true" },
+      query: "статья 7 и статья 9 право на обращение",
+      locale: "ru",
+      now,
+      liveSearch: async () => { liveCalls += 1; return liveResult(); },
+    });
+    assert.equal(liveCalls, 1);
+    assert.equal(result.sourceAccessMode, "mixed");
+    assert.equal(result.retrievalTelemetry?.fusionOutcome, "mixed");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("secondary internet is eligible only for weak or empty combined official coverage", () => {
+  const packet = (coverageStatus: "good_coverage" | "partial_coverage" | "weak_coverage" | "no_coverage") => ({
+    coverageStatus,
+    sources: [],
+  }) as unknown as Awaited<ReturnType<typeof retrieveCorpusAwareLegalSources>>;
+  assert.equal(shouldRetrieveSecondaryInternet(packet("good_coverage")), false);
+  assert.equal(shouldRetrieveSecondaryInternet(packet("partial_coverage")), false);
+  assert.equal(shouldRetrieveSecondaryInternet(packet("weak_coverage")), true);
+  assert.equal(shouldRetrieveSecondaryInternet(packet("no_coverage")), true);
 });
 
 test("development can read the staging index without replacing its local D1 binding", async () => {

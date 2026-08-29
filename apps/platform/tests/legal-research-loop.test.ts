@@ -384,6 +384,94 @@ test("semantic reranking can reject a one-word collision before exact-window hyd
   }
 });
 
+test("a single exact article match bypasses the model reranker", async () => {
+  const hash = "e".repeat(64);
+  const exact = {
+    chunkId: "labour-409",
+    documentId: "6257291",
+    documentTitle: "Трудовой кодекс Республики Узбекистан",
+    documentType: "code",
+    documentNumber: null,
+    adoptingAuthority: null,
+    sourceClass: "OFFICIAL_LEGISLATION" as const,
+    articleNumber: "409",
+    articleTitle: "Гарантии для работников, имеющих ребенка до трех лет",
+    exactQuote: "Статья 409 ограничивает прекращение трудового договора с работником, имеющим ребенка до трех лет.",
+    sourceUrl: "https://lex.uz/ru/docs/6257291",
+    language: "ru" as const,
+    status: "active" as const,
+    validFrom: "2023-04-30",
+    validTo: null,
+    versionDate: "2026-07-25",
+    fetchedAt: "2026-08-28T00:00:00.000Z",
+    contentHash: hash,
+  };
+  let rerankerCalls = 0;
+  let hydrationBatches = 0;
+  const result = await runJuroLegalResearchLoop({
+    db: {} as D1Database,
+    originalQuery: "статья 409 Трудового кодекса",
+    locale: "ru",
+    readTools: {
+      findLegalSources: async () => [exact],
+      inspectLegalAct: async () => { throw new Error("batched hydration expected"); },
+      readLegalProvisions: async () => { throw new Error("batched hydration expected"); },
+      hydrateLegalSources: async ({ anchorChunkIds }) => {
+        hydrationBatches += 1;
+        return anchorChunkIds.map((anchorChunkId) => ({
+          anchorChunkId,
+          act: {
+            documentId: exact.documentId,
+            title: exact.documentTitle,
+            documentType: exact.documentType,
+            documentNumber: null,
+            adoptingAuthority: null,
+            adoptionDate: null,
+            publicationDate: null,
+            language: exact.language,
+            status: exact.status,
+            validFrom: exact.validFrom,
+            validTo: null,
+            versionDate: exact.versionDate,
+            sourceUrl: exact.sourceUrl,
+            fetchedAt: exact.fetchedAt,
+          },
+          spans: [{
+            id: exact.chunkId,
+            article: exact.articleNumber,
+            paragraph: null,
+            text: exact.exactQuote,
+            textSha256: hash,
+            quality: "high" as const,
+          }],
+        }));
+      },
+    },
+    rerankCandidates: async () => { rerankerCalls += 1; return [exact.chunkId]; },
+  });
+  assert.equal(rerankerCalls, 0);
+  assert.equal(hydrationBatches, 1);
+  assert.equal(result.rerankingOutcome, "not_needed");
+  assert.deepEqual(result.hits.map((hit) => hit.passage.chunkId), [exact.chunkId]);
+});
+
+test("near-duplicate generated searches share one request-scoped corpus lookup", async () => {
+  const calls: string[] = [];
+  const result = await runJuroLegalResearchLoop({
+    db: {} as D1Database,
+    originalQuery: "Статья 409 ТК РУз",
+    generatedQueries: ["статья 409 тк руз!", "  СТАТЬЯ 409 ТК РУЗ  ", "гарантии работнику с ребенком"],
+    locale: "ru",
+    readTools: {
+      findLegalSources: async ({ query }) => { calls.push(query); return []; },
+      inspectLegalAct: async () => null,
+      readLegalProvisions: async () => [],
+    },
+  });
+  assert.deepEqual(calls, ["Статья 409 ТК РУз", "гарантии работнику с ребенком"]);
+  assert.equal(result.queriesRun, 2);
+});
+
 test("reranker permutations produce the same deterministic source order", async () => {
   const hash = "f".repeat(64);
   const now = "2026-08-28T00:00:00.000Z";

@@ -28,6 +28,7 @@ import {
 } from "../../../../lib/legal/verified-retrieval";
 import {
   retrieveCorpusAwareLegalSources,
+  shouldRetrieveSecondaryInternet,
   type LegalChatSourceRetrieval,
 } from "../../../../lib/legal-corpus/chat-retrieval";
 import {
@@ -505,9 +506,8 @@ async function executePostWithinBudget(
   // rank candidates but never becomes evidence.
   // Memory and tenant-document lookup provide conversational/case-fact context
   // and may run alongside the legal-source ladder. Official authority retrieval
-  // remains sequential inside its own ladder: JURO indexed
-  // legal corpus -> live Lex.uz. Lower-authority public-web research runs as a
-  // separate parallel branch and is labelled as non-legislative context.
+  // remains sequential inside its own ladder: JURO indexed legal corpus -> live Lex.uz.
+  // Lower-authority public-web research is a terminal fallback.
   const memoryStage = budget.beginStage("memory_context", { timeoutMs: 1_250 });
   const memoryContext = (async () => {
     try {
@@ -575,82 +575,6 @@ async function executePostWithinBudget(
       };
     }
   })();
-
-  // Open-web research is an independent, lower-authority branch. Start it as
-  // soon as the request-scoped query plan is ready instead of waiting for the
-  // complete indexed -> live Lex ladder to fail. This keeps useful public
-  // context inside the interactive deadline and makes the unrestricted search
-  // genuinely concurrent with official-source verification.
-  const secondaryInternetPromise: Promise<SecondaryInternetRetrieval> = applicableAt
-    ? Promise.resolve({ sources: [], evidence: [], errors: [] })
-    : (async () => {
-      const retrievalUnderstanding = await retrievalUnderstandingPromise;
-      if (budget.remainingMs < 8_000) {
-        return { sources: [], evidence: [], errors: [{ code: "SECONDARY_RESEARCH_BUDGET_SKIPPED" }] };
-      }
-      await emitProgress({ stage: "internet_search_started" });
-      const internetStage = budget.beginStage("secondary_web_retrieval", { timeoutMs: 6_200 });
-      try {
-        const usage = await usageSummary(db, workspace.id, user.id, answerCycleLimit);
-        if (usage.limit !== null && usage.used >= usage.limit) throw new Error("PLAN_LIMIT_PRECHECK");
-        await assertProviderCallAllowed({ db, environment: providerEnvironment, provider: "openai" });
-        const startedAt = isoNow();
-        const result = await retrieveSecondaryInternetSources({
-          db,
-          query: retrievalUnderstanding.webSearchQuery,
-          locale,
-          requestId: `${idempotencyKey}:secondary`,
-          safetyIdentifier,
-          signal: internetStage.signal,
-          timeoutMs: Math.min(6_000, budget.remainingMs),
-          onTelemetry: async (event) => {
-            try {
-              const completedAt = isoNow();
-              const eventHash = (await sha256Json({
-                idempotencyKey,
-                providerResponseId: event.providerResponseId,
-                startedAt,
-                tier: "secondary",
-              })).slice(0, 48);
-              await recordProviderUsage({
-                db,
-                environment: providerEnvironment,
-                workspaceId: workspace.id,
-                userId: user.id,
-                feature: "legal_chat",
-                operation: "web_search",
-                provider: "openai",
-                model: event.model,
-                providerRequestId: event.providerResponseId,
-                inputTokens: event.inputTokens,
-                outputTokens: event.outputTokens,
-                cachedInputTokens: 0,
-                status: "succeeded",
-                startedAt,
-                completedAt,
-                eventId: `provider_usage_secondary_${eventHash}`,
-              });
-            } catch {
-              console.warn(JSON.stringify({ event: "ai.secondary_research_usage_deferred" }));
-            }
-          },
-        });
-        internetStage.complete();
-        return result;
-      } catch (error) {
-        internetStage.fail();
-        if (signal.aborted) throw error;
-        console.warn(JSON.stringify({
-          event: "ai.secondary_research_unavailable",
-          code: error instanceof Error ? error.name : "SECONDARY_RESEARCH_FAILED",
-        }));
-        return {
-          sources: [],
-          evidence: [],
-          errors: [{ code: "SECONDARY_RESEARCH_UNAVAILABLE" }],
-        };
-      }
-    })();
 
   // This progress stage refers to JURO's stored legal corpus, not to private
   // uploads. The corpus retriever falls back to live Lex.uz only when indexed
@@ -807,7 +731,79 @@ async function executePostWithinBudget(
 
   const retrievalUnderstanding = await retrievalUnderstandingPromise;
   const retrievalQuestion = retrievalUnderstanding.standaloneQuestion;
-  const secondaryInternet = await secondaryInternetPromise;
+  // Secondary internet material is consulted only after the combined official result is weak or empty.
+  // It can explain practice, but can never establish
+  // a legal rule, deadline, calculation, or mandatory action.
+  const secondaryInternet: SecondaryInternetRetrieval = !applicableAt
+    && shouldRetrieveSecondaryInternet(retrieval)
+    ? await (async () => {
+      if (budget.remainingMs < 8_000) {
+        return { sources: [], evidence: [], errors: [{ code: "SECONDARY_RESEARCH_BUDGET_SKIPPED" }] };
+      }
+      await emitProgress({ stage: "internet_search_started" });
+      const internetStage = budget.beginStage("secondary_web_retrieval", { timeoutMs: 6_200 });
+      try {
+        const usage = await usageSummary(db, workspace.id, user.id, answerCycleLimit);
+        if (usage.limit !== null && usage.used >= usage.limit) throw new Error("PLAN_LIMIT_PRECHECK");
+        await assertProviderCallAllowed({ db, environment: providerEnvironment, provider: "openai" });
+        const startedAt = isoNow();
+        const result = await retrieveSecondaryInternetSources({
+          db,
+          query: retrievalUnderstanding.webSearchQuery,
+          locale,
+          requestId: `${idempotencyKey}:secondary`,
+          safetyIdentifier,
+          signal: internetStage.signal,
+          timeoutMs: Math.min(6_000, budget.remainingMs),
+          onTelemetry: async (event) => {
+            try {
+              const completedAt = isoNow();
+              const eventHash = (await sha256Json({
+                idempotencyKey,
+                providerResponseId: event.providerResponseId,
+                startedAt,
+                tier: "secondary",
+              })).slice(0, 48);
+              await recordProviderUsage({
+                db,
+                environment: providerEnvironment,
+                workspaceId: workspace.id,
+                userId: user.id,
+                feature: "legal_chat",
+                operation: "web_search",
+                provider: "openai",
+                model: event.model,
+                providerRequestId: event.providerResponseId,
+                inputTokens: event.inputTokens,
+                outputTokens: event.outputTokens,
+                cachedInputTokens: 0,
+                status: "succeeded",
+                startedAt,
+                completedAt,
+                eventId: `provider_usage_secondary_${eventHash}`,
+              });
+            } catch {
+              console.warn(JSON.stringify({ event: "ai.secondary_research_usage_deferred" }));
+            }
+          },
+        });
+        internetStage.complete();
+        return result;
+      } catch (error) {
+        internetStage.fail();
+        if (signal.aborted) throw error;
+        console.warn(JSON.stringify({
+          event: "ai.secondary_research_unavailable",
+          code: error instanceof Error ? error.name : "SECONDARY_RESEARCH_FAILED",
+        }));
+        return {
+          sources: [],
+          evidence: [],
+          errors: [{ code: "SECONDARY_RESEARCH_UNAVAILABLE" }],
+        };
+      }
+    })()
+    : { sources: [], evidence: [], errors: [] };
   // Source verification progress is content-free. A separate preliminary
   // event is emitted only after a complete provider finding passes the same
   // authoritative Lex claim/span gate as the terminal answer.

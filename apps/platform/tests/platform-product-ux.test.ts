@@ -46,6 +46,53 @@ test("AI composer keeps idle voice, question, and send controls on one row", asy
   assert.match(styles, /\.ai-composer-input:has\(> \.ai-voice-controls:not\(\[data-phase="idle"\]\)\)\s*\{[^}]*"voice voice voice"\s*"question question send"/su);
 });
 
+test("AI chat keeps the answer in focus and exposes responsive history and evidence controls", async () => {
+  const [client, styles] = await Promise.all([
+    source("../app/_platform/AiLawyerClient.tsx"),
+    source("../app/_platform/ai-lawyer.css"),
+  ]);
+
+  assert.match(client, /const \[historyCollapsed, setHistoryCollapsed\]/u);
+  assert.match(client, /localStorage\.setItem\("juro:ai-history"/u);
+  assert.match(client, /aria-controls="ai-conversations-panel"/u);
+  assert.match(client, /className="ai-mobile-context-bar"/u);
+  assert.match(client, /role=\{mobileContextOpen \? "dialog" : undefined\}/u);
+  assert.match(client, /hidden=\{mobileContextOpen && mobileContextTab !== "facts"\}/u);
+  assert.match(client, /hidden=\{mobileContextOpen && mobileContextTab !== "sources"\}/u);
+  assert.match(client, /latestAnswerRef\.current\?\.scrollIntoView/u);
+  assert.doesNotMatch(client, /transcript\.scrollTo\(\{ top: transcript\.scrollHeight, behavior: preliminary/u);
+
+  assert.match(styles, /\.ai-workspace\.ai-history-collapsed/u);
+  assert.match(styles, /\.ai-mobile-context-bar/u);
+  assert.match(styles, /\.ai-context\.is-mobile-open/u);
+  assert.match(styles, /\.ai-fact[^}]*[\s\S]*?button[^}]*min-(?:width|height):\s*44px/u);
+});
+
+test("AI composer grows with its content and does not submit during IME composition", async () => {
+  const client = await source("../app/_platform/AiLawyerClient.tsx");
+  assert.match(client, /function resizeComposer\(/u);
+  assert.match(client, /event\.nativeEvent\.isComposing/u);
+  assert.match(client, /resizeComposer\(event\.currentTarget\)/u);
+});
+
+test("AI source dialog traps focus and returns it to the citation control", async () => {
+  const client = await source("../app/_platform/AiLawyerClient.tsx");
+  assert.match(client, /const sourceDialogRef = useRef<HTMLElement \| null>\(null\)/u);
+  assert.match(client, /const sourceReturnFocusRef = useRef<HTMLElement \| null>\(null\)/u);
+  assert.match(client, /event\.key !== "Tab"/u);
+  assert.match(client, /document\.activeElement === last/u);
+  assert.match(client, /sourceReturnFocusRef\.current\?\.focus\(\)/u);
+  assert.match(client, /ref=\{sourceDialogRef\} className="ai-source-modal" role="dialog"/u);
+});
+
+test("guest AI keeps its workspace and interactive states legible in dark mode", async () => {
+  const styles = await source("../app/_guest/guest-ai.css");
+
+  assert.match(styles, /html\[data-theme="dark"\] \.guest-ai-workspace\s*\{[^}]*background:\s*#102c3e/u);
+  assert.match(styles, /html\[data-theme="dark"\] \.guest-ai-form textarea\s*\{[^}]*background:\s*#081f30;[^}]*color:\s*#edf2f5/u);
+  assert.match(styles, /html\[data-theme="dark"\] \.guest-ai-header nav a:hover\s*\{[^}]*background:\s*#17384b;[^}]*color:\s*#f4f7f9/u);
+});
+
 test("history presents human labels without exposing opaque entity ids", async () => {
   const history = await source("../app/_platform/HistoryClient.tsx");
   assert.doesNotMatch(history, /\{event\.entityId\}/);

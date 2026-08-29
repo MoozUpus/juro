@@ -75,6 +75,19 @@ export type LegalChatSourceRetrieval = {
   };
 };
 
+/**
+ * Lower-authority public material is a terminal fallback, never a concurrent
+ * evidence branch. Partial official coverage is still sufficient to answer
+ * conservatively; only weak or empty combined corpus/Lex coverage may consult
+ * secondary internet material.
+ */
+export function shouldRetrieveSecondaryInternet(
+  retrieval: Pick<LegalChatSourceRetrieval, "coverageStatus">,
+): boolean {
+  return retrieval.coverageStatus === "weak_coverage"
+    || retrieval.coverageStatus === "no_coverage";
+}
+
 type LiveSearchInput = Parameters<typeof retrieveLiveLexSources>[0];
 
 function sourceLocale(language: JuroLegalResearchHit["passage"]["language"]): string {
@@ -372,8 +385,9 @@ async function queueValidatedLiveSources(
 
 /**
  * Keeps the current direct Lex flow as the exact feature-off fallback. When
- * enabled, an immutable indexed packet is preferred; weak/no coverage falls
- * back to the existing live validator and queues only those validated URLs.
+ * enabled, only good immutable indexed coverage stops the ladder. Partial,
+ * weak, or empty coverage continues to the existing live validator and queues
+ * only those validated URLs.
  */
 export async function retrieveCorpusAwareLegalSources(input: {
   env: CorpusRuntimeEnv;
@@ -458,6 +472,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
       denseSearch,
       readTools,
       rerankCandidates: input.rerankCandidates,
+      signal: input.signal,
     });
     indexed = research.hits;
     indexedMetrics = {
@@ -479,10 +494,10 @@ export async function retrieveCorpusAwareLegalSources(input: {
     sources: indexed.map((hit) => hit.passage),
   });
   const indexedPacket = indexedRetrieval(indexed, input.now ?? new Date(), coverage, indexedMetrics);
-  const hasUsableIndexedCoverage = indexedPacket.sources.length > 0
-    && (coverage === "good_coverage" || coverage === "partial_coverage");
+  const hasGoodIndexedCoverage = indexedPacket.sources.length > 0
+    && coverage === "good_coverage";
   const liveEnabled = featureEnabled(input.env, "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED");
-  const useIndexed = hasUsableIndexedCoverage
+  const useIndexed = hasGoodIndexedCoverage
     && (indexedPacket.freshness.status === "fresh" || !liveEnabled);
 
   // The existing direct Lex fallback resolves the current page. It must not

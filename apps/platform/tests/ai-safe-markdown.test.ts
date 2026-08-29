@@ -28,9 +28,15 @@ test("safe Markdown renders GFM structure and only allowlisted legal-answer link
 
   assert.match(html, /<h3>Основание<\/h3>/u);
   assert.match(html, /<ul>/u);
-  assert.match(html, /role="region" aria-label="Scrollable table"/u);
+  assert.match(html, /role="region" aria-label="Прокручиваемая таблица"/u);
+  assert.doesNotMatch(html, /node="/u);
   assert.match(html, /<blockquote>/u);
   assert.match(html, /href="https:\/\/lex\.uz\/ru\/docs\/1"/u);
   assert.doesNotMatch(html, /href="https:\/\/example\.org/u);
   assert.doesNotMatch(html, /javascript:|<script|<img/iu);
+});
+
+test("safe Markdown localizes the scrollable table name for Uzbek answers", () => {
+  const html = renderToStaticMarkup(createElement(SafeMarkdown, { locale: "uz" }, "| A |\n| --- |\n| B |"));
+  assert.match(html, /role="region" aria-label="Aylantiriladigan jadval"/u);
 });

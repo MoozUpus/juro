@@ -6,6 +6,7 @@ import {
   type LegalCorpusRetrievalItem,
   type LegalCorpusSearchScope,
 } from "./retrieval";
+import { detectArticleNumbers } from "../legal/legal-language";
 
 const RRF_K = 60;
 // A remote D1-backed local run pays a network round trip for each search. Keep
@@ -104,10 +105,38 @@ export type JuroLegalCorpusReadTools = {
     before?: number;
     after?: number;
   }): Promise<LegalSourceSpan[]>;
+  hydrateLegalSources?(input: {
+    anchorChunkIds: readonly string[];
+  }): Promise<Array<{
+    anchorChunkId: string;
+    act: JuroActRecord | null;
+    spans: LegalSourceSpan[];
+  }>>;
 };
 
 function normalizeQuery(value: string): string {
   return value.normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 900);
+}
+
+function queryIdentity(value: string): string {
+  return normalizeQuery(value)
+    .toLocaleLowerCase("und")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function uniqueQueries(values: readonly string[]): string[] {
+  const identities = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const query = normalizeQuery(value);
+    const identity = queryIdentity(query);
+    if (!query || !identity || identities.has(identity)) continue;
+    identities.add(identity);
+    result.push(query);
+  }
+  return result;
 }
 
 function passageIdentity(item: LegalCorpusRetrievalItem): string {
@@ -339,7 +368,9 @@ export async function runJuroLegalResearchLoop(input: {
   search?: IndexedSearch;
   readTools?: JuroLegalCorpusReadTools;
   rerankCandidates?: JuroLegalCandidateReranker;
+  signal?: AbortSignal;
 }): Promise<JuroLegalResearchResult> {
+  input.signal?.throwIfAborted();
   const limit = Math.max(1, Math.min(input.limit ?? 8, MAX_HYDRATED_HITS));
   const original = normalizeQuery(input.originalQuery);
   const readTools: JuroLegalCorpusReadTools = input.readTools ?? {
@@ -361,13 +392,29 @@ export async function runJuroLegalResearchLoop(input: {
       before,
       after,
     }),
+    hydrateLegalSources: ({ anchorChunkIds }) => Promise.all(anchorChunkIds.map(async (anchorChunkId) => {
+      const [act, spans] = await Promise.all([
+        inspectJuroActRecord({ db: input.db, anchorChunkId }),
+        loadJuroProvisionWindow({ db: input.db, anchorChunkId }),
+      ]);
+      return { anchorChunkId, act, spans };
+    })),
   };
-  const firstSearch = readTools.findLegalSources({
-    query: original,
-    locale: input.locale,
-    scope: input.scope,
-    limit: limit * 2,
-  });
+  const requestSearchCache = new Map<string, Promise<LegalCorpusRetrievalItem[]>>();
+  const findLegalSources = (query: string) => {
+    const identity = queryIdentity(query);
+    const cached = requestSearchCache.get(identity);
+    if (cached) return cached;
+    const pending = readTools.findLegalSources({
+      query,
+      locale: input.locale,
+      scope: input.scope,
+      limit: limit * 2,
+    });
+    requestSearchCache.set(identity, pending);
+    return pending;
+  };
+  const firstSearch = findLegalSources(original);
   const [proposed, resolvedRerankingQuestion, resolvedRequiredConcepts] = await Promise.all([
     Promise.resolve(input.generatedQueries ?? []),
     Promise.resolve(input.rerankingQuestion ?? original),
@@ -377,19 +424,15 @@ export async function runJuroLegalResearchLoop(input: {
   const requiredConcepts = resolvedRequiredConcepts.slice(0, 5).map((concept) => ({
     alternatives: concept.alternatives.map(normalizeQuery).filter(Boolean).slice(0, 5),
   })).filter((concept) => concept.alternatives.length > 0);
-  const queries = [...new Set([
+  const queries = uniqueQueries([
     original,
     ...proposed.map(normalizeQuery),
     ...crossFacetQueries(requiredConcepts),
-  ].filter(Boolean))]
+  ])
     .slice(0, MAX_RESEARCH_QUERIES);
-  const remainingSearches = queries.slice(1).map((query) => readTools.findLegalSources({
-    query,
-    locale: input.locale,
-    scope: input.scope,
-    limit: limit * 2,
-  }));
+  const remainingSearches = queries.slice(1).map(findLegalSources);
   const rankedLists = await Promise.all([firstSearch, ...remainingSearches]);
+  input.signal?.throwIfAborted();
   const byIdentity = new Map<string, LegalCorpusRetrievalItem>();
   const scores = new Map<string, number>();
   const matchedQueries = new Map<string, Set<string>>();
@@ -462,19 +505,30 @@ export async function runJuroLegalResearchLoop(input: {
     diversifiedCandidates.push(candidate);
   }
   const candidatePool = diversifiedCandidates.slice(0, MAX_RERANK_CANDIDATES);
+  const requestedArticles = new Set(detectArticleNumbers(rerankingQuestion));
+  const exactArticleCandidates = requestedArticles.size > 0
+    ? candidatePool.filter(({ item }) => item.articleNumber && requestedArticles.has(item.articleNumber))
+    : [];
+  const exactArticleDocuments = new Set(exactArticleCandidates.map(({ item }) => item.documentId));
+  const singleExactArticleMatch = exactArticleCandidates.length === 1
+    && exactArticleDocuments.size === 1;
 
   // When a semantic reranker is configured, its decision is the safety gate:
   // an empty answer means that no candidate directly covers the question, and
   // an unavailable reranker must not silently turn a keyword collision into
   // legal evidence. The deterministic path remains available to deployments
   // that intentionally run without a reranker.
-  let fused = input.rerankCandidates ? [] : deterministicCandidates;
+  let fused = input.rerankCandidates && !singleExactArticleMatch
+    ? []
+    : singleExactArticleMatch ? exactArticleCandidates : deterministicCandidates;
   let rerankedCandidateCount = 0;
-  let rerankingOutcome: JuroLegalResearchResult["rerankingOutcome"] = input.rerankCandidates
+  let rerankingOutcome: JuroLegalResearchResult["rerankingOutcome"] = singleExactArticleMatch
+    ? "not_needed"
+    : input.rerankCandidates
     ? candidatePool.length > 0 ? "failed_closed" : "not_needed"
     : "not_configured";
   let rerankingFailureCode: string | null = null;
-  if (input.rerankCandidates && candidatePool.length > 0) {
+  if (input.rerankCandidates && candidatePool.length > 0 && !singleExactArticleMatch) {
     try {
       const rankedChunkIds = await input.rerankCandidates({
         question: rerankingQuestion,
@@ -522,11 +576,24 @@ export async function runJuroLegalResearchLoop(input: {
     ? "semantic_reranker"
     : "deterministic_fallback";
 
-  const hydrated: Array<JuroLegalResearchHit | null> = await Promise.all(fused.map(async ({ identity, item }): Promise<JuroLegalResearchHit | null> => {
-    const [act, window] = await Promise.all([
-      readTools.inspectLegalAct({ anchorChunkId: item.chunkId }),
-      readTools.readLegalProvisions({ anchorChunkId: item.chunkId }),
+  const anchorChunkIds = [...new Set(fused.map(({ item }) => item.chunkId))];
+  const hydrateIndividually = () => Promise.all(anchorChunkIds.map(async (anchorChunkId) => {
+    const [act, spans] = await Promise.all([
+      readTools.inspectLegalAct({ anchorChunkId }),
+      readTools.readLegalProvisions({ anchorChunkId }),
     ]);
+    return { anchorChunkId, act, spans };
+  }));
+  input.signal?.throwIfAborted();
+  const hydrationPackets = readTools.hydrateLegalSources
+    ? await readTools.hydrateLegalSources({ anchorChunkIds }).catch(hydrateIndividually)
+    : await hydrateIndividually();
+  input.signal?.throwIfAborted();
+  const hydrationByAnchor = new Map(hydrationPackets.map((packet) => [packet.anchorChunkId, packet]));
+  const hydrated: Array<JuroLegalResearchHit | null> = await Promise.all(fused.map(async ({ identity, item }): Promise<JuroLegalResearchHit | null> => {
+    const packet = hydrationByAnchor.get(item.chunkId);
+    const act = packet?.act ?? null;
+    const window = packet?.spans ?? [];
     if (!act) return null;
     const fallbackSpan: LegalSourceSpan = {
       id: item.chunkId,

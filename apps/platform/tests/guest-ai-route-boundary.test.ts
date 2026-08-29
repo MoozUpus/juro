@@ -11,6 +11,16 @@ test("guest AI route is server-only, same-origin protected, provider-backed, and
   assert.match(route, /validateTurnstile/);
   assert.match(route, /guestAiTurnstileAction/);
   assert.match(route, /retrieveCorpusAwareLegalSources/);
+  assert.match(route, /understandLegalRetrievalQuery/);
+  assert.match(route, /rerankLegalCorpusCandidates/);
+  assert.match(route, /shouldRetrieveSecondaryInternet\(retrieval\)/);
+  assert.match(route, /retrieveSecondaryInternetSources/);
+  assert.match(route, /indexQueries: retrievalUnderstanding\.corpusQueries/);
+  assert.match(route, /lexSearchQueries: retrievalUnderstanding\.lexSearchQueries/);
+  const official = route.indexOf("retrieval = await retrieveCorpusAwareLegalSources");
+  const secondaryGate = route.indexOf("shouldRetrieveSecondaryInternet(retrieval)");
+  const secondary = route.indexOf("await retrieveSecondaryInternetSources", secondaryGate);
+  assert.ok(official >= 0 && secondaryGate > official && secondary > secondaryGate);
   assert.match(route, /legalCitationStatements/);
   assert.doesNotMatch(route, /retrieveInteractiveVerifiedLegalSources/);
   assert.match(route, /legalAiProvider\(\)/);

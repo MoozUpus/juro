@@ -4,9 +4,8 @@
 
 import { AudioLines, BookmarkPlus, BookOpenCheck, Bot, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Pencil, Plus, RotateCcw, Send, Settings2, ShieldAlert, Square, ThumbsUp, Trash2, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, KeyboardEvent, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryRequest, isRestartableAiTerminal, isUserCancelledAiRequest, shouldOfferAiRetry, shouldUseFreshAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
-import { nonRepeatingLegalDetail } from "../../lib/ai/legal-output-safety";
 import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
 import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, type VoiceSpeechPhase } from "../../lib/ai/voice-ui";
 import { formatPlatformDate, formatPlatformLongDate, formatPlatformMonth } from "../../lib/platform/date-time";
@@ -14,19 +13,8 @@ import type { PlatformLocale } from "../../lib/platform/routing";
 import { uzbekistanCalendarDate } from "../../lib/legal/applicability-date";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 import { AiSelect } from "./AiSelect";
+import { LegalAnswerView } from "./LegalAnswerView";
 import { AssistantSpeechControls, VoiceMessageControls } from "./VoiceMessageControls";
-
-const SafeMarkdown = lazy(() => import("./SafeMarkdown").then((module) => ({ default: module.SafeMarkdown })));
-
-function GroundedMarkdown({ children, className, allowedLinks }: {
-  children: string;
-  className?: string;
-  allowedLinks: readonly string[];
-}) {
-  return <Suspense fallback={<p className={className} aria-busy="true">{children}</p>}>
-    <SafeMarkdown className={className} allowedLinks={allowedLinks}>{children}</SafeMarkdown>
-  </Suspense>;
-}
 
 type ProviderStatus = { configured: boolean; provider: string | null; model: string | null; fallbackConfigured: boolean };
 type Usage = { used: number; limit: number | null; periodEnd: string };
@@ -173,8 +161,14 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [preliminary, setPreliminary] = useState<AiPreliminary | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const latestAnswerRef = useRef<HTMLDivElement | null>(null);
+  const transcriptPinnedRef = useRef(true);
   const pendingAiRequestRef = useRef<AiRetryRequest<AiRequestPayload> | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [evidenceCollapsed, setEvidenceCollapsed] = useState(false);
+  const [mobileContextOpen, setMobileContextOpen] = useState(false);
+  const [mobileContextTab, setMobileContextTab] = useState<"facts" | "sources">("sources");
   const [canRetry, setCanRetry] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
   const [targetCaseId, setTargetCaseId] = useState("");
@@ -236,6 +230,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
+    setHistoryCollapsed(localStorage.getItem("juro:ai-history") === "collapsed");
+  }, []);
+
+  useEffect(() => {
     if (planConfirmationOpen) planConfirmationRef.current?.focus();
   }, [planConfirmationOpen]);
 
@@ -245,10 +243,24 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }, [answer?.messageId]);
 
   useEffect(() => {
+    if (!answer?.messageId || !transcriptPinnedRef.current) return;
+    latestAnswerRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+    if (answer.result.sources.length > 0) setEvidenceCollapsed(false);
+  }, [answer?.messageId, answer?.result.sources.length]);
+
+  useEffect(() => {
     const transcript = transcriptRef.current;
-    if (!transcript) return;
-    transcript.scrollTo({ top: transcript.scrollHeight, behavior: preliminary ? "auto" : "smooth" });
-  }, [answer?.messageId, optimisticQuestion, preliminary]);
+    if (!transcript || !transcriptPinnedRef.current || (!optimisticQuestion && !preliminary)) return;
+    transcript.scrollTo({ top: transcript.scrollHeight, behavior: "auto" });
+  }, [optimisticQuestion, preliminary]);
+
+  useEffect(() => {
+    const textarea = composerRef.current;
+    if (textarea) resizeComposer(textarea);
+  }, [question]);
 
   useEffect(() => {
     if (!answer?.messageId) { setFeedback([]); setFeedbackStatus(""); return; }
@@ -449,10 +461,25 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void submit();
     }
+  }
+
+  function toggleHistory() {
+    setHistoryCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem("juro:ai-history", next ? "collapsed" : "expanded");
+      return next;
+    });
+  }
+
+  function revealCitation(sourceId: string) {
+    setEvidenceCollapsed(false);
+    setMobileContextTab("sources");
+    if (window.matchMedia("(max-width: 1380px)").matches) setMobileContextOpen(true);
+    requestAnimationFrame(() => focusSourceCard(sourceId));
   }
 
   async function deleteConversation(conversationId: string) {
@@ -604,8 +631,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
 
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
   return (
-    <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""}`}>
-      <aside className="ai-conversations">
+    <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""} ${historyCollapsed ? "ai-history-collapsed" : ""} ${evidenceCollapsed ? "ai-evidence-collapsed" : ""}`}>
+      <aside className="ai-conversations" id="ai-conversations-panel" aria-label={ru ? "История диалогов" : "Suhbatlar tarixi"}>
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
         <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setOptimisticQuestion(""); setPreliminary(null); setVoiceRecordingId(""); setEditSourceMessageId(""); window.location.assign(aiLocation()); }}><Plus />{ru ? "Новый вопрос" : "Yangi savol"}</button>
         <nav className="ai-conversation-list" aria-label={ru ? "История диалогов" : "Suhbatlar tarixi"}>
@@ -620,7 +647,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       <section className="ai-dialog" aria-labelledby="ai-lawyer-heading">
         <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (usage?.limit === null
           ? (ru ? `Право Узбекистана · безлимитно (локально) · ${usage.used} ответов` : `O‘zbekiston huquqi · lokal cheklanmagan · ${usage.used} javob`)
-          : (ru ? `Право Узбекистана · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston huquqi · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`)) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button></nav></header>
+          : (ru ? `Право Узбекистана · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston huquqi · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`)) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><div className="ai-panel-controls"><button type="button" aria-controls="ai-conversations-panel" aria-expanded={!historyCollapsed} onClick={toggleHistory}><History aria-hidden="true" /><span>{ru ? "История" : "Tarix"}</span></button><button type="button" aria-controls="ai-context-panel" aria-expanded={mobileContextOpen || !evidenceCollapsed} onClick={() => { if (window.matchMedia("(max-width: 1380px)").matches) { setMobileContextTab("sources"); setMobileContextOpen(true); } else setEvidenceCollapsed((current) => !current); }}><BookOpenCheck aria-hidden="true" /><span>{ru ? "Источники" : "Manbalar"}</span></button></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button></nav></header>
         {voiceMode && <VoiceModeStage
           locale={locale}
           configured={Boolean(status?.configured)}
@@ -631,22 +658,23 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         />}
         {!status?.configured && <div className="ai-unavailable" role="status"><ShieldAlert /><div><strong>{ru ? "AI пока недоступен" : "AI hozircha ishlamaydi"}</strong><p>{ru ? "Сервер не подтвердил ключ AI-провайдера. JURO не имитирует ответ и не показывает ложный success." : "Server AI-provayder kalitini tasdiqlamadi. JURO javobni taqlid qilmaydi va soxta muvaffaqiyatni ko‘rsatmaydi."}</p></div></div>}
         {error && <div className="ai-error" role="alert"><CircleAlert /><div><p>{error}</p>{canRetry && <button type="button" disabled={sending} onClick={() => { const pending = pendingAiRequestRef.current; if (pending) void submit(undefined, undefined, pending); }}>{ru ? "Безопасно повторить запрос" : "So‘rovni xavfsiz qaytarish"}</button>}</div></div>}
-        <div className="ai-answer-stream" ref={transcriptRef} aria-live="polite" aria-busy={sending}>
+        <p className="sr-only" role="status" aria-live="polite">{sending ? streamStatus : answer?.messageId ? (ru ? "Проверенный ответ готов" : "Tekshirilgan javob tayyor") : ""}</p>
+        <div className="ai-answer-stream" ref={transcriptRef} role="log" aria-label={ru ? "Юридический диалог" : "Huquqiy suhbat"} aria-busy={sending} onScroll={(event) => { const transcript = event.currentTarget; transcriptPinnedRef.current = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 96; }}>
           {!answer && !optimisticQuestion ? (
             <div className="ai-start"><FileQuestion /><h2>{ru ? "Опишите юридическую ситуацию" : "Yuridik vaziyatni yozing"}</h2><p>{ru ? "Не указывайте лишние персональные данные. JURO отделит подтверждённые нормы от предположений." : "Ortiqcha shaxsiy ma’lumotlarni yozmang. JURO tasdiqlangan normalarni taxminlardan ajratadi."}</p></div>
           ) : <>
             {answer && <>
             <div className="ai-transcript">
-              {(answer.turns ?? []).filter((turn) => turn.responseMessageId !== answer.messageId).map((turn) => <ConversationTurnPair key={turn.branchId} turn={turn} ru={ru} />)}
+              {(answer.turns ?? []).filter((turn) => turn.responseMessageId !== answer.messageId).map((turn) => <ConversationTurnPair key={turn.branchId} turn={turn} ru={ru} onCitationSelect={revealCitation} />)}
               <HumanMessage question={answer.question || answer.turns?.at(-1)?.question || ""} ru={ru} />
-              <LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} showActionPlan={false} onQuestionSelect={(selected) => {
-                setQuestion(selected);
-                requestAnimationFrame(() => composerRef.current?.focus());
-              }} />
+              <div className="ai-current-answer" ref={latestAnswerRef}><LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} onCitationSelect={revealCitation} onQuestionSelect={(selected) => {
+                 setQuestion(selected);
+                 requestAnimationFrame(() => composerRef.current?.focus());
+              }} /></div>
             </div>
             {answer.result.responseKind === "answer" && answer.result.actionPlan.length > 0 && dismissedPlanMessageId !== answer.messageId && <section className="ai-plan-card" aria-labelledby="ai-plan-card-title">
               <header><small>{ru ? "После ответа AI" : "AI javobidan so‘ng"}</small><h2 id="ai-plan-card-title">{ru ? "Создать план действий" : "Harakatlar rejasini yaratish"}</h2></header>
-              <ol>{answer.result.actionPlan.slice(0, 6).map((step, index) => <li key={`${step.title}-${index}`}><strong>{step.title}</strong><span>{step.description}</span></li>)}</ol>
+              <p>{ru ? "Сохраните следующие шаги из ответа как задачи в новом или существующем деле." : "Javobdagi keyingi qadamlarni yangi yoki mavjud ishda vazifalar sifatida saqlang."}</p>
               {planEditorOpen && <div className="ai-plan-destination"><label htmlFor="ai-plan-case">{ru ? "Куда добавить план" : "Rejani qayerga qo‘shish"}</label><AiSelect id="ai-plan-case" value={targetCaseId} disabled={savingPlan} onChange={setTargetCaseId} options={[{ value: "", label: ru ? "Новое дело" : "Yangi ish" }, ...cases.map((item) => ({ value: item.id, label: item.title }))]} /></div>}
               {!planConfirmationOpen ? <footer><button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => setPlanConfirmationOpen(true)}><ListPlus />{targetCaseId ? (ru ? "Создать в выбранном деле" : "Tanlangan ishda yaratish") : (ru ? "Создать план" : "Reja yaratish")}</button><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanEditorOpen((current) => !current)}>{ru ? "Изменить" : "O‘zgartirish"}</button><button type="button" className="quiet" disabled={savingPlan} onClick={() => setDismissedPlanMessageId(answer.messageId || "")}>{ru ? "Не предлагать" : "Taklif qilmaslik"}</button></footer> : <div className="ai-plan-confirmation" ref={planConfirmationRef} tabIndex={-1} role="group" aria-label={ru ? "Подтверждение сохранения плана" : "Rejani saqlashni tasdiqlash"}>
                 <p>{targetCaseId
@@ -717,7 +745,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
               onClear={() => setVoiceRecordingId("")}
             />
             <label className="sr-only" htmlFor="ai-question">{ru ? "Юридический вопрос" : "Yuridik savol"}</label>
-            <textarea ref={composerRef} id="ai-question" value={question} onChange={(event) => { pendingAiRequestRef.current = null; setCanRetry(false); setQuestion(event.target.value); }} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Опишите ситуацию или задайте вопрос…" : "Vaziyatni yozing yoki savol bering…"} />
+            <textarea ref={composerRef} id="ai-question" value={question} rows={1} onChange={(event) => { pendingAiRequestRef.current = null; setCanRetry(false); setQuestion(event.target.value); resizeComposer(event.currentTarget); }} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Опишите ситуацию или задайте вопрос…" : "Vaziyatni yozing yoki savol bering…"} />
             {sending
               ? <button type="button" onClick={() => streamAbortRef.current?.abort()} aria-label={ru ? "Остановить генерацию" : "Javob yaratishni to‘xtatish"}><Square /></button>
               : <button disabled={!status?.configured || !question.trim()} aria-label={ru ? "Отправить" : "Yuborish"}><Send /></button>}
@@ -725,10 +753,12 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           <small className="ai-composer-hint">{ru ? "Enter — отправить · Shift + Enter — новая строка · не указывайте лишние персональные данные" : "Enter — yuborish · Shift + Enter — yangi satr · ortiqcha shaxsiy ma’lumotlarni kiritmang"}</small>
         </form>
       </section>
-      <aside className="ai-context">
-        <header><BookOpenCheck /><strong>{ru ? "Контекст" : "Kontekst"}</strong></header>
-        <section><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section className="ai-evidence"><h2>{hasPrivateSources || hasSecondarySources ? (ru ? "Источники" : "Manbalar") : (ru ? "Основания в Lex.uz" : "Lex.uz asoslari")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, ru)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
+      <nav className="ai-mobile-context-bar" aria-label={ru ? "Факты и источники ответа" : "Javob faktlari va manbalari"}><button type="button" onClick={() => { setMobileContextTab("facts"); setMobileContextOpen(true); }}><Check aria-hidden="true" />{ru ? `Факты ${answer?.facts.length ?? 0}` : `Faktlar ${answer?.facts.length ?? 0}`}</button><button type="button" onClick={() => { setMobileContextTab("sources"); setMobileContextOpen(true); }}><BookOpenCheck aria-hidden="true" />{ru ? `Источники ${visibleSources.length}` : `Manbalar ${visibleSources.length}`}</button></nav>
+      <aside className={`ai-context ${mobileContextOpen ? "is-mobile-open" : ""}`} id="ai-context-panel" role={mobileContextOpen ? "dialog" : undefined} aria-modal={mobileContextOpen || undefined} aria-label={ru ? "Факты и источники" : "Faktlar va manbalar"}>
+        <header><BookOpenCheck /><strong>{ru ? "Контекст ответа" : "Javob konteksti"}</strong><button className="ai-context-close" type="button" aria-label={ru ? "Закрыть факты и источники" : "Faktlar va manbalarni yopish"} onClick={() => setMobileContextOpen(false)}><X /></button></header>
+        <div className="ai-context-tabs" role="tablist" aria-label={ru ? "Раздел контекста" : "Kontekst bo‘limi"}><button type="button" role="tab" aria-selected={mobileContextTab === "facts"} onClick={() => setMobileContextTab("facts")}>{ru ? "Факты" : "Faktlar"}</button><button type="button" role="tab" aria-selected={mobileContextTab === "sources"} onClick={() => setMobileContextTab("sources")}>{ru ? "Источники" : "Manbalar"}</button></div>
+        <section hidden={mobileContextOpen && mobileContextTab !== "facts"}><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
+        <section className="ai-evidence" hidden={mobileContextOpen && mobileContextTab !== "sources"}><h2>{hasPrivateSources || hasSecondarySources ? (ru ? "Источники" : "Manbalar") : (ru ? "Основания в Lex.uz" : "Lex.uz asoslari")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, ru)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
       </aside>
     </section>
   );
@@ -809,10 +839,10 @@ function HumanMessage({ question, ru }: { question: string; ru: boolean }) {
   </article>;
 }
 
-function ConversationTurnPair({ turn, ru }: { turn: ConversationTurn; ru: boolean }) {
+function ConversationTurnPair({ turn, ru, onCitationSelect }: { turn: ConversationTurn; ru: boolean; onCitationSelect?: (sourceId: string) => void }) {
   return <section className="ai-conversation-turn">
     <HumanMessage question={turn.question} ru={ru} />
-    <LegalAnswer result={turn.result} freshness={turn.sourceFreshness} ru={ru} />
+    <LegalAnswer result={turn.result} freshness={turn.sourceFreshness} ru={ru} onCitationSelect={onCitationSelect} />
   </section>;
 }
 
@@ -873,20 +903,46 @@ function LegalSourceCard({
   const [details, setDetails] = useState<ArticleDetails | null>(null);
   const [error, setError] = useState("");
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const sourceDialogRef = useRef<HTMLElement | null>(null);
+  const sourceReturnFocusRef = useRef<HTMLElement | null>(null);
   const privateSource = isTrustedPrivateSource(source);
   const secondarySource = isSafeSecondarySource(source);
+
+  const closeSourceDialog = useCallback(() => {
+    setOpen(false);
+    requestAnimationFrame(() => sourceReturnFocusRef.current?.focus());
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     closeRef.current?.focus();
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+    const ownKeyboard = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSourceDialog();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(sourceDialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
+      ) ?? []).filter((element) => !element.hasAttribute("hidden"));
+      const first = focusable.at(0);
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [open]);
+    document.addEventListener("keydown", ownKeyboard);
+    return () => document.removeEventListener("keydown", ownKeyboard);
+  }, [closeSourceDialog, open]);
 
   async function showArticle() {
+    sourceReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setOpen(true);
     setError("");
     if (details || !messageId) return;
@@ -964,11 +1020,11 @@ function LegalSourceCard({
       {!privateSource && <a href={source.originalUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{secondarySource ? (ru ? "Открыть материал" : "Materialni ochish") : (ru ? "Открыть Lex.uz" : "Lex.uz saytini ochish")}</a>}
     </div>
     {!privateSource && !secondarySource && <SourceBookmarkControl source={source} cases={cases} locale={locale} />}
-    {open && <div className="ai-source-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
-      <section className="ai-source-modal" role="dialog" aria-modal="true" aria-labelledby="ai-source-modal-title">
+    {open && <div className="ai-source-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeSourceDialog(); }}>
+      <section ref={sourceDialogRef} className="ai-source-modal" role="dialog" aria-modal="true" aria-labelledby="ai-source-modal-title">
         <header>
           <div><small>{privateSource ? "JURO · PRIVATE DOCUMENT" : "JURO · LEX.UZ"}</small><h2 id="ai-source-modal-title">{privateSource ? (ru ? "Документ пользователя" : "Foydalanuvchi hujjati") : display.fullArticle ? (ru ? "Полный текст статьи" : "Moddaning to‘liq matni") : (ru ? "Проверенный фрагмент" : "Tekshirilgan parcha")}</h2></div>
-          <button ref={closeRef} type="button" aria-label={ru ? "Закрыть" : "Yopish"} onClick={() => setOpen(false)}><X /></button>
+          <button ref={closeRef} type="button" aria-label={ru ? "Закрыть" : "Yopish"} onClick={closeSourceDialog}><X /></button>
         </header>
         {loading ? <div className="ai-source-modal-state" role="status"><LoaderCircle className="spin" />{ru ? "Загружаем проверенную редакцию…" : "Tekshirilgan tahrir yuklanmoqda…"}</div> : <>
           {error && <p className="ai-source-modal-warning" role="status">{error}</p>}
@@ -1152,173 +1208,20 @@ function focusSourceCard(sourceId: string) {
   card?.focus({ preventScroll: true });
 }
 
-function effectiveEvidenceMode(result: LegalResult): NonNullable<LegalResult["evidenceMode"]> {
-  if (result.evidenceMode) return result.evidenceMode;
-  const classes = new Set(result.sources.flatMap((source) => {
-    if (["OFFICIAL_LEGISLATION", "OFFICIAL_GOVERNMENT_GUIDANCE"].includes(source.sourceClass ?? "")) return ["official"];
-    if (source.sourceClass === "SECONDARY_REFERENCE" || source.sourceOrigin === "web") return ["secondary"];
-    if (["USER_TRUSTED_PRIVATE", "TENANT_TRUSTED_PRIVATE", "OWNER_TRUSTED_GLOBAL"].includes(source.sourceClass ?? "")) return ["private"];
-    try {
-      const url = new URL(source.originalUrl);
-      if (url.protocol === "juro-private:") return ["private"];
-      if (url.hostname === "lex.uz" || url.hostname === "www.lex.uz") return ["official"];
-    } catch { /* Legacy rows can contain a non-URL locator. */ }
-    return source.status === "unconfirmed" ? ["secondary"] : [];
-  }));
-  const official = classes.has("official");
-  const secondary = classes.has("secondary");
-  const privateEvidence = classes.has("private");
-  if (official && !secondary && !privateEvidence) return "official";
-  if (secondary && !official && !privateEvidence) return "secondary_only";
-  if (privateEvidence && !official && !secondary) return "private_only";
-  return classes.size ? "mixed" : "none";
-}
-
-function inlineCitationLabel(source: Source, ru: boolean) {
-  const article = source.article?.replace(/^(?:статья|ст\.?|modda)\s*/iu, "").trim();
-  const act = source.actTitle
-    .replace(/Республики Узбекистан/giu, ru ? "РУз" : "O‘zR")
-    .replace(/O‘zbekiston Respublikasi/giu, ru ? "РУз" : "O‘zR");
-  if (article) return ru ? `ст. ${article} · ${act}` : `${article}-modda · ${act}`;
-  if (source.documentNumber) return `${act} · № ${source.documentNumber}`;
-  return act;
-}
-
-function inlineCitations(
-  sourceIds: readonly string[] | undefined,
-  result: LegalResult,
-  ru: boolean,
-  excludedSourceIds: ReadonlySet<string> = new Set(),
-) {
-  const sources = (sourceIds ?? []).flatMap((sourceId) => {
-    const source = result.sources.find((candidate) => candidate.sourceId === sourceId);
-    return source && !excludedSourceIds.has(source.sourceId) ? [source] : [];
-  });
-  if (!sources.length) return null;
-  return <span className="ai-inline-citations" aria-label={ru ? "Правовые основания" : "Huquqiy asoslar"}>
-    {sources.map((source) => {
-      const label = inlineCitationLabel(source, ru);
-      const publicLink = safeOfficialUrl(source.originalUrl) || isSafeSecondarySource(source);
-      return publicLink
-        ? <a href={source.originalUrl} target="_blank" rel="noopener noreferrer" key={source.sourceId} title={ru ? "Открыть источник" : "Manbani ochish"}>
-          {label}<ExternalLink aria-hidden="true" />
-        </a>
-        : <button type="button" key={source.sourceId} onClick={() => focusSourceCard(source.sourceId)}>{label}</button>;
-    })}
-  </span>;
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-}
-
-function linkedLegalText(text: string, sourceIds: readonly string[] | undefined, result: LegalResult, ru: boolean) {
-  const candidates = (sourceIds ?? []).flatMap((sourceId) => {
-    const source = result.sources.find((item) => item.sourceId === sourceId);
-    const article = source?.article?.match(/\d+(?:\s*[-.‐‑–—]\s*[\p{L}\d]+)?/u)?.[0];
-    if (!source || !article || !(safeOfficialUrl(source.originalUrl) || isSafeSecondarySource(source))) return [];
-    const number = escapeRegExp(article).replace(/\\\s\*/gu, "\\s*");
-    const pattern = ru
-      ? new RegExp(`(?:стат(?:ья|ьи|ье|ью|ей)|ст\\.?)\\s*${number}`, "giu")
-      : new RegExp(`${number}\\s*(?:[-‐‑–—]\\s*)?modda(?:si|ning|da|dan)?`, "giu");
-    return [{ source, pattern }];
-  });
-  const matches = candidates.flatMap(({ source, pattern }) => [...text.matchAll(pattern)].map((match) => ({
-    source,
-    index: match.index ?? 0,
-    text: match[0],
-  }))).sort((left, right) => left.index - right.index);
-  const linked = new Set<string>();
-  const nodes: Array<string | React.ReactElement> = [];
-  let cursor = 0;
-  for (const match of matches) {
-    if (match.index < cursor) continue;
-    if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
-    linked.add(match.source.sourceId);
-    nodes.push(<a className="ai-inline-law-link" href={match.source.originalUrl} target="_blank" rel="noopener noreferrer" key={`${match.source.sourceId}:${match.index}`} title={inlineCitationLabel(match.source, ru)}>{match.text}</a>);
-    cursor = match.index + match.text.length;
-  }
-  if (cursor < text.length) nodes.push(text.slice(cursor));
-  return { nodes: nodes.length ? nodes : [text], linked };
-}
-
-function LegalStatement({
-  title,
-  text,
-  sourceIds,
-  result,
-  ru,
-  allowedLinks,
-}: {
-  title: string;
-  text: string;
-  sourceIds: readonly string[] | undefined;
-  result: LegalResult;
-  ru: boolean;
-  allowedLinks: readonly string[];
-}) {
-  const plainText = !/[\n`*_#|\[\]<>]/u.test(text);
-  if (!plainText) return <><strong>{title}</strong><GroundedMarkdown allowedLinks={allowedLinks}>{text}</GroundedMarkdown>{inlineCitations(sourceIds, result, ru)}</>;
-  const linked = linkedLegalText(text, sourceIds, result, ru);
-  return <p><strong>{title}. </strong>{linked.nodes} {inlineCitations(sourceIds, result, ru, linked.linked)}</p>;
-}
-
-function uniqueAnswerDetail(result: LegalResult): string {
-  let detail = result.answer.trim();
-  const preliminaryAssumptionDetails = result.assumptions.map((item) => item.impact.replace(
-    /^(?:Ранее подтверждённый вывод переведён в предварительный до обновления базы|Oldin tasdiqlangan xulosa baza yangilanguncha dastlabki deb ko‘rsatiladi)\s*:\s*/iu,
-    "",
-  ).trim());
-  const known = [
-    result.summary.replace(/^(?:Краткий вывод|Qisqa xulosa)\s*:\s*/iu, "").trim(),
-    ...result.confirmedFindings.map((item) => `${item.title}. ${item.explanation}`.trim()),
-    ...result.confirmedFindings.map((item) => item.explanation.trim()),
-    ...result.assumptions.map((item) => `${item.statement}. ${item.impact}`.trim()),
-    ...result.assumptions.map((item) => item.impact.trim()),
-    ...result.assumptions.map((item, index) => `${item.statement}. ${preliminaryAssumptionDetails[index]}`.trim()),
-    ...preliminaryAssumptionDetails,
-    ...result.risks.map((item) => `${item.title}. ${item.explanation}`.trim()),
-    ...result.risks.map((item) => item.explanation.trim()),
-    ...result.deadlines.map((item) => `${item.title}. ${item.dueDate ?? ""} ${item.calculationMethod}`.replace(/\s+/gu, " ").trim()),
-    ...result.deadlines.map((item) => item.calculationMethod.trim()),
-    ...result.actionPlan.map((item) => `${item.title}. ${item.description}`.trim()),
-    ...result.actionPlan.map((item) => item.description.trim()),
-    ...(result.referenceNotes ?? []).map((item) => item.note.trim()),
-  ].filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
-  for (const value of known) detail = detail.split(value).join(" ");
-  return detail.replace(/^[\s.;:—-]+|[\s.;:—-]+$/gu, "").replace(/\s+/gu, " ").trim();
-}
-
 function LegalAnswer({
   result,
   freshness,
   ru,
   onQuestionSelect,
-  showActionPlan = true,
+  onCitationSelect,
 }: {
   result: LegalResult;
   freshness?: SourceFreshness;
   ru: boolean;
   onQuestionSelect?: (question: string) => void;
-  showActionPlan?: boolean;
+  onCitationSelect?: (sourceId: string) => void;
 }) {
-  const evidenceMode = effectiveEvidenceMode(result);
-  const allowedLinks = result.sources.flatMap((source) =>
-    safeOfficialUrl(source.originalUrl) || isSafeSecondarySource(source) ? [source.originalUrl] : [],
-  );
-  const answerDetail = uniqueAnswerDetail(result);
-  const authorityLabel = evidenceMode === "official"
-    ? (ru ? "Подтверждено официальными источниками" : "Rasmiy manbalar bilan tasdiqlangan")
-    : evidenceMode === "mixed"
-      ? (ru ? "Официальные и контекстные источники" : "Rasmiy va kontekst manbalari")
-      : evidenceMode === "secondary_only"
-        ? (ru ? "Только справочные источники" : "Faqat ma’lumotnoma manbalari")
-        : evidenceMode === "private_only"
-          ? (ru ? "Факты из ваших документов" : "Hujjatlaringizdagi faktlar")
-          : (ru ? "Источник не подтверждён" : "Manba tasdiqlanmagan");
-  return <article className="ai-answer">
-    <div className="ai-branch-history"><span className={`ai-authority-badge ai-authority-${evidenceMode}`} role="status"><BookOpenCheck aria-hidden="true" />{authorityLabel}</span></div>
-    <small>JURO · {result.responseKind === "answer" ? (ru ? "проверенный структурированный ответ" : "tekshirilgan tuzilgan javob") : (ru ? "источник не найден · можно уточнить · лимит не списан" : "manba topilmadi · aniqlashtirish mumkin · limit yechilmadi")}</small>
+  return <div className="ai-answer-frame">
     {freshness && freshness.status !== "fresh" && result.sourceAccessMode !== "direct" && <div className={`ai-source-freshness ai-source-freshness-${freshness.status}`} role="status">
       <CircleAlert aria-hidden="true" />
       <p>{freshness.status === "unavailable"
@@ -1329,33 +1232,14 @@ function LegalAnswer({
           ? `Правовая база старше ${freshness.maxAgeDays} дней. Последняя подтверждённая полная синхронизация: ${formatDate(freshness.asOf, true)}.`
           : `Huquqiy baza ${freshness.maxAgeDays} kundan eski. Oxirgi tasdiqlangan to‘liq sinxronlash: ${formatDate(freshness.asOf, false)}.`)}</p>
     </div>}
-    <h2>{result.summary}</h2>
-    {answerDetail && <GroundedMarkdown className="ai-answer-body" allowedLinks={allowedLinks}>{answerDetail}</GroundedMarkdown>}
-    {result.confirmedFindings.length > 0 && <section className="ai-confirmed-basis" aria-labelledby="ai-confirmed-basis-title">
-      <h3 id="ai-confirmed-basis-title">{evidenceMode === "private_only" ? (ru ? "Подтверждено вашими документами" : "Hujjatlaringiz bilan tasdiqlangan") : (ru ? "Подтверждённое правовое основание" : "Tasdiqlangan huquqiy asos")}</h3>
-      {result.confirmedFindings.map((item) => {
-        const explanation = nonRepeatingLegalDetail(item.title, item.explanation);
-        return <section className="ai-result-block ai-legal-statement" key={item.title}>{explanation
-          ? <LegalStatement title={item.title} text={explanation} sourceIds={item.sourceIds} result={result} ru={ru} allowedLinks={allowedLinks} />
-          : <><strong>{item.title}</strong>{inlineCitations(item.sourceIds, result, ru)}</>}</section>;
-      })}
-    </section>}
-    {(result.referenceNotes ?? []).length > 0 && <section className="ai-reference-context ai-result-block ai-assumption" aria-labelledby="ai-reference-context-title">
-      <h3 id="ai-reference-context-title">{ru ? "Справочный контекст — не норма права" : "Ma’lumotnoma konteksti — huquq normasi emas"}</h3>
-      <p>{ru ? "Эти материалы поясняют контекст, но не устанавливают сроки, расчёты или обязательные действия." : "Bu materiallar kontekstni tushuntiradi, lekin muddat, hisob-kitob yoki majburiy harakatni belgilamaydi."}</p>
-      {(result.referenceNotes ?? []).map((note) => <article key={`${note.title}:${note.sourceIds.join(":")}`}><strong>{note.title}</strong><GroundedMarkdown allowedLinks={allowedLinks}>{note.note}</GroundedMarkdown>{inlineCitations(note.sourceIds, result, ru)}</article>)}
-    </section>}
-    {result.assumptions.length > 0 && <><h3>{ru ? "Предположения" : "Taxminlar"}</h3>{result.assumptions.map((item) => <section className="ai-result-block ai-assumption" key={item.statement}><strong>{item.statement}</strong><p>{item.impact}</p></section>)}</>}
-    {result.urgency !== "normal" && <div className="ai-cautions"><ShieldAlert /><p>{result.urgency === "critical" ? (ru ? "Критическая срочность: проверьте ближайший срок и возможность немедленной помощи." : "Juda shoshilinch: yaqin muddat va zudlik bilan yordam olish imkonini tekshiring.") : (ru ? "Вопрос требует приоритетного внимания." : "Masala ustuvor e’tiborni talab qiladi.")}</p></div>}
-    {result.risks.length > 0 && <><h3>{ru ? "Риски" : "Xavflar"}</h3>{result.risks.map((risk) => <section className={`ai-result-block risk-${risk.level}`} key={`${risk.level}:${risk.title}`}><strong>{risk.title}</strong><p>{risk.explanation} {inlineCitations(risk.sourceIds, result, ru)}</p></section>)}</>}
-    {result.deadlines.length > 0 && <><h3>{ru ? "Сроки" : "Muddatlar"}</h3>{result.deadlines.map((deadline) => <section className="ai-result-block" key={deadline.title}><strong>{deadline.title}{deadline.dueDate ? ` · ${deadline.dueDate}` : ""}</strong><p>{deadline.calculationMethod} {inlineCitations(deadline.sourceIds, result, ru)}</p></section>)}</>}
-    {showActionPlan && result.actionPlan.length > 0 && <><h3>{ru ? "План действий" : "Harakatlar rejasi"}</h3><ol>{result.actionPlan.map((step) => <li key={step.title}><strong>{step.title}</strong><p>{step.description}</p></li>)}</ol></>}
-    {result.suggestedDocument && <section className="ai-result-block"><h3>{ru ? "Рекомендованный документ" : "Tavsiya etilgan hujjat"}</h3><strong>{result.suggestedDocument.title}</strong><p>{result.suggestedDocument.reason}</p></section>}
-    {result.requiredDocuments.length > 0 && <><h3>{ru ? "Документы" : "Hujjatlar"}</h3><ul>{result.requiredDocuments.map((document) => <li key={document.name}><strong>{document.name}</strong> — {document.reason}</li>)}</ul></>}
-    {result.clarificationQuestions.length > 0 && <section className="ai-follow-up-prompts" aria-labelledby="ai-follow-up-title"><h3 id="ai-follow-up-title">{ru ? "Что уточнить для более точного ответа" : "Aniqroq javob uchun nimani aniqlashtirish kerak"}</h3><div className="ai-answer-actions">{result.clarificationQuestions.map((item) => onQuestionSelect
-      ? <button type="button" key={item} onClick={() => onQuestionSelect(item)}>{item}</button>
-      : <p key={item}>{item}</p>)}</div></section>}
-  </article>;
+    <LegalAnswerView
+      result={result}
+      locale={ru ? "ru" : "uz"}
+      className="ai-answer"
+      onQuestionSelect={onQuestionSelect}
+      onCitationSelect={onCitationSelect}
+    />
+  </div>;
 }
 
 function formatDate(value: string, ru: boolean) {
@@ -1469,4 +1353,9 @@ function abortableDelay(milliseconds: number, signal: AbortSignal) {
     };
     signal.addEventListener("abort", abort, { once: true });
   });
+}
+
+function resizeComposer(textarea: HTMLTextAreaElement) {
+  textarea.style.height = "0px";
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 176)}px`;
 }

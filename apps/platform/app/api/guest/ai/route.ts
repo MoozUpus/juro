@@ -27,8 +27,20 @@ import {
 import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
-import { retrieveCorpusAwareLegalSources } from "../../../../lib/legal-corpus/chat-retrieval";
+import {
+  retrieveCorpusAwareLegalSources,
+  shouldRetrieveSecondaryInternet,
+} from "../../../../lib/legal-corpus/chat-retrieval";
 import { directSourceCards } from "../../../../lib/legal/direct-retrieval";
+import {
+  fallbackLegalRetrievalUnderstanding,
+  rerankLegalCorpusCandidates,
+  understandLegalRetrievalQuery,
+} from "../../../../lib/legal/legal-retrieval-understanding";
+import {
+  retrieveSecondaryInternetSources,
+  type SecondaryInternetRetrieval,
+} from "../../../../lib/legal/secondary-internet-retrieval";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import {
   createAiExecutionBudget,
@@ -424,9 +436,13 @@ export async function POST(request: Request): Promise<Response> {
       question: parsed.data.question,
       locale,
     });
-    // Guest chat follows the same official Lex-only boundary as the
-    // authenticated route. The feature-gated immutable corpus is preferred;
-    // otherwise the existing request-scoped live validator remains exact.
+    const safetyIdentifier = await sha256Json({
+      scope: "guest-openai-safety-v1",
+      sessionId: sessionContext.session.id,
+    });
+    // Guest chat uses the same public source ladder as authenticated chat:
+    // indexed corpus -> live Lex.uz -> secondary internet only when combined
+    // official coverage remains weak. It intentionally has no private context.
     const configuredProvider = provider.name === "anthropic" ? "anthropic" : "openai";
     const configuredModel = providerStatus.model;
     budget = createAiExecutionBudget({
@@ -446,18 +462,60 @@ export async function POST(request: Request): Promise<Response> {
       providerStartedAtMs: null,
       fallbackFromProvider: null,
     };
+    let retrievalUnderstanding = fallbackLegalRetrievalUnderstanding(effectiveQuestion);
+    const understandingStage = budget.beginStage("query_understanding", { timeoutMs: 6_200 });
+    try {
+      retrievalUnderstanding = await understandLegalRetrievalQuery({
+        query: effectiveQuestion,
+        locale,
+        requestId: `${idempotencyKey}:understanding`,
+        safetyIdentifier,
+        signal: understandingStage.signal,
+        timeoutMs: 6_000,
+        maxAttempts: 1,
+      });
+      understandingStage.complete();
+    } catch {
+      understandingStage.fail();
+    }
+
     let retrieval;
-    const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 2_900 });
+    const retrievalBudget = budget;
+    const retrievalStage = retrievalBudget.beginStage("live_lex_retrieval", { timeoutMs: 12_500 });
     try {
       retrieval = await retrieveCorpusAwareLegalSources({
         env: { ...runtimeEnv(), DB: db },
         query: effectiveQuestion,
         locale,
+        indexQueries: retrievalUnderstanding.corpusQueries,
+        rerankingQuestion: retrievalUnderstanding.standaloneQuestion,
+        requiredConcepts: retrievalUnderstanding.requiredConcepts,
+        lexSearchQueries: retrievalUnderstanding.lexSearchQueries,
         signal: retrievalStage.signal,
-        limit: 2,
-        budgetMs: 2_750,
+        limit: 4,
+        budgetMs: 12_000,
         correlationId: idempotencyKey,
         scope: { asOfDate: applicableAt ? parsed.data.legalContextDate ?? null : null },
+        rerankCandidates: async ({ question, candidates, limit }) => {
+          const rerankingStage = retrievalBudget.beginStage("corpus_reranking", { timeoutMs: 7_200 });
+          try {
+            const ranked = await rerankLegalCorpusCandidates({
+              question,
+              locale,
+              candidates,
+              limit,
+              requestId: `${idempotencyKey}:corpus-reranking`,
+              safetyIdentifier,
+              signal: rerankingStage.signal,
+              timeoutMs: 7_000,
+            });
+            rerankingStage.complete();
+            return ranked;
+          } catch (error) {
+            rerankingStage.fail();
+            throw error;
+          }
+        },
       });
       retrievalStage.complete();
     } catch {
@@ -466,6 +524,30 @@ export async function POST(request: Request): Promise<Response> {
         env: { ...runtimeEnv(), DB: db }, query: "", locale, limit: 1, budgetMs: 1,
       });
     }
+    const secondaryInternet: SecondaryInternetRetrieval = !applicableAt
+      && shouldRetrieveSecondaryInternet(retrieval)
+      ? await (async () => {
+        const secondaryStage = budget.beginStage("secondary_web_retrieval", { timeoutMs: 6_200 });
+        try {
+          const secondary = await retrieveSecondaryInternetSources({
+            db,
+            query: retrievalUnderstanding.webSearchQuery,
+            locale,
+            requestId: `${idempotencyKey}:secondary`,
+            safetyIdentifier,
+            signal: secondaryStage.signal,
+            timeoutMs: 6_000,
+          });
+          secondaryStage.complete();
+          return secondary;
+        } catch {
+          secondaryStage.fail();
+          return { sources: [], evidence: [], errors: [{ code: "SECONDARY_RESEARCH_UNAVAILABLE" }] };
+        }
+      })()
+      : { sources: [], evidence: [], errors: [] };
+    const sources = [...retrieval.sources, ...secondaryInternet.sources];
+    const evidence = [...retrieval.evidence, ...secondaryInternet.evidence];
     const requestHash = await sha256Json({
       question: effectiveQuestion,
       locale,
@@ -481,8 +563,8 @@ export async function POST(request: Request): Promise<Response> {
     });
     const sourceVersionHash = await sha256Json({
       freshness: retrieval.freshness,
-      evidence: retrieval.evidence,
-      sources: retrieval.sources.map((source) => ({
+      evidence,
+      sources: sources.map((source) => ({
         id: source.id,
         hash: source.contentSha256,
         excerpt: source.excerpt ?? null,
@@ -530,14 +612,11 @@ export async function POST(request: Request): Promise<Response> {
         locale,
         answerMode: "short",
         reasoningMode: "fast",
-        sources: retrieval.sources,
+        sources,
         legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
         applicableAt: applicableAt?.toISOString(),
         requestId: reservation.run.correlationId,
-        safetyIdentifier: await sha256Json({
-          scope: "guest-openai-safety-v1",
-          sessionId: sessionContext.session.id,
-        }),
+        safetyIdentifier,
         runtimeSettings,
       }, { signal: budget.signal, budget });
       providerStage.complete();
@@ -569,17 +648,17 @@ export async function POST(request: Request): Promise<Response> {
       const bounded = enforceLegalChatSourceBoundary(
         parseLegalChatResponse(aiResult.data),
         new Set(
-          retrieval.sources
+          sources
             .filter((source) => source.excerpt?.trim())
             .map((source) => source.id),
         ),
       );
-      const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
+      const sourceById = new Map(sources.map((source) => [source.id, source]));
       // Lex cards come from a technically validated live fetch, not
       // from a model claim. This preserves the empty-claim safety boundary.
       const returnedSources = bounded.sources.length > 0
         ? bounded.sources
-        : directSourceCards(retrieval.sources);
+        : directSourceCards(sources);
       result = enforceLegalDatabaseFreshness({
         ...bounded,
         sources: returnedSources.map((reference) => {
@@ -594,11 +673,22 @@ export async function POST(request: Request): Promise<Response> {
             status: source.applicabilityStatus ?? "current" as const,
             effectiveDate: source.effectiveDate ?? null,
             verifiedAt: source.verifiedAt,
+            documentType: source.documentType ?? null,
+            documentNumber: source.documentNumber ?? source.actIdentifier ?? null,
+            adoptingAuthority: source.adoptingAuthority ?? null,
+            sourceClass: source.sourceClass ?? "OFFICIAL_LEGISLATION",
+            language: source.locale === "uzc" ? "uz-Cyrl" as const
+              : source.locale === "uz" ? "uz-Latn" as const
+                : source.locale === "en" ? "en" as const : "ru" as const,
+            sourceOrigin: source.verificationState === "web_cited"
+              ? "web" as const
+              : source.verificationState === "direct_validated" ? "live" as const : "indexed" as const,
           };
         }),
         sourceAccessMode: retrieval.sourceAccessMode,
         sourcesRetrievedAt: retrieval.sourcesRetrievedAt,
         sourceValidationStatus: retrieval.sourceValidationStatus,
+        coverageStatus: retrieval.coverageStatus,
       }, retrieval.freshness, {
         locale,
         answerMode: "short",

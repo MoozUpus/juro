@@ -16,8 +16,8 @@ function safeLink(value: string | undefined, allowedLinks?: ReadonlySet<string>)
   }
 }
 
-function Table({ children, ...props }: ComponentPropsWithoutRef<"table">) {
-  return <div className="safe-markdown-table" role="region" aria-label="Scrollable table" tabIndex={0} style={{ maxWidth: "100%", overflowX: "auto" }}>
+function Table({ children, label, ...props }: ComponentPropsWithoutRef<"table"> & { label: string }) {
+  return <div className="safe-markdown-table" role="region" aria-label={label} tabIndex={0} style={{ maxWidth: "100%", overflowX: "auto" }}>
     <table {...props} style={{ width: "100%", borderCollapse: "collapse" }}>{children}</table>
   </div>;
 }
@@ -27,10 +27,12 @@ export function SafeMarkdown({
   children,
   allowedLinks,
   className,
+  locale = "ru",
 }: {
   children?: string;
   allowedLinks?: readonly string[];
   className?: string;
+  locale?: "ru" | "uz";
 }) {
   const allowlist = allowedLinks ? new Set(allowedLinks.flatMap((value) => {
     const safe = safeLink(value);
@@ -58,7 +60,10 @@ export function SafeMarkdown({
         ul: ({ children: value }) => <ul>{value}</ul>,
         ol: ({ children: value }) => <ol>{value}</ol>,
         li: ({ children: value }) => <li>{value}</li>,
-        table: Table,
+        table: ({ children: value, node, ...props }) => {
+          void node;
+          return <Table {...props} label={locale === "ru" ? "Прокручиваемая таблица" : "Aylantiriladigan jadval"}>{value}</Table>;
+        },
         thead: ({ children: value }) => <thead>{value}</thead>,
         tbody: ({ children: value }) => <tbody>{value}</tbody>,
         tr: ({ children: value }) => <tr>{value}</tr>,

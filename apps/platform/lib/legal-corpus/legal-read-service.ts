@@ -20,6 +20,7 @@ export const JURO_LEGAL_CORPUS_TOOL_NAMES = {
   findLegalSources: "find_juro_legal_sources",
   inspectLegalAct: "inspect_juro_legal_act",
   readLegalProvisions: "read_juro_legal_provisions",
+  hydrateLegalSources: "hydrate_juro_legal_sources",
 } as const;
 
 const TOOL_ROOT = "/internal/legal-corpus/read-tools/";
@@ -47,6 +48,10 @@ const readLegalProvisionsInputSchema = z.object({
   anchorChunkId: anchorChunkIdSchema,
   before: z.number().int().min(0).max(12).default(2),
   after: z.number().int().min(0).max(24).default(4),
+}).strict();
+
+const hydrateLegalSourcesInputSchema = z.object({
+  anchorChunkIds: z.array(anchorChunkIdSchema).min(1).max(4),
 }).strict();
 
 const optionalText = z.string().max(10_000).nullable();
@@ -102,6 +107,12 @@ const legalSourceSpanSchema = z.object({
   textSha256: z.string().regex(/^[a-f0-9]{64}$/u),
   quality: z.literal("high"),
   provisionSequence: z.number().int().nonnegative().optional(),
+}).strict();
+
+const hydratedLegalSourceSchema = z.object({
+  anchorChunkId: anchorChunkIdSchema,
+  act: juroActRecordSchema.nullable(),
+  spans: z.array(legalSourceSpanSchema).max(64),
 }).strict();
 
 export type JuroLegalCorpusReadServiceEnv = Pick<Env, "DB">;
@@ -196,6 +207,18 @@ export async function handleJuroLegalCorpusReadToolRequest(
       const result = await loadJuroProvisionWindow({ db: env.DB, ...input });
       return serviceResponse({ result });
     }
+    if (pathname === toolPath(JURO_LEGAL_CORPUS_TOOL_NAMES.hydrateLegalSources)) {
+      const input = hydrateLegalSourcesInputSchema.parse(packet);
+      const anchorChunkIds = [...new Set(input.anchorChunkIds)];
+      const result = await Promise.all(anchorChunkIds.map(async (anchorChunkId) => {
+        const [act, spans] = await Promise.all([
+          inspectJuroActRecord({ db: env.DB, anchorChunkId }),
+          loadJuroProvisionWindow({ db: env.DB, anchorChunkId }),
+        ]);
+        return { anchorChunkId, act, spans };
+      }));
+      return serviceResponse({ result });
+    }
     return serviceResponse({ code: "NOT_FOUND" }, 404);
   } catch (error) {
     if (error instanceof RangeError) return serviceResponse({ code: "PAYLOAD_TOO_LARGE" }, 413);
@@ -270,6 +293,11 @@ export function createJuroLegalCorpusReadServiceTools(input: {
       JURO_LEGAL_CORPUS_TOOL_NAMES.readLegalProvisions,
       { anchorChunkId, before, after },
       z.array(legalSourceSpanSchema).max(64),
+    ),
+    hydrateLegalSources: ({ anchorChunkIds }) => call(
+      JURO_LEGAL_CORPUS_TOOL_NAMES.hydrateLegalSources,
+      { anchorChunkIds: [...new Set(anchorChunkIds)].slice(0, 4) },
+      z.array(hydratedLegalSourceSchema).max(4),
     ),
   };
 }

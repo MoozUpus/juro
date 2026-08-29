@@ -186,6 +186,9 @@
   padding-top: 1.5rem;
   border-top: 1px solid #d9ddde;
 }
+.guest-legal-answer {
+  margin-top: 1.25rem;
+}
 .guest-ai-result-heading {
   display: flex;
   gap: 1rem;
@@ -201,28 +204,35 @@
   color: #17374e;
   font-weight: 700;
 }
-.guest-ai-result h2 {
-  margin: 1rem 0;
-  color: #062844;
-  font-size: clamp(1.35rem, 3vw, 2rem);
-  line-height: 1.15;
+.guest-ai-sources {
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #d9ddde;
 }
-.guest-ai-result h3 {
-  margin: 1.5rem 0 0.6rem;
-  color: #17374e;
+.guest-ai-sources > h2 {
+  margin: 0 0 0.85rem;
   font-size: 1rem;
 }
-.guest-ai-result p,
-.guest-ai-result li {
-  line-height: 1.65;
+.guest-ai-sources ul {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
 }
-.guest-ai-result ul,
-.guest-ai-result ol {
-  padding-left: 1.25rem;
+.guest-ai-sources a {
+  display: grid;
+  min-height: 44px;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #d9ddde;
+  border-radius: 0.75rem;
+  background: var(--surface-subtle);
+  gap: 0.25rem;
+  text-decoration: none;
 }
-.guest-ai-result a {
-  color: #174f78;
-  text-underline-offset: 0.18em;
+.guest-ai-sources a span {
+  color: #687780;
+  font-size: 0.75rem;
 }
 .guest-ai-register {
   margin-top: 1.5rem;
@@ -250,9 +260,21 @@
   color: #687780;
   font-size: 0.8rem;
 }
+html[data-theme="dark"] .guest-ai-header { border-color: #315064; background: rgba(8,31,48,.96); }
+html[data-theme="dark"] :is(.guest-ai-brand,.guest-ai-header nav a,.guest-ai-intro h1,.guest-ai-form label,.guest-ai-register h2) { color: #f4f7f9; }
+html[data-theme="dark"] :is(.guest-ai-page,.guest-ai-intro>p:not(.guest-ai-eyebrow),.guest-ai-intro li,.guest-ai-counter,.guest-ai-skeleton,.auth-turnstile-status) { color: #b7c5ce; }
+html[data-theme="dark"] .guest-ai-workspace { border-color: #315064; background: #102c3e; box-shadow: none; }
+html[data-theme="dark"] .guest-ai-form textarea { border-color: #3b5a6e; background: #081f30; color: #edf2f5; }
+html[data-theme="dark"] :is(.guest-ai-result,.guest-ai-sources) { border-color: #315064; }
+html[data-theme="dark"] .guest-ai-sources a { border-color: #315064; background: #17384b; color: #edf2f5; }
+html[data-theme="dark"] .guest-ai-register { background: #302a1d; color: #e8dcc1; }
 @media (hover: hover) and (pointer: fine) {
   .guest-ai-header nav a:hover {
     background: #ece9e1;
+  }
+  html[data-theme="dark"] .guest-ai-header nav a:hover {
+    background: #17384b;
+    color: #f4f7f9;
   }
   .guest-ai-form button:not(:disabled):hover,
   .guest-ai-register a:hover {
