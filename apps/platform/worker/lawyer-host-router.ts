@@ -33,6 +33,13 @@ export function lawyerHostTarget(url: URL): URL | null {
     target.searchParams.set("accountType", "lawyer");
     return target;
   }
+  const staleIndividualDashboard = url.pathname.match(
+    /^\/(ru|uz)\/individual\/dashboard\/?$/u,
+  );
+  if (staleIndividualDashboard) {
+    target.pathname = `/${staleIndividualDashboard[1]}/lawyer/dashboard`;
+    return target;
+  }
   const onboarding = url.pathname.match(/^\/(?:(ru|uz)\/)?onboarding\/?$/u);
   if (onboarding) {
     target.pathname = `/${onboarding[1] || "ru"}/onboarding`;
