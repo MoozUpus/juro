@@ -12,6 +12,8 @@ type PendingProfile = {
   languagesJson: string;
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes: number;
+  additionalServicesJson: string;
   availabilityStatus: string;
   nextAvailableAt: string | null;
   advocateStatus: string;
@@ -69,7 +71,10 @@ export async function moderateLawyerProfile(
        p.profile_revision AS profileRevision,
        p.display_name AS displayName,p.specialties_json AS specialtiesJson,
        p.languages_json AS languagesJson,p.experience_years AS experienceYears,
-       p.price_description AS priceDescription,p.availability_status AS availabilityStatus,
+       p.price_description AS priceDescription,
+       p.consultation_duration_minutes AS consultationDurationMinutes,
+       p.additional_services_json AS additionalServicesJson,
+       p.availability_status AS availabilityStatus,
        p.next_available_at AS nextAvailableAt,p.advocate_status AS advocateStatus,
        p.firm_name AS firmName,p.bio,p.city,p.region,p.education,
        p.consultation_formats_json AS consultationFormatsJson,
@@ -108,6 +113,8 @@ export async function moderateLawyerProfile(
     languagesJson: profile.languagesJson,
     experienceYears: profile.experienceYears,
     priceDescription: profile.priceDescription,
+    consultationDurationMinutes: profile.consultationDurationMinutes,
+    additionalServicesJson: profile.additionalServicesJson,
     availabilityStatus: profile.availabilityStatus,
     nextAvailableAt: profile.nextAvailableAt,
     advocateStatus: profile.advocateStatus,

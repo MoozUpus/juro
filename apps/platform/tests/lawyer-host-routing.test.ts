@@ -43,6 +43,7 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   const root = lawyerHostTarget(new URL("https://lawyer.juro.uz/"));
   assert.equal(root?.pathname, "/ru/auth/login");
   assert.equal(root?.searchParams.get("accountType"), "lawyer");
+  assert.equal(root?.searchParams.get("reauth"), null);
 
   const register = lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/register"));
   assert.equal(register?.pathname, "/ru/auth/register");

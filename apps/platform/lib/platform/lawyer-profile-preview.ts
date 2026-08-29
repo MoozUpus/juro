@@ -5,14 +5,17 @@ export type LawyerProfilePreviewEnvironment = {
 };
 
 /**
- * The directory is available in local development and staging only when the
- * explicit flag and a real D1 binding are both present. Production remains
- * fail-closed until its separate release approval changes the environment.
+ * Lawyer profile and moderation surfaces are available only when the explicit
+ * environment flag and a real D1 binding are both present. This keeps unknown
+ * preview environments fail-closed while allowing an approved production
+ * release to opt in through version-controlled Cloudflare configuration.
  */
 export function isLawyerProfileDirectoryPreviewEnabled(
   environment: LawyerProfilePreviewEnvironment,
 ): boolean {
-  return (environment.APP_ENV === "development" || environment.APP_ENV === "staging")
+  return ["development", "staging", "production"].includes(
+    environment.APP_ENV ?? "",
+  )
     && environment.LAWYER_PROFILE_DIRECTORY_ENABLED === "true"
     && Boolean(environment.DB);
 }

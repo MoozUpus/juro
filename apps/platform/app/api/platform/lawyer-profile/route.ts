@@ -32,6 +32,8 @@ type LawyerProfile = {
   publicApprovedAt: string | null;
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes: number;
+  additionalServicesJson: string;
   availabilityStatus: string;
   nextAvailableAt: string | null;
   advocateStatus: string;
@@ -45,6 +47,14 @@ type LawyerProfile = {
   profileRevision: number;
   hasPhone: number;
   moderationReason: string | null;
+  updatedAt: string;
+};
+
+type ModerationHistoryItem = {
+  profileRevision: number;
+  decision: string;
+  reason: string | null;
+  createdAt: string;
 };
 
 type EditableProfile = {
@@ -53,6 +63,8 @@ type EditableProfile = {
   languages: string[];
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes: number;
+  additionalServices: string[];
   availabilityStatus: string;
   nextAvailableAt: string | null;
   advocateStatus: string;
@@ -89,6 +101,8 @@ function toEditable(profile: LawyerProfile): EditableProfile {
     languages: list(profile.languagesJson),
     experienceYears: profile.experienceYears,
     priceDescription: profile.priceDescription,
+    consultationDurationMinutes: profile.consultationDurationMinutes,
+    additionalServices: list(profile.additionalServicesJson),
     availabilityStatus: profile.availabilityStatus,
     nextAvailableAt: profile.nextAvailableAt,
     advocateStatus: profile.advocateStatus,
@@ -119,7 +133,10 @@ function completion(profile: LawyerProfile, value = toEditable(profile)) {
   };
 }
 
-function serialize(profile: LawyerProfile) {
+function serialize(
+  profile: LawyerProfile,
+  moderationHistory: ModerationHistoryItem[] = [],
+) {
   const required = completion(profile);
   return {
     id: profile.id,
@@ -131,6 +148,8 @@ function serialize(profile: LawyerProfile) {
     publicApprovedAt: profile.publicApprovedAt,
     experienceYears: profile.experienceYears,
     priceDescription: profile.priceDescription,
+    consultationDurationMinutes: profile.consultationDurationMinutes,
+    additionalServices: list(profile.additionalServicesJson),
     availabilityStatus: profile.availabilityStatus,
     nextAvailableAt: profile.nextAvailableAt,
     advocateStatus: profile.advocateStatus,
@@ -142,7 +161,7 @@ function serialize(profile: LawyerProfile) {
     consultationFormats: list(profile.consultationFormatsJson),
     hasPhone: profile.hasPhone === 1,
     profilePhotoUrl: profile.profilePhotoKey
-      ? `/api/public/lawyers/${encodeURIComponent(profile.id)}/photo`
+      ? "/api/platform/lawyer-profile/photo"
       : null,
     moderationReason:
       profile.marketplaceStatus === "changes_requested"
@@ -150,6 +169,8 @@ function serialize(profile: LawyerProfile) {
         : null,
     missingRequiredFields: missingLawyerMarketplaceFields(required),
     profileRevision: profile.profileRevision,
+    updatedAt: profile.updatedAt,
+    moderationHistory,
   };
 }
 
@@ -168,11 +189,15 @@ async function ownProfile(userId: string) {
       `SELECT p.id,p.display_name AS displayName,p.specialties_json AS specialtiesJson,
        p.languages_json AS languagesJson,p.status,p.marketplace_status AS marketplaceStatus,
        p.public_approved_at AS publicApprovedAt,p.experience_years AS experienceYears,
-       p.price_description AS priceDescription,p.availability_status AS availabilityStatus,
+       p.price_description AS priceDescription,
+       p.consultation_duration_minutes AS consultationDurationMinutes,
+       p.additional_services_json AS additionalServicesJson,
+       p.availability_status AS availabilityStatus,
        p.next_available_at AS nextAvailableAt,p.advocate_status AS advocateStatus,
        p.firm_name AS firmName,p.bio,p.city,p.region,p.education,
        p.consultation_formats_json AS consultationFormatsJson,
        p.profile_photo_key AS profilePhotoKey,p.profile_revision AS profileRevision,
+       p.updated_at AS updatedAt,
        CASE WHEN u.phone IS NOT NULL AND length(trim(u.phone))>0 THEN 1 ELSE 0 END AS hasPhone,
        (SELECT m.reason FROM lawyer_profile_moderation m
          WHERE m.lawyer_profile_id=p.id AND m.profile_revision=p.profile_revision
@@ -186,6 +211,17 @@ async function ownProfile(userId: string) {
     .first<LawyerProfile>();
 }
 
+async function ownModerationHistory(profileId: string) {
+  const history = await requireD1().prepare(
+    `SELECT profile_revision AS profileRevision,decision,reason,
+      created_at AS createdAt
+     FROM lawyer_profile_moderation
+     WHERE lawyer_profile_id=?
+     ORDER BY created_at DESC,id DESC LIMIT 25`,
+  ).bind(profileId).all<ModerationHistoryItem>();
+  return history.results;
+}
+
 function changed(current: EditableProfile, next: EditableProfile): boolean {
   return (
     current.displayName !== next.displayName ||
@@ -193,8 +229,35 @@ function changed(current: EditableProfile, next: EditableProfile): boolean {
     JSON.stringify(current.languages) !== JSON.stringify(next.languages) ||
     current.experienceYears !== next.experienceYears ||
     current.priceDescription !== next.priceDescription ||
+    current.consultationDurationMinutes !== next.consultationDurationMinutes ||
+    JSON.stringify(current.additionalServices) !==
+      JSON.stringify(next.additionalServices) ||
     current.availabilityStatus !== next.availabilityStatus ||
     current.nextAvailableAt !== next.nextAvailableAt ||
+    current.advocateStatus !== next.advocateStatus ||
+    current.firmName !== next.firmName ||
+    current.bio !== next.bio ||
+    current.city !== next.city ||
+    current.region !== next.region ||
+    current.education !== next.education ||
+    JSON.stringify(current.consultationFormats) !==
+      JSON.stringify(next.consultationFormats)
+  );
+}
+
+function moderatedFieldsChanged(
+  current: EditableProfile,
+  next: EditableProfile,
+): boolean {
+  return (
+    current.displayName !== next.displayName ||
+    JSON.stringify(current.specialties) !== JSON.stringify(next.specialties) ||
+    JSON.stringify(current.languages) !== JSON.stringify(next.languages) ||
+    current.experienceYears !== next.experienceYears ||
+    current.priceDescription !== next.priceDescription ||
+    current.consultationDurationMinutes !== next.consultationDurationMinutes ||
+    JSON.stringify(current.additionalServices) !==
+      JSON.stringify(next.additionalServices) ||
     current.advocateStatus !== next.advocateStatus ||
     current.firmName !== next.firmName ||
     current.bio !== next.bio ||
@@ -221,7 +284,11 @@ export const GET = withApiErrors(async function GET() {
     );
   }
   const profile = await ownProfile(user.id);
-  return response({ profile: profile ? serialize(profile) : null });
+  return response({
+    profile: profile
+      ? serialize(profile, await ownModerationHistory(profile.id))
+      : null,
+  });
 });
 
 export const POST = withApiErrors(async function POST(request: Request) {
@@ -277,10 +344,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       .prepare(
         `INSERT INTO lawyer_profiles (
         id,user_id,display_name,specialties_json,languages_json,status,marketplace_status,
-        experience_years,price_description,availability_status,next_available_at,
+        experience_years,price_description,consultation_duration_minutes,
+        additional_services_json,availability_status,next_available_at,
         advocate_status,firm_name,bio,city,region,education,consultation_formats_json,
         created_at,updated_at
-      ) VALUES (?,?,?,?,?,'pending','profile_incomplete',?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,'pending','profile_incomplete',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .bind(
         id,
@@ -290,6 +358,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
         JSON.stringify(value.languages),
         value.experienceYears ?? null,
         value.priceDescription ?? null,
+        value.consultationDurationMinutes,
+        JSON.stringify(value.additionalServices ?? []),
         value.availabilityStatus,
         value.nextAvailableAt ?? null,
         value.advocateStatus,
@@ -332,7 +402,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       ),
   ]);
   const profile = await ownProfile(user.id);
-  return response({ profile: profile ? serialize(profile) : null }, 201);
+  return response({
+    profile: profile
+      ? serialize(profile, await ownModerationHistory(profile.id))
+      : null,
+  }, 201);
 });
 
 export const PATCH = withApiErrors(async function PATCH(request: Request) {
@@ -398,6 +472,10 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
       value.priceDescription === undefined
         ? current.priceDescription
         : value.priceDescription,
+    consultationDurationMinutes:
+      value.consultationDurationMinutes ?? current.consultationDurationMinutes,
+    additionalServices:
+      value.additionalServices ?? current.additionalServices,
     availabilityStatus: value.availabilityStatus ?? current.availabilityStatus,
     nextAvailableAt:
       value.nextAvailableAt === undefined
@@ -416,9 +494,21 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     consultationFormats:
       value.consultationFormats ?? current.consultationFormats,
   };
-  if (!changed(current, next)) return response({ profile: serialize(profile) });
+  if (!changed(current, next)) {
+    return response({
+      profile: serialize(profile, await ownModerationHistory(profile.id)),
+    });
+  }
 
-  const marketplaceStatus = "profile_incomplete";
+  const preservesPublishedProfile = profile.status === "public_approved"
+    && profile.marketplaceStatus === "public_approved"
+    && !moderatedFieldsChanged(current, next);
+  const marketplaceStatus = preservesPublishedProfile
+    ? "public_approved"
+    : "profile_incomplete";
+  const profileStatus = preservesPublishedProfile
+    ? "public_approved"
+    : "pending";
   const missingRequiredFields = missingLawyerMarketplaceFields(
     completion(profile, next),
   );
@@ -431,38 +521,64 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     locale,
     marketplaceStatus,
   );
+  const resultingRevision = preservesPublishedProfile
+    ? profile.profileRevision
+    : profile.profileRevision + 1;
+  const updateStatement = preservesPublishedProfile
+    ? db
+        .prepare(
+          `UPDATE lawyer_profiles SET
+         availability_status=?,next_available_at=?,updated_at=?
+         WHERE id=? AND user_id=? AND profile_revision=?
+           AND status='public_approved' AND marketplace_status='public_approved'
+           AND updated_at=?`,
+        )
+        .bind(
+          next.availabilityStatus,
+          next.nextAvailableAt,
+          now,
+          profile.id,
+          user.id,
+          profile.profileRevision,
+          profile.updatedAt,
+        )
+    : db
+        .prepare(
+          `UPDATE lawyer_profiles SET
+         display_name=?,specialties_json=?,languages_json=?,experience_years=?,
+         price_description=?,consultation_duration_minutes=?,additional_services_json=?,
+         availability_status=?,next_available_at=?,advocate_status=?,
+         firm_name=?,bio=?,city=?,region=?,education=?,consultation_formats_json=?,
+         profile_revision=profile_revision+1,status=?,marketplace_status=?,
+         public_approved_at=NULL,updated_at=?
+         WHERE id=? AND user_id=? AND profile_revision=?`,
+        )
+        .bind(
+          next.displayName,
+          JSON.stringify(next.specialties),
+          JSON.stringify(next.languages),
+          next.experienceYears,
+          next.priceDescription,
+          next.consultationDurationMinutes,
+          JSON.stringify(next.additionalServices),
+          next.availabilityStatus,
+          next.nextAvailableAt,
+          next.advocateStatus,
+          next.firmName,
+          next.bio,
+          next.city,
+          next.region,
+          next.education,
+          JSON.stringify(next.consultationFormats),
+          profileStatus,
+          marketplaceStatus,
+          now,
+          profile.id,
+          user.id,
+          profile.profileRevision,
+        );
   const statements = [
-    db
-      .prepare(
-        `UPDATE lawyer_profiles SET
-       display_name=?,specialties_json=?,languages_json=?,experience_years=?,
-       price_description=?,availability_status=?,next_available_at=?,advocate_status=?,
-       firm_name=?,bio=?,city=?,region=?,education=?,consultation_formats_json=?,
-       profile_revision=profile_revision+1,status='pending',marketplace_status=?,
-       public_approved_at=NULL,updated_at=?
-       WHERE id=? AND user_id=? AND profile_revision=?`,
-      )
-      .bind(
-        next.displayName,
-        JSON.stringify(next.specialties),
-        JSON.stringify(next.languages),
-        next.experienceYears,
-        next.priceDescription,
-        next.availabilityStatus,
-        next.nextAvailableAt,
-        next.advocateStatus,
-        next.firmName,
-        next.bio,
-        next.city,
-        next.region,
-        next.education,
-        JSON.stringify(next.consultationFormats),
-        marketplaceStatus,
-        now,
-        profile.id,
-        user.id,
-        profile.profileRevision,
-      ),
+    updateStatement,
     db
       .prepare(
         `INSERT INTO workspace_audit_events
@@ -471,7 +587,7 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
        WHERE EXISTS (
          SELECT 1 FROM lawyer_profiles
          WHERE id=? AND user_id=? AND profile_revision=?
-           AND status='pending' AND marketplace_status=? AND updated_at=?
+           AND status=? AND marketplace_status=? AND updated_at=?
        )`,
       )
       .bind(
@@ -483,11 +599,13 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
           previousRevision: profile.profileRevision,
           marketplaceStatus,
           missingRequiredFields,
+          publicationPreserved: preservesPublishedProfile,
         }),
         now,
         profile.id,
         user.id,
-        profile.profileRevision + 1,
+        resultingRevision,
+        profileStatus,
         marketplaceStatus,
         now,
       ),
@@ -502,7 +620,7 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
          WHERE EXISTS (
            SELECT 1 FROM lawyer_profiles
            WHERE id=? AND user_id=? AND profile_revision=?
-             AND status='pending' AND marketplace_status=? AND updated_at=?
+           AND status=? AND marketplace_status=? AND updated_at=?
          )`,
         )
         .bind(
@@ -514,7 +632,8 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
           now,
           profile.id,
           user.id,
-          profile.profileRevision + 1,
+          resultingRevision,
+          profileStatus,
           marketplaceStatus,
           now,
         ),
@@ -535,5 +654,9 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     );
   }
   const updated = await ownProfile(user.id);
-  return response({ profile: updated ? serialize(updated) : null });
+  return response({
+    profile: updated
+      ? serialize(updated, await ownModerationHistory(updated.id))
+      : null,
+  });
 });

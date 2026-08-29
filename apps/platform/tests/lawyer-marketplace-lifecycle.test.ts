@@ -11,6 +11,8 @@ import {
 } from "../lib/platform/lawyer-marketplace";
 import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
 import { localizedLawyerProfileStatusNotification } from "../lib/platform/lawyer-profile-notifications";
+import { moderateLawyerProfile } from "../lib/platform/lawyer-profile-moderation-service";
+import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const completeProfile: LawyerMarketplaceCompletionInput = {
   displayName: "Юрист JURO",
@@ -115,6 +117,124 @@ test("lawyer application has an explicit submit gate and draft saves do not publ
   assert.match(submitRoute, /profile_revision=\?/);
 });
 
+test("lawyer service details and six-step application are persisted and reviewable", () => {
+  const migration = readFileSync(new URL("../drizzle/0146_lawyer_profile_services.sql", import.meta.url), "utf8");
+  const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
+  const application = readFileSync(new URL("../app/_platform/LawyerProfessionalProfile.tsx", import.meta.url), "utf8");
+  const adminDetail = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/route.ts", import.meta.url), "utf8");
+  const adminPhoto = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/photo/route.ts", import.meta.url), "utf8");
+  const adminInbox = readFileSync(new URL("../app/_staff/LawyerProfileModerationInbox.tsx", import.meta.url), "utf8");
+  assert.match(migration, /consultation_duration_minutes/);
+  assert.match(migration, /additional_services_json/);
+  assert.match(migration, /BETWEEN 15 AND 480/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE|DELETE\s+FROM/iu);
+  assert.match(profileRoute, /consultation_duration_minutes/);
+  assert.match(profileRoute, /additional_services_json/);
+  assert.match(application, /Стандартная длительность консультации/);
+  assert.match(application, /Дополнительные услуги через запятую/);
+  assert.match(application, /Шаг 4 · Расписание/);
+  assert.match(application, /Отправить профиль на проверку/);
+  assert.match(adminDetail, /lawyer_profile_moderation/);
+  assert.match(adminDetail, /lawyer_profile_lifecycle_events/);
+  assert.match(adminDetail, /lawyer_availability_rules/);
+  assert.match(adminPhoto, /lawyer\.profiles\.moderate/);
+  assert.match(adminPhoto, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
+  assert.match(adminInbox, /REVIEW VIEW/);
+  assert.match(adminInbox, /\/lifecycle/);
+});
+
+test("availability-only edits preserve an approved public profile", () => {
+  const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
+  assert.match(profileRoute, /preservesPublishedProfile/);
+  assert.match(profileRoute, /!moderatedFieldsChanged\(current, next\)/);
+  assert.match(profileRoute, /availability_status=\?,next_available_at=\?,updated_at=\?/);
+  assert.match(profileRoute, /resultingRevision = preservesPublishedProfile/);
+  assert.doesNotMatch(
+    profileRoute.match(/const updateStatement = preservesPublishedProfile[\s\S]*?\n    : db/)?.[0] ?? "",
+    /profile_revision=profile_revision\+1|public_approved_at/u,
+  );
+  assert.match(profileRoute, /publicationPreserved: preservesPublishedProfile/);
+});
+
+test("availability-only updates retain the exact moderated revision at the D1 boundary", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const now = "2026-08-29T22:20:00.000Z";
+  const moderatorId = "10000000-0000-4000-8000-000000000001";
+  const lawyerId = "10000000-0000-4000-8000-000000000002";
+  const workspaceId = "20000000-0000-4000-8000-000000000001";
+  const profileId = "30000000-0000-4000-8000-000000000001";
+  try {
+    sqlite.prepare(
+      `INSERT INTO user_profiles (id,email,locale,account_type,created_at,updated_at)
+       VALUES (?,'moderator@example.test','ru','individual',?,?),
+         (?,'lawyer@example.test','ru','lawyer',?,?)`,
+    ).run(moderatorId, now, now, lawyerId, now, now);
+    sqlite.prepare(
+      "INSERT INTO workspaces(id,type,name,locale,created_at,updated_at) VALUES (?,'individual','Lawyer workspace','ru',?,?)",
+    ).run(workspaceId, now, now);
+    sqlite.prepare(
+      "UPDATE user_profiles SET default_workspace_id=?,phone='+998901234567' WHERE id=?",
+    ).run(workspaceId, lawyerId);
+    sqlite.prepare(
+      `INSERT INTO lawyer_profiles (
+        id,user_id,display_name,specialties_json,languages_json,status,marketplace_status,
+        experience_years,price_description,availability_status,advocate_status,firm_name,
+        city,region,education,consultation_formats_json,profile_photo_key,created_at,updated_at
+      ) VALUES (?,?,'JURO Lawyer','["contracts"]','["ru"]','pending','pending_review',
+        5,'By agreement','available','declared','JURO Legal','Tashkent','Tashkent',
+        'Law school','["video"]','lawyer-profiles/test/photo.webp',?,?)`,
+    ).run(profileId, lawyerId, now, now);
+
+    await moderateLawyerProfile(d1, {
+      profileId,
+      moderatorUserId: moderatorId,
+      decision: "approved",
+      reason: "Profile completeness confirmed.",
+      now: new Date(now),
+    });
+    const availabilityUpdate = sqlite.prepare(
+      `UPDATE lawyer_profiles SET availability_status='limited',
+        next_available_at='2026-09-01T09:00:00.000Z',updated_at=?
+       WHERE id=? AND profile_revision=1 AND status='public_approved'
+         AND marketplace_status='public_approved' AND updated_at=?`,
+    );
+    const firstUpdate = availabilityUpdate.run(
+      "2026-08-29T22:25:00.000Z",
+      profileId,
+      now,
+    );
+    const staleUpdate = availabilityUpdate.run(
+      "2026-08-29T22:26:00.000Z",
+      profileId,
+      now,
+    );
+    assert.equal(firstUpdate.changes, 1);
+    assert.equal(staleUpdate.changes, 0);
+
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        `SELECT status,marketplace_status AS marketplaceStatus,
+          profile_revision AS profileRevision,availability_status AS availabilityStatus
+         FROM lawyer_profiles WHERE id=?`,
+      ).get(profileId) },
+      {
+        status: "public_approved",
+        marketplaceStatus: "public_approved",
+        profileRevision: 1,
+        availabilityStatus: "limited",
+      },
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM lawyer_profile_moderation WHERE lawyer_profile_id=? AND profile_revision=1",
+      ).get(profileId) as { total: number }).total,
+      1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a correction-requested profile remains fail-closed if it reaches a directory projection", () => {
   const [lawyer] = projectPublicLawyerDirectory([{
     id: "correction-requested-lawyer",
@@ -143,7 +263,7 @@ test("profile photos remain fail-closed until the malware scanner verifies their
   assert.ok(route.indexOf("const scanVerdict") < route.indexOf("const objectKey"));
 });
 
-test("a completed profile under review is visible but cannot receive a request", () => {
+test("a completed profile stays private until approval and retains a self-only preview", () => {
   const publicPhotoRoute = readFileSync(new URL("../app/api/public/lawyers/[profileId]/photo/route.ts", import.meta.url), "utf8");
   const directoryRoute = readFileSync(new URL("../app/api/platform/lawyers/route.ts", import.meta.url), "utf8");
   const publicDirectoryRoute = readFileSync(new URL("../app/api/public/lawyers/route.ts", import.meta.url), "utf8");
@@ -153,21 +273,21 @@ test("a completed profile under review is visible but cannot receive a request",
   const detailClient = readFileSync(new URL("../app/_platform/LawyerProfileClient.tsx", import.meta.url), "utf8");
   const privatePhotoRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
   const privateProfileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
-  assert.match(publicPhotoRoute, /marketplace_status='pending_review' AND status='pending'/);
-  assert.match(directoryRoute, /marketplace_status='pending_review' AND status='pending'/);
-  assert.match(publicDirectoryRoute, /marketplace_status='pending_review' AND status='pending'/);
-  assert.match(publicDetailRoute, /marketplace_status='pending_review' AND status='pending'/);
+  for (const source of [publicPhotoRoute, directoryRoute, publicDirectoryRoute, publicDetailRoute, detailRoute]) {
+    assert.match(source, /status='public_approved'/);
+    assert.match(source, /marketplace_status='public_approved'/);
+    assert.doesNotMatch(source, /marketplace_status='pending_review' AND status='pending'/);
+  }
   assert.doesNotMatch(publicDirectoryRoute, /phone|user_profiles|moderation_notes/i);
-  assert.match(directoryClient, /Профиль на проверке JURO/);
-  assert.match(directoryClient, /Запись после проверки/);
-  assert.match(detailRoute, /marketplace_status='pending_review' AND status='pending'/);
   assert.match(detailClient, /consultations\?lawyer=/);
-  assert.match(detailClient, /Запись после проверки/);
-  assert.match(detailClient, /Профиль на проверке JURO/);
+  assert.match(privateProfileRoute, /lawyer_profile_status/);
+  const application = readFileSync(new URL("../app/_platform/LawyerProfessionalProfile.tsx", import.meta.url), "utf8");
+  assert.match(application, /lawyer-profile-preview/);
+  assert.match(application, /Предпросмотр публичного профиля/);
   assert.match(privatePhotoRoute, /export const GET/);
   assert.match(privatePhotoRoute, /WHERE user_id=\?/);
   assert.match(privatePhotoRoute, /lawyer_profile_status/);
-  assert.match(privateProfileRoute, /lawyer_profile_status/);
+  assert.match(directoryClient, /canReceiveRequests/);
 });
 
 test("JURO approval and Top Lawyer remain separate public designations", () => {
