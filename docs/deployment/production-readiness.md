@@ -40,6 +40,32 @@ made. Production release readiness therefore records a required owner/network
 review of FTP and mail service ownership before any narrowly approved DNS
 remediation.
 
+## 2026-08-29 read-only Cloudflare runtime resource inventory
+
+The live `juro` Worker resource graph matches the production Wrangler contract.
+All 17 expected `production-*` queues exist with no missing or extra production
+queue. Its two schedules are exactly `*/5 * * * *` and `0 19 * * *`; the
+`juro-admin` and `juro-legaltech` Workers correctly have no schedules. Worker
+170 exposes the expected D1, three R2, 13 queue, two service, one Durable
+Object, Analytics Engine, Workers AI, Images and assets bindings. Nine provider,
+identity, Turnstile, email, TURN and Admin credentials remain secret bindings;
+no secret value was requested or recorded.
+
+The three production private buckets — `juro-private-documents`,
+`juro-production-backups` and `juro-production-quarantine` — exist, have no
+custom domain and have public `r2.dev` access disabled. The separate
+`juro-public-media` bucket is intentionally public through `r2.dev`, has no
+custom domain and is not a private application-data binding. The managed
+production Turnstile widget is restricted to `app.juro.uz` and
+`lawyer.juro.uz`; its staging counterpart is restricted to
+`staging.app.juro.uz`.
+
+The OAuth token still cannot read zone/account rulesets or account redirect
+lists. Existing authenticated-dashboard proof for Full (strict), the Free
+Managed Ruleset and the scoped analytics rate rule therefore remains the
+rules-plane evidence boundary. No queue, bucket, domain, schedule, binding,
+secret, widget or ruleset was changed during this inventory.
+
 ## 2026-08-29 public Sites v86 replay and unpublished correction
 
 A read-only Chrome replay of the deployed Sites v86 artifact covered RU, UZ
@@ -106,19 +132,19 @@ No migration or D1 mutation, DNS change, notification mutation or Sites release
 was made. Sites v86 remains live. Worker 169 is the immediate application
 rollback.
 
-## 2026-08-28 Anthropic account recovery recheck
+## 2026-08-29 Anthropic account recovery recheck
 
 After the owner reported replenishing the Anthropic account, independent reads
 through `app.juro.uz/api/status` and `status.juro.uz/api/status` returned the
-same snapshot generated at `2026-08-28T18:32:32.114Z`: all eight published
+same latest snapshot generated at `2026-08-29T00:19:04.324Z`: all eight published
 components were operational and there was no active incident. Anthropic's fresh
-synthetic probe was operational at `2026-08-28T18:30:54.428Z` (5,895 ms, no
+synthetic probe was operational at `2026-08-29T00:15:32.841Z` (6,141 ms, no
 safe error); the dependent document-analysis probe was operational at
-`2026-08-28T18:31:06.053Z` (11,256 ms, no safe error).
+`2026-08-29T00:00:46.020Z` (7,564 ms, no safe error).
 
 This was a read-only recovery check. No provider prompt, private upload,
 customer-data access, D1 mutation, DNS change, notification or release was
-performed. Worker 168 and Sites v86 remain live.
+performed. Worker 170 and Sites v86 remain live.
 
 ## 2026-08-28 Worker 168 Client dashboard keyboard focus
 

@@ -28,6 +28,19 @@ conformance claim.
 | Cloudflare recommendation | OPEN REVIEW — the dashboard reports one partially exposed origin-IP recommendation; FTP/mail ownership must be confirmed before any proxy change |
 | Mutation boundary | PASS — no DNS record, proxy, TTL, mail, Worker-domain or route change was made |
 
+## Read-only Cloudflare runtime resource inventory
+
+| Gate | Result |
+| --- | --- |
+| Production queues | PASS — all 17 expected `production-*` queues from the production Wrangler configuration exist; zero expected queues are missing and zero extra production queues were found |
+| Cron triggers | PASS — the live `juro` Worker has exactly `*/5 * * * *` and `0 19 * * *`; `juro-admin` and `juro-legaltech` have no schedules, matching their roles |
+| Private R2 exposure | PASS — `juro-private-documents`, `juro-production-backups` and `juro-production-quarantine` exist, have no custom domain and have public `r2.dev` access disabled |
+| Public media R2 | INVENTORIED — `juro-public-media` intentionally has public `r2.dev` access, no custom domain and is not a private application-data binding |
+| Worker 170 bindings | PASS — the active version exposes the expected D1, three R2, 13 queue, two service, one Durable Object, Analytics Engine, Workers AI, Images and assets bindings; all nine secrets are secret bindings and no secret value was read |
+| Turnstile | PASS — the managed production widget is restricted to `app.juro.uz` and `lawyer.juro.uz`, with `no_clearance`; the separate staging widget is restricted to `staging.app.juro.uz` |
+| Rules-plane API boundary | EXPECTED LIMIT — the current OAuth token reads Worker, Queue, R2 and Turnstile control-plane state but receives authentication errors for zone/account rulesets and account lists; previously recorded dashboard evidence remains the current WAF/TLS proof |
+| Mutation boundary | PASS — no queue, bucket, domain, schedule, binding, secret, Turnstile or ruleset was changed |
+
 ## Public Sites v86 replay and superseding source candidate
 
 | Gate | Result |
@@ -72,9 +85,9 @@ claim.
 
 | Gate | Result |
 | --- | --- |
-| Independent production reads | PASS — `app.juro.uz/api/status` and `status.juro.uz/api/status` returned the same snapshot generated at `2026-08-28T18:32:32.114Z` |
-| Anthropic | PASS — fresh synthetic probe operational at `2026-08-28T18:30:54.428Z`, 5,895 ms, no safe error |
-| Dependent document analysis | PASS — operational at `2026-08-28T18:31:06.053Z`, 11,256 ms, no safe error |
+| Independent production reads | PASS — `app.juro.uz/api/status` and `status.juro.uz/api/status` returned the same latest snapshot generated at `2026-08-29T00:19:04.324Z` |
+| Anthropic | PASS — fresh synthetic probe operational at `2026-08-29T00:15:32.841Z`, 6,141 ms, no safe error |
+| Dependent document analysis | PASS — operational at `2026-08-29T00:00:46.020Z`, 7,564 ms, no safe error |
 | Aggregate health | PASS — all eight published components operational and no active incident |
 | Scope | READ-ONLY — no prompt, upload, customer data, D1 mutation, DNS change, notification or release |
 
