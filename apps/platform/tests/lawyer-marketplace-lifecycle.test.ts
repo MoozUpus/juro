@@ -116,7 +116,7 @@ test("lawyer application has an explicit submit gate and draft saves do not publ
 });
 
 test("lawyer service details and six-step application are persisted and reviewable", () => {
-  const migration = readFileSync(new URL("../drizzle/0145_lawyer_profile_services.sql", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../drizzle/0146_lawyer_profile_services.sql", import.meta.url), "utf8");
   const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
   const application = readFileSync(new URL("../app/_platform/LawyerProfessionalProfile.tsx", import.meta.url), "utf8");
   const adminDetail = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/route.ts", import.meta.url), "utf8");
