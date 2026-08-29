@@ -724,10 +724,17 @@ export async function handleLegalCorpusScheduled(
         ingestionBudget: nominalIngestionBudget,
         continuePager: corePagerContinuationRequired,
       });
-      const versionSlotIndexes = legalCorpusVersionSlotIndexes({
-        ingestionBudget,
-        queuedVersionJobs: await queuedLegalCorpusVersionJobs(env.DB),
-      });
+      // The approved queue-only release path is fetch-first: this shard is
+      // below the canonical-document gate while provisions/chunks already
+      // exceed their targets. Due retrying version jobs still win globally,
+      // but reserving fresh version slots here would delay the document gate
+      // without discarding any version work (it remains durable in D1).
+      const versionSlotIndexes = queueProcessingEnabled(env)
+        ? []
+        : legalCorpusVersionSlotIndexes({
+          ingestionBudget,
+          queuedVersionJobs: await queuedLegalCorpusVersionJobs(env.DB),
+        });
       for (let index = 0; index < ingestionBudget; index += 1) {
         const startCutoffMs = env.APP_ENV === "staging"
           ? LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS
