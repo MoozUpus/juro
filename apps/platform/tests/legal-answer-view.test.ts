@@ -42,6 +42,7 @@ function result(overrides: Partial<LegalAnswerViewResult> = {}): LegalAnswerView
     legalDatabaseAsOf: "2026-08-29",
     evidenceMode: "official",
     referenceNotes: [{ title: "Практический комментарий", note: "Материал помогает понять контекст.", sourceIds: ["commentary"] }],
+    conditionalBranches: [],
     ...overrides,
   };
 }
@@ -91,6 +92,64 @@ test("Uzbek Legal Answer uses the approved localized section labels", () => {
   assert.match(html, />Qonunda nima deyilgan</u);
   assert.match(html, />Keyingi qadamlar</u);
   assert.doesNotMatch(html, />Muhim jihatlar</u);
+});
+
+test("Conditional Answer renders supported branches with their own citations", () => {
+  const html = renderToStaticMarkup(createElement(LegalAnswerView, {
+    result: result({
+      conditionalBranches: [{
+        condition: "Если инициатор — работодатель",
+        outcome: "Действует запрет на увольнение в период отпуска.",
+        sourceIds: ["labor-code-163"],
+      }],
+    }),
+    locale: "ru",
+  }));
+
+  assert.match(html, />Как меняется ответ</u);
+  assert.match(html, />Если инициатор — работодатель</u);
+  assert.match(html, /ст\. 163 · Трудовой кодекс РУз/u);
+});
+
+test("Main Point cites only its leading supported proposition", () => {
+  const secondSource = {
+    ...result().sources[0]!,
+    sourceId: "civil-code-10",
+    actTitle: "Гражданский кодекс Республики Узбекистан",
+    article: "10",
+  };
+  const html = renderToStaticMarkup(createElement(LegalAnswerView, {
+    result: result({
+      sources: [...result().sources, secondSource],
+      confirmedFindings: [
+        ...result().confirmedFindings,
+        { title: "Иной вопрос", explanation: "Применяется отдельная норма.", sourceIds: [secondSource.sourceId] },
+      ],
+    }),
+    locale: "ru",
+  }));
+  const main = html.indexOf(">Главное<");
+  const law = html.indexOf(">Что говорит закон<");
+  const mainMarkup = html.slice(main, law);
+  assert.match(mainMarkup, /ст\. 163 · Трудовой кодекс РУз/u);
+  assert.doesNotMatch(mainMarkup, /ст\. 10 · Гражданский кодекс РУз/u);
+});
+
+test("branch-only Conditional Answer cites the branch that grounds its Main Point", () => {
+  const html = renderToStaticMarkup(createElement(LegalAnswerView, {
+    result: result({
+      confirmedFindings: [],
+      conditionalBranches: [{
+        condition: "Если инициатор — работодатель",
+        outcome: "Действует запрет на увольнение в период отпуска.",
+        sourceIds: ["labor-code-163"],
+      }],
+    }),
+    locale: "ru",
+  }));
+  const main = html.indexOf(">Главное<");
+  const branches = html.indexOf(">Как меняется ответ<");
+  assert.match(html.slice(main, branches), /ст\. 163 · Трудовой кодекс РУз/u);
 });
 
 test("unsupported conclusions render an Insufficient-Evidence Result instead of empty legal sections", () => {

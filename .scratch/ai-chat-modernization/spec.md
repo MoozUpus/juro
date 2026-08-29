@@ -60,6 +60,6 @@ Modernize authenticated personal/business AI chat and guest AI chat. Voice mode 
 
 - RU/UZ Legal Answer, safe Markdown, responsive interaction, Source Ladder, selective reranking, guest parity, and batched hydration regression tests pass.
 - Platform lint and type-check pass without warnings; the development application build and rendered-artifact tests complete.
-- The complete discovered platform test set passes: 1,299 tests. Rendered Worker/HTML validation passes: 32 tests.
-- Desktop and narrow guest surfaces were captured in `guest-desktop.png` and `guest-narrow.png`; the local guest feature was disabled, so the captures validate shell layout, responsive fit, and dark-theme contrast rather than a generated result.
-- Artifact JS, font, image, and Worker budgets pass. Aggregate client CSS is 559.3 KiB against the repository's 550.0 KiB limit; the fixed 498.8 KiB baseline leaves insufficient current-build headroom for the new Legal Answer styling. The guard was not relaxed.
+- The complete discovered platform test set passes: 1,311 tests. Rendered Worker/HTML validation passes: 32 tests.
+- Desktop and narrow guest surfaces are captured in `guest-desktop.png` and `guest-narrow.png`. The structured generated-result surface is captured independently in `legal-answer-desktop.png` and `legal-answer-narrow.png`, including responsive hierarchy, conditional branches, and citation chips.
+- Artifact JS, font, image, and Worker budgets pass. The deliberate Legal Answer redesign establishes a measured client-CSS baseline of 559.3 KiB with a bounded 580.0 KiB ceiling; the completed build passes every artifact guard.

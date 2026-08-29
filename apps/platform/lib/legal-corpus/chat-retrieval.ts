@@ -485,7 +485,9 @@ export async function retrieveCorpusAwareLegalSources(input: {
       exactWindowSuccesses: research.exactWindowSuccesses,
       denseUnavailable: research.denseUnavailable,
     };
-  } catch {
+  } catch (error) {
+    if (input.signal?.aborted) input.signal.throwIfAborted();
+    if (error instanceof Error && error.name === "AbortError") throw error;
     indexed = [];
   }
   const coverage = assessLegalCorpusCoverage({
@@ -527,7 +529,9 @@ export async function retrieveCorpusAwareLegalSources(input: {
       input.query,
       input.locale,
     );
-  } catch {
+  } catch (error) {
+    if (input.signal?.aborted) input.signal.throwIfAborted();
+    if (error instanceof Error && error.name === "AbortError") throw error;
     return indexedPacket;
   }
 }

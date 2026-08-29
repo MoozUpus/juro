@@ -31,6 +31,7 @@ import {
   legalFindingSchema,
   type LegalChatResponse,
 } from "./legal-chat-schema";
+import { attachSecondaryReferenceContext } from "./secondary-reference-result";
 import {
   aiProviderStatus,
   type AiProviderStatus,
@@ -323,6 +324,11 @@ function candidateClaims(result: LegalChatResponse): CandidateClaim[] {
       type: "legal_basis" as const,
       sourceIds: finding.sourceIds,
     })),
+    ...(result.conditionalBranches ?? []).map((branch) => ({
+      ...claim(branch.condition, branch.outcome),
+      type: "legal_basis" as const,
+      sourceIds: branch.sourceIds,
+    })),
     ...result.actionPlan.filter((step) => step.sourceIds.length > 0).map((step) => ({
       ...claim(step.title, step.description),
       type: "action" as const,
@@ -381,6 +387,14 @@ function filteredLegacyResult(
       ...finding,
       title: plainGroundedText(finding.title),
       explanation: plainGroundedText(finding.explanation),
+    })),
+    conditionalBranches: (result.conditionalBranches ?? []).filter((branch) =>
+      supported(branch.condition, branch.outcome)
+        && branch.sourceIds.every((sourceId) => validSourceIds.has(sourceId)),
+    ).map((branch) => ({
+      ...branch,
+      condition: plainGroundedText(branch.condition),
+      outcome: plainGroundedText(branch.outcome),
     })),
     risks: result.risks.filter((risk) =>
       risk.sourceIds.length > 0 && (supported(risk.title, risk.explanation)
@@ -805,16 +819,30 @@ export function validateLegalGatewayAnswer(input: {
     const span = firstSpanBySource.get(sourceId);
     return source && span ? [canonicalLegacySource(source, span)] : [];
   });
-  const retainedTiers = new Set(canonicalSources.map((source) => {
-    if (source.sourceClass === "SECONDARY_REFERENCE") return "secondary";
+  const secondaryCanonicalSources = canonicalSources.filter((source) => source.sourceClass === "SECONDARY_REFERENCE");
+  const authoritativeCanonicalSources = canonicalSources.filter((source) => source.sourceClass !== "SECONDARY_REFERENCE");
+  const retainedTiers = new Set(authoritativeCanonicalSources.map((source) => {
     if (source.sourceClass === "USER_TRUSTED_PRIVATE") return "private";
     return "official";
   }));
   const evidenceMode = retainedTiers.size === 0 ? "none" as const
     : retainedTiers.size > 1 ? "mixed" as const
       : retainedTiers.has("official") ? "official" as const
-        : retainedTiers.has("private") ? "private_only" as const : "secondary_only" as const;
-  const referenceOnly = publishable.length === 0 && referenceNotes.length > 0;
+        : "private_only" as const;
+  const groundedResult: LegalChatResponse = {
+    ...grounded,
+    responseKind: "answer",
+    summary: groundedVisibleAnswer(publishable.slice(0, 1), input.locale, true),
+    answer: groundedVisibleAnswer(publishable, input.locale, false, input.answerMode === "detailed" ? 8 : 3),
+    referenceNotes: [],
+    clarificationQuestions: sanitizeClarificationQuestions(grounded.clarificationQuestions, input.locale),
+    assumptions: [],
+    requiredDocuments: [],
+    successOutlook: null,
+    suggestLawyer: grounded.suggestLawyer,
+    sources: authoritativeCanonicalSources,
+    evidenceMode,
+  };
   const safeResult = validSourceIds.size === 0
     ? forceClarificationWithoutVerifiedSources(grounded, {
       locale: input.locale,
@@ -822,48 +850,13 @@ export function validateLegalGatewayAnswer(input: {
       reasoningMode: input.reasoningMode,
       legalDatabaseAsOf: input.legalDatabaseAsOf,
     })
-    : referenceOnly
-      // Reference material was found but no norm was. It is still a useful,
-      // chargeable answer, but every field that implies legal authority stays
-      // empty and the caveat is fixed server-owned text.
-      ? {
-        ...grounded,
-        responseKind: "answer" as const,
-        summary: input.locale === "ru"
-          ? "Справочный ответ: официальная норма Lex.uz не подтверждена."
-          : "Ma’lumotnoma javobi: Lex.uz rasmiy normasi tasdiqlanmadi.",
-        answer: input.locale === "ru"
-          ? `Официальная норма Lex.uz не подтверждена. Это только справочный контекст из проверенной открытой страницы; он не устанавливает законодательство, сроки, расчёты или обязательные действия. ${secondaryClaims.map((claim) => claim.text).join(" ")}`.slice(0, 20_000)
-          : `Lex.uz rasmiy normasi tasdiqlanmadi. Bu faqat tekshirilgan ochiq sahifadagi ma’lumotnoma konteksti; u qonunchilik, muddat, hisob-kitob yoki majburiy harakatni belgilamaydi. ${secondaryClaims.map((claim) => claim.text).join(" ")}`.slice(0, 20_000),
-        confirmedFindings: [],
-        referenceNotes,
-        clarificationQuestions: sanitizeClarificationQuestions(grounded.clarificationQuestions, input.locale),
-        assumptions: [],
-        risks: [],
-        requiredDocuments: [],
-        actionPlan: [],
-        deadlines: [],
-        successOutlook: null,
-        suggestLawyer: true,
-        sources: canonicalSources,
-        evidenceMode,
-      }
-      : {
-        ...grounded,
-        responseKind: "answer" as const,
-        summary: groundedVisibleAnswer(publishable.slice(0, 1), input.locale, true),
-        answer: groundedVisibleAnswer(publishable, input.locale, false, input.answerMode === "detailed" ? 8 : 3),
-        referenceNotes,
-        clarificationQuestions: sanitizeClarificationQuestions(grounded.clarificationQuestions, input.locale),
-        assumptions: [],
-        requiredDocuments: [],
-        successOutlook: null,
-        // Public-web material alongside a real norm still means a human should
-        // check the combination before anything irreversible happens.
-        suggestLawyer: grounded.suggestLawyer || referenceNotes.length > 0,
-        sources: canonicalSources,
-        evidenceMode,
-      };
+    : attachSecondaryReferenceContext({
+      result: groundedResult,
+      secondarySources: secondaryCanonicalSources,
+      referenceNotes,
+      locale: input.locale,
+      contextText: secondaryClaims.map((claim) => claim.text).join(" "),
+    });
   const sources = [...validSourceIds].flatMap((sourceId) => {
     const source = sourceById.get(sourceId);
     const span = firstSpanBySource.get(sourceId);

@@ -21,9 +21,9 @@ import {
 } from "../../../../lib/ai/provider";
 import {
   enforceLegalDatabaseFreshness,
-  enforceLegalChatSourceBoundary,
   parseLegalChatResponse,
 } from "../../../../lib/ai/legal-chat-schema";
+import { validateLegalGatewayAnswer } from "../../../../lib/ai/legal-ai-gateway";
 import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
@@ -31,7 +31,6 @@ import {
   retrieveCorpusAwareLegalSources,
   shouldRetrieveSecondaryInternet,
 } from "../../../../lib/legal-corpus/chat-retrieval";
-import { directSourceCards } from "../../../../lib/legal/direct-retrieval";
 import {
   fallbackLegalRetrievalUnderstanding,
   rerankLegalCorpusCandidates,
@@ -95,6 +94,11 @@ function json(
 
 function copy(locale: "ru" | "uz", ru: string, uz: string): string {
   return locale === "ru" ? ru : uz;
+}
+
+function rethrowGuestCancellation(error: unknown, signal: AbortSignal): void {
+  if (signal.aborted) signal.throwIfAborted();
+  if (error instanceof Error && error.name === "AbortError") throw error;
 }
 
 type GuestAiSloContext = {
@@ -475,8 +479,9 @@ export async function POST(request: Request): Promise<Response> {
         maxAttempts: 1,
       });
       understandingStage.complete();
-    } catch {
+    } catch (error) {
       understandingStage.fail();
+      rethrowGuestCancellation(error, budget.signal);
     }
 
     let retrieval;
@@ -518,8 +523,9 @@ export async function POST(request: Request): Promise<Response> {
         },
       });
       retrievalStage.complete();
-    } catch {
+    } catch (error) {
       retrievalStage.fail();
+      rethrowGuestCancellation(error, budget.signal);
       retrieval = await retrieveCorpusAwareLegalSources({
         env: { ...runtimeEnv(), DB: db }, query: "", locale, limit: 1, budgetMs: 1,
       });
@@ -540,8 +546,9 @@ export async function POST(request: Request): Promise<Response> {
           });
           secondaryStage.complete();
           return secondary;
-        } catch {
+        } catch (error) {
           secondaryStage.fail();
+          rethrowGuestCancellation(error, budget.signal);
           return { sources: [], evidence: [], errors: [{ code: "SECONDARY_RESEARCH_UNAVAILABLE" }] };
         }
       })()
@@ -549,14 +556,6 @@ export async function POST(request: Request): Promise<Response> {
     const authoritativeSources = retrieval.sources;
     const allRetrievedSources = [...authoritativeSources, ...secondaryInternet.sources];
     const evidence = [...retrieval.evidence, ...secondaryInternet.evidence];
-    const secondaryReferenceNotes = secondaryInternet.sources
-      .filter((source) => source.excerpt?.trim())
-      .slice(0, 8)
-      .map((source) => ({
-        title: source.actTitle.slice(0, 240),
-        note: source.excerpt!.trim().slice(0, 3_000),
-        sourceIds: [source.id],
-      }));
     const requestHash = await sha256Json({
       question: effectiveQuestion,
       locale,
@@ -618,6 +617,7 @@ export async function POST(request: Request): Promise<Response> {
     try {
       aiResult = await provider.runLegalChat({
         question: effectiveQuestion,
+        retrievalQuery: retrievalUnderstanding.corpusQueries.join(" "),
         locale,
         answerMode: "short",
         reasoningMode: "fast",
@@ -654,46 +654,19 @@ export async function POST(request: Request): Promise<Response> {
     let result;
     const validationStage = budget.beginStage("validation");
     try {
-      const bounded = enforceLegalChatSourceBoundary(
-        parseLegalChatResponse(aiResult.data),
-        new Set(
-          authoritativeSources
-            .filter((source) => source.excerpt?.trim())
-            .map((source) => source.id),
-        ),
-      );
-      const sourceById = new Map(authoritativeSources.map((source) => [source.id, source]));
-      // Lex cards come from a technically validated live fetch, not
-      // from a model claim. This preserves the empty-claim safety boundary.
-      const returnedSources = bounded.sources.length > 0
-        ? bounded.sources
-        : directSourceCards(authoritativeSources);
-      const authoritativeResult = enforceLegalDatabaseFreshness({
-        ...bounded,
-        sources: returnedSources.map((reference) => {
-          const source = sourceById.get(reference.sourceId)!;
-          return {
-            sourceId: source.id,
-            actTitle: source.actTitle,
-            actIdentifier: source.actIdentifier,
-            article: source.article ?? null,
-            excerpt: source.excerpt ?? null,
-            originalUrl: source.officialUrl,
-            status: source.applicabilityStatus ?? "current" as const,
-            effectiveDate: source.effectiveDate ?? null,
-            verifiedAt: source.verifiedAt,
-            documentType: source.documentType ?? null,
-            documentNumber: source.documentNumber ?? source.actIdentifier ?? null,
-            adoptingAuthority: source.adoptingAuthority ?? null,
-            sourceClass: source.sourceClass ?? "OFFICIAL_LEGISLATION",
-            language: source.locale === "uzc" ? "uz-Cyrl" as const
-              : source.locale === "uz" ? "uz-Latn" as const
-                : source.locale === "en" ? "en" as const : "ru" as const,
-            sourceOrigin: source.verificationState === "web_cited"
-              ? "web" as const
-              : source.verificationState === "direct_validated" ? "live" as const : "indexed" as const,
-          };
-        }),
+      const validated = validateLegalGatewayAnswer({
+        result: parseLegalChatResponse(aiResult.data),
+        run: aiResult,
+        sources: allRetrievedSources,
+        question: effectiveQuestion,
+        retrievalQuery: retrievalUnderstanding.corpusQueries.join(" "),
+        locale,
+        answerMode: "short",
+        reasoningMode: "fast",
+        legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
+      });
+      result = enforceLegalDatabaseFreshness({
+        ...validated.run.data,
         sourceAccessMode: retrieval.sourceAccessMode,
         sourcesRetrievedAt: retrieval.sourcesRetrievedAt,
         sourceValidationStatus: retrieval.sourceValidationStatus,
@@ -703,69 +676,6 @@ export async function POST(request: Request): Promise<Response> {
         answerMode: "short",
         reasoningMode: "fast",
       });
-      const secondarySourceById = new Map(secondaryInternet.sources.map((source) => [source.id, source]));
-      const secondaryCards = secondaryReferenceNotes.flatMap((note) => note.sourceIds.flatMap((sourceId) => {
-        const source = secondarySourceById.get(sourceId);
-        if (!source) return [];
-        return [{
-          sourceId: source.id,
-          actTitle: source.actTitle,
-          actIdentifier: source.actIdentifier,
-          article: source.article ?? null,
-          excerpt: source.excerpt ?? null,
-          originalUrl: source.officialUrl,
-          status: source.applicabilityStatus ?? "unconfirmed" as const,
-          effectiveDate: source.effectiveDate ?? null,
-          verifiedAt: source.verifiedAt,
-          documentType: source.documentType ?? null,
-          documentNumber: source.documentNumber ?? source.actIdentifier ?? null,
-          adoptingAuthority: source.adoptingAuthority ?? null,
-          sourceClass: "SECONDARY_REFERENCE" as const,
-          language: source.locale === "uzc" ? "uz-Cyrl" as const
-            : source.locale === "uz" ? "uz-Latn" as const
-              : source.locale === "en" ? "en" as const : "ru" as const,
-          sourceOrigin: "web" as const,
-        }];
-      }));
-      if (secondaryCards.length === 0) {
-        result = authoritativeResult;
-      } else if (authoritativeResult.sources.length > 0) {
-        result = {
-          ...authoritativeResult,
-          sources: [...authoritativeResult.sources, ...secondaryCards],
-          referenceNotes: [...(authoritativeResult.referenceNotes ?? []), ...secondaryReferenceNotes].slice(0, 8),
-          evidenceMode: "mixed" as const,
-          suggestLawyer: true,
-        };
-      } else {
-        const context = secondaryReferenceNotes.map((note) => note.note).join(" ").slice(0, 12_000);
-        result = {
-          ...authoritativeResult,
-          responseKind: "answer" as const,
-          summary: copy(
-            locale,
-            "Справочный ответ: официальная норма Lex.uz не подтверждена.",
-            "Ma’lumotnoma javobi: Lex.uz rasmiy normasi tasdiqlanmadi.",
-          ),
-          answer: copy(
-            locale,
-            `Официальная норма Lex.uz не подтверждена. Материал ниже даёт только справочный контекст и не устанавливает законодательство, сроки, расчёты или обязательные действия. ${context}`,
-            `Lex.uz rasmiy normasi tasdiqlanmadi. Quyidagi material faqat ma’lumotnoma kontekstini beradi hamda qonunchilik, muddat, hisob-kitob yoki majburiy harakatni belgilamaydi. ${context}`,
-          ).slice(0, 20_000),
-          confirmedFindings: [],
-          assumptions: [],
-          risks: [],
-          requiredDocuments: [],
-          actionPlan: [],
-          deadlines: [],
-          successOutlook: null,
-          suggestedDocument: null,
-          suggestLawyer: true,
-          sources: secondaryCards,
-          referenceNotes: secondaryReferenceNotes,
-          evidenceMode: "secondary_only" as const,
-        };
-      }
       validationStage.complete();
     } catch {
       validationStage.fail();

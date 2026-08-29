@@ -104,6 +104,7 @@ type LegalResult = {
   sourceAccessMode?: "direct" | "approved_package" | "mixed";
   evidenceMode?: "official" | "mixed" | "secondary_only" | "private_only" | "none";
   referenceNotes?: Array<{ title: string; note: string; sourceIds: string[] }>;
+  conditionalBranches?: Array<{ condition: string; outcome: string; sourceIds: string[] }>;
   sourcesRetrievedAt?: string | null;
   sourceValidationStatus?: "validated" | "unavailable";
   coverageStatus?: "good_coverage" | "partial_coverage" | "weak_coverage" | "no_coverage";

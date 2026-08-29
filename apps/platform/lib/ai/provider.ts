@@ -10,6 +10,7 @@ import { runAnthropicLegalChat } from "./anthropic-provider";
 import { legalChatProviderTimeoutMs } from "./legal-chat-timeout";
 import { shouldUseAnthropicFallback } from "./provider-fallback";
 import {
+  LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
   LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
   LEGAL_ANSWER_MARKDOWN_RULE,
 } from "./legal-answer-prompt-rules";
@@ -274,6 +275,7 @@ class OpenAiLegalProvider implements LegalAiProvider {
         "В fast mode сокращай глубину рассуждения, а не полезность ответа. Если answerMode=short, summary и answer — не более 15 слов каждый и не более 2 confirmedFindings. Если answerMode=detailed, дай содержательный разбор подтверждённой части: до 4 confirmedFindings, 4 actionPlan и 3 risks.",
         LEGAL_ANSWER_MARKDOWN_RULE,
         LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
+        LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
         "В fast mode первым confirmedFinding дай самый полезный законченный вывод по вопросу; используй один sourceId и лексику соответствующего sourceSpan, чтобы сервер мог проверить этот вывод независимо до завершения остальных полей.",
         "Если applicableAt передан, анализируй право на эту дату и не называй историческую редакцию текущей.",
         "Не придумывай статью, цитату, дату, акт или URL. Если подтверждённого текста недостаточно, установи responseKind=clarification_required, оставь confirmedFindings, sources, actionPlan, risks и deadlines пустыми и не пиши правовой вывод из общих юридических знаний: в summary и answer напиши только, что подтверждённый источник не найден, а необходимые уточнения помести в clarificationQuestions. Сервер в этом случае заменит summary и answer фиксированным текстом, поэтому предварительная оценка из памяти модели не будет показана пользователю.",

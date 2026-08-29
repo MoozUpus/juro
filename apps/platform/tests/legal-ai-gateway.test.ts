@@ -172,6 +172,42 @@ test("gateway binds a legal claim to an exact validated Lex span and strips exce
   assert.equal(validated.run.data.sources[0]?.excerpt, null);
 });
 
+test("gateway retains only conditional branches supported by their cited exact span", () => {
+  const branchResult: LegalChatResponse = {
+    ...result,
+    summary: "Результат зависит от факта регистрации.",
+    answer: "Проверьте регистрацию общества.",
+    confirmedFindings: [],
+    conditionalBranches: [
+      {
+        condition: "Если создаётся общество",
+        outcome: "Общество подлежит государственной регистрации в установленном порядке.",
+        sourceIds: [source.id],
+      },
+      {
+        condition: "Если отчётность не сдана",
+        outcome: "Директор обязан уплатить неподтверждённый штраф.",
+        sourceIds: [source.id],
+      },
+    ],
+    sources: [],
+  };
+
+  const validated = validateLegalGatewayAnswer({
+    result: branchResult,
+    run: { ...run, data: branchResult },
+    sources: [source],
+    question: "Нужно ли регистрировать общество?",
+    locale: "ru",
+    answerMode: "short",
+    reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt,
+  });
+
+  assert.deepEqual(validated.run.data.conditionalBranches, [branchResult.conditionalBranches![0]]);
+  assert.match(validated.run.data.summary, /государственной регистрации/iu);
+});
+
 test("gateway emits a repeated title and explanation only once", () => {
   const provision = "В обществе создается уставный фонд, размер которого не может быть менее 50 минимальных размеров заработной платы.";
   const capitalSource: LegalSourceContext = {

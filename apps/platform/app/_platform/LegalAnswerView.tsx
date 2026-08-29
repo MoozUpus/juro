@@ -37,11 +37,13 @@ export type LegalAnswerViewResult = {
   legalDatabaseAsOf: string;
   evidenceMode?: "official" | "mixed" | "secondary_only" | "private_only" | "none";
   referenceNotes?: Array<{ title: string; note: string; sourceIds: string[] }>;
+  conditionalBranches?: Array<{ condition: string; outcome: string; sourceIds: string[] }>;
 };
 
 type AnswerCopy = {
   main: string;
   law: string;
+  branches: string;
   next: string;
   important: string;
   deadlines: string;
@@ -61,6 +63,7 @@ const COPY: Record<"ru" | "uz", AnswerCopy> = {
   ru: {
     main: "Главное",
     law: "Что говорит закон",
+    branches: "Как меняется ответ",
     next: "Что делать дальше",
     important: "Важно учесть",
     deadlines: "Сроки",
@@ -84,6 +87,7 @@ const COPY: Record<"ru" | "uz", AnswerCopy> = {
   uz: {
     main: "Asosiysi",
     law: "Qonunda nima deyilgan",
+    branches: "Javob qachon o‘zgaradi",
     next: "Keyingi qadamlar",
     important: "Muhim jihatlar",
     deadlines: "Muddatlar",
@@ -212,13 +216,26 @@ export function LegalAnswerView({
 
   const important = result.assumptions.length > 0 || result.risks.length > 0 || result.urgency !== "normal";
   const prepare = result.requiredDocuments.length > 0 || Boolean(result.suggestedDocument);
-  const mainSourceIds = [...new Set(result.confirmedFindings.flatMap((finding) => finding.sourceIds ?? []))];
+  const mainSourceIds = [
+    ...result.confirmedFindings.map((finding) => finding.sourceIds),
+    ...(result.conditionalBranches ?? []).map((branch) => branch.sourceIds),
+    ...result.actionPlan.map((step) => step.sourceIds),
+    ...result.risks.map((risk) => risk.sourceIds),
+    ...result.deadlines.map((deadline) => deadline.sourceIds),
+  ].find((sourceIds) => (sourceIds?.length ?? 0) > 0) ?? [];
   return <article className={rootClass} data-answer-kind="legal-answer">
     <p className={`legal-answer__authority legal-answer__authority--${mode}`}>{copy.authority[mode]}</p>
     <Section id={`${id}-main`} title={copy.main} className="legal-answer__section--main">
       <Markdown result={result} locale={locale}>{result.summary}</Markdown>
       <CitationList sourceIds={mainSourceIds} result={result} locale={locale} onCitationSelect={onCitationSelect} />
     </Section>
+    {(result.conditionalBranches ?? []).length > 0 && <Section id={`${id}-branches`} title={copy.branches}>
+      <div className="legal-answer__findings">{(result.conditionalBranches ?? []).map((branch) => <article key={`${branch.condition}:${branch.sourceIds.join(":")}`}>
+        <h3>{branch.condition}</h3>
+        <Markdown result={result} locale={locale}>{branch.outcome}</Markdown>
+        <CitationList sourceIds={branch.sourceIds} result={result} locale={locale} onCitationSelect={onCitationSelect} />
+      </article>)}</div>
+    </Section>}
     {result.confirmedFindings.length > 0 && <Section id={`${id}-law`} title={copy.law}>
       <div className="legal-answer__findings">{result.confirmedFindings.map((finding) => <article key={`${finding.title}:${finding.sourceIds?.join(":") ?? ""}`}>
         <h3>{finding.title}</h3>

@@ -413,51 +413,141 @@ test("one exact article split across chunks bypasses the model reranker", async 
   };
   let rerankerCalls = 0;
   let hydrationBatches = 0;
-  const result = await runJuroLegalResearchLoop({
+  const results = [];
+  for (const originalQuery of ["ст. 409 ТК РУз", "статья 409 Трудового кодекса"]) {
+    results.push(await runJuroLegalResearchLoop({
+      db: {} as D1Database,
+      originalQuery,
+      locale: "ru",
+      readTools: {
+        findLegalSources: async () => [exact, continuation],
+        inspectLegalAct: async () => { throw new Error("batched hydration expected"); },
+        readLegalProvisions: async () => { throw new Error("batched hydration expected"); },
+        hydrateLegalSources: async ({ anchorChunkIds }) => {
+          hydrationBatches += 1;
+          return anchorChunkIds.map((anchorChunkId) => ({
+            anchorChunkId,
+            act: {
+              documentId: exact.documentId,
+              title: exact.documentTitle,
+              documentType: exact.documentType,
+              documentNumber: null,
+              adoptingAuthority: null,
+              adoptionDate: null,
+              publicationDate: null,
+              language: exact.language,
+              status: exact.status,
+              validFrom: exact.validFrom,
+              validTo: null,
+              versionDate: exact.versionDate,
+              sourceUrl: exact.sourceUrl,
+              fetchedAt: exact.fetchedAt,
+            },
+            spans: [{
+              id: anchorChunkId,
+              article: exact.articleNumber,
+              paragraph: null,
+              text: anchorChunkId === exact.chunkId ? exact.exactQuote : continuation.exactQuote,
+              textSha256: hash,
+              quality: "high" as const,
+            }],
+          }));
+        },
+      },
+      rerankCandidates: async () => { rerankerCalls += 1; return [exact.chunkId]; },
+    }));
+  }
+  assert.equal(rerankerCalls, 0);
+  assert.equal(hydrationBatches, 2);
+  assert.equal(results.every((result) => result.rerankingOutcome === "not_needed"), true);
+  for (const result of results) {
+    assert.deepEqual(result.hits.map((hit) => hit.passage.chunkId), [exact.chunkId, continuation.chunkId]);
+  }
+});
+
+test("bare article and generic jurisdiction wording do not bypass reranking", async () => {
+  const candidate = {
+    chunkId: "labour-163",
+    documentId: "6257291",
+    documentTitle: "Трудовой кодекс Республики Узбекистан",
+    documentType: "code",
+    documentNumber: null,
+    adoptingAuthority: null,
+    sourceClass: "OFFICIAL_LEGISLATION" as const,
+    articleNumber: "163",
+    articleTitle: "Запрет прекращения трудового договора в период отпуска",
+    exactQuote: "В период отпуска прекращение трудового договора по инициативе работодателя не допускается.",
+    sourceUrl: "https://lex.uz/ru/docs/6257291",
+    language: "ru" as const,
+    status: "active" as const,
+    validFrom: "2023-04-30",
+    validTo: null,
+    versionDate: "2026-07-25",
+    fetchedAt: "2026-08-28T00:00:00.000Z",
+    contentHash: "b".repeat(64),
+  };
+  let rerankerCalls = 0;
+  for (const originalQuery of [
+    "статья 163",
+    "статья 163 закона Республики Узбекистан",
+    "трудовой спор, статья 163",
+  ]) {
+    const result = await runJuroLegalResearchLoop({
+      db: {} as D1Database,
+      originalQuery,
+      locale: "ru",
+      readTools: {
+        findLegalSources: async () => [candidate],
+        inspectLegalAct: async () => { throw new Error("reranker rejection should stop hydration"); },
+        readLegalProvisions: async () => { throw new Error("reranker rejection should stop hydration"); },
+      },
+      rerankCandidates: async () => { rerankerCalls += 1; return []; },
+    });
+    assert.equal(result.rerankingOutcome, "rejected");
+    assert.deepEqual(result.hits, []);
+  }
+  assert.equal(rerankerCalls, 3);
+});
+
+test("an aborted batch hydration never starts individual fallback reads", async () => {
+  const controller = new AbortController();
+  const candidate = {
+    chunkId: "labour-409-abort",
+    documentId: "6257291",
+    documentTitle: "Трудовой кодекс Республики Узбекистан",
+    documentType: "code",
+    documentNumber: null,
+    adoptingAuthority: null,
+    sourceClass: "OFFICIAL_LEGISLATION" as const,
+    articleNumber: "409",
+    articleTitle: "Гарантии для работников с детьми",
+    exactQuote: "Статья 409 устанавливает гарантии для работников, имеющих ребенка до трех лет.",
+    sourceUrl: "https://lex.uz/ru/docs/6257291",
+    language: "ru" as const,
+    status: "active" as const,
+    validFrom: "2023-04-30",
+    validTo: null,
+    versionDate: "2026-07-25",
+    fetchedAt: "2026-08-28T00:00:00.000Z",
+    contentHash: "c".repeat(64),
+  };
+  let individualReads = 0;
+  await assert.rejects(runJuroLegalResearchLoop({
     db: {} as D1Database,
     originalQuery: "статья 409 Трудового кодекса",
     locale: "ru",
+    signal: controller.signal,
     readTools: {
-      findLegalSources: async () => [exact, continuation],
-      inspectLegalAct: async () => { throw new Error("batched hydration expected"); },
-      readLegalProvisions: async () => { throw new Error("batched hydration expected"); },
-      hydrateLegalSources: async ({ anchorChunkIds }) => {
-        hydrationBatches += 1;
-        return anchorChunkIds.map((anchorChunkId) => ({
-          anchorChunkId,
-          act: {
-            documentId: exact.documentId,
-            title: exact.documentTitle,
-            documentType: exact.documentType,
-            documentNumber: null,
-            adoptingAuthority: null,
-            adoptionDate: null,
-            publicationDate: null,
-            language: exact.language,
-            status: exact.status,
-            validFrom: exact.validFrom,
-            validTo: null,
-            versionDate: exact.versionDate,
-            sourceUrl: exact.sourceUrl,
-            fetchedAt: exact.fetchedAt,
-          },
-          spans: [{
-            id: anchorChunkId,
-            article: exact.articleNumber,
-            paragraph: null,
-            text: anchorChunkId === exact.chunkId ? exact.exactQuote : continuation.exactQuote,
-            textSha256: hash,
-            quality: "high" as const,
-          }],
-        }));
+      findLegalSources: async () => [candidate],
+      inspectLegalAct: async () => { individualReads += 1; return null; },
+      readLegalProvisions: async () => { individualReads += 1; return []; },
+      hydrateLegalSources: async () => {
+        controller.abort();
+        throw new Error("batch aborted");
       },
     },
-    rerankCandidates: async () => { rerankerCalls += 1; return [exact.chunkId]; },
-  });
-  assert.equal(rerankerCalls, 0);
-  assert.equal(hydrationBatches, 1);
-  assert.equal(result.rerankingOutcome, "not_needed");
-  assert.deepEqual(result.hits.map((hit) => hit.passage.chunkId), [exact.chunkId, continuation.chunkId]);
+  }), /aborted/iu);
+  assert.equal(individualReads, 0);
 });
 
 test("near-duplicate generated searches share one request-scoped corpus lookup", async () => {

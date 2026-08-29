@@ -128,10 +128,12 @@ test("provider and UI contracts answer first, keep questions last, and conceal i
     assert.match(provider, /sourceClass=SECONDARY_REFERENCE/u);
     assert.match(provider, /LEGAL_ANSWER_MARKDOWN_RULE/u);
     assert.match(provider, /LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE/u);
+    assert.match(provider, /LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE/u);
   }
   assert.match(sharedPromptRules, /Markdown внутри текстовых полей/u);
   assert.match(sharedPromptRules, /не создавай собственные заголовки разделов/u);
   assert.match(sharedPromptRules, /узком последующем вопросе не повторяй нерелевантные части/u);
+  assert.match(sharedPromptRules, /conditionalBranches/u);
   const summary = legalAnswer.indexOf('id={`${id}-main`}');
   const findings = legalAnswer.indexOf("result.confirmedFindings.length");
   const actionPlan = legalAnswer.indexOf("result.actionPlan.length");

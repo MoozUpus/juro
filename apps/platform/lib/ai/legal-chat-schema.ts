@@ -25,6 +25,14 @@ export const legalReferenceNoteSchema = z.object({
   sourceIds: sourceIdList,
 }).strict();
 
+export const legalConditionalBranchSchema = z.object({
+  condition: z.string().min(1).max(1_000),
+  outcome: z.string().min(1).max(3_000),
+  sourceIds: sourceIdList,
+}).strict();
+
+const legalConditionalBranchListSchema = z.array(legalConditionalBranchSchema).max(8);
+
 export const legalAssumptionSchema = z.object({
   statement: z.string().min(1).max(1_000),
   impact: z.string().min(1).max(2_000),
@@ -106,6 +114,7 @@ export const legalChatResponseSchema = z.object({
   responseKind: z.enum(["answer", "clarification_required"]),
   summary: z.string().min(1).max(1_500),
   answer: z.string().min(1).max(20_000),
+  conditionalBranches: legalConditionalBranchListSchema.optional(),
   language: z.enum(["ru", "uz"]),
   jurisdiction: z.literal("UZ"),
   answerMode: z.enum(["short", "detailed"]),
@@ -152,8 +161,12 @@ export const legalChatModelResponseSchema = legalChatResponseSchema
     sourceValidationStatus: true,
     coverageStatus: true,
     referenceNotes: true,
+    conditionalBranches: true,
   })
-  .extend({ sources: z.array(legalSourceRefModelSchema).max(12) });
+  .extend({
+    conditionalBranches: legalConditionalBranchListSchema,
+    sources: z.array(legalSourceRefModelSchema).max(12),
+  });
 
 export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, {
   target: "draft-7",
@@ -199,6 +212,7 @@ export function forceClarificationWithoutVerifiedSources(
     answer: options.locale === "ru"
       ? "JURO пока не сформировал правовой вывод: релевантный фрагмент не удалось получить напрямую из доступных официальных источников. Ответьте на уточняющие вопросы или попробуйте позже — этот шаг не списывает лимит ответа."
       : "JURO hozircha huquqiy xulosa tuzmadi: tegishli parcha mavjud rasmiy manbalardan bevosita olinmadi. Aniqlashtiruvchi savollarga javob bering yoki keyinroq urinib ko‘ring — bu bosqich javob limitidan yechilmaydi.",
+    conditionalBranches: [],
     language: options.locale,
     jurisdiction: "UZ",
     answerMode: options.answerMode,
@@ -247,6 +261,7 @@ export function enforceLegalDatabaseFreshness(
             : "Huquqiy asos alohida tekshirilishi kerak",
           impact: warning,
         }, ...result.assumptions].slice(0, 16),
+        conditionalBranches: [],
         deadlines: [],
         successOutlook: null,
         suggestLawyer: true,
@@ -298,6 +313,7 @@ export function enforceLegalDatabaseFreshness(
     ...result,
     answer,
     confirmedFindings: [],
+    conditionalBranches: [],
     assumptions,
     deadlines: result.deadlines.map((deadline) => ({
       ...deadline,
@@ -313,6 +329,7 @@ export function referencedSourceIds(result: LegalChatResponse): Set<string> {
   return new Set([
     ...result.sources.map((source) => source.sourceId),
     ...result.confirmedFindings.flatMap((finding) => finding.sourceIds),
+    ...(result.conditionalBranches ?? []).flatMap((branch) => branch.sourceIds),
     ...(result.referenceNotes ?? []).flatMap((note) => note.sourceIds),
     ...result.risks.flatMap((risk) => risk.sourceIds),
     ...result.actionPlan.flatMap((step) => step.sourceIds),
@@ -338,6 +355,7 @@ export function enforceLegalChatSourceBoundary(
   }
   const citedSourceIds = new Set([
     ...result.confirmedFindings.flatMap((finding) => finding.sourceIds),
+    ...(result.conditionalBranches ?? []).flatMap((branch) => branch.sourceIds),
     ...(result.referenceNotes ?? []).flatMap((note) => note.sourceIds),
     ...result.risks.flatMap((risk) => risk.sourceIds),
     ...result.actionPlan.flatMap((step) => step.sourceIds),
@@ -350,6 +368,9 @@ export function enforceLegalChatSourceBoundary(
   }
   if (result.confirmedFindings.some((finding) => finding.sourceIds.length === 0)) {
     throw new Error("AI_CONFIRMED_FINDING_REQUIRES_CITATION");
+  }
+  if ((result.conditionalBranches ?? []).some((branch) => branch.sourceIds.length === 0)) {
+    throw new Error("AI_CONDITIONAL_BRANCH_REQUIRES_CITATION");
   }
   if ((result.referenceNotes ?? []).some((note) => note.sourceIds.length === 0)) {
     throw new Error("AI_REFERENCE_NOTE_REQUIRES_CITATION");

@@ -20,6 +20,7 @@ import {
 } from "../lib/ai/run-store";
 import { readResponsesSse, ResponsesSseError } from "../lib/ai/responses-sse";
 import { completeStreamingJsonArrayObjects } from "../lib/ai/streaming-json";
+import { attachSecondaryReferenceContext } from "../lib/ai/secondary-reference-result";
 
 const validLegalResponse = {
   responseKind: "clarification_required" as const,
@@ -50,6 +51,7 @@ test("LegalChatResponse is strict, bilingual, and JSON-schema backed", () => {
   assert.equal(legalChatResponseSchema.safeParse({ ...validLegalResponse, hidden: "not allowed" }).success, false);
   assert.equal(legalChatJsonSchema.type, "object");
   assert.ok(Array.isArray(legalChatJsonSchema.required));
+  assert.ok(legalChatJsonSchema.required.includes("conditionalBranches"));
 });
 
 test("legacy stored responses derive authority mode when the optional field is absent", () => {
@@ -75,6 +77,96 @@ test("legacy stored responses derive authority mode when the optional field is a
   assert.equal(deriveLegalEvidenceMode({ sources: [web] }), "secondary_only");
   assert.equal(deriveLegalEvidenceMode({ sources: [official, web] }), "mixed");
   assert.equal(deriveLegalEvidenceMode({ sources: [] }), "none");
+});
+
+test("secondary context is attached to an authoritative answer only as a reference note", () => {
+  const official = {
+    sourceId: "official-1",
+    actTitle: "Трудовой кодекс",
+    actIdentifier: "ТК",
+    article: "Статья 163",
+    excerpt: "Увольнение в период отпуска не допускается.",
+    originalUrl: "https://lex.uz/ru/docs/6257288",
+    status: "current" as const,
+    effectiveDate: null,
+    verifiedAt: "2026-08-29T00:00:00.000Z",
+    sourceClass: "OFFICIAL_LEGISLATION" as const,
+  };
+  const secondary = {
+    ...official,
+    sourceId: "secondary-1",
+    actTitle: "Практический комментарий",
+    actIdentifier: null,
+    article: null,
+    excerpt: "Практическое пояснение.",
+    originalUrl: "https://example.org/commentary",
+    status: "unconfirmed" as const,
+    sourceClass: "SECONDARY_REFERENCE" as const,
+    sourceOrigin: "web" as const,
+  };
+  const authoritative = legalChatResponseSchema.parse({
+    ...validLegalResponse,
+    responseKind: "answer",
+    summary: "Увольнение запрещено.",
+    answer: "Работодатель не вправе уволить работника в отпуске.",
+    confirmedFindings: [{ title: "Запрет", explanation: "Увольнение не допускается.", sourceIds: [official.sourceId] }],
+    sources: [official],
+    evidenceMode: "official",
+  });
+
+  const attached = attachSecondaryReferenceContext({
+    result: authoritative,
+    secondarySources: [secondary],
+    referenceNotes: [{ title: secondary.actTitle, note: secondary.excerpt, sourceIds: [secondary.sourceId] }],
+    locale: "ru",
+  });
+
+  assert.equal(attached.evidenceMode, "mixed");
+  assert.deepEqual(attached.confirmedFindings, authoritative.confirmedFindings);
+  assert.deepEqual(attached.referenceNotes?.[0]?.sourceIds, [secondary.sourceId]);
+});
+
+test("secondary-only context clears every field that could communicate legal authority", () => {
+  const secondary = {
+    sourceId: "secondary-only-1",
+    actTitle: "Практический комментарий",
+    actIdentifier: null,
+    article: null,
+    excerpt: "Справочный материал о практике.",
+    originalUrl: "https://example.org/commentary",
+    status: "unconfirmed" as const,
+    effectiveDate: null,
+    verifiedAt: "2026-08-29T00:00:00.000Z",
+    sourceClass: "SECONDARY_REFERENCE" as const,
+    sourceOrigin: "web" as const,
+  };
+  const unsafeAuthority = legalChatResponseSchema.parse({
+    ...validLegalResponse,
+    responseKind: "answer",
+    summary: "Неподтверждённый вывод.",
+    answer: "Неподтверждённый ответ.",
+    confirmedFindings: [{ title: "Вывод", explanation: "Требование.", sourceIds: [] }],
+    conditionalBranches: [{ condition: "Если наступит событие", outcome: "Возникает обязанность.", sourceIds: [] }],
+    risks: [{ level: "high", title: "Риск", explanation: "Возможна ответственность.", sourceIds: [] }],
+    requiredDocuments: [{ name: "Документ", reason: "Для выполнения требования.", required: true }],
+    sources: [],
+  });
+
+  const attached = attachSecondaryReferenceContext({
+    result: unsafeAuthority,
+    secondarySources: [secondary],
+    referenceNotes: [{ title: secondary.actTitle, note: secondary.excerpt, sourceIds: [secondary.sourceId] }],
+    locale: "ru",
+  });
+
+  assert.equal(attached.evidenceMode, "secondary_only");
+  assert.match(attached.summary, /официальная норма Lex\.uz не подтверждена/iu);
+  assert.deepEqual(attached.confirmedFindings, []);
+  assert.deepEqual(attached.conditionalBranches, []);
+  assert.deepEqual(attached.risks, []);
+  assert.deepEqual(attached.requiredDocuments, []);
+  assert.deepEqual(attached.actionPlan, []);
+  assert.deepEqual(attached.deadlines, []);
 });
 
 test("source boundary rejects a provider-invented source id", () => {
@@ -599,6 +691,17 @@ test("AI usage reservation enforces a monthly limit and request hash binding", a
   await assert.rejects(
     reserveAiRun({ ...firstInput, requestHash: "different-hash" }),
     (error: unknown) => error instanceof AiRunConflictError && error.code === "IDEMPOTENCY_CONFLICT",
+  );
+});
+
+test("conditional branches are citation-bound legal propositions", () => {
+  assert.throws(
+    () => enforceLegalChatSourceBoundary({
+      ...validLegalResponse,
+      responseKind: "answer",
+      conditionalBranches: [{ condition: "Если факт подтвердится", outcome: "Применяется отдельное правило.", sourceIds: [] }],
+    }, new Set()),
+    /AI_CONDITIONAL_BRANCH_REQUIRES_CITATION/,
   );
 });
 

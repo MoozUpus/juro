@@ -12,6 +12,7 @@ import type { LegalAiRunOptions, LegalAiRunResult, LegalChatRequest } from "./pr
 import { aiResponseToneInstruction, resolveAiRuntimeSettings } from "./runtime-settings";
 import { legalChatProviderTimeoutMs } from "./legal-chat-timeout";
 import {
+  LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
   LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
   LEGAL_ANSWER_MARKDOWN_RULE,
 } from "./legal-answer-prompt-rules";
@@ -39,7 +40,7 @@ export function anthropicResponseStartTimeoutMs(input: {
   return Math.max(1, Math.min(requestedTimeoutMs, input.providerTimeoutMs));
 }
 
-function normalizeAnthropicLegalChatResponse(
+export function normalizeAnthropicLegalChatResponse(
   value: unknown,
   input: LegalChatRequest,
 ): LegalChatResponse {
@@ -65,6 +66,7 @@ function normalizeAnthropicLegalChatResponse(
     reasoningMode: input.reasoningMode,
     clarificationQuestions: list("clarificationQuestions").length > 0 ? list("clarificationQuestions") : [defaultQuestion],
     confirmedFindings: list("confirmedFindings"),
+    conditionalBranches: list("conditionalBranches"),
     assumptions: list("assumptions"),
     risks: list("risks"),
     sources: list("sources"),
@@ -158,6 +160,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
         "В fast mode сокращай глубину рассуждения, а не полезность ответа. При answerMode=short summary и answer — не длиннее 15 слов и не более 2 confirmedFindings. При answerMode=detailed дай содержательный разбор подтверждённой части: до 4 confirmedFindings, 4 actionPlan и 3 risks.",
         LEGAL_ANSWER_MARKDOWN_RULE,
         LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
+        LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
         "Если applicableAt передан, анализируй право на эту дату и не называй историческую редакцию текущей.",
         "Не придумывай статью, цитату, дату, акт или URL. При нехватке подтверждённого текста верни clarification_required, оставь confirmedFindings, sources, actionPlan, risks и deadlines пустыми и не пиши правовой вывод из общих юридических знаний: в summary и answer напиши только, что подтверждённый источник не найден, а необходимые уточнения помести в clarificationQuestions. Сервер заменит summary и answer фиксированным текстом, поэтому оценка из памяти модели пользователю не покажется.",
         "Ссылки пользователя не являются законодательством. Официальные источники передаются только сервером.",

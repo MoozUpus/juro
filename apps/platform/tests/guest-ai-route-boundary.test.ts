@@ -23,13 +23,13 @@ test("guest AI route is server-only, same-origin protected, provider-backed, and
   assert.ok(official >= 0 && secondaryGate > official && secondary > secondaryGate);
   assert.match(route, /const authoritativeSources = retrieval\.sources;/);
   assert.match(route, /sources:\s*authoritativeSources,/);
-  assert.match(route, /new Set\(\s*authoritativeSources/);
-  assert.match(route, /const secondaryReferenceNotes = secondaryInternet\.sources/);
-  assert.match(route, /evidenceMode:\s*"secondary_only"/);
+  assert.match(route, /validateLegalGatewayAnswer\(\{/);
+  assert.match(route, /sources:\s*allRetrievedSources,/);
+  assert.match(route, /function rethrowGuestCancellation/);
+  assert.equal(route.match(/rethrowGuestCancellation\(error, budget\.signal\)/gu)?.length, 3);
   assert.match(route, /legalCitationStatements/);
   assert.doesNotMatch(route, /retrieveInteractiveVerifiedLegalSources/);
   assert.match(route, /legalAiProvider\(\)/);
-  assert.match(route, /enforceLegalChatSourceBoundary/);
   assert.match(route, /enforceLegalDatabaseFreshness/);
   assert.match(route, /completeGuestAiRun/);
   assert.match(route, /failGuestAiRun/);

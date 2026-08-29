@@ -148,6 +148,45 @@ function passageIdentity(item: LegalCorpusRetrievalItem): string {
   ].join("\u001f");
 }
 
+function explicitlyNamesAct(query: string, item: LegalCorpusRetrievalItem): boolean {
+  const queryKey = queryIdentity(query);
+  const explicitIdentifiers = [item.documentNumber, item.documentId]
+    .flatMap((value) => value ? [queryIdentity(value)] : [])
+    .filter((value) => value.length >= 3);
+  if (explicitIdentifiers.some((identifier) => queryKey.includes(identifier))) return true;
+
+  const queryTerms = relevanceTerms(query);
+  const distinctiveTitleTerms = relevanceTerms(item.documentTitle).filter((term) =>
+    !NON_DISTINCTIVE_ACT_TITLE_TERM.test(term)
+  );
+  const matchedTitleTerms = distinctiveTitleTerms.filter((titleTerm) => queryTerms.some((queryTerm) =>
+    sharesTermFragment(titleTerm, queryTerm)
+  ));
+  const titleDocumentForms = relevanceTerms(item.documentTitle).filter((term) =>
+    DOCUMENT_FORM_ACT_TITLE_TERM.test(term)
+  );
+  const namesDocumentForm = titleDocumentForms.some((titleTerm) => queryTerms.some((queryTerm) =>
+    DOCUMENT_FORM_ACT_TITLE_TERM.test(queryTerm) && sharesTermFragment(titleTerm, queryTerm)
+  ));
+  if (matchedTitleTerms.length >= 2 || (matchedTitleTerms.length === 1 && namesDocumentForm)) return true;
+
+  // Derive common short act names from the title itself instead of keeping an
+  // act alias dictionary. For example, "Трудовой кодекс Республики
+  // Узбекистан" yields "ткру", which is present in "ТК РУз" after compacting.
+  const titleInitials = (item.documentTitle.normalize("NFKC")
+    .toLocaleLowerCase("und")
+    .match(/[\p{L}\p{N}]+/gu) ?? [])
+    .map((word) => word[0])
+    .join("");
+  const compactQuery = queryKey.replace(/\s+/gu, "");
+  return titleInitials.length >= 3 && compactQuery.includes(titleInitials);
+}
+
+// Jurisdiction names and document-form labels identify a legal-document class,
+// not a particular act. They must never be enough to skip semantic reranking.
+const NON_DISTINCTIVE_ACT_TITLE_TERM = /^(?:республик\p{L}*|узбекистан\p{L}*|закон\p{L}*|кодекс\p{L}*|указ\p{L}*|постановлен\p{L}*|решен\p{L}*|положен\p{L}*|o?zbekiston\p{L}*|respublik\p{L}*|qonun\p{L}*|kodeks\p{L}*|qaror\p{L}*|farmon\p{L}*|nizom\p{L}*|republic\p{L}*|uzbekistan\p{L}*|law|code|decree|resolution|regulation)$/iu;
+const DOCUMENT_FORM_ACT_TITLE_TERM = /^(?:закон\p{L}*|кодекс\p{L}*|указ\p{L}*|постановлен\p{L}*|решен\p{L}*|положен\p{L}*|qonun\p{L}*|kodeks\p{L}*|qaror\p{L}*|farmon\p{L}*|nizom\p{L}*|law|code|decree|resolution|regulation)$/iu;
+
 function relevanceTerms(value: string): string[] {
   const normalized = value.normalize("NFKC")
     .toLocaleLowerCase("und")
@@ -507,7 +546,9 @@ export async function runJuroLegalResearchLoop(input: {
   const candidatePool = diversifiedCandidates.slice(0, MAX_RERANK_CANDIDATES);
   const requestedArticles = new Set(detectArticleNumbers(rerankingQuestion));
   const exactArticleCandidates = requestedArticles.size > 0
-    ? candidatePool.filter(({ item }) => item.articleNumber && requestedArticles.has(item.articleNumber))
+    ? candidatePool.filter(({ item }) => item.articleNumber
+      && requestedArticles.has(item.articleNumber)
+      && explicitlyNamesAct(rerankingQuestion, item))
     : [];
   const exactArticleProvisions = new Set(exactArticleCandidates.map(({ item }) =>
     `${item.documentId}\u001f${item.articleNumber}`
@@ -579,16 +620,24 @@ export async function runJuroLegalResearchLoop(input: {
     : "deterministic_fallback";
 
   const anchorChunkIds = [...new Set(fused.map(({ item }) => item.chunkId))];
-  const hydrateIndividually = () => Promise.all(anchorChunkIds.map(async (anchorChunkId) => {
-    const [act, spans] = await Promise.all([
-      readTools.inspectLegalAct({ anchorChunkId }),
-      readTools.readLegalProvisions({ anchorChunkId }),
-    ]);
-    return { anchorChunkId, act, spans };
-  }));
+  const hydrateIndividually = () => {
+    input.signal?.throwIfAborted();
+    return Promise.all(anchorChunkIds.map(async (anchorChunkId) => {
+      input.signal?.throwIfAborted();
+      const [act, spans] = await Promise.all([
+        readTools.inspectLegalAct({ anchorChunkId }),
+        readTools.readLegalProvisions({ anchorChunkId }),
+      ]);
+      input.signal?.throwIfAborted();
+      return { anchorChunkId, act, spans };
+    }));
+  };
   input.signal?.throwIfAborted();
   const hydrationPackets = readTools.hydrateLegalSources
-    ? await readTools.hydrateLegalSources({ anchorChunkIds }).catch(hydrateIndividually)
+    ? await readTools.hydrateLegalSources({ anchorChunkIds }).catch(() => {
+      input.signal?.throwIfAborted();
+      return hydrateIndividually();
+    })
     : await hydrateIndividually();
   input.signal?.throwIfAborted();
   const hydrationByAnchor = new Map(hydrationPackets.map((packet) => [packet.anchorChunkId, packet]));

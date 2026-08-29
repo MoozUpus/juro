@@ -269,6 +269,39 @@ test("live verification failure returns the usable indexed evidence packet", asy
   }
 });
 
+test("caller cancellation during indexed retrieval never escalates to live Lex", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const controller = new AbortController();
+  controller.abort(new DOMException("caller cancelled", "AbortError"));
+  let liveCalls = 0;
+  try {
+    await assert.rejects(retrieveCorpusAwareLegalSources({
+      env: { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_LIVE_LEXUZ_ENABLED: "true" },
+      query: "статья 163 трудового кодекса",
+      locale: "ru",
+      signal: controller.signal,
+      liveSearch: async () => { liveCalls += 1; return liveResult(); },
+    }), (error: unknown) => error instanceof Error && error.name === "AbortError");
+    assert.equal(liveCalls, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("live Lex cancellation propagates instead of returning an indexed fallback", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await assert.rejects(retrieveCorpusAwareLegalSources({
+      env: { DB: d1, LEGAL_CORPUS_ENABLED: "false" },
+      query: "статья 163 трудового кодекса",
+      locale: "ru",
+      liveSearch: async () => { throw new DOMException("caller cancelled", "AbortError"); },
+    }), (error: unknown) => error instanceof Error && error.name === "AbortError");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("historical chat retrieval never substitutes a current live page", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   let liveCalls = 0;
