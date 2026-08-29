@@ -212,6 +212,7 @@
 .dbt-form-nav button:disabled { opacity: .45; cursor: not-allowed; }
 
 .dbt-review-panel, .dbt-editor, .dbt-collaboration, .dbt-assets, .dbt-versions { margin-top: 20px; padding: 20px; background: white; border: 1px solid var(--dbt-line); border-radius: 15px; box-shadow: 0 5px 18px rgba(6,40,68,.05); }
+.dbt-deferred-panel { width: min(1100px, 100%); min-height: 72px; margin: 20px auto 0; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--dbt-line); border-radius: 15px; background: white; color: var(--dbt-muted); }
 .dbt-review-panel > header, .dbt-collaboration > header, .dbt-assets > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dbt-review-panel > header > div, .dbt-collaboration > header, .dbt-assets > header { color: var(--dbt-navy); }
 .dbt-review-panel > header > div { display: flex; align-items: center; gap: 9px; }

@@ -128,6 +128,23 @@ test("детерминированная проверка отмечает не�
 test("возврат после входа закреплен через безопасный URL расписки", async () => { const source = await readFile(new URL("app/_document-builder/[categorySlug]/[documentCode]/page.tsx", root), "utf8"); assert.match(source, /chatGPTSignInPath\(`\$\{returnTo\}\?resume=1`\)/); });
 test("автосохранение использует debounce и ревизию", async () => { const source = await readFile(new URL("app/_document-builder/DocumentBuilderClient.tsx", root), "utf8"); assert.match(source, /useDebouncedEffect/); assert.match(source, /revisionRef/); });
 
+test("условные панели конструктора загружаются только при открытии соответствующего шага", async () => {
+  const source = await readFile(new URL("app/_document-builder/DocumentBuilderClient.tsx", root), "utf8");
+  for (const component of [
+    "CollaborationPanel",
+    "DocumentAssetsPanel",
+    "FinalSuccess",
+    "ManualEditor",
+    "BuilderAnalysisLauncher",
+    "BuilderVersionHistory",
+  ]) {
+    assert.match(source, new RegExp(`lazy\\(\\(\\) => import\\(\"\\./_components/${component}\"\\)`));
+    assert.doesNotMatch(source, new RegExp(`import \\{ ${component}(?:,| \\})`));
+  }
+  assert.match(source, /<Suspense fallback=\{<DeferredPanelFallback/);
+  assert.match(source, /role="status"/);
+});
+
 test("DOCX является настоящим OOXML и содержит данные", () => { assert.equal(String.fromCharCode(...ruDocx.slice(0, 2)), "PK"); const zip = new PizZip(ruDocx); const xml = zip.file("word/document.xml")?.asText() ?? ""; assert.match(xml, /Каримов Азиз Акмалович/); assert.doesNotMatch(xml, /\{\{[^}]+\}\}/); });
 test("DOCX использует корректные half-point размеры шрифта", () => { const xml = new PizZip(ruDocx).file("word/document.xml")?.asText() ?? ""; assert.match(xml, /<w:sz w:val="22"\/>/); assert.doesNotMatch(xml, /<w:sz w:val="(?:220|240|280)"\/>/); });
 test("узбекский DOCX содержит кириллицу", () => { const xml = new PizZip(uzDocx).file("word/document.xml")?.asText() ?? ""; assert.match(xml, /Пул маблағларини олиш/); });
