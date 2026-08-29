@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+const workerPromise = import(new URL("../dist/server/index.js", import.meta.url).href)
+  .then(({ default: worker }) => worker);
+
+async function createWorker() {
+  return workerPromise;
+}
+
 test("protects the application root without demo-only metadata", async () => {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+  const worker = await createWorker();
 
   const response = await worker.fetch(
     new Request("http://localhost/", {
@@ -25,12 +30,6 @@ test("protects the application root without demo-only metadata", async () => {
   assert.equal(response.status, 307);
   assert.match(response.headers.get("location") ?? "", /\/login/);
 });
-
-async function createWorker() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${Math.random()}`);
-  return (await import(workerUrl.href)).default;
-}
 
 test("built Worker exposes fetch, queue, and scheduled module handlers", async () => {
   const worker = await createWorker();
