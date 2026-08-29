@@ -2,9 +2,9 @@
 
 Status: **live baseline, not a completion certificate**
 
-Evidence cutoff: **2026-08-30 00:18 UZT (2026-08-29 19:18 UTC)**
+Evidence cutoff: **2026-08-30 02:04 UZT (2026-08-29 21:04 UTC)**
 
-Repository baseline: `origin/main` at `da54857d40acb8440e90d1f039ffe6afc0466caf`
+Repository baseline: `origin/main` at merge commit `0b2582fc0408cd737d409a9c7f22bfee2bb4b6f6`
 
 This inventory separates live production, protected staging, provider-owned Sites surfaces, code-only hostnames, and legacy DNS. It intentionally does not inspect or change the legislation database, legal-corpus contents, Lex.uz ingestion, Advice.uz ingestion, vectors, or legal-source records, following the owner's explicit scope exclusion.
 
@@ -31,7 +31,7 @@ An HTTP `200` after a redirect proves reachability and the public/auth boundary 
 | [www.juro.uz](https://www.juro.uz/) | production alias | Public website alias | Proxied CNAME | One redirect to `https://juro.uz/`, final `200` | Redirect-only; public | Keep as canonical alias | `VERIFIED` |
 | [juro-legaltech.muzaffarbekmurodoff.chatgpt.site](https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/) | production provider surface | Sites service hostname; anonymous; RU/UZ/EN content clone | Sites deployment result | `200`; canonical points to `https://juro.uz/ru` | Live v94 returns `meta robots=index, follow` and no `X-Robots-Tag` | SEO duplicate boundary regressed after v86. Fix is validated and saved as Sites v95, not deployed | `SECURITY RISK` |
 | [app.juro.uz](https://app.juro.uz/) | production | Client and business platform; auth required; RU/UZ | Cloudflare Worker domain and `apps/platform/wrangler.jsonc` | One redirect to localized login, final `200`; `/ru/individual/dashboard` redirects to login with preserved `returnTo` | HTML and header both `noindex`; private data | Authenticated Client/Business Chrome matrix remains incomplete | `PARTIAL` |
-| [lawyer.juro.uz](https://lawyer.juro.uz/) | production | Lawyer entry and workspace; public entry plus protected routes; RU/UZ | Cloudflare Worker domain and platform host router | Root `200`; `/ru/lawyer/dashboard` redirects to lawyer login, final `200` | `noindex`; private/professional data | `/ru/individual/dashboard` returns `404`; fix or explicitly deprecate this cross-persona deep link | `PARTIAL` |
+| [lawyer.juro.uz](https://lawyer.juro.uz/) | production | Lawyer entry and workspace; public entry plus protected routes; RU/UZ | Cloudflare Worker v173 and platform host router | Root `200`; RU/UZ `/individual/dashboard` paths continue to lawyer login with the equivalent lawyer dashboard `returnTo`; unrelated `/ru/individual/settings` remains `404` | `noindex`; private/professional data | Anonymous persona boundary is verified; authenticated Lawyer Chrome flow remains open | `PARTIAL` |
 | [admin.juro.uz](https://admin.juro.uz/) | production | Staff/admin entry; strong auth required; RU | Cloudflare Worker domain; `juro` Worker service binding to `juro-admin` | Redirects to `app.juro.uz/ru/admin/console?reason=admin-session`, final `200` | `noindex`; highly sensitive | Authenticated staff/fresh-MFA Chrome QA is not proven in this audit | `PARTIAL` |
 | [status.juro.uz](https://status.juro.uz/) | production | Public-safe operational status; anonymous | Cloudflare Worker domain; `STATUS_HOSTNAME` | Root and `/api/status` return `200` | `noindex`; public-safe telemetry | Overall status operational; retain no-sensitive-data boundary | `VERIFIED` |
 | [staging.app.juro.uz](https://staging.app.juro.uz/) | staging | Protected platform; test accounts; RU/UZ | Cloudflare Worker domain and Access | Redirects to Cloudflare Access login, final login page `200` | Access-protected; private test data | Authenticated post-Access matrix remains incomplete | `PARTIAL` |
@@ -103,6 +103,5 @@ The current tree defines 161 page files and 181 API route files. Dynamic paramet
 1. **P1 — provider-host indexing:** live Sites v94 exposes indexable duplicate HTML. A tested v95 is saved but not deployed.
 2. **P1 — staging observability:** the staging status endpoint is reachable but reports all eight components degraded from stale evidence. Active Cloudflare schedules were verified, and a live five-minute cron failed in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`; capacity remediation stays in the separately excluded legislation/corpus scope.
 3. **P1 — legacy origin exposure:** Cloudflare flags partial origin exposure and `ftp.juro.uz` fails TLS hostname validation. Ownership must be confirmed before DNS changes.
-4. **P1 — lawyer deep link:** `lawyer.juro.uz/ru/individual/dashboard` returns `404`, matching the user-supplied failure screenshot; the lawyer route itself is reachable through login.
-5. **P2 — staging hostname drift:** `app.staging.juro.uz` and `lawyer.staging.juro.uz` are present in code paths but do not resolve; the active app hostname is `staging.app.juro.uz`.
-6. **Open evidence gate:** authenticated Client, Business, Lawyer, and Staff/Admin Chrome runs are still required before these families can be marked `VERIFIED`.
+4. **P2 — staging hostname drift:** `app.staging.juro.uz` and `lawyer.staging.juro.uz` are present in code paths but do not resolve; the active app hostname is `staging.app.juro.uz`.
+5. **Open evidence gate:** authenticated Client, Business, Lawyer, and Staff/Admin Chrome runs are still required before these families can be marked `VERIFIED`. Anonymous Chrome evidence now closes the reported lawyer cross-persona deep-link failure on Worker v173.
