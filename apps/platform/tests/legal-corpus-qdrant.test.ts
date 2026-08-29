@@ -405,3 +405,23 @@ test("version deactivation updates payload by a bounded environment and version 
     ["version_id", "lexuz:42:ru:v1"],
   ]);
 });
+
+test("approved rebuild can delete only points from the configured collection", async () => {
+  let captured: { url: string; body: string; apiKey: string | null } | null = null;
+  const client = new QdrantLegalCorpusClient(configured, async (input, init) => {
+    captured = {
+      url: String(input),
+      body: String(init?.body),
+      apiKey: new Headers(init?.headers).get("api-key"),
+    };
+    return Response.json({ status: "ok", result: { status: "completed" } });
+  });
+  await client.deleteAllPoints();
+  const observed = captured as { url: string; body: string; apiKey: string | null } | null;
+  assert.ok(observed);
+  assert.equal(observed.url,
+    "https://qdrant.internal.example/collections/juro_legal_staging/points/delete?wait=true");
+  assert.deepEqual(JSON.parse(observed.body), { filter: { must: [] } });
+  assert.equal(observed.apiKey, "test-secret");
+  assert.doesNotMatch(observed.body, /test-secret/u);
+});

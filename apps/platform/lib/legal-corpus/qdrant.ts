@@ -571,6 +571,29 @@ export class QdrantLegalCorpusClient {
     return parsed.data.result.count;
   }
 
+  /**
+   * Removes every point from the explicitly configured corpus collection.
+   * This is intentionally exposed only for the approved staging disjoint
+   * rebuild path; callers must gate it by environment and a dedicated
+   * rebuild flag. The collection name is validated by the constructor and
+   * the private service allow-list prevents cross-collection access.
+   */
+  async deleteAllPoints(): Promise<void> {
+    const parsed = mutationResponseSchema.safeParse(await request(
+      this.env,
+      "/points/delete?wait=true",
+      {
+        method: "POST",
+        body: JSON.stringify({ filter: { must: [] } }),
+      },
+      this.fetchImpl,
+      { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS },
+    ));
+    if (!parsed.success || parsed.data.status !== "ok") {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+  }
+
   async createSnapshot(): Promise<QdrantSnapshotInfo> {
     const parsed = snapshotResponseSchema.safeParse(await request(
       this.env,

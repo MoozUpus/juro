@@ -105,7 +105,7 @@ type SnapshotClient = Pick<QdrantLegalCorpusClient,
   | "deleteSnapshot"
   | "downloadSnapshot"
   | "ensureCompatible"
-  | "restoreSnapshot">;
+  | "restoreSnapshot"> & Partial<Pick<QdrantLegalCorpusClient, "deleteAllPoints">>;
 
 export class LegalCorpusQdrantSnapshotError extends Error {
   constructor(
@@ -473,6 +473,50 @@ export async function ensureLegalCorpusQdrantAvailable(
     }
     if (totalPoints > ledger.denseTrackedPoints) {
       throw new QdrantCorpusError("QDRANT_COLLECTION_INCOMPATIBLE", false);
+    }
+    if (
+      env.APP_ENV === "staging"
+      && env.LEGAL_CORPUS_AUTO_INGEST_ENABLED !== "true"
+      && env.LEGAL_CORPUS_QDRANT_REBUILD_APPROVED === "true"
+      && !snapshotRow
+    ) {
+      // A collection that is smaller than the D1 ledger can be a partially
+      // written ephemeral container. There is no verified snapshot to use,
+      // so rebuild the explicitly configured staging collection from the
+      // immutable D1/source-text registry. Clear the collection first; this
+      // prevents stale deterministic IDs from surviving the disjoint rebuild.
+      console.warn(JSON.stringify({
+        service: "legal-corpus-qdrant-recovery",
+        event: "qdrant.disjoint_rebuild_required",
+        environment: env.APP_ENV,
+        ledgerTotalPoints: ledger.denseTrackedPoints,
+        qdrantTotalPoints: totalPoints,
+        reason: "approved_staging_rebuild_after_partial_collection_drift",
+      }));
+      if (!client.deleteAllPoints) {
+        throw new QdrantCorpusError("QDRANT_COLLECTION_INCOMPATIBLE", false);
+      }
+      await client.deleteAllPoints();
+      const reset = await env.DB.prepare(`UPDATE legal_corpus_chunks
+        SET dense_vector_id=NULL,indexed_at=NULL
+        WHERE dense_vector_id IS NOT NULL
+          AND id IN (
+            SELECT chunk.id
+            FROM legal_corpus_chunks chunk
+            INNER JOIN legal_corpus_provisions provision ON provision.id=chunk.provision_id
+            INNER JOIN legal_corpus_documents document ON document.id=provision.document_id
+            WHERE document.provider IN ('lex_uz','juro_owner')
+              AND document.scope='global' AND document.availability_status='ready'
+          )`).run();
+      const resetDensePointIds = Math.max(0, Number(reset.meta?.changes ?? 0));
+      console.warn(JSON.stringify({
+        service: "legal-corpus-qdrant-recovery",
+        event: "qdrant.disjoint_rebuild_reset",
+        environment: env.APP_ENV,
+        resetDensePointIds,
+        reason: "approved_staging_rebuild_after_partial_collection_drift",
+      }));
+      return { status: "existing", resetDensePointIds };
     }
   } else if (ledger.denseTrackedPoints === 0) {
     await client.ensureCompatible();
