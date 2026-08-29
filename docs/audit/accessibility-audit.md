@@ -1,5 +1,15 @@
 # Accessibility audit
 
+## 2026-08-29 auth locale-continuity candidate
+
+- Source commit `244b2e40` makes the RU/UZ auth language links localize the
+  protected return destination instead of preserving a stale locale.
+- Focused auth, Lawyer routing and accessibility contracts passed 26/26;
+  production-artifact rendering passed 36/36 and verifies the exact UZ link
+  excludes the old RU destination. Type-check, lint and artifact budgets pass.
+- This is an unpublished navigation/accessibility candidate. It does not alter
+  authentication, session, role or server authorization behavior.
+
 ## 2026-08-29 full public responsive release gate
 
 - Source commit `1e25c1aeaedad1daff964d1cc08714bece814bee` expands the

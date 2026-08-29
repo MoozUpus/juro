@@ -12,6 +12,13 @@ workflows. The current release work concentrated on trust gaps that visual polis
 cannot hide: signed-share transport, tenant/capability boundaries, answer-source
 integrity, privacy-safe activation telemetry, and truthful production status.
 
+Commit `244b2e40` closes a reproduced auth-localization mismatch. Switching RU
+↔ UZ on login or registration now localizes both the visible form route and a
+safe protected `returnTo`/`return_to` destination. A UZ choice can no longer
+silently return the user to `/ru/...` after authentication. Account type,
+reauthentication and other safe query context remain intact; external targets
+are removed rather than propagated.
+
 ## User journey assessment
 
 | Journey | Current state | Remaining UX evidence |
@@ -33,6 +40,7 @@ integrity, privacy-safe activation telemetry, and truthful production status.
 - Standalone signed-share downloads use explicit signed authorization rather than
   a broadly reusable bearer path.
 - Server role/persona destination wins over stale client return state.
+- Auth language switching keeps the protected destination in the selected RU/UZ locale.
 - Product analytics is an exact, content-free vocabulary rather than arbitrary
   event payloads.
 - Public funnel telemetry requires explicit analytics consent and sends no URL,

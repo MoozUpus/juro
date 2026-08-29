@@ -38,6 +38,15 @@ rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.
 
+## Prepared auth locale-continuity change — not deployed
+
+Candidate `244b2e40` changes only client-side auth language-link construction.
+It has no migration or data write. If a future release drops query context,
+loops between auth pages or returns to the wrong locale, route traffic back to
+the verified pre-release Worker and leave D1/R2 untouched. Re-test RU → UZ and
+UZ → RU login and registration links with personal, business, Lawyer and reauth
+return paths before restoring traffic to a forward fix.
+
 ## Prepared Document Builder performance change — not deployed
 
 Candidate `942ff677` changes only client chunk boundaries and accessible loading

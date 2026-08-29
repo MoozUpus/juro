@@ -11,6 +11,12 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `244b2e40` keeps auth language changes and protected destinations
+  in the same RU/UZ locale. It covers `returnTo` and legacy `return_to`, removes
+  external targets and leaves OTP/MFA/session/role rules unchanged. Focused
+  auth/routing/accessibility tests pass 26/26; rendered Worker passes 36/36;
+  type-check, lint and production artifact validation pass.
+
 - Candidate `942ff677` defers six state-specific Document Builder panels and
   keeps a visible status fallback while their chunks load. The largest lazy
   route increment fell from 208.1 to 175.5 KiB emitted raw JS (32.6 KiB / 15.7%).

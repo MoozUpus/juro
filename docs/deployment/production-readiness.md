@@ -4,6 +4,19 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 auth locale-continuity candidate
+
+Commit `244b2e40` fixes the reproduced RU → UZ authentication mismatch: the
+language switch now rewrites a safe localized protected destination alongside
+the auth page itself. Both supported return-parameter names are covered;
+external targets are removed. No OTP, MFA, session, persona, role or server
+authorization behavior changes.
+
+Focused auth/routing/accessibility tests passed 26/26. The production artifact
+passed type-check, lint and budgets, and its rendered Worker passed 36/36 with an
+exact assertion that the UZ link contains the UZ dashboard destination and not
+the stale RU path. The candidate is not deployed.
+
 ## 2026-08-29 Document Builder conditional-panel candidate
 
 Commit `942ff677` turns collaboration, assets, version history, manual editing,

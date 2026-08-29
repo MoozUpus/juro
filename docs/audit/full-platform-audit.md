@@ -9,6 +9,14 @@ authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
 the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
+**Auth locale-continuity candidate:** commit `244b2e40` rewrites a safe
+localized `returnTo` or legacy `return_to` when the user changes RU/UZ on login
+or registration. The production-artifact test proves that a UZ link from the RU
+login page now contains `/uz/individual/dashboard`, not the stale `/ru/...`
+destination. Focused auth/routing/accessibility tests passed 26/26, rendered
+Worker 36/36, type-check, lint and artifact validation passed. This candidate is
+unpublished and changes no authentication, session, role or authorization rule.
+
 **Document Builder performance candidate:** commit `942ff677` defers six
 state-specific panels behind accessible loading boundaries. The production
 artifact's largest lazy route increment fell from 208.1 to 175.5 KiB emitted

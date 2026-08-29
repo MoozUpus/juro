@@ -1,5 +1,17 @@
 # Test report — current evidence through 2026-08-29
 
+## Auth locale-continuity candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `244b2e40` |
+| Navigation contract | PASS — RU/UZ switching rewrites a safe localized `returnTo` and legacy `return_to`, preserves remaining query context and removes external targets |
+| Focused regression | PASS — auth locale, auth accessibility and Lawyer routing 26/26 |
+| Rendered Worker | PASS — 36/36; the built RU login emits a UZ link with `%2Fuz%2Findividual%2Fdashboard` and no stale `%2Fru...` destination |
+| Static/artifact gates | PASS — type-check, lint and production artifact validation; budgets remain CSS 596.9, initial JS 295.6, lazy 175.5, fonts 453.6, images 564.4 and Worker 3724.4 KiB |
+| Security boundary | PASS source — no authentication, session, role or authorization rule changes; external return targets remain rejected |
+| Release boundary | UNPUBLISHED — no Worker, Sites, migration, DNS, notification or customer-data mutation |
+
 ## Document Builder conditional-panel split
 
 | Gate | Result |
