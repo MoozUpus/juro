@@ -627,6 +627,9 @@ export class QdrantLegalCorpusClient {
         event: "qdrant.response_rejected",
         operation: "snapshot-create",
         reason: parsed.success ? "status" : "schema",
+        issuePaths: parsed.success
+          ? []
+          : parsed.error.issues.map((issue) => issue.path.join(".")),
       }));
       throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
     }
