@@ -82,7 +82,7 @@ one queryable schema without adding identity or content.
 | Web fallback rate | `retrieval_fallback / first_question_sent`, same locale/window | Instrumented; current counts are too small and may include controlled QA |
 | Citation validation failure | failed citation-validation outcomes / answers subject to validation | `UNVERIFIED`; no dedicated aggregate outcome is emitted |
 | Outdated source rate | answers using an outdated source / source-backed answers | `UNVERIFIED`; user feedback subtype `outdated` is a report signal, not proof of source state |
-| User-reported error rate | failure-class feedback / all submitted feedback | Contract fixed in the current candidate; future `feedback_submitted` rows carry success/partial/failure and bounded subtype |
+| User-reported error rate | retained failure-class feedback types / all retained feedback types first submitted in the same 30-day window; one type per answer counts once | `INSTRUMENTED CANDIDATE / NO DATA`; commit `3101525c` computes the aggregate from durable D1 feedback without reading comments or answer content. The read-only production replay found 0 submitted feedback types, so no rate is reported. |
 | Latency | p50/p75/p95 bounded elapsed time for comparable successful outcomes | Instrumented where callers provide `elapsedMs`; minimum sample remains required |
 | Provider availability | successful content-free provider probes / due probes, plus latest state | `VERIFIED CURRENT` independently from product events for OpenAI and Anthropic; after the account top-up, Anthropic passed at `2026-08-29T11:10:56.708Z` in 4,810 ms with no safe error. |
 
@@ -215,9 +215,27 @@ valid structured result, but zero met the validated-source answer contract.
 Production has no `ai_answer_source_opens` table, so no source-open rate is
 claimed.
 
+Commit `3101525c12dd53171494515e0c9668859b92408c` adds the 30-day
+user-reported error aggregate to the same protected dashboard without a new
+table or event join. Each retained feedback type for an answer contributes at
+most once because `ai_feedback` already enforces a unique
+workspace/user/answer/type key. `helpful` is reported separately;
+`not_helpful`, `incomplete` and `language` are partial signals; and
+`wrong_norm`, `broken_link`, `outdated`, `unsafe` and `ignored_facts` form the
+error numerator. The query returns counts and basis points only. It never reads
+or returns the optional comment, question, answer, source URL or actor ID.
+`outdated` remains a user report signal and is not relabelled as a verified
+outdated-source rate.
+
+The read-only production replay at `2026-08-29T12:49:08.640Z` read four rows,
+wrote zero and found zero retained feedback types in the preceding 30 days:
+zero helpful, partial, error-class and outdated signals. The rate is therefore
+`NO DATA`, not 0.0%. No product-quality or product-market-fit conclusion is
+drawn from the empty denominator.
+
 The extended candidate passes product-KPI focused 5/5, the combined KPI/purge
 focused run 15/15, core 1138/1138,
 Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint,
 ordered migration/foreign-key checks and the bounded artifact gate. Worker entry
-is 3706.9/6144.0 KiB. Migrations 0164 and 0165 remain outside the production
+is 3712.8/6144.0 KiB. Migrations 0164 and 0165 remain outside the production
 migration pattern; production remains Worker 170 and Sites v86.

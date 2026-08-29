@@ -28,10 +28,14 @@
   authorized source-open funnel. Migration `0165_ai_answer_source_opens.sql`
   stores one content-free row per actor/answer, rejects cross-owner evidence,
   deduplicates repeat opens, and is included in account purge.
+- Candidate `3101525c12dd53171494515e0c9668859b92408c` adds a 30-day
+  user-reported error aggregate from existing durable feedback. One retained
+  type per answer counts once; comments, answers, source URLs and actor IDs are
+  not read or returned, and `outdated` remains only a report signal.
 - Focused KPI tests pass 5/5 and the combined KPI/purge run passes 15/15; the
   full local gate passes core 1138/1138,
   Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
-  artifact validation; Worker entry is 3706.9/6144.0 KiB. Local Chrome verifies the RU/UZ protected
+  artifact validation; Worker entry is 3712.8/6144.0 KiB. Local Chrome verifies the RU/UZ protected
   boundary at desktop and 390 px with noindex, exact re-auth return path, no
   overflow and no warning/error log; no staff identity was fabricated.
 - A read-only production replay read 230 rows and wrote zero: 10 eligible, two
@@ -46,6 +50,9 @@
   A 313-row diagnostic confirmed exact completed structured responses for all
   five, but zero passed the strict validated-source contract. Production has no
   0165 table, so no source-open actor rate is claimed.
+- The feedback replay at `2026-08-29T12:49:08.640Z` read four rows and wrote
+  zero. It found no retained feedback types in the 30-day window, so the rate
+  remains `NO DATA`; this is not evidence of error-free use.
 - Migrations 0164/0165 remain outside the production pattern. No production release,
   D1 row write, DNS, notification or customer-data mutation occurred; product-
   market-fit evidence remains unverified.

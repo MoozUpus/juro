@@ -38,6 +38,16 @@ rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.
 
+## Prepared feedback-quality KPI change — not deployed
+
+Candidate `3101525c12dd53171494515e0c9668859b92408c` adds only an aggregate
+read and RU/UZ Admin presentation over the existing `ai_feedback` table. It has
+no migration and makes no write-path change. If a future release causes a KPI
+query or Admin rendering regression, route traffic back to the verified
+pre-release Worker; do not edit or restore D1. Confirm that protected Admin
+access still requires fresh MFA, the response remains aggregate-only and rates
+remain suppressed below five before restoring traffic to a forward fix.
+
 ## Prepared migration 0161 gate — not applied
 
 Candidate migration `0161_balanced_ai_reasoning_mode.sql` rebuilds only

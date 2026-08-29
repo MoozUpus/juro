@@ -36,6 +36,14 @@ opens, and account deletion explicitly removes the observation before its
 conversation is deleted. Citation access does not fail if the best-effort
 observation write fails.
 
+Commit `3101525c12dd53171494515e0c9668859b92408c` adds the adjacent
+30-day user-reported error aggregate without a migration. It counts each
+retained feedback type for an answer once, separates helpful and partial
+signals, and uses `wrong_norm`, `broken_link`, `outdated`, `unsafe` and
+`ignored_facts` as the error numerator. The query does not read comments,
+questions, answers or source URLs and returns no actor identifiers. An
+`outdated` report is not presented as verified source freshness.
+
 Focused aggregation/privacy/deduplication/access tests passed 5/5 and the
 combined KPI/purge run passed 15/15. The full local gate then passed core
 1138/1138, Cloudflare/infrastructure 203/203,
@@ -66,6 +74,11 @@ separate diagnostic read 313 rows and wrote zero; all five actors had exact
 completed structured responses within seven days, but zero met the strict
 validated-source answer contract. Production has no 0165 table, so the
 answer-to-source-open rate remains awaiting observation.
+
+The feedback-quality replay at `2026-08-29T12:49:08.640Z` read four rows and
+wrote zero. It found zero retained feedback types in the preceding 30 days, so
+the rate is `NO DATA`, not 0.0%. The empty denominator supports neither a
+quality claim nor a product-market-fit claim.
 
 This is an unpublished application-plus-migration candidate. Migrations 0164
 and 0165 remain outside production's migration pattern. No production D1
