@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "recordedAt": "2026-08-29T11:41:31.798Z",
+  "databaseName": "juro-staging-corpus-shard-3",
+  "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+  "readOnlySource": true,
+  "export": {
+    "format": "wrangler d1 export SQL",
+    "inputBytes": 1240279460,
+    "sha256": "2a86f5017d679586fa4d58baa87b9f0d160b696f2c2a1b051812b93b6027a1bf",
+    "temporaryPath": "D:\\JuroLegalCorpusTemp\\juro-staging-corpus-shard-3.sql"
+  },
+  "restore": {
+    "outputBytes": 754913280,
+    "temporaryPath": "D:\\JuroLegalCorpusTemp\\juro-staging-corpus-shard-3.restore.sqlite",
+    "statementCount": 5523963,
+    "tableCount": 262,
+    "indexCount": 565,
+    "triggerCount": 363,
+    "migrationCount": 143,
+    "quickCheck": "ok",
+    "foreignKeyViolations": 0
+  },
+  "verificationCommand": "node scripts/verify-d1-full-export-restore.mjs --input D:\\JuroLegalCorpusTemp\\juro-staging-corpus-shard-3.sql --output D:\\JuroLegalCorpusTemp\\juro-staging-corpus-shard-3.restore.sqlite",
+  "cleanup": {
+    "temporaryPlaintextRemovedAfterVerification": true,
+    "remoteDataMutated": false
+  },
+  "scope": "This closes isolated shard-3 D1 export/restore integrity only; it is not a federated snapshot or release approval."
+}
