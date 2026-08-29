@@ -210,3 +210,25 @@ test("document rename uses the JURO dialog instead of a native prompt", async ()
   assert.match(copy, /renameDialogTitle: "Hujjat nomini o‘zgartirish"/);
   assert.match(styles, /\.dbt-rename-dialog \{ width: min\(480px, 100%\); \}/);
 });
+
+test("document builder confirmations stay localized and own keyboard focus", async () => {
+  const [builder, styles] = await Promise.all([
+    source("../app/_document-builder/DocumentBuilderClient.tsx"),
+    source("../app/_document-builder/document-builder.css"),
+  ]);
+  assert.doesNotMatch(builder, /window\.confirm/);
+  assert.match(builder, /useModalFocus<HTMLElement>\(Boolean\(confirmationDecision\), closeConfirmation\)/);
+  assert.match(builder, /role="dialog" aria-modal="true" aria-labelledby="builder-confirmation-title" aria-describedby="builder-confirmation-description"/);
+  assert.match(builder, /className="cancel" data-dialog-initial-focus/);
+  assert.match(builder, /"Konstruktordan chiqasizmi\?"/);
+  assert.match(builder, /"Уйти из конструктора\?"/);
+  assert.match(builder, /"Kelishuv bekor qilinsinmi\?"/);
+  assert.match(builder, /"Отменить согласование\?"/);
+  assert.match(builder, /if \(phase !== "builder" \|\| accessRole === "collaborator"\) return;/);
+  assert.match(builder, /event\.defaultPrevented \|\| event\.button !== 0 \|\| event\.metaKey \|\| event\.ctrlKey/);
+  assert.match(builder, /event\.returnValue = "";/);
+  assert.match(builder, /allowNavigationRef\.current = true;[\s\S]*?window\.location\.assign\(decision\.href\)/);
+  assert.match(builder, /agreementWarningShown\.current = true;[\s\S]*?pending\?\.\(\)/);
+  assert.match(builder, /onChange=\{\(event\) => changeTitle\(event\.target\.value\)\}/);
+  assert.match(styles, /\.dbt-confirm-dialog > button\.confirm \{[^}]*background: var\(--dbt-navy\);/);
+});
