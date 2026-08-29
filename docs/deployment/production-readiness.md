@@ -4,6 +4,29 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 security remediation candidate
+
+Codex Security scan `aacf0487-aae5-4c8f-a527-8f3efc70cb76` targeted immutable
+source `3a30042c096f5aca91c3852a6998b7ddcd452025` and reported zero Critical,
+zero High and six validated Medium findings. Commit `695693f3` closes all six:
+workspace editor-role enforcement on content writes, hidden collaborator
+attachment download enforcement, stale lawyer-grant revocation plus operational
+profile rechecks, checksum-bound malware quarantine for Builder uploads,
+bounded DOCX expansion and guest-AI provider circuit/accounting.
+
+Selected non-legislation Platform tests passed 774/774. Rendered Worker HTML
+passed 35/35 after evidence commit `1ee3047b`; type-check, lint, production
+build, deployable-artifact validation and emitted-asset budgets passed locally.
+Exact-source GitHub Actions run `33227714329` passed on `1ee3047b`: Website in
+3m50s and Platform in 8m14s, including the Cloudflare matrix, dependency audit
+and licence policy. The detailed report is
+[`security-scan-3a30042c.md`](../audit/security-scan-3a30042c.md).
+
+This is a prepared but unpublished Platform candidate. No Worker, Sites, DNS,
+D1, notification or customer-data mutation was made. Production does not yet
+inherit these six controls, so release approval and post-deploy replay remain
+separate gates.
+
 ## 2026-08-29 full public responsive candidate
 
 Commit `1e25c1aeaedad1daff964d1cc08714bece814bee` extends the built-site Chrome

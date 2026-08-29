@@ -38,6 +38,17 @@ shows one partially exposed origin-IP recommendation. It remains an explicit
 infrastructure review because FTP/mail ownership must be established before
 any proxy change. No DNS mutation was made.
 
+**Security candidate:** Codex Security scan
+`aacf0487-aae5-4c8f-a527-8f3efc70cb76` targeted immutable source
+`3a30042c096f5aca91c3852a6998b7ddcd452025` and reported zero Critical, zero
+High and six validated Medium findings. Candidate `695693f3` remediates all six
+across workspace write roles, collaborator attachments, lawyer access grants,
+Builder upload quarantine, DOCX expansion and guest-AI cost controls. Evidence
+HEAD `1ee3047b` passed 774/774 selected non-legislation tests, rendered Worker
+HTML 35/35, local release gates and exact-source CI `33227714329` (Website
+3m50s, Platform 8m14s). The candidate is not deployed; see
+[`security-scan-3a30042c.md`](./security-scan-3a30042c.md).
+
 ## Current production recovery
 
 Worker 161 safely classified the repeated Anthropic HTTP 400 as
@@ -45,10 +56,10 @@ Worker 161 safely classified the repeated Anthropic HTTP 400 as
 provider message, prompts and secrets were not logged. After the account balance
 was restored, fresh production probes recorded Anthropic operational at
 `2026-08-28T06:47:17.754Z`. After the owner's latest account top-up report,
-independent app/status-host reads generated at `2026-08-29T00:19:04.324Z`
+independent app/status-host reads generated at `2026-08-29T02:11:04.267Z`
 again agreed on 8/8 operational with no incident. Anthropic was operational at
-`00:15:32.841Z` (6,141 ms, no safe error) and document analysis at
-`00:00:46.020Z` (7,564 ms, no safe error). The exception is closed by live
+`02:00:33.048Z` (5,308 ms, no safe error) and document analysis at
+`02:00:40.647Z` (7,556 ms, no safe error). The exception is closed by live
 provider evidence rather than by the balance action alone.
 
 The same recovery window exposed a separate P1 operational defect: Lex RSS

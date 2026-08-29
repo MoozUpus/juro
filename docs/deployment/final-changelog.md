@@ -3,11 +3,24 @@
 ## Current operational verification
 
 - After the owner reported replenishing the Anthropic account, independent
-  production app/status reads generated at `2026-08-29T00:19:04.324Z` agreed
+  production app/status reads generated at `2026-08-29T02:11:04.267Z` agreed
   on 8/8 operational with no incident. Anthropic was operational at
-  `00:15:32.841Z` (6,141 ms, no safe error) and document analysis at
-  `00:00:46.020Z` (7,564 ms, no safe error). This was a read-only recovery
+  `02:00:33.048Z` (5,308 ms, no safe error) and document analysis at
+  `02:00:40.647Z` (7,556 ms, no safe error). This was a read-only recovery
   verification, not a new release.
+
+## Prepared in Draft PR, not shipped
+
+- Security scan `aacf0487-aae5-4c8f-a527-8f3efc70cb76` reported 0 Critical,
+  0 High and 6 validated Medium findings on immutable source `3a30042c`.
+- Candidate `695693f3` closes workspace editor-role enforcement, hidden
+  collaborator attachment access, stale lawyer grants, Builder upload
+  quarantine, DOCX expansion limits and guest-AI cost controls/accounting.
+- Evidence HEAD `1ee3047b` passed 774/774 selected non-legislation tests,
+  rendered Worker HTML 35/35, local release gates and exact-source CI
+  `33227714329` (Website 3m50s, Platform 8m14s).
+- The candidate is not deployed. It changes no production Worker, Sites, DNS,
+  D1, notifications or customer data.
 
 ## Shipped to production
 

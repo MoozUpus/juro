@@ -1,5 +1,23 @@
 # Test report — current evidence through 2026-08-29
 
+## Security remediation candidate and Anthropic recovery
+
+| Gate | Result |
+| --- | --- |
+| Security scan | ACTIONED — scan `aacf0487-aae5-4c8f-a527-8f3efc70cb76` on immutable `3a30042c096f5aca91c3852a6998b7ddcd452025` reported 0 Critical, 0 High and 6 validated Medium findings |
+| Remediation source | PASS candidate — `695693f3ecbc04a800c8cc81e8486d22c03e5230` closes editor-role, hidden-attachment, stale-lawyer-grant, Builder quarantine, DOCX expansion and guest-AI cost-control boundaries |
+| Selected non-legislation regression | PASS — 774/774 |
+| Rendered Worker HTML | PASS — 35/35 after `1ee3047b643136c08fcadcacce61776d19cded18` reuses one built Worker instance for the suite |
+| Local release gates | PASS — type-check, lint, production build, deployable-artifact validation and all emitted-asset budgets |
+| Exact-source CI | PASS — run `33227714329` on `1ee3047b`; Website 3m50s and Platform 8m14s, including tests, Cloudflare matrix, dependency audit and licence policy |
+| Live provider recovery | PASS read-only — both production status APIs generated the same `2026-08-29T02:11:04.267Z` snapshot with 8/8 operational and no incident; Anthropic was operational at `02:00:33.048Z`, 5,308 ms, no safe error |
+| Release boundary | NOT DEPLOYED — the six security remediations remain a Draft PR candidate; production Worker and Sites state were not changed |
+
+The durable finding-by-finding record is
+[`security-scan-3a30042c.md`](../audit/security-scan-3a30042c.md). The live
+Anthropic result confirms the account recovery; it does not deploy or validate
+the security candidate in production.
+
 ## Full public responsive release gate
 
 | Gate | Result |
