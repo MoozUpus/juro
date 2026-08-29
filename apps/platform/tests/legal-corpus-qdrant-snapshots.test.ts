@@ -113,7 +113,7 @@ class MemoryR2 {
   }
 
   async createMultipartUpload(key: string, options: R2MultipartOptions = {}) {
-    const bucket = this;
+    const persist = this.put.bind(this);
     const parts = new Map<number, Uint8Array>();
     const upload = {
       key,
@@ -136,7 +136,7 @@ class MemoryR2 {
           bytes.set(value, offset);
           offset += value.byteLength;
         }
-        return bucket.put(key, bytes, options as R2PutOptions);
+        return persist(key, bytes, options as R2PutOptions);
       },
     };
     return upload as unknown as R2MultipartUpload;
