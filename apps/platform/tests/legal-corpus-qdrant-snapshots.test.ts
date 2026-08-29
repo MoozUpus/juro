@@ -275,6 +275,56 @@ test("approved staging disjoint snapshot records deferred queued acquisition wor
   }
 });
 
+test("snapshot repairs stale current-variant payload flags when total points already match", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const r2 = new MemoryR2();
+  const snapshotBytes = new TextEncoder().encode("repaired-current-flags");
+  const checksum = hex(await crypto.subtle.digest("SHA-256", snapshotBytes));
+  let currentCount = 0;
+  let cleared = 0;
+  let versionsMarkedCurrent = 0;
+  try {
+    seedDenseChunk(sqlite, { suffix: "48", indexedAt: "2026-08-15T16:00:00.000Z" });
+    const client = {
+      async collectionExists() { return true; },
+      async assertCompatible() {},
+      async countPoints(current: boolean) { return current ? currentCount : 1; },
+      async setAllPointsCurrent(value: boolean) { if (!value) { cleared += 1; currentCount = 0; } },
+      async setVersionCurrent(_versionId: string, value: boolean) { if (value) { versionsMarkedCurrent += 1; currentCount = 1; } },
+      async createSnapshot() {
+        return {
+          name: "repaired-current.snapshot",
+          size: snapshotBytes.byteLength,
+          creationTime: "2026-08-15T16:01:00.000Z",
+          checksumSha256: checksum,
+        };
+      },
+      async downloadSnapshot() {
+        return new Response(snapshotBytes, { headers: { "content-length": String(snapshotBytes.byteLength) } });
+      },
+      async deleteSnapshot() {},
+      async ensureCompatible() { return "existing" as const; },
+      async restoreSnapshot() {},
+    };
+    const result = await createLegalCorpusQdrantSnapshot({
+      APP_ENV: "staging" as const,
+      DB: d1,
+      BACKUP_BUCKET: r2 as unknown as R2Bucket,
+      LEGAL_CORPUS_DENSE_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "false",
+      LEGAL_CORPUS_QDRANT_DISJOINT_SNAPSHOT_APPROVED: "true",
+      QDRANT_URL: "https://qdrant.internal",
+      QDRANT_API_KEY: "secret",
+      QDRANT_COLLECTION: "juro_legal_staging",
+    }, { client });
+    assert.equal(result.status, "created");
+    assert.equal(cleared, 1);
+    assert.equal(versionsMarkedCurrent, 1);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("ephemeral collection restore requires the verified R2 snapshot and resets only later D1 point ids", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const r2 = new MemoryR2();

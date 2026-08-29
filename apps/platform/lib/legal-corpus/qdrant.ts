@@ -776,6 +776,31 @@ export class QdrantLegalCorpusClient {
       throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
     }
   }
+
+  /**
+   * Rebuild the current-variant payload fence after an ephemeral restore or
+   * an interrupted version handoff.  D1 is authoritative for current
+   * variants; clearing the flag for this private environment/scope before
+   * re-applying current versions prevents stale `is_current=true` payloads
+   * from inflating point-count parity.
+   */
+  async setAllPointsCurrent(isCurrent: boolean): Promise<void> {
+    const parsed = mutationResponseSchema.safeParse(await request(this.env, "/points/payload?wait=true", {
+      method: "POST",
+      body: JSON.stringify({
+        payload: { is_current: isCurrent },
+        filter: {
+          must: [
+            { key: "environment", match: { value: this.env.APP_ENV } },
+            { key: "scope", match: { value: "global" } },
+          ],
+        },
+      }),
+    }, this.fetchImpl));
+    if (!parsed.success || parsed.data.status !== "ok") {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+  }
 }
 
 async function sparseIndex(term: string): Promise<number> {

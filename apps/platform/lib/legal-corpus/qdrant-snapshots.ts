@@ -105,7 +105,7 @@ type SnapshotClient = Pick<QdrantLegalCorpusClient,
   | "deleteSnapshot"
   | "downloadSnapshot"
   | "ensureCompatible"
-  | "restoreSnapshot"> & Partial<Pick<QdrantLegalCorpusClient, "deleteAllPoints">>;
+  | "restoreSnapshot"> & Partial<Pick<QdrantLegalCorpusClient, "deleteAllPoints" | "setAllPointsCurrent" | "setVersionCurrent">>;
 
 export class LegalCorpusQdrantSnapshotError extends Error {
   constructor(
@@ -299,6 +299,22 @@ export type CreateLegalCorpusQdrantSnapshotResult =
   | { status: "disabled" | "not_frozen" | "not_ready"; snapshotId: null }
   | { status: "existing" | "created"; snapshotId: string; manifest: LegalCorpusQdrantSnapshotManifest };
 
+async function repairCurrentPayloadParity(
+  env: LegalCorpusQdrantSnapshotEnv,
+  client: SnapshotClient,
+): Promise<void> {
+  if (!client.setAllPointsCurrent || !client.setVersionCurrent) return;
+  await client.setAllPointsCurrent(false);
+  const rows = await env.DB.prepare(`SELECT version.id AS versionId
+    FROM legal_corpus_versions version
+    INNER JOIN legal_corpus_variants variant ON variant.current_version_id=version.id
+    INNER JOIN legal_corpus_documents document ON document.id=variant.document_id
+    WHERE document.provider IN ('lex_uz','juro_owner')
+      AND document.scope='global' AND document.availability_status='ready'
+    ORDER BY version.id ASC`).all<{ versionId: string }>();
+  for (const row of rows.results) await client.setVersionCurrent(row.versionId, true);
+}
+
 export async function createLegalCorpusQdrantSnapshot(
   env: LegalCorpusQdrantSnapshotEnv,
   options: { client?: SnapshotClient; now?: Date } = {},
@@ -339,10 +355,28 @@ export async function createLegalCorpusQdrantSnapshot(
     }
   }
   await client.assertCompatible();
-  const [totalPoints, currentPoints] = await Promise.all([
-    client.countPoints(false),
-    client.countPoints(true),
-  ]);
+  const totalPoints = await client.countPoints(false);
+  let currentPoints = await client.countPoints(true);
+  if (
+    totalPoints !== ledger.denseTrackedPoints
+    || currentPoints !== ledger.denseTrackedCurrentPoints
+  ) {
+    // A restored collection can retain all deterministic points while losing
+    // current-variant payload updates. Repair only that payload fence when
+    // total points already match; no vectors or D1 dense IDs are rewritten.
+    if (
+      totalPoints === ledger.denseTrackedPoints
+      && currentPoints < ledger.denseTrackedCurrentPoints
+      && client.setAllPointsCurrent
+      && client.setVersionCurrent
+    ) {
+      await repairCurrentPayloadParity(env, client);
+      const repairedCurrentPoints = await client.countPoints(true);
+      if (repairedCurrentPoints === ledger.denseTrackedCurrentPoints) {
+        currentPoints = repairedCurrentPoints;
+      }
+    }
+  }
   if (
     totalPoints !== ledger.denseTrackedPoints
     || currentPoints !== ledger.denseTrackedCurrentPoints
