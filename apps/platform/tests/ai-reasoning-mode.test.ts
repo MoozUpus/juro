@@ -7,6 +7,7 @@ import test from "node:test";
 import { legalChatResponseSchema } from "../lib/ai/legal-chat-schema";
 import {
   aiReasoningProfile,
+  aiReasoningRuntimeRoute,
   DEFAULT_AI_REASONING_MODE,
   parseAiReasoningMode,
 } from "../lib/ai/reasoning-mode";
@@ -49,6 +50,44 @@ test("reasoning profiles preserve the intended model and cost boundary", () => {
   assert.ok(balanced.maxOutputTokens.detailed < deep.maxOutputTokens.detailed);
   assert.ok(fast.fallbackTimeoutMs < balanced.fallbackTimeoutMs);
   assert.ok(balanced.fallbackTimeoutMs < deep.fallbackTimeoutMs);
+});
+
+test("runtime execution and Admin use one exact mode-to-model mapping", async () => {
+  const settings = {
+    openaiChatModel: "gpt-chat-test",
+    openaiDeepModel: "gpt-deep-test",
+    anthropicChatFallbackModel: "claude-fallback-test",
+  };
+  const fast = aiReasoningRuntimeRoute(settings, "fast");
+  const balanced = aiReasoningRuntimeRoute(settings, "balanced");
+  const deep = aiReasoningRuntimeRoute(settings, "deep");
+  assert.deepEqual(
+    [fast.primaryModel, balanced.primaryModel, deep.primaryModel],
+    ["gpt-chat-test", "gpt-chat-test", "gpt-deep-test"],
+  );
+  assert.deepEqual(
+    [fast.fallbackModel, balanced.fallbackModel, deep.fallbackModel],
+    ["claude-fallback-test", "claude-fallback-test", "claude-fallback-test"],
+  );
+  assert.deepEqual([fast.isDefault, balanced.isDefault, deep.isDefault], [false, true, false]);
+
+  const provider = await readFile(new URL("../lib/ai/provider.ts", import.meta.url), "utf8");
+  const anthropic = await readFile(new URL("../lib/ai/anthropic-provider.ts", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/platform/ai/route.ts", import.meta.url), "utf8");
+  const admin = await readFile(new URL("../app/_staff/AiSettingsConsole.tsx", import.meta.url), "utf8");
+  assert.match(provider, /aiReasoningRuntimeRoute\(settings, input\.reasoningMode\)\.primaryModel/);
+  assert.match(anthropic, /aiReasoningRuntimeRoute\(settings, input\.reasoningMode\)\.fallbackModel/);
+  assert.match(route, /aiReasoningRuntimeRoute\(runtimeSettings, reasoningMode\)/);
+  assert.match(admin, /aiReasoningRuntimeRoute\(dashboard\.current, mode\)/);
+  assert.match(admin, /Фактическая маршрутизация режимов/);
+  assert.match(admin, /Rejimlarning amaldagi marshruti/);
+  assert.match(admin, /Сбалансированный/);
+  assert.match(admin, /Muvozanatli/);
+  assert.match(admin, /profile\.providerTimeoutMs/);
+  assert.match(admin, /profile\.fallbackTimeoutMs/);
+  assert.match(admin, /DEFAULT_AI_EXECUTION_BUDGET_MS/);
+  assert.match(admin, /row\.openaiDeepModel/);
+  assert.match(admin, /row\.anthropicChatFallbackModel/);
 });
 
 test("AI composer exposes the three localized modes and starts balanced", async () => {

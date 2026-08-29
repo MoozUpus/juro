@@ -26,7 +26,11 @@ import {
   type LegalChatResponse,
 } from "./legal-chat-schema";
 import { completeStreamingJsonArrayObjects } from "./streaming-json";
-import { aiReasoningProfile, type AiReasoningMode } from "./reasoning-mode";
+import {
+  aiReasoningProfile,
+  aiReasoningRuntimeRoute,
+  type AiReasoningMode,
+} from "./reasoning-mode";
 
 export type LegalSourceSpan = {
   id: string;
@@ -190,7 +194,7 @@ class OpenAiLegalProvider implements LegalAiProvider {
       env: runtimeEnv(),
     });
     const reasoningProfile = aiReasoningProfile(input.reasoningMode);
-    const model = reasoningProfile.modelTier === "deep" ? settings.openaiDeepModel : settings.openaiChatModel;
+    const model = aiReasoningRuntimeRoute(settings, input.reasoningMode).primaryModel;
     const providerBudgetMs = legalChatProviderTimeoutMs({
       reasoningMode: input.reasoningMode,
       budget: options.budget,

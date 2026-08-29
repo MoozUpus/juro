@@ -18,6 +18,22 @@ export type AiReasoningProfile = {
   };
 };
 
+export type AiReasoningRuntimeModels = Readonly<{
+  openaiChatModel: string;
+  openaiDeepModel: string;
+  anthropicChatFallbackModel: string;
+}>;
+
+export type AiReasoningRuntimeRoute = Readonly<{
+  mode: AiReasoningMode;
+  isDefault: boolean;
+  primaryProvider: "openai";
+  primaryModel: string;
+  fallbackProvider: "anthropic";
+  fallbackModel: string;
+  profile: AiReasoningProfile;
+}>;
+
 const profiles: Record<AiReasoningMode, AiReasoningProfile> = {
   fast: {
     modelTier: "chat",
@@ -59,4 +75,27 @@ export function parseAiReasoningMode(value: unknown): AiReasoningMode {
 
 export function aiReasoningProfile(mode: AiReasoningMode): AiReasoningProfile {
   return profiles[mode];
+}
+
+/**
+ * One source of truth for the user-facing mode to runtime-model mapping.
+ * Provider execution, run reservation, and the protected Admin console use
+ * this same function so the displayed route cannot drift from the real call.
+ */
+export function aiReasoningRuntimeRoute(
+  settings: AiReasoningRuntimeModels,
+  mode: AiReasoningMode,
+): AiReasoningRuntimeRoute {
+  const profile = aiReasoningProfile(mode);
+  return {
+    mode,
+    isDefault: mode === DEFAULT_AI_REASONING_MODE,
+    primaryProvider: "openai",
+    primaryModel: profile.modelTier === "deep"
+      ? settings.openaiDeepModel
+      : settings.openaiChatModel,
+    fallbackProvider: "anthropic",
+    fallbackModel: settings.anthropicChatFallbackModel,
+    profile,
+  };
 }

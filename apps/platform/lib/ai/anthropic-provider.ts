@@ -11,7 +11,7 @@ import {
 import type { LegalAiRunOptions, LegalAiRunResult, LegalChatRequest } from "./provider";
 import { aiResponseToneInstruction, resolveAiRuntimeSettings } from "./runtime-settings";
 import { legalChatProviderTimeoutMs } from "./legal-chat-timeout";
-import { aiReasoningProfile } from "./reasoning-mode";
+import { aiReasoningProfile, aiReasoningRuntimeRoute } from "./reasoning-mode";
 
 export function anthropicModel(): string {
   return runtimeEnv().ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
@@ -84,7 +84,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
   let usableSourceIds: Set<string>;
   try {
     const settings = input.runtimeSettings ?? await resolveAiRuntimeSettings({ db: runtimeEnv().DB, env: runtimeEnv() });
-    model = settings.anthropicChatFallbackModel;
+    model = aiReasoningRuntimeRoute(settings, input.reasoningMode).fallbackModel;
     responseTone = settings.responseTone;
     usableSourceIds = new Set(
       input.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id),

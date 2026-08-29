@@ -70,7 +70,11 @@ import {
 } from "../../../../lib/ai/provider-cost-control";
 import { recordProviderUsage } from "../../../../lib/ai/provider-usage";
 import { resolveAiRuntimeSettings } from "../../../../lib/ai/runtime-settings";
-import { parseAiReasoningMode, type AiReasoningMode } from "../../../../lib/ai/reasoning-mode";
+import {
+  aiReasoningRuntimeRoute,
+  parseAiReasoningMode,
+  type AiReasoningMode,
+} from "../../../../lib/ai/reasoning-mode";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -569,6 +573,7 @@ async function executePostWithinBudget(
     })),
   });
   const runtimeSettings = await resolveAiRuntimeSettings({ db, env: runtimeEnv() });
+  const reasoningRoute = aiReasoningRuntimeRoute(runtimeSettings, reasoningMode);
   const instructionHash = await sha256Json({
     version: INSTRUCTION_VERSION,
     jurisdiction: "UZ",
@@ -589,8 +594,8 @@ async function executePostWithinBudget(
       conversationId: existingConversation ? conversationId : null,
       provider: provider.name,
       model: provider.name === "openai"
-        ? (reasoningMode === "deep" ? runtimeSettings.openaiDeepModel : runtimeSettings.openaiChatModel)
-        : runtimeSettings.anthropicChatFallbackModel,
+        ? reasoningRoute.primaryModel
+        : reasoningRoute.fallbackModel,
       answerMode, reasoningMode,
       legalDatabaseAsOf, instructionHash, sourceVersionHash,
       monthlyLimit: entitlements.aiAnswerCyclesMonthly,
