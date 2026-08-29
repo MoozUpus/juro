@@ -14,7 +14,9 @@ Rollback is justified for a release-caused availability, authentication,
 routing, metadata, font loading, signed-share, document-comparison, Lawyer or
 Admin interaction-target regression.
 Anthropic `CREDIT_BALANCE_LOW` was not release-caused, was resolved by restoring
-API credit and is not a reason to roll back Worker 170. After any genuine
+API credit and is not a reason to roll back Worker 170. The latest content-free
+production probe passed at `2026-08-29T11:10:56.708Z` in 4,810 ms with no safe
+error. After any genuine
 release rollback, repeat the six-host HTTPS
 probe, login/status smoke, document-comparison compact-layout probe, Lawyer
 re-auth/API boundary, Admin re-auth boundary, authenticated dashboard count and
@@ -106,6 +108,29 @@ The old Worker ignores the additive columns, so keep them and their evidence;
 do not edit the migration ledger or delete usage rows. A database restore is
 reserved for a separately approved schema incident with explicit recovery-point
 and provider-billing reconciliation.
+
+## Prepared migration 0164 gate — not applied
+
+Candidate migration `0164_lawyer_directory_daily_visits.sql` is additive. It
+stores an internal user key, UTC visit day and first/last timestamps with one row
+per user/day; it stores no lawyer profile, case, workspace, contact, query or
+content field. Account deletion explicitly purges the actor's rows. Migration
+0164 remains excluded from the production `migrations_pattern` and has not been
+applied remotely.
+
+Before an explicitly approved release, create and round-trip-verify a fresh full
+pre-0164 production export. Require `quick_check=ok`, zero foreign-key
+violations, exact existing row-count parity and the expected composite key/index
+after an isolated ordered migration rehearsal. In staging, verify daily
+deduplication, non-blocking directory behavior, cross-user isolation, account
+purge and a same-actor seven-day request conversion before deploying the exact
+matching Worker. Begin the production observation window only after both schema
+and Worker identities are recorded.
+
+If the matching Worker regresses after 0164, restore the prior Worker first and
+leave the additive table in place; the old Worker does not read or write it. Do
+not delete funnel rows ad hoc or edit the migration ledger. A database restore
+requires a separately approved schema incident and recovery-point review.
 
 ## Zone TLS rollback
 

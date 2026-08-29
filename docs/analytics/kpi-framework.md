@@ -62,10 +62,10 @@ one queryable schema without adding identity or content.
 | Time to first value | p50/p75/p95 elapsed time from completed onboarding to the first qualifying outcome | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; only two production actors qualified in the replay, below the five-activation disclosure floor. |
 | Completion rate | successful terminal events / matching started events, by workflow | `INSUFFICIENT_SAMPLE`; no signup or document-completion pair exists in the current window |
 | Step drop-off | 1 minus adjacent-step completion rate | `INSUFFICIENT_SAMPLE`; do not infer a funnel from unrelated event totals |
-| Return rate | activated actors returning in the approved observation window / activated actors | `UNVERIFIED`; no privacy-safe cohort aggregate exists yet |
+| 7-day engaged return | activated actors with a new explicit product action on a later UTC day within 7 days / activated actors in a fully observed cohort | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the protected D1 aggregate excludes passive session refreshes. A read-only production replay found 0/2 returning, below the five-activation disclosure floor. |
 | Plan completion | completed plans / created plans in the same 30-day D1 window | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the read-only production replay found only three created plans. |
 | Case creation | `case_created` count and, once comparable, `case_created / signup_completed` | Instrumented; zero current-window events |
-| Lawyer conversion | `lawyer_request_created / lawyer_viewed`, with comparable surface and window | Instrumented; denominator is request-occurrence based and cannot be treated as unique visitors |
+| Lawyer conversion | unique actors creating a lawyer request within 7 days of their first authenticated directory view / unique first-time directory viewers in a fully observed cohort | `INSTRUMENTED CANDIDATE / AWAITING OBSERVATION`; migration 0164 adds daily-deduplicated internal visit evidence. The existing 13 Analytics Engine view occurrences remain non-joinable and are not reused as unique visitors. |
 | Lawyer-request acceptance | requests in `accepted`, `offer_proposed`, `offer_accepted`, or `completed` / requests created in the same 30-day D1 window | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the read-only production replay found two requests, one accepted-or-later and zero completed. This is not browse-to-request conversion. |
 | Source open rate | `source_opened / successful answer outcomes` in the same window | Instrumented; current counts are too small and unlinked for a rate claim |
 | Cost per successful answer | priced successful provider cost / priced successful answers | `INSUFFICIENT_SAMPLE`; 4/30 priced successes, `$0.104549` total |
@@ -84,7 +84,7 @@ one queryable schema without adding identity or content.
 | Outdated source rate | answers using an outdated source / source-backed answers | `UNVERIFIED`; user feedback subtype `outdated` is a report signal, not proof of source state |
 | User-reported error rate | failure-class feedback / all submitted feedback | Contract fixed in the current candidate; future `feedback_submitted` rows carry success/partial/failure and bounded subtype |
 | Latency | p50/p75/p95 bounded elapsed time for comparable successful outcomes | Instrumented where callers provide `elapsedMs`; minimum sample remains required |
-| Provider availability | successful content-free provider probes / due probes, plus latest state | `VERIFIED CURRENT` independently from product events for OpenAI and Anthropic |
+| Provider availability | successful content-free provider probes / due probes, plus latest state | `VERIFIED CURRENT` independently from product events for OpenAI and Anthropic; after the account top-up, Anthropic passed at `2026-08-29T11:10:56.708Z` in 4,810 ms with no safe error. |
 
 ## Guardrails
 
@@ -129,8 +129,9 @@ rows, not business conversion. Public events are consent-gated, only one
 `landing_view` exists, and there are no `signup_started` or `signup_completed`
 events. The three first-question events and downstream failure/open/feedback
 counts cannot be joined to a person or reliably separated between controlled QA
-and ordinary use. Activation, return, drop-off, and conversion therefore remain
-`UNVERIFIED` rather than being calculated from mismatched denominators.
+and ordinary use. Analytics Engine alone therefore cannot prove activation,
+return, drop-off, or conversion; the protected D1 cohorts below use compatible
+actor and observation windows instead of mismatched occurrence totals.
 
 ## Privacy-safe D1 cohort computation candidate
 
@@ -163,3 +164,31 @@ the bounded production artifact gate. Local Chrome verified the localized
 RU/UZ protected boundary at desktop and 390 px without a fabricated staff
 identity; private noindex, exact re-auth return paths, zero horizontal overflow
 and an empty warning/error log were preserved.
+
+Commit `8602e4101e2a61089ac7e5a66a13c6916abd1044` extends that same protected
+surface with two narrower metrics. The 7-day engaged-return denominator is the
+fully observed activated cohort from 44 through 14 days before the snapshot. A
+return requires a new explicit user message, case, document, document-analysis
+start, or lawyer request on a later UTC date and no more than seven days after
+first value. Session refresh and passive reads are intentionally excluded, so
+this is engaged return rather than broad visit retention. A read-only production
+replay read 417 rows and wrote zero: 9 eligible signups, 2 activated users and 0
+returning users. The rate remains privacy-suppressed because only two users
+activated.
+
+Migration `0164_lawyer_directory_daily_visits.sql` prepares compatible
+directory-to-request evidence: one content-free row per internal user and UTC
+day stores only first/last view timestamps. The first-ever observed directory
+view fixes a mature cohort; a request by that actor within seven days is the
+numerator. Repeated views cannot move the cohort. Account deletion explicitly
+purges the rows, and another user's rows remain isolated in behavioral tests.
+The table, matching Worker and observation window are not deployed, so no live
+browse-conversion value is claimed. The previous 13 Analytics Engine
+`lawyer_viewed` occurrences are not identity-linked and are not substituted for
+unique visitors.
+
+The extended candidate passes focused 4/4, core 1137/1137,
+Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint,
+ordered migration/foreign-key checks and the bounded artifact gate. Migration
+0164 remains outside the production migration pattern; production remains
+Worker 170 and Sites v86.

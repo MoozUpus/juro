@@ -4,7 +4,7 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
-## 2026-08-29 privacy-safe product KPI candidate
+## 2026-08-29 privacy-safe product KPI and funnel candidate
 
 The Draft PR now includes a protected RU/UZ product KPI surface and no-store
 aggregate API. Both require `staff.operations.manage` and MFA within 15 minutes.
@@ -14,8 +14,21 @@ value, and returns only aggregate counts, basis points, bounded durations and
 window timestamps. Legal-evaluation profiles, the fixed synthetic investor demo
 and active platform staff are excluded.
 
-Focused aggregation/privacy/access tests passed 3/3. The full local gate then
-passed core 1136/1136, Cloudflare/infrastructure 203/203, rendered Worker 35/35,
+Commit `8602e4101e2a61089ac7e5a66a13c6916abd1044` adds two compatible
+cohorts. Engaged return uses signups from 44 through 14 days before the snapshot
+and requires an explicit action on a later UTC day within seven days of first
+value; passive session refreshes and reads are excluded. Marketplace conversion
+uses the first authenticated directory view and a same-actor lawyer request
+within seven days. It never divides non-joinable Analytics Engine occurrences.
+
+Migration `0164_lawyer_directory_daily_visits.sql` stores only an internal user
+key, UTC day and first/last timestamps, one row per user/day. Account deletion
+explicitly purges those rows. The table is additive but must precede the matching
+Worker; it remains outside production's migration pattern.
+
+Focused aggregation/privacy/deduplication/access tests passed 4/4. The full
+local gate then passed core 1137/1137, Cloudflare/infrastructure 203/203,
+rendered Worker 35/35,
 type-check, lint and the bounded production artifact build. Chrome verified the
 localized RU/UZ protected boundary at desktop and 390 px: private noindex,
 exact re-auth return path, no horizontal overflow and no warning/error log,
@@ -28,9 +41,21 @@ because fewer than five users activated; the cohort remains below the 30-signup
 comparison gate. Three plans and two lawyer requests also remain below the
 privacy threshold for rates.
 
-This is an unpublished application candidate with no migration. No production
-D1 write, Worker/Sites publish, DNS, notification or customer-data mutation was
-performed. Production remains Worker 170 and Sites v86.
+The engaged-return replay separately read 417 production rows and wrote zero:
+9 eligible signups, 2 activated users and 0 returning users. The rate remains
+privacy-suppressed because the activated denominator is below five. No browse
+conversion baseline exists because 0164 is not deployed; the 13 historical
+`lawyer_viewed` occurrences are not unique actors and are not reused.
+
+This is an unpublished application-plus-migration candidate. No production D1
+row write or migration, Worker/Sites publish, DNS, notification or customer-data
+mutation was performed. Production remains Worker 170 and Sites v86.
+
+The funded Anthropic path was also rechecked independently of this candidate.
+The production snapshot generated at `2026-08-29T11:14:32.854Z` was operational
+with no active incident; Anthropic passed at `11:10:56.708Z` in 4,810 ms with no
+safe error, and document analysis remained operational. This is current
+read-only evidence, not a release result.
 
 ## 2026-08-29 Compact conversation-context candidate
 
@@ -468,10 +493,10 @@ A read-only production query found 24 stored and represented events from
 `_sample_interval=1`. All 24 used one of the 21 canonical product event names
 and the expected first-six layout. The sample contains one consented
 `landing_view`, three `first_question_sent` occurrences and zero
-`signup_started`/`signup_completed` events. There is no privacy-safe cohort
-linkage, so activation, return, step drop-off and conversion remain
-`UNVERIFIED`; 13 `lawyer_viewed` occurrences are not claimed as 13 unique
-people.
+`signup_started`/`signup_completed` events. Analytics Engine has no actor
+linkage, so this occurrence dataset alone cannot prove activation, return, step
+drop-off or conversion; 13 `lawyer_viewed` occurrences are not claimed as 13
+unique people. The later protected D1 candidate is reported separately above.
 
 Focused analytics/feedback/platform tests passed 83/83. Full local gates passed
 core 1106/1106, Cloudflare/infrastructure 203/203, lint, type-check and

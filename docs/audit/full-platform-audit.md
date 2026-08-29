@@ -10,19 +10,29 @@ the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
 **Privacy-safe product KPI candidate:** the protected RU/UZ Admin dashboard now
-computes mature signup activation, TTFV, plan completion and lawyer-request
-acceptance inside D1 without returning identifiers or content. Legal evaluation,
-the fixed investor demo and active staff are excluded; rates/TTFV suppress below
-five observations and readiness requires 30. Focused 3/3, core 1136/1136,
-Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
-production artifact validation passed. Local Chrome verified localized RU/UZ
-protected boundaries at desktop and 390 px with private noindex, the exact
-re-auth return path, no overflow and a clean warning/error log; no staff identity
-was fabricated. A read-only production replay read 230 rows and wrote zero: 10
-eligible, 2 activated (20.0%), but TTFV and the 3-plan/2-request workflow rates remain
-privacy-suppressed or insufficient. The candidate is unpublished; this closes
-the calculation/linkage gap but does not prove retention, browse conversion or
+computes mature signup activation, TTFV, plan completion, lawyer-request
+acceptance and 7-day engaged return inside D1 without returning identifiers or
+content. Commit `8602e410` defines return as a new explicit action on a later UTC
+day, excluding session refresh and passive reads. Migration 0164 prepares a
+compatible first-directory-view to 7-day request cohort with one content-free
+daily row; account purge deletes it and old Analytics Engine occurrences are not
+misrepresented as users. Legal evaluation, investor demo and active staff are
+excluded; rates suppress below five and readiness requires 30. Focused 4/4,
+core 1137/1137, Cloudflare/infrastructure 203/203, rendered Worker 35/35,
+type-check, lint, ordered migration/FK checks and artifact validation passed;
+Worker entry is 3697.1/6144.0 KiB. Existing protected-boundary Chrome evidence
+remains valid without a fabricated staff identity. The original read-only
+production replay found 2/10 activated; the return replay read 417 rows, wrote
+zero and found 2/9 activated with 0 returning, so the rate remains
+privacy-suppressed. Browse conversion awaits deployment and observation. The
+candidate and 0164 are unpublished and do not prove retention, conversion or
 product-market fit.
+
+**Current Anthropic recovery:** after the owner replenished the account, the
+production snapshot generated at `2026-08-29T11:14:32.854Z` was operational
+with no active incident. The content-free Anthropic probe passed at
+`11:10:56.708Z` in 4,810 ms with no safe error; document analysis also remained
+operational. This is read-only current evidence, not a release.
 
 **Compact conversation-context candidate:** commit `c7c6d35e` keeps the latest
 three branch-local turns, deterministically summarizes up to five redacted older
@@ -160,12 +170,12 @@ Worker 161 safely classified the repeated Anthropic HTTP 400 as
 `PROBE_PROVIDER_HTTP_400_INVALID_REQUEST_ERROR_CREDIT_BALANCE_LOW`. The raw
 provider message, prompts and secrets were not logged. After the account balance
 was restored, fresh production probes recorded Anthropic operational at
-`2026-08-28T06:47:17.754Z`. After the owner's latest account top-up report,
-independent app/status-host reads generated at `2026-08-29T03:46:26.954Z`
-again agreed on 8/8 operational with no incident. Anthropic was operational at
-`03:45:28.572Z` (4,882 ms, no safe error) and document analysis at
-`03:30:39.338Z` (9,579 ms, no safe error). The exception is closed by live
-provider evidence rather than by the balance action alone.
+`2026-08-28T06:47:17.754Z`. Following the owner's latest top-up report, the
+newer status snapshot generated at `2026-08-29T11:14:32.854Z` remained
+operational with no active incident. Anthropic passed at `11:10:56.708Z`
+(4,810 ms, no safe error), OpenAI passed at `11:10:51.650Z`, and document
+analysis remained operational at `10:56:05.105Z`. The exception is closed by
+live provider evidence rather than by the balance action alone.
 
 The same recovery window exposed a separate P1 operational defect: Lex RSS
 delivery-time churn had generated repeated metadata changes and 222,329

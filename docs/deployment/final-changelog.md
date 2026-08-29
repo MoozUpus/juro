@@ -2,31 +2,43 @@
 
 ## Current operational verification
 
-- After the owner reported replenishing the Anthropic account, independent
-  production app/status reads generated at `2026-08-29T03:46:26.954Z` agreed
-  on 8/8 operational with no incident. Anthropic was operational at
-  `03:45:28.572Z` (4,882 ms, no safe error) and document analysis at
-  `03:30:39.338Z` (9,579 ms, no safe error). This was a read-only recovery
-  verification, not a new release.
+- After the owner reported another Anthropic account top-up, the fresh
+  production status snapshot generated at `2026-08-29T11:14:32.854Z` remained
+  operational with no active incident. Anthropic passed its content-free probe
+  at `11:10:56.708Z` in 4,810 ms with no safe error; OpenAI passed at
+  `11:10:51.650Z`, and document analysis remained operational at
+  `10:56:05.105Z`. This was a read-only recovery verification, not a release.
 
 ## Prepared in Draft PR, not shipped
 
 - Added a fresh-MFA protected RU/UZ product KPI dashboard and no-store aggregate
   API for mature activation, TTFV, plan completion and lawyer-request acceptance.
+- Candidate `8602e4101e2a61089ac7e5a66a13c6916abd1044` extends it with
+  privacy-suppressed 7-day engaged return and first-directory-view to request
+  conversion. Return requires an explicit action on a later UTC day; background
+  session refresh and passive reads do not count.
 - The computation stays inside D1 and returns no user identifiers or content.
   Legal-eval, investor-demo and active-staff cohorts are excluded; rates/TTFV
   suppress below five observations and comparable readiness begins at 30.
-- Focused tests pass 3/3; the full local gate passes core 1136/1136,
+- Migration `0164_lawyer_directory_daily_visits.sql` stores one content-free
+  internal observation per user/day with first/last timestamps. Repeated views
+  cannot move the first-view cohort, and account purge deletes the actor's rows
+  without touching another user.
+- Focused tests pass 4/4; the full local gate passes core 1137/1137,
   Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
-  production artifact validation. Local Chrome verifies the RU/UZ protected
+  artifact validation; Worker entry is 3697.1/6144.0 KiB. Local Chrome verifies the RU/UZ protected
   boundary at desktop and 390 px with noindex, exact re-auth return path, no
   overflow and no warning/error log; no staff identity was fabricated.
 - A read-only production replay read 230 rows and wrote zero: 10 eligible, two
   activated (20.0%), with TTFV and workflow rates correctly suppressed because
   their samples are too small.
-- This closes the aggregate calculation gap only. Return rate, browse conversion
-  and product-market-fit evidence remain unverified; no production release or D1
-  write occurred.
+- A separate engaged-return replay read 417 rows and wrote zero: 9 eligible,
+  2 activated and 0 returning. Its rate remains hidden below the five-activation
+  disclosure floor. Browse conversion awaits migration, Worker and observation;
+  the 13 old view occurrences are not treated as unique visitors.
+- Migration 0164 remains outside the production pattern. No production release,
+  D1 row write, DNS, notification or customer-data mutation occurred; product-
+  market-fit evidence remains unverified.
 
 - Candidate `c7c6d35e` compacts authenticated legal-chat history without a new
   model call or migration: the latest three branch-local turns remain recent,
