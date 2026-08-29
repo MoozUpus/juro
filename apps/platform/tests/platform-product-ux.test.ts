@@ -150,3 +150,22 @@ test("contact editor modal owns the complete keyboard focus cycle", async () => 
   assert.match(contacts, /returnFocusRef\.current\?\.focus\(\)/);
   assert.match(contacts, /<form ref=\{dialogRef\} className="dbt-contact-form" role="dialog" aria-modal="true"/);
 });
+
+test("document workspace dialogs trap and restore keyboard focus", async () => {
+  const [focusHook, builder, documents] = await Promise.all([
+    source("../app/_document-builder/_hooks/useModalFocus.ts"),
+    source("../app/_document-builder/DocumentBuilderClient.tsx"),
+    source("../app/_document-builder/documents/DocumentsClient.tsx"),
+  ]);
+  assert.match(focusHook, /if \(event\.key === "Escape"\)/);
+  assert.match(focusHook, /dialogRef\.current\.contains\(document\.activeElement\)/);
+  assert.match(focusHook, /event\.shiftKey && document\.activeElement === first/);
+  assert.match(focusHook, /!event\.shiftKey && document\.activeElement === last/);
+  assert.match(focusHook, /returnTarget\?\.focus\(\)/);
+  assert.match(builder, /useModalFocus<HTMLElement>\(consultationOpen, closeConsultation\)/);
+  assert.match(builder, /ref=\{consultationDialogRef\}[\s\S]*aria-describedby="consultation-description"/);
+  assert.match(builder, /title: "Maslahat olish"/);
+  assert.match(documents, /useModalFocus<HTMLElement>\(Boolean\(deleteDecision\), closeDeleteDecision\)/);
+  assert.match(documents, /ref=\{deleteDialogRef\}[\s\S]*aria-describedby="delete-document-description"/);
+  assert.match(documents, /data-dialog-initial-focus/);
+});
