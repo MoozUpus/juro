@@ -10,6 +10,7 @@ const profileStylesheet = new URL("../app/_platform/profile-settings.css", impor
 const lawyerStylesheet = new URL("../app/_platform/lawyer-workspace.css", import.meta.url);
 const lawyerConsultationsStylesheet = new URL("../app/_platform/consultations-phase7.css", import.meta.url);
 const staffStylesheet = new URL("../app/_staff/legal-source-reviews.css", import.meta.url);
+const costConsoleSource = new URL("../app/_staff/CostConsole.tsx", import.meta.url);
 const dashboardStylesheet = new URL("../app/_platform/dashboard.css", import.meta.url);
 const calendarStylesheet = new URL("../app/_platform/calendar.css", import.meta.url);
 const documentBuilderStylesheet = new URL("../app/_document-builder/document-builder.css", import.meta.url);
@@ -105,6 +106,14 @@ test("non-corpus Admin actions retain the 44px interaction floor", async () => {
   const css = await readFile(staffStylesheet, "utf8");
 
   assert.match(css, /\.staff-error button,[\s\S]*?\.cost-checkbox\{min-height:2\.75rem\}/);
+});
+
+test("Admin cost tables expose captions and scoped column headers", async () => {
+  const source = await readFile(costConsoleSource, "utf8");
+
+  assert.equal(source.match(/<caption className="sr-only">/g)?.length, 8);
+  assert.equal(source.match(/<th scope="col">/g)?.length, 44);
+  assert.doesNotMatch(source, /<th>/);
 });
 
 test("lawyer trial banner keeps readable theme-aware foregrounds", async () => {
