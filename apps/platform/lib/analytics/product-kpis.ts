@@ -64,6 +64,20 @@ export type ProductKpiDashboard = {
     userReportedErrorRateBasisPoints: number | null;
     readiness: ProductKpiReadiness;
   };
+  lawyerEscalation: {
+    cohortStartedAt: string;
+    cohortEndedAt: string;
+    conversionWindowDays: 7;
+    eligibleOutcomeUsers: number;
+    escalatingUsers: number;
+    rateBasisPoints: number | null;
+    readiness: ProductKpiReadiness;
+    firstOutcomeUsers: {
+      groundedAnswer: number;
+      documentAnalysis: number;
+      caseCreated: number;
+    };
+  };
   workflows: {
     windowStartedAt: string;
     windowEndedAt: string;
@@ -122,6 +136,13 @@ type FeedbackQualitySummaryRow = {
   partial: number;
   reportedErrors: number;
   outdatedReports: number;
+};
+type LawyerEscalationSummaryRow = {
+  eligibleOutcomeUsers: number;
+  escalatingUsers: number;
+  groundedAnswerUsers: number;
+  documentAnalysisUsers: number;
+  caseCreatedUsers: number;
 };
 
 const investorDemoIds = [
@@ -320,6 +341,57 @@ JOIN user_profiles profile ON profile.id=feedback.user_id
 WHERE feedback.created_at>=? AND feedback.created_at<?
   AND ${excludedUserPredicate}`;
 
+const lawyerEscalationSummarySql = `
+WITH outcome_events AS (
+  SELECT run.user_id AS userId,run.completed_at AS outcomeAt,'grounded_answer' AS outcome
+  FROM ai_runs run
+  JOIN conversation_messages response ON response.id=run.response_message_id
+    AND response.author_type='assistant'
+  WHERE run.status='completed' AND run.completed_at IS NOT NULL
+    AND json_valid(response.structured_json)=1
+    AND json_extract(response.structured_json,'$.responseKind')='answer'
+    AND json_extract(response.structured_json,'$.sourceValidationStatus')='validated'
+    AND json_array_length(response.structured_json,'$.sources')>0
+  UNION ALL
+  SELECT analysis.owner_user_id AS userId,analysis.updated_at AS outcomeAt,
+    'document_analysis' AS outcome
+  FROM document_analyses analysis
+  WHERE analysis.status='completed'
+  UNION ALL
+  SELECT matter.owner_user_id AS userId,matter.created_at AS outcomeAt,
+    'case_created' AS outcome
+  FROM cases matter
+),
+ranked_outcomes AS (
+  SELECT event.userId,event.outcomeAt,event.outcome,
+    row_number() OVER (
+      PARTITION BY event.userId
+      ORDER BY event.outcomeAt,event.outcome
+    ) AS outcomeRank
+  FROM outcome_events event
+),
+eligible_outcomes AS (
+  SELECT outcome.userId,outcome.outcomeAt,outcome.outcome
+  FROM ranked_outcomes outcome
+  JOIN user_profiles profile ON profile.id=outcome.userId
+  WHERE outcome.outcomeRank=1
+    AND outcome.outcomeAt>=? AND outcome.outcomeAt<?
+    AND ${excludedUserPredicate}
+),
+escalating_users AS (
+  SELECT DISTINCT outcome.userId
+  FROM eligible_outcomes outcome
+  JOIN lawyer_requests request ON request.requester_user_id=outcome.userId
+  WHERE julianday(request.created_at)>=julianday(outcome.outcomeAt)
+    AND julianday(request.created_at)<=julianday(outcome.outcomeAt)+7
+)
+SELECT
+  (SELECT count(*) FROM eligible_outcomes) AS eligibleOutcomeUsers,
+  (SELECT count(*) FROM escalating_users) AS escalatingUsers,
+  (SELECT count(*) FROM eligible_outcomes WHERE outcome='grounded_answer') AS groundedAnswerUsers,
+  (SELECT count(*) FROM eligible_outcomes WHERE outcome='document_analysis') AS documentAnalysisUsers,
+  (SELECT count(*) FROM eligible_outcomes WHERE outcome='case_created') AS caseCreatedUsers`;
+
 const planSummarySql = `
 SELECT count(*) AS created,
   COALESCE(sum(CASE WHEN plan.status='completed' THEN 1 ELSE 0 END),0) AS completed
@@ -381,12 +453,13 @@ export async function readProductKpiDashboard(input: {
   const workflowBindings = [workflowStartedAt, asOf, asOf] as const;
   const marketplaceBindings = [cohortStartedAt, cohortEndedAt, asOf] as const;
 
-  const [summaryResult, durationResult, returnResult, answerResult, feedbackResult, planResult, lawyerResult, marketplaceResult] = await input.db.batch([
+  const [summaryResult, durationResult, returnResult, answerResult, feedbackResult, escalationResult, planResult, lawyerResult, marketplaceResult] = await input.db.batch([
     input.db.prepare(activationSummarySql).bind(...activationBindings),
     input.db.prepare(activationDurationsSql).bind(...activationBindings),
     input.db.prepare(engagedReturnSummarySql).bind(...returnBindings),
     input.db.prepare(answerFunnelSummarySql).bind(...answerBindings),
     input.db.prepare(feedbackQualitySummarySql).bind(...workflowBindings),
+    input.db.prepare(lawyerEscalationSummarySql).bind(...marketplaceBindings),
     input.db.prepare(planSummarySql).bind(...workflowBindings),
     input.db.prepare(lawyerRequestSummarySql).bind(...workflowBindings),
     input.db.prepare(lawyerMarketplaceSummarySql).bind(...marketplaceBindings),
@@ -398,6 +471,7 @@ export async function readProductKpiDashboard(input: {
   const engagedReturn = (returnResult.results?.[0] ?? {}) as Partial<EngagedReturnSummaryRow>;
   const answerFunnel = (answerResult.results?.[0] ?? {}) as Partial<AnswerFunnelSummaryRow>;
   const feedbackQuality = (feedbackResult.results?.[0] ?? {}) as Partial<FeedbackQualitySummaryRow>;
+  const lawyerEscalation = (escalationResult.results?.[0] ?? {}) as Partial<LawyerEscalationSummaryRow>;
   const marketplace = (marketplaceResult.results?.[0] ?? {}) as Partial<LawyerMarketplaceSummaryRow>;
   const durations = (durationResult.results ?? [])
     .map((row) => numeric((row as Partial<DurationRow>).durationSeconds))
@@ -412,6 +486,7 @@ export async function readProductKpiDashboard(input: {
   const answeredUsers = numeric(answerFunnel.answeredUsers);
   const sourceOpeningUsers = numeric(answerFunnel.sourceOpeningUsers);
   const submittedFeedback = numeric(feedbackQuality.submitted);
+  const eligibleEscalationUsers = numeric(lawyerEscalation.eligibleOutcomeUsers);
   const directoryVisitors = numeric(marketplace.directoryVisitors);
 
   return {
@@ -475,6 +550,23 @@ export async function readProductKpiDashboard(input: {
         submittedFeedback,
       ),
       readiness: readiness(submittedFeedback),
+    },
+    lawyerEscalation: {
+      cohortStartedAt,
+      cohortEndedAt,
+      conversionWindowDays: 7,
+      eligibleOutcomeUsers: eligibleEscalationUsers,
+      escalatingUsers: numeric(lawyerEscalation.escalatingUsers),
+      rateBasisPoints: rateBasisPoints(
+        numeric(lawyerEscalation.escalatingUsers),
+        eligibleEscalationUsers,
+      ),
+      readiness: readiness(eligibleEscalationUsers),
+      firstOutcomeUsers: {
+        groundedAnswer: numeric(lawyerEscalation.groundedAnswerUsers),
+        documentAnalysis: numeric(lawyerEscalation.documentAnalysisUsers),
+        caseCreated: numeric(lawyerEscalation.caseCreatedUsers),
+      },
     },
     workflows: {
       windowStartedAt: workflowStartedAt,

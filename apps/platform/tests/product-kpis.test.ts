@@ -31,6 +31,16 @@ function seedWorkspace(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"], use
   return workspaceId;
 }
 
+function seedProfileWithoutOnboarding(
+  sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
+  id: string,
+  createdAt: string,
+): void {
+  sqlite.prepare(`INSERT INTO user_profiles
+    (id,email,created_at,updated_at)
+    VALUES (?,?,?,?)`).run(id, `${id}@example.test`, createdAt, createdAt);
+}
+
 function seedCase(
   sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
   input: { id: string; workspaceId: string; userId: string; createdAt: string },
@@ -56,6 +66,26 @@ test("product KPI dashboard computes mature activation without returning identit
       VALUES ('staff-assignment','staff-excluded','administrator','operator_bootstrap',NULL,
         'Exclude active staff from product cohorts.',?,?,?,?)`)
       .run(onboardedAt, "2027-08-01T00:00:00.000Z", onboardedAt, onboardedAt);
+
+    [
+      "legal_eval_user_excluded",
+      "10000000-0000-4000-8000-000000000001",
+      "staff-excluded",
+    ].forEach((userId, index) => {
+      const workspaceId = seedWorkspace(sqlite, userId);
+      const caseId = `excluded-escalation-case-${index}`;
+      const outcomeAt = `2026-07-24T1${index}:00:00.000Z`;
+      const requestAt = `2026-07-25T1${index}:00:00.000Z`;
+      seedCase(sqlite, { id: caseId, workspaceId, userId, createdAt: outcomeAt });
+      sqlite.prepare(`INSERT INTO lawyer_requests
+        (id,workspace_id,case_id,requester_user_id,status,anonymized_summary,
+         requested_scope_json,created_at,updated_at)
+        VALUES (?,?,?,?,?,'excluded aggregate test','{}',?,?)`)
+        .run(
+          `excluded-escalation-request-${index}`, workspaceId, caseId, userId,
+          "conflict_check_pending", requestAt, requestAt,
+        );
+    });
 
     for (let index = 0; index < 2; index += 1) {
       const userId = `cohort-${String(index).padStart(2, "0")}`;
@@ -186,6 +216,26 @@ test("product KPI dashboard computes mature activation without returning identit
         );
     });
 
+    for (let index = 0; index < 5; index += 1) {
+      const userId = `escalation-${index}`;
+      const outcomeAt = `2026-07-24T0${index}:00:00.000Z`;
+      seedProfileWithoutOnboarding(sqlite, userId, outcomeAt);
+      const workspaceId = seedWorkspace(sqlite, userId);
+      const caseId = `escalation-case-${index}`;
+      seedCase(sqlite, { id: caseId, workspaceId, userId, createdAt: outcomeAt });
+      if (index < 3) {
+        const requestAt = `2026-07-25T0${index}:00:00.000Z`;
+        sqlite.prepare(`INSERT INTO lawyer_requests
+          (id,workspace_id,case_id,requester_user_id,status,anonymized_summary,
+           requested_scope_json,created_at,updated_at)
+          VALUES (?,?,?,?,?,'aggregate-only escalation test','{}',?,?)`)
+          .run(
+            `escalation-request-${index}`, workspaceId, caseId, userId,
+            "conflict_check_pending", requestAt, requestAt,
+          );
+      }
+    }
+
     const requestStatuses = ["accepted", "offer_proposed", "offer_accepted", "completed", "conflict_check_pending"];
     for (let index = 0; index < 5; index += 1) {
       const userId = `cohort-0${index}`;
@@ -258,6 +308,20 @@ test("product KPI dashboard computes mature activation without returning identit
       userReportedErrorRateBasisPoints: 6_000,
       readiness: "insufficient_sample",
     });
+    assert.deepEqual(dashboard.lawyerEscalation, {
+      cohortStartedAt: "2026-07-23T12:00:00.000Z",
+      cohortEndedAt: "2026-08-22T12:00:00.000Z",
+      conversionWindowDays: 7,
+      eligibleOutcomeUsers: 10,
+      escalatingUsers: 3,
+      rateBasisPoints: 3_000,
+      readiness: "insufficient_sample",
+      firstOutcomeUsers: {
+        groundedAnswer: 2,
+        documentAnalysis: 1,
+        caseCreated: 7,
+      },
+    });
     assert.deepEqual(dashboard.workflows.plans, {
       created: 7,
       completed: 3,
@@ -312,6 +376,8 @@ test("product KPI dashboard suppresses rates and TTFV below the privacy threshol
     assert.equal(dashboard.answerFunnel.answerReadiness, "no_data");
     assert.equal(dashboard.feedbackQuality.userReportedErrorRateBasisPoints, null);
     assert.equal(dashboard.feedbackQuality.readiness, "no_data");
+    assert.equal(dashboard.lawyerEscalation.rateBasisPoints, null);
+    assert.equal(dashboard.lawyerEscalation.readiness, "no_data");
     assert.equal(dashboard.workflows.lawyerMarketplace.conversionRateBasisPoints, null);
   } finally {
     sqlite.close();
@@ -441,4 +507,6 @@ test("product KPI console is no-store, administrator-only and fresh-MFA-gated", 
   assert.doesNotMatch(observation, /profile_id|lawyer_id|case_id|workspace_id|content|query/i);
   assert.match(service, /FROM ai_feedback feedback/);
   assert.doesNotMatch(service, /SELECT[^;]*feedback\.comment/is);
+  assert.match(service, /PARTITION BY event\.userId[\s\S]*outcomeRank=1/);
+  assert.match(service, /request\.requester_user_id=outcome\.userId/);
 });

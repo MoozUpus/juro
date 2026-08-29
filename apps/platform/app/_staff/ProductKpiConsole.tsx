@@ -55,6 +55,15 @@ const copy = {
     feedbackErrorRate: "User-reported error rate",
     feedbackOutdated: "Сигналы «устарело»",
     feedbackQualityNote: "Один тип отзыва на один ответ считается один раз. Комментарии и содержимое ответов не читаются и не возвращаются. Сигнал «устарело» — сообщение пользователя, а не подтверждённое состояние источника.",
+    lawyerEscalation: "Первый результат → заявка юристу",
+    escalationCohort: "Когорта первого результата",
+    eligibleOutcomes: "Получили первый результат",
+    escalatingUsers: "Создали заявку за 7 дней",
+    escalationRate: "Lawyer escalation rate",
+    firstGrounded: "Первый результат: AI-ответ",
+    firstAnalysis: "Первый результат: анализ",
+    firstCase: "Первый результат: дело",
+    escalationNote: "Когорта закрепляется самым ранним валидированным AI-ответом, завершённым анализом или созданным делом. Повторные результаты её не сдвигают; заявка должна принадлежать тому же пользователю и появиться не позже 7 дней.",
     workflows: "Операционные воронки за 30 дней",
     plansCreated: "Планы созданы",
     plansCompleted: "Планы завершены",
@@ -127,6 +136,15 @@ const copy = {
     feedbackErrorRate: "User-reported error rate",
     feedbackOutdated: "«Eskirgan» signallari",
     feedbackQualityNote: "Bitta javob uchun bitta fikr turi bir marta sanaladi. Izohlar va javob mazmuni o‘qilmaydi hamda qaytarilmaydi. «Eskirgan» signali — foydalanuvchi xabari, manba holatining tasdig‘i emas.",
+    lawyerEscalation: "Birinchi natija → yurist so‘rovi",
+    escalationCohort: "Birinchi natija kohortasi",
+    eligibleOutcomes: "Birinchi natijani olganlar",
+    escalatingUsers: "7 kunda so‘rov yaratganlar",
+    escalationRate: "Lawyer escalation rate",
+    firstGrounded: "Birinchi natija: AI javobi",
+    firstAnalysis: "Birinchi natija: tahlil",
+    firstCase: "Birinchi natija: ish",
+    escalationNote: "Kohorta eng erta tekshirilgan AI javobi, tugallangan tahlil yoki yaratilgan ish bilan belgilanadi. Takroriy natijalar uni ko‘chirmaydi; so‘rov ayni foydalanuvchiga tegishli bo‘lib, 7 kundan kech yaratilmasligi kerak.",
     workflows: "30 kunlik operatsion voronkalar",
     plansCreated: "Rejalar yaratildi",
     plansCompleted: "Rejalar tugallandi",
@@ -192,6 +210,7 @@ export function ProductKpiConsole({
   const engagedReturn = dashboard.engagedReturn;
   const answerFunnel = dashboard.answerFunnel;
   const feedbackQuality = dashboard.feedbackQuality;
+  const lawyerEscalation = dashboard.lawyerEscalation;
   const workflows = dashboard.workflows;
   const otherLocale = locale === "ru" ? "uz" : "ru";
   return <div className="staff-console">
@@ -277,6 +296,20 @@ export function ProductKpiConsole({
           <article><span>{t.casePlan}</span><b>{activation.qualifyingUsers.caseWithPlan}</b></article>
         </div>
         <p className="staff-count">{t.pathwaysNote}</p>
+      </section>
+
+      <section className="jobs-summary" aria-labelledby="lawyer-escalation-heading">
+        <h2 id="lawyer-escalation-heading">{t.lawyerEscalation}</h2>
+        <p className="staff-count">{t.escalationCohort}: <time dateTime={lawyerEscalation.cohortStartedAt}>{dateTime(lawyerEscalation.cohortStartedAt, locale)}</time> — <time dateTime={lawyerEscalation.cohortEndedAt}>{dateTime(lawyerEscalation.cohortEndedAt, locale)}</time> · {readinessLabel[lawyerEscalation.readiness]}</p>
+        <div>
+          <article><span>{t.eligibleOutcomes}</span><b>{lawyerEscalation.eligibleOutcomeUsers}</b></article>
+          <article><span>{t.escalatingUsers}</span><b>{lawyerEscalation.escalatingUsers}</b></article>
+          <article><span>{t.escalationRate}</span><b>{percent(lawyerEscalation.rateBasisPoints)}</b></article>
+          <article><span>{t.firstGrounded}</span><b>{lawyerEscalation.firstOutcomeUsers.groundedAnswer}</b></article>
+          <article><span>{t.firstAnalysis}</span><b>{lawyerEscalation.firstOutcomeUsers.documentAnalysis}</b></article>
+          <article><span>{t.firstCase}</span><b>{lawyerEscalation.firstOutcomeUsers.caseCreated}</b></article>
+        </div>
+        <p className="staff-count">{t.escalationNote}</p>
       </section>
 
       <section className="jobs-summary" aria-labelledby="workflow-heading">
