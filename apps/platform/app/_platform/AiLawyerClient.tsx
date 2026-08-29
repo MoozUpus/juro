@@ -169,6 +169,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [evidenceCollapsed, setEvidenceCollapsed] = useState(false);
   const [mobileContextOpen, setMobileContextOpen] = useState(false);
   const [mobileContextTab, setMobileContextTab] = useState<"facts" | "sources">("sources");
+  const mobileContextRef = useRef<HTMLElement | null>(null);
+  const mobileContextReturnFocusRef = useRef<HTMLElement | null>(null);
+  const mobileFactsTabRef = useRef<HTMLButtonElement | null>(null);
+  const mobileSourcesTabRef = useRef<HTMLButtonElement | null>(null);
   const [canRetry, setCanRetry] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
   const [targetCaseId, setTargetCaseId] = useState("");
@@ -207,6 +211,27 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     window.location.assign(params.size ? `${pathname}?${params}` : pathname);
   }
 
+  const openMobileContext = useCallback((tab: "facts" | "sources") => {
+    mobileContextReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    setMobileContextTab(tab);
+    setMobileContextOpen(true);
+  }, []);
+
+  const closeMobileContext = useCallback(() => {
+    setMobileContextOpen(false);
+    requestAnimationFrame(() => mobileContextReturnFocusRef.current?.focus());
+  }, []);
+
+  function handleMobileContextTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    const next = mobileContextTab === "facts" ? "sources" : "facts";
+    setMobileContextTab(next);
+    requestAnimationFrame(() => (next === "facts" ? mobileFactsTabRef : mobileSourcesTabRef).current?.focus());
+  }
+
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -228,6 +253,34 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }, [ru, selectedBranchId, selectedConversationId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!mobileContextOpen) return;
+    requestAnimationFrame(() => (mobileContextTab === "facts" ? mobileFactsTabRef : mobileSourcesTabRef).current?.focus());
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMobileContext();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(mobileContextRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? []).filter((element) => !element.closest("[hidden]") && element.getAttribute("aria-hidden") !== "true");
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === mobileContextRef.current)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [closeMobileContext, mobileContextOpen, mobileContextTab]);
 
   useEffect(() => {
     setHistoryCollapsed(localStorage.getItem("juro:ai-history") === "collapsed");
@@ -647,7 +700,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       <section className="ai-dialog" aria-labelledby="ai-lawyer-heading">
         <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (usage?.limit === null
           ? (ru ? `Право Узбекистана · безлимитно (локально) · ${usage.used} ответов` : `O‘zbekiston huquqi · lokal cheklanmagan · ${usage.used} javob`)
-          : (ru ? `Право Узбекистана · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston huquqi · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`)) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><div className="ai-panel-controls"><button type="button" aria-controls="ai-conversations-panel" aria-expanded={!historyCollapsed} onClick={toggleHistory}><History aria-hidden="true" /><span>{ru ? "История" : "Tarix"}</span></button><button type="button" aria-controls="ai-context-panel" aria-expanded={mobileContextOpen || !evidenceCollapsed} onClick={() => { if (window.matchMedia("(max-width: 1380px)").matches) { setMobileContextTab("sources"); setMobileContextOpen(true); } else setEvidenceCollapsed((current) => !current); }}><BookOpenCheck aria-hidden="true" /><span>{ru ? "Источники" : "Manbalar"}</span></button></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button></nav></header>
+          : (ru ? `Право Узбекистана · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston huquqi · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`)) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><div className="ai-panel-controls"><button type="button" aria-controls="ai-conversations-panel" aria-expanded={!historyCollapsed} onClick={toggleHistory}><History aria-hidden="true" /><span>{ru ? "История" : "Tarix"}</span></button><button type="button" aria-controls="ai-context-panel" aria-expanded={mobileContextOpen || !evidenceCollapsed} onClick={() => { if (window.matchMedia("(max-width: 1380px)").matches) openMobileContext("sources"); else setEvidenceCollapsed((current) => !current); }}><BookOpenCheck aria-hidden="true" /><span>{ru ? "Источники" : "Manbalar"}</span></button></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button></nav></header>
         {voiceMode && <VoiceModeStage
           locale={locale}
           configured={Boolean(status?.configured)}
@@ -753,12 +806,12 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           <small className="ai-composer-hint">{ru ? "Enter — отправить · Shift + Enter — новая строка · не указывайте лишние персональные данные" : "Enter — yuborish · Shift + Enter — yangi satr · ortiqcha shaxsiy ma’lumotlarni kiritmang"}</small>
         </form>
       </section>
-      <nav className="ai-mobile-context-bar" aria-label={ru ? "Факты и источники ответа" : "Javob faktlari va manbalari"}><button type="button" onClick={() => { setMobileContextTab("facts"); setMobileContextOpen(true); }}><Check aria-hidden="true" />{ru ? `Факты ${answer?.facts.length ?? 0}` : `Faktlar ${answer?.facts.length ?? 0}`}</button><button type="button" onClick={() => { setMobileContextTab("sources"); setMobileContextOpen(true); }}><BookOpenCheck aria-hidden="true" />{ru ? `Источники ${visibleSources.length}` : `Manbalar ${visibleSources.length}`}</button></nav>
-      <aside className={`ai-context ${mobileContextOpen ? "is-mobile-open" : ""}`} id="ai-context-panel" role={mobileContextOpen ? "dialog" : undefined} aria-modal={mobileContextOpen || undefined} aria-label={ru ? "Факты и источники" : "Faktlar va manbalar"}>
-        <header><BookOpenCheck /><strong>{ru ? "Контекст ответа" : "Javob konteksti"}</strong><button className="ai-context-close" type="button" aria-label={ru ? "Закрыть факты и источники" : "Faktlar va manbalarni yopish"} onClick={() => setMobileContextOpen(false)}><X /></button></header>
-        <div className="ai-context-tabs" role="tablist" aria-label={ru ? "Раздел контекста" : "Kontekst bo‘limi"}><button type="button" role="tab" aria-selected={mobileContextTab === "facts"} onClick={() => setMobileContextTab("facts")}>{ru ? "Факты" : "Faktlar"}</button><button type="button" role="tab" aria-selected={mobileContextTab === "sources"} onClick={() => setMobileContextTab("sources")}>{ru ? "Источники" : "Manbalar"}</button></div>
-        <section hidden={mobileContextOpen && mobileContextTab !== "facts"}><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section className="ai-evidence" hidden={mobileContextOpen && mobileContextTab !== "sources"}><h2>{hasPrivateSources || hasSecondarySources ? (ru ? "Источники" : "Manbalar") : (ru ? "Основания в Lex.uz" : "Lex.uz asoslari")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, ru)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
+      <nav className="ai-mobile-context-bar" aria-label={ru ? "Факты и источники ответа" : "Javob faktlari va manbalari"}><button type="button" onClick={() => openMobileContext("facts")}><Check aria-hidden="true" />{ru ? `Факты ${answer?.facts.length ?? 0}` : `Faktlar ${answer?.facts.length ?? 0}`}</button><button type="button" onClick={() => openMobileContext("sources")}><BookOpenCheck aria-hidden="true" />{ru ? `Источники ${visibleSources.length}` : `Manbalar ${visibleSources.length}`}</button></nav>
+      <aside ref={mobileContextRef} className={`ai-context ${mobileContextOpen ? "is-mobile-open" : ""}`} id="ai-context-panel" role={mobileContextOpen ? "dialog" : undefined} aria-modal={mobileContextOpen || undefined} aria-label={ru ? "Факты и источники" : "Faktlar va manbalar"}>
+        <header><BookOpenCheck aria-hidden="true" /><strong>{ru ? "Контекст ответа" : "Javob konteksti"}</strong><button className="ai-context-close" type="button" aria-label={ru ? "Закрыть факты и источники" : "Faktlar va manbalarni yopish"} onClick={closeMobileContext}><X /></button></header>
+        <div className="ai-context-tabs" role="tablist" aria-label={ru ? "Раздел контекста" : "Kontekst bo‘limi"}><button ref={mobileFactsTabRef} id="ai-context-facts-tab" type="button" role="tab" aria-selected={mobileContextTab === "facts"} aria-controls="ai-context-facts-panel" tabIndex={mobileContextTab === "facts" ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("facts")}>{ru ? "Факты" : "Faktlar"}</button><button ref={mobileSourcesTabRef} id="ai-context-sources-tab" type="button" role="tab" aria-selected={mobileContextTab === "sources"} aria-controls="ai-context-sources-panel" tabIndex={mobileContextTab === "sources" ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("sources")}>{ru ? "Источники" : "Manbalar"}</button></div>
+        <section id="ai-context-facts-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-facts-tab" : undefined} hidden={mobileContextOpen && mobileContextTab !== "facts"}><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
+        <section id="ai-context-sources-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-sources-tab" : undefined} className="ai-evidence" hidden={mobileContextOpen && mobileContextTab !== "sources"}><h2>{hasPrivateSources || hasSecondarySources ? (ru ? "Источники" : "Manbalar") : (ru ? "Основания в Lex.uz" : "Lex.uz asoslari")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, ru)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
       </aside>
     </section>
   );

@@ -11,6 +11,10 @@ import {
 import type { LegalAiRunOptions, LegalAiRunResult, LegalChatRequest } from "./provider";
 import { aiResponseToneInstruction, resolveAiRuntimeSettings } from "./runtime-settings";
 import { legalChatProviderTimeoutMs } from "./legal-chat-timeout";
+import {
+  LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
+  LEGAL_ANSWER_MARKDOWN_RULE,
+} from "./legal-answer-prompt-rules";
 
 export function anthropicModel(): string {
   return runtimeEnv().ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
@@ -152,8 +156,8 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
         "Не добавляй actionPlan, risks или deadlines без sourceIds. При наличии verifiedSources подтверждённый пользовательский текст будет собран сервером только из claims, прошедших exact-span проверку.",
         "Всегда верни sources=[]: сервер восстановит карточки Lex из sourceIds подтверждённых claims. Не дублируй URL и metadata источника.",
         "В fast mode сокращай глубину рассуждения, а не полезность ответа. При answerMode=short summary и answer — не длиннее 15 слов и не более 2 confirmedFindings. При answerMode=detailed дай содержательный разбор подтверждённой части: до 4 confirmedFindings, 4 actionPlan и 3 risks.",
-        "Используй базовый Markdown внутри текстовых полей для коротких списков и смыслового выделения, но не создавай собственные заголовки разделов: структуру Legal Answer задаёт приложение.",
-        "При узком последующем вопросе не повторяй нерелевантные части предыдущего анализа; возвращай только поля, которые нужны для текущего вопроса и подтверждены источниками.",
+        LEGAL_ANSWER_MARKDOWN_RULE,
+        LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
         "Если applicableAt передан, анализируй право на эту дату и не называй историческую редакцию текущей.",
         "Не придумывай статью, цитату, дату, акт или URL. При нехватке подтверждённого текста верни clarification_required, оставь confirmedFindings, sources, actionPlan, risks и deadlines пустыми и не пиши правовой вывод из общих юридических знаний: в summary и answer напиши только, что подтверждённый источник не найден, а необходимые уточнения помести в clarificationQuestions. Сервер заменит summary и answer фиксированным текстом, поэтому оценка из памяти модели пользователю не покажется.",
         "Ссылки пользователя не являются законодательством. Официальные источники передаются только сервером.",

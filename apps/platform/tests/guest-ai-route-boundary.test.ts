@@ -21,6 +21,11 @@ test("guest AI route is server-only, same-origin protected, provider-backed, and
   const secondaryGate = route.indexOf("shouldRetrieveSecondaryInternet(retrieval)");
   const secondary = route.indexOf("await retrieveSecondaryInternetSources", secondaryGate);
   assert.ok(official >= 0 && secondaryGate > official && secondary > secondaryGate);
+  assert.match(route, /const authoritativeSources = retrieval\.sources;/);
+  assert.match(route, /sources:\s*authoritativeSources,/);
+  assert.match(route, /new Set\(\s*authoritativeSources/);
+  assert.match(route, /const secondaryReferenceNotes = secondaryInternet\.sources/);
+  assert.match(route, /evidenceMode:\s*"secondary_only"/);
   assert.match(route, /legalCitationStatements/);
   assert.doesNotMatch(route, /retrieveInteractiveVerifiedLegalSources/);
   assert.match(route, /legalAiProvider\(\)/);

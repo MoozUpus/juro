@@ -69,7 +69,9 @@ test("Russian Legal Answer uses the product-owned structure and delegates sectio
   const main = html.indexOf(">Главное<");
   const law = html.indexOf(">Что говорит закон<");
   const next = html.indexOf(">Что делать дальше<");
+  const mainCitation = html.indexOf("ст. 163 · Трудовой кодекс РУз", main);
   assert.ok(main >= 0 && law > main && next > law);
+  assert.ok(mainCitation > main && mainCitation < law, "the Main Point should carry its supporting citation");
   assert.match(html, /Проверьте основание увольнения/u);
   assert.match(html, /ст\. 163 · Трудовой кодекс РУз/u);
   assert.match(html, />Важно учесть</u);

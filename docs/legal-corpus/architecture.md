@@ -37,11 +37,12 @@ environment. The platform Worker, authentication bypass, D1 `DB`, R2, queues
 and all application write paths stay local. During Vite `serve` only, the
 configuration injects a second D1 binding named `LEGAL_CORPUS_READ_DB` for the
 existing `juro-staging` database and marks only that binding `remote: true`.
-The agentic research loop uses it for three bounded read operations:
+The agentic research loop uses it for four bounded read operations:
 
 - `find_juro_legal_sources` — hybrid retrieval over global official legislation;
 - `inspect_juro_legal_act` — server-owned metadata for a returned chunk;
-- `read_juro_legal_provisions` — an exact immutable provision window around it.
+- `read_juro_legal_provisions` — an exact immutable provision window around it;
+- `hydrate_juro_legal_sources` — act metadata and provision windows for at most four selected anchors in one read-only batch.
 
 Tenant IDs, user IDs and matter IDs are never sent to the staging corpus. The
 remote binding is wrapped before retrieval: only a single comment-free
@@ -134,9 +135,12 @@ same request-scoped semantic query to all three retrieval tiers. For indexed
 retrieval it also produces request-scoped concept facets (action, actor/status,
 circumstance and outcome, each with bounded lexical alternatives). A passage
 must cover every required facet before it can enter a diversified per-query
-candidate pool. A second bounded model step cross-encodes that pool for direct
+candidate pool. When candidates compete or the requested provision is
+ambiguous, a second bounded model step cross-encodes that pool for direct
 responsiveness; it can only reorder allowlisted chunk IDs, while deterministic
-fusion retains facet-valid coverage of materially different readings. Exact
+fusion retains facet-valid coverage of materially different readings. A single
+explicit act/article provision is selected deterministically even when its text
+is split across multiple chunks, so it does not spend a reranker call. Exact
 sequential text windows and act metadata are then reloaded from D1. Neither
 model output is evidence. No topic-specific synonym table, act/article map or
 phrase-specific ranking bonus participates in chat retrieval.

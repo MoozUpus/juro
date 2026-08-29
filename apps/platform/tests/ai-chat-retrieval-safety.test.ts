@@ -113,9 +113,10 @@ test("grounded legal prose does not repeat a complete provision returned as both
 });
 
 test("provider and UI contracts answer first, keep questions last, and conceal internals", async () => {
-  const [openAi, anthropic, client, legalAnswer] = await Promise.all([
+  const [openAi, anthropic, sharedPromptRules, client, legalAnswer] = await Promise.all([
     source("../lib/ai/provider.ts"),
     source("../lib/ai/anthropic-provider.ts"),
+    source("../lib/ai/legal-answer-prompt-rules.ts"),
     source("../app/_platform/AiLawyerClient.tsx"),
     source("../app/_platform/LegalAnswerView.tsx"),
   ]);
@@ -125,10 +126,12 @@ test("provider and UI contracts answer first, keep questions last, and conceal i
     assert.match(provider, /не пиши правовой вывод из общих юридических знаний/u);
     assert.match(provider, /Не утверждай в вопросе норму, статью, кодекс, срок или последствие/u);
     assert.match(provider, /sourceClass=SECONDARY_REFERENCE/u);
-    assert.match(provider, /Markdown внутри текстовых полей/u);
-    assert.match(provider, /не создавай собственные заголовки разделов/u);
-    assert.match(provider, /узком последующем вопросе не повторяй нерелевантные части/u);
+    assert.match(provider, /LEGAL_ANSWER_MARKDOWN_RULE/u);
+    assert.match(provider, /LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE/u);
   }
+  assert.match(sharedPromptRules, /Markdown внутри текстовых полей/u);
+  assert.match(sharedPromptRules, /не создавай собственные заголовки разделов/u);
+  assert.match(sharedPromptRules, /узком последующем вопросе не повторяй нерелевантные части/u);
   const summary = legalAnswer.indexOf('id={`${id}-main`}');
   const findings = legalAnswer.indexOf("result.confirmedFindings.length");
   const actionPlan = legalAnswer.indexOf("result.actionPlan.length");

@@ -546,8 +546,17 @@ export async function POST(request: Request): Promise<Response> {
         }
       })()
       : { sources: [], evidence: [], errors: [] };
-    const sources = [...retrieval.sources, ...secondaryInternet.sources];
+    const authoritativeSources = retrieval.sources;
+    const allRetrievedSources = [...authoritativeSources, ...secondaryInternet.sources];
     const evidence = [...retrieval.evidence, ...secondaryInternet.evidence];
+    const secondaryReferenceNotes = secondaryInternet.sources
+      .filter((source) => source.excerpt?.trim())
+      .slice(0, 8)
+      .map((source) => ({
+        title: source.actTitle.slice(0, 240),
+        note: source.excerpt!.trim().slice(0, 3_000),
+        sourceIds: [source.id],
+      }));
     const requestHash = await sha256Json({
       question: effectiveQuestion,
       locale,
@@ -564,7 +573,7 @@ export async function POST(request: Request): Promise<Response> {
     const sourceVersionHash = await sha256Json({
       freshness: retrieval.freshness,
       evidence,
-      sources: sources.map((source) => ({
+      sources: allRetrievedSources.map((source) => ({
         id: source.id,
         hash: source.contentSha256,
         excerpt: source.excerpt ?? null,
@@ -612,7 +621,7 @@ export async function POST(request: Request): Promise<Response> {
         locale,
         answerMode: "short",
         reasoningMode: "fast",
-        sources,
+        sources: authoritativeSources,
         legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
         applicableAt: applicableAt?.toISOString(),
         requestId: reservation.run.correlationId,
@@ -648,18 +657,18 @@ export async function POST(request: Request): Promise<Response> {
       const bounded = enforceLegalChatSourceBoundary(
         parseLegalChatResponse(aiResult.data),
         new Set(
-          sources
+          authoritativeSources
             .filter((source) => source.excerpt?.trim())
             .map((source) => source.id),
         ),
       );
-      const sourceById = new Map(sources.map((source) => [source.id, source]));
+      const sourceById = new Map(authoritativeSources.map((source) => [source.id, source]));
       // Lex cards come from a technically validated live fetch, not
       // from a model claim. This preserves the empty-claim safety boundary.
       const returnedSources = bounded.sources.length > 0
         ? bounded.sources
-        : directSourceCards(sources);
-      result = enforceLegalDatabaseFreshness({
+        : directSourceCards(authoritativeSources);
+      const authoritativeResult = enforceLegalDatabaseFreshness({
         ...bounded,
         sources: returnedSources.map((reference) => {
           const source = sourceById.get(reference.sourceId)!;
@@ -694,6 +703,69 @@ export async function POST(request: Request): Promise<Response> {
         answerMode: "short",
         reasoningMode: "fast",
       });
+      const secondarySourceById = new Map(secondaryInternet.sources.map((source) => [source.id, source]));
+      const secondaryCards = secondaryReferenceNotes.flatMap((note) => note.sourceIds.flatMap((sourceId) => {
+        const source = secondarySourceById.get(sourceId);
+        if (!source) return [];
+        return [{
+          sourceId: source.id,
+          actTitle: source.actTitle,
+          actIdentifier: source.actIdentifier,
+          article: source.article ?? null,
+          excerpt: source.excerpt ?? null,
+          originalUrl: source.officialUrl,
+          status: source.applicabilityStatus ?? "unconfirmed" as const,
+          effectiveDate: source.effectiveDate ?? null,
+          verifiedAt: source.verifiedAt,
+          documentType: source.documentType ?? null,
+          documentNumber: source.documentNumber ?? source.actIdentifier ?? null,
+          adoptingAuthority: source.adoptingAuthority ?? null,
+          sourceClass: "SECONDARY_REFERENCE" as const,
+          language: source.locale === "uzc" ? "uz-Cyrl" as const
+            : source.locale === "uz" ? "uz-Latn" as const
+              : source.locale === "en" ? "en" as const : "ru" as const,
+          sourceOrigin: "web" as const,
+        }];
+      }));
+      if (secondaryCards.length === 0) {
+        result = authoritativeResult;
+      } else if (authoritativeResult.sources.length > 0) {
+        result = {
+          ...authoritativeResult,
+          sources: [...authoritativeResult.sources, ...secondaryCards],
+          referenceNotes: [...(authoritativeResult.referenceNotes ?? []), ...secondaryReferenceNotes].slice(0, 8),
+          evidenceMode: "mixed" as const,
+          suggestLawyer: true,
+        };
+      } else {
+        const context = secondaryReferenceNotes.map((note) => note.note).join(" ").slice(0, 12_000);
+        result = {
+          ...authoritativeResult,
+          responseKind: "answer" as const,
+          summary: copy(
+            locale,
+            "Справочный ответ: официальная норма Lex.uz не подтверждена.",
+            "Ma’lumotnoma javobi: Lex.uz rasmiy normasi tasdiqlanmadi.",
+          ),
+          answer: copy(
+            locale,
+            `Официальная норма Lex.uz не подтверждена. Материал ниже даёт только справочный контекст и не устанавливает законодательство, сроки, расчёты или обязательные действия. ${context}`,
+            `Lex.uz rasmiy normasi tasdiqlanmadi. Quyidagi material faqat ma’lumotnoma kontekstini beradi hamda qonunchilik, muddat, hisob-kitob yoki majburiy harakatni belgilamaydi. ${context}`,
+          ).slice(0, 20_000),
+          confirmedFindings: [],
+          assumptions: [],
+          risks: [],
+          requiredDocuments: [],
+          actionPlan: [],
+          deadlines: [],
+          successOutlook: null,
+          suggestedDocument: null,
+          suggestLawyer: true,
+          sources: secondaryCards,
+          referenceNotes: secondaryReferenceNotes,
+          evidenceMode: "secondary_only" as const,
+        };
+      }
       validationStage.complete();
     } catch {
       validationStage.fail();

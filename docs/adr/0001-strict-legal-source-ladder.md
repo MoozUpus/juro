@@ -4,4 +4,4 @@ JURO legal research searches the Indexed Official Corpus first, performs Live Of
 
 ## Consequences
 
-Retrieval tiers must not run speculatively in parallel. The interface should expose concise, honest progress states so the longer sequential path remains understandable without presenting unvalidated content as an answer.
+Retrieval tiers must not run speculatively in parallel. The interface should expose concise, honest progress states so the longer sequential path remains understandable without presenting unvalidated content as an answer. Strong explicit act/article matches are selected deterministically, including provisions split across multiple chunks; the model reranker is reserved for competing or ambiguous candidates.

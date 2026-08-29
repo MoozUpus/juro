@@ -80,9 +80,24 @@ test("AI source dialog traps focus and returns it to the citation control", asyn
   assert.match(client, /const sourceDialogRef = useRef<HTMLElement \| null>\(null\)/u);
   assert.match(client, /const sourceReturnFocusRef = useRef<HTMLElement \| null>\(null\)/u);
   assert.match(client, /event\.key !== "Tab"/u);
+  assert.match(client, /!element\.closest\("\[hidden\]"\)/u);
   assert.match(client, /document\.activeElement === last/u);
   assert.match(client, /sourceReturnFocusRef\.current\?\.focus\(\)/u);
   assert.match(client, /ref=\{sourceDialogRef\} className="ai-source-modal" role="dialog"/u);
+});
+
+test("mobile AI context sheet owns focus and implements keyboard tabs", async () => {
+  const client = await source("../app/_platform/AiLawyerClient.tsx");
+
+  assert.match(client, /const mobileContextRef = useRef<HTMLElement \| null>\(null\)/u);
+  assert.match(client, /mobileContextReturnFocusRef\.current\?\.focus\(\)/u);
+  assert.match(client, /event\.key === "Escape"/u);
+  assert.match(client, /event\.key !== "Tab"/u);
+  assert.match(client, /event\.key !== "ArrowRight" && event\.key !== "ArrowLeft"/u);
+  assert.match(client, /aria-controls="ai-context-facts-panel"/u);
+  assert.match(client, /aria-controls="ai-context-sources-panel"/u);
+  assert.match(client, /role=\{mobileContextOpen \? "tabpanel" : undefined\}/u);
+  assert.match(client, /ref=\{mobileContextRef\}[\s\S]*?role=\{mobileContextOpen \? "dialog" : undefined\}/u);
 });
 
 test("guest AI keeps its workspace and interactive states legible in dark mode", async () => {

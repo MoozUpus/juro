@@ -509,26 +509,28 @@ export async function runJuroLegalResearchLoop(input: {
   const exactArticleCandidates = requestedArticles.size > 0
     ? candidatePool.filter(({ item }) => item.articleNumber && requestedArticles.has(item.articleNumber))
     : [];
-  const exactArticleDocuments = new Set(exactArticleCandidates.map(({ item }) => item.documentId));
-  const singleExactArticleMatch = exactArticleCandidates.length === 1
-    && exactArticleDocuments.size === 1;
+  const exactArticleProvisions = new Set(exactArticleCandidates.map(({ item }) =>
+    `${item.documentId}\u001f${item.articleNumber}`
+  ));
+  const unambiguousExactArticleMatch = exactArticleCandidates.length > 0
+    && exactArticleProvisions.size === 1;
 
   // When a semantic reranker is configured, its decision is the safety gate:
   // an empty answer means that no candidate directly covers the question, and
   // an unavailable reranker must not silently turn a keyword collision into
   // legal evidence. The deterministic path remains available to deployments
   // that intentionally run without a reranker.
-  let fused = input.rerankCandidates && !singleExactArticleMatch
+  let fused = input.rerankCandidates && !unambiguousExactArticleMatch
     ? []
-    : singleExactArticleMatch ? exactArticleCandidates : deterministicCandidates;
+    : unambiguousExactArticleMatch ? exactArticleCandidates : deterministicCandidates;
   let rerankedCandidateCount = 0;
-  let rerankingOutcome: JuroLegalResearchResult["rerankingOutcome"] = singleExactArticleMatch
+  let rerankingOutcome: JuroLegalResearchResult["rerankingOutcome"] = unambiguousExactArticleMatch
     ? "not_needed"
     : input.rerankCandidates
     ? candidatePool.length > 0 ? "failed_closed" : "not_needed"
     : "not_configured";
   let rerankingFailureCode: string | null = null;
-  if (input.rerankCandidates && candidatePool.length > 0 && !singleExactArticleMatch) {
+  if (input.rerankCandidates && candidatePool.length > 0 && !unambiguousExactArticleMatch) {
     try {
       const rankedChunkIds = await input.rerankCandidates({
         question: rerankingQuestion,

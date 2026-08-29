@@ -384,7 +384,7 @@ test("semantic reranking can reject a one-word collision before exact-window hyd
   }
 });
 
-test("a single exact article match bypasses the model reranker", async () => {
+test("one exact article split across chunks bypasses the model reranker", async () => {
   const hash = "e".repeat(64);
   const exact = {
     chunkId: "labour-409",
@@ -406,6 +406,11 @@ test("a single exact article match bypasses the model reranker", async () => {
     fetchedAt: "2026-08-28T00:00:00.000Z",
     contentHash: hash,
   };
+  const continuation = {
+    ...exact,
+    chunkId: "labour-409-continuation",
+    exactQuote: "Гарантия статьи 409 также применяется к одинокому отцу или опекуну.",
+  };
   let rerankerCalls = 0;
   let hydrationBatches = 0;
   const result = await runJuroLegalResearchLoop({
@@ -413,7 +418,7 @@ test("a single exact article match bypasses the model reranker", async () => {
     originalQuery: "статья 409 Трудового кодекса",
     locale: "ru",
     readTools: {
-      findLegalSources: async () => [exact],
+      findLegalSources: async () => [exact, continuation],
       inspectLegalAct: async () => { throw new Error("batched hydration expected"); },
       readLegalProvisions: async () => { throw new Error("batched hydration expected"); },
       hydrateLegalSources: async ({ anchorChunkIds }) => {
@@ -437,10 +442,10 @@ test("a single exact article match bypasses the model reranker", async () => {
             fetchedAt: exact.fetchedAt,
           },
           spans: [{
-            id: exact.chunkId,
+            id: anchorChunkId,
             article: exact.articleNumber,
             paragraph: null,
-            text: exact.exactQuote,
+            text: anchorChunkId === exact.chunkId ? exact.exactQuote : continuation.exactQuote,
             textSha256: hash,
             quality: "high" as const,
           }],
@@ -452,7 +457,7 @@ test("a single exact article match bypasses the model reranker", async () => {
   assert.equal(rerankerCalls, 0);
   assert.equal(hydrationBatches, 1);
   assert.equal(result.rerankingOutcome, "not_needed");
-  assert.deepEqual(result.hits.map((hit) => hit.passage.chunkId), [exact.chunkId]);
+  assert.deepEqual(result.hits.map((hit) => hit.passage.chunkId), [exact.chunkId, continuation.chunkId]);
 });
 
 test("near-duplicate generated searches share one request-scoped corpus lookup", async () => {

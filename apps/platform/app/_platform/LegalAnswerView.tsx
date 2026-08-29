@@ -2,6 +2,7 @@
 
 import { ExternalLink } from "lucide-react";
 import { lazy, Suspense, useId, type ReactNode } from "react";
+import { deriveLegalEvidenceMode } from "../../lib/ai/legal-evidence-mode";
 
 const SafeMarkdown = lazy(() => import("./SafeMarkdown").then((module) => ({ default: module.SafeMarkdown })));
 
@@ -105,20 +106,6 @@ const COPY: Record<"ru" | "uz", AnswerCopy> = {
   },
 };
 
-function evidenceMode(result: LegalAnswerViewResult): NonNullable<LegalAnswerViewResult["evidenceMode"]> {
-  if (result.evidenceMode) return result.evidenceMode;
-  const classes = new Set(result.sources.flatMap((source) => {
-    if (["OFFICIAL_LEGISLATION", "OFFICIAL_GOVERNMENT_GUIDANCE"].includes(source.sourceClass ?? "")) return ["official"];
-    if (source.sourceClass === "SECONDARY_REFERENCE" || source.sourceOrigin === "web") return ["secondary"];
-    if (["USER_TRUSTED_PRIVATE", "TENANT_TRUSTED_PRIVATE", "OWNER_TRUSTED_GLOBAL"].includes(source.sourceClass ?? "")) return ["private"];
-    return [];
-  }));
-  if (classes.size === 1 && classes.has("official")) return "official";
-  if (classes.size === 1 && classes.has("secondary")) return "secondary_only";
-  if (classes.size === 1 && classes.has("private")) return "private_only";
-  return classes.size ? "mixed" : "none";
-}
-
 function publicSourceUrl(source: LegalAnswerViewSource): string | null {
   try {
     const url = new URL(source.originalUrl);
@@ -198,7 +185,7 @@ export function LegalAnswerView({
 }) {
   const id = useId().replace(/:/gu, "");
   const copy = COPY[locale];
-  const mode = evidenceMode(result);
+  const mode = deriveLegalEvidenceMode(result);
   const rootClass = `legal-answer ${className}`.trim();
 
   if (result.responseKind === "clarification_required") {
@@ -225,10 +212,12 @@ export function LegalAnswerView({
 
   const important = result.assumptions.length > 0 || result.risks.length > 0 || result.urgency !== "normal";
   const prepare = result.requiredDocuments.length > 0 || Boolean(result.suggestedDocument);
+  const mainSourceIds = [...new Set(result.confirmedFindings.flatMap((finding) => finding.sourceIds ?? []))];
   return <article className={rootClass} data-answer-kind="legal-answer">
     <p className={`legal-answer__authority legal-answer__authority--${mode}`}>{copy.authority[mode]}</p>
     <Section id={`${id}-main`} title={copy.main} className="legal-answer__section--main">
       <Markdown result={result} locale={locale}>{result.summary}</Markdown>
+      <CitationList sourceIds={mainSourceIds} result={result} locale={locale} onCitationSelect={onCitationSelect} />
     </Section>
     {result.confirmedFindings.length > 0 && <Section id={`${id}-law`} title={copy.law}>
       <div className="legal-answer__findings">{result.confirmedFindings.map((finding) => <article key={`${finding.title}:${finding.sourceIds?.join(":") ?? ""}`}>
