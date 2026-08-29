@@ -64,8 +64,9 @@ only 4/30, so the reduction target remains `UNVERIFIED`.
 - Block release if the current route has no effective price version.
 - Alert on unpriced requests, daily/provider budget approach, failure spikes,
   fallback spikes, or cost-per-success regression.
-- Prefer the less expensive validated route for ordinary questions; use deep
-  reasoning only when the request warrants it.
+- Route ordinary questions through the balanced default on the less expensive
+  chat model; reserve deep reasoning and its larger token allowance for an
+  explicit user choice. Fast remains the compact lowest-budget option.
 - Treat caching as a measured optimization, never as an assumed discount.
 - Review official pricing before each production release and create a new
   effective-dated version when it changes.

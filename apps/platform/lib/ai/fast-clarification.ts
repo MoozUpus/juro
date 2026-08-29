@@ -3,6 +3,7 @@ import {
   parseLegalChatResponse,
   type LegalChatResponse,
 } from "./legal-chat-schema";
+import type { AiReasoningMode } from "./reasoning-mode";
 
 /**
  * Server-owned first useful content for a request that has no usable official
@@ -17,7 +18,7 @@ import {
 export function createUnavailableVerifiedSourceClarification(input: {
   locale: "ru" | "uz";
   answerMode: "short" | "detailed";
-  reasoningMode: "fast" | "deep";
+  reasoningMode: AiReasoningMode;
   legalDatabaseAsOf: string;
 }): LegalChatResponse {
   const ru = input.locale === "ru";

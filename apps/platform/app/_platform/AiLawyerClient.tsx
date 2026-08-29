@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryRequest, isRestartableAiTerminal, isUserCancelledAiRequest, shouldOfferAiRetry, shouldUseFreshAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
 import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
+import { DEFAULT_AI_REASONING_MODE, type AiReasoningMode } from "../../lib/ai/reasoning-mode";
 import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, type VoiceSpeechPhase } from "../../lib/ai/voice-ui";
 import { formatPlatformDate, formatPlatformLongDate, formatPlatformMonth } from "../../lib/platform/date-time";
 import type { PlatformLocale } from "../../lib/platform/routing";
@@ -113,7 +114,7 @@ type AiRequestPayload = {
   question?: string;
   locale: PlatformLocale;
   answerMode: "short" | "detailed";
-  reasoningMode: "fast" | "deep";
+  reasoningMode: AiReasoningMode;
   conversationId?: string;
   operation: AiMessageOperation;
   sourceMessageId?: string;
@@ -146,7 +147,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [cases, setCases] = useState<CaseOption[]>([]);
   const [question, setQuestion] = useState(() => (searchParams.get("prompt") || "").slice(0, 4_000));
   const [answerMode, setAnswerMode] = useState<"short" | "detailed">("detailed");
-  const [reasoningMode, setReasoningMode] = useState<"fast" | "deep">("fast");
+  const [reasoningMode, setReasoningMode] = useState<AiReasoningMode>(DEFAULT_AI_REASONING_MODE);
   const [legalContextDate, setLegalContextDate] = useState("");
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [loading, setLoading] = useState(true);
@@ -694,7 +695,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           {editSourceMessageId && <div className="ai-edit-notice" role="status"><span>{ru ? "Редактирование создаст новую версию; исходный ответ сохранится." : "Tahrirlash yangi versiya yaratadi; oldingi javob saqlanadi."}</span><button type="button" onClick={() => { setEditSourceMessageId(""); setQuestion(""); }}>{ru ? "Отменить" : "Bekor qilish"}</button></div>}
           <div className="ai-modes">
             <div className="ai-mode-field"><span id="ai-answer-mode-label">{ru ? "Формат ответа" : "Javob formati"}</span><div className="ai-segmented" role="group" aria-labelledby="ai-answer-mode-label"><button type="button" aria-pressed={answerMode === "short"} onClick={() => setAnswerMode("short")}>{ru ? "Кратко" : "Qisqa"}</button><button type="button" aria-pressed={answerMode === "detailed"} onClick={() => setAnswerMode("detailed")}>{ru ? "Подробно" : "Batafsil"}</button></div></div>
-            <div className="ai-mode-field"><span id="ai-reasoning-mode-label">{ru ? "Глубина анализа" : "Tahlil chuqurligi"}</span><div className="ai-segmented" role="group" aria-labelledby="ai-reasoning-mode-label"><button type="button" aria-pressed={reasoningMode === "fast"} onClick={() => setReasoningMode("fast")}>{ru ? "Быстро" : "Tez"}</button><button type="button" aria-pressed={reasoningMode === "deep"} onClick={() => setReasoningMode("deep")}>{ru ? "Глубоко" : "Chuqur"}</button></div></div>
+            <div className="ai-mode-field ai-reasoning-mode-field"><span id="ai-reasoning-mode-label">{ru ? "Глубина анализа" : "Tahlil chuqurligi"}</span><div className="ai-segmented ai-reasoning-segmented" role="group" aria-labelledby="ai-reasoning-mode-label"><button type="button" aria-pressed={reasoningMode === "fast"} onClick={() => setReasoningMode("fast")}>{ru ? "Быстрый" : "Tezkor"}</button><button type="button" aria-pressed={reasoningMode === "balanced"} onClick={() => setReasoningMode("balanced")}>{ru ? "Сбалансированный" : "Muvozanatli"}</button><button type="button" aria-pressed={reasoningMode === "deep"} onClick={() => setReasoningMode("deep")}>{ru ? "Глубокий" : "Chuqur"}</button></div></div>
             <AiDatePicker ru={ru} value={legalContextDate} max={uzbekistanCalendarDate()} onChange={(value) => { pendingAiRequestRef.current = null; setCanRetry(false); setLegalContextDate(value); }} />
           </div>
           <VoiceMessageControls

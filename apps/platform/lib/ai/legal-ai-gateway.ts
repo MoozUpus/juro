@@ -31,6 +31,7 @@ import {
   type LegalSourceContext,
   type LegalSourceSpan,
 } from "./provider";
+import type { AiReasoningMode } from "./reasoning-mode";
 
 const claimTypeSchema = z.enum(["legal_basis", "action", "deadline", "risk", "fact"]);
 
@@ -118,7 +119,7 @@ export interface LegalAiGateway {
     question?: string;
     locale: "ru" | "uz";
     answerMode: "short" | "detailed";
-    reasoningMode: "fast" | "deep";
+    reasoningMode: AiReasoningMode;
     legalDatabaseAsOf: string;
     availableDocumentTemplateCodes?: readonly string[];
   }): ValidatedLegalGatewayResult;
@@ -454,7 +455,7 @@ export function validateLegalGatewayAnswer(input: {
   question?: string;
   locale: "ru" | "uz";
   answerMode: "short" | "detailed";
-  reasoningMode: "fast" | "deep";
+  reasoningMode: AiReasoningMode;
   legalDatabaseAsOf: string;
   availableDocumentTemplateCodes?: readonly string[];
 }): ValidatedLegalGatewayResult {

@@ -1128,6 +1128,13 @@
       "when": 1787906285263,
       "tag": "0160_monitoring_email_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 161,
+      "version": "7",
+      "when": 1787970942759,
+      "tag": "0161_balanced_ai_reasoning_mode",
+      "breakpoints": true
     }
   ]
 }

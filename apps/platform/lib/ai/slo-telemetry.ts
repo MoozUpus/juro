@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { aiReasoningModes, type AiReasoningMode } from "./reasoning-mode";
 
 /**
  * Append-only operational measurements for the interactive AI SLO.
@@ -18,7 +19,7 @@ export const aiSloEnvironments = ["development", "staging", "production"] as con
 export const aiSloRequestKinds = ["legal_chat", "staging_synthetic_probe"] as const;
 export const aiSloAuthKinds = ["authenticated", "guest", "system"] as const;
 export const aiSloAnswerModes = ["short", "detailed"] as const;
-export const aiSloReasoningModes = ["fast", "deep"] as const;
+export const aiSloReasoningModes = aiReasoningModes;
 export const aiSloProviders = ["openai", "anthropic", "none"] as const;
 export const aiSloOutcomes = ["completed", "failed", "timed_out", "cancelled"] as const;
 export const aiSloFallbacks = ["none", "openai_to_anthropic", "anthropic_to_openai"] as const;
@@ -360,7 +361,7 @@ export async function recordStagingAiSloProbe(input: {
   db: D1Database;
   correlationId: string;
   answerMode: "short" | "detailed";
-  reasoningMode: "fast" | "deep";
+  reasoningMode: AiReasoningMode;
   provider: "openai" | "anthropic" | "none";
   model?: string | null;
   outcome: "completed" | "failed" | "timed_out" | "cancelled";

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { LegalDatabaseFreshness } from "../legal/verified-retrieval";
+import { aiReasoningModes, type AiReasoningMode } from "./reasoning-mode";
 
 const sourceIdList = z.array(z.string().min(1).max(160)).max(12);
 
@@ -93,7 +94,7 @@ export const legalChatResponseSchema = z.object({
   language: z.enum(["ru", "uz"]),
   jurisdiction: z.literal("UZ"),
   answerMode: z.enum(["short", "detailed"]),
-  reasoningMode: z.enum(["fast", "deep"]),
+  reasoningMode: z.enum(aiReasoningModes),
   clarificationQuestions: z.array(z.string().min(1).max(500)).max(8),
   assumptions: z.array(legalAssumptionSchema).max(16),
   risks: z.array(legalRiskSchema).max(16),
@@ -147,7 +148,7 @@ export function forceClarificationWithoutVerifiedSources(
   options: {
     locale: "ru" | "uz";
     answerMode: "short" | "detailed";
-    reasoningMode: "fast" | "deep";
+    reasoningMode: AiReasoningMode;
     legalDatabaseAsOf: string;
   },
 ): LegalChatResponse {
@@ -191,7 +192,7 @@ export function enforceLegalDatabaseFreshness(
   options: {
     locale: "ru" | "uz";
     answerMode: "short" | "detailed";
-    reasoningMode: "fast" | "deep";
+    reasoningMode: AiReasoningMode;
   },
 ): LegalChatResponse {
   if (freshness.status === "unavailable") {

@@ -11,6 +11,7 @@ import {
 import type { LegalAiRunOptions, LegalAiRunResult, LegalChatRequest } from "./provider";
 import { aiResponseToneInstruction, resolveAiRuntimeSettings } from "./runtime-settings";
 import { legalChatProviderTimeoutMs } from "./legal-chat-timeout";
+import { aiReasoningProfile } from "./reasoning-mode";
 
 export function anthropicModel(): string {
   return runtimeEnv().ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
@@ -28,9 +29,11 @@ export function anthropicModel(): string {
 export function anthropicResponseStartTimeoutMs(input: {
   interactive: boolean;
   providerTimeoutMs: number;
+  defaultResponseStartTimeoutMs?: number;
   nonStreamingResponseStartTimeoutMs?: number;
 }): number {
-  const defaultTimeoutMs = input.interactive ? 4_500 : 30_000;
+  const defaultTimeoutMs = input.defaultResponseStartTimeoutMs
+    ?? (input.interactive ? 4_500 : 30_000);
   const requestedTimeoutMs = input.nonStreamingResponseStartTimeoutMs ?? defaultTimeoutMs;
   return Math.max(1, Math.min(requestedTimeoutMs, input.providerTimeoutMs));
 }
@@ -96,6 +99,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
   }
   let result: LegalAiRunResult;
   try {
+    const reasoningProfile = aiReasoningProfile(input.reasoningMode);
     const interactive = input.reasoningMode === "fast";
     const providerBudgetMs = legalChatProviderTimeoutMs({
       reasoningMode: input.reasoningMode,
@@ -118,6 +122,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
     const responseStartTimeoutMs = anthropicResponseStartTimeoutMs({
       interactive,
       providerTimeoutMs: providerBudgetMs,
+      defaultResponseStartTimeoutMs: reasoningProfile.firstContentTimeoutMs,
       nonStreamingResponseStartTimeoutMs: options.nonStreamingResponseStartTimeoutMs,
     });
     result = await callAnthropicStructured<LegalChatResponse>({
@@ -129,9 +134,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
       totalResponseTimeoutMs: providerBudgetMs,
       deadlineAt: options.budget ? Date.now() + options.budget.remainingMs : undefined,
       maxAttempts: 1,
-      maxTokens: interactive
-        ? (input.answerMode === "short" ? 1_000 : 1_400)
-        : (input.answerMode === "short" ? 2_400 : 4_200),
+      maxTokens: reasoningProfile.maxOutputTokens[input.answerMode],
       requestId: input.requestId,
       model,
       signal: options.signal,

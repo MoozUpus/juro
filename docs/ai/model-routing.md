@@ -1,6 +1,6 @@
 # AI model routing
 
-**Verified against the production configuration and implementation on 2026-08-25.**
+**Implementation verified on the release candidate on 2026-08-29. Production remains on the previously published configuration until an explicitly authorized deployment.**
 
 JURO uses OpenAI and Anthropic only. The provider is selected by workload and
 failure class; provider-authored URLs, excerpts, or legal conclusions are never
@@ -8,8 +8,9 @@ accepted as application truth.
 
 | Workload | Primary | Fallback | Boundary |
 | --- | --- | --- | --- |
-| Legal chat, fast | OpenAI `gpt-5.6-terra` | Anthropic `claude-sonnet-4-6` | One shared response budget; fallback only for eligible provider, timeout, circuit, retryable, or invalid-output failures. |
-| Legal chat, deep | OpenAI `gpt-5.6-sol` | Anthropic `claude-sonnet-4-6` | Refusal and user cancellation do not trigger a second provider. |
+| Legal chat, fast | OpenAI chat model (`gpt-5.6-terra` in the verified configuration), low reasoning | Anthropic `claude-sonnet-4-6` | Compact 1,000/1,400-token output and the shortest bounded provider/fallback windows. |
+| Legal chat, balanced (default) | OpenAI chat model (`gpt-5.6-terra` in the verified configuration), medium reasoning | Anthropic `claude-sonnet-4-6` | Ordinary analysis stays on the lower-cost chat model; output and fallback budgets sit between fast and deep. |
+| Legal chat, deep | OpenAI deep model (`gpt-5.6-sol` in the verified configuration), high reasoning | Anthropic `claude-sonnet-4-6` | Highest output allowance. Refusal and user cancellation do not trigger a second provider. |
 | Document analysis, quick | OpenAI structured output | Anthropic, bounded fallback | OpenAI has an 80 s budget; fallback is bounded to 30 s; total budget is 110 s. |
 | Document analysis, full/expert | Anthropic `claude-sonnet-4-6` | OpenAI deep model | One attempt per provider; mode budgets are 120/150 s. |
 | Document comparison | Deterministic diff, then OpenAI legal enrichment | No model-generated diff | Exact textual changes remain deterministic even if legal enrichment is unavailable. |
@@ -33,3 +34,9 @@ Changing a model, provider, prompt contract, timeout, or retrieval mode requires
 the focused suites, current price configuration, a new evaluation comparison,
 and release evidence. A configuration value is not by itself proof of answer
 quality.
+
+The three user-facing modes are `Быстрый`, `Сбалансированный`, and `Глубокий`
+in Russian and `Tezkor`, `Muvozanatli`, and `Chuqur` in Uzbek. Missing or
+unrecognized mode input is normalized to `balanced`; guest and synthetic probe
+flows that explicitly request `fast` remain fast. All three modes share the
+same absolute request deadline and provider-cost circuit.

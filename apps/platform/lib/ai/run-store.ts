@@ -1,3 +1,5 @@
+import type { AiReasoningMode } from "./reasoning-mode";
+
 const CHAT_FEATURE = "legal_chat";
 const FREE_MONTHLY_CYCLES = 20;
 // Interactive requests share a hard 30 second execution budget. A short
@@ -52,7 +54,7 @@ type ReserveInput = {
   provider: string;
   model: string;
   answerMode: "short" | "detailed";
-  reasoningMode: "fast" | "deep";
+  reasoningMode: AiReasoningMode;
   legalDatabaseAsOf: string;
   instructionHash: string;
   sourceVersionHash: string;

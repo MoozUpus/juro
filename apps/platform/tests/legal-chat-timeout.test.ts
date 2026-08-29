@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { createAiExecutionBudget, type AiExecutionBudgetTimers } from "../lib/ai/execution-budget";
 import {
+  BALANCED_LEGAL_CHAT_PROVIDER_TIMEOUT_MS,
   DEEP_LEGAL_CHAT_PROVIDER_TIMEOUT_MS,
   FAST_LEGAL_CHAT_PROVIDER_TIMEOUT_MS,
   legalChatProviderTimeoutMs,
@@ -53,8 +54,10 @@ test("primary legal-chat providers leave a finalization reserve inside the share
   const { budget: execution, timers } = budget();
 
   assert.equal(FAST_LEGAL_CHAT_PROVIDER_TIMEOUT_MS, 25_500);
+  assert.equal(BALANCED_LEGAL_CHAT_PROVIDER_TIMEOUT_MS, 45_000);
   assert.equal(DEEP_LEGAL_CHAT_PROVIDER_TIMEOUT_MS, 120_000);
   assert.equal(legalChatProviderTimeoutMs({ reasoningMode: "fast", budget: execution }), 25_500);
+  assert.equal(legalChatProviderTimeoutMs({ reasoningMode: "balanced", budget: execution }), 28_000);
   assert.equal(legalChatProviderTimeoutMs({ reasoningMode: "deep", budget: execution }), 28_000);
 
   timers.advanceBy(4_000);

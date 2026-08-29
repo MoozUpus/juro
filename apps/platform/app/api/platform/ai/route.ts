@@ -70,6 +70,7 @@ import {
 } from "../../../../lib/ai/provider-cost-control";
 import { recordProviderUsage } from "../../../../lib/ai/provider-usage";
 import { resolveAiRuntimeSettings } from "../../../../lib/ai/runtime-settings";
+import { parseAiReasoningMode, type AiReasoningMode } from "../../../../lib/ai/reasoning-mode";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -239,7 +240,7 @@ async function executePostWithinBudget(
   }
   const submittedQuestion = body?.question?.trim();
   const answerMode = body?.answerMode === "short" ? "short" : "detailed";
-  const reasoningMode = body?.reasoningMode === "deep" ? "deep" : "fast";
+  const reasoningMode = parseAiReasoningMode(body?.reasoningMode);
   const applicableAt = body?.legalContextDate
     ? parseLegalApplicabilityDate(body.legalContextDate)
     : null;
@@ -1374,7 +1375,7 @@ async function completeNonChargeableIntent(input: {
   question: string;
   locale: "ru" | "uz";
   answerMode: "short" | "detailed";
-  reasoningMode: "fast" | "deep";
+  reasoningMode: AiReasoningMode;
   idempotencyKey: string;
   branchInput: {
     parentBranchId: string | null;
@@ -1587,7 +1588,7 @@ async function recordLegalChatSlo(input: {
   budget: AiExecutionBudget;
   correlationId: string;
   answerMode: "short" | "detailed";
-  reasoningMode: "fast" | "deep";
+  reasoningMode: AiReasoningMode;
   provider: "openai" | "anthropic" | "none";
   model: string | null;
   fallbackFromProvider: "openai" | "anthropic" | null;
