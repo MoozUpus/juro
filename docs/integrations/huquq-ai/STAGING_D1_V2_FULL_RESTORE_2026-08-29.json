@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-08-29T02:25:31Z",
+  "databaseName": "juro-staging-corpus-v2",
+  "databaseId": "62620fb3-3da3-4c76-a8e9-aa60858c1063",
+  "sourceReadOnly": true,
+  "export": {
+    "format": "wrangler d1 export SQL",
+    "bytes": 15869568967,
+    "sha256": "c1ffaca73040bb85b668215888f1ba28db545102a73dfc68a8b903d9ef8e0b14",
+    "localPlaintextRemovedAfterRestore": true
+  },
+  "isolatedRestore": {
+    "target": "local SQLite file outside the repository",
+    "bytes": 9840861184,
+    "quickCheck": "ok",
+    "foreignKeyViolations": 0,
+    "tables": 258,
+    "indexes": 563,
+    "triggers": 346,
+    "migrations": 142
+  },
+  "verification": {
+    "command": "node --import tsx -e <read-only node:sqlite verification>",
+    "remoteDataMutated": false,
+    "productionDataTouched": false
+  },
+  "releaseGate": "unproven",
+  "note": "This is an isolated local export-to-restore integrity check for the read-only v2 staging source. It is not a production backup, does not publish corpus data, and does not by itself prove federated release readiness."
+}
