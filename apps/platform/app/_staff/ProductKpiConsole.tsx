@@ -46,6 +46,15 @@ const copy = {
     sourceOpenRate: "Answer-to-source open",
     sourceDropOff: "Отсев до открытия источника",
     answerFunnelNote: "Воронка связывает первый вопрос с его точным завершённым ответом за 7 дней, а ответ — с первым авторизованным открытием его источника ещё за 7 дней. Исторические обезличенные события не выдаются за пользователей.",
+    feedbackQuality: "Пользовательские сигналы качества за 30 дней",
+    feedbackWindow: "Окно отзывов",
+    feedbackSubmitted: "Сохранённые типы отзывов",
+    feedbackHelpful: "Полезно",
+    feedbackPartial: "Частичные замечания",
+    feedbackErrors: "Сообщения об ошибках",
+    feedbackErrorRate: "User-reported error rate",
+    feedbackOutdated: "Сигналы «устарело»",
+    feedbackQualityNote: "Один тип отзыва на один ответ считается один раз. Комментарии и содержимое ответов не читаются и не возвращаются. Сигнал «устарело» — сообщение пользователя, а не подтверждённое состояние источника.",
     workflows: "Операционные воронки за 30 дней",
     plansCreated: "Планы созданы",
     plansCompleted: "Планы завершены",
@@ -109,6 +118,15 @@ const copy = {
     sourceOpenRate: "Answer-to-source open",
     sourceDropOff: "Manba ochilishigacha chiqib ketish",
     answerFunnelNote: "Voronka birinchi savolni 7 kun ichidagi uning aniq tugallangan javobiga, javobni esa keyingi 7 kun ichidagi birinchi ruxsatli manba ochilishiga bog‘laydi. Tarixiy anonim hodisalar foydalanuvchi sifatida ko‘rsatilmaydi.",
+    feedbackQuality: "30 kunlik foydalanuvchi sifat signallari",
+    feedbackWindow: "Fikr-mulohaza oynasi",
+    feedbackSubmitted: "Saqlangan fikr turlari",
+    feedbackHelpful: "Foydali",
+    feedbackPartial: "Qisman e’tirozlar",
+    feedbackErrors: "Xato haqidagi xabarlar",
+    feedbackErrorRate: "User-reported error rate",
+    feedbackOutdated: "«Eskirgan» signallari",
+    feedbackQualityNote: "Bitta javob uchun bitta fikr turi bir marta sanaladi. Izohlar va javob mazmuni o‘qilmaydi hamda qaytarilmaydi. «Eskirgan» signali — foydalanuvchi xabari, manba holatining tasdig‘i emas.",
     workflows: "30 kunlik operatsion voronkalar",
     plansCreated: "Rejalar yaratildi",
     plansCompleted: "Rejalar tugallandi",
@@ -173,6 +191,7 @@ export function ProductKpiConsole({
   const activation = dashboard.activation;
   const engagedReturn = dashboard.engagedReturn;
   const answerFunnel = dashboard.answerFunnel;
+  const feedbackQuality = dashboard.feedbackQuality;
   const workflows = dashboard.workflows;
   const otherLocale = locale === "ru" ? "uz" : "ru";
   return <div className="staff-console">
@@ -234,6 +253,20 @@ export function ProductKpiConsole({
           <article><span>{t.sourceDropOff}</span><b>{percent(answerFunnel.sourceDropOffRateBasisPoints)}</b></article>
         </div>
         <p className="staff-count">{t.answerFunnelNote}</p>
+      </section>
+
+      <section className="jobs-summary" aria-labelledby="feedback-quality-heading">
+        <h2 id="feedback-quality-heading">{t.feedbackQuality}</h2>
+        <p className="staff-count">{t.feedbackWindow}: <time dateTime={feedbackQuality.windowStartedAt}>{dateTime(feedbackQuality.windowStartedAt, locale)}</time> — <time dateTime={feedbackQuality.windowEndedAt}>{dateTime(feedbackQuality.windowEndedAt, locale)}</time> · {readinessLabel[feedbackQuality.readiness]}</p>
+        <div>
+          <article><span>{t.feedbackSubmitted}</span><b>{feedbackQuality.submitted}</b></article>
+          <article><span>{t.feedbackHelpful}</span><b>{feedbackQuality.helpful}</b></article>
+          <article><span>{t.feedbackPartial}</span><b>{feedbackQuality.partial}</b></article>
+          <article><span>{t.feedbackErrors}</span><b>{feedbackQuality.reportedErrors}</b></article>
+          <article><span>{t.feedbackErrorRate}</span><b>{percent(feedbackQuality.userReportedErrorRateBasisPoints)}</b></article>
+          <article><span>{t.feedbackOutdated}</span><b>{feedbackQuality.outdatedReports}</b></article>
+        </div>
+        <p className="staff-count">{t.feedbackQualityNote}</p>
       </section>
 
       <section className="jobs-summary" aria-labelledby="pathways-heading">

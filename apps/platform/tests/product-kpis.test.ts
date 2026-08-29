@@ -171,6 +171,21 @@ test("product KPI dashboard computes mature activation without returning identit
       }
     }
 
+    const feedbackTypes = ["helpful", "wrong_norm", "broken_link", "incomplete", "outdated"] as const;
+    feedbackTypes.forEach((feedbackType, index) => {
+      const userId = `cohort-0${index}`;
+      sqlite.prepare(`INSERT INTO ai_feedback
+        (id,workspace_id,user_id,conversation_id,assistant_message_id,ai_run_id,
+         feedback_type,comment,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,NULL,?,?)`)
+        .run(
+          `feedback-${index}`, `workspace-${userId}`, userId,
+          `answer-funnel-conversation-${index}`, `answer-funnel-response-${index}`,
+          `answer-funnel-run-${index}`, feedbackType,
+          `2026-08-2${index}T10:00:00.000Z`, `2026-08-2${index}T10:00:00.000Z`,
+        );
+    });
+
     const requestStatuses = ["accepted", "offer_proposed", "offer_accepted", "completed", "conflict_check_pending"];
     for (let index = 0; index < 5; index += 1) {
       const userId = `cohort-0${index}`;
@@ -232,6 +247,17 @@ test("product KPI dashboard computes mature activation without returning identit
       answerReadiness: "insufficient_sample",
       sourceReadiness: "insufficient_sample",
     });
+    assert.deepEqual(dashboard.feedbackQuality, {
+      windowStartedAt: "2026-07-30T12:00:00.000Z",
+      windowEndedAt: "2026-08-29T12:00:00.000Z",
+      submitted: 5,
+      helpful: 1,
+      partial: 1,
+      reportedErrors: 3,
+      outdatedReports: 1,
+      userReportedErrorRateBasisPoints: 6_000,
+      readiness: "insufficient_sample",
+    });
     assert.deepEqual(dashboard.workflows.plans, {
       created: 7,
       completed: 3,
@@ -284,6 +310,8 @@ test("product KPI dashboard suppresses rates and TTFV below the privacy threshol
     assert.equal(dashboard.answerFunnel.answerCompletionRateBasisPoints, null);
     assert.equal(dashboard.answerFunnel.sourceOpenRateBasisPoints, null);
     assert.equal(dashboard.answerFunnel.answerReadiness, "no_data");
+    assert.equal(dashboard.feedbackQuality.userReportedErrorRateBasisPoints, null);
+    assert.equal(dashboard.feedbackQuality.readiness, "no_data");
     assert.equal(dashboard.workflows.lawyerMarketplace.conversionRateBasisPoints, null);
   } finally {
     sqlite.close();
@@ -411,4 +439,6 @@ test("product KPI console is no-store, administrator-only and fresh-MFA-gated", 
   assert.match(citationRoute, /recordAiAnswerSourceOpenBestEffort\(\{ db, userId: user\.id, responseMessageId: messageId \}\)/);
   assert.match(observation, /ON CONFLICT\(user_id,response_message_id\) DO UPDATE/);
   assert.doesNotMatch(observation, /profile_id|lawyer_id|case_id|workspace_id|content|query/i);
+  assert.match(service, /FROM ai_feedback feedback/);
+  assert.doesNotMatch(service, /SELECT[^;]*feedback\.comment/is);
 });

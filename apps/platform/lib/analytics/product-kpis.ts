@@ -53,6 +53,17 @@ export type ProductKpiDashboard = {
     answerReadiness: ProductKpiReadiness;
     sourceReadiness: ProductKpiReadiness;
   };
+  feedbackQuality: {
+    windowStartedAt: string;
+    windowEndedAt: string;
+    submitted: number;
+    helpful: number;
+    partial: number;
+    reportedErrors: number;
+    outdatedReports: number;
+    userReportedErrorRateBasisPoints: number | null;
+    readiness: ProductKpiReadiness;
+  };
   workflows: {
     windowStartedAt: string;
     windowEndedAt: string;
@@ -104,6 +115,13 @@ type AnswerFunnelSummaryRow = {
   firstQuestionUsers: number;
   answeredUsers: number;
   sourceOpeningUsers: number;
+};
+type FeedbackQualitySummaryRow = {
+  submitted: number;
+  helpful: number;
+  partial: number;
+  reportedErrors: number;
+  outdatedReports: number;
 };
 
 const investorDemoIds = [
@@ -291,6 +309,17 @@ SELECT
   (SELECT count(*) FROM first_answers) AS answeredUsers,
   (SELECT count(*) FROM source_opening_users) AS sourceOpeningUsers`;
 
+const feedbackQualitySummarySql = `
+SELECT count(*) AS submitted,
+  COALESCE(sum(CASE WHEN feedback.feedback_type='helpful' THEN 1 ELSE 0 END),0) AS helpful,
+  COALESCE(sum(CASE WHEN feedback.feedback_type IN ('not_helpful','incomplete','language') THEN 1 ELSE 0 END),0) AS partial,
+  COALESCE(sum(CASE WHEN feedback.feedback_type IN ('wrong_norm','broken_link','outdated','unsafe','ignored_facts') THEN 1 ELSE 0 END),0) AS reportedErrors,
+  COALESCE(sum(CASE WHEN feedback.feedback_type='outdated' THEN 1 ELSE 0 END),0) AS outdatedReports
+FROM ai_feedback feedback
+JOIN user_profiles profile ON profile.id=feedback.user_id
+WHERE feedback.created_at>=? AND feedback.created_at<?
+  AND ${excludedUserPredicate}`;
+
 const planSummarySql = `
 SELECT count(*) AS created,
   COALESCE(sum(CASE WHEN plan.status='completed' THEN 1 ELSE 0 END),0) AS completed
@@ -352,11 +381,12 @@ export async function readProductKpiDashboard(input: {
   const workflowBindings = [workflowStartedAt, asOf, asOf] as const;
   const marketplaceBindings = [cohortStartedAt, cohortEndedAt, asOf] as const;
 
-  const [summaryResult, durationResult, returnResult, answerResult, planResult, lawyerResult, marketplaceResult] = await input.db.batch([
+  const [summaryResult, durationResult, returnResult, answerResult, feedbackResult, planResult, lawyerResult, marketplaceResult] = await input.db.batch([
     input.db.prepare(activationSummarySql).bind(...activationBindings),
     input.db.prepare(activationDurationsSql).bind(...activationBindings),
     input.db.prepare(engagedReturnSummarySql).bind(...returnBindings),
     input.db.prepare(answerFunnelSummarySql).bind(...answerBindings),
+    input.db.prepare(feedbackQualitySummarySql).bind(...workflowBindings),
     input.db.prepare(planSummarySql).bind(...workflowBindings),
     input.db.prepare(lawyerRequestSummarySql).bind(...workflowBindings),
     input.db.prepare(lawyerMarketplaceSummarySql).bind(...marketplaceBindings),
@@ -367,6 +397,7 @@ export async function readProductKpiDashboard(input: {
   const lawyer = (lawyerResult.results?.[0] ?? {}) as Partial<LawyerRequestSummaryRow>;
   const engagedReturn = (returnResult.results?.[0] ?? {}) as Partial<EngagedReturnSummaryRow>;
   const answerFunnel = (answerResult.results?.[0] ?? {}) as Partial<AnswerFunnelSummaryRow>;
+  const feedbackQuality = (feedbackResult.results?.[0] ?? {}) as Partial<FeedbackQualitySummaryRow>;
   const marketplace = (marketplaceResult.results?.[0] ?? {}) as Partial<LawyerMarketplaceSummaryRow>;
   const durations = (durationResult.results ?? [])
     .map((row) => numeric((row as Partial<DurationRow>).durationSeconds))
@@ -380,6 +411,7 @@ export async function readProductKpiDashboard(input: {
   const firstQuestionUsers = numeric(answerFunnel.firstQuestionUsers);
   const answeredUsers = numeric(answerFunnel.answeredUsers);
   const sourceOpeningUsers = numeric(answerFunnel.sourceOpeningUsers);
+  const submittedFeedback = numeric(feedbackQuality.submitted);
   const directoryVisitors = numeric(marketplace.directoryVisitors);
 
   return {
@@ -429,6 +461,20 @@ export async function readProductKpiDashboard(input: {
       sourceDropOffRateBasisPoints: rateBasisPoints(answeredUsers - sourceOpeningUsers, answeredUsers),
       answerReadiness: readiness(firstQuestionUsers),
       sourceReadiness: readiness(answeredUsers),
+    },
+    feedbackQuality: {
+      windowStartedAt: workflowStartedAt,
+      windowEndedAt: asOf,
+      submitted: submittedFeedback,
+      helpful: numeric(feedbackQuality.helpful),
+      partial: numeric(feedbackQuality.partial),
+      reportedErrors: numeric(feedbackQuality.reportedErrors),
+      outdatedReports: numeric(feedbackQuality.outdatedReports),
+      userReportedErrorRateBasisPoints: rateBasisPoints(
+        numeric(feedbackQuality.reportedErrors),
+        submittedFeedback,
+      ),
+      readiness: readiness(submittedFeedback),
     },
     workflows: {
       windowStartedAt: workflowStartedAt,
