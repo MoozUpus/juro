@@ -1,6 +1,6 @@
 # JURO Broken Links Report
 
-Evidence cutoff: **2026-08-30 00:18 UZT**
+Evidence cutoff: **2026-08-30 02:04 UZT**
 
 Live site: `https://juro.uz` Sites v94
 
@@ -15,11 +15,11 @@ Live site: `https://juro.uz` Sites v94
 
 The crawl used rendered HTML from every sitemap URL, resolved relative links, removed fragments, retained JURO-zone web links, and performed HTTPS GETs using a Chrome user agent. The check validates reachability, not authenticated product outcomes.
 
-## Important failures outside the sitemap link set
+## Important outcomes outside the sitemap link set
 
 | URL / host | Evidence | Impact | Status / action |
 | --- | --- | --- | --- |
-| `https://lawyer.juro.uz/ru/individual/dashboard` | Final `404`, no redirect | User-visible “Not Found” on a cross-persona deep link | `BROKEN`; route to the lawyer destination or explicitly deprecate the URL |
+| `https://lawyer.juro.uz/ru/individual/dashboard` | Worker v173 continues to `https://lawyer.juro.uz/ru/auth/login?returnTo=%2Fru%2Flawyer%2Fdashboard`, final `200`; UZ equivalent also verified | The reported cross-persona “Not Found” is removed without exposing unrelated individual routes | `VERIFIED` for the anonymous boundary; authenticated Lawyer journey remains a separate evidence gate |
 | `https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/` | `200`, canonical to `juro.uz/ru`, but indexable | Duplicate provider-host copy can be indexed | `SECURITY RISK`; validated noindex fix is saved as v95 |
 | `https://api.juro.uz/` | DNS does not resolve | Stale docs/links would fail | `DEPRECATED`; remove current-state references unless provisioned |
 | `https://app.staging.juro.uz/` | DNS does not resolve | Wrong staging spelling in the Sites v94 analytics bridge | `BROKEN`; use `staging.app.juro.uz` |
