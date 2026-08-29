@@ -38,6 +38,7 @@ export type ProviderUsageInput = {
   inputTokens: number;
   outputTokens?: number;
   cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
   itemCount?: number;
   dimensions?: number | null;
   status: "succeeded" | "failed";
@@ -78,6 +79,7 @@ export type AiCostDailyView = {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   estimatedCostMicrousd: number;
   unpricedRequestCount: number;
 };
@@ -91,6 +93,7 @@ export type AiCostUserView = {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   estimatedCostMicrousd: number;
   unpricedRequestCount: number;
 };
@@ -115,6 +118,7 @@ export type AiCostOperationalView = {
   cacheHitRateBps: number | null;
   inputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   cachedInputTokenShareBps: number | null;
   completedLegalChatRuns: number;
   deepEscalationCount: number;
@@ -226,16 +230,26 @@ async function activePrice(
 }
 
 function estimatedCost(input: {
+  provider: ProviderName;
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   price: PriceRow;
 }): number {
-  const uncached = Math.max(0, input.inputTokens - input.cachedInputTokens);
-  const numerator = BigInt(uncached) * BigInt(input.price.inputRate)
-    + BigInt(input.cachedInputTokens) * BigInt(input.price.cachedInputRate)
-    + BigInt(input.outputTokens) * BigInt(input.price.outputRate);
-  const cost = (numerator + 999_999n) / 1_000_000n;
+  const uncached = Math.max(
+    0,
+    input.inputTokens - input.cachedInputTokens - input.cacheCreationInputTokens,
+  );
+  // Explicit Anthropic 5-minute cache writes cost 1.25x ordinary input.
+  // Quarter-rate integer arithmetic keeps the estimate exact without
+  // introducing a floating-point billing boundary.
+  const cacheWriteMultiplier = input.provider === "anthropic" ? 5n : 4n;
+  const numeratorInQuarterRateUnits = BigInt(uncached) * BigInt(input.price.inputRate) * 4n
+    + BigInt(input.cachedInputTokens) * BigInt(input.price.cachedInputRate) * 4n
+    + BigInt(input.cacheCreationInputTokens) * BigInt(input.price.inputRate) * cacheWriteMultiplier
+    + BigInt(input.outputTokens) * BigInt(input.price.outputRate) * 4n;
+  const cost = (numeratorInQuarterRateUnits + 3_999_999n) / 4_000_000n;
   if (cost > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new ProviderUsageError("PROVIDER_USAGE_INVALID");
   }
@@ -263,7 +277,13 @@ export async function recordProviderUsage(input: ProviderUsageInput): Promise<Pr
   const inputTokens = safeInteger(input.inputTokens);
   const outputTokens = safeInteger(input.outputTokens);
   const cachedInputTokens = safeInteger(input.cachedInputTokens);
-  if (cachedInputTokens > inputTokens) throw new ProviderUsageError("PROVIDER_USAGE_INVALID");
+  const cacheCreationInputTokens = safeInteger(input.cacheCreationInputTokens);
+  if (cachedInputTokens + cacheCreationInputTokens > inputTokens) {
+    throw new ProviderUsageError("PROVIDER_USAGE_INVALID");
+  }
+  if (input.provider !== "anthropic" && cacheCreationInputTokens > 0) {
+    throw new ProviderUsageError("PROVIDER_USAGE_INVALID");
+  }
   const itemCount = safeInteger(input.itemCount);
   const dimensions = input.dimensions === null || input.dimensions === undefined
     ? null
@@ -272,7 +292,9 @@ export async function recordProviderUsage(input: ProviderUsageInput): Promise<Pr
   const errorCode = input.status === "failed"
     ? cleanIdentifier(input.errorCode || "PROVIDER_REQUEST_FAILED", 100, /^[A-Z0-9._-]+$/)
     : null;
-  if (input.status === "failed" && (inputTokens || outputTokens || cachedInputTokens)) {
+  if (input.status === "failed" && (
+    inputTokens || outputTokens || cachedInputTokens || cacheCreationInputTokens
+  )) {
     throw new ProviderUsageError("PROVIDER_USAGE_INVALID");
   }
 
@@ -280,7 +302,14 @@ export async function recordProviderUsage(input: ProviderUsageInput): Promise<Pr
     ? await activePrice(input.db, input.provider, model, operation, completedAt)
     : null;
   const cost = price
-    ? estimatedCost({ inputTokens, outputTokens, cachedInputTokens, price })
+    ? estimatedCost({
+      provider: input.provider,
+      inputTokens,
+      outputTokens,
+      cachedInputTokens,
+      cacheCreationInputTokens,
+      price,
+    })
     : null;
   const eventId = input.eventId || crypto.randomUUID();
   if (!/^[A-Za-z0-9._:-]{1,180}$/.test(eventId)) {
@@ -306,9 +335,9 @@ export async function recordProviderUsage(input: ProviderUsageInput): Promise<Pr
         `INSERT INTO ai_provider_usage_events
          (id,environment,usage_day,workspace_id,user_id,feature,operation,provider,model,
           provider_request_id,request_count,input_tokens,output_tokens,cached_input_tokens,
-          item_count,dimensions,status,error_code,price_version_id,estimated_cost_microusd,
+          cache_creation_input_tokens,item_count,dimensions,status,error_code,price_version_id,estimated_cost_microusd,
           started_at,completed_at,created_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).bind(
         eventId,
         input.environment,
@@ -323,6 +352,7 @@ export async function recordProviderUsage(input: ProviderUsageInput): Promise<Pr
         inputTokens,
         outputTokens,
         cachedInputTokens,
+        cacheCreationInputTokens,
         itemCount,
         dimensions,
         input.status,
@@ -337,14 +367,15 @@ export async function recordProviderUsage(input: ProviderUsageInput): Promise<Pr
         `INSERT INTO ai_cost_daily_aggregates
          (id,environment,usage_day,scope_key,workspace_id,user_id,feature,operation,provider,model,
           request_count,failed_request_count,input_tokens,output_tokens,cached_input_tokens,
-          estimated_cost_microusd,unpriced_request_count,created_at,updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?)
+          cache_creation_input_tokens,estimated_cost_microusd,unpriced_request_count,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(id) DO UPDATE SET
           request_count=request_count+1,
           failed_request_count=failed_request_count+excluded.failed_request_count,
           input_tokens=input_tokens+excluded.input_tokens,
           output_tokens=output_tokens+excluded.output_tokens,
           cached_input_tokens=cached_input_tokens+excluded.cached_input_tokens,
+          cache_creation_input_tokens=cache_creation_input_tokens+excluded.cache_creation_input_tokens,
           estimated_cost_microusd=estimated_cost_microusd+excluded.estimated_cost_microusd,
           unpriced_request_count=unpriced_request_count+excluded.unpriced_request_count,
           updated_at=excluded.updated_at`,
@@ -363,6 +394,7 @@ export async function recordProviderUsage(input: ProviderUsageInput): Promise<Pr
         inputTokens,
         outputTokens,
         cachedInputTokens,
+        cacheCreationInputTokens,
         cost ?? 0,
         input.status === "succeeded" && !price ? 1 : 0,
         now,
@@ -483,6 +515,7 @@ export async function readAiCostDashboard(input: {
         sum(request_count) AS requestCount,sum(failed_request_count) AS failedRequestCount,
         sum(input_tokens) AS inputTokens,sum(output_tokens) AS outputTokens,
         sum(cached_input_tokens) AS cachedInputTokens,
+        sum(cache_creation_input_tokens) AS cacheCreationInputTokens,
         sum(estimated_cost_microusd) AS estimatedCostMicrousd,
         sum(unpriced_request_count) AS unpricedRequestCount
        FROM ai_cost_daily_aggregates
@@ -498,6 +531,7 @@ export async function readAiCostDashboard(input: {
         sum(aggregate.input_tokens) AS inputTokens,
         sum(aggregate.output_tokens) AS outputTokens,
         sum(aggregate.cached_input_tokens) AS cachedInputTokens,
+        sum(aggregate.cache_creation_input_tokens) AS cacheCreationInputTokens,
         sum(aggregate.estimated_cost_microusd) AS estimatedCostMicrousd,
         sum(aggregate.unpriced_request_count) AS unpricedRequestCount
        FROM ai_cost_daily_aggregates AS aggregate
@@ -532,6 +566,7 @@ export async function readAiCostDashboard(input: {
         COALESCE(sum(CASE WHEN status='succeeded' AND input_tokens>0 AND cached_input_tokens>0 THEN 1 ELSE 0 END),0) AS cacheHitRequests,
         COALESCE(sum(CASE WHEN status='succeeded' THEN input_tokens ELSE 0 END),0) AS inputTokens,
         COALESCE(sum(CASE WHEN status='succeeded' THEN cached_input_tokens ELSE 0 END),0) AS cachedInputTokens,
+        COALESCE(sum(CASE WHEN status='succeeded' THEN cache_creation_input_tokens ELSE 0 END),0) AS cacheCreationInputTokens,
         COALESCE(sum(round((julianday(completed_at)-julianday(started_at))*86400000)),0) AS totalProviderLatencyMs
        FROM ai_provider_usage_events
        WHERE environment=? AND completed_at>=? AND completed_at<=?`,
@@ -542,6 +577,7 @@ export async function readAiCostDashboard(input: {
       cacheHitRequests: number;
       inputTokens: number;
       cachedInputTokens: number;
+      cacheCreationInputTokens: number;
       totalProviderLatencyMs: number;
     }>(),
     input.db.prepare(
@@ -601,6 +637,7 @@ export async function readAiCostDashboard(input: {
   const cacheHitRequests = Number(operationalRow?.cacheHitRequests ?? 0);
   const inputTokens = Number(operationalRow?.inputTokens ?? 0);
   const cachedInputTokens = Number(operationalRow?.cachedInputTokens ?? 0);
+  const cacheCreationInputTokens = Number(operationalRow?.cacheCreationInputTokens ?? 0);
   const totalProviderLatencyMs = Number(operationalRow?.totalProviderLatencyMs ?? 0);
   const completedLegalChatRuns = Number(legalChatRow?.completedLegalChatRuns ?? 0);
   const deepEscalationCount = Number(legalChatRow?.deepEscalationCount ?? 0);
@@ -634,6 +671,7 @@ export async function readAiCostDashboard(input: {
         : null,
       inputTokens,
       cachedInputTokens,
+      cacheCreationInputTokens,
       cachedInputTokenShareBps: inputTokens > 0
         ? Math.floor(cachedInputTokens * 10_000 / inputTokens)
         : null,

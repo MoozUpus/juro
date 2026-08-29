@@ -419,7 +419,12 @@ test("document analysis sends Anthropic a forced envelope and restores the canon
         output_config?: { format?: { type?: string; schema?: Record<string, unknown> } };
         tools?: Array<{ name?: string; input_schema?: Record<string, unknown> }>;
         tool_choice?: { type?: string; name?: string };
-        system?: string;
+        system?: Array<{
+          type?: string;
+          text?: string;
+          cache_control?: { type?: string; ttl?: string };
+        }>;
+        messages?: Array<{ role?: string; content?: string; cache_control?: unknown }>;
       };
       assert.equal(request.model, "claude-sonnet-4-6");
       assert.equal(request.max_tokens, 3_600);
@@ -428,8 +433,12 @@ test("document analysis sends Anthropic a forced envelope and restores the canon
       assert.equal(request.tools?.[0]?.name, "emit_result");
       assert.equal(request.tools?.[0]?.input_schema?.type, "object");
       assert.deepEqual(request.tool_choice, { type: "tool", name: "emit_result" });
-      assert.match(request.system ?? "", /officialLexSources пусты/);
-      assert.match(request.system ?? "", /legalComplianceStatus обязан быть unverified/);
+      assert.equal(request.system?.length, 1);
+      assert.deepEqual(request.system?.[0]?.cache_control, { type: "ephemeral", ttl: "5m" });
+      assert.match(request.system?.[0]?.text ?? "", /officialLexSources пусты/);
+      assert.match(request.system?.[0]?.text ?? "", /legalComplianceStatus обязан быть unverified/);
+      assert.equal(request.messages?.[0]?.role, "user");
+      assert.equal(request.messages?.[0]?.cache_control, undefined);
       const nativeWireResult = {
         ...base,
         userSide: "",
@@ -446,7 +455,12 @@ test("document analysis sends Anthropic a forced envelope and restores the canon
         model: "claude-sonnet-4-6",
         stop_reason: "tool_use",
         content: [{ type: "tool_use", name: "emit_result", input: { payload_json: JSON.stringify(nativeWireResult) } }],
-        usage: { input_tokens: 20, output_tokens: 30 },
+        usage: {
+          input_tokens: 20,
+          output_tokens: 30,
+          cache_read_input_tokens: 200,
+          cache_creation_input_tokens: 1_000,
+        },
       });
     };
     const result = await runDocumentAnalysis({
@@ -471,6 +485,9 @@ test("document analysis sends Anthropic a forced envelope and restores the canon
     assert.equal(result.data.summary, base.summary);
     assert.equal(result.data.userSide, null);
     assert.equal(result.data.risks[0]?.page, null);
+    assert.equal(result.usage.inputTokens, 1_220);
+    assert.equal(result.usage.cachedInputTokens, 200);
+    assert.equal(result.usage.cacheCreationInputTokens, 1_000);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(originalRuntime)) {

@@ -21,6 +21,7 @@ interface AnthropicMessagesPayload {
     input_tokens?: number;
     output_tokens?: number;
     cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
   };
   error?: {
     type?: string;
@@ -84,7 +85,12 @@ export async function callAnthropicStructured<T>(options: {
     env: configuration,
   })).anthropicChatFallbackModel;
   const startedAt = Date.now();
-  const totalUsage: AiProviderUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+  const totalUsage: AiProviderUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+  };
   const maxAttempts = options.maxAttempts ?? 2;
   const legacyTimeoutMs = options.timeoutMs ?? 45_000;
   const firstByteTimeoutMs = options.firstByteTimeoutMs ?? legacyTimeoutMs;
@@ -115,7 +121,16 @@ export async function callAnthropicStructured<T>(options: {
           body: JSON.stringify({
             model,
             max_tokens: options.maxTokens ?? 8_192,
-            system: systemInstructions,
+            // Cache only the code-owned, repeatable system prefix. User
+            // questions, conversation history and documents remain in the
+            // separate user message and are never included in this cache
+            // breakpoint. The explicit 5-minute TTL also keeps cost
+            // accounting on one documented cache-write rate.
+            system: [{
+              type: "text",
+              text: systemInstructions,
+              cache_control: { type: "ephemeral", ttl: "5m" },
+            }],
             messages: [{
               role: "user",
               content: typeof options.input === "string" ? options.input : JSON.stringify(options.input),
@@ -141,9 +156,18 @@ export async function callAnthropicStructured<T>(options: {
           payload: await response.json().catch(() => ({})) as AnthropicMessagesPayload,
         }),
       });
-      totalUsage.inputTokens += payload.usage?.input_tokens ?? 0;
+      const cacheReadInputTokens = payload.usage?.cache_read_input_tokens ?? 0;
+      const cacheCreationInputTokens = payload.usage?.cache_creation_input_tokens ?? 0;
+      // Anthropic reports uncached, cache-read and cache-write input tokens as
+      // disjoint counters. Normalize inputTokens to the provider-neutral
+      // total used by JURO and retain both cache components separately.
+      totalUsage.inputTokens += (payload.usage?.input_tokens ?? 0)
+        + cacheReadInputTokens
+        + cacheCreationInputTokens;
       totalUsage.outputTokens += payload.usage?.output_tokens ?? 0;
-      totalUsage.cachedInputTokens += payload.usage?.cache_read_input_tokens ?? 0;
+      totalUsage.cachedInputTokens += cacheReadInputTokens;
+      totalUsage.cacheCreationInputTokens = (totalUsage.cacheCreationInputTokens ?? 0)
+        + cacheCreationInputTokens;
 
       if (!response.ok) {
         const retryable = response.status === 408 || response.status === 409 || response.status === 429 || response.status >= 500;

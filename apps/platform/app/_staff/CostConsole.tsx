@@ -35,11 +35,12 @@ const copy = {
     signals: "Операционные сигналы за окно",
     cacheHitRate: "Cache hit rate запросов",
     cachedTokenShare: "Доля cached input",
+    cacheWrites: "Записано в prompt cache",
     deepEscalations: "Deep escalation",
     providerFallbacks: "Provider fallback",
     providerErrors: "Ошибки providers",
     averageLatency: "Средняя latency provider",
-    signalCaveat: "Cache hit считается среди успешных вызовов с input tokens. Escalation и fallback считаются среди завершённых AI-чатов после входа; гостевой AI и анализ документов в этот знаменатель не входят.",
+    signalCaveat: "Cache hit считается среди успешных вызовов с input tokens. Cache writes — только количество токенов статических системных инструкций, записанных Anthropic в 5-минутный кэш; пользовательский контент не кэшируется. Escalation и fallback считаются среди завершённых AI-чатов после входа; гостевой AI и анализ документов в этот знаменатель не входят.",
     protectionMissing: "Автозащита не настроена",
     protectionMissingDetail: "Укажите согласованный дневной бюджет и порог ошибок — без политики circuit не откроется автоматически.",
     prices: "Версии цен",
@@ -127,11 +128,12 @@ const copy = {
     signals: "Oyna bo‘yicha operatsion signallar",
     cacheHitRate: "So‘rovlar cache hit rate",
     cachedTokenShare: "Cached input ulushi",
+    cacheWrites: "Prompt cache yozuvlari",
     deepEscalations: "Deep escalation",
     providerFallbacks: "Provider fallback",
     providerErrors: "Provider xatolari",
     averageLatency: "O‘rtacha provider latency",
-    signalCaveat: "Cache hit input tokenlari bor muvaffaqiyatli chaqiruvlar orasida hisoblanadi. Escalation va fallback faqat tizimga kirgandan keyingi yakunlangan AI-chatlar orasida hisoblanadi; mehmon AI va hujjat tahlili maxrajga kirmaydi.",
+    signalCaveat: "Cache hit input tokenlari bor muvaffaqiyatli chaqiruvlar orasida hisoblanadi. Cache writes faqat Anthropic 5 daqiqalik keshiga yozilgan statik tizim yo‘riqnomalari tokenlaridir; foydalanuvchi kontenti keshlanmaydi. Escalation va fallback faqat tizimga kirgandan keyingi yakunlangan AI-chatlar orasida hisoblanadi; mehmon AI va hujjat tahlili maxrajga kirmaydi.",
     protectionMissing: "Avtohimoya sozlanmagan",
     protectionMissingDetail: "Kelishilgan kunlik budjet va xato chegarasini kiriting — siyosatsiz circuit avtomatik ochilmaydi.",
     prices: "Narx versiyalari",
@@ -377,6 +379,7 @@ export function CostConsole({
         <div className="cost-summary-grid">
           <div className="cost-summary"><span>{t.cacheHitRate}</span><b>{percent(data.operational.cacheHitRateBps)}</b></div>
           <div className="cost-summary"><span>{t.cachedTokenShare}</span><b>{percent(data.operational.cachedInputTokenShareBps)}</b></div>
+          <div className="cost-summary"><span>{t.cacheWrites}</span><b>{data.operational.cacheCreationInputTokens.toLocaleString("en-US")}</b></div>
           <div className="cost-summary"><span>{t.deepEscalations}</span><b>{data.operational.deepEscalationCount} · {percent(data.operational.deepEscalationRateBps)}</b></div>
           <div className="cost-summary"><span>{t.providerFallbacks}</span><b>{data.operational.providerFallbackCount} · {percent(data.operational.providerFallbackRateBps)}</b></div>
           <div className="cost-summary"><span>{t.providerErrors}</span><b>{data.operational.providerFailures} · {percent(data.operational.providerFailureRateBps)}</b></div>

@@ -69,6 +69,67 @@ test("system-scoped guest usage accepts null tenant identities and remains cost-
   }
 });
 
+test("0163 accounts Anthropic 5-minute cache writes without storing cached content", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    await createAiModelPriceVersion({
+      db: d1,
+      actorUserId: "cost-user",
+      now: new Date(now),
+      value: {
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        operation: "messages",
+        inputMicrousdPerMillionTokens: 3_000_000,
+        outputMicrousdPerMillionTokens: 15_000_000,
+        cachedInputMicrousdPerMillionTokens: 300_000,
+        effectiveFrom: "2026-08-01T00:00:00.000Z",
+        sourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
+      },
+    });
+    const result = await recordProviderUsage({
+      db: d1,
+      environment: "development",
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      feature: "legal_chat",
+      operation: "messages",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      inputTokens: 3_000,
+      cachedInputTokens: 1_000,
+      cacheCreationInputTokens: 1_000,
+      status: "succeeded",
+      startedAt: now,
+      completedAt: now,
+      eventId: "usage-anthropic-cache-write",
+    });
+    assert.equal(result.estimatedCostMicrousd, 7_050);
+    assert.deepEqual({ ...(sqlite.prepare(
+      `SELECT input_tokens AS inputTokens,cached_input_tokens AS cachedInputTokens,
+        cache_creation_input_tokens AS cacheCreationInputTokens,estimated_cost_microusd AS cost
+       FROM ai_provider_usage_events WHERE id='usage-anthropic-cache-write'`,
+    ).get() as Record<string, unknown>) }, {
+      inputTokens: 3_000,
+      cachedInputTokens: 1_000,
+      cacheCreationInputTokens: 1_000,
+      cost: 7_050,
+    });
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT cache_creation_input_tokens AS value FROM ai_cost_daily_aggregates WHERE feature='legal_chat'",
+      ).get() as { value: number }).value,
+      1_000,
+    );
+    const columns = (sqlite.prepare("PRAGMA table_info(ai_provider_usage_events)").all() as Array<{ name: string }>)
+      .map((column) => column.name);
+    assert.equal(columns.includes("cache_creation_input_tokens"), true);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("0081 records priced and failed provider calls exactly once without content", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
@@ -204,6 +265,7 @@ test("0081 cost admin boundary is administrator-only, fresh-MFA-gated and CSRF-p
   assert.match(client, /"x-juro-csrf": "1"/);
   assert.match(client, /data\.measurement\.pricingCoverageBps/);
   assert.match(client, /data\.operational\.cacheHitRateBps/);
+  assert.match(client, /data\.operational\.cacheCreationInputTokens/);
   assert.match(client, /data\.operational\.deepEscalationRateBps/);
   assert.match(client, /data\.byPlan\.map/);
   assert.match(client, /data\.byUser\.map/);
@@ -394,6 +456,7 @@ test("AI cost dashboard reports current-plan, user, cache and legal-chat escalat
       inputTokens: 2_000,
       outputTokens: 300,
       cachedInputTokens: 500,
+      cacheCreationInputTokens: 0,
       estimatedCostMicrousd: 9_150,
       unpricedRequestCount: 0,
     }]);
@@ -416,6 +479,7 @@ test("AI cost dashboard reports current-plan, user, cache and legal-chat escalat
       cacheHitRateBps: 5_000,
       inputTokens: 2_000,
       cachedInputTokens: 500,
+      cacheCreationInputTokens: 0,
       cachedInputTokenShareBps: 2_500,
       completedLegalChatRuns: 2,
       deepEscalationCount: 1,

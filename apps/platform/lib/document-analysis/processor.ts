@@ -686,6 +686,7 @@ async function analyzeObject(
         inputTokens: ai.usage.inputTokens,
         outputTokens: ai.usage.outputTokens,
         cachedInputTokens: ai.usage.cachedInputTokens,
+        cacheCreationInputTokens: ai.usage.cacheCreationInputTokens,
         status: "succeeded",
         startedAt: successfulCall.startedAt,
         completedAt,

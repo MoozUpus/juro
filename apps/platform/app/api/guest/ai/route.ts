@@ -683,6 +683,7 @@ export async function POST(request: Request): Promise<Response> {
         inputTokens: aiResult.usage.inputTokens,
         outputTokens: aiResult.usage.outputTokens,
         cachedInputTokens: aiResult.usage.cachedInputTokens,
+        cacheCreationInputTokens: aiResult.usage.cacheCreationInputTokens,
         status: "succeeded",
         startedAt: successfulCall?.startedAt ?? completedAt,
         completedAt,

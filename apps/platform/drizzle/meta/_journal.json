@@ -1142,6 +1142,13 @@
       "when": 1787983200000,
       "tag": "0162_scoped_ai_cost_budgets",
       "breakpoints": true
+    },
+    {
+      "idx": 163,
+      "version": "7",
+      "when": 1787986800000,
+      "tag": "0163_anthropic_prompt_cache_accounting",
+      "breakpoints": true
     }
   ]
 }

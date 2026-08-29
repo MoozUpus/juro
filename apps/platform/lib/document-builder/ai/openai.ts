@@ -64,9 +64,12 @@ interface ResponsesApiPayload {
 }
 
 export type AiProviderUsage = {
+  /** Total input tokens, including provider cache reads and cache writes. */
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  /** Provider input tokens written to a prompt cache during this request. */
+  cacheCreationInputTokens?: number;
 };
 
 export type AiStructuredResult<T> = {
