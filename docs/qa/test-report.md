@@ -1,5 +1,27 @@
 # Test report — current evidence through 2026-08-29
 
+## Legal AI Fast/Balanced/Deep candidate and fresh provider recovery
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `1ed175014d4255217444c538d3e8d7ae87b8dd9f` |
+| Mode contract | PASS — `fast`, `balanced`, `deep`; omitted and unknown input normalize to `balanced` |
+| Cost/latency routing | PASS candidate — Fast and Balanced retain the configured chat model with low/medium reasoning; Deep alone selects the deep model/high reasoning; all profiles keep bounded provider/first-content/fallback/output controls |
+| Provider boundary | PASS candidate — existing bounded Anthropic fallback eligibility is preserved; guest and synthetic probes remain explicitly Fast |
+| D1 migration | PASS locally — migration 0161 preserves prior telemetry rows, accepts Balanced rows and restores append-only update/delete guards and indexes |
+| Focused regression | PASS — 8/8 mode/parser/schema/routing/localization/migration tests |
+| Full Platform release gate | PASS — core 1114/1114, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check, lint and production artifact validation |
+| Artifact budgets | PASS — CSS 595.1/600.0 KiB; initial JS 295.3/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3647.0/6144.0 KiB |
+| Exact-source CI | PASS — run `33230331239` on `1ed17501`; Website 3m32s and Platform 8m45s |
+| Local Chrome | PASS bounded — exact RU/UZ mode labels, Balanced default, switching, 1024/700/390/320 px layout, 44 px targets, no overflow and no console warning/error; no Lawyer/Admin identity used |
+| Live provider recovery | PASS read-only — both public status APIs agreed at `2026-08-29T03:02:32.506Z` on 8/8 operational and zero incidents; Anthropic was operational at `03:00:33.053Z` (5,465 ms) and document analysis at `03:00:41.121Z` (8,018 ms), both with no safe error |
+| Release boundary | NOT DEPLOYED — no Worker/Sites publish, migration, D1, DNS, notification or customer-data mutation |
+
+The provider result verifies recovery after the reported account top-up. It
+does not prove the unpublished reasoning-mode candidate in production. A
+production release would still require explicit approval, migration safety
+gates and role-correct signed-in replay.
+
 ## Security remediation candidate and Anthropic recovery
 
 | Gate | Result |

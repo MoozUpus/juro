@@ -3,14 +3,32 @@
 ## Current operational verification
 
 - After the owner reported replenishing the Anthropic account, independent
-  production app/status reads generated at `2026-08-29T02:11:04.267Z` agreed
+  production app/status reads generated at `2026-08-29T03:02:32.506Z` agreed
   on 8/8 operational with no incident. Anthropic was operational at
-  `02:00:33.048Z` (5,308 ms, no safe error) and document analysis at
-  `02:00:40.647Z` (7,556 ms, no safe error). This was a read-only recovery
+  `03:00:33.053Z` (5,465 ms, no safe error) and document analysis at
+  `03:00:41.121Z` (8,018 ms, no safe error). This was a read-only recovery
   verification, not a new release.
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `1ed17501` adds explicit Fast, Balanced and Deep legal-AI modes,
+  with Balanced as the default for omitted or unknown client input. Balanced
+  keeps the normal chat model and medium reasoning; Deep alone selects the
+  configured deep model/high reasoning profile. Existing bounded Anthropic
+  fallback eligibility is preserved rather than expanded into an unbounded
+  primary path.
+- The candidate adds migration `0161_balanced_ai_reasoning_mode.sql` so D1
+  telemetry can record all three modes while preserving existing rows and
+  restoring append-only guards. The migration has not been applied anywhere
+  in production.
+- Local gates passed focused 8/8, core 1114/1114,
+  Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check,
+  lint and production artifact validation. Exact-source CI `33230331239`
+  passed `1ed17501`: Website 3m32s and Platform 8m45s.
+- Isolated local Chrome verified the exact RU/UZ labels, Balanced default,
+  mode switching, 1024/700/390/320 px layout, 44 px targets, zero horizontal
+  overflow and no console warning/error. No real Lawyer/Admin identity was
+  used and this is not production evidence.
 - Security scan `aacf0487-aae5-4c8f-a527-8f3efc70cb76` reported 0 Critical,
   0 High and 6 validated Medium findings on immutable source `3a30042c`.
 - Candidate `695693f3` closes workspace editor-role enforcement, hidden

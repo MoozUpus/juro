@@ -49,6 +49,17 @@ HTML 35/35, local release gates and exact-source CI `33227714329` (Website
 3m50s, Platform 8m14s). The candidate is not deployed; see
 [`security-scan-3a30042c.md`](./security-scan-3a30042c.md).
 
+**AI reasoning candidate:** commit
+`1ed175014d4255217444c538d3e8d7ae87b8dd9f` adds explicit Fast, Balanced and
+Deep legal-AI profiles, makes Balanced the normalized default, preserves the
+bounded Anthropic fallback and keeps guest/synthetic probes Fast. Migration
+0161 extends telemetry to the three-mode contract while preserving rows and
+append-only guards. Local focused 8/8, core 1114/1114,
+Cloudflare/infrastructure 203/203, rendered Worker 35/35, static/build/artifact
+gates and isolated RU/UZ Chrome at 1024/700/390/320 px passed. Exact-source CI
+`33230331239` passed Website in 3m32s and Platform in 8m45s. This candidate and
+its migration are not deployed; production remains Worker 170 and Sites v86.
+
 ## Current production recovery
 
 Worker 161 safely classified the repeated Anthropic HTTP 400 as
@@ -56,10 +67,10 @@ Worker 161 safely classified the repeated Anthropic HTTP 400 as
 provider message, prompts and secrets were not logged. After the account balance
 was restored, fresh production probes recorded Anthropic operational at
 `2026-08-28T06:47:17.754Z`. After the owner's latest account top-up report,
-independent app/status-host reads generated at `2026-08-29T02:11:04.267Z`
+independent app/status-host reads generated at `2026-08-29T03:02:32.506Z`
 again agreed on 8/8 operational with no incident. Anthropic was operational at
-`02:00:33.048Z` (5,308 ms, no safe error) and document analysis at
-`02:00:40.647Z` (7,556 ms, no safe error). The exception is closed by live
+`03:00:33.053Z` (5,465 ms, no safe error) and document analysis at
+`03:00:41.121Z` (8,018 ms, no safe error). The exception is closed by live
 provider evidence rather than by the balance action alone.
 
 The same recovery window exposed a separate P1 operational defect: Lex RSS
@@ -169,7 +180,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | Document/case/lawyer workflows | PASS from prior authenticated release evidence; PARTIAL for this delta | The analytics delta is covered by server-side success-boundary tests. Fresh in-app browser checks proved guest, Client login, dedicated Lawyer login, Admin re-auth and status boundaries; no new OTP-authenticated mutable workflow was submitted for this delta. |
 | Payments | DEMO / NOT APPROVED | Production approval flag false; no live-payment claim. |
 | Product analytics | DEPLOYED / INSUFFICIENT SAMPLE | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. The 2026-08-28 read-only recheck retained 24 represented events from 25 August onward and found zero events at or after the Worker 166 release boundary, so no conversion baseline is invented. |
-| AI costs | ACTIVE MEASUREMENT / INSUFFICIENT SAMPLE | Four official, effective-dated production price rows passed backup/restore gates. The protected console now reports 100% current price coverage, `$0.104549` estimated cost and 4/30 priced successes; it refuses to call the sample ready and explicitly shows that production cost-guard policies are not configured. The 30% reduction target remains `UNVERIFIED`. |
+| AI costs | ACTIVE MEASUREMENT / INSUFFICIENT SAMPLE | Four official, effective-dated production price rows passed backup/restore gates. The protected console now reports 100% current price coverage, `$0.104549` estimated cost and 4/30 priced successes; it refuses to call the sample ready and explicitly shows that production cost-guard policies are not configured. The 30% reduction target remains `UNVERIFIED`. Candidate `1ed17501` adds bounded Fast/Balanced/Deep routing with Balanced on the chat model by default, but it is not deployed and therefore does not change this production sample. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
 | Accessibility | PARTIAL | The exact public candidate source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix, the 44 px and ARIA-reference runtime guards, and retained 320/390/981/1101 px keyboard/visual samples. The deployed Sites v86 replay is now complete and recorded as a live FAIL for its stale sub-12 px labels, 32 px theme targets, dangling menu reference, duplicate accessible closer and missing skip-to-main focus transfer; commit `7e07b562` fixes them only in the unpublished candidate. Workers 156–158 close confirmed Client comparison, Lawyer professional and non-corpus Admin interaction-target defects, and Workers 168–170 close the sampled Client focus/shell defects in production. No signed-in Lawyer/Admin, real OTP/MFA error, screen reader or physical mobile device was used. Protected Lawyer/Admin rendering and live auth-error assistive-technology replay remain open, so this is not a WCAG conformance claim. |
 | Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Fresh app/status reads reconfirmed Anthropic and document analysis operational after the reported account top-up. The authenticated dashboard verifies the complete 22-record DNS inventory. A fresh control-plane inventory also exactly matched 17 production queues, two production schedules and the active Worker 170 bindings; all three private R2 buckets have no custom domain and public `r2.dev` access disabled. The narrower OAuth token still receives authentication errors from DNS/ruleset/list endpoints. Cloudflare's one partially exposed origin-IP recommendation, overdue infrastructure billing and unavailable real CWV tracing remain explicit risks. |

@@ -4,6 +4,36 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 legal AI reasoning-mode candidate
+
+Commit `1ed175014d4255217444c538d3e8d7ae87b8dd9f` adds three explicit modes to
+the legal AI interface and API: Fast, Balanced and Deep. Balanced is the
+default for both omitted and unknown input. It uses the configured chat model,
+medium reasoning and bounded latency/output controls; Deep alone selects the
+configured deep model/high-reasoning profile. Fast remains the low-latency
+profile, and guest/synthetic probes remain explicitly Fast. The existing
+bounded Anthropic fallback path remains eligible without becoming an
+unbounded primary route.
+
+Migration `0161_balanced_ai_reasoning_mode.sql` rebuilds the telemetry table
+constraint to accept all three modes, copies existing rows and recreates the
+append-only triggers and indexes. A dedicated regression proves default/input
+normalization, schema acceptance, routing profiles, localized source labels,
+row preservation and restored update/delete guards.
+
+Local validation passed focused 8/8, core 1114/1114,
+Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check,
+lint, the production build and deployable-artifact budgets. Exact-source
+GitHub Actions run `33230331239` passed on `1ed17501`: Website in 3m32s and
+Platform in 8m45s. Isolated local Chrome confirmed the three exact RU/UZ
+labels, Balanced default and switching at 1024, 700, 390 and 320 px, with
+44 px targets, no horizontal overflow and no warning/error console output.
+
+This is a prepared but unpublished Platform/D1 candidate. No Worker, Sites,
+DNS, D1, notification or customer-data mutation was made. Production still
+runs Worker 170 and Sites v86; release approval, migration backup/apply and
+signed-in post-deploy replay remain separate gates.
+
 ## 2026-08-29 security remediation candidate
 
 Codex Security scan `aacf0487-aae5-4c8f-a527-8f3efc70cb76` targeted immutable
