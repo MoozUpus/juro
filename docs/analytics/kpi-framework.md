@@ -60,14 +60,14 @@ one queryable schema without adding identity or content.
 | --- | --- | --- |
 | Activation rate | completed signups reaching a validated source-backed answer, completed analysis, or saved case plus plan within 7 days / completed signups | `INSTRUMENTED CANDIDATE / INSUFFICIENT SAMPLE`; D1 now computes a mature 30-day cohort server-side and returns aggregates only. A read-only 2026-08-29 production replay found 2/10 activated (20.0%), which is below the 30-signup comparison gate. |
 | Time to first value | p50/p75/p95 elapsed time from completed onboarding to the first qualifying outcome | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; only two production actors qualified in the replay, below the five-activation disclosure floor. |
-| Completion rate | successful terminal events / matching started events, by workflow | `INSUFFICIENT_SAMPLE`; no signup or document-completion pair exists in the current window |
-| Step drop-off | 1 minus adjacent-step completion rate | `INSUFFICIENT_SAMPLE`; do not infer a funnel from unrelated event totals |
+| Completion rate | first-question actors receiving the exact request-linked, completed, validated source-backed answer within 7 days / first-question actors in the fully observed 44-to-14-day cohort | `INSTRUMENTED CANDIDATE / INSUFFICIENT SAMPLE`; the 2026-08-29 read-only D1 replay found 0/5 qualifying completions (0.0%). All 5 had an exact completed structured response, but none met the persisted validated-source answer contract. |
+| Step drop-off | 1 minus the adjacent actor-level completion rate, separately for first question → validated answer and validated answer → opened source | `INSTRUMENTED CANDIDATE`; first-question-to-answer drop-off is currently 5/5 (100.0%) in the small production cohort. Source-open drop-off awaits migration 0165, the matching Worker and a complete observation window. |
 | 7-day engaged return | activated actors with a new explicit product action on a later UTC day within 7 days / activated actors in a fully observed cohort | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the protected D1 aggregate excludes passive session refreshes. A read-only production replay found 0/2 returning, below the five-activation disclosure floor. |
 | Plan completion | completed plans / created plans in the same 30-day D1 window | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the read-only production replay found only three created plans. |
 | Case creation | `case_created` count and, once comparable, `case_created / signup_completed` | Instrumented; zero current-window events |
 | Lawyer conversion | unique actors creating a lawyer request within 7 days of their first authenticated directory view / unique first-time directory viewers in a fully observed cohort | `INSTRUMENTED CANDIDATE / AWAITING OBSERVATION`; migration 0164 adds daily-deduplicated internal visit evidence. The existing 13 Analytics Engine view occurrences remain non-joinable and are not reused as unique visitors. |
 | Lawyer-request acceptance | requests in `accepted`, `offer_proposed`, `offer_accepted`, or `completed` / requests created in the same 30-day D1 window | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the read-only production replay found two requests, one accepted-or-later and zero completed. This is not browse-to-request conversion. |
-| Source open rate | `source_opened / successful answer outcomes` in the same window | Instrumented; current counts are too small and unlinked for a rate claim |
+| Source open rate | actors opening the exact qualifying answer's authorized citation within 7 days / actors receiving a qualifying validated source-backed answer | `INSTRUMENTED CANDIDATE / AWAITING OBSERVATION`; migration 0165 adds answer-deduplicated actor evidence. Historical Analytics Engine occurrences remain non-joinable and are not reused as users. |
 | Cost per successful answer | priced successful provider cost / priced successful answers | `INSUFFICIENT_SAMPLE`; 4/30 priced successes, `$0.104549` total |
 | Average AI cost | priced provider cost / fully priced provider requests, reported separately for success/failure | `INSUFFICIENT_SAMPLE`; zero-token failures may understate billed failed work |
 | Scoped budget utilization | priced UTC day/month cost / operator-entered scope limit, reported separately for technical user and allowlisted feature | Instrumented in candidate `f312a930`; no production policy or threshold exists |
@@ -187,8 +187,37 @@ browse-conversion value is claimed. The previous 13 Analytics Engine
 `lawyer_viewed` occurrences are not identity-linked and are not substituted for
 unique visitors.
 
-The extended candidate passes focused 4/4, core 1137/1137,
+Commit `c0f9c372` adds an actor-level answer funnel over the same protected D1
+surface. The denominator is each eligible actor's first-ever explicit user
+message in the fully observed 44-to-14-day cohort. A completion requires the
+exact `ai_runs.request_message_id`, a completed run within seven days, and the
+persisted assistant result to be `responseKind=answer`,
+`sourceValidationStatus=validated`, with at least one source. The next step
+requires an authorized open of that exact response within seven days. Rates and
+drop-off are independently suppressed below five denominator actors; comparable
+readiness still requires 30.
+
+Migration `0165_ai_answer_source_opens.sql` stores only internal user ID,
+response-message ID, and first/last open timestamps, one row per actor and
+answer. Insert/update triggers require the response to be an assistant message
+owned by that actor. Repeated opens cannot inflate the numerator, no prompt,
+answer, URL, profile, workspace, case, contact or document content is stored,
+and account deletion purges the rows while preserving another actor's evidence.
+Citation access remains available if this best-effort observation write fails.
+
+The read-only production replay at `2026-08-29T12:18:22.659Z` read 2,142 rows
+and wrote zero. It found five eligible first-question actors and zero qualifying
+validated source-backed answers, so answer completion is 0.0% and first-step
+drop-off is 100.0%; this is an insufficient 5-actor baseline, not a quality or
+product-market-fit conclusion. A separate diagnostic read 313 rows and wrote
+zero: all five actors had an exact completed response within seven days and a
+valid structured result, but zero met the validated-source answer contract.
+Production has no `ai_answer_source_opens` table, so no source-open rate is
+claimed.
+
+The extended candidate passes product-KPI focused 5/5, the combined KPI/purge
+focused run 15/15, core 1138/1138,
 Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint,
-ordered migration/foreign-key checks and the bounded artifact gate. Migration
-0164 remains outside the production migration pattern; production remains
-Worker 170 and Sites v86.
+ordered migration/foreign-key checks and the bounded artifact gate. Worker entry
+is 3706.9/6144.0 KiB. Migrations 0164 and 0165 remain outside the production
+migration pattern; production remains Worker 170 and Sites v86.

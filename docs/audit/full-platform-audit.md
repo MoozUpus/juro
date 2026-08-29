@@ -11,21 +11,29 @@ the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 
 **Privacy-safe product KPI candidate:** the protected RU/UZ Admin dashboard now
 computes mature signup activation, TTFV, plan completion, lawyer-request
-acceptance and 7-day engaged return inside D1 without returning identifiers or
+acceptance, 7-day engaged return and the exact first-question → validated answer
+→ authorized source-open funnel inside D1 without returning identifiers or
 content. Commit `8602e410` defines return as a new explicit action on a later UTC
 day, excluding session refresh and passive reads. Migration 0164 prepares a
 compatible first-directory-view to 7-day request cohort with one content-free
 daily row; account purge deletes it and old Analytics Engine occurrences are not
-misrepresented as users. Legal evaluation, investor demo and active staff are
-excluded; rates suppress below five and readiness requires 30. Focused 4/4,
-core 1137/1137, Cloudflare/infrastructure 203/203, rendered Worker 35/35,
+misrepresented as users. Commit `c0f9c372` and migration 0165 add one
+content-free, owner-bound row per actor/answer; repeat source opens cannot inflate
+the numerator and account purge removes them. Legal evaluation, investor demo
+and active staff are excluded; rates suppress below five and readiness requires
+30. Focused KPI 5/5, combined KPI/purge 15/15, core 1138/1138,
+Cloudflare/infrastructure 203/203, rendered Worker 35/35,
 type-check, lint, ordered migration/FK checks and artifact validation passed;
-Worker entry is 3697.1/6144.0 KiB. Existing protected-boundary Chrome evidence
+Worker entry is 3706.9/6144.0 KiB. Existing protected-boundary Chrome evidence
 remains valid without a fabricated staff identity. The original read-only
 production replay found 2/10 activated; the return replay read 417 rows, wrote
 zero and found 2/9 activated with 0 returning, so the rate remains
 privacy-suppressed. Browse conversion awaits deployment and observation. The
-candidate and 0164 are unpublished and do not prove retention, conversion or
+answer replay read 2,142 rows and wrote zero: 5 first-question actors and 0
+validated source-backed completions. All five had exact completed structured
+responses, but zero passed the strict source-validation contract. Source-open
+conversion awaits 0165 and a full observation window. The candidate and
+migrations 0164/0165 are unpublished and do not prove retention, conversion or
 product-market fit.
 
 **Current Anthropic recovery:** after the owner replenished the account, the

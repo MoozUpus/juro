@@ -24,9 +24,14 @@
   internal observation per user/day with first/last timestamps. Repeated views
   cannot move the first-view cohort, and account purge deletes the actor's rows
   without touching another user.
-- Focused tests pass 4/4; the full local gate passes core 1137/1137,
+- Candidate `c0f9c372` adds the exact first-question → validated answer →
+  authorized source-open funnel. Migration `0165_ai_answer_source_opens.sql`
+  stores one content-free row per actor/answer, rejects cross-owner evidence,
+  deduplicates repeat opens, and is included in account purge.
+- Focused KPI tests pass 5/5 and the combined KPI/purge run passes 15/15; the
+  full local gate passes core 1138/1138,
   Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
-  artifact validation; Worker entry is 3697.1/6144.0 KiB. Local Chrome verifies the RU/UZ protected
+  artifact validation; Worker entry is 3706.9/6144.0 KiB. Local Chrome verifies the RU/UZ protected
   boundary at desktop and 390 px with noindex, exact re-auth return path, no
   overflow and no warning/error log; no staff identity was fabricated.
 - A read-only production replay read 230 rows and wrote zero: 10 eligible, two
@@ -36,7 +41,12 @@
   2 activated and 0 returning. Its rate remains hidden below the five-activation
   disclosure floor. Browse conversion awaits migration, Worker and observation;
   the 13 old view occurrences are not treated as unique visitors.
-- Migration 0164 remains outside the production pattern. No production release,
+- A new read-only replay at `2026-08-29T12:18:22.659Z` read 2,142 rows and
+  wrote zero: 5 first-question actors and 0 validated source-backed completions.
+  A 313-row diagnostic confirmed exact completed structured responses for all
+  five, but zero passed the strict validated-source contract. Production has no
+  0165 table, so no source-open actor rate is claimed.
+- Migrations 0164/0165 remain outside the production pattern. No production release,
   D1 row write, DNS, notification or customer-data mutation occurred; product-
   market-fit evidence remains unverified.
 

@@ -26,8 +26,19 @@ key, UTC day and first/last timestamps, one row per user/day. Account deletion
 explicitly purges those rows. The table is additive but must precede the matching
 Worker; it remains outside production's migration pattern.
 
-Focused aggregation/privacy/deduplication/access tests passed 4/4. The full
-local gate then passed core 1137/1137, Cloudflare/infrastructure 203/203,
+Commit `c0f9c372` adds the adjacent first-question → validated answer → source
+open funnel. A qualifying answer is joined by the exact persisted request ID,
+must complete within seven days and must contain a validated non-empty source
+set. Migration `0165_ai_answer_source_opens.sql` records only actor ID, exact
+response ID and first/last open timestamps. Owner-integrity triggers require an
+assistant response owned by that actor; the primary key deduplicates repeat
+opens, and account deletion explicitly removes the observation before its
+conversation is deleted. Citation access does not fail if the best-effort
+observation write fails.
+
+Focused aggregation/privacy/deduplication/access tests passed 5/5 and the
+combined KPI/purge run passed 15/15. The full local gate then passed core
+1138/1138, Cloudflare/infrastructure 203/203,
 rendered Worker 35/35,
 type-check, lint and the bounded production artifact build. Chrome verified the
 localized RU/UZ protected boundary at desktop and 390 px: private noindex,
@@ -47,7 +58,17 @@ privacy-suppressed because the activated denominator is below five. No browse
 conversion baseline exists because 0164 is not deployed; the 13 historical
 `lawyer_viewed` occurrences are not unique actors and are not reused.
 
-This is an unpublished application-plus-migration candidate. No production D1
+The answer-funnel replay at `2026-08-29T12:18:22.659Z` read 2,142 rows and
+wrote zero. It found five eligible first-question actors and zero qualifying
+validated source-backed answers: 0.0% completion and 100.0% drop-off, both an
+insufficient-sample baseline rather than a product-quality conclusion. A
+separate diagnostic read 313 rows and wrote zero; all five actors had exact
+completed structured responses within seven days, but zero met the strict
+validated-source answer contract. Production has no 0165 table, so the
+answer-to-source-open rate remains awaiting observation.
+
+This is an unpublished application-plus-migration candidate. Migrations 0164
+and 0165 remain outside production's migration pattern. No production D1
 row write or migration, Worker/Sites publish, DNS, notification or customer-data
 mutation was performed. Production remains Worker 170 and Sites v86.
 

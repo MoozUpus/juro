@@ -132,6 +132,30 @@ leave the additive table in place; the old Worker does not read or write it. Do
 not delete funnel rows ad hoc or edit the migration ledger. A database restore
 requires a separately approved schema incident and recovery-point review.
 
+## Prepared migration 0165 gate — not applied
+
+Candidate migration `0165_ai_answer_source_opens.sql` is additive. It stores an
+internal user ID, exact assistant-response ID and first/last open timestamps,
+one row per actor/answer. Owner-integrity triggers reject a response that is not
+an assistant message owned by that actor. It contains no prompt, answer, source
+URL, profile, workspace, case, contact or document content, and account deletion
+explicitly purges the actor's rows. Migration 0165 remains excluded from the
+production `migrations_pattern` and has not been applied remotely.
+
+Before an explicitly approved release, create and round-trip-verify a fresh full
+pre-0164/0165 production export, rehearse the complete ordered migration set in
+an isolated database, and require `quick_check=ok`, zero foreign-key violations,
+the composite keys, both owner triggers and exact row-count parity. Apply both
+schemas before the matching Worker. In staging, prove an authorized citation
+open is answer-deduplicated, a foreign actor is rejected, source access remains
+available on observation failure, account purge removes only the actor's row,
+and the 14-day fully observed cohort returns aggregate-only output.
+
+If the matching Worker regresses after 0165, restore the prior Worker first and
+leave the additive table in place. The prior Worker does not read or write it.
+Do not delete funnel rows ad hoc or edit the migration ledger; database restore
+requires a separately approved schema incident and recovery-point review.
+
 ## Zone TLS rollback
 
 The current zone encryption mode is explicit `Full (strict)`. If a verified

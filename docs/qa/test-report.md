@@ -4,25 +4,28 @@
 
 | Gate | Result |
 | --- | --- |
-| Exact implementation source | PASS candidate — activation baseline `0725887f`; engaged-return and lawyer-funnel extension `8602e4101e2a61089ac7e5a66a13c6916abd1044` |
+| Exact implementation source | PASS candidate — activation baseline `0725887f`; engaged-return and lawyer-funnel extension `8602e4101e2a61089ac7e5a66a13c6916abd1044`; exact answer/source-open funnel `c0f9c372` |
 | Cohort contract | PASS — a mature 30-day signup cohort gets a complete seven-day value window; grounded answer, completed analysis and case-plus-plan paths are deduplicated at the actor's earliest result |
 | Engaged-return contract | PASS — the 44-to-14-day signup cohort has complete activation and return windows; only an explicit action on a later UTC day within seven days of first value counts, while session refresh and passive reads do not |
 | Marketplace contract | PASS candidate — one internal daily-deduplicated visit row fixes the first-view cohort; only a request by the same actor within seven days converts, and unrelated Analytics Engine occurrences are never divided into the rate |
+| Answer-funnel contract | PASS candidate — each actor's first-ever user message is joined through the exact completed `request_message_id` to one validated source-backed response within 7 days, then to an authorized open of that exact response within the next 7 days |
 | Exclusions | PASS — `legal_eval_user_*`, the three fixed investor-demo identities and active platform staff do not enter product cohorts |
 | Privacy boundary | PASS — D1 uses identifiers only inside aggregate CTEs; the response contains no identifier, email, contact field, prompt, answer, case text or document content |
-| Retention/deletion boundary | PASS — migration 0164 stores only internal user/day and first/last timestamps; account purge deletes the actor's rows while preserving another user's evidence |
+| Retention/deletion boundary | PASS — migrations 0164/0165 store only internal keys and timestamps; source-open owner triggers reject cross-actor evidence, and account purge deletes the actor's rows while preserving another user's evidence |
 | Disclosure/readiness | PASS — rates and TTFV are suppressed below five observations; 30 denominator observations are required before the dashboard says the sample is comparable |
 | Admin boundary | PASS source — page and no-store API require `staff.operations.manage` and MFA within 15 minutes; both locales are present and the route is noindex |
-| Focused regression | PASS — product KPI aggregation, privacy suppression, daily deduplication and Admin/source boundary 4/4 |
-| Full local regression | PASS — core 1137/1137; Cloudflare/infrastructure 203/203; rendered Worker 35/35; type-check and lint |
-| Production artifact | PASS — bounded build and emitted-byte budgets: CSS 596.7/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3697.1/6144.0 KiB |
+| Focused regression | PASS — product KPI aggregation/privacy/deduplication/Admin boundary 5/5; combined KPI plus real account-purge run 15/15 |
+| Full local regression | PASS — core 1138/1138; Cloudflare/infrastructure 203/203; rendered Worker 35/35; type-check and lint |
+| Production artifact | PASS — bounded build and emitted-byte budgets: CSS 596.7/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3706.9/6144.0 KiB |
 | Local Chrome | PASS bounded — RU/UZ protected boundaries at 1440×900 and 390×844 retained one localized H1, private noindex metadata, exact re-auth return path, zero horizontal overflow and no warning/error log; no staff identity was fabricated |
 | Production data replay | PASS read-only / INSUFFICIENT SAMPLE — 10 eligible, 2 activated, one grounded-answer user, zero analysis users and two case-plus-plan users; 230 rows read, zero written |
 | Engaged-return replay | PASS read-only / PRIVACY-SUPPRESSED — 9 eligible, 2 activated and 0 returning; 417 rows read, zero written; the 0/2 rate is not disclosed as a comparable metric |
 | Browse conversion replay | AWAITING OBSERVATION — migration 0164 and the matching Worker are not deployed; the 13 older `lawyer_viewed` occurrences are deliberately not treated as unique visitors |
+| Answer-funnel replay | PASS read-only / INSUFFICIENT SAMPLE — main query read 2,142 rows and wrote zero: 5 first-question actors, 0 qualifying validated source-backed answers, 0.0% completion and 100.0% drop-off. Diagnostic query read 313 rows and wrote zero: all 5 had exact completed structured responses, but none passed the validated-source contract |
+| Source-open replay | AWAITING OBSERVATION — production has no migration 0165 table; no actor rate is inferred from the old non-joinable `source_opened` occurrence |
 | Workflow replay | PRIVACY-SUPPRESSED — three plans with zero completed; two lawyer requests with one accepted-or-later and zero completed |
 | Anthropic recovery | PASS current read-only — at `2026-08-29T11:10:56.708Z` the content-free production probe completed in 4,810 ms with no safe error; document analysis also remained operational |
-| Release boundary | UNPUBLISHED — migration 0164 is outside the production pattern; no D1 row write/migration, Worker/Sites publish, DNS, notification or customer-data mutation |
+| Release boundary | UNPUBLISHED — migrations 0164/0165 are outside the production pattern; no D1 row write/migration, Worker/Sites publish, DNS, notification or customer-data mutation |
 
 The 2/10 result is a 20.0% small baseline, not a target or a readiness claim.
 TTFV remains hidden because only two actors qualified. Path counts overlap and
@@ -30,6 +33,12 @@ must not be summed. Engaged return is now computable but privacy-suppressed at
 0/2. Browse-to-request conversion is instrumented without inventing identity
 linkage, but remains unmeasured until migration 0164, the matching Worker and a
 complete observation window are explicitly released.
+
+The exact question-to-answer funnel is now measurable without joining unrelated
+event totals. Its current 0/5 result is disclosed because the denominator meets
+the five-actor privacy floor, but remains below the 30-actor comparison gate.
+Source-open conversion remains unmeasured until migration 0165 and the matching
+Worker are explicitly released and the full observation window matures.
 
 ## Compact conversation-context candidate
 
