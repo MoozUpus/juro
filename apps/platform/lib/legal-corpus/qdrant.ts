@@ -9,6 +9,10 @@ const SNAPSHOT_REQUEST_TIMEOUT_MS = 120_000;
 const COLLECTION_PATTERN = /^[A-Za-z0-9_-]{1,80}$/u;
 const SNAPSHOT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,239}$/u;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
+// Qdrant 1.18 emits RFC3339 timestamps without an offset in some container
+// builds. Keep the value bounded and timestamp-shaped while accepting both
+// that form and the offset-bearing form returned by other builds.
+const QDRANT_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})?$/u;
 const POINT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const VECTOR_DIMENSIONS = 1_536;
 export const LEGAL_CORPUS_QDRANT_INSTANCE = "juro-legal-corpus-qdrant-v1";
@@ -109,7 +113,7 @@ const snapshotResponseSchema = z.object({
   result: z.object({
     name: z.string().regex(SNAPSHOT_NAME_PATTERN),
     size: z.number().int().positive().safe(),
-    creation_time: z.string().datetime({ offset: true }),
+    creation_time: z.string().regex(QDRANT_TIMESTAMP_PATTERN),
     checksum: z.string().regex(SHA256_PATTERN),
   }).passthrough(),
 }).passthrough();

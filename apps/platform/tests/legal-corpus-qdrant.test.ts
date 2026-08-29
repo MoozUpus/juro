@@ -318,6 +318,20 @@ test("snapshot lifecycle preserves Qdrant checksum across download, upload and c
   assert.equal(requests.at(-1)?.method, "DELETE");
 });
 
+test("snapshot creation accepts Qdrant timestamps without an explicit offset", async () => {
+  const client = new QdrantLegalCorpusClient(configured, async () => Response.json({
+    status: "ok",
+    result: {
+      name: "legal.snapshot",
+      size: 1,
+      creation_time: "2026-08-29T07:49:12.123456789",
+      checksum: "a".repeat(64),
+    },
+  }));
+  const info = await client.createSnapshot();
+  assert.equal(info.creationTime, "2026-08-29T07:49:12.123456789");
+});
+
 test("hybrid Qdrant fusion preserves dense-only and sparse-only candidates", async () => {
   const client = new QdrantLegalCorpusClient(configured, async (_input, init) => {
     const body = JSON.parse(String(init?.body)) as { using: string };
