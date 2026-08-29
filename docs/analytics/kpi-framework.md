@@ -69,6 +69,9 @@ one queryable schema without adding identity or content.
 | Source open rate | `source_opened / successful answer outcomes` in the same window | Instrumented; current counts are too small and unlinked for a rate claim |
 | Cost per successful answer | priced successful provider cost / priced successful answers | `INSUFFICIENT_SAMPLE`; 4/30 priced successes, `$0.104549` total |
 | Average AI cost | priced provider cost / fully priced provider requests, reported separately for success/failure | `INSUFFICIENT_SAMPLE`; zero-token failures may understate billed failed work |
+| Scoped budget utilization | priced UTC day/month cost / operator-entered scope limit, reported separately for technical user and allowlisted feature | Instrumented in candidate `f312a930`; no production policy or threshold exists |
+| Scoped budget breach rate | unique `cost_limit` events / active scope-periods, split by daily/monthly and configured action | Instrumented in candidate `f312a930`; unpriced warnings are excluded because unknown cost is not a proven breach |
+| Deep budget suppression | Deep attempts rejected by `disable_deep` / Deep attempts subject to an active reached policy | Instrumented as a control outcome; no production value is claimed before policy deployment and a comparable sample |
 | AI cache-hit request rate | successful provider calls with positive input and cached-input tokens / successful provider calls with positive input tokens | Instrumented in candidate `a08698df`; no production value is claimed before release |
 | AI Deep escalation rate | completed authenticated legal-chat runs in Deep mode / all completed authenticated legal-chat runs in the same window | Instrumented in candidate `a08698df`; excludes guest AI and document analysis by definition |
 | Provider fallback rate | completed authenticated legal-chat runs with `fallback_from_provider` / completed authenticated legal-chat runs | Instrumented in candidate `a08698df`; minimum comparable sample is still required |
@@ -89,6 +92,9 @@ one queryable schema without adding identity or content.
 - p95 complete useful chat response remains a release guardrail of 30 seconds;
 - cross-tenant/privacy tests and the telemetry allowlist must pass;
 - unpriced provider requests must be zero for the active price window;
+- scoped budget utilization must distinguish UTC daily/monthly periods, active
+  policy version and `alert_only`/`disable_deep`/`block_calls`; unknown price
+  coverage is an alert, never a fabricated cost or automatic breach;
 - successful releases are reported separately from overall service health.
 
 ## Production data-quality checkpoint

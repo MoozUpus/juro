@@ -1,6 +1,6 @@
 # Cost control
 
-Status: local candidate through migration `0082`; staging is through `0078`.
+Status: local candidate includes migration `0162`; production remains unchanged.
 
 Provider and queue actions are server-side and record bounded technical/cost
 metadata where implemented. Synthetic provider probes are one-time, staging-only,
@@ -79,3 +79,29 @@ in staging, real Resend delivery plus retry evidence, provider-billing
 reconciliation, and a documented open/close rehearsal. Provider calls outside
 the integrated chat/document-analysis/embedding paths must adopt the same guard
 before they can be counted as covered. Production remains unchanged.
+
+Migration `0162_scoped_ai_cost_budgets.sql` adds a second, independent control
+layer for a technical user or an allowlisted feature. Each immutable policy
+version has operator-entered daily and monthly micro-USD limits and one action:
+alert only, disable Deep calls, or block all provider calls in that scope. The
+protected Admin console shows current UTC day/month spend, price completeness,
+events and alert-delivery state. No threshold is seeded or inferred.
+
+The integrated scopes are authenticated and guest chat, document analysis, and
+private-document indexing/search. Internal legal-corpus ingestion is excluded
+by the current release boundary. Scoped budget errors do not initiate a paid
+provider fallback. Unpriced successful usage creates identifiers-only daily
+warning evidence but is not given fake cost and does not prove that a monetary
+limit has been reached.
+
+Events, alert jobs and `email.send` outbox rows are created idempotently. The
+recipient comes from `OPERATIONS_ALERT_EMAIL` only at delivery; the budget
+tables keep no address or user content. The evaluator is a D1 request-boundary
+guard, not a provider billing hard cap: concurrent in-flight calls may overshoot
+a threshold, and provider/D1 reconciliation remains an operator responsibility.
+
+Migration 0162 is local-only and excluded from the production
+`migrations_pattern`. Release still requires a verified backup/restore, ordered
+migration and exact-Worker rehearsal, reviewed operator thresholds, controlled
+daily/monthly crossings, real delivery/retry evidence, and authenticated Admin
+verification. The 30% cost-reduction target remains unverified.

@@ -1,5 +1,29 @@
 # Test report — current evidence through 2026-08-29
 
+## Scoped AI budget candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `f312a930e9e93a690a71ad963ea0ff59ab1a4ab6` |
+| Budget contract | PASS — immutable, effective-dated daily and monthly micro-USD limits exist independently for a technical user or an allowlisted AI feature |
+| Operator actions | PASS — `alert_only`, `disable_deep`, and `block_calls`; no monetary threshold is seeded or inferred |
+| Enforcement boundary | PASS — authenticated/guest chat, document analysis, and private-document indexing/search check the applicable budget immediately before real provider work; scoped budget errors do not trigger a paid provider fallback |
+| Unknown-price boundary | PASS — successful unpriced usage creates durable warning evidence but is not assigned a fabricated cost and is not treated as proof that a monetary limit was reached |
+| Alerts | PASS — daily/monthly threshold events, identifiers-only email jobs and opaque Queue outbox rows are idempotent; recipient identity is resolved from runtime configuration rather than persisted in cost tables |
+| Admin boundary | PASS source — policy writes require `staff.operations.manage`, active TOTP, MFA within 15 minutes, and existing same-origin/CSRF protection |
+| Migration | PASS local — `0162_scoped_ai_cost_budgets.sql` applies in the ordered migration matrix, retains immutable policy/event evidence, and passes foreign-key checks |
+| Focused regression | PASS — 3/3 scoped-budget tests, including Deep-only/user hard limits, exact-once alert delivery, unpriced usage, immutability and route boundaries |
+| Full Platform regression | PASS — core 1127/1127 including the scoped suite, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35 |
+| Static/artifact gates | PASS — type-check, lint, production artifact validation and emitted-asset budgets; Worker entry 3652.3/6144.0 KiB |
+| Production/release boundary | NOT DEPLOYED — migration 0162 remains excluded from the production migration pattern; no threshold, D1 migration, Worker/Sites publish, DNS, email, notification or customer-data mutation occurred |
+| Outcome target | UNVERIFIED — controls are ready for operator thresholds, but the required 30% cost reduction with quality non-regression still lacks a comparable production sample |
+
+The evaluator uses UTC calendar days/months and current D1 aggregates. It is a
+request-boundary control, not a provider billing hard cap: already in-flight
+concurrent requests can overshoot a threshold, and provider/D1 reconciliation
+remains required. Internal legal-corpus ingestion was deliberately not changed
+under the current goal boundary.
+
 ## Admin AI cost-observability candidate
 
 | Gate | Result |

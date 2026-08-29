@@ -67,6 +67,26 @@ database-incident decision, a recorded recovery-point impact review and a
 fresh incident-database export. Never use ad-hoc `ALTER`, `DROP` or migration
 ledger edits as rollback.
 
+## Prepared migration 0162 gate — not applied
+
+Candidate migration `0162_scoped_ai_cost_budgets.sql` is additive. It creates
+versioned scope policies, immutable budget events and mutable alert-delivery
+evidence; it does not seed thresholds or change existing usage rows. It remains
+excluded from the production `migrations_pattern` and is not applied remotely.
+
+Before an explicitly approved release, repeat the verified private backup and
+isolated restore procedure above for the complete ordered ledger through 0162.
+Require `quick_check=ok`, zero foreign-key violations, the expected indexes and
+immutable triggers, then exercise controlled daily/monthly thresholds and one
+retry-safe identifiers-only alert in staging. Enter only owner-reviewed limits
+and deploy the exact matching Worker after the migration passes.
+
+If the Worker fails after 0162 is applied, restore the prior Worker first and
+leave the additive tables/evidence intact. Do not delete policies or events and
+do not edit the migration ledger. A database restore is an explicit incident
+decision only; because concurrent provider calls can overshoot a D1 boundary,
+reconcile provider billing before choosing the recovery point.
+
 ## Zone TLS rollback
 
 The current zone encryption mode is explicit `Full (strict)`. If a verified

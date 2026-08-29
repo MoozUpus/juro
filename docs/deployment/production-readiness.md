@@ -4,6 +4,36 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 scoped AI budget candidate
+
+Commit `f312a930e9e93a690a71ad963ea0ff59ab1a4ab6` adds operator-defined daily
+and monthly AI cost budgets for a technical user or an allowlisted feature.
+The three explicit actions are alert only, disable optional Deep calls, or
+block all calls in that scope. The protected Admin flow is still bound to
+operations capability, active TOTP, fresh MFA and same-origin/CSRF checks. No
+threshold is seeded or inferred from the small historical sample.
+
+Migration `0162_scoped_ai_cost_budgets.sql` stores immutable policy versions
+and threshold events plus retry-safe alert delivery evidence. Calendar periods
+are UTC. Unpriced success is reported separately and never receives a fake
+cost or becomes proof of budget exhaustion. Chat, guest chat, document
+analysis and private-document vector work check policy before provider work;
+the internal legal-corpus ingestion path is unchanged.
+
+Focused 3/3, full core 1127/1127, Cloudflare/infrastructure 203/203,
+rendered Worker HTML 35/35, type-check, lint, ordered migration/foreign-key
+checks and production artifact validation passed locally. The D1 control is
+best-effort at request boundaries: concurrent in-flight calls may overshoot a
+cap, so it is not a provider billing hard limit.
+
+This candidate is not deployed. Migration 0162 remains outside the production
+`migrations_pattern`; no policy, threshold, email, D1, Worker, Sites, DNS,
+notification or customer-data mutation was made. A fresh verified backup,
+ordered migration rehearsal, operator-approved thresholds, controlled staging
+crossings, real alert retry evidence and role-correct Admin browser replay are
+still release gates. The 30% cost-reduction/quality target remains
+`UNVERIFIED`.
+
 ## 2026-08-29 Admin AI cost-observability candidate
 
 Commit `a08698df` extends the fresh-MFA Admin cost console with content-free

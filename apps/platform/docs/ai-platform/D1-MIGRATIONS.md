@@ -1,5 +1,30 @@
 # JURO D1 migrations
 
+## Pending 0162 — scoped AI cost budgets
+
+`0162_scoped_ai_cost_budgets.sql` additively creates immutable, effective-dated
+policy versions for one technical user or one allowlisted AI feature, immutable
+daily/monthly threshold and unpriced-usage events, and mutable idempotent alert
+delivery rows. Limits are integer micro-USD, use UTC calendar periods, and are
+never seeded by the migration or application. Actions are `alert_only`,
+`disable_deep`, or `block_calls`.
+
+Policy creation requires the existing operations capability, active TOTP,
+15-minute MFA and safe-write boundary. User policies require an existing
+technical profile. The tables contain no prompt, answer, document, filename,
+email, phone or recipient field. Unpriced success creates a warning with a null
+threshold and never receives a fabricated price or counts as a monetary breach.
+
+Local focused 3/3, ordered migration/foreign-key matrix, core 1127/1127,
+Cloudflare 203/203, rendered Worker 35/35, type-check, lint and production
+artifact validation passed. Migration 0162 remains deliberately excluded from
+the production `migrations_pattern` and has not been applied to any remote D1.
+Before release: take and independently restore/checksum a fresh backup, apply
+the complete ordered pending ledger, verify schema/FKs/triggers, enter reviewed
+thresholds, exercise daily/monthly and retry paths in controlled staging, then
+deploy the exact Worker and perform role-correct Admin/browser verification.
+Rollback is application-first; retained evidence must not be deleted.
+
 ## Migrations 0112–0113 — interactive reliability evidence (staging applied)
 
 `0112_dependency_health_checks.sql` additively creates immutable,

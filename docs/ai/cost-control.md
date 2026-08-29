@@ -100,3 +100,32 @@ console must show this as **not configured**, never as a closed/healthy automati
 circuit. An operator must approve the daily provider budget and rolling failure
 threshold before creating an immutable production policy; no arbitrary threshold
 is inferred from historical spend.
+
+## Scoped daily and monthly budgets
+
+Candidate `f312a930e9e93a690a71ad963ea0ff59ab1a4ab6` adds immutable,
+effective-dated budgets for either a technical user or an allowlisted AI
+feature. Each operator-entered policy uses integer micro-USD daily/monthly
+limits and one explicit action: alert only, disable optional Deep calls, or
+block calls in the scope. UTC calendar days and months define the periods.
+
+The integrated features are authenticated legal chat, guest chat, document
+analysis, and private-document indexing/search. The internal legal-corpus
+ingestion path is intentionally unchanged. Policy checks occur immediately
+before provider-bearing work and scoped budget errors do not trigger a paid
+fallback.
+
+Crossing a configured limit creates immutable daily/monthly evidence, an
+idempotent identifiers-only alert job and an opaque email outbox row. Successful
+usage without an effective price creates a separate warning with no invented
+cost; it is not treated as proof of limit exhaustion. Technical user IDs may be
+shown only inside the protected operations console, shortened where practical.
+No prompt, answer, document text, filename, email, phone or recipient address is
+stored in scoped budget tables.
+
+This is a D1 request-boundary guard, not a provider billing hard cap. Concurrent
+in-flight requests can overshoot a threshold, and provider billing still needs
+reconciliation. Migration `0162_scoped_ai_cost_budgets.sql` is not deployed and
+remains excluded from production migration configuration. Production still has
+no operator-entered scoped policy, and the 30% cost-reduction target remains
+`UNVERIFIED`.

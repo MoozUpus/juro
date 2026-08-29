@@ -11,6 +11,25 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `f312a930` adds immutable per-user and per-feature daily/monthly AI
+  budgets with operator-selected `alert_only`, `disable_deep`, or `block_calls`
+  enforcement. No monetary threshold is seeded.
+- Migration `0162_scoped_ai_cost_budgets.sql` adds versioned policy, immutable
+  threshold-event and idempotent alert-delivery evidence. UTC periods and
+  technical identifiers are used; prompt, answer, document, filename, email
+  and phone fields are excluded.
+- Authenticated/guest chat, document analysis, and private-document
+  indexing/search check applicable policies before provider work. The internal
+  legal-corpus ingestion path was deliberately not changed.
+- Unpriced success creates a warning without fabricated cost and is not treated
+  as a monetary-limit breach. The request-boundary control may still overshoot
+  under concurrent in-flight calls and is not a provider billing hard cap.
+- Focused 3/3, full core 1127/1127, Cloudflare 203/203, rendered Worker 35/35,
+  type-check, lint, migration integrity and production artifact gates passed.
+- Migration 0162 remains excluded from production deployment configuration.
+  No policy, threshold, migration, Worker/Sites publish, DNS, email,
+  notification or customer-data mutation was made, and the 30% reduction
+  target remains `UNVERIFIED`.
 - Candidate `a08698df` adds content-free Admin AI-cost breakdowns by technical
   user/workspace and current subscription plan, plus provider failure rate,
   average provider latency, cache-hit request rate, cached-input token share,

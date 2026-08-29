@@ -20,6 +20,21 @@ production artifact budgets passed. No real Admin/MFA session was available,
 so protected UI replay is not claimed. This candidate is not deployed and does
 not change the 4/30 production sample or the `UNVERIFIED` 30% reduction target.
 
+**Scoped AI budget candidate:** commit
+`f312a930e9e93a690a71ad963ea0ff59ab1a4ab6` adds independent daily/monthly
+budgets for technical users and allowlisted AI features. Operator actions are
+alert-only, Deep-only disablement, or scoped hard blocking; no limit is seeded.
+Migration 0162 preserves immutable policy/threshold evidence and idempotent,
+identifiers-only delivery state. Unpriced usage alerts without fabricated cost
+or a false monetary breach. Focused 3/3, full core 1127/1127,
+Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint,
+migration integrity and production artifact validation passed. This is a
+request-boundary control, not a provider billing hard cap, and concurrent
+in-flight calls may overshoot. The internal legal-corpus path was not changed.
+Migration 0162 remains excluded from production configuration; no release,
+threshold or external mutation occurred, and the 30% target is still
+`UNVERIFIED`.
+
 **Public Sites checkpoint:** a read-only Chrome replay of live v86 preserved
 the RU/UZ/EN SEO/document structure but found stale accessibility defects:
 sub-12 px labels, 32 px theme targets, a closed-menu dangling `aria-controls`,
