@@ -23,6 +23,9 @@ export type LegalCorpusQdrantSnapshotEnv = QdrantCorpusEnv & {
   /** Explicit staging-only recovery after a Container code update can reset
    * its ephemeral collection before the first verified snapshot exists. */
   LEGAL_CORPUS_QDRANT_REBUILD_APPROVED?: string;
+  /** Explicit staging-only approval for a disjoint snapshot while the frozen
+   * acquisition queue retains bounded, not-yet-ingested work. */
+  LEGAL_CORPUS_QDRANT_DISJOINT_SNAPSHOT_APPROVED?: string;
 };
 
 type DenseLedger = {
@@ -30,6 +33,7 @@ type DenseLedger = {
   denseTrackedCurrentPoints: number;
   missingCurrentPoints: number;
   pendingJobs: number;
+  queuedJobs: number;
   denseIndexedThrough: string | null;
 };
 
@@ -51,6 +55,9 @@ export type LegalCorpusQdrantSnapshotManifest = {
     denseTrackedPoints: number;
     denseTrackedCurrentPoints: number;
     pendingJobs: number;
+    /** Queued acquisition work intentionally excluded from this disjoint
+     * snapshot. A zero value means the snapshot covers an empty queue. */
+    deferredQueueJobs: number;
   };
   r2: {
     snapshotObjectKey: string;
@@ -79,6 +86,7 @@ const manifestSchema: z.ZodType<LegalCorpusQdrantSnapshotManifest> = z.object({
     denseTrackedPoints: z.number().int().nonnegative(),
     denseTrackedCurrentPoints: z.number().int().nonnegative(),
     pendingJobs: z.literal(0),
+    deferredQueueJobs: z.number().int().nonnegative().default(0),
   }).strict(),
   r2: z.object({
     snapshotObjectKey: z.string().regex(OBJECT_KEY_PATTERN),
@@ -172,12 +180,14 @@ async function denseLedger(db: D1Database): Promise<DenseLedger> {
         AND document.provider IN ('lex_uz','juro_owner')
         AND document.scope='global' AND document.availability_status='ready') AS missingCurrentPoints,
     (SELECT count(*) FROM legal_corpus_ingestion_jobs WHERE status<>'completed') AS pendingJobs,
+    (SELECT count(*) FROM legal_corpus_ingestion_jobs WHERE status='queued') AS queuedJobs,
     (SELECT max(indexed_at) FROM legal_corpus_chunks WHERE dense_vector_id IS NOT NULL) AS denseIndexedThrough
   `).first<{
     denseTrackedPoints: number;
     denseTrackedCurrentPoints: number;
     missingCurrentPoints: number;
     pendingJobs: number;
+    queuedJobs: number;
     denseIndexedThrough: string | null;
   }>();
   return {
@@ -185,6 +195,7 @@ async function denseLedger(db: D1Database): Promise<DenseLedger> {
     denseTrackedCurrentPoints: Math.max(0, Number(row?.denseTrackedCurrentPoints ?? 0)),
     missingCurrentPoints: Math.max(0, Number(row?.missingCurrentPoints ?? 0)),
     pendingJobs: Math.max(0, Number(row?.pendingJobs ?? 0)),
+    queuedJobs: Math.max(0, Number(row?.queuedJobs ?? 0)),
     denseIndexedThrough: typeof row?.denseIndexedThrough === "string" ? row.denseIndexedThrough : null,
   };
 }
@@ -299,10 +310,14 @@ export async function createLegalCorpusQdrantSnapshot(
     return { status: "not_frozen", snapshotId: null };
   }
   const ledger = await denseLedger(env.DB);
+  const disjointQueueApproved = env.APP_ENV === "staging"
+    && env.LEGAL_CORPUS_AUTO_INGEST_ENABLED !== "true"
+    && env.LEGAL_CORPUS_QDRANT_DISJOINT_SNAPSHOT_APPROVED === "true"
+    && ledger.pendingJobs === ledger.queuedJobs;
   if (
     ledger.denseTrackedPoints < 1
     || ledger.missingCurrentPoints > 0
-    || ledger.pendingJobs > 0
+    || (ledger.pendingJobs > 0 && !disjointQueueApproved)
     || !ledger.denseIndexedThrough
   ) {
     return { status: "not_ready", snapshotId: null };
@@ -364,6 +379,7 @@ export async function createLegalCorpusQdrantSnapshot(
         denseTrackedPoints: ledger.denseTrackedPoints,
         denseTrackedCurrentPoints: ledger.denseTrackedCurrentPoints,
         pendingJobs: 0,
+        deferredQueueJobs: disjointQueueApproved ? ledger.queuedJobs : 0,
       },
       r2: {
         snapshotObjectKey,

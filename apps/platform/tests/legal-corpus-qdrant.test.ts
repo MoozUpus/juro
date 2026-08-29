@@ -106,7 +106,7 @@ test("private service errors remain bounded and preserve actionable staging code
   const routeRejected = new QdrantLegalCorpusClient({
     ...configured,
     QDRANT_URL: "https://qdrant.internal",
-    QDRANT_SERVICE: { fetch: async () => Response.json({ error: "QDRANT_PRIVATE_ROUTE_REJECTED" }, { status: 404 }) } as Fetcher,
+    QDRANT_SERVICE: { fetch: async () => Response.json({ error: "QDRANT_PRIVATE_ROUTE_REJECTED" }, { status: 404 }) } as unknown as Fetcher,
   });
   await assert.rejects(() => routeRejected.queryDense(denseVector(), 1), (error: unknown) =>
     error instanceof QdrantCorpusError && error.code === "QDRANT_PRIVATE_ROUTE_REJECTED");
@@ -114,7 +114,7 @@ test("private service errors remain bounded and preserve actionable staging code
   const unavailable = new QdrantLegalCorpusClient({
     ...configured,
     QDRANT_URL: "https://qdrant.internal",
-    QDRANT_SERVICE: { fetch: async () => Response.json({ error: "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" }, { status: 503 }) } as Fetcher,
+    QDRANT_SERVICE: { fetch: async () => Response.json({ error: "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" }, { status: 503 }) } as unknown as Fetcher,
   });
   await assert.rejects(() => unavailable.queryDense(denseVector(), 1), (error: unknown) =>
     error instanceof QdrantCorpusError && error.code === "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" && error.retryable);
@@ -122,7 +122,7 @@ test("private service errors remain bounded and preserve actionable staging code
   const bindingFailure = new QdrantLegalCorpusClient({
     ...configured,
     QDRANT_URL: "https://qdrant.internal",
-    QDRANT_SERVICE: { fetch: async () => { throw new Error("service binding unavailable"); } } as Fetcher,
+    QDRANT_SERVICE: { fetch: async () => { throw new Error("service binding unavailable"); } } as unknown as Fetcher,
   });
   await assert.rejects(() => bindingFailure.queryDense(denseVector(), 1), (error: unknown) =>
     error instanceof QdrantCorpusError && error.code === "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" && error.retryable);
@@ -130,7 +130,7 @@ test("private service errors remain bounded and preserve actionable staging code
   const unauthorized = new QdrantLegalCorpusClient({
     ...configured,
     QDRANT_URL: "https://qdrant.internal",
-    QDRANT_SERVICE: { fetch: async () => new Response(null, { status: 401 }) } as Fetcher,
+    QDRANT_SERVICE: { fetch: async () => new Response(null, { status: 401 }) } as unknown as Fetcher,
   });
   await assert.rejects(() => unauthorized.queryDense(denseVector(), 1), (error: unknown) =>
     error instanceof QdrantCorpusError && error.code === "QDRANT_HTTP_4XX" && !error.retryable);

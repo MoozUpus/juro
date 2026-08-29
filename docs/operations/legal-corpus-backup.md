@@ -28,6 +28,18 @@ Qdrant SHA-256 as R2's write-time integrity check, verifies size and checksum by
 snapshot. The API key, vector values and legal text are not written to the
 manifest or logs.
 
+For the explicitly approved staging handoff, a *disjoint* snapshot may be
+created while the acquisition queue still contains only `queued` jobs. It is
+enabled only by the staging flag
+`LEGAL_CORPUS_QDRANT_DISJOINT_SNAPSHOT_APPROVED=true` with auto-ingestion
+disabled. The snapshot never marks those jobs completed: `corpus.pendingJobs`
+is `0` for the indexed set and `corpus.deferredQueueJobs` records the exact
+queued count excluded from the snapshot. Any `retrying`, `running`, `failed`,
+or `dead_letter` job keeps the snapshot not-ready. This artifact is a
+recoverable dense-index handoff, not release evidence that the acquisition
+queue is drained; the release gate remains closed until the queue is frozen
+and independently verified.
+
 Do not treat the private snapshot as a release backup until the final evidence
 also records an independent R2 readback hash and a successful isolated restore
 with point-count and representative hybrid-query parity.

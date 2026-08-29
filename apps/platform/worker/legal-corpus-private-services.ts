@@ -129,7 +129,7 @@ export async function handleLegalCorpusQdrantServiceRequest(
     }));
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
   }
-  const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
+  const container = env.QDRANT_CONTAINER!.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
   try {
     await container.startAndWaitForPorts({});
   } catch (error) {
@@ -156,7 +156,7 @@ export async function handleLegalCorpusQdrantServiceRequest(
       await response.body?.cancel().catch(() => undefined);
       await container.stop();
       await container.startAndWaitForPorts({});
-      response = await container.fetch(retryRequest);
+      response = await container.fetch(retryRequest as unknown as RequestInfo);
     }
     console.log(JSON.stringify({
       service: "legal-corpus-private-qdrant",

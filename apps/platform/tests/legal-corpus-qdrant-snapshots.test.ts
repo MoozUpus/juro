@@ -220,6 +220,61 @@ test("frozen dense corpus writes checksum-verified Qdrant snapshot and deduplica
   }
 });
 
+test("approved staging disjoint snapshot records deferred queued acquisition work", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const r2 = new MemoryR2();
+  const snapshotBytes = new TextEncoder().encode("disjoint-qdrant-snapshot");
+  const checksum = hex(await crypto.subtle.digest("SHA-256", snapshotBytes));
+  const client = {
+    async collectionExists() { return true; },
+    async assertCompatible() {},
+    async countPoints() { return 1; },
+    async createSnapshot() {
+      return {
+        name: "legal-disjoint.snapshot",
+        size: snapshotBytes.byteLength,
+        creationTime: "2026-08-15T16:01:00.000Z",
+        checksumSha256: checksum,
+      };
+    },
+    async downloadSnapshot() {
+      return new Response(snapshotBytes, {
+        headers: { "content-length": String(snapshotBytes.byteLength) },
+      });
+    },
+    async deleteSnapshot() {},
+    async ensureCompatible() { return "existing" as const; },
+    async restoreSnapshot() {},
+  };
+  try {
+    seedDenseChunk(sqlite, { suffix: "43", indexedAt: "2026-08-15T16:00:00.000Z" });
+    sqlite.prepare(`INSERT INTO legal_corpus_ingestion_jobs
+      (id,job_type,status,provider,canonical_document_id,variant_id,source_url,language,
+       idempotency_key,attempt_count,max_attempts,next_attempt_at,last_error_code,
+       correlation_id,created_at,updated_at)
+      VALUES ('deferred-fetch','fetch','queued','lex_uz','lexuz:deferred',NULL,
+        'https://lex.uz/docs/deferred','ru','deferred-fetch-key',0,5,NULL,NULL,
+        'disjoint-test','2026-08-15T16:00:00.000Z','2026-08-15T16:00:00.000Z')`).run();
+    const env = {
+      APP_ENV: "staging" as const,
+      DB: d1,
+      BACKUP_BUCKET: r2 as unknown as R2Bucket,
+      LEGAL_CORPUS_DENSE_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "false",
+      LEGAL_CORPUS_QDRANT_DISJOINT_SNAPSHOT_APPROVED: "true",
+      QDRANT_URL: "https://qdrant.internal",
+      QDRANT_API_KEY: "secret",
+      QDRANT_COLLECTION: "juro_legal_staging",
+    };
+    const result = await createLegalCorpusQdrantSnapshot(env, { client });
+    assert.equal(result.status, "created");
+    assert.equal(result.status === "created" && result.manifest.corpus.pendingJobs, 0);
+    assert.equal(result.status === "created" && result.manifest.corpus.deferredQueueJobs, 1);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("ephemeral collection restore requires the verified R2 snapshot and resets only later D1 point ids", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const r2 = new MemoryR2();

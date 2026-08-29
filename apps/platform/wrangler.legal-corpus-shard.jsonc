@@ -73,6 +73,7 @@
         "LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN": "20",
         "LEGAL_CORPUS_QDRANT_BACKFILL_BATCHES_PER_RUN": "16",
         "LEGAL_CORPUS_QDRANT_REBUILD_APPROVED": "true",
+        "LEGAL_CORPUS_QDRANT_DISJOINT_SNAPSHOT_APPROVED": "true",
         "QDRANT_URL": "https://qdrant.internal",
         "QDRANT_COLLECTION": "juro_legal_staging_shard_3",
         "EMBEDDING_MODEL": "text-embedding-3-large"
