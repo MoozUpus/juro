@@ -1,4 +1,4 @@
-# Rollback plan — Worker 170 / migrations 0159-0160 / Sites 86
+# Rollback plan — Worker 170 / applied migrations 0159-0160 / Sites 86
 
 ## Application rollback
 
@@ -35,6 +35,37 @@ Migrations 0159 and 0160 are additive. An application-only rollback to Worker
 rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.
+
+## Prepared migration 0161 gate — not applied
+
+Candidate migration `0161_balanced_ai_reasoning_mode.sql` rebuilds only
+`ai_slo_telemetry_events` so its reasoning-mode constraint accepts Fast,
+Balanced and Deep. It copies existing rows and recreates the append-only
+update/delete guards and indexes. It is not applied to production.
+
+Before an explicitly approved release:
+
+1. Confirm the exact production migration ledger, table row count, indexes,
+   triggers and zero foreign-key violations with read-only queries.
+2. Create a new full pre-0161 production export in private
+   `juro-production-backups`; record its exact object path, byte count and
+   SHA-256 in the release evidence.
+3. Download that object into an isolated protected directory, verify its hash,
+   restore it into an isolated database and require `quick_check=ok`, zero
+   foreign-key violations, matching telemetry row count and the expected
+   append-only guards.
+4. Apply 0161 only through the explicit production Wrangler configuration,
+   then re-check ledger/schema/row-count parity and append-only guards before
+   routing traffic to the new Worker.
+
+If the new Worker fails after a successful 0161 migration, route traffic back
+to the verified pre-release Worker first. The old Fast/Deep values remain valid
+under the extended constraint, so an ordinary application rollback must not
+restore or edit D1. Prefer a forward database fix if the migrated schema itself
+is defective. Restore the verified pre-0161 export only after an explicit
+database-incident decision, a recorded recovery-point impact review and a
+fresh incident-database export. Never use ad-hoc `ALTER`, `DROP` or migration
+ledger edits as rollback.
 
 ## Zone TLS rollback
 
