@@ -2,7 +2,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../.
 import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
 import { AnalysisExportError } from "../../../../../../lib/document-analysis/exporter";
 import { deleteComparisonExport } from "../../../../../../lib/document-comparison/exporter";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../../lib/platform/workspace";
 
 export const DELETE = withApiErrors(async function DELETE(
   request: Request,
@@ -10,7 +10,7 @@ export const DELETE = withApiErrors(async function DELETE(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { exportId } = await context.params;
   try {
     const result = await deleteComparisonExport(

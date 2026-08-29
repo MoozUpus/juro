@@ -27,12 +27,21 @@ function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }
 
+async function operationalLawyer(userId: string): Promise<boolean> {
+  const profile = await requireD1().prepare(
+    `SELECT id FROM lawyer_profiles WHERE user_id=?
+       AND status='public_approved' AND marketplace_status='public_approved' LIMIT 1`,
+  ).bind(userId).first();
+  return Boolean(profile);
+}
+
 async function lawyerMatter(userId: string, caseId: string): Promise<Matter | null> {
   const now = new Date().toISOString();
   return requireD1().prepare(
     `SELECT r.id AS requestId,r.workspace_id AS workspaceId,r.case_id AS caseId
      FROM lawyer_requests r
      JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=?
+       AND p.status='public_approved' AND p.marketplace_status='public_approved'
      JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.case_id=r.case_id AND g.lawyer_user_id=?
        AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
      WHERE r.case_id=? LIMIT 1`,
@@ -52,10 +61,7 @@ async function list(userId: string) {
 
 export const GET = withApiErrors(async function GET() {
   const user = await requireApiUser();
-  const profile = await requireD1().prepare(
-    "SELECT id FROM lawyer_profiles WHERE user_id=? LIMIT 1",
-  ).bind(user.id).first();
-  if (!profile) return response({ code: "LAWYER_ACCOUNT_REQUIRED" }, 403);
+  if (!await operationalLawyer(user.id)) return response({ code: "OPERATIONAL_LAWYER_REQUIRED" }, 403);
   return list(user.id);
 });
 
@@ -64,6 +70,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const user = await requireApiUser();
   const parsed = await parseJsonRequest(request, input, 4_096);
   if (!parsed.ok) return response({ code: "INVALID_INPUT" }, parsed.error === "payload_too_large" ? 413 : 400);
+  if (!await operationalLawyer(user.id)) return response({ code: "OPERATIONAL_LAWYER_REQUIRED" }, 403);
   const db = requireD1();
   const now = new Date().toISOString();
 

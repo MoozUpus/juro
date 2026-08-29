@@ -12,7 +12,8 @@ import {
   loadExtractedDocument,
 } from "../../../../../../lib/document-comparison/storage";
 import { ComparisonProcessingError, type ComparisonChange, type ComparisonLocale } from "../../../../../../lib/document-comparison/types";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { ArchiveInspectionError, verifyArchiveBytes } from "../../../../../../lib/document-analysis/archive-inspector";
+import { workspaceForContentEditor } from "../../../../../../lib/platform/workspace";
 import { trackProductEvent } from "../../../../../../lib/platform/analytics";
 
 function response(body: unknown, status = 200) {
@@ -41,7 +42,23 @@ async function fileBytes(db: D1Database, fileId: string, workspaceId: string, ow
   if (!file) throw new ComparisonProcessingError("CORRUPT_FILE", "Одна из версий была удалена или недоступна.");
   const object = await getPrivateObject(file.r2Key);
   if (!object) throw new ComparisonProcessingError("CORRUPT_FILE", "Одна из версий отсутствует в приватном хранилище.");
-  return { ...file, bytes: new Uint8Array(await object.arrayBuffer()) };
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (file.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    try {
+      await verifyArchiveBytes(bytes, file.mimeType, {
+        timeoutMs: 8_000,
+        maxEntries: 500,
+        maxUncompressedBytes: 25 * 1024 * 1024,
+        maxExpansionRatio: 40,
+      });
+    } catch (error) {
+      if (error instanceof ArchiveInspectionError) {
+        throw new ComparisonProcessingError("CORRUPT_FILE", "DOCX не прошёл безопасную проверку распаковки.");
+      }
+      throw error;
+    }
+  }
+  return { ...file, bytes };
 }
 
 async function storeChanges(db: D1Database, comparisonId: string, changes: ComparisonChange[]) {
@@ -72,7 +89,7 @@ export const POST = withApiErrors(async function POST(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { comparisonId } = await context.params;
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);

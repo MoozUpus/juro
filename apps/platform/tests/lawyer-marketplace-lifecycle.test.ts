@@ -74,6 +74,21 @@ test("restricted profiles are locked for edits and excluded from new handoff wor
   assert.doesNotMatch(migration, /DROP\s+TABLE|DELETE\s+FROM/iu);
 });
 
+test("restricting a lawyer revokes stale grants and operational routes recheck profile state", () => {
+  const lifecycle = readFileSync(new URL("../lib/platform/lawyer-profile-lifecycle-service.ts", import.meta.url), "utf8");
+  const time = readFileSync(new URL("../app/api/platform/lawyer-time/route.ts", import.meta.url), "utf8");
+  const verification = readFileSync(new URL("../app/api/platform/document-analysis/[analysisId]/lawyer-verification/route.ts", import.meta.url), "utf8");
+  const consultations = readFileSync(new URL("../app/api/platform/lawyer-consultations/route.ts", import.meta.url), "utf8");
+  assert.match(lifecycle, /UPDATE lawyer_access_grants[\s\S]*revoked_at=\?,revoke_reason=\?/);
+  assert.match(lifecycle, /profile_\$\{input\.action\}/);
+  for (const route of [time, verification, consultations]) {
+    assert.match(route, /status='public_approved'/);
+    assert.match(route, /marketplace_status='public_approved'/);
+  }
+  assert.match(time, /OPERATIONAL_LAWYER_REQUIRED/);
+  assert.match(consultations, /OPERATIONAL_LAWYER_REQUIRED/);
+});
+
 test("profile status notifications are localized and preserve only a bounded review reason", () => {
   const ru = localizedLawyerProfileStatusNotification("ru", "changes_requested", "Уточните формат консультации.");
   assert.equal(ru.title, "Профиль юриста нужно доработать");

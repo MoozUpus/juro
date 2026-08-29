@@ -3,7 +3,7 @@ import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
 import { parseJsonRequest } from "../../../../lib/auth/input";
 import { caseCreateInputSchema, caseScenarioMatchesAccount, caseScenarioSteps } from "../../../../lib/platform/case-create";
-import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
 import { trackProductEvent } from "../../../../lib/platform/analytics";
 
 function response(body: unknown, status=200){return Response.json(body,{status,headers:{"cache-control":"private, no-store"}});}
@@ -31,7 +31,7 @@ export const POST = withApiErrors(async function POST(request:Request){
   const planTitle=locale==="ru" ? "План: "+title : "Reja: "+title;
   const initialSnapshot=JSON.stringify({version:1,title:planTitle,status:"in_progress",progressPercent:0,steps});
   const db=requireD1();
-  const workspace=await workspaceForUser(user);
+  const workspace=await workspaceForContentEditor(user);
   const accountType=workspace.type==="business"?"business":parsed.data.accountType==="business"?"individual":parsed.data.accountType;
   if(!caseScenarioMatchesAccount(legalArea,accountType))return response({error:"INVALID_CASE_SCENARIO"},400);
   await db.batch([

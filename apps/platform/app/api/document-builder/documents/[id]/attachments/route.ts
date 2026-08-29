@@ -2,7 +2,8 @@ import { assertSafeWrite, requireApiUser } from "../../../../../../lib/document-
 import { apiError, badRequest, forbidden, jsonResponse, notFound } from "../../../../../../lib/document-builder/auth/responses";
 import { requireOwner } from "../../../../../../lib/document-builder/permissions";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
-import { deletePrivateObject, putPrivateObject, sanitizeFileName, validateUpload } from "../../../../../../lib/document-builder/storage/files";
+import { deletePrivateObject, sanitizeFileName, validateUploadBytes } from "../../../../../../lib/document-builder/storage/files";
+import { QuarantinedUploadError, quarantineScanAndStorePrivateObject } from "../../../../../../lib/document-builder/storage/quarantined-upload";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 
 export const dynamic = "force-dynamic";
@@ -19,25 +20,45 @@ export async function POST(request: Request, context: Context): Promise<Response
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return badRequest("Файл не выбран.");
-    const error = validateUpload(file);
-    if (error) return badRequest(error, "INVALID_FILE");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const inspection = validateUploadBytes(file, bytes);
+    if (inspection) return badRequest(inspection.message, inspection.code);
     const fileId = crypto.randomUUID();
     const attachmentId = crypto.randomUUID();
     const safeName = sanitizeFileName(file.name);
     const extension = safeName.split(".").pop()?.toLocaleLowerCase() ?? "bin";
     const key = `users/${user.id}/documents/${id}/attachments/${fileId}.${extension}`;
-    await putPrivateObject(key, await file.arrayBuffer(), file.type, { documentId: id, originalName: safeName });
+    const evidence = await quarantineScanAndStorePrivateObject({
+      key,
+      bytes,
+      mimeType: file.type,
+      metadata: { documentId: id, originalName: safeName, kind: "attachment" },
+    });
     const now = isoNow();
     const visible = form.get("visibleToCollaborator") === "true";
     const db = requireD1();
-    await db.batch([
-      db.prepare("INSERT INTO document_files (id, workspace_id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'attachment', ?, ?, ?, ?, NULL, ?, ?)")
-        .bind(fileId, access.workspaceId, id, user.id, key, safeName, file.type, file.size, now, now),
-      db.prepare("INSERT INTO document_attachments (id, document_id, file_id, visible_to_collaborator, created_at) VALUES (?, ?, ?, ?, ?)")
-        .bind(attachmentId, id, fileId, visible ? 1 : 0, now),
-    ]);
+    try {
+      await db.batch([
+        db.prepare("INSERT INTO document_files (id, workspace_id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, sha256, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'attachment', ?, ?, ?, ?, ?, NULL, ?, ?)")
+          .bind(fileId, access.workspaceId, id, user.id, key, safeName, file.type, file.size, evidence.sha256, now, now),
+        db.prepare("INSERT INTO document_attachments (id, document_id, file_id, visible_to_collaborator, created_at) VALUES (?, ?, ?, ?, ?)")
+          .bind(attachmentId, id, fileId, visible ? 1 : 0, now),
+      ]);
+    } catch (error) {
+      await deletePrivateObject(key).catch(() => undefined);
+      throw error;
+    }
     return jsonResponse({ attachment: { id: attachmentId, fileId, fileName: safeName, mimeType: file.type, sizeBytes: file.size, visibleToCollaborator: visible, createdAt: now } }, { status: 201 });
   } catch (error) {
+    if (error instanceof QuarantinedUploadError) {
+      const status = error.code === "FILE_UNSAFE" ? 422 : 503;
+      return jsonResponse({
+        code: error.code,
+        error: error.code === "FILE_UNSAFE"
+          ? "Файл не прошёл проверку безопасности."
+          : "Проверка безопасности файла временно недоступна.",
+      }, { status });
+    }
     return apiError(error);
   }
 }

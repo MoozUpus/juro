@@ -1140,6 +1140,27 @@ test("monitoring keeps delivery disabled until a fresh Lex metadata run is avail
   assert.match(jobs, /executeMonitoringEmail\(env, envelope\.subjectId\)/);
 });
 
+test("workspace content mutations require an editor role at the route boundary", async () => {
+  const routes = await Promise.all([
+    "../app/api/platform/cases/route.ts",
+    "../app/api/platform/cases/[caseId]/route.ts",
+    "../app/api/platform/cases/[caseId]/tasks/route.ts",
+    "../app/api/platform/cases/[caseId]/plan/route.ts",
+    "../app/api/platform/cases/[caseId]/steps/[stepId]/route.ts",
+    "../app/api/platform/document-analysis/uploads/route.ts",
+    "../app/api/platform/document-analysis/uploads/[analysisId]/route.ts",
+    "../app/api/platform/document-analysis/uploads/[analysisId]/finalize/route.ts",
+    "../app/api/platform/document-comparisons/route.ts",
+    "../app/api/platform/document-comparisons/[comparisonId]/route.ts",
+    "../app/api/platform/document-comparisons/[comparisonId]/process/route.ts",
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")));
+  for (const route of routes) assert.match(route, /workspaceForContentEditor\(user\)/);
+  const workspace = await readFile(new URL("../lib/platform/workspace.ts", import.meta.url), "utf8");
+  const permissions = await readFile(new URL("../lib/platform/permissions.ts", import.meta.url), "utf8");
+  assert.match(workspace, /requireWorkspaceContentEditor\(workspace\.role\)/);
+  assert.match(permissions, /if \(!canEditWorkspaceContent\(role\)\)/);
+});
+
 test("JURO motion tokens are bounded and the dashboard route is static", async () => {
   const [globals, dashboard] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -1467,7 +1488,7 @@ test("confirmed action-plan changes are validated, scoped, and saved as one vers
   assert.match(schema, /confirmedActionPlanPatchSchema/);
   assert.match(schema, /A step may be changed only once/);
   assert.match(route, /assertSafeWrite\(request\)/);
-  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /workspaceForContentEditor\(user\)/);
   assert.match(route, /plan_changes_confirmed/);
   assert.match(route, /current_revision=current_revision\+1/);
   assert.match(route, /INSERT INTO action_plan_versions/);

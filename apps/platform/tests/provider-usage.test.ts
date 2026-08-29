@@ -22,6 +22,53 @@ function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]) {
     VALUES ('cost-member','cost-workspace','cost-user','owner','active',?,?,?)`).run(now, now, now);
 }
 
+test("system-scoped guest usage accepts null tenant identities and remains cost-accounted", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    await createAiModelPriceVersion({
+      db: d1,
+      actorUserId: "cost-user",
+      now: new Date(now),
+      value: {
+        provider: "anthropic",
+        model: "guest-cost-test",
+        operation: "messages",
+        inputMicrousdPerMillionTokens: 1_000_000,
+        outputMicrousdPerMillionTokens: 2_000_000,
+        cachedInputMicrousdPerMillionTokens: 0,
+        effectiveFrom: "2026-08-01T00:00:00.000Z",
+        sourceUrl: "https://www.anthropic.com/pricing",
+      },
+    });
+    const result = await recordProviderUsage({
+      db: d1,
+      environment: "development",
+      workspaceId: null,
+      userId: null,
+      feature: "guest_legal_chat",
+      operation: "messages",
+      provider: "anthropic",
+      model: "guest-cost-test",
+      inputTokens: 100,
+      outputTokens: 50,
+      status: "succeeded",
+      startedAt: "2026-08-04T11:59:59.000Z",
+      completedAt: now,
+      eventId: "guest-system-usage",
+    });
+    assert.equal(result.estimatedCostMicrousd, 200);
+    const row = sqlite.prepare(
+      "SELECT workspace_id AS workspaceId,user_id AS userId,scope_key AS scopeKey FROM ai_cost_daily_aggregates WHERE feature='guest_legal_chat'",
+    ).get() as { workspaceId: string | null; userId: string | null; scopeKey: string };
+    assert.equal(row.workspaceId, null);
+    assert.equal(row.userId, null);
+    assert.equal(row.scopeKey, "system");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("0081 records priced and failed provider calls exactly once without content", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {

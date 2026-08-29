@@ -116,7 +116,7 @@ test("URL import route and RU/UZ UI expose no credential forwarding or fake succ
   assert.match(route, /PUBLIC_DOCUMENT_URL_IMPORT_DISABLED/);
   assert.match(route, /publicDocumentUrlImportDisabledMessage\(operationalLocaleFromRequest\(request\)\)/);
   assert.ok(route.indexOf("if (!publicDocumentUrlImportEnabled") < route.indexOf("const parsed = await parseJsonRequest"));
-  assert.match(route, /workspaceForUser/);
+  assert.match(route, /workspaceForContentEditor/);
   assert.match(route, /parseJsonRequest\(request, publicDocumentUrlIntentSchema, 4_096\)/);
   assert.match(route, /ANALYSIS_QUEUED/);
   assert.doesNotMatch(route, /requireQuarantineR2|quarantined|MALWARE_SCAN|FILE_SCAN_/);

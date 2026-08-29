@@ -3,7 +3,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../.
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 import { AnalysisExportError } from "../../../../../../lib/document-analysis/exporter";
 import { requestComparisonExport } from "../../../../../../lib/document-comparison/exporter";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../../../lib/platform/workspace";
 
 const requestSchema = z.object({ format: z.enum(["pdf", "docx"]) }).strict();
 const response = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
@@ -30,7 +30,7 @@ export const POST = withApiErrors(async function POST(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { comparisonId } = await context.params;
   const parsed = requestSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return response({ code: "ANALYSIS_EXPORT_FORMAT_INVALID", error: message("ANALYSIS_EXPORT_FORMAT_INVALID") }, 400);
