@@ -777,6 +777,32 @@ export class QdrantLegalCorpusClient {
     }
   }
 
+  /** Set the current flag for a bounded set of D1-authoritative versions in
+   * one payload update. Qdrant's `match.any` keeps snapshot repair below the
+   * Worker lease even when a corpus has hundreds of language/version rows. */
+  async setCurrentVersions(versionIds: readonly string[]): Promise<void> {
+    if (versionIds.length < 1 || versionIds.length > 10_000
+      || versionIds.some((versionId) => !/^[A-Za-z0-9:_-]{1,240}$/u.test(versionId))) {
+      throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
+    }
+    const parsed = mutationResponseSchema.safeParse(await request(this.env, "/points/payload?wait=true", {
+      method: "POST",
+      body: JSON.stringify({
+        payload: { is_current: true },
+        filter: {
+          must: [
+            { key: "environment", match: { value: this.env.APP_ENV } },
+            { key: "scope", match: { value: "global" } },
+            { key: "version_id", match: { any: [...versionIds] } },
+          ],
+        },
+      }),
+    }, this.fetchImpl));
+    if (!parsed.success || parsed.data.status !== "ok") {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+  }
+
   /**
    * Rebuild the current-variant payload fence after an ephemeral restore or
    * an interrupted version handoff.  D1 is authoritative for current

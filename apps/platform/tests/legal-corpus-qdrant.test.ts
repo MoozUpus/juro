@@ -406,6 +406,24 @@ test("version deactivation updates payload by a bounded environment and version 
   ]);
 });
 
+test("current-version repair uses one bounded any-match payload update", async () => {
+  let body: Record<string, unknown> | null = null;
+  const client = new QdrantLegalCorpusClient(configured, async (_input, init) => {
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json({ status: "ok", result: { status: "completed" } });
+  });
+  await client.setCurrentVersions(["lexuz:42:ru:v1", "lexuz:42:uz-Latn:v1"]);
+  const payload = body as unknown as {
+    payload: { is_current: boolean };
+    filter: { must: Array<{ key: string; match: { any: unknown } }> };
+  };
+  assert.equal(payload.payload.is_current, true);
+  assert.deepEqual(payload.filter.must[2], {
+    key: "version_id",
+    match: { any: ["lexuz:42:ru:v1", "lexuz:42:uz-Latn:v1"] },
+  });
+});
+
 test("approved rebuild can delete only points from the configured collection", async () => {
   let captured: { url: string; body: string; apiKey: string | null } | null = null;
   const client = new QdrantLegalCorpusClient(configured, async (input, init) => {

@@ -105,7 +105,7 @@ type SnapshotClient = Pick<QdrantLegalCorpusClient,
   | "deleteSnapshot"
   | "downloadSnapshot"
   | "ensureCompatible"
-  | "restoreSnapshot"> & Partial<Pick<QdrantLegalCorpusClient, "deleteAllPoints" | "setAllPointsCurrent" | "setVersionCurrent">>;
+  | "restoreSnapshot"> & Partial<Pick<QdrantLegalCorpusClient, "deleteAllPoints" | "setAllPointsCurrent" | "setCurrentVersions" | "setVersionCurrent">>;
 
 export class LegalCorpusQdrantSnapshotError extends Error {
   constructor(
@@ -303,7 +303,7 @@ async function repairCurrentPayloadParity(
   env: LegalCorpusQdrantSnapshotEnv,
   client: SnapshotClient,
 ): Promise<void> {
-  if (!client.setAllPointsCurrent || !client.setVersionCurrent) return;
+  if (!client.setAllPointsCurrent || (!client.setCurrentVersions && !client.setVersionCurrent)) return;
   await client.setAllPointsCurrent(false);
   const rows = await env.DB.prepare(`SELECT version.id AS versionId
     FROM legal_corpus_versions version
@@ -312,7 +312,11 @@ async function repairCurrentPayloadParity(
     WHERE document.provider IN ('lex_uz','juro_owner')
       AND document.scope='global' AND document.availability_status='ready'
     ORDER BY version.id ASC`).all<{ versionId: string }>();
-  for (const row of rows.results) await client.setVersionCurrent(row.versionId, true);
+  if (client.setCurrentVersions) {
+    await client.setCurrentVersions(rows.results.map((row) => row.versionId));
+  } else if (client.setVersionCurrent) {
+    for (const row of rows.results) await client.setVersionCurrent(row.versionId, true);
+  }
 }
 
 export async function createLegalCorpusQdrantSnapshot(
@@ -368,7 +372,7 @@ export async function createLegalCorpusQdrantSnapshot(
       totalPoints === ledger.denseTrackedPoints
       && currentPoints < ledger.denseTrackedCurrentPoints
       && client.setAllPointsCurrent
-      && client.setVersionCurrent
+      && (client.setCurrentVersions || client.setVersionCurrent)
     ) {
       await repairCurrentPayloadParity(env, client);
       const repairedCurrentPoints = await client.countPoints(true);
