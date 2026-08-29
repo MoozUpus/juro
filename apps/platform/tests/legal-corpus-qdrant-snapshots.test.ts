@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 
 import {
   createLegalCorpusQdrantSnapshot,
@@ -7,6 +8,38 @@ import {
 } from "../lib/legal-corpus/qdrant-snapshots";
 import type { QdrantSnapshotInfo } from "../lib/legal-corpus/qdrant";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
+
+// Node's WebCrypto does not expose Cloudflare's incremental DigestStream;
+// provide a test-only equivalent so the multipart snapshot path is exercised
+// without buffering production-sized snapshots in memory.
+if (typeof (globalThis.crypto as Crypto & { DigestStream?: unknown }).DigestStream !== "function") {
+  class TestDigestStream extends WritableStream<ArrayBuffer | ArrayBufferView> {
+    readonly digest: Promise<ArrayBuffer>;
+
+    constructor() {
+      const hash = createHash("sha256");
+      let resolveDigest!: (value: ArrayBuffer) => void;
+      const digest = new Promise<ArrayBuffer>((resolve) => { resolveDigest = resolve; });
+      super({
+        write(chunk) {
+          const bytes = chunk instanceof ArrayBuffer
+            ? new Uint8Array(chunk)
+            : new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+          hash.update(bytes);
+        },
+        close() {
+          const bytes = hash.digest();
+          resolveDigest(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+        },
+      });
+      this.digest = digest;
+    }
+  }
+  Object.defineProperty(globalThis.crypto, "DigestStream", {
+    value: TestDigestStream,
+    configurable: true,
+  });
+}
 
 type Stored = {
   bytes: Uint8Array;
@@ -77,6 +110,36 @@ class MemoryR2 {
     };
     this.objects.set(key, stored);
     return this.object(key, stored) as unknown as R2Object;
+  }
+
+  async createMultipartUpload(key: string, options: R2MultipartOptions = {}) {
+    const bucket = this;
+    const parts = new Map<number, Uint8Array>();
+    const upload = {
+      key,
+      uploadId: `upload-${crypto.randomUUID()}`,
+      async uploadPart(partNumber: number, value: unknown) {
+        const bytes = await bodyBytes(value);
+        parts.set(partNumber, bytes);
+        return { partNumber, etag: `part-${partNumber}` } as R2UploadedPart;
+      },
+      async abort() {
+        parts.clear();
+      },
+      async complete(uploadedParts: R2UploadedPart[]) {
+        const bytes = new Uint8Array(uploadedParts.reduce(
+          (total, part) => total + (parts.get(part.partNumber)?.byteLength ?? 0), 0,
+        ));
+        let offset = 0;
+        for (const part of uploadedParts) {
+          const value = parts.get(part.partNumber) ?? new Uint8Array();
+          bytes.set(value, offset);
+          offset += value.byteLength;
+        }
+        return bucket.put(key, bytes, options as R2PutOptions);
+      },
+    };
+    return upload as unknown as R2MultipartUpload;
   }
 
   async head(key: string) {

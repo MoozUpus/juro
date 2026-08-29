@@ -15,6 +15,7 @@ const QDRANT_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,
 const MANIFEST_LIMIT_BYTES = 64 * 1024;
 const RECOVERY_LOCK_NAME = "legal-corpus-qdrant-recovery";
 const RECOVERY_LOCK_MS = 3 * 60_000;
+const SNAPSHOT_MULTIPART_PART_SIZE = 8 * 1024 * 1024;
 
 export type LegalCorpusQdrantSnapshotEnv = QdrantCorpusEnv & {
   DB: D1Database;
@@ -300,26 +301,77 @@ async function storeSnapshotObject(input: {
     await input.response.body?.cancel().catch(() => undefined);
     throw new LegalCorpusQdrantSnapshotError("LEGAL_CORPUS_QDRANT_SNAPSHOT_INVALID", false);
   }
+  const storage = bucket(input.env);
+  const metadata = {
+    httpMetadata: { contentType: "application/octet-stream" },
+    customMetadata: {
+      environment: input.env.APP_ENV,
+      collection: collection(input.env),
+      qdrantSnapshotName: input.info.name,
+      qdrantCreationTime: input.info.creationTime,
+      qdrantChecksumSha256: input.info.checksumSha256,
+    },
+  };
   let stored: R2Object | null;
   try {
-    // Re-wrap the service-binding stream in this Worker realm before handing
-    // it to R2. Some Cloudflare runtime combinations reject a cross-service
-    // ReadableStream with a TypeError even though both APIs use web streams.
-    const snapshotBody = input.response.body.pipeThrough(new TransformStream());
-    stored = await bucket(input.env).put(input.objectKey, snapshotBody, {
-      httpMetadata: { contentType: "application/octet-stream" },
-      customMetadata: {
-        environment: input.env.APP_ENV,
-        collection: collection(input.env),
-        qdrantSnapshotName: input.info.name,
-        qdrantCreationTime: input.info.creationTime,
-        qdrantChecksumSha256: input.info.checksumSha256,
-      },
-      // Cloudflare's runtime accepts the documented string form in most
-      // paths, but a streamed cross-service body can throw a TypeError when
-      // the checksum is left as text. Pass the canonical bytes instead.
-      sha256: hexToArrayBuffer(input.info.checksumSha256),
-    });
+    if (typeof storage.createMultipartUpload === "function") {
+      const multipart = await storage.createMultipartUpload(input.objectKey, metadata);
+      let completed = false;
+      try {
+        const reader = input.response.body.getReader();
+        const digestConstructor = (globalThis.crypto as unknown as {
+          DigestStream: new (algorithm: string) => DigestStream;
+        }).DigestStream;
+        const digest = new digestConstructor("SHA-256");
+        const digestWriter = digest.getWriter();
+        const parts: R2UploadedPart[] = [];
+        let pending = new Uint8Array(0);
+        let received = 0;
+        let partNumber = 1;
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          received += next.value.byteLength;
+          await digestWriter.write(next.value);
+          const merged = new Uint8Array(pending.byteLength + next.value.byteLength);
+          merged.set(pending, 0);
+          merged.set(next.value, pending.byteLength);
+          let offset = 0;
+          while (merged.byteLength - offset >= SNAPSHOT_MULTIPART_PART_SIZE) {
+            parts.push(await multipart.uploadPart(
+              partNumber,
+              merged.slice(offset, offset + SNAPSHOT_MULTIPART_PART_SIZE),
+            ));
+            partNumber += 1;
+            offset += SNAPSHOT_MULTIPART_PART_SIZE;
+          }
+          pending = merged.slice(offset);
+        }
+        await digestWriter.close();
+        const checksum = bytesToHex(await digest.digest);
+        if (
+          received !== input.info.size
+          || checksum !== input.info.checksumSha256
+        ) {
+          throw new LegalCorpusQdrantSnapshotError("LEGAL_CORPUS_QDRANT_SNAPSHOT_INVALID", false);
+        }
+        if (pending.byteLength > 0 || parts.length === 0) {
+          parts.push(await multipart.uploadPart(partNumber, pending));
+        }
+        stored = await multipart.complete(parts);
+        completed = true;
+      } catch (error) {
+        if (!completed) await multipart.abort().catch(() => undefined);
+        throw error;
+      }
+    } else {
+      // Keep small in-memory test doubles and older local runtimes compatible;
+      // Cloudflare staging/production bindings always expose multipart upload.
+      stored = await storage.put(input.objectKey, input.response.body, {
+        ...metadata,
+        sha256: hexToArrayBuffer(input.info.checksumSha256),
+      });
+    }
   } catch (error) {
     const failure = safeR2Failure(error);
     console.error(JSON.stringify({
