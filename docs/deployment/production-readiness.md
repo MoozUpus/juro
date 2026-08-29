@@ -4,6 +4,18 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 calendar locale-format candidate
+
+Commit `d7b77ec1` replaces the calendar's remaining hard-coded Russian time
+formatter with the shared RU/UZ platform formatter. Consultation times now
+follow the selected route locale in both compact month cells and detailed list
+rows while retaining `Asia/Tashkent`. Calendar queries, deadline arithmetic and
+stored values are unchanged.
+
+Focused date/calendar/accessibility tests passed 18/18. Type-check, lint,
+production artifact validation and rendered Worker 36/36 passed with unchanged
+budgets. The candidate is not deployed.
+
 ## 2026-08-29 auth locale-continuity candidate
 
 Commit `244b2e40` fixes the reproduced RU → UZ authentication mismatch: the

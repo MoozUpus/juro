@@ -9,6 +9,14 @@ authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
 the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
+**Calendar locale-format candidate:** commit `d7b77ec1` removes the remaining
+hard-coded Russian formatter from consultation times in the Client/Business
+calendar. Month cells and list rows now use the selected RU/UZ locale through
+the shared Tashkent-timezone formatter. Focused date/calendar/accessibility
+tests passed 18/18, rendered Worker 36/36, and type-check, lint and production
+artifact validation passed with unchanged budgets. This candidate is
+unpublished and changes no calendar query, deadline calculation or stored data.
+
 **Auth locale-continuity candidate:** commit `244b2e40` rewrites a safe
 localized `returnTo` or legacy `return_to` when the user changes RU/UZ on login
 or registration. The production-artifact test proves that a UZ link from the RU

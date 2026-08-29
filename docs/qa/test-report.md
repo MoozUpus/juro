@@ -1,5 +1,16 @@
 # Test report — current evidence through 2026-08-29
 
+## Calendar RU/UZ time-format candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `d7b77ec1` |
+| Localization contract | PASS — consultation times in both month cells and list rows use the selected RU/UZ locale through the shared platform formatter and retain `Asia/Tashkent` |
+| Focused regression | PASS — date/time, calendar and shell accessibility 18/18 |
+| Rendered Worker | PASS — 36/36 |
+| Static/artifact gates | PASS — type-check, lint and production artifact validation; budgets remain CSS 596.9, initial JS 295.6, lazy 175.5, fonts 453.6, images 564.4 and Worker 3724.4 KiB |
+| Release boundary | UNPUBLISHED — no Worker, Sites, migration, DNS, notification or customer-data mutation |
+
 ## Auth locale-continuity candidate
 
 | Gate | Result |

@@ -11,6 +11,11 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `d7b77ec1` localizes consultation times in every calendar view
+  instead of forcing a Russian formatter on UZ routes. The shared formatter
+  retains `Asia/Tashkent`; focused 18/18, rendered Worker 36/36, type-check,
+  lint and production artifact validation pass with unchanged budgets.
+
 - Candidate `244b2e40` keeps auth language changes and protected destinations
   in the same RU/UZ locale. It covers `returnTo` and legacy `return_to`, removes
   external targets and leaves OTP/MFA/session/role rules unchanged. Focused

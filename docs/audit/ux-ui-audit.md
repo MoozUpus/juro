@@ -19,6 +19,11 @@ silently return the user to `/ru/...` after authentication. Account type,
 reauthentication and other safe query context remain intact; external targets
 are removed rather than propagated.
 
+Commit `d7b77ec1` also closes a calendar localization mismatch: consultation
+times in month cells and list rows no longer use a hard-coded Russian locale.
+They follow the selected RU/UZ route while retaining the product's
+`Asia/Tashkent` timezone.
+
 ## User journey assessment
 
 | Journey | Current state | Remaining UX evidence |
@@ -41,6 +46,7 @@ are removed rather than propagated.
   a broadly reusable bearer path.
 - Server role/persona destination wins over stale client return state.
 - Auth language switching keeps the protected destination in the selected RU/UZ locale.
+- Calendar consultation times follow the selected RU/UZ locale in every view.
 - Product analytics is an exact, content-free vocabulary rather than arbitrary
   event payloads.
 - Public funnel telemetry requires explicit analytics consent and sends no URL,

@@ -47,6 +47,14 @@ the verified pre-release Worker and leave D1/R2 untouched. Re-test RU → UZ and
 UZ → RU login and registration links with personal, business, Lawyer and reauth
 return paths before restoring traffic to a forward fix.
 
+## Prepared calendar locale-format change — not deployed
+
+Candidate `d7b77ec1` changes only client-side display formatting for consultation
+times in the calendar. It has no migration, query or stored-data change. If a
+future release shows incorrect time or language, return traffic to the verified
+pre-release Worker and leave D1/R2 untouched. Re-test RU and UZ month, list and
+case-grouped calendar views before restoring traffic to a forward fix.
+
 ## Prepared Document Builder performance change — not deployed
 
 Candidate `942ff677` changes only client chunk boundaries and accessible loading
