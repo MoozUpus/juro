@@ -264,6 +264,8 @@ test("0081 cost admin boundary is administrator-only, fresh-MFA-gated and CSRF-p
   assert.match(page, /robots: \{ index: false, follow: false, nocache: true \}/);
   assert.match(client, /"x-juro-csrf": "1"/);
   assert.match(client, /data\.measurement\.pricingCoverageBps/);
+  assert.match(client, /data\.priceVerification\.historicalMispricedRequestCount/);
+  assert.match(client, /pricing_mismatch/);
   assert.match(client, /data\.operational\.cacheHitRateBps/);
   assert.match(client, /data\.operational\.cacheCreationInputTokens/);
   assert.match(client, /data\.operational\.deepEscalationRateBps/);
@@ -566,6 +568,58 @@ test("0081 cost measurement becomes ready only after a complete priced sample", 
     assert.equal(ready.measurement.unpricedSuccessfulRequests, 0);
     assert.equal(ready.measurement.estimatedCostMicrousd, 3_900);
     assert.equal(ready.measurement.costPerPricedSuccessMicrousd, 130);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("cost measurement rejects a historically used price that conflicts with the verified effective rate", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    await createAiModelPriceVersion({
+      db: d1,
+      actorUserId: "cost-user",
+      now: new Date("2026-08-25T07:44:49.444Z"),
+      value: {
+        provider: "openai",
+        model: "gpt-5.6-terra",
+        operation: "responses",
+        inputMicrousdPerMillionTokens: 2_500_000,
+        outputMicrousdPerMillionTokens: 15_000_000,
+        cachedInputMicrousdPerMillionTokens: 250_000,
+        effectiveFrom: "2026-08-25T07:44:49.444Z",
+        sourceUrl: "https://platform.openai.com/pricing",
+      },
+    });
+    await recordProviderUsage({
+      db: d1,
+      environment: "production",
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      feature: "legal_chat",
+      operation: "responses",
+      provider: "openai",
+      model: "gpt-5.6-terra",
+      inputTokens: 1_000,
+      outputTokens: 100,
+      status: "succeeded",
+      startedAt: "2026-08-25T08:00:00.000Z",
+      completedAt: "2026-08-25T08:00:01.000Z",
+      eventId: "usage-stale-terra-price",
+    });
+    const dashboard = await readAiCostDashboard({
+      db: d1,
+      environment: "production",
+      now: new Date("2026-08-29T12:00:00.000Z"),
+    });
+    assert.equal(dashboard.measurement.status, "pricing_mismatch");
+    assert.equal(dashboard.priceVerification.status, "needs_review");
+    assert.equal(dashboard.priceVerification.historicalMispricedRequestCount, 1);
+    assert.equal(
+      dashboard.priceVerification.checks.find((check) => check.model === "gpt-5.6-terra")?.status,
+      "rate_mismatch",
+    );
   } finally {
     sqlite.close();
   }

@@ -68,3 +68,5 @@
 .kb-sections>header button,
 .kb-sections>fieldset>button,
 .cost-checkbox{min-height:2.75rem}
+.cost-measurement--pricing_mismatch{border-color:#d9aaa5;background:#fff5f3}
+.cost-measurement-heading+.cost-table-wrap{margin-top:.8rem}

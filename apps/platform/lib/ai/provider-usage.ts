@@ -12,6 +12,11 @@ import {
   ScopedCostBudgetError,
   type ScopedCostBudgetDashboard,
 } from "./scoped-cost-budget";
+import {
+  verifyAiPriceReferences,
+  type AiPriceVerificationView,
+  type AiUsedPriceVersion,
+} from "./provider-price-reference";
 
 const PROVIDERS = ["openai", "anthropic"] as const;
 const MAX_RATE_MICROUSD = 1_000_000_000_000;
@@ -132,6 +137,7 @@ export const AI_COST_MINIMUM_PRICED_SUCCESS_SAMPLE = 30;
 export type AiCostMeasurementStatus =
   | "no_data"
   | "incomplete_pricing"
+  | "pricing_mismatch"
   | "insufficient_sample"
   | "ready";
 
@@ -160,6 +166,7 @@ export type AiCostDashboard = {
   operational: AiCostOperationalView;
   unpricedEvents: number;
   measurement: AiCostMeasurementView;
+  priceVerification: AiPriceVerificationView;
 } & ProviderCostControlDashboard & ScopedCostBudgetDashboard;
 
 export class ProviderUsageError extends Error {
@@ -501,7 +508,7 @@ export async function readAiCostDashboard(input: {
   const cutoff = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const cutoffTimestamp = `${cutoff}T00:00:00.000Z`;
   const windowEnd = now.toISOString();
-  const [prices, daily, byUser, byPlan, operationalRow, legalChatRow, unpriced, measurementRow, control, scopedControl] = await Promise.all([
+  const [prices, daily, byUser, byPlan, operationalRow, legalChatRow, unpriced, measurementRow, usedPriceVersions, control, scopedControl] = await Promise.all([
     input.db.prepare(
       `SELECT id,provider,model,operation,
         input_microusd_per_million_tokens AS inputMicrousdPerMillionTokens,
@@ -623,6 +630,21 @@ export async function readAiCostDashboard(input: {
       unpricedSuccessfulRequests: number;
       estimatedCostMicrousd: number;
     }>(),
+    input.db.prepare(
+      `SELECT events.price_version_id AS priceVersionId,events.provider,events.model,events.operation,
+        prices.input_microusd_per_million_tokens AS inputMicrousdPerMillionTokens,
+        prices.output_microusd_per_million_tokens AS outputMicrousdPerMillionTokens,
+        prices.cached_input_microusd_per_million_tokens AS cachedInputMicrousdPerMillionTokens,
+        substr(events.completed_at,1,10) AS usageDay,count(*) AS requestCount,
+        min(events.completed_at) AS firstUsedAt,max(events.completed_at) AS lastUsedAt
+       FROM ai_provider_usage_events AS events
+       JOIN ai_model_price_versions AS prices ON prices.id=events.price_version_id
+       WHERE events.environment=? AND events.status='succeeded'
+        AND events.completed_at>=? AND events.completed_at<=?
+       GROUP BY events.price_version_id,events.provider,events.model,events.operation,usageDay,
+        prices.input_microusd_per_million_tokens,prices.output_microusd_per_million_tokens,
+        prices.cached_input_microusd_per_million_tokens`,
+    ).bind(input.environment, cutoffTimestamp, windowEnd).all<AiUsedPriceVersion>(),
     readProviderCostControlDashboard({ db: input.db, environment: input.environment }),
     readScopedCostBudgetDashboard({ db: input.db, environment: input.environment, now }),
   ]);
@@ -642,10 +664,17 @@ export async function readAiCostDashboard(input: {
   const completedLegalChatRuns = Number(legalChatRow?.completedLegalChatRuns ?? 0);
   const deepEscalationCount = Number(legalChatRow?.deepEscalationCount ?? 0);
   const providerFallbackCount = Number(legalChatRow?.providerFallbackCount ?? 0);
+  const priceVerification = verifyAiPriceReferences({
+    prices: prices.results,
+    usedPriceVersions: usedPriceVersions.results,
+    now,
+  });
   const status: AiCostMeasurementStatus = successfulRequests + failedRequests === 0
     ? "no_data"
     : unpricedSuccessfulRequests > 0
       ? "incomplete_pricing"
+      : priceVerification.historicalMispricedRequestCount > 0
+        ? "pricing_mismatch"
       : pricedSuccessfulRequests < AI_COST_MINIMUM_PRICED_SUCCESS_SAMPLE
         ? "insufficient_sample"
         : "ready";
@@ -686,6 +715,7 @@ export async function readAiCostDashboard(input: {
         : null,
     },
     unpricedEvents: Number(unpriced?.count ?? 0),
+    priceVerification,
     measurement: {
       windowStart: measurementRow?.windowStart ?? cutoffTimestamp,
       windowEnd,

@@ -29,9 +29,23 @@ const copy = {
     sample: "Сопоставимая выборка",
     measurementNoData: "Нет данных после начала окна цен",
     measurementIncomplete: "Есть успешные вызовы без цены",
+    measurementPricingMismatch: "Расчёт использует неверную цену",
     measurementInsufficient: "Выборка ещё недостаточна",
     measurementReady: "Выборка собрана",
     measurementCaveat: "Готовая выборка позволяет сравнивать стоимость, но сама по себе не доказывает сохранение качества.",
+    priceVerification: "Проверка цен OpenAI",
+    priceVerificationReady: "Активные цены подтверждены",
+    priceVerificationNeedsReview: "Нужна коррекция или повторная проверка",
+    priceVerificationCaveat: "Проверка сопоставляет активные append-only версии с model-specific официальными источниками. Исторические оценки не переписываются.",
+    expectedRate: "Официально input / cached / output, µUSD / 1 млн",
+    activeRate: "Активно input / cached / output, µUSD / 1 млн",
+    verificationStatus: "Проверка",
+    verificationVerified: "Подтверждено",
+    verificationMissing: "Активной версии нет",
+    verificationSourceMissing: "Нет официального источника",
+    verificationMismatch: "Тариф не совпадает",
+    verificationReviewDue: "Срок повторной проверки",
+    historicalMispriced: "Исторические вызовы с неверной оценкой",
     signals: "Операционные сигналы за окно",
     cacheHitRate: "Cache hit rate запросов",
     cachedTokenShare: "Доля cached input",
@@ -122,9 +136,23 @@ const copy = {
     sample: "Taqqoslanadigan namuna",
     measurementNoData: "Narx oynasi boshlanganidan keyin ma’lumot yo‘q",
     measurementIncomplete: "Narxsiz muvaffaqiyatli chaqiruvlar bor",
+    measurementPricingMismatch: "Hisob noto‘g‘ri narxdan foydalanmoqda",
     measurementInsufficient: "Namuna hali yetarli emas",
     measurementReady: "Namuna yig‘ildi",
     measurementCaveat: "Tayyor namuna xarajatni taqqoslashga imkon beradi, ammo sifat saqlanganini o‘zi isbotlamaydi.",
+    priceVerification: "OpenAI narxlarini tekshirish",
+    priceVerificationReady: "Faol narxlar tasdiqlangan",
+    priceVerificationNeedsReview: "Tuzatish yoki qayta tekshirish kerak",
+    priceVerificationCaveat: "Tekshiruv faol append-only versiyalarni modelga xos rasmiy manbalar bilan solishtiradi. Tarixiy baholar qayta yozilmaydi.",
+    expectedRate: "Rasmiy input / cached / output, µUSD / 1 mln",
+    activeRate: "Faol input / cached / output, µUSD / 1 mln",
+    verificationStatus: "Tekshiruv",
+    verificationVerified: "Tasdiqlangan",
+    verificationMissing: "Faol versiya yo‘q",
+    verificationSourceMissing: "Rasmiy manba yo‘q",
+    verificationMismatch: "Tarif mos emas",
+    verificationReviewDue: "Qayta tekshirish muddati",
+    historicalMispriced: "Noto‘g‘ri baholangan tarixiy chaqiruvlar",
     signals: "Oyna bo‘yicha operatsion signallar",
     cacheHitRate: "So‘rovlar cache hit rate",
     cachedTokenShare: "Cached input ulushi",
@@ -344,9 +372,17 @@ export function CostConsole({
   const measurementStatus = {
     no_data: t.measurementNoData,
     incomplete_pricing: t.measurementIncomplete,
+    pricing_mismatch: t.measurementPricingMismatch,
     insufficient_sample: t.measurementInsufficient,
     ready: t.measurementReady,
   }[data.measurement.status];
+  const verificationStatus = {
+    verified: t.verificationVerified,
+    missing: t.verificationMissing,
+    source_missing: t.verificationSourceMissing,
+    rate_mismatch: t.verificationMismatch,
+    review_due: t.verificationReviewDue,
+  } as const;
   const coverage = `${(data.measurement.pricingCoverageBps / 100).toFixed(2)}%`;
 
   return <div className="staff-console cost-console" aria-busy={busy}>
@@ -371,6 +407,27 @@ export function CostConsole({
           <div className="cost-summary"><span>{t.unpriced}</span><b>{data.measurement.unpricedSuccessfulRequests}</b></div>
         </div>
         <p>{t.measurementCaveat}</p>
+      </section>
+      <section
+        className={`cost-measurement cost-measurement--${data.priceVerification.status === "verified" ? "ready" : "pricing_mismatch"}`}
+        aria-labelledby="cost-price-verification-title"
+      >
+        <div className="cost-measurement-heading">
+          <div><ShieldCheck aria-hidden="true"/><h2 id="cost-price-verification-title">{t.priceVerification}</h2></div>
+          <strong>{data.priceVerification.status === "verified" ? t.priceVerificationReady : t.priceVerificationNeedsReview}</strong>
+        </div>
+        <div className="cost-table-wrap">
+          <table>
+            <thead><tr><th>{t.model}</th><th>{t.expectedRate}</th><th>{t.activeRate}</th><th>{t.verificationStatus}</th></tr></thead>
+            <tbody>{data.priceVerification.checks.map((check) => <tr key={`${check.provider}:${check.model}:${check.operation}`}>
+              <td><a href={check.referenceSourceUrl} target="_blank" rel="noreferrer"><code>{check.model}</code></a></td>
+              <td>{[check.expectedInputMicrousdPerMillionTokens, check.expectedCachedInputMicrousdPerMillionTokens, check.expectedOutputMicrousdPerMillionTokens].map((value) => value.toLocaleString("en-US")).join(" / ")}</td>
+              <td>{check.activeInputMicrousdPerMillionTokens === null ? "—" : [check.activeInputMicrousdPerMillionTokens, check.activeCachedInputMicrousdPerMillionTokens, check.activeOutputMicrousdPerMillionTokens].map((value) => value?.toLocaleString("en-US")).join(" / ")}</td>
+              <td>{verificationStatus[check.status]}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        <p>{t.historicalMispriced}: <b>{data.priceVerification.historicalMispricedRequestCount}</b>. {t.priceVerificationCaveat}</p>
       </section>
       <section className="cost-measurement" aria-labelledby="cost-signals-title">
         <div className="cost-measurement-heading">

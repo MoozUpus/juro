@@ -6,12 +6,12 @@ JURO records append-only provider usage and resolves cost through effective-date
 price versions. A usage row without a matching version remains explicitly
 `unpriced`; zero stored cost must never be interpreted as free usage.
 
-The production price versions for the current standard, short-context routes are:
+The verified reference prices for the current standard, short-context routes are:
 
 | Provider/model/operation | Input per 1M | Cached input per 1M | Output per 1M | Official source |
 | --- | ---: | ---: | ---: | --- |
-| OpenAI `gpt-5.6-sol` / Responses | $5.00 | $0.50 | $30.00 | [OpenAI API pricing](https://platform.openai.com/pricing) |
-| OpenAI `gpt-5.6-terra` / Responses | $2.50 | $0.25 | $15.00 | [OpenAI API pricing](https://platform.openai.com/pricing) |
+| OpenAI `gpt-5.6-sol` / Responses | $4.00 | $0.40 | $20.00 | [OpenAI model pricing](https://developers.openai.com/api/docs/models/gpt-5.6-sol) |
+| OpenAI `gpt-5.6-terra` / Responses | $2.00 | $0.20 | $12.00 | [OpenAI model pricing](https://developers.openai.com/api/docs/models/gpt-5.6-terra) |
 | OpenAI `text-embedding-3-large` / embeddings | $0.13 | — | — | [OpenAI model pricing](https://developers.openai.com/api/docs/models/text-embedding-3-large) |
 | Anthropic `claude-sonnet-4-6` / Messages | $3.00 | $0.30 cache hit | $15.00 | [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing) |
 
@@ -19,6 +19,13 @@ These values apply to the routes JURO currently invokes: standard OpenAI
 Responses without a selected Batch/Flex/Priority tier and global Anthropic
 inference without `inference_geo=us`. A route change requires a new price
 version, not mutation of history.
+
+OpenAI made the lower Terra price effective on 2026-07-30. The Sol rate is a
+promotion announced on 2026-08-21 and documented as available at least through
+2026-11-21. The code-owned verification reference therefore becomes
+`review_due` on 2026-11-22 unless it is reverified against the official model
+page. This reference detects operator/configuration drift; append-only D1 price
+versions remain the accounting source used by each usage event.
 
 ## Deterministic conversation compaction
 
@@ -67,14 +74,15 @@ comparable post-release sample exists.
 
 ## Observed baseline
 
-The last-30-day production usage snapshot taken on 2026-08-25 contained 58
-requests across chat/document providers plus two embedding requests. Historical
+The last-30-day production usage snapshot at the price-ledger boundary on
+2026-08-25 contained 56 requests across chat/document providers plus two
+embedding requests. Historical
 rows were unpriced. Applying the table above only as a shadow estimate to their
-recorded successful-token counts gives approximately **$0.84** total:
+recorded successful-token counts gives approximately **$0.64** total:
 
 - Anthropic Sonnet: $0.0417;
-- OpenAI `gpt-5.6-sol`: $0.3749;
-- OpenAI `gpt-5.6-terra`: $0.4192;
+- OpenAI `gpt-5.6-sol`: $0.2583;
+- OpenAI `gpt-5.6-terra`: $0.3354;
 - embeddings: $0.0005.
 
 This is a reconstructed cost baseline, not a provider invoice. Failed requests
@@ -90,17 +98,41 @@ a minimum sample of 30 priced successful calls. The state is fail-honest:
 
 - `no_data` when the measurement window has no calls;
 - `incomplete_pricing` when any successful call has no effective price;
+- `pricing_mismatch` when a used immutable price version conflicts with the
+  verified model-specific rate effective at the time of the call;
 - `insufficient_sample` until 30 fully priced successes exist;
-- `ready` only after the sample threshold is met with no unpriced success.
+- `ready` only after the sample threshold is met with no unpriced success or
+  detected price mismatch.
 
 `ready` means only that a cost sample can be compared. It does not prove the
 target 30% reduction or preservation of answer quality; that decision still
 requires matched routing/quality evidence under the model-evaluation scorecard.
 
-The production snapshot on 2026-08-28 after the current prices became effective
-contained four priced successes, two zero-token failures, zero unpriced
-successes and `$0.104549` estimated cost. Coverage was 100%, but the sample was
-only 4/30, so the reduction target remains `UNVERIFIED`.
+The production snapshot on 2026-08-28 after the D1 prices became effective
+contained four priced successes, two zero-token failures and zero unpriced
+successes. D1 stored `$0.104549`, but the subsequently verified official rates
+produce a shadow estimate of `$0.074958` for those same four immutable token
+records. The candidate therefore reports `pricing_mismatch`, not a ready or
+comparable sample. Historical estimates are not rewritten, production still
+needs new append-only price versions, and the reduction target remains
+`UNVERIFIED`.
+
+## Model-price integrity candidate
+
+Candidate code now verifies the active Terra and Sol price versions against
+model-specific official references and separately scans price versions actually
+used inside the measurement window. The protected Admin console shows expected
+and active input/cached/output rates, missing or mismatched routes, the Sol
+review deadline, and the count of historically mispriced successful requests.
+It does not fetch provider pages at request time and cannot silently rewrite
+immutable accounting evidence.
+
+The read-only production check on 2026-08-29 found that Anthropic Sonnet and
+`text-embedding-3-large` match their official prices. Production Terra still
+stores 2,500,000 / 250,000 / 15,000,000 micro-USD and Sol stores
+5,000,000 / 500,000 / 30,000,000, so both OpenAI routes require new
+administrator-created versions. No production price row was added during this
+candidate work.
 
 ## Control-center metric contract
 

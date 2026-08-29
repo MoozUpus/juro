@@ -970,6 +970,16 @@ insert created exactly four immutable price versions effective
 | OpenAI `text-embedding-3-large` / `embeddings` | 130,000 / 0 / 0 | `https://developers.openai.com/api/docs/models/text-embedding-3-large` |
 | Anthropic `claude-sonnet-4-6` / `messages` | 3,000,000 / 300,000 / 15,000,000 | `https://platform.claude.com/docs/en/about-claude/pricing` |
 
+This table is immutable evidence of what production received, not a statement
+that those four rates remain correct. A read-only recheck on 2026-08-29 found
+that the Anthropic and embedding rows still match their official sources, but
+the two OpenAI rows do not. OpenAI made Terra 2,000,000 / 200,000 / 12,000,000
+effective on 2026-07-30 and announced the temporary Sol
+4,000,000 / 400,000 / 20,000,000 rate on 2026-08-21. The Sol official page
+guarantees that promotion at least through 2026-11-21. Production remains
+unchanged and needs new append-only administrator-created price versions; the
+historical four-row insertion must not be edited or relabelled as correct.
+
 The 156,868,036-byte pre export had SHA-256
 `df1a19c3a58b7d9929ec535b84f5d47064d90318320fb1bf93d53dcf64e5a7e0`.
 The 156,873,094-byte post export had SHA-256
