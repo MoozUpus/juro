@@ -60,6 +60,17 @@ gates and isolated RU/UZ Chrome at 1024/700/390/320 px passed. Exact-source CI
 `33230331239` passed Website in 3m32s and Platform in 8m45s. This candidate and
 its migration are not deployed; production remains Worker 170 and Sites v86.
 
+**Admin AI routing-transparency candidate:** commit
+`6bb8d607dfaead59fa345468ccf0ec56afe16016` makes runtime execution, Anthropic
+fallback, run reservation and the protected localized Admin summary share one
+mode-routing contract. The cards expose active models, Balanced default,
+reasoning effort, bounded time/output controls and the shared 30-second
+deadline; history exposes chat, Deep and fallback models. Focused 6/6, core
+1114/1114, Cloudflare/infrastructure 203/203, rendered Worker 35/35,
+type-check, lint and artifact budgets passed. The CSS budget is tight at
+596.6/600.0 KiB. No real Admin/MFA session was available, so protected browser
+verification is not claimed. The candidate is not deployed.
+
 ## Current production recovery
 
 Worker 161 safely classified the repeated Anthropic HTTP 400 as
@@ -67,10 +78,10 @@ Worker 161 safely classified the repeated Anthropic HTTP 400 as
 provider message, prompts and secrets were not logged. After the account balance
 was restored, fresh production probes recorded Anthropic operational at
 `2026-08-28T06:47:17.754Z`. After the owner's latest account top-up report,
-independent app/status-host reads generated at `2026-08-29T03:02:32.506Z`
+independent app/status-host reads generated at `2026-08-29T03:46:26.954Z`
 again agreed on 8/8 operational with no incident. Anthropic was operational at
-`03:00:33.053Z` (5,465 ms, no safe error) and document analysis at
-`03:00:41.121Z` (8,018 ms, no safe error). The exception is closed by live
+`03:45:28.572Z` (4,882 ms, no safe error) and document analysis at
+`03:30:39.338Z` (9,579 ms, no safe error). The exception is closed by live
 provider evidence rather than by the balance action alone.
 
 The same recovery window exposed a separate P1 operational defect: Lex RSS

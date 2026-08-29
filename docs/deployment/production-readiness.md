@@ -4,6 +4,30 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 Admin AI routing-transparency candidate
+
+Commit `6bb8d607dfaead59fa345468ccf0ec56afe16016` makes the protected Admin AI
+settings page show the actual active Fast, Balanced and Deep routing contract.
+Provider execution, Anthropic fallback, run reservation and the Admin summary
+now share `aiReasoningRuntimeRoute`, preventing a separately maintained display
+table from drifting away from runtime behavior. The localized cards show the
+primary and fallback model, Balanced default, reasoning effort, bounded attempt
+and first-content windows, compact/detailed output limits and the shared
+30-second absolute request deadline. Saved-version history now includes chat,
+Deep and Anthropic fallback model identifiers.
+
+Focused 6/6, core 1114/1114, Cloudflare/infrastructure 203/203, rendered Worker
+HTML 35/35, type-check, lint and production artifact validation passed locally.
+Emitted budgets passed at CSS 596.6/600.0 KiB, initial JS 295.4/320.0 KiB,
+largest lazy increment 208.1/240.0 KiB, fonts 453.6/512.0 KiB, images
+564.4/640.0 KiB and Worker entry 3647.1/6144.0 KiB. The CSS result has only
+3.4 KiB of headroom.
+
+No authorized real Admin/MFA session was available, so no signed-in browser
+claim is made for the protected cards. This remains an unpublished candidate:
+no Worker, Sites, D1/migration, DNS, notification or customer-data mutation was
+made.
+
 ## 2026-08-29 legal AI reasoning-mode candidate
 
 Commit `1ed175014d4255217444c538d3e8d7ae87b8dd9f` adds three explicit modes to

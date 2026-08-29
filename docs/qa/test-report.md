@@ -1,5 +1,24 @@
 # Test report — current evidence through 2026-08-29
 
+## Admin Fast/Balanced/Deep routing transparency candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `6bb8d607dfaead59fa345468ccf0ec56afe16016` |
+| Runtime/display drift control | PASS — provider execution, Anthropic fallback, run reservation and the protected Admin summary share `aiReasoningRuntimeRoute` |
+| Admin contract | PASS source — localized Fast/Balanced/Deep cards expose the active primary/fallback model, Balanced default, reasoning effort, attempt/first-content limits, output limits and the shared 30-second deadline |
+| History contract | PASS source — saved-version rows expose chat, Deep and Anthropic fallback models rather than only the generic chat/document pair |
+| Focused regression | PASS — 6/6 routing/default/localization/source-contract tests |
+| Full Platform release gate | PASS — core 1114/1114, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check, lint and production artifact validation |
+| Artifact budgets | PASS — CSS 596.6/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3647.1/6144.0 KiB |
+| Protected browser replay | NOT RUN — no authorized real Admin/MFA session was available; source, behavior tests and responsive CSS are evidence, but not a claim of signed-in browser verification |
+| Fresh Anthropic recovery | PASS read-only — app/status APIs agreed at `2026-08-29T03:46:26.954Z` on 8/8 operational and zero incidents; Anthropic was operational at `03:45:28.572Z` (4,882 ms, no safe error) and document analysis at `03:30:39.338Z` (9,579 ms, no safe error) |
+| Release boundary | NOT DEPLOYED — no Worker/Sites publish, migration, D1, DNS, notification or customer-data mutation |
+
+The CSS budget passes with only 3.4 KiB of remaining headroom and should be
+treated as a tight release constraint. The live provider recovery verifies the
+funded Anthropic account, not the unpublished Admin candidate.
+
 ## Legal AI Fast/Balanced/Deep candidate and fresh provider recovery
 
 | Gate | Result |

@@ -40,3 +40,19 @@ in Russian and `Tezkor`, `Muvozanatli`, and `Chuqur` in Uzbek. Missing or
 unrecognized mode input is normalized to `balanced`; guest and synthetic probe
 flows that explicitly request `fast` remain fast. All three modes share the
 same absolute request deadline and provider-cost circuit.
+
+## Admin routing transparency
+
+The protected AI settings console derives its read-only Fast/Balanced/Deep
+summary from the same `aiReasoningRuntimeRoute` contract used by primary
+provider execution, Anthropic fallback and run reservation. Each localized
+card exposes the active primary and fallback models, default-mode marker,
+reasoning effort, attempt windows, first-content cap and compact/detailed
+output limits. It also states the shared 30-second absolute request deadline,
+which clips any longer per-attempt value to the time remaining.
+
+The editable chat-model field is explicitly labelled as shared by Fast and
+Balanced; Deep has its own model field. Version history records the chat, Deep
+and Anthropic fallback model identifiers so an operator can compare a saved
+configuration with the active one without inferring routing from a generic
+"chat model" label.

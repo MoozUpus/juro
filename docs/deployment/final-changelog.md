@@ -3,14 +3,25 @@
 ## Current operational verification
 
 - After the owner reported replenishing the Anthropic account, independent
-  production app/status reads generated at `2026-08-29T03:02:32.506Z` agreed
+  production app/status reads generated at `2026-08-29T03:46:26.954Z` agreed
   on 8/8 operational with no incident. Anthropic was operational at
-  `03:00:33.053Z` (5,465 ms, no safe error) and document analysis at
-  `03:00:41.121Z` (8,018 ms, no safe error). This was a read-only recovery
+  `03:45:28.572Z` (4,882 ms, no safe error) and document analysis at
+  `03:30:39.338Z` (9,579 ms, no safe error). This was a read-only recovery
   verification, not a new release.
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `6bb8d607` makes protected Admin AI settings expose the actual
+  Fast/Balanced/Deep runtime mapping. Execution, run reservation, fallback and
+  the localized operator summary use the same contract; the cards show the
+  primary/fallback models, Balanced default, reasoning effort, bounded time and
+  output controls, and shared 30-second deadline. History now records chat,
+  Deep and Anthropic fallback models.
+- Local gates passed focused 6/6, core 1114/1114,
+  Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check,
+  lint and artifact validation. The CSS budget passed at 596.6/600.0 KiB with
+  only 3.4 KiB remaining. No real Admin/MFA browser session was available, so
+  signed-in Admin UI verification is not claimed.
 - Candidate `1ed17501` adds explicit Fast, Balanced and Deep legal-AI modes,
   with Balanced as the default for omitted or unknown client input. Balanced
   keeps the normal chat model and medium reasoning; Deep alone selects the
