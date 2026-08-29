@@ -450,6 +450,7 @@ async function inventory(
          (SELECT count(*) FROM document_change_proposals WHERE author_user_id=?) +
          (SELECT count(*) FROM cases WHERE owner_user_id=?) +
          (SELECT count(*) FROM action_plans WHERE created_by_user_id=?) +
+         (SELECT count(*) FROM ai_answer_source_opens WHERE user_id=?) +
          (SELECT count(*) FROM conversations WHERE owner_user_id=?) +
          (SELECT count(*) FROM contacts WHERE owner_user_id=?) +
          (SELECT count(*) FROM consultation_requests WHERE requester_user_id=?) +
@@ -480,7 +481,7 @@ async function inventory(
          )
        ) AS retainedFinancialRecords`,
   ).bind(
-    ...Array.from({ length: 38 }, () => userId),
+    ...Array.from({ length: 39 }, () => userId),
   ).first<Record<keyof PurgeInventory, number>>();
   if (!row) {
     throw new AccountDeletionPurgeError(
@@ -551,6 +552,7 @@ function deletionStatements(
     db.prepare(`DELETE FROM document_files WHERE owner_user_id=?`).bind(user),
     db.prepare(`DELETE FROM action_plans WHERE created_by_user_id=?`).bind(user),
     db.prepare(`DELETE FROM cases WHERE owner_user_id=?`).bind(user),
+    db.prepare(`DELETE FROM ai_answer_source_opens WHERE user_id=?`).bind(user),
     db.prepare(`DELETE FROM conversations WHERE owner_user_id=?`).bind(user),
     db.prepare(`DELETE FROM consultation_requests WHERE requester_user_id=?`).bind(user),
     db.prepare(`DELETE FROM consultation_bookings WHERE requester_user_id=?`).bind(user),

@@ -189,6 +189,18 @@ function seedContent(
     sqlite.prepare(`INSERT INTO lawyer_directory_daily_visits
       (user_id,visit_day,first_viewed_at,last_viewed_at)
       VALUES (?,'2026-07-30',?,?)`).run(userId, NOW, NOW);
+    const ownerLabel = userId === USER_ID ? "purge" : "purge-other";
+    sqlite.prepare(`INSERT INTO conversations
+      (id,workspace_id,owner_user_id,title,locale,status,created_at,updated_at)
+      VALUES (?,?,?,'Purge source-open test','ru','active',?,?)`)
+      .run(`${ownerLabel}-conversation`, WORKSPACE_ID, userId, NOW, NOW);
+    sqlite.prepare(`INSERT INTO conversation_messages
+      (id,conversation_id,author_type,content,structured_json,created_at)
+      VALUES (?,?,'assistant','purge test answer','{}',?)`)
+      .run(`${ownerLabel}-response`, `${ownerLabel}-conversation`, NOW);
+    sqlite.prepare(`INSERT INTO ai_answer_source_opens
+      (user_id,response_message_id,first_opened_at,last_opened_at)
+      VALUES (?,?,?,?)`).run(userId, `${ownerLabel}-response`, NOW, NOW);
   }
   sqlite.prepare(
     `INSERT INTO document_templates (
@@ -443,6 +455,14 @@ test("purge removes D1/R2 content, redacts shared comments, and retains immutabl
     );
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS total FROM lawyer_directory_daily_visits WHERE user_id=?").get(OTHER_USER_ID) as { total: number }).total,
+      1,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM ai_answer_source_opens WHERE user_id=?").get(USER_ID) as { total: number }).total,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM ai_answer_source_opens WHERE user_id=?").get(OTHER_USER_ID) as { total: number }).total,
       1,
     );
     assert.equal(

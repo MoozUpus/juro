@@ -2122,6 +2122,17 @@ export const conversationMessages = sqliteTable("conversation_messages", {
   createdAt: text("created_at").notNull(),
 }, (table) => [index("conversation_messages_conversation_idx").on(table.conversationId, table.createdAt)]);
 
+export const aiAnswerSourceOpens = sqliteTable("ai_answer_source_opens", {
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  responseMessageId: text("response_message_id").notNull().references(() => conversationMessages.id, { onDelete: "cascade" }),
+  firstOpenedAt: text("first_opened_at").notNull(),
+  lastOpenedAt: text("last_opened_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.responseMessageId] }),
+  index("ai_answer_source_opens_first_opened_idx").on(table.firstOpenedAt, table.userId),
+  check("ai_answer_source_opens_time_order_check", sql`${table.firstOpenedAt} <= ${table.lastOpenedAt}`),
+]);
+
 export const aiDocumentPrefillHandoffs = sqliteTable("ai_document_prefill_handoffs", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),

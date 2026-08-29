@@ -38,6 +38,21 @@ export type ProductKpiDashboard = {
     rateBasisPoints: number | null;
     readiness: ProductKpiReadiness;
   };
+  answerFunnel: {
+    cohortStartedAt: string;
+    cohortEndedAt: string;
+    answerWindowDays: 7;
+    sourceOpenWindowDays: 7;
+    firstQuestionUsers: number;
+    answeredUsers: number;
+    sourceOpeningUsers: number;
+    answerCompletionRateBasisPoints: number | null;
+    answerDropOffRateBasisPoints: number | null;
+    sourceOpenRateBasisPoints: number | null;
+    sourceDropOffRateBasisPoints: number | null;
+    answerReadiness: ProductKpiReadiness;
+    sourceReadiness: ProductKpiReadiness;
+  };
   workflows: {
     windowStartedAt: string;
     windowEndedAt: string;
@@ -85,6 +100,11 @@ type PlanSummaryRow = { created: number; completed: number };
 type LawyerRequestSummaryRow = { created: number; acceptedOrLater: number; completed: number };
 type EngagedReturnSummaryRow = { activatedUsers: number; returningUsers: number };
 type LawyerMarketplaceSummaryRow = { directoryVisitors: number; requestingVisitors: number };
+type AnswerFunnelSummaryRow = {
+  firstQuestionUsers: number;
+  answeredUsers: number;
+  sourceOpeningUsers: number;
+};
 
 const investorDemoIds = [
   "10000000-0000-4000-8000-000000000001",
@@ -212,6 +232,65 @@ SELECT
   (SELECT count(*) FROM first_values) AS activatedUsers,
   (SELECT count(*) FROM returning_users) AS returningUsers`;
 
+const answerFunnelSummarySql = `
+WITH ranked_questions AS (
+  SELECT conversation.owner_user_id AS userId,message.id AS requestMessageId,
+    message.created_at AS questionAt,
+    row_number() OVER (
+      PARTITION BY conversation.owner_user_id
+      ORDER BY message.created_at,message.id
+    ) AS questionRank
+  FROM conversation_messages message
+  JOIN conversations conversation ON conversation.id=message.conversation_id
+  WHERE message.author_type='user'
+),
+eligible_questions AS (
+  SELECT question.userId,question.requestMessageId,question.questionAt
+  FROM ranked_questions question
+  JOIN user_profiles profile ON profile.id=question.userId
+  WHERE question.questionRank=1
+    AND question.questionAt>=? AND question.questionAt<?
+    AND ${excludedUserPredicate}
+),
+ranked_answers AS (
+  SELECT eligible.userId,run.response_message_id AS responseMessageId,
+    run.completed_at AS answerAt,
+    row_number() OVER (
+      PARTITION BY eligible.userId
+      ORDER BY run.completed_at,run.id
+    ) AS answerRank
+  FROM eligible_questions eligible
+  JOIN ai_runs run ON run.user_id=eligible.userId
+    AND run.request_message_id=eligible.requestMessageId
+  JOIN conversation_messages response ON response.id=run.response_message_id
+    AND response.author_type='assistant'
+  WHERE run.status='completed' AND run.completed_at IS NOT NULL
+    AND julianday(run.completed_at)>=julianday(eligible.questionAt)
+    AND julianday(run.completed_at)<=julianday(eligible.questionAt)+7
+    AND json_valid(response.structured_json)=1
+    AND json_extract(response.structured_json,'$.responseKind')='answer'
+    AND json_extract(response.structured_json,'$.sourceValidationStatus')='validated'
+    AND json_array_length(response.structured_json,'$.sources')>0
+),
+first_answers AS (
+  SELECT userId,responseMessageId,answerAt
+  FROM ranked_answers
+  WHERE answerRank=1
+),
+source_opening_users AS (
+  SELECT DISTINCT answer.userId
+  FROM first_answers answer
+  JOIN ai_answer_source_opens source_open
+    ON source_open.user_id=answer.userId
+    AND source_open.response_message_id=answer.responseMessageId
+  WHERE julianday(source_open.first_opened_at)>=julianday(answer.answerAt)
+    AND julianday(source_open.first_opened_at)<=julianday(answer.answerAt)+7
+)
+SELECT
+  (SELECT count(*) FROM eligible_questions) AS firstQuestionUsers,
+  (SELECT count(*) FROM first_answers) AS answeredUsers,
+  (SELECT count(*) FROM source_opening_users) AS sourceOpeningUsers`;
+
 const planSummarySql = `
 SELECT count(*) AS created,
   COALESCE(sum(CASE WHEN plan.status='completed' THEN 1 ELSE 0 END),0) AS completed
@@ -264,16 +343,20 @@ export async function readProductKpiDashboard(input: {
   const cohortEndedAt = isoDaysBefore(now, 7);
   const returnCohortStartedAt = isoDaysBefore(now, 44);
   const returnCohortEndedAt = isoDaysBefore(now, 14);
+  const answerCohortStartedAt = returnCohortStartedAt;
+  const answerCohortEndedAt = returnCohortEndedAt;
   const workflowStartedAt = isoDaysBefore(now, 30);
   const activationBindings = [cohortStartedAt, cohortEndedAt, asOf] as const;
   const returnBindings = [returnCohortStartedAt, returnCohortEndedAt, asOf] as const;
+  const answerBindings = [answerCohortStartedAt, answerCohortEndedAt, asOf] as const;
   const workflowBindings = [workflowStartedAt, asOf, asOf] as const;
   const marketplaceBindings = [cohortStartedAt, cohortEndedAt, asOf] as const;
 
-  const [summaryResult, durationResult, returnResult, planResult, lawyerResult, marketplaceResult] = await input.db.batch([
+  const [summaryResult, durationResult, returnResult, answerResult, planResult, lawyerResult, marketplaceResult] = await input.db.batch([
     input.db.prepare(activationSummarySql).bind(...activationBindings),
     input.db.prepare(activationDurationsSql).bind(...activationBindings),
     input.db.prepare(engagedReturnSummarySql).bind(...returnBindings),
+    input.db.prepare(answerFunnelSummarySql).bind(...answerBindings),
     input.db.prepare(planSummarySql).bind(...workflowBindings),
     input.db.prepare(lawyerRequestSummarySql).bind(...workflowBindings),
     input.db.prepare(lawyerMarketplaceSummarySql).bind(...marketplaceBindings),
@@ -283,6 +366,7 @@ export async function readProductKpiDashboard(input: {
   const plan = (planResult.results?.[0] ?? {}) as Partial<PlanSummaryRow>;
   const lawyer = (lawyerResult.results?.[0] ?? {}) as Partial<LawyerRequestSummaryRow>;
   const engagedReturn = (returnResult.results?.[0] ?? {}) as Partial<EngagedReturnSummaryRow>;
+  const answerFunnel = (answerResult.results?.[0] ?? {}) as Partial<AnswerFunnelSummaryRow>;
   const marketplace = (marketplaceResult.results?.[0] ?? {}) as Partial<LawyerMarketplaceSummaryRow>;
   const durations = (durationResult.results ?? [])
     .map((row) => numeric((row as Partial<DurationRow>).durationSeconds))
@@ -293,6 +377,9 @@ export async function readProductKpiDashboard(input: {
   const createdPlans = numeric(plan.created);
   const createdRequests = numeric(lawyer.created);
   const activatedReturnUsers = numeric(engagedReturn.activatedUsers);
+  const firstQuestionUsers = numeric(answerFunnel.firstQuestionUsers);
+  const answeredUsers = numeric(answerFunnel.answeredUsers);
+  const sourceOpeningUsers = numeric(answerFunnel.sourceOpeningUsers);
   const directoryVisitors = numeric(marketplace.directoryVisitors);
 
   return {
@@ -327,6 +414,21 @@ export async function readProductKpiDashboard(input: {
       returningUsers: numeric(engagedReturn.returningUsers),
       rateBasisPoints: rateBasisPoints(numeric(engagedReturn.returningUsers), activatedReturnUsers),
       readiness: readiness(activatedReturnUsers),
+    },
+    answerFunnel: {
+      cohortStartedAt: answerCohortStartedAt,
+      cohortEndedAt: answerCohortEndedAt,
+      answerWindowDays: 7,
+      sourceOpenWindowDays: 7,
+      firstQuestionUsers,
+      answeredUsers,
+      sourceOpeningUsers,
+      answerCompletionRateBasisPoints: rateBasisPoints(answeredUsers, firstQuestionUsers),
+      answerDropOffRateBasisPoints: rateBasisPoints(firstQuestionUsers - answeredUsers, firstQuestionUsers),
+      sourceOpenRateBasisPoints: rateBasisPoints(sourceOpeningUsers, answeredUsers),
+      sourceDropOffRateBasisPoints: rateBasisPoints(answeredUsers - sourceOpeningUsers, answeredUsers),
+      answerReadiness: readiness(firstQuestionUsers),
+      sourceReadiness: readiness(answeredUsers),
     },
     workflows: {
       windowStartedAt: workflowStartedAt,

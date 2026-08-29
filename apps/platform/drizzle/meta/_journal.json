@@ -1156,6 +1156,13 @@
       "when": 1788002232427,
       "tag": "0164_lawyer_directory_daily_visits",
       "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "7",
+      "when": 1788012000000,
+      "tag": "0165_ai_answer_source_opens",
+      "breakpoints": true
     }
   ]
 }

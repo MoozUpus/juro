@@ -1,6 +1,7 @@
 import { requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
 import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
 import { parsePrivateDocumentLocator } from "../../../../../../lib/document-analysis/private-document-locator";
+import { recordAiAnswerSourceOpen } from "../../../../../../lib/analytics/product-funnel-observations";
 import { normalizeArticleNumber } from "../../../../../../lib/legal/legal-language";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
 import { trackProductEvent } from "../../../../../../lib/platform/analytics";
@@ -118,6 +119,18 @@ function normalizedArticle(value: string | null): string | null {
   return normalizeArticleNumber(number) || null;
 }
 
+async function recordAiAnswerSourceOpenBestEffort(input: {
+  db: D1Database;
+  userId: string;
+  responseMessageId: string;
+}): Promise<void> {
+  try {
+    await recordAiAnswerSourceOpen(input);
+  } catch {
+    console.warn(JSON.stringify({ event: "ai_answer_source_open.persistence_failed" }));
+  }
+}
+
 export const GET = withApiErrors(async function GET(request: Request, context: Context) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
@@ -182,6 +195,7 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
       return response({ code: "CITATION_UNAVAILABLE" }, 404);
     }
     const displayed = text.slice(0, MAX_PRIVATE_DOCUMENT_CHARACTERS);
+    await recordAiAnswerSourceOpenBestEffort({ db, userId: user.id, responseMessageId: messageId });
     trackProductEvent({ event: "source_opened", surface: "ai_chat" });
     return response({
       documentTitle: privateDocument.fileName,
@@ -265,6 +279,7 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
     || combinedArticleText.length > MAX_ARTICLE_CHARACTERS
     || articleRows.some((row) => row.textLength > row.text.length);
 
+  await recordAiAnswerSourceOpenBestEffort({ db, userId: user.id, responseMessageId: messageId });
   trackProductEvent({ event: "source_opened", surface: "ai_chat" });
   return response({
     documentTitle: article?.documentTitle ?? citation.title,

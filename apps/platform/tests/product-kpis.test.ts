@@ -7,7 +7,10 @@ import {
   PRODUCT_KPI_PRIVACY_MIN_SAMPLE,
   readProductKpiDashboard,
 } from "../lib/analytics/product-kpis";
-import { recordLawyerDirectoryVisit } from "../lib/analytics/product-funnel-observations";
+import {
+  recordAiAnswerSourceOpen,
+  recordLawyerDirectoryVisit,
+} from "../lib/analytics/product-funnel-observations";
 import { platformStaffRoleAllows } from "../lib/auth/staff-access";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -120,6 +123,54 @@ test("product KPI dashboard computes mature activation without returning identit
       });
     }
 
+    seedWorkspace(sqlite, "cohort-05");
+    for (let index = 0; index < 6; index += 1) {
+      const userId = `cohort-0${index}`;
+      const workspaceId = `workspace-${userId}`;
+      const conversationId = `answer-funnel-conversation-${index}`;
+      const requestMessageId = `answer-funnel-request-${index}`;
+      const responseMessageId = `answer-funnel-response-${index}`;
+      const questionAt = `2026-08-10T0${index}:00:00.000Z`;
+      const answerAt = `2026-08-11T0${index}:00:00.000Z`;
+      sqlite.prepare(`INSERT INTO conversations
+        (id,workspace_id,owner_user_id,title,locale,status,created_at,updated_at)
+        VALUES (?,?,?,'Answer funnel conversation','ru','active',?,?)`)
+        .run(conversationId, workspaceId, userId, questionAt, answerAt);
+      sqlite.prepare(`INSERT INTO conversation_messages
+        (id,conversation_id,author_type,content,structured_json,created_at)
+        VALUES (?,?,'user','aggregate-only test question',NULL,?)`)
+        .run(requestMessageId, conversationId, questionAt);
+      if (index >= 5) continue;
+      sqlite.prepare(`INSERT INTO conversation_messages
+        (id,conversation_id,author_type,content,structured_json,created_at)
+        VALUES (?,?,'assistant','aggregate-only test answer',?,?)`)
+        .run(responseMessageId, conversationId, JSON.stringify({
+          responseKind: "answer",
+          sourceValidationStatus: "validated",
+          sources: [{ url: "https://lex.uz/docs/funnel-test" }],
+        }), answerAt);
+      sqlite.prepare(`INSERT INTO ai_runs
+        (id,workspace_id,user_id,conversation_id,request_message_id,response_message_id,
+         idempotency_key,correlation_id,provider,model,answer_mode,reasoning_mode,status,
+         legal_database_as_of,instruction_hash,source_version_hash,started_at,completed_at,
+         created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,'detailed','fast','completed',?,?,?,?,?,?,?)`)
+        .run(
+          `answer-funnel-run-${index}`, workspaceId, userId, conversationId,
+          requestMessageId, responseMessageId, `answer-funnel-idem-${index}`,
+          `answer-funnel-corr-${index}`, "anthropic", "claude-sonnet-4-6",
+          questionAt, "c".repeat(64), "d".repeat(64), questionAt, answerAt, answerAt, answerAt,
+        );
+      if (index < 3) {
+        await recordAiAnswerSourceOpen({
+          db: d1,
+          userId,
+          responseMessageId,
+          observedAt: new Date(`2026-08-12T0${index}:00:00.000Z`),
+        });
+      }
+    }
+
     const requestStatuses = ["accepted", "offer_proposed", "offer_accepted", "completed", "conflict_check_pending"];
     for (let index = 0; index < 5; index += 1) {
       const userId = `cohort-0${index}`;
@@ -165,6 +216,21 @@ test("product KPI dashboard computes mature activation without returning identit
       returningUsers: 3,
       rateBasisPoints: 6_000,
       readiness: "insufficient_sample",
+    });
+    assert.deepEqual(dashboard.answerFunnel, {
+      cohortStartedAt: "2026-07-16T12:00:00.000Z",
+      cohortEndedAt: "2026-08-15T12:00:00.000Z",
+      answerWindowDays: 7,
+      sourceOpenWindowDays: 7,
+      firstQuestionUsers: 6,
+      answeredUsers: 5,
+      sourceOpeningUsers: 3,
+      answerCompletionRateBasisPoints: 8_333,
+      answerDropOffRateBasisPoints: 1_667,
+      sourceOpenRateBasisPoints: 6_000,
+      sourceDropOffRateBasisPoints: 4_000,
+      answerReadiness: "insufficient_sample",
+      sourceReadiness: "insufficient_sample",
     });
     assert.deepEqual(dashboard.workflows.plans, {
       created: 7,
@@ -215,6 +281,9 @@ test("product KPI dashboard suppresses rates and TTFV below the privacy threshol
     assert.equal(dashboard.activation.rateBasisPoints, null);
     assert.deepEqual(dashboard.activation.ttfvSeconds, { p50: null, p75: null, p95: null });
     assert.equal(dashboard.engagedReturn.rateBasisPoints, null);
+    assert.equal(dashboard.answerFunnel.answerCompletionRateBasisPoints, null);
+    assert.equal(dashboard.answerFunnel.sourceOpenRateBasisPoints, null);
+    assert.equal(dashboard.answerFunnel.answerReadiness, "no_data");
     assert.equal(dashboard.workflows.lawyerMarketplace.conversionRateBasisPoints, null);
   } finally {
     sqlite.close();
@@ -265,12 +334,68 @@ test("lawyer directory visits are daily-deduplicated without storing page or pro
   }
 });
 
+test("answer source opens are answer-deduplicated, owner-bound and content-free", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seedProfile(sqlite, "source-open-user");
+    seedProfile(sqlite, "source-open-other");
+    const workspaceId = seedWorkspace(sqlite, "source-open-user");
+    seedWorkspace(sqlite, "source-open-other");
+    sqlite.prepare(`INSERT INTO conversations
+      (id,workspace_id,owner_user_id,title,locale,status,created_at,updated_at)
+      VALUES ('source-open-conversation',?,?,'Source open test','ru','active',?,?)`)
+      .run(workspaceId, "source-open-user", onboardedAt, onboardedAt);
+    sqlite.prepare(`INSERT INTO conversation_messages
+      (id,conversation_id,author_type,content,structured_json,created_at)
+      VALUES ('source-open-response','source-open-conversation','assistant','test answer','{}',?)`)
+      .run(onboardedAt);
+
+    await recordAiAnswerSourceOpen({
+      db: d1,
+      userId: "source-open-user",
+      responseMessageId: "source-open-response",
+      observedAt: new Date("2026-08-12T15:00:00.000Z"),
+    });
+    await recordAiAnswerSourceOpen({
+      db: d1,
+      userId: "source-open-user",
+      responseMessageId: "source-open-response",
+      observedAt: new Date("2026-08-12T10:00:00.000Z"),
+    });
+    assert.deepEqual(
+      { ...sqlite.prepare(`SELECT user_id AS userId,response_message_id AS responseMessageId,
+        first_opened_at AS firstOpenedAt,last_opened_at AS lastOpenedAt
+        FROM ai_answer_source_opens`).get() },
+      {
+        userId: "source-open-user",
+        responseMessageId: "source-open-response",
+        firstOpenedAt: "2026-08-12T10:00:00.000Z",
+        lastOpenedAt: "2026-08-12T15:00:00.000Z",
+      },
+    );
+    await assert.rejects(
+      recordAiAnswerSourceOpen({
+        db: d1,
+        userId: "source-open-other",
+        responseMessageId: "source-open-response",
+      }),
+      /AI_ANSWER_SOURCE_OPEN_OWNER_MISMATCH/,
+    );
+    const columns = sqlite.prepare("PRAGMA table_info(ai_answer_source_opens)").all()
+      .map((column) => String((column as { name: string }).name));
+    assert.deepEqual(columns, ["user_id", "response_message_id", "first_opened_at", "last_opened_at"]);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("product KPI console is no-store, administrator-only and fresh-MFA-gated", () => {
   const api = readFileSync(new URL("../app/api/platform/admin/product-kpis/route.ts", import.meta.url), "utf8");
   const page = readFileSync(new URL("../app/[locale]/admin/product-kpis/page.tsx", import.meta.url), "utf8");
   const service = readFileSync(new URL("../lib/analytics/product-kpis.ts", import.meta.url), "utf8");
   const observation = readFileSync(new URL("../lib/analytics/product-funnel-observations.ts", import.meta.url), "utf8");
   const directoryRoute = readFileSync(new URL("../app/api/platform/lawyers/route.ts", import.meta.url), "utf8");
+  const citationRoute = readFileSync(new URL("../app/api/platform/ai/citations/[messageId]/route.ts", import.meta.url), "utf8");
   assert.equal(platformStaffRoleAllows("administrator", "staff.operations.manage"), true);
   assert.equal(platformStaffRoleAllows("support", "staff.operations.manage"), false);
   assert.match(api, /requirePlatformStaffRequest\(request, "staff\.operations\.manage", \{/);
@@ -283,5 +408,7 @@ test("product KPI console is no-store, administrator-only and fresh-MFA-gated", 
   assert.match(service, /date\(engagement\.engagedAt\)>date\(first\.firstValueAt\)/);
   assert.match(observation, /ON CONFLICT\(user_id,visit_day\) DO UPDATE/);
   assert.match(directoryRoute, /recordLawyerDirectoryVisit\(\{ db, userId: user\.id \}\)/);
+  assert.match(citationRoute, /recordAiAnswerSourceOpenBestEffort\(\{ db, userId: user\.id, responseMessageId: messageId \}\)/);
+  assert.match(observation, /ON CONFLICT\(user_id,response_message_id\) DO UPDATE/);
   assert.doesNotMatch(observation, /profile_id|lawyer_id|case_id|workspace_id|content|query/i);
 });

@@ -36,6 +36,16 @@ const copy = {
     returned: "Вернулись к осмысленному действию",
     returnRate: "7-day engaged return",
     returnNote: "Возврат — новое явное действие пользователя в другой UTC-день в течение 7 дней после первой ценности. Фоновое обновление сессии и пассивный просмотр не засчитываются.",
+    answerFunnel: "Первый вопрос → ответ → открытый источник",
+    questionCohort: "Когорта первого вопроса",
+    firstQuestions: "Задали первый вопрос",
+    answeredQuestions: "Получили валидированный ответ",
+    openedSources: "Открыли источник",
+    answerCompletion: "Question-to-answer completion",
+    answerDropOff: "Отсев до ответа",
+    sourceOpenRate: "Answer-to-source open",
+    sourceDropOff: "Отсев до открытия источника",
+    answerFunnelNote: "Воронка связывает первый вопрос с его точным завершённым ответом за 7 дней, а ответ — с первым авторизованным открытием его источника ещё за 7 дней. Исторические обезличенные события не выдаются за пользователей.",
     workflows: "Операционные воронки за 30 дней",
     plansCreated: "Планы созданы",
     plansCompleted: "Планы завершены",
@@ -89,6 +99,16 @@ const copy = {
     returned: "Mazmunli harakatga qaytganlar",
     returnRate: "7-day engaged return",
     returnNote: "Qaytish — birinchi qiymatdan keyin 7 kun ichida boshqa UTC kunida foydalanuvchining yangi aniq harakati. Fon seansi yangilanishi va passiv ko‘rish hisoblanmaydi.",
+    answerFunnel: "Birinchi savol → javob → ochilgan manba",
+    questionCohort: "Birinchi savol kohortasi",
+    firstQuestions: "Birinchi savolni berganlar",
+    answeredQuestions: "Tekshirilgan javob olganlar",
+    openedSources: "Manbani ochganlar",
+    answerCompletion: "Question-to-answer completion",
+    answerDropOff: "Javobgacha chiqib ketish",
+    sourceOpenRate: "Answer-to-source open",
+    sourceDropOff: "Manba ochilishigacha chiqib ketish",
+    answerFunnelNote: "Voronka birinchi savolni 7 kun ichidagi uning aniq tugallangan javobiga, javobni esa keyingi 7 kun ichidagi birinchi ruxsatli manba ochilishiga bog‘laydi. Tarixiy anonim hodisalar foydalanuvchi sifatida ko‘rsatilmaydi.",
     workflows: "30 kunlik operatsion voronkalar",
     plansCreated: "Rejalar yaratildi",
     plansCompleted: "Rejalar tugallandi",
@@ -152,6 +172,7 @@ export function ProductKpiConsole({
   };
   const activation = dashboard.activation;
   const engagedReturn = dashboard.engagedReturn;
+  const answerFunnel = dashboard.answerFunnel;
   const workflows = dashboard.workflows;
   const otherLocale = locale === "ru" ? "uz" : "ru";
   return <div className="staff-console">
@@ -198,6 +219,21 @@ export function ProductKpiConsole({
           <article><span>{t.p75}</span><b>{duration(activation.ttfvSeconds.p75)}</b></article>
           <article><span>{t.p95}</span><b>{duration(activation.ttfvSeconds.p95)}</b></article>
         </div>
+      </section>
+
+      <section className="jobs-summary" aria-labelledby="answer-funnel-heading">
+        <h2 id="answer-funnel-heading">{t.answerFunnel}</h2>
+        <p className="staff-count">{t.questionCohort}: <time dateTime={answerFunnel.cohortStartedAt}>{dateTime(answerFunnel.cohortStartedAt, locale)}</time> — <time dateTime={answerFunnel.cohortEndedAt}>{dateTime(answerFunnel.cohortEndedAt, locale)}</time> · {readinessLabel[answerFunnel.answerReadiness]} / {readinessLabel[answerFunnel.sourceReadiness]}</p>
+        <div>
+          <article><span>{t.firstQuestions}</span><b>{answerFunnel.firstQuestionUsers}</b></article>
+          <article><span>{t.answeredQuestions}</span><b>{answerFunnel.answeredUsers}</b></article>
+          <article><span>{t.openedSources}</span><b>{answerFunnel.sourceOpeningUsers}</b></article>
+          <article><span>{t.answerCompletion}</span><b>{percent(answerFunnel.answerCompletionRateBasisPoints)}</b></article>
+          <article><span>{t.answerDropOff}</span><b>{percent(answerFunnel.answerDropOffRateBasisPoints)}</b></article>
+          <article><span>{t.sourceOpenRate}</span><b>{percent(answerFunnel.sourceOpenRateBasisPoints)}</b></article>
+          <article><span>{t.sourceDropOff}</span><b>{percent(answerFunnel.sourceDropOffRateBasisPoints)}</b></article>
+        </div>
+        <p className="staff-count">{t.answerFunnelNote}</p>
       </section>
 
       <section className="jobs-summary" aria-labelledby="pathways-heading">
