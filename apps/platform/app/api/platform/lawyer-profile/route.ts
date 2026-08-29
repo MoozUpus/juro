@@ -530,7 +530,8 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
           `UPDATE lawyer_profiles SET
          availability_status=?,next_available_at=?,updated_at=?
          WHERE id=? AND user_id=? AND profile_revision=?
-           AND status='public_approved' AND marketplace_status='public_approved'`,
+           AND status='public_approved' AND marketplace_status='public_approved'
+           AND updated_at=?`,
         )
         .bind(
           next.availabilityStatus,
@@ -539,6 +540,7 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
           profile.id,
           user.id,
           profile.profileRevision,
+          profile.updatedAt,
         )
     : db
         .prepare(

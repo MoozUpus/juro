@@ -192,12 +192,24 @@ test("availability-only updates retain the exact moderated revision at the D1 bo
       reason: "Profile completeness confirmed.",
       now: new Date(now),
     });
-    sqlite.prepare(
+    const availabilityUpdate = sqlite.prepare(
       `UPDATE lawyer_profiles SET availability_status='limited',
         next_available_at='2026-09-01T09:00:00.000Z',updated_at=?
        WHERE id=? AND profile_revision=1 AND status='public_approved'
-         AND marketplace_status='public_approved'`,
-    ).run("2026-08-29T22:25:00.000Z", profileId);
+         AND marketplace_status='public_approved' AND updated_at=?`,
+    );
+    const firstUpdate = availabilityUpdate.run(
+      "2026-08-29T22:25:00.000Z",
+      profileId,
+      now,
+    );
+    const staleUpdate = availabilityUpdate.run(
+      "2026-08-29T22:26:00.000Z",
+      profileId,
+      now,
+    );
+    assert.equal(firstUpdate.changes, 1);
+    assert.equal(staleUpdate.changes, 0);
 
     assert.deepEqual(
       { ...sqlite.prepare(
