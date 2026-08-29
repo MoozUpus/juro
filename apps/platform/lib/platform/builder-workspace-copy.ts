@@ -3,7 +3,7 @@ import type { PlatformLocale } from "./routing";
 export const builderWorkspaceCopy = {
   ru: {
     documents: {
-      loadError: "Не удалось загрузить документы.", deleted: "Документ удалён", deleteError: "Удаление не выполнено.", uploadError: "PDF не загружен.", shareError: "Ссылка не создана.",
+      loadError: "Не удалось загрузить документы.", deleted: "Документ удалён", deleteError: "Удаление не выполнено.", uploadError: "PDF не загружен.", shareError: "Ссылка не создана.", close: "Закрыть сообщение",
       title: "Мои документы", countOne: "документ", countMany: "документов и файлов", create: "Создать документ",
       folders: { all: "Все", created: "Созданные", shared: "Доступные мне", favorite: "Избранное", archive: "Архив" },
       search: "Поиск по названию или участникам", statusFilter: "Фильтр по статусу", allStatuses: "Все статусы", statuses: { draft: "Черновик", ready: "Готов", approved: "Согласован", signed: "Подписан", archived: "Архив" },
@@ -24,7 +24,7 @@ export const builderWorkspaceCopy = {
   },
   uz: {
     documents: {
-      loadError: "Hujjatlarni yuklab bo‘lmadi.", deleted: "Hujjat o‘chirildi", deleteError: "Hujjatni o‘chirib bo‘lmadi.", uploadError: "PDF yuklanmadi.", shareError: "Havola yaratilmadi.",
+      loadError: "Hujjatlarni yuklab bo‘lmadi.", deleted: "Hujjat o‘chirildi", deleteError: "Hujjatni o‘chirib bo‘lmadi.", uploadError: "PDF yuklanmadi.", shareError: "Havola yaratilmadi.", close: "Xabarni yopish",
       title: "Mening hujjatlarim", countOne: "ta hujjat", countMany: "ta hujjat va fayl", create: "Hujjat yaratish",
       folders: { all: "Barchasi", created: "Yaratilgan", shared: "Menga ulashilgan", favorite: "Tanlangan", archive: "Arxiv" },
       search: "Nomi yoki ishtirokchi bo‘yicha qidirish", statusFilter: "Holat bo‘yicha filter", allStatuses: "Barcha holatlar", statuses: { draft: "Qoralama", ready: "Tayyor", approved: "Kelishilgan", signed: "Imzolangan", archived: "Arxiv" },
