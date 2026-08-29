@@ -23,6 +23,10 @@ export const LEGAL_CORPUS_STAGING_D1_DATABASE_NAMES = [
   LEGAL_CORPUS_STAGING_D1_DATABASE_NAME,
   "juro-staging-corpus-shard-1",
   "juro-staging-corpus-shard-2",
+  // The active rollover target is a numbered staging shard as well. Keep it
+  // in the strict capacity-evidence allow-list so the release artifact can be
+  // bound to the database actually serving the dedicated corpus Worker.
+  "juro-staging-corpus-shard-3",
 ] as const;
 
 /**
