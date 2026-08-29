@@ -37,10 +37,13 @@
   analysis or case creation. The mature 37-to-7-day cohort has a complete
   request window; only a same-actor request within seven days converts, and
   repeat outcomes cannot move or multiply the cohort.
+- Candidate `1a52d9cc` adds mature signup-to-case creation. A user contributes
+  once when at least one case is created at or after completed onboarding and
+  within seven days; cases outside the window and excluded cohorts do not count.
 - Focused KPI tests pass 5/5 and the combined KPI/purge run passes 15/15; the
   full local gate passes core 1138/1138,
   Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
-  artifact validation; Worker entry is 3720.5/6144.0 KiB. Local Chrome verifies
+  artifact validation; Worker entry is 3724.1/6144.0 KiB. Local Chrome verifies
   the RU/UZ protected boundary at desktop and 390 px with noindex, exact re-auth return path, no
   overflow and no warning/error log; no staff identity was fabricated.
 - A read-only production replay read 230 rows and wrote zero: 10 eligible, two
@@ -62,6 +65,9 @@
   and wrote zero. It found three eligible actors and zero escalating actors,
   with first outcomes split 1 grounded answer / 1 completed analysis / 1 case.
   The denominator is below five, so no 0.0% rate is disclosed.
+- The case-creation replay at `2026-08-29T13:42:05.963Z` read 105 rows and
+  wrote zero. It found 2 of 10 eligible signups creating a case within seven
+  days (20.0%); the result is below the 30-signup comparison gate.
 - Migrations 0164/0165 remain outside the production pattern. No production release,
   D1 row write, DNS, notification or customer-data mutation occurred; product-
   market-fit evidence remains unverified.

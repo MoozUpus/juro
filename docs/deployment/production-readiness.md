@@ -53,6 +53,12 @@ requires the same actor to create a lawyer request at or after that outcome and
 within seven days. The response stays aggregate-only, and repeat outcomes or
 requests cannot move or multiply the cohort.
 
+Commit `1a52d9cc` adds a mature signup-to-case creation rate without a
+migration. It reuses the completed-signup cohort from 37 through 7 days before
+the snapshot and counts each actor once when a case is created at or after
+onboarding and no more than seven days later. This prevents repeat cases,
+pre-onboarding records and late cases from inflating the conversion.
+
 Focused aggregation/privacy/deduplication/access tests passed 5/5 and the
 combined KPI/purge run passed 15/15. The full local gate then passed core
 1138/1138, Cloudflare/infrastructure 203/203,
@@ -94,6 +100,12 @@ wrote zero. It found three eligible actors, zero escalating actors and one
 first outcome in each path: grounded answer, completed analysis and case. The
 denominator is below five, so the rate remains privacy-suppressed and is not
 reported as 0.0%; it is also below the 30-actor comparison gate.
+
+The case-creation replay at `2026-08-29T13:42:05.963Z` read 105 rows and wrote
+zero. It found 10 eligible completed signups and two unique actors creating a
+case inside the seven-day window. The 20.0% result clears the disclosure floor
+but is still an insufficient small baseline below the 30-signup comparison gate,
+not a target or product-market-fit result.
 
 This is an unpublished application-plus-migration candidate. Migrations 0164
 and 0165 remain outside production's migration pattern. No production D1

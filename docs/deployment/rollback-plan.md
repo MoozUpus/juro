@@ -38,7 +38,7 @@ rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.
 
-## Prepared feedback-quality and lawyer-escalation KPI changes — not deployed
+## Prepared product KPI aggregate changes — not deployed
 
 Candidate `3101525c12dd53171494515e0c9668859b92408c` adds only an aggregate
 read and RU/UZ Admin presentation over the existing `ai_feedback` table. It has
@@ -55,6 +55,13 @@ write-path change. The same application-only rollback applies: leave D1 intact,
 then confirm that only first-ever qualifying outcomes enter the mature cohort,
 only same-actor requests within seven days convert, no identifier/content is
 returned, and the privacy/comparison gates remain enforced.
+
+Candidate `1a52d9cc` adds only an aggregate signup-to-case read and RU/UZ Admin
+presentation over existing onboarding and case timestamps. It has no migration
+and no write-path change. The same application-only rollback applies. After a
+forward fix, confirm one actor counts once, cases are bounded from onboarding
+through day 7, excluded cohorts remain absent and the disclosure/comparison
+thresholds still apply.
 
 ## Prepared migration 0161 gate — not applied
 

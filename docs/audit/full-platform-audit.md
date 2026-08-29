@@ -25,12 +25,14 @@ type per answer and never reading comments or answer content. `outdated` stays a
 user signal rather than verified source-state evidence. Commit `e452b3ae` adds
 actor-level lawyer escalation after each actor's first-ever grounded answer,
 completed analysis or case creation; only a same-actor request within seven days
-converts. Legal evaluation, investor demo and active staff are excluded; rates
+converts. Commit `1a52d9cc` adds a mature completed-signup → case-created rate;
+one actor counts once and only for a case created from onboarding through day 7.
+Legal evaluation, investor demo and active staff are excluded; rates
 suppress below five and readiness requires 30. Focused KPI 5/5, combined
 KPI/purge 15/15, core 1138/1138,
 Cloudflare/infrastructure 203/203, rendered Worker 35/35,
 type-check, lint, ordered migration/FK checks and artifact validation passed;
-Worker entry is 3720.5/6144.0 KiB. Existing protected-boundary Chrome evidence
+Worker entry is 3724.1/6144.0 KiB. Existing protected-boundary Chrome evidence
 remains valid without a fabricated staff identity. The original read-only
 production replay found 2/10 activated; the return replay read 417 rows, wrote
 zero and found 2/9 activated with 0 returning, so the rate remains
@@ -46,7 +48,10 @@ denominator, so the dashboard correctly reports `NO DATA`, not a zero error
 rate. The lawyer-escalation replay at `2026-08-29T13:13:11.194Z` read 272
 rows, wrote zero and found three eligible actors, zero escalations and a 1/1/1
 first-outcome split across grounded answer, completed analysis and case. The
-rate is privacy-suppressed rather than published as 0.0%.
+rate is privacy-suppressed rather than published as 0.0%. The case-creation
+replay at `2026-08-29T13:42:05.963Z` read 105 rows, wrote zero and found 2/10
+eligible signups creating a case within seven days (20.0%); it remains below the
+30-signup comparison gate.
 
 **Current Anthropic recovery:** after the owner replenished the account, the
 production snapshot generated at `2026-08-29T11:14:32.854Z` was operational

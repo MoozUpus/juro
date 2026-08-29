@@ -4,13 +4,14 @@
 
 | Gate | Result |
 | --- | --- |
-| Exact implementation source | PASS candidate — activation baseline `0725887f`; engaged-return and lawyer-funnel extension `8602e4101e2a61089ac7e5a66a13c6916abd1044`; exact answer/source-open funnel `c0f9c372`; user-reported error aggregate `3101525c12dd53171494515e0c9668859b92408c`; actor-level lawyer escalation `e452b3ae40d53d55e4726cf05ee9280d7b6fb855` |
+| Exact implementation source | PASS candidate — activation baseline `0725887f`; engaged-return and lawyer-funnel extension `8602e4101e2a61089ac7e5a66a13c6916abd1044`; exact answer/source-open funnel `c0f9c372`; user-reported error aggregate `3101525c12dd53171494515e0c9668859b92408c`; actor-level lawyer escalation `e452b3ae40d53d55e4726cf05ee9280d7b6fb855`; signup-to-case creation `1a52d9cc` |
 | Cohort contract | PASS — a mature 30-day signup cohort gets a complete seven-day value window; grounded answer, completed analysis and case-plus-plan paths are deduplicated at the actor's earliest result |
 | Engaged-return contract | PASS — the 44-to-14-day signup cohort has complete activation and return windows; only an explicit action on a later UTC day within seven days of first value counts, while session refresh and passive reads do not |
 | Marketplace contract | PASS candidate — one internal daily-deduplicated visit row fixes the first-view cohort; only a request by the same actor within seven days converts, and unrelated Analytics Engine occurrences are never divided into the rate |
 | Answer-funnel contract | PASS candidate — each actor's first-ever user message is joined through the exact completed `request_message_id` to one validated source-backed response within 7 days, then to an authorized open of that exact response within the next 7 days |
 | Feedback-quality contract | PASS candidate — one retained feedback type per answer contributes once; five fixed failure classes form the error numerator, while comments, answer content, source URLs and actor IDs are not read or returned |
 | Lawyer-escalation contract | PASS candidate — each actor contributes only their first-ever grounded answer, completed analysis or case creation in the mature 37-to-7-day cohort; only that actor's request at or after the outcome and within seven days converts |
+| Case-creation contract | PASS candidate — unique completed-signup actors count once when a case is created at or after onboarding and within seven days; the denominator uses the complete mature 37-to-7-day cohort |
 | Exclusions | PASS — `legal_eval_user_*`, the three fixed investor-demo identities and active platform staff do not enter product cohorts |
 | Privacy boundary | PASS — D1 uses identifiers only inside aggregate CTEs; the response contains no identifier, email, contact field, prompt, answer, case text or document content |
 | Retention/deletion boundary | PASS — migrations 0164/0165 store only internal keys and timestamps; source-open owner triggers reject cross-actor evidence, and account purge deletes the actor's rows while preserving another user's evidence |
@@ -18,7 +19,7 @@
 | Admin boundary | PASS source — page and no-store API require `staff.operations.manage` and MFA within 15 minutes; both locales are present and the route is noindex |
 | Focused regression | PASS — product KPI aggregation/privacy/deduplication/Admin boundary 5/5; combined KPI plus real account-purge run 15/15 |
 | Full local regression | PASS — core 1138/1138; Cloudflare/infrastructure 203/203; rendered Worker 35/35; type-check and lint |
-| Production artifact | PASS — bounded build and emitted-byte budgets: CSS 596.7/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3720.5/6144.0 KiB |
+| Production artifact | PASS — bounded build and emitted-byte budgets: CSS 596.7/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3724.1/6144.0 KiB |
 | Local Chrome | PASS bounded — RU/UZ protected boundaries at 1440×900 and 390×844 retained one localized H1, private noindex metadata, exact re-auth return path, zero horizontal overflow and no warning/error log; no staff identity was fabricated |
 | Production data replay | PASS read-only / INSUFFICIENT SAMPLE — 10 eligible, 2 activated, one grounded-answer user, zero analysis users and two case-plus-plan users; 230 rows read, zero written |
 | Engaged-return replay | PASS read-only / PRIVACY-SUPPRESSED — 9 eligible, 2 activated and 0 returning; 417 rows read, zero written; the 0/2 rate is not disclosed as a comparable metric |
@@ -27,6 +28,7 @@
 | Source-open replay | AWAITING OBSERVATION — production has no migration 0165 table; no actor rate is inferred from the old non-joinable `source_opened` occurrence |
 | Feedback-quality replay | PASS read-only / NO DATA — at `2026-08-29T12:49:08.640Z` the aggregate read 4 rows and wrote zero; all five category counts were zero, so the error rate is not reported as 0.0% |
 | Lawyer-escalation replay | PASS read-only / PRIVACY-SUPPRESSED — at `2026-08-29T13:13:11.194Z` the aggregate read 272 rows and wrote zero; 3 actors were eligible, 0 escalated, and first outcomes split 1 grounded answer / 1 completed analysis / 1 case, so no 0.0% rate is disclosed |
+| Case-creation replay | PASS read-only / INSUFFICIENT SAMPLE — at `2026-08-29T13:42:05.963Z` the aggregate read 105 rows and wrote zero; 2/10 eligible signups created a case within seven days (20.0%), below the 30-signup comparison gate |
 | Workflow replay | PRIVACY-SUPPRESSED — three plans with zero completed; two lawyer requests with one accepted-or-later and zero completed |
 | Anthropic recovery | PASS current read-only — at `2026-08-29T11:10:56.708Z` the content-free production probe completed in 4,810 ms with no safe error; document analysis also remained operational |
 | Release boundary | UNPUBLISHED — migrations 0164/0165 are outside the production pattern; no D1 row write/migration, Worker/Sites publish, DNS, notification or customer-data mutation |
@@ -50,6 +52,9 @@ The lawyer-escalation cohort is also source- and test-verified, but its three
 eligible production actors are below both the five-actor disclosure floor and
 the 30-actor comparison gate. The rate remains hidden rather than being
 presented as 0.0%.
+The case-creation calculation is source- and test-verified at 2/10 (20.0%). It
+meets the five-signup disclosure floor but remains below the 30-signup comparison
+gate, so it is a small baseline rather than a target or readiness conclusion.
 
 ## Compact conversation-context candidate
 

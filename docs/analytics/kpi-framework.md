@@ -64,7 +64,7 @@ one queryable schema without adding identity or content.
 | Step drop-off | 1 minus the adjacent actor-level completion rate, separately for first question → validated answer and validated answer → opened source | `INSTRUMENTED CANDIDATE`; first-question-to-answer drop-off is currently 5/5 (100.0%) in the small production cohort. Source-open drop-off awaits migration 0165, the matching Worker and a complete observation window. |
 | 7-day engaged return | activated actors with a new explicit product action on a later UTC day within 7 days / activated actors in a fully observed cohort | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the protected D1 aggregate excludes passive session refreshes. A read-only production replay found 0/2 returning, below the five-activation disclosure floor. |
 | Plan completion | completed plans / created plans in the same 30-day D1 window | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the read-only production replay found only three created plans. |
-| Case creation | `case_created` count and, once comparable, `case_created / signup_completed` | Instrumented; zero current-window events |
+| Case creation | completed-signup actors creating at least one case within 7 days / completed signups in the mature 37-to-7-day cohort | `INSTRUMENTED CANDIDATE / INSUFFICIENT SAMPLE`; commit `1a52d9cc` deduplicates actors and accepts only cases at or after onboarding and within the complete seven-day window. The read-only production replay found 2/10 (20.0%), below the 30-signup comparison gate. |
 | Lawyer conversion | unique actors creating a lawyer request within 7 days of their first authenticated directory view / unique first-time directory viewers in a fully observed cohort | `INSTRUMENTED CANDIDATE / AWAITING OBSERVATION`; migration 0164 adds daily-deduplicated internal visit evidence. The existing 13 Analytics Engine view occurrences remain non-joinable and are not reused as unique visitors. |
 | Lawyer-request acceptance | requests in `accepted`, `offer_proposed`, `offer_accepted`, or `completed` / requests created in the same 30-day D1 window | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the read-only production replay found two requests, one accepted-or-later and zero completed. This is not browse-to-request conversion. |
 | Source open rate | actors opening the exact qualifying answer's authorized citation within 7 days / actors receiving a qualifying validated source-backed answer | `INSTRUMENTED CANDIDATE / AWAITING OBSERVATION`; migration 0165 adds answer-deduplicated actor evidence. Historical Analytics Engine occurrences remain non-joinable and are not reused as users. |
@@ -252,9 +252,21 @@ Because the denominator is below five, the rate remains privacy-suppressed and
 must not be published as 0.0%; the sample is also below the 30-actor comparison
 gate.
 
+Commit `1a52d9cc` adds signup-to-case creation to the same protected aggregate
+without a migration. It reuses the mature 37-to-7-day signup cohort and counts
+each actor once when at least one case was created at or after completed
+onboarding and no more than seven days later. Cases before onboarding, outside
+the conversion window, or belonging to excluded cohorts do not contribute.
+
+The read-only production replay at `2026-08-29T13:42:05.963Z` read 105 rows,
+wrote zero and found two case-creating actors among ten eligible signups. The
+20.0% rate clears the disclosure floor but remains an insufficient small
+baseline below the 30-signup comparison gate; it is not a target or a
+product-market-fit conclusion.
+
 The extended candidate passes product-KPI focused 5/5, the combined KPI/purge
 focused run 15/15, core 1138/1138,
 Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint,
 ordered migration/foreign-key checks and the bounded artifact gate. Worker entry
-is 3720.5/6144.0 KiB. Migrations 0164 and 0165 remain outside the production
+is 3724.1/6144.0 KiB. Migrations 0164 and 0165 remain outside the production
 migration pattern; production remains Worker 170 and Sites v86.
