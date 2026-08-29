@@ -303,8 +303,8 @@ async function repairCurrentPayloadParity(
   env: LegalCorpusQdrantSnapshotEnv,
   client: SnapshotClient,
 ): Promise<void> {
-  if (!client.setAllPointsCurrent || (!client.setCurrentVersions && !client.setVersionCurrent)) return;
-  await client.setAllPointsCurrent(false);
+  // Prefer one bounded `match.any` update. The clear-and-reapply fallback is
+  // retained for test doubles/older clients that do not expose that method.
   const rows = await env.DB.prepare(`SELECT version.id AS versionId
     FROM legal_corpus_versions version
     INNER JOIN legal_corpus_variants variant ON variant.current_version_id=version.id
@@ -314,7 +314,8 @@ async function repairCurrentPayloadParity(
     ORDER BY version.id ASC`).all<{ versionId: string }>();
   if (client.setCurrentVersions) {
     await client.setCurrentVersions(rows.results.map((row) => row.versionId));
-  } else if (client.setVersionCurrent) {
+  } else if (client.setAllPointsCurrent && client.setVersionCurrent) {
+    await client.setAllPointsCurrent(false);
     for (const row of rows.results) await client.setVersionCurrent(row.versionId, true);
   }
 }
