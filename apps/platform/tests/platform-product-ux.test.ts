@@ -183,3 +183,13 @@ test("standalone document icon actions expose localized accessible names", async
   assert.match(copy, /close: "Закрыть сообщение"/);
   assert.match(copy, /close: "Xabarni yopish"/);
 });
+
+test("document workspace error dismissals and loading state follow the active locale", async () => {
+  const [contacts, configuredBuilder] = await Promise.all([
+    source("../app/_document-builder/contacts/ContactsClient.tsx"),
+    source("../app/_document-builder/_components/ConfigurableDocumentBuilder.tsx"),
+  ]);
+  assert.match(contacts, /aria-label=\{copy\.close\} title=\{copy\.close\}/);
+  assert.match(configuredBuilder, /aria-label=\{language === "uz" \? "Xabarni yopish" : "Закрыть сообщение"\}/);
+  assert.match(configuredBuilder, /language === "uz" \? "Konstruktor yuklanmoqda…" : "Загружаем конструктор…"/);
+});
