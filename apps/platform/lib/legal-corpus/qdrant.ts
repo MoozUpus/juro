@@ -384,7 +384,20 @@ async function request(
   options: { allowNotFound?: boolean; timeoutMs?: number } = {},
 ): Promise<unknown | undefined> {
   const response = await requestResponse(env, suffix, init, fetchImpl, options);
-  return response ? limitedJson(response) : undefined;
+  if (!response) return undefined;
+  try {
+    return await limitedJson(response);
+  } catch (error) {
+    if (error instanceof QdrantCorpusError && error.code === "QDRANT_RESPONSE_REJECTED") {
+      console.error(JSON.stringify({
+        service: "legal-corpus-qdrant-client",
+        event: "qdrant.response_rejected",
+        phase: "json-decode",
+        endpoint: suffix,
+      }));
+    }
+    throw error;
+  }
 }
 
 function points(result: z.infer<typeof queryResponseSchema>): Array<z.infer<typeof pointSchema>> {
@@ -590,6 +603,12 @@ export class QdrantLegalCorpusClient {
       { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS },
     ));
     if (!parsed.success || parsed.data.status !== "ok") {
+      console.error(JSON.stringify({
+        service: "legal-corpus-qdrant-client",
+        event: "qdrant.response_rejected",
+        operation: "points-delete",
+        reason: parsed.success ? "status" : "schema",
+      }));
       throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
     }
   }
@@ -603,6 +622,12 @@ export class QdrantLegalCorpusClient {
       { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS },
     ));
     if (!parsed.success || parsed.data.status !== "ok") {
+      console.error(JSON.stringify({
+        service: "legal-corpus-qdrant-client",
+        event: "qdrant.response_rejected",
+        operation: "snapshot-create",
+        reason: parsed.success ? "status" : "schema",
+      }));
       throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
     }
     return {
@@ -625,6 +650,12 @@ export class QdrantLegalCorpusClient {
       { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS },
     );
     if (!response?.body) {
+      console.error(JSON.stringify({
+        service: "legal-corpus-qdrant-client",
+        event: "qdrant.response_rejected",
+        operation: "snapshot-download",
+        reason: "empty-body",
+      }));
       throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
     }
     return response;
