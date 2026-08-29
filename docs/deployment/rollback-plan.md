@@ -38,7 +38,7 @@ rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.
 
-## Prepared feedback-quality KPI change — not deployed
+## Prepared feedback-quality and lawyer-escalation KPI changes — not deployed
 
 Candidate `3101525c12dd53171494515e0c9668859b92408c` adds only an aggregate
 read and RU/UZ Admin presentation over the existing `ai_feedback` table. It has
@@ -47,6 +47,14 @@ query or Admin rendering regression, route traffic back to the verified
 pre-release Worker; do not edit or restore D1. Confirm that protected Admin
 access still requires fresh MFA, the response remains aggregate-only and rates
 remain suppressed below five before restoring traffic to a forward fix.
+
+Candidate `e452b3ae40d53d55e4726cf05ee9280d7b6fb855` adds only an
+aggregate first-outcome cohort read and RU/UZ Admin presentation over existing
+answers, analyses, cases and lawyer requests. It has no migration and no
+write-path change. The same application-only rollback applies: leave D1 intact,
+then confirm that only first-ever qualifying outcomes enter the mature cohort,
+only same-actor requests within seven days convert, no identifier/content is
+returned, and the privacy/comparison gates remain enforced.
 
 ## Prepared migration 0161 gate — not applied
 

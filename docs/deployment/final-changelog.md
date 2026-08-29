@@ -32,11 +32,16 @@
   user-reported error aggregate from existing durable feedback. One retained
   type per answer counts once; comments, answers, source URLs and actor IDs are
   not read or returned, and `outdated` remains only a report signal.
+- Candidate `e452b3ae40d53d55e4726cf05ee9280d7b6fb855` adds actor-level
+  lawyer escalation after the first-ever qualifying grounded answer, completed
+  analysis or case creation. The mature 37-to-7-day cohort has a complete
+  request window; only a same-actor request within seven days converts, and
+  repeat outcomes cannot move or multiply the cohort.
 - Focused KPI tests pass 5/5 and the combined KPI/purge run passes 15/15; the
   full local gate passes core 1138/1138,
   Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
-  artifact validation; Worker entry is 3712.8/6144.0 KiB. Local Chrome verifies the RU/UZ protected
-  boundary at desktop and 390 px with noindex, exact re-auth return path, no
+  artifact validation; Worker entry is 3720.5/6144.0 KiB. Local Chrome verifies
+  the RU/UZ protected boundary at desktop and 390 px with noindex, exact re-auth return path, no
   overflow and no warning/error log; no staff identity was fabricated.
 - A read-only production replay read 230 rows and wrote zero: 10 eligible, two
   activated (20.0%), with TTFV and workflow rates correctly suppressed because
@@ -53,6 +58,10 @@
 - The feedback replay at `2026-08-29T12:49:08.640Z` read four rows and wrote
   zero. It found no retained feedback types in the 30-day window, so the rate
   remains `NO DATA`; this is not evidence of error-free use.
+- The lawyer-escalation replay at `2026-08-29T13:13:11.194Z` read 272 rows
+  and wrote zero. It found three eligible actors and zero escalating actors,
+  with first outcomes split 1 grounded answer / 1 completed analysis / 1 case.
+  The denominator is below five, so no 0.0% rate is disclosed.
 - Migrations 0164/0165 remain outside the production pattern. No production release,
   D1 row write, DNS, notification or customer-data mutation occurred; product-
   market-fit evidence remains unverified.

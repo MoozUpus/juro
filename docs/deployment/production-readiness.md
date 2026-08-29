@@ -44,6 +44,15 @@ signals, and uses `wrong_norm`, `broken_link`, `outdated`, `unsafe` and
 questions, answers or source URLs and returns no actor identifiers. An
 `outdated` report is not presented as verified source freshness.
 
+Commit `e452b3ae40d53d55e4726cf05ee9280d7b6fb855` adds actor-level
+lawyer escalation without a migration. Each actor contributes only their
+first-ever qualifying self-service outcome: a completed persisted grounded
+answer, completed document analysis, or case creation. The denominator includes
+only first outcomes from 37 through 7 days before the snapshot; a conversion
+requires the same actor to create a lawyer request at or after that outcome and
+within seven days. The response stays aggregate-only, and repeat outcomes or
+requests cannot move or multiply the cohort.
+
 Focused aggregation/privacy/deduplication/access tests passed 5/5 and the
 combined KPI/purge run passed 15/15. The full local gate then passed core
 1138/1138, Cloudflare/infrastructure 203/203,
@@ -79,6 +88,12 @@ The feedback-quality replay at `2026-08-29T12:49:08.640Z` read four rows and
 wrote zero. It found zero retained feedback types in the preceding 30 days, so
 the rate is `NO DATA`, not 0.0%. The empty denominator supports neither a
 quality claim nor a product-market-fit claim.
+
+The lawyer-escalation replay at `2026-08-29T13:13:11.194Z` read 272 rows and
+wrote zero. It found three eligible actors, zero escalating actors and one
+first outcome in each path: grounded answer, completed analysis and case. The
+denominator is below five, so the rate remains privacy-suppressed and is not
+reported as 0.0%; it is also below the 30-actor comparison gate.
 
 This is an unpublished application-plus-migration candidate. Migrations 0164
 and 0165 remain outside production's migration pattern. No production D1

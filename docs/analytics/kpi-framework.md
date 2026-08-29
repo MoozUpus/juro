@@ -76,7 +76,7 @@ one queryable schema without adding identity or content.
 | AI cache-hit request rate | successful provider calls with positive input and cached-input tokens / successful provider calls with positive input tokens | Instrumented in candidate `a08698df`; no production value is claimed before release |
 | AI Deep escalation rate | completed authenticated legal-chat runs in Deep mode / all completed authenticated legal-chat runs in the same window | Instrumented in candidate `a08698df`; excludes guest AI and document analysis by definition |
 | Provider fallback rate | completed authenticated legal-chat runs with `fallback_from_provider` / completed authenticated legal-chat runs | Instrumented in candidate `a08698df`; minimum comparable sample is still required |
-| Lawyer escalation rate | lawyer requests created / eligible AI or case outcomes | Instrumented numerator; eligible denominator is not yet comparable |
+| Lawyer escalation rate | actors creating a lawyer request within 7 days of their first-ever qualifying self-service outcome / actors whose first-ever grounded answer, completed analysis, or case creation falls in the mature 37-to-7-day cohort | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; commit `e452b3ae` fixes one first outcome per actor and joins only a same-actor request in the complete seven-day window. The read-only production replay found 0/3 escalations, below the five-actor disclosure floor and the 30-actor comparison gate. |
 | AI cost by user | priced/unpriced provider totals grouped by technical user and workspace identifier | Instrumented in candidate `a08698df`; content and direct contact fields are excluded |
 | AI cost by plan | provider totals grouped by the workspace's current subscription plan at read time | Instrumented in candidate `a08698df`; current-plan snapshot is not historical event-time attribution |
 | Web fallback rate | `retrieval_fallback / first_question_sent`, same locale/window | Instrumented; current counts are too small and may include controlled QA |
@@ -233,9 +233,28 @@ zero helpful, partial, error-class and outdated signals. The rate is therefore
 `NO DATA`, not 0.0%. No product-quality or product-market-fit conclusion is
 drawn from the empty denominator.
 
+Commit `e452b3ae40d53d55e4726cf05ee9280d7b6fb855` adds an actor-level
+lawyer-escalation cohort without a migration. For each eligible actor, the query
+fixes the first-ever qualifying self-service outcome: a completed persisted
+grounded answer, completed document analysis, or case creation. Only actors
+whose first outcome falls from 37 through 7 days before the snapshot enter the
+denominator, so every actor has a complete seven-day request window. A lawyer
+request converts only when the same actor creates it at or after that fixed
+outcome and no more than seven days later. Repeat outcomes and requests cannot
+move the cohort or multiply the actor. The response contains only the eligible
+and escalating actor counts, basis points, readiness and the three first-outcome
+path counts.
+
+The read-only production replay at `2026-08-29T13:13:11.194Z` read 272 rows
+and wrote zero. It found three eligible actors and zero escalating actors, with
+one first grounded answer, one first completed analysis and one first case.
+Because the denominator is below five, the rate remains privacy-suppressed and
+must not be published as 0.0%; the sample is also below the 30-actor comparison
+gate.
+
 The extended candidate passes product-KPI focused 5/5, the combined KPI/purge
 focused run 15/15, core 1138/1138,
 Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint,
 ordered migration/foreign-key checks and the bounded artifact gate. Worker entry
-is 3712.8/6144.0 KiB. Migrations 0164 and 0165 remain outside the production
+is 3720.5/6144.0 KiB. Migrations 0164 and 0165 remain outside the production
 migration pattern; production remains Worker 170 and Sites v86.
