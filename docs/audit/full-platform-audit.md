@@ -9,6 +9,21 @@ authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
 the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
+**Privacy-safe product KPI candidate:** the protected RU/UZ Admin dashboard now
+computes mature signup activation, TTFV, plan completion and lawyer-request
+acceptance inside D1 without returning identifiers or content. Legal evaluation,
+the fixed investor demo and active staff are excluded; rates/TTFV suppress below
+five observations and readiness requires 30. Focused 3/3, core 1136/1136,
+Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
+production artifact validation passed. Local Chrome verified localized RU/UZ
+protected boundaries at desktop and 390 px with private noindex, the exact
+re-auth return path, no overflow and a clean warning/error log; no staff identity
+was fabricated. A read-only production replay read 230 rows and wrote zero: 10
+eligible, 2 activated (20.0%), but TTFV and the 3-plan/2-request workflow rates remain
+privacy-suppressed or insufficient. The candidate is unpublished; this closes
+the calculation/linkage gap but does not prove retention, browse conversion or
+product-market fit.
+
 **Compact conversation-context candidate:** commit `c7c6d35e` keeps the latest
 three branch-local turns, deterministically summarizes up to five redacted older
 turns, and explicitly omits the remainder from the already bounded 12-turn

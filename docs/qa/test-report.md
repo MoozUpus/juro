@@ -1,5 +1,28 @@
 # Test report — current evidence through 2026-08-29
 
+## Privacy-safe product KPI candidate
+
+| Gate | Result |
+| --- | --- |
+| Cohort contract | PASS — a mature 30-day signup cohort gets a complete seven-day value window; grounded answer, completed analysis and case-plus-plan paths are deduplicated at the actor's earliest result |
+| Exclusions | PASS — `legal_eval_user_*`, the three fixed investor-demo identities and active platform staff do not enter product cohorts |
+| Privacy boundary | PASS — D1 uses identifiers only inside aggregate CTEs; the response contains no identifier, email, contact field, prompt, answer, case text or document content |
+| Disclosure/readiness | PASS — rates and TTFV are suppressed below five observations; 30 denominator observations are required before the dashboard says the sample is comparable |
+| Admin boundary | PASS source — page and no-store API require `staff.operations.manage` and MFA within 15 minutes; both locales are present and the route is noindex |
+| Focused regression | PASS — product KPI aggregation, privacy suppression and Admin boundary 3/3 |
+| Full local regression | PASS — core 1136/1136; Cloudflare/infrastructure 203/203; rendered Worker 35/35; type-check and lint |
+| Production artifact | PASS — bounded production build and emitted-byte budgets: CSS 596.7/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3686.2/6144.0 KiB |
+| Local Chrome | PASS bounded — RU/UZ protected boundaries at 1440×900 and 390×844 retained one localized H1, private noindex metadata, exact re-auth return path, zero horizontal overflow and no warning/error log; no staff identity was fabricated |
+| Production data replay | PASS read-only / INSUFFICIENT SAMPLE — 10 eligible, 2 activated, one grounded-answer user, zero analysis users and two case-plus-plan users; 230 rows read, zero written |
+| Workflow replay | PRIVACY-SUPPRESSED — three plans with zero completed; two lawyer requests with one accepted-or-later and zero completed |
+| Release boundary | UNPUBLISHED — no D1 migration/write, Worker/Sites publish, DNS, notification or customer-data mutation |
+
+The 2/10 result is a 20.0% small baseline, not a target or a readiness claim.
+TTFV remains hidden because only two actors qualified. Path counts overlap and
+must not be summed. Return rate and browse-to-lawyer-request conversion remain
+unverified because this increment does not invent identity linkage in Analytics
+Engine.
+
 ## Compact conversation-context candidate
 
 | Gate | Result |

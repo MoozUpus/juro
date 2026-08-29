@@ -58,14 +58,15 @@ one queryable schema without adding identity or content.
 
 | Metric | Definition | Current evidence status |
 | --- | --- | --- |
-| Activation rate | completed signups reaching a successful answer, completed analysis, or saved case plus plan within 7 days / completed signups | `UNVERIFIED`; aggregate events currently have no privacy-safe cohort linkage |
-| Time to first value | p50/p75/p95 elapsed time from `signup_completed` to the first qualifying outcome | `UNVERIFIED`; requires aggregate cohort computation rather than raw identifiers in Analytics Engine |
+| Activation rate | completed signups reaching a validated source-backed answer, completed analysis, or saved case plus plan within 7 days / completed signups | `INSTRUMENTED CANDIDATE / INSUFFICIENT SAMPLE`; D1 now computes a mature 30-day cohort server-side and returns aggregates only. A read-only 2026-08-29 production replay found 2/10 activated (20.0%), which is below the 30-signup comparison gate. |
+| Time to first value | p50/p75/p95 elapsed time from completed onboarding to the first qualifying outcome | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; only two production actors qualified in the replay, below the five-activation disclosure floor. |
 | Completion rate | successful terminal events / matching started events, by workflow | `INSUFFICIENT_SAMPLE`; no signup or document-completion pair exists in the current window |
 | Step drop-off | 1 minus adjacent-step completion rate | `INSUFFICIENT_SAMPLE`; do not infer a funnel from unrelated event totals |
 | Return rate | activated actors returning in the approved observation window / activated actors | `UNVERIFIED`; no privacy-safe cohort aggregate exists yet |
-| Plan completion | completed plan tasks or plans / created plans | `UNVERIFIED`; `plan_created` exists but completion is a D1 workflow aggregate, not a canonical event |
+| Plan completion | completed plans / created plans in the same 30-day D1 window | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the read-only production replay found only three created plans. |
 | Case creation | `case_created` count and, once comparable, `case_created / signup_completed` | Instrumented; zero current-window events |
 | Lawyer conversion | `lawyer_request_created / lawyer_viewed`, with comparable surface and window | Instrumented; denominator is request-occurrence based and cannot be treated as unique visitors |
+| Lawyer-request acceptance | requests in `accepted`, `offer_proposed`, `offer_accepted`, or `completed` / requests created in the same 30-day D1 window | `INSTRUMENTED CANDIDATE / PRIVACY-SUPPRESSED`; the read-only production replay found two requests, one accepted-or-later and zero completed. This is not browse-to-request conversion. |
 | Source open rate | `source_opened / successful answer outcomes` in the same window | Instrumented; current counts are too small and unlinked for a rate claim |
 | Cost per successful answer | priced successful provider cost / priced successful answers | `INSUFFICIENT_SAMPLE`; 4/30 priced successes, `$0.104549` total |
 | Average AI cost | priced provider cost / fully priced provider requests, reported separately for success/failure | `INSUFFICIENT_SAMPLE`; zero-token failures may understate billed failed work |
@@ -130,3 +131,35 @@ events. The three first-question events and downstream failure/open/feedback
 counts cannot be joined to a person or reliably separated between controlled QA
 and ordinary use. Activation, return, drop-off, and conversion therefore remain
 `UNVERIFIED` rather than being calculated from mismatched denominators.
+
+## Privacy-safe D1 cohort computation candidate
+
+The current Draft PR adds a protected RU/UZ Admin dashboard at
+`/{locale}/admin/product-kpis` and a no-store aggregate API. Both require
+`staff.operations.manage` plus MFA completed within 15 minutes. The query uses
+technical user identifiers only inside D1 CTEs; the response contains counts,
+basis points, bounded durations and window timestamps, never an identifier,
+email, contact field, prompt, answer, case text or document content.
+
+The activation cohort covers completed onboarding from 37 through 7 days before
+the snapshot, so every included signup has the full seven-day value window.
+Legal-evaluation profiles, the three fixed synthetic investor-demo profiles and
+active platform staff are excluded. A grounded answer must be a completed AI run
+whose persisted structured result is `responseKind=answer`, has
+`sourceValidationStatus=validated` and includes at least one source. Document
+analysis must be completed; case activation requires both the case and its plan
+inside the seven-day window.
+
+Rates are suppressed below five denominator observations, and TTFV percentiles
+below five activated observations. A sample is labelled comparable only from 30
+denominator observations. The read-only production replay on 2026-08-29 read
+230 rows and wrote zero: 10 eligible signups, two activated users, one grounded
+answer user, zero completed-analysis users and two case-plus-plan users. Because
+paths can overlap, path counts must not be summed. The observed 20.0% is a small
+baseline, not a target or product-market-fit claim; TTFV remains suppressed.
+The exact candidate passed focused 3/3, core 1136/1136,
+Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
+the bounded production artifact gate. Local Chrome verified the localized
+RU/UZ protected boundary at desktop and 390 px without a fabricated staff
+identity; private noindex, exact re-auth return paths, zero horizontal overflow
+and an empty warning/error log were preserved.

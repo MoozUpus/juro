@@ -22,6 +22,7 @@ const copy = {
     secure: "Защищённая рабочая зона",
     fresh: "Недавняя 2FA",
     refresh: "Обновить",
+    productKpis: "Продуктовые KPI",
     unpriced: "Вызовы без цены",
     measurement: "Готовность измерения",
     coverage: "Покрытие ценами",
@@ -129,6 +130,7 @@ const copy = {
     secure: "Himoyalangan ish maydoni",
     fresh: "Yaqindagi 2FA",
     refresh: "Yangilash",
+    productKpis: "Mahsulot KPI",
     unpriced: "Narxsiz chaqiruvlar",
     measurement: "O‘lchash tayyorligi",
     coverage: "Narx bilan qamrov",
@@ -386,6 +388,7 @@ export function CostConsole({
   const coverage = `${(data.measurement.pricingCoverageBps / 100).toFixed(2)}%`;
 
   return <div className="staff-console cost-console" aria-busy={busy}>
+    <a className="staff-skip" href="#main-content">{t.title}</a>
     <header className="staff-topbar">
       <div className="staff-brand"><ShieldCheck aria-hidden="true"/><span><b>JURO</b><small>{t.secure}</small></span></div>
       <div className="staff-session"><span>{t.fresh}</span><b>{staffName}</b></div>
@@ -393,7 +396,10 @@ export function CostConsole({
     <main className="staff-main" id="main-content">
       <section className="staff-heading">
         <div><p>{t.eyebrow}</p><h1>{t.title}</h1></div>
-        <button type="button" onClick={() => void refresh()} disabled={busy}><RefreshCw aria-hidden="true"/>{t.refresh}</button>
+        <div className="jobs-heading-actions">
+          <a href={`/${locale}/admin/product-kpis`}>{t.productKpis}</a>
+          <button type="button" onClick={() => void refresh()} disabled={busy}><RefreshCw aria-hidden="true"/>{t.refresh}</button>
+        </div>
       </section>
       <section className={`cost-measurement cost-measurement--${data.measurement.status}`} aria-labelledby="cost-measurement-title">
         <div className="cost-measurement-heading">

@@ -4,6 +4,34 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 privacy-safe product KPI candidate
+
+The Draft PR now includes a protected RU/UZ product KPI surface and no-store
+aggregate API. Both require `staff.operations.manage` and MFA within 15 minutes.
+The D1 service computes a mature 30-day signup cohort with a complete seven-day
+activation window, deduplicates qualifying results at the earliest verified
+value, and returns only aggregate counts, basis points, bounded durations and
+window timestamps. Legal-evaluation profiles, the fixed synthetic investor demo
+and active platform staff are excluded.
+
+Focused aggregation/privacy/access tests passed 3/3. The full local gate then
+passed core 1136/1136, Cloudflare/infrastructure 203/203, rendered Worker 35/35,
+type-check, lint and the bounded production artifact build. Chrome verified the
+localized RU/UZ protected boundary at desktop and 390 px: private noindex,
+exact re-auth return path, no horizontal overflow and no warning/error log,
+without fabricating a staff identity. A read-only production replay read 230
+rows and wrote zero. It found 10
+eligible signups and two activated users (20.0%); one user had a validated
+source-backed answer, no user had a completed document analysis in-window, and
+two users had a case plus plan. Qualifying paths can overlap. TTFV is suppressed
+because fewer than five users activated; the cohort remains below the 30-signup
+comparison gate. Three plans and two lawyer requests also remain below the
+privacy threshold for rates.
+
+This is an unpublished application candidate with no migration. No production
+D1 write, Worker/Sites publish, DNS, notification or customer-data mutation was
+performed. Production remains Worker 170 and Sites v86.
+
 ## 2026-08-29 Compact conversation-context candidate
 
 Commit `c7c6d35eb88baaec157f8709ee214b936c07b64a` implements branch-aware,
