@@ -9,6 +9,14 @@ authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
 the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
+**Admin cost-table semantics candidate:** commit `95774e80` gives each of the
+eight protected cost-console tables a localized accessible caption and marks
+all 44 column headers with explicit column scope. Focused shell/Admin
+accessibility tests passed 14/14, rendered Worker 36/36, and type-check, lint
+and production artifact validation passed with unchanged budgets. No fresh-MFA
+Admin or screen-reader session is inferred; the candidate is unpublished and
+changes no cost query, control, role or data.
+
 **Calendar locale-format candidate:** commit `d7b77ec1` removes the remaining
 hard-coded Russian formatter from consultation times in the Client/Business
 calendar. Month cells and list rows now use the selected RU/UZ locale through

@@ -38,6 +38,15 @@ rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.
 
+## Prepared Admin cost-table semantics change — not deployed
+
+Candidate `95774e80` changes only table captions and header scope in the
+protected cost console. It has no migration, query, budget, circuit or data
+change. If a future release causes a cost-console rendering regression, return
+traffic to the verified pre-release Worker and leave D1/R2 untouched. Re-test
+all eight RU/UZ tables behind fresh MFA before restoring traffic to a forward
+fix.
+
 ## Prepared auth locale-continuity change — not deployed
 
 Candidate `244b2e40` changes only client-side auth language-link construction.

@@ -4,6 +4,17 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 Admin cost-table semantics candidate
+
+Commit `95774e80` adds localized accessible captions to all eight protected
+cost-console tables and explicit column scope to all 44 headers. It changes no
+cost query, circuit policy, budget enforcement, role or persisted data.
+
+Focused shell/Admin accessibility tests passed 14/14. Type-check, lint,
+production artifact validation and rendered Worker 36/36 passed with unchanged
+budgets. No fresh-MFA Admin or screen-reader session was fabricated, so this is
+source and artifact evidence only. The candidate is not deployed.
+
 ## 2026-08-29 calendar locale-format candidate
 
 Commit `d7b77ec1` replaces the calendar's remaining hard-coded Russian time

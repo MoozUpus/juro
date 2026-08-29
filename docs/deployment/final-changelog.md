@@ -11,6 +11,12 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `95774e80` gives all eight protected cost-console tables localized
+  accessible captions and all 44 column headers explicit column scope. Focused
+  shell/Admin accessibility 14/14, rendered Worker 36/36, type-check, lint and
+  production artifact validation pass. Authenticated assistive-technology
+  behavior remains unclaimed without a real fresh-MFA Admin session.
+
 - Candidate `d7b77ec1` localizes consultation times in every calendar view
   instead of forcing a Russian formatter on UZ routes. The shared formatter
   retains `Asia/Tashkent`; focused 18/18, rendered Worker 36/36, type-check,

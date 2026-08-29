@@ -1,5 +1,17 @@
 # Test report — current evidence through 2026-08-29
 
+## Admin cost-table semantics candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `95774e80` |
+| Table contract | PASS — all eight cost-console tables have localized accessible captions and all 44 column headers declare `scope="col"` |
+| Focused regression | PASS — shell/Admin accessibility 14/14 |
+| Rendered Worker | PASS — 36/36 |
+| Static/artifact gates | PASS — type-check, lint and production artifact validation; budgets remain CSS 596.9, initial JS 295.6, lazy 175.5, fonts 453.6, images 564.4 and Worker 3724.4 KiB |
+| Protected runtime boundary | NOT TESTED — no real fresh-MFA Admin session was fabricated; this is source and artifact evidence, not a screen-reader claim |
+| Release boundary | UNPUBLISHED — no Worker, Sites, migration, DNS, notification or customer-data mutation |
+
 ## Calendar RU/UZ time-format candidate
 
 | Gate | Result |
