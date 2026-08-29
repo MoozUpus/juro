@@ -797,7 +797,7 @@ export class QdrantLegalCorpusClient {
           ],
         },
       }),
-    }, this.fetchImpl));
+    }, this.fetchImpl, { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS }));
     if (!parsed.success || parsed.data.status !== "ok") {
       throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
     }
@@ -822,7 +822,7 @@ export class QdrantLegalCorpusClient {
           ],
         },
       }),
-    }, this.fetchImpl));
+    }, this.fetchImpl, { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS }));
     if (!parsed.success || parsed.data.status !== "ok") {
       throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
     }
