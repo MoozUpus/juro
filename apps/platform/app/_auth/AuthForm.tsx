@@ -18,6 +18,7 @@ import {
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { TurnstileWidget } from "./TurnstileWidget";
 import { ThemeSwitcher } from "../_theme/ThemeSwitcher";
+import { localizeAuthReturnPath } from "../../lib/platform/auth-locale";
 import { authContinuationDestination } from "../../lib/platform/lawyer-entry-routing";
 
 type AccountType = "individual" | "entrepreneur" | "lawyer";
@@ -107,7 +108,14 @@ export function AuthForm({
   const localeHref = (nextLocale: Locale): string => {
     const localePath = pathname.replace(/^\/(?:ru|uz)(?=\/|$)/u, `/${nextLocale}`);
     const targetPath = localePath === pathname ? `/${nextLocale}/auth/${mode}` : localePath;
-    const query = searchParams.toString();
+    const nextSearchParams = new URLSearchParams(searchParams.toString());
+    for (const key of ["returnTo", "return_to"] as const) {
+      if (!nextSearchParams.has(key)) continue;
+      const localizedReturnTo = localizeAuthReturnPath(nextSearchParams.get(key), nextLocale);
+      if (localizedReturnTo) nextSearchParams.set(key, localizedReturnTo);
+      else nextSearchParams.delete(key);
+    }
+    const query = nextSearchParams.toString();
     return query ? `${targetPath}?${query}` : targetPath;
   };
   const masked = useMemo(() => {

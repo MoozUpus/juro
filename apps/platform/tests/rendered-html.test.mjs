@@ -223,6 +223,21 @@ test("serves public login and registration routes", async () => {
   }
 });
 
+test("auth language switch localizes the protected return path", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(
+    new Request("http://localhost/ru/auth/login?returnTo=%2Fru%2Findividual%2Fdashboard", {
+      headers: { accept: "text/html" },
+    }),
+    runtime,
+    context,
+  );
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /href="\/uz\/auth\/login\?returnTo=%2Fuz%2Findividual%2Fdashboard"/u);
+  assert.doesNotMatch(html, /href="\/uz\/auth\/login\?returnTo=%2Fru%2Findividual%2Fdashboard"/u);
+});
+
 test("keeps the legal-source staff inbox hidden while its exact flag is false", async () => {
   const worker = await createWorker();
   const response = await worker.fetch(
