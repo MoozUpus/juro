@@ -166,17 +166,21 @@ async function denseLedger(db: D1Database): Promise<DenseLedger> {
         AND document.provider IN ('lex_uz','juro_owner')
         AND document.scope='global' AND document.availability_status='ready') AS denseTrackedPoints,
     (SELECT count(*) FROM legal_corpus_chunks chunk
+      JOIN legal_corpus_provisions provision ON provision.id=chunk.provision_id
       JOIN legal_corpus_versions version ON version.id=chunk.version_id
       JOIN legal_corpus_variants variant ON variant.current_version_id=version.id
       JOIN legal_corpus_documents document ON document.id=variant.document_id
       WHERE chunk.dense_vector_id IS NOT NULL
+        AND provision.status='active'
         AND document.provider IN ('lex_uz','juro_owner')
         AND document.scope='global' AND document.availability_status='ready') AS denseTrackedCurrentPoints,
     (SELECT count(*) FROM legal_corpus_chunks chunk
+      JOIN legal_corpus_provisions provision ON provision.id=chunk.provision_id
       JOIN legal_corpus_versions version ON version.id=chunk.version_id
       JOIN legal_corpus_variants variant ON variant.current_version_id=version.id
       JOIN legal_corpus_documents document ON document.id=variant.document_id
       WHERE chunk.dense_vector_id IS NULL
+        AND provision.status='active'
         AND document.provider IN ('lex_uz','juro_owner')
         AND document.scope='global' AND document.availability_status='ready') AS missingCurrentPoints,
     (SELECT count(*) FROM legal_corpus_ingestion_jobs WHERE status<>'completed') AS pendingJobs,
