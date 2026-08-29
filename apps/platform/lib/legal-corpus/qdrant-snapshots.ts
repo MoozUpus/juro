@@ -336,6 +336,15 @@ export async function createLegalCorpusQdrantSnapshot(
     totalPoints !== ledger.denseTrackedPoints
     || currentPoints !== ledger.denseTrackedCurrentPoints
   ) {
+    console.warn(JSON.stringify({
+      service: "legal-corpus-qdrant-snapshot",
+      event: "qdrant.snapshot_not_ready",
+      environment: env.APP_ENV,
+      ledgerTotalPoints: ledger.denseTrackedPoints,
+      ledgerCurrentPoints: ledger.denseTrackedCurrentPoints,
+      qdrantTotalPoints: totalPoints,
+      qdrantCurrentPoints: currentPoints,
+    }));
     throw new LegalCorpusQdrantSnapshotError("LEGAL_CORPUS_QDRANT_SNAPSHOT_NOT_READY", false);
   }
   const previous = await latestManifest(env);
