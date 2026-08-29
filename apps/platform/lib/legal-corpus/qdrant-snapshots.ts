@@ -313,41 +313,79 @@ async function storeSnapshotObject(input: {
     },
   };
   let stored: R2Object | null;
+  let multipartStage = "create";
+  let multipartPartNumber = 0;
   try {
     if (typeof storage.createMultipartUpload === "function") {
+      multipartStage = "create";
       const multipart = await storage.createMultipartUpload(input.objectKey, metadata);
       let completed = false;
       try {
+        multipartStage = "reader";
         const reader = input.response.body.getReader();
         const digestConstructor = (globalThis.crypto as unknown as {
           DigestStream: new (algorithm: string) => DigestStream;
         }).DigestStream;
+        multipartStage = "digest-create";
         const digest = new digestConstructor("SHA-256");
         const digestWriter = digest.getWriter();
         const parts: R2UploadedPart[] = [];
         let pending = new Uint8Array(0);
         let received = 0;
         let partNumber = 1;
+        let sourceComplete = false;
         while (true) {
+          multipartStage = "source-read";
           const next = await reader.read();
-          if (next.done) break;
-          received += next.value.byteLength;
-          await digestWriter.write(next.value);
-          const merged = new Uint8Array(pending.byteLength + next.value.byteLength);
+          if (next.done) {
+            sourceComplete = true;
+            break;
+          }
+          // Copy each source chunk into a standalone ArrayBuffer. Some
+          // service-binding streams expose views backed by ArrayBufferLike;
+          // R2 and DigestStream accept ArrayBuffer reliably across runtimes.
+          const sourceChunk = Uint8Array.from(next.value);
+          if (sourceChunk.byteLength === 0) continue;
+          if (received + sourceChunk.byteLength > input.info.size) {
+            throw new LegalCorpusQdrantSnapshotError("LEGAL_CORPUS_QDRANT_SNAPSHOT_INVALID", false);
+          }
+          received += sourceChunk.byteLength;
+          multipartStage = "digest-write";
+          await digestWriter.write(sourceChunk.buffer);
+          const merged = new Uint8Array(pending.byteLength + sourceChunk.byteLength);
           merged.set(pending, 0);
-          merged.set(next.value, pending.byteLength);
+          merged.set(sourceChunk, pending.byteLength);
           let offset = 0;
           while (merged.byteLength - offset >= SNAPSHOT_MULTIPART_PART_SIZE) {
+            multipartStage = "upload-part";
+            multipartPartNumber = partNumber;
+            const part = Uint8Array.from(
+              merged.subarray(offset, offset + SNAPSHOT_MULTIPART_PART_SIZE),
+            );
             parts.push(await multipart.uploadPart(
               partNumber,
-              merged.slice(offset, offset + SNAPSHOT_MULTIPART_PART_SIZE),
+              part.buffer,
             ));
             partNumber += 1;
             offset += SNAPSHOT_MULTIPART_PART_SIZE;
           }
           pending = merged.slice(offset);
+          // Qdrant's download response is length-delimited but a service
+          // binding may not emit a terminal `done` chunk. Stop at the exact
+          // declared size and cancel the upstream reader to avoid waiting on a
+          // stream that has no further bytes.
+          if (received === input.info.size) {
+            await reader.cancel().catch(() => undefined);
+            sourceComplete = true;
+            break;
+          }
         }
+        if (!sourceComplete || received !== input.info.size) {
+          throw new LegalCorpusQdrantSnapshotError("LEGAL_CORPUS_QDRANT_SNAPSHOT_INVALID", false);
+        }
+        multipartStage = "digest-close";
         await digestWriter.close();
+        multipartStage = "digest-read";
         const checksum = bytesToHex(await digest.digest);
         if (
           received !== input.info.size
@@ -356,8 +394,11 @@ async function storeSnapshotObject(input: {
           throw new LegalCorpusQdrantSnapshotError("LEGAL_CORPUS_QDRANT_SNAPSHOT_INVALID", false);
         }
         if (pending.byteLength > 0 || parts.length === 0) {
-          parts.push(await multipart.uploadPart(partNumber, pending));
+          multipartStage = "upload-tail";
+          multipartPartNumber = partNumber;
+          parts.push(await multipart.uploadPart(partNumber, Uint8Array.from(pending).buffer));
         }
+        multipartStage = "complete";
         stored = await multipart.complete(parts);
         completed = true;
       } catch (error) {
@@ -378,11 +419,14 @@ async function storeSnapshotObject(input: {
       service: "legal-corpus-qdrant-snapshot",
       event: "qdrant.snapshot_stage_failed",
       environment: input.env.APP_ENV,
-      stage: "r2-snapshot-put",
+      stage: typeof storage.createMultipartUpload === "function"
+        ? `r2-multipart-${multipartStage}`
+        : "r2-snapshot-put",
       errorCode: failure.errorCode ?? "UNCLASSIFIED",
       reason: failure.reason,
       declaredSize,
       snapshotSize: input.info.size,
+      ...(typeof storage.createMultipartUpload === "function" ? { multipartPartNumber } : {}),
       errorType: error instanceof Error ? error.name : typeof error,
     }));
     throw error;
