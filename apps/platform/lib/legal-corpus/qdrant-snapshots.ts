@@ -278,26 +278,51 @@ async function storeSnapshotObject(input: {
     await input.response.body?.cancel().catch(() => undefined);
     throw new LegalCorpusQdrantSnapshotError("LEGAL_CORPUS_QDRANT_SNAPSHOT_INVALID", false);
   }
-  const stored = await bucket(input.env).put(input.objectKey, input.response.body, {
-    httpMetadata: { contentType: "application/octet-stream" },
-    customMetadata: {
+  let stored: R2Object | null;
+  try {
+    stored = await bucket(input.env).put(input.objectKey, input.response.body, {
+      httpMetadata: { contentType: "application/octet-stream" },
+      customMetadata: {
+        environment: input.env.APP_ENV,
+        collection: collection(input.env),
+        qdrantSnapshotName: input.info.name,
+        qdrantCreationTime: input.info.creationTime,
+        qdrantChecksumSha256: input.info.checksumSha256,
+      },
+      sha256: input.info.checksumSha256,
+    });
+  } catch (error) {
+    console.error(JSON.stringify({
+      service: "legal-corpus-qdrant-snapshot",
+      event: "qdrant.snapshot_stage_failed",
       environment: input.env.APP_ENV,
-      collection: collection(input.env),
-      qdrantSnapshotName: input.info.name,
-      qdrantCreationTime: input.info.creationTime,
-      qdrantChecksumSha256: input.info.checksumSha256,
-    },
-    sha256: input.info.checksumSha256,
-  });
+      stage: "r2-snapshot-put",
+      errorCode: "UNCLASSIFIED",
+      errorType: error instanceof Error ? error.name : typeof error,
+    }));
+    throw error;
+  }
   if (!stored) {
     throw new LegalCorpusQdrantSnapshotError("LEGAL_CORPUS_QDRANT_SNAPSHOT_WRITE_FAILED", true);
   }
-  return verifiedObject(
-    bucket(input.env),
-    input.objectKey,
-    input.info.size,
-    input.info.checksumSha256,
-  );
+  try {
+    return await verifiedObject(
+      bucket(input.env),
+      input.objectKey,
+      input.info.size,
+      input.info.checksumSha256,
+    );
+  } catch (error) {
+    console.error(JSON.stringify({
+      service: "legal-corpus-qdrant-snapshot",
+      event: "qdrant.snapshot_stage_failed",
+      environment: input.env.APP_ENV,
+      stage: "r2-snapshot-verify",
+      errorCode: error instanceof LegalCorpusQdrantSnapshotError ? error.code : "UNCLASSIFIED",
+      errorType: error instanceof Error ? error.name : typeof error,
+    }));
+    throw error;
+  }
 }
 
 export type CreateLegalCorpusQdrantSnapshotResult =
