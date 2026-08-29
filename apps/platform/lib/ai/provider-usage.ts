@@ -75,6 +75,47 @@ export type AiCostDailyView = {
   unpricedRequestCount: number;
 };
 
+export type AiCostUserView = {
+  workspaceId: string;
+  userId: string;
+  currentPlanCode: string | null;
+  requestCount: number;
+  failedRequestCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  estimatedCostMicrousd: number;
+  unpricedRequestCount: number;
+};
+
+export type AiCostPlanView = {
+  attribution: "subscription" | "unassigned" | "guest_or_system";
+  planCode: string | null;
+  userCount: number;
+  requestCount: number;
+  failedRequestCount: number;
+  estimatedCostMicrousd: number;
+  unpricedRequestCount: number;
+};
+
+export type AiCostOperationalView = {
+  providerRequests: number;
+  providerFailures: number;
+  providerFailureRateBps: number | null;
+  averageProviderLatencyMs: number | null;
+  cacheEligibleRequests: number;
+  cacheHitRequests: number;
+  cacheHitRateBps: number | null;
+  inputTokens: number;
+  cachedInputTokens: number;
+  cachedInputTokenShareBps: number | null;
+  completedLegalChatRuns: number;
+  deepEscalationCount: number;
+  deepEscalationRateBps: number | null;
+  providerFallbackCount: number;
+  providerFallbackRateBps: number | null;
+};
+
 export const AI_COST_MINIMUM_PRICED_SUCCESS_SAMPLE = 30;
 
 export type AiCostMeasurementStatus =
@@ -102,6 +143,10 @@ export type AiCostMeasurementView = {
 export type AiCostDashboard = {
   prices: AiModelPriceView[];
   daily: AiCostDailyView[];
+  byUser: AiCostUserView[];
+  byPlan: AiCostPlanView[];
+  planSnapshotAt: string;
+  operational: AiCostOperationalView;
   unpricedEvents: number;
   measurement: AiCostMeasurementView;
 } & ProviderCostControlDashboard;
@@ -407,7 +452,7 @@ export async function readAiCostDashboard(input: {
   const cutoff = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const cutoffTimestamp = `${cutoff}T00:00:00.000Z`;
   const windowEnd = now.toISOString();
-  const [prices, daily, unpriced, measurementRow, control] = await Promise.all([
+  const [prices, daily, byUser, byPlan, operationalRow, legalChatRow, unpriced, measurementRow, control] = await Promise.all([
     input.db.prepare(
       `SELECT id,provider,model,operation,
         input_microusd_per_million_tokens AS inputMicrousdPerMillionTokens,
@@ -428,6 +473,71 @@ export async function readAiCostDashboard(input: {
        GROUP BY usage_day,feature,operation,provider,model
        ORDER BY usage_day DESC,estimatedCostMicrousd DESC LIMIT 500`,
     ).bind(input.environment, cutoff).all<AiCostDailyView>(),
+    input.db.prepare(
+      `SELECT aggregate.workspace_id AS workspaceId,aggregate.user_id AS userId,
+        subscription.plan_code AS currentPlanCode,
+        sum(aggregate.request_count) AS requestCount,
+        sum(aggregate.failed_request_count) AS failedRequestCount,
+        sum(aggregate.input_tokens) AS inputTokens,
+        sum(aggregate.output_tokens) AS outputTokens,
+        sum(aggregate.cached_input_tokens) AS cachedInputTokens,
+        sum(aggregate.estimated_cost_microusd) AS estimatedCostMicrousd,
+        sum(aggregate.unpriced_request_count) AS unpricedRequestCount
+       FROM ai_cost_daily_aggregates AS aggregate
+       LEFT JOIN subscriptions AS subscription ON subscription.workspace_id=aggregate.workspace_id
+       WHERE aggregate.environment=? AND aggregate.usage_day>=? AND aggregate.user_id IS NOT NULL
+       GROUP BY aggregate.workspace_id,aggregate.user_id,subscription.plan_code
+       ORDER BY estimatedCostMicrousd DESC,requestCount DESC LIMIT 200`,
+    ).bind(input.environment, cutoff).all<AiCostUserView>(),
+    input.db.prepare(
+      `SELECT
+        CASE
+          WHEN aggregate.user_id IS NULL THEN 'guest_or_system'
+          WHEN subscription.plan_code IS NULL THEN 'unassigned'
+          ELSE 'subscription'
+        END AS attribution,
+        subscription.plan_code AS planCode,
+        count(DISTINCT aggregate.user_id) AS userCount,
+        sum(aggregate.request_count) AS requestCount,
+        sum(aggregate.failed_request_count) AS failedRequestCount,
+        sum(aggregate.estimated_cost_microusd) AS estimatedCostMicrousd,
+        sum(aggregate.unpriced_request_count) AS unpricedRequestCount
+       FROM ai_cost_daily_aggregates AS aggregate
+       LEFT JOIN subscriptions AS subscription ON subscription.workspace_id=aggregate.workspace_id
+       WHERE aggregate.environment=? AND aggregate.usage_day>=?
+       GROUP BY attribution,subscription.plan_code
+       ORDER BY estimatedCostMicrousd DESC,requestCount DESC`,
+    ).bind(input.environment, cutoff).all<AiCostPlanView>(),
+    input.db.prepare(
+      `SELECT count(*) AS providerRequests,
+        COALESCE(sum(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS providerFailures,
+        COALESCE(sum(CASE WHEN status='succeeded' AND input_tokens>0 THEN 1 ELSE 0 END),0) AS cacheEligibleRequests,
+        COALESCE(sum(CASE WHEN status='succeeded' AND input_tokens>0 AND cached_input_tokens>0 THEN 1 ELSE 0 END),0) AS cacheHitRequests,
+        COALESCE(sum(CASE WHEN status='succeeded' THEN input_tokens ELSE 0 END),0) AS inputTokens,
+        COALESCE(sum(CASE WHEN status='succeeded' THEN cached_input_tokens ELSE 0 END),0) AS cachedInputTokens,
+        COALESCE(sum(round((julianday(completed_at)-julianday(started_at))*86400000)),0) AS totalProviderLatencyMs
+       FROM ai_provider_usage_events
+       WHERE environment=? AND completed_at>=? AND completed_at<=?`,
+    ).bind(input.environment, cutoffTimestamp, windowEnd).first<{
+      providerRequests: number;
+      providerFailures: number;
+      cacheEligibleRequests: number;
+      cacheHitRequests: number;
+      inputTokens: number;
+      cachedInputTokens: number;
+      totalProviderLatencyMs: number;
+    }>(),
+    input.db.prepare(
+      `SELECT count(*) AS completedLegalChatRuns,
+        COALESCE(sum(CASE WHEN reasoning_mode='deep' THEN 1 ELSE 0 END),0) AS deepEscalationCount,
+        COALESCE(sum(CASE WHEN fallback_from_provider IS NOT NULL THEN 1 ELSE 0 END),0) AS providerFallbackCount
+       FROM ai_runs
+       WHERE status='completed' AND completed_at>=? AND completed_at<=?`,
+    ).bind(cutoffTimestamp, windowEnd).first<{
+      completedLegalChatRuns: number;
+      deepEscalationCount: number;
+      providerFallbackCount: number;
+    }>(),
     input.db.prepare(
       `SELECT count(*) AS count FROM ai_provider_usage_events
        WHERE environment=? AND status='succeeded' AND price_version_id IS NULL`,
@@ -467,6 +577,16 @@ export async function readAiCostDashboard(input: {
   const pricedSuccessfulRequests = Number(measurementRow?.pricedSuccessfulRequests ?? 0);
   const unpricedSuccessfulRequests = Number(measurementRow?.unpricedSuccessfulRequests ?? 0);
   const estimatedCostMicrousd = Number(measurementRow?.estimatedCostMicrousd ?? 0);
+  const providerRequests = Number(operationalRow?.providerRequests ?? 0);
+  const providerFailures = Number(operationalRow?.providerFailures ?? 0);
+  const cacheEligibleRequests = Number(operationalRow?.cacheEligibleRequests ?? 0);
+  const cacheHitRequests = Number(operationalRow?.cacheHitRequests ?? 0);
+  const inputTokens = Number(operationalRow?.inputTokens ?? 0);
+  const cachedInputTokens = Number(operationalRow?.cachedInputTokens ?? 0);
+  const totalProviderLatencyMs = Number(operationalRow?.totalProviderLatencyMs ?? 0);
+  const completedLegalChatRuns = Number(legalChatRow?.completedLegalChatRuns ?? 0);
+  const deepEscalationCount = Number(legalChatRow?.deepEscalationCount ?? 0);
+  const providerFallbackCount = Number(legalChatRow?.providerFallbackCount ?? 0);
   const status: AiCostMeasurementStatus = successfulRequests + failedRequests === 0
     ? "no_data"
     : unpricedSuccessfulRequests > 0
@@ -477,6 +597,38 @@ export async function readAiCostDashboard(input: {
   return {
     prices: prices.results,
     daily: daily.results,
+    byUser: byUser.results,
+    byPlan: byPlan.results,
+    planSnapshotAt: windowEnd,
+    operational: {
+      providerRequests,
+      providerFailures,
+      providerFailureRateBps: providerRequests > 0
+        ? Math.floor(providerFailures * 10_000 / providerRequests)
+        : null,
+      averageProviderLatencyMs: providerRequests > 0
+        ? Math.round(totalProviderLatencyMs / providerRequests)
+        : null,
+      cacheEligibleRequests,
+      cacheHitRequests,
+      cacheHitRateBps: cacheEligibleRequests > 0
+        ? Math.floor(cacheHitRequests * 10_000 / cacheEligibleRequests)
+        : null,
+      inputTokens,
+      cachedInputTokens,
+      cachedInputTokenShareBps: inputTokens > 0
+        ? Math.floor(cachedInputTokens * 10_000 / inputTokens)
+        : null,
+      completedLegalChatRuns,
+      deepEscalationCount,
+      deepEscalationRateBps: completedLegalChatRuns > 0
+        ? Math.floor(deepEscalationCount * 10_000 / completedLegalChatRuns)
+        : null,
+      providerFallbackCount,
+      providerFallbackRateBps: completedLegalChatRuns > 0
+        ? Math.floor(providerFallbackCount * 10_000 / completedLegalChatRuns)
+        : null,
+    },
     unpricedEvents: Number(unpriced?.count ?? 0),
     measurement: {
       windowStart: measurementRow?.windowStart ?? cutoffTimestamp,

@@ -32,10 +32,27 @@ const copy = {
     measurementInsufficient: "Выборка ещё недостаточна",
     measurementReady: "Выборка собрана",
     measurementCaveat: "Готовая выборка позволяет сравнивать стоимость, но сама по себе не доказывает сохранение качества.",
+    signals: "Операционные сигналы за окно",
+    cacheHitRate: "Cache hit rate запросов",
+    cachedTokenShare: "Доля cached input",
+    deepEscalations: "Deep escalation",
+    providerFallbacks: "Provider fallback",
+    providerErrors: "Ошибки providers",
+    averageLatency: "Средняя latency provider",
+    signalCaveat: "Cache hit считается среди успешных вызовов с input tokens. Escalation и fallback считаются среди завершённых AI-чатов после входа; гостевой AI и анализ документов в этот знаменатель не входят.",
     protectionMissing: "Автозащита не настроена",
     protectionMissingDetail: "Укажите согласованный дневной бюджет и порог ошибок — без политики circuit не откроется автоматически.",
     prices: "Версии цен",
     usage: "Дневное использование",
+    planUsage: "Расходы по тарифам",
+    userUsage: "Расходы по пользователям",
+    currentPlan: "Текущий тариф",
+    users: "Пользователи",
+    user: "Пользователь",
+    workspace: "Workspace",
+    guestOrSystem: "Гость / системный контур",
+    unassignedPlan: "Тариф не назначен",
+    planSnapshot: "Тариф — текущий снимок workspace на {date}; это не историческая атрибуция тарифа в момент вызова.",
     addPrice: "Добавить версию цены",
     provider: "Провайдер",
     model: "Модель",
@@ -88,10 +105,27 @@ const copy = {
     measurementInsufficient: "Namuna hali yetarli emas",
     measurementReady: "Namuna yig‘ildi",
     measurementCaveat: "Tayyor namuna xarajatni taqqoslashga imkon beradi, ammo sifat saqlanganini o‘zi isbotlamaydi.",
+    signals: "Oyna bo‘yicha operatsion signallar",
+    cacheHitRate: "So‘rovlar cache hit rate",
+    cachedTokenShare: "Cached input ulushi",
+    deepEscalations: "Deep escalation",
+    providerFallbacks: "Provider fallback",
+    providerErrors: "Provider xatolari",
+    averageLatency: "O‘rtacha provider latency",
+    signalCaveat: "Cache hit input tokenlari bor muvaffaqiyatli chaqiruvlar orasida hisoblanadi. Escalation va fallback faqat tizimga kirgandan keyingi yakunlangan AI-chatlar orasida hisoblanadi; mehmon AI va hujjat tahlili maxrajga kirmaydi.",
     protectionMissing: "Avtohimoya sozlanmagan",
     protectionMissingDetail: "Kelishilgan kunlik budjet va xato chegarasini kiriting — siyosatsiz circuit avtomatik ochilmaydi.",
     prices: "Narx versiyalari",
     usage: "Kunlik foydalanish",
+    planUsage: "Tariflar bo‘yicha xarajat",
+    userUsage: "Foydalanuvchilar bo‘yicha xarajat",
+    currentPlan: "Joriy tarif",
+    users: "Foydalanuvchilar",
+    user: "Foydalanuvchi",
+    workspace: "Workspace",
+    guestOrSystem: "Mehmon / tizim konturi",
+    unassignedPlan: "Tarif biriktirilmagan",
+    planSnapshot: "Tarif {date} vaqtidagi workspace joriy holatidir; bu chaqiruv paytidagi tarixiy tarif atributsiyasi emas.",
     addPrice: "Narx versiyasini qo‘shish",
     provider: "Provayder",
     model: "Model",
@@ -137,6 +171,14 @@ function usd(microusd: number): string {
     minimumFractionDigits: 4,
     maximumFractionDigits: 6,
   }).format(microusd / 1_000_000);
+}
+
+function percent(basisPoints: number | null): string {
+  return basisPoints === null ? "—" : `${(basisPoints / 100).toFixed(2)}%`;
+}
+
+function shortId(value: string): string {
+  return value.length > 16 ? `${value.slice(0, 12)}…` : value;
 }
 
 async function json<T>(response: Response): Promise<T> {
@@ -267,6 +309,20 @@ export function CostConsole({
         </div>
         <p>{t.measurementCaveat}</p>
       </section>
+      <section className="cost-measurement" aria-labelledby="cost-signals-title">
+        <div className="cost-measurement-heading">
+          <div><BarChart3 aria-hidden="true"/><h2 id="cost-signals-title">{t.signals}</h2></div>
+        </div>
+        <div className="cost-summary-grid">
+          <div className="cost-summary"><span>{t.cacheHitRate}</span><b>{percent(data.operational.cacheHitRateBps)}</b></div>
+          <div className="cost-summary"><span>{t.cachedTokenShare}</span><b>{percent(data.operational.cachedInputTokenShareBps)}</b></div>
+          <div className="cost-summary"><span>{t.deepEscalations}</span><b>{data.operational.deepEscalationCount} · {percent(data.operational.deepEscalationRateBps)}</b></div>
+          <div className="cost-summary"><span>{t.providerFallbacks}</span><b>{data.operational.providerFallbackCount} · {percent(data.operational.providerFallbackRateBps)}</b></div>
+          <div className="cost-summary"><span>{t.providerErrors}</span><b>{data.operational.providerFailures} · {percent(data.operational.providerFailureRateBps)}</b></div>
+          <div className="cost-summary"><span>{t.averageLatency}</span><b>{data.operational.averageProviderLatencyMs === null ? "—" : `${data.operational.averageProviderLatencyMs.toLocaleString("en-US")} ms`}</b></div>
+        </div>
+        <p>{t.signalCaveat}</p>
+      </section>
       {error && <p className="staff-error" role="alert">{error}</p>}
       {notice && <p className="cost-success" role="status">{notice}</p>}
 
@@ -325,7 +381,18 @@ export function CostConsole({
 
       <section className="cost-usage" aria-labelledby="cost-usage-title">
         <h2 id="cost-usage-title">{t.usage}</h2>
-        {data.daily.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.date}</th><th>{t.feature}</th><th>{t.provider}</th><th>{t.model}</th><th>{t.requests}</th><th>{t.failures}</th><th>{t.tokens}</th><th>{t.cost}</th></tr></thead><tbody>{data.daily.map((row) => <tr key={`${row.usageDay}:${row.feature}:${row.provider}:${row.model}`}><td>{row.usageDay}</td><td>{row.feature}</td><td>{row.provider}</td><td><code>{row.model}</code></td><td>{row.requestCount}</td><td>{row.failedRequestCount}</td><td>{row.inputTokens + row.outputTokens}</td><td>{usd(row.estimatedCostMicrousd)}{row.unpricedRequestCount > 0 ? ` · ${t.unpriced}: ${row.unpricedRequestCount}` : ""}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
+        {data.daily.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.date}</th><th>{t.feature}</th><th>{t.provider}</th><th>{t.model}</th><th>{t.requests}</th><th>{t.failures}</th><th>{t.tokens}</th><th>{t.cost}</th></tr></thead><tbody>{data.daily.map((row) => <tr key={`${row.usageDay}:${row.feature}:${row.operation}:${row.provider}:${row.model}`}><td>{row.usageDay}</td><td>{row.feature}</td><td>{row.provider}</td><td><code>{row.model}</code></td><td>{row.requestCount}</td><td>{row.failedRequestCount}</td><td>{row.inputTokens + row.outputTokens}</td><td>{usd(row.estimatedCostMicrousd)}{row.unpricedRequestCount > 0 ? ` · ${t.unpriced}: ${row.unpricedRequestCount}` : ""}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
+      </section>
+
+      <section className="cost-usage" aria-labelledby="cost-plan-usage-title">
+        <h2 id="cost-plan-usage-title">{t.planUsage}</h2>
+        <p>{t.planSnapshot.replace("{date}", new Date(data.planSnapshotAt).toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ"))}</p>
+        {data.byPlan.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.currentPlan}</th><th>{t.users}</th><th>{t.requests}</th><th>{t.failures}</th><th>{t.cost}</th></tr></thead><tbody>{data.byPlan.map((row) => <tr key={`${row.attribution}:${row.planCode ?? "none"}`}><td>{row.attribution === "guest_or_system" ? t.guestOrSystem : row.attribution === "unassigned" ? t.unassignedPlan : <code>{row.planCode}</code>}</td><td>{row.userCount}</td><td>{row.requestCount}</td><td>{row.failedRequestCount}</td><td>{usd(row.estimatedCostMicrousd)}{row.unpricedRequestCount > 0 ? ` · ${t.unpriced}: ${row.unpricedRequestCount}` : ""}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
+      </section>
+
+      <section className="cost-usage" aria-labelledby="cost-user-usage-title">
+        <h2 id="cost-user-usage-title">{t.userUsage}</h2>
+        {data.byUser.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.user}</th><th>{t.workspace}</th><th>{t.currentPlan}</th><th>{t.requests}</th><th>{t.failures}</th><th>{t.tokens}</th><th>{t.cost}</th></tr></thead><tbody>{data.byUser.map((row) => <tr key={`${row.workspaceId}:${row.userId}`}><td><code title={row.userId}>{shortId(row.userId)}</code></td><td><code title={row.workspaceId}>{shortId(row.workspaceId)}</code></td><td>{row.currentPlanCode ? <code>{row.currentPlanCode}</code> : t.unassignedPlan}</td><td>{row.requestCount}</td><td>{row.failedRequestCount}</td><td>{row.inputTokens + row.outputTokens}</td><td>{usd(row.estimatedCostMicrousd)}{row.unpricedRequestCount > 0 ? ` · ${t.unpriced}: ${row.unpricedRequestCount}` : ""}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
       </section>
 
       <section className="cost-usage" aria-labelledby="cost-alerts-title">

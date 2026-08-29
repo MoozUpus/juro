@@ -203,6 +203,11 @@ test("0081 cost admin boundary is administrator-only, fresh-MFA-gated and CSRF-p
   assert.match(page, /robots: \{ index: false, follow: false, nocache: true \}/);
   assert.match(client, /"x-juro-csrf": "1"/);
   assert.match(client, /data\.measurement\.pricingCoverageBps/);
+  assert.match(client, /data\.operational\.cacheHitRateBps/);
+  assert.match(client, /data\.operational\.deepEscalationRateBps/);
+  assert.match(client, /data\.byPlan\.map/);
+  assert.match(client, /data\.byUser\.map/);
+  assert.match(client, /planSnapshot/);
   assert.match(client, /protectionMissingDetail/);
   assert.doesNotMatch(client, /dangerouslySetInnerHTML|transition:\s*all/);
   assert.match(migration, /ai_provider_usage_events_no_update/);
@@ -280,6 +285,143 @@ test("0081 price sources are provider-bound and dashboard reports unpriced calls
       costPerPricedSuccessMicrousd: null,
       minimumPricedSuccessfulRequests: 30,
       status: "incomplete_pricing",
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("AI cost dashboard reports current-plan, user, cache and legal-chat escalation metrics without content", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    sqlite.prepare(
+      `INSERT INTO subscriptions
+       (id,workspace_id,provider,plan_code,status,created_at,updated_at)
+       VALUES ('cost-subscription','cost-workspace','sandbox','professional','active',?,?)`,
+    ).run(now, now);
+    await createAiModelPriceVersion({
+      db: d1,
+      actorUserId: "cost-user",
+      now: new Date(now),
+      value: {
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        operation: "messages",
+        inputMicrousdPerMillionTokens: 3_000_000,
+        outputMicrousdPerMillionTokens: 15_000_000,
+        cachedInputMicrousdPerMillionTokens: 300_000,
+        effectiveFrom: now,
+        sourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
+      },
+    });
+    await recordProviderUsage({
+      db: d1,
+      environment: "production",
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      feature: "legal_chat",
+      operation: "messages",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      inputTokens: 1_000,
+      outputTokens: 200,
+      cachedInputTokens: 500,
+      status: "succeeded",
+      startedAt: now,
+      completedAt: now,
+      eventId: "usage-observability-cached",
+    });
+    await recordProviderUsage({
+      db: d1,
+      environment: "production",
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      feature: "legal_chat",
+      operation: "messages",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      inputTokens: 1_000,
+      outputTokens: 100,
+      status: "succeeded",
+      startedAt: now,
+      completedAt: now,
+      eventId: "usage-observability-uncached",
+    });
+    await recordProviderUsage({
+      db: d1,
+      environment: "production",
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      feature: "legal_chat",
+      operation: "messages",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      inputTokens: 0,
+      status: "failed",
+      errorCode: "PROVIDER_HTTP_429",
+      startedAt: now,
+      completedAt: now,
+      eventId: "usage-observability-failed",
+    });
+    const insertRun = sqlite.prepare(
+      `INSERT INTO ai_runs
+       (id,workspace_id,user_id,idempotency_key,correlation_id,provider,model,
+        fallback_from_provider,answer_mode,reasoning_mode,status,legal_database_as_of,
+        instruction_hash,source_version_hash,input_tokens,output_tokens,cached_input_tokens,
+        attempt_count,latency_ms,started_at,completed_at,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,'completed',?,?,?,?,?,?,1,0,?,?,?,?)`,
+    );
+    insertRun.run(
+      "cost-run-deep", "cost-workspace", "cost-user", "cost-run-deep", "cost-correlation-deep",
+      "anthropic", "claude-sonnet-4-6", "openai", "detailed", "deep", now,
+      "instruction-hash", "source-hash", 1_000, 200, 500, now, now, now, now,
+    );
+    insertRun.run(
+      "cost-run-balanced", "cost-workspace", "cost-user", "cost-run-balanced", "cost-correlation-balanced",
+      "anthropic", "claude-sonnet-4-6", null, "short", "balanced", now,
+      "instruction-hash", "source-hash", 1_000, 100, 0, now, now, now, now,
+    );
+
+    const dashboard = await readAiCostDashboard({ db: d1, environment: "production", now: new Date(now) });
+    assert.equal(dashboard.planSnapshotAt, now);
+    assert.deepEqual(dashboard.byUser.map((row) => ({ ...row })), [{
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      currentPlanCode: "professional",
+      requestCount: 3,
+      failedRequestCount: 1,
+      inputTokens: 2_000,
+      outputTokens: 300,
+      cachedInputTokens: 500,
+      estimatedCostMicrousd: 9_150,
+      unpricedRequestCount: 0,
+    }]);
+    assert.deepEqual(dashboard.byPlan.map((row) => ({ ...row })), [{
+      attribution: "subscription",
+      planCode: "professional",
+      userCount: 1,
+      requestCount: 3,
+      failedRequestCount: 1,
+      estimatedCostMicrousd: 9_150,
+      unpricedRequestCount: 0,
+    }]);
+    assert.deepEqual(dashboard.operational, {
+      providerRequests: 3,
+      providerFailures: 1,
+      providerFailureRateBps: 3_333,
+      averageProviderLatencyMs: 0,
+      cacheEligibleRequests: 2,
+      cacheHitRequests: 1,
+      cacheHitRateBps: 5_000,
+      inputTokens: 2_000,
+      cachedInputTokens: 500,
+      cachedInputTokenShareBps: 2_500,
+      completedLegalChatRuns: 2,
+      deepEscalationCount: 1,
+      deepEscalationRateBps: 5_000,
+      providerFallbackCount: 1,
+      providerFallbackRateBps: 5_000,
     });
   } finally {
     sqlite.close();
