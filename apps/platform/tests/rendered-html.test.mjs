@@ -151,6 +151,27 @@ test("protects My Documents and preserves return_to", async () => {
   assert.match(canonical.headers.get("location") ?? "", /\/login/);
 });
 
+test("protected workspace deep links preserve the exact return path", async () => {
+  const worker = await createWorker();
+  for (const route of [
+    "/ru/individual/settings/security?section=mfa",
+    "/uz/entrepreneur/cases",
+    "/ru/business/ws_business_1/settings/privacy",
+  ]) {
+    const response = await worker.fetch(new Request(`http://localhost${route}`, {
+      headers: {
+        accept: "text/html",
+        "x-juro-request-path": "/ru/individual/dashboard?spoofed=1",
+      },
+      redirect: "manual",
+    }), runtime, context);
+    assert.equal(response.status, 307, route);
+    const location = new URL(response.headers.get("location") ?? "", "http://localhost");
+    assert.equal(location.pathname, `/${route.split("/")[1]}/auth/login`, route);
+    assert.equal(location.searchParams.get("returnTo"), route, route);
+  }
+});
+
 test("serves public login and registration routes", async () => {
   const worker = await createWorker();
   for (const route of ["/login?lang=ru", "/register?lang=uz", "/ru/auth/login", "/uz/auth/register?accountType=lawyer"]) {

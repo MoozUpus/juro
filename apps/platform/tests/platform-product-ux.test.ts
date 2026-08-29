@@ -150,3 +150,85 @@ test("contact editor modal owns the complete keyboard focus cycle", async () => 
   assert.match(contacts, /returnFocusRef\.current\?\.focus\(\)/);
   assert.match(contacts, /<form ref=\{dialogRef\} className="dbt-contact-form" role="dialog" aria-modal="true"/);
 });
+
+test("document workspace dialogs trap and restore keyboard focus", async () => {
+  const [focusHook, builder, documents] = await Promise.all([
+    source("../app/_document-builder/_hooks/useModalFocus.ts"),
+    source("../app/_document-builder/DocumentBuilderClient.tsx"),
+    source("../app/_document-builder/documents/DocumentsClient.tsx"),
+  ]);
+  assert.match(focusHook, /if \(event\.key === "Escape"\)/);
+  assert.match(focusHook, /dialogRef\.current\.contains\(document\.activeElement\)/);
+  assert.match(focusHook, /event\.shiftKey && document\.activeElement === first/);
+  assert.match(focusHook, /!event\.shiftKey && document\.activeElement === last/);
+  assert.match(focusHook, /returnTarget\?\.focus\(\)/);
+  assert.match(builder, /useModalFocus<HTMLElement>\(consultationOpen, closeConsultation\)/);
+  assert.match(builder, /ref=\{consultationDialogRef\}[\s\S]*aria-describedby="consultation-description"/);
+  assert.match(builder, /title: "Maslahat olish"/);
+  assert.match(documents, /useModalFocus<HTMLElement>\(Boolean\(deleteDecision\), closeDeleteDecision\)/);
+  assert.match(documents, /ref=\{deleteDialogRef\}[\s\S]*aria-describedby="delete-document-description"/);
+  assert.match(documents, /data-dialog-initial-focus/);
+});
+
+test("standalone document icon actions expose localized accessible names", async () => {
+  const [documents, copy] = await Promise.all([
+    source("../app/_document-builder/documents/DocumentsClient.tsx"),
+    source("../lib/platform/builder-workspace-copy.ts"),
+  ]);
+  assert.match(documents, /aria-label=\{copy\.close\} title=\{copy\.close\}/);
+  assert.match(documents, /aria-label=\{`\$\{copy\.rename\}: \$\{file\.fileName\}`\}/);
+  assert.match(documents, /aria-label=\{`\$\{copy\.restore\}: \$\{file\.fileName\}`\}/);
+  assert.match(documents, /aria-label=\{`\$\{copy\.moveArchive\}: \$\{file\.fileName\}`\}/);
+  assert.match(documents, /aria-label=\{`\$\{copy\.remove\}: \$\{file\.fileName\}`\}/);
+  assert.match(copy, /close: "Закрыть сообщение"/);
+  assert.match(copy, /close: "Xabarni yopish"/);
+});
+
+test("document workspace error dismissals and loading state follow the active locale", async () => {
+  const [contacts, configuredBuilder] = await Promise.all([
+    source("../app/_document-builder/contacts/ContactsClient.tsx"),
+    source("../app/_document-builder/_components/ConfigurableDocumentBuilder.tsx"),
+  ]);
+  assert.match(contacts, /aria-label=\{copy\.close\} title=\{copy\.close\}/);
+  assert.match(configuredBuilder, /aria-label=\{language === "uz" \? "Xabarni yopish" : "Закрыть сообщение"\}/);
+  assert.match(configuredBuilder, /language === "uz" \? "Konstruktor yuklanmoqda…" : "Загружаем конструктор…"/);
+});
+
+test("document rename uses the JURO dialog instead of a native prompt", async () => {
+  const [documents, copy, styles] = await Promise.all([
+    source("../app/_document-builder/documents/DocumentsClient.tsx"),
+    source("../lib/platform/builder-workspace-copy.ts"),
+    source("../app/_document-builder/document-builder.css"),
+  ]);
+  assert.doesNotMatch(documents, /window\.prompt/);
+  assert.match(documents, /useModalFocus<HTMLFormElement>\(Boolean\(renameDecision\), closeRename\)/);
+  assert.match(documents, /role="dialog" aria-modal="true" aria-labelledby="rename-document-title" aria-describedby="rename-document-description"/);
+  assert.match(documents, /data-dialog-initial-focus required minLength=\{1\}/);
+  assert.match(documents, /renameDecision\.kind === "standalone" \? 180 : 300/);
+  assert.match(documents, /JSON\.stringify\(\{ action: "rename", title: renameTitle\.trim\(\) \}\)/);
+  assert.match(copy, /renameDialogTitle: "Переименовать документ"/);
+  assert.match(copy, /renameDialogTitle: "Hujjat nomini o‘zgartirish"/);
+  assert.match(styles, /\.dbt-rename-dialog \{ width: min\(480px, 100%\); \}/);
+});
+
+test("document builder confirmations stay localized and own keyboard focus", async () => {
+  const [builder, styles] = await Promise.all([
+    source("../app/_document-builder/DocumentBuilderClient.tsx"),
+    source("../app/_document-builder/document-builder.css"),
+  ]);
+  assert.doesNotMatch(builder, /window\.confirm/);
+  assert.match(builder, /useModalFocus<HTMLElement>\(Boolean\(confirmationDecision\), closeConfirmation\)/);
+  assert.match(builder, /role="dialog" aria-modal="true" aria-labelledby="builder-confirmation-title" aria-describedby="builder-confirmation-description"/);
+  assert.match(builder, /className="cancel" data-dialog-initial-focus/);
+  assert.match(builder, /"Konstruktordan chiqasizmi\?"/);
+  assert.match(builder, /"Уйти из конструктора\?"/);
+  assert.match(builder, /"Kelishuv bekor qilinsinmi\?"/);
+  assert.match(builder, /"Отменить согласование\?"/);
+  assert.match(builder, /if \(phase !== "builder" \|\| accessRole === "collaborator"\) return;/);
+  assert.match(builder, /event\.defaultPrevented \|\| event\.button !== 0 \|\| event\.metaKey \|\| event\.ctrlKey/);
+  assert.match(builder, /event\.returnValue = "";/);
+  assert.match(builder, /allowNavigationRef\.current = true;[\s\S]*?window\.location\.assign\(decision\.href\)/);
+  assert.match(builder, /agreementWarningShown\.current = true;[\s\S]*?pending\?\.\(\)/);
+  assert.match(builder, /onChange=\{\(event\) => changeTitle\(event\.target\.value\)\}/);
+  assert.match(styles, /\.dbt-confirm-dialog > button\.confirm \{[^}]*background: var\(--dbt-navy\);/);
+});

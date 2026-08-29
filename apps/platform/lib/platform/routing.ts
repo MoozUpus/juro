@@ -2,6 +2,8 @@ export type PlatformLocale = "ru" | "uz";
 export type PersonalAccountType = "individual" | "entrepreneur" | "lawyer";
 export type AccountType = PersonalAccountType | "business";
 
+export const INTERNAL_REQUEST_PATH_HEADER = "x-juro-request-path";
+
 export const CASE_SECTIONS = [
   "overview",
   "chat",
@@ -112,4 +114,28 @@ export function platformPath(
   workspaceId?: string,
 ): string {
   return `${platformBasePath(locale, accountType, workspaceId)}/${module}`;
+}
+
+export function safeWorkspaceReturnPath(
+  value: string | null,
+  basePath: string,
+  fallback: string,
+): string {
+  if (!value?.startsWith("/") || value.startsWith("//")) return fallback;
+
+  let target: URL;
+  try {
+    target = new URL(value, "https://app.juro.local");
+  } catch {
+    return fallback;
+  }
+
+  if (
+    target.origin !== "https://app.juro.local"
+    || (target.pathname !== basePath && !target.pathname.startsWith(`${basePath}/`))
+  ) {
+    return fallback;
+  }
+
+  return `${target.pathname}${target.search}`;
 }

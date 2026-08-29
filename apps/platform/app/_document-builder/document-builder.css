@@ -390,6 +390,10 @@
 .dbt-consultation-modal button span { display: grid; }
 .dbt-consultation-modal small { color: var(--dbt-muted); }
 .dbt-modal-close, .dbt-delete-choice .cancel { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--dbt-muted); cursor: pointer; }
+.dbt-confirm-dialog > p { margin: 0 0 4px; color: var(--dbt-muted); line-height: 1.55; }
+.dbt-confirm-dialog > button { justify-content: center; text-align: center; }
+.dbt-confirm-dialog > button.cancel { padding: 12px 14px; border: 1px solid var(--dbt-line); border-radius: 10px; background: white; color: var(--dbt-navy); font-weight: 700; }
+.dbt-confirm-dialog > button.confirm { border-color: var(--dbt-navy); background: var(--dbt-navy); color: white; font-weight: 800; }
 .dbt-toast { position: fixed; right: 22px; bottom: 22px; z-index: 260; padding: 11px 15px; border-radius: 9px; background: var(--dbt-navy); color: white; box-shadow: 0 10px 30px rgba(6,40,68,.25); font-size: 12px; font-weight: 800; }
 
 .dbt-page-title { margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
@@ -466,6 +470,8 @@
 .dbt-contact-form > footer { margin-top: 16px; justify-content: flex-end; gap: 8px; }
 .dbt-contact-form > footer button { min-height: 44px; min-width: 44px; padding: 9px 12px; border: 1px solid #cbd2d7; border-radius: 8px; background: white; color: var(--dbt-navy); cursor: pointer; }
 .dbt-contact-form > footer button.primary { background: var(--dbt-navy); color: white; }
+.dbt-rename-dialog { width: min(480px, 100%); }
+.dbt-rename-dialog > p { margin: 0 0 16px; color: var(--dbt-muted); line-height: 1.5; }
 
 .dbt-notification-list { display: grid; gap: 8px; }
 .dbt-notification-list article { padding: 13px; display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; background: white; border: 1px solid var(--dbt-line); border-radius: 10px; }

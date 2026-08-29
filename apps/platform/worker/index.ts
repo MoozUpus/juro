@@ -29,6 +29,7 @@ import {
   LegalCorpusQdrantContainer,
 } from "./legal-corpus-private-services";
 import { lawyerHostTarget } from "./lawyer-host-router";
+import { INTERNAL_REQUEST_PATH_HEADER } from "../lib/platform/routing";
 
 export { MalwareScannerContainer, LegalCorpusQdrantContainer };
 
@@ -196,7 +197,16 @@ const worker = {
     const internalAdminResponse = await handleInternalAdminRequest(routedRequest, env);
     if (internalAdminResponse) return withSecurityHeaders(internalAdminResponse, url);
 
-    const response = await handler.fetch(routedRequest, env, ctx);
+    const appHeaders = new Headers(routedRequest.headers);
+    appHeaders.set(
+      INTERNAL_REQUEST_PATH_HEADER,
+      `${routedUrl.pathname}${routedUrl.search}`,
+    );
+    const response = await handler.fetch(
+      new Request(routedRequest, { headers: appHeaders }),
+      env,
+      ctx,
+    );
     const isPrivateApi = routedUrl.pathname.startsWith("/api/document-builder/") || routedUrl.pathname.startsWith("/api/auth/") || routedUrl.pathname.startsWith("/api/platform/");
     const isPrivateShare = routedUrl.pathname.startsWith("/document-builder/share/")
       || routedUrl.pathname.startsWith("/document-builder/signed-share/");

@@ -19,18 +19,33 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
-function withSecurityHeaders(response: Response, requestUrl: URL): Response {
+const SITES_SERVICE_HOST_SUFFIX = ".chatgpt.site";
+
+export function isSitesServiceHost(hostname: string): boolean {
+  return hostname.toLowerCase().endsWith(SITES_SERVICE_HOST_SUFFIX);
+}
+
+export function withSecurityHeaders(response: Response, requestUrl: URL): Response {
   const headers = new Headers(response.headers);
+  if (response.status === 200 && requestUrl.pathname.startsWith("/assets/")) {
+    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  }
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
   headers.set("X-Frame-Options", "DENY");
   headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://app.juro.uz; img-src 'self' data: blob: https://app.juro.uz https://pub-28041c6b6dff4877a700421e6cd2c986.r2.dev; media-src 'self' https://pub-28041c6b6dff4877a700421e6cd2c986.r2.dev; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; upgrade-insecure-requests",
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://app.juro.uz; img-src 'self' data: blob: https://app.juro.uz https://pub-28041c6b6dff4877a700421e6cd2c986.r2.dev; manifest-src 'self'; media-src 'self' https://pub-28041c6b6dff4877a700421e6cd2c986.r2.dev; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; upgrade-insecure-requests",
   );
   if (requestUrl.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  // Sites keeps a provider hostname beside the custom domain. Canonical HTML
+  // still points to juro.uz, while this header prevents the provider surface
+  // from becoming a separately indexed copy of the public website.
+  if (isSitesServiceHost(requestUrl.hostname)) {
+    headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
