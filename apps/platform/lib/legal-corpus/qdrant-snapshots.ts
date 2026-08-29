@@ -205,6 +205,15 @@ async function denseLedger(db: D1Database): Promise<DenseLedger> {
   };
 }
 
+function hexToArrayBuffer(value: string): ArrayBuffer {
+  if (!SHA256_PATTERN.test(value)) throw new Error("invalid_sha256");
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes.buffer;
+}
+
 async function verifiedObject(
   storage: R2Bucket,
   key: string,
@@ -289,7 +298,10 @@ async function storeSnapshotObject(input: {
         qdrantCreationTime: input.info.creationTime,
         qdrantChecksumSha256: input.info.checksumSha256,
       },
-      sha256: input.info.checksumSha256,
+      // Cloudflare's runtime accepts the documented string form in most
+      // paths, but a streamed cross-service body can throw a TypeError when
+      // the checksum is left as text. Pass the canonical bytes instead.
+      sha256: hexToArrayBuffer(input.info.checksumSha256),
     });
   } catch (error) {
     console.error(JSON.stringify({
