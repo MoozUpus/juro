@@ -75,14 +75,13 @@ import {
   parseAiReasoningMode,
   type AiReasoningMode,
 } from "../../../../lib/ai/reasoning-mode";
+import { AI_PROMPT_VERSIONS } from "../../../../lib/ai/prompt-registry";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
   OperationalFeatureError,
   operationalFeatureMessage,
 } from "../../../../lib/operations/operational-feature-flags";
-
-const INSTRUCTION_VERSION = "juro-legal-chat-v2-conversation";
 
 function matchingDocumentTemplates(question: string, locale: "ru" | "uz") {
   const terms = [...new Set(question.toLocaleLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])].slice(0, 20);
@@ -575,7 +574,7 @@ async function executePostWithinBudget(
   const runtimeSettings = await resolveAiRuntimeSettings({ db, env: runtimeEnv() });
   const reasoningRoute = aiReasoningRuntimeRoute(runtimeSettings, reasoningMode);
   const instructionHash = await sha256Json({
-    version: INSTRUCTION_VERSION,
+    version: AI_PROMPT_VERSIONS.legalChat,
     jurisdiction: "UZ",
     runtimeConfigHash: runtimeSettings.configHash,
   });

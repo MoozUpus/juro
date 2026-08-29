@@ -180,6 +180,8 @@ const coreTestFiles = [
   "tests/ai-provider-fallback.test.ts",
   "tests/provider-request-timeout.test.ts",
   "tests/ai-runtime-settings.test.ts",
+  "tests/ai-reasoning-mode.test.ts",
+  "tests/ai-prompt-registry.test.ts",
   "tests/ai-client-retry.test.ts",
   "tests/ai-branch-history.test.ts",
   "tests/ai-lawyer-compat-route.test.ts",

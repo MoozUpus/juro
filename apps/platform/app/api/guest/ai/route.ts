@@ -62,6 +62,7 @@ import {
   type GuestAiSession,
 } from "../../../../lib/ai/guest-session";
 import { resolveAiRuntimeSettings } from "../../../../lib/ai/runtime-settings";
+import { AI_PROMPT_VERSIONS } from "../../../../lib/ai/prompt-registry";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -69,7 +70,6 @@ import {
   operationalFeatureMessage,
 } from "../../../../lib/operations/operational-feature-flags";
 
-const GUEST_INSTRUCTION_VERSION = "juro-guest-legal-chat-v1";
 const requestSchema = z.object({
   question: z.string().trim().min(5).max(4_000),
   locale: z.enum(["ru", "uz"]),
@@ -480,7 +480,7 @@ export async function POST(request: Request): Promise<Response> {
     });
     const runtimeSettings = await resolveAiRuntimeSettings({ db, env: runtimeEnv() });
     const instructionHash = await sha256Json({
-      version: GUEST_INSTRUCTION_VERSION,
+      version: AI_PROMPT_VERSIONS.guestLegalChat,
       jurisdiction: "UZ",
       runtimeConfigHash: runtimeSettings.configHash,
     });

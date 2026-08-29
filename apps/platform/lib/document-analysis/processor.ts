@@ -41,6 +41,7 @@ import {
 } from "./revisions";
 import { scheduleTrustedUserDocumentIndexStatements } from "./user-document-vectors";
 import { resolveAiRuntimeSettings, type AiRuntimeSettings } from "../ai/runtime-settings";
+import { AI_PROMPT_VERSIONS } from "../ai/prompt-registry";
 import { publishPendingOwnerCorpusUpload } from "../legal-corpus/owner-upload";
 import { trackProductEvent } from "../platform/analytics";
 
@@ -876,7 +877,7 @@ async function persistNormalizedAnalysis(
     persisted.result.sources.map((source) => `${source.sourceId}:${source.verifiedAt}`).sort().join("|"),
   ));
   const instructionHash = await sha256Hex(new TextEncoder().encode(
-    JSON.stringify({ version: "juro-document-analysis-v1", runtimeConfigHash: persisted.technical.runtimeConfigHash }),
+    JSON.stringify({ version: AI_PROMPT_VERSIONS.documentAnalysis, runtimeConfigHash: persisted.technical.runtimeConfigHash }),
   ));
   const sourceVersion = await db.prepare(
     `SELECT id,sha256 FROM analysis_document_versions
