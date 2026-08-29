@@ -44,7 +44,7 @@ Staging `/api/status` at `2026-08-29T19:08:53Z`:
 - Anthropic, D1, queues, R2, malware scanner: `stale`;
 - document builder and lawyer handoff: `unknown`.
 
-This is a P1 release-gate failure even though the staging host returns HTTP `200`.
+This is a P1 release-gate failure even though the staging host returns HTTP `200`. Both configured Cloudflare schedules are active and were updated with the 28 August deployment, but a live `*/5` cron event at `2026-08-29T19:40:47Z` failed in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`. A read-only query reported `size_after=9,999,998,976` bytes and zero persisted scheduler runs after 21 August. Remediation belongs to the separately excluded legislation-database/corpus capacity scope; this increment only records the blocker.
 
 ## Evidence gates completed in this increment
 
@@ -62,7 +62,7 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 | Priority | Gap | Evidence | Required action |
 | --- | --- | --- | --- |
 | P1 | Provider Sites hostname is indexable on live v94 | Live meta/header inspection | Publish saved v95 after explicit production approval, then recrawl both hosts |
-| P1 | Staging health is degraded/stale after a newer deployment | Public staging status JSON | Restore scheduled/synthetic probe writes, verify fresh timestamps and 8/8 component health |
+| P1 | Staging health is degraded/stale after a newer deployment | Active cron delivery fails in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`; D1 reports 9,999,998,976 bytes | Resolve staging D1 capacity in the separately scoped legislation/corpus work, then verify fresh scheduler writes and 8/8 component health |
 | P1 | Lawyer cross-persona deep link returns `404` | Live `lawyer.juro.uz/ru/individual/dashboard` | Add a host-aware redirect or remove every producer of the invalid URL; test login continuation |
 | P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
 | P1 | Authenticated role matrix incomplete | Only anonymous boundary checks are current | Chrome QA for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin with no fabricated session |
