@@ -1,5 +1,20 @@
 # Test report — current evidence through 2026-08-29
 
+## Compact conversation-context candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `c7c6d35eb88baaec157f8709ee214b936c07b64a` |
+| Branch/history contract | PASS — latest 3 turns remain recent, up to 5 older turns are redacted and summarized, and the remainder are explicitly counted as omitted |
+| Legal-source boundary | PASS — compact history is labelled untrusted and current `verifiedSources` remain mandatory |
+| Failure/privacy boundary | PASS — malformed stored results fall back to bounded redacted text; telemetry contains counts only, not prompts, summaries or answers |
+| Focused regression | PASS — conversation context, query planner, branch history and prompt registry 20/20 |
+| Full local regression | PASS — core 1129/1129; Cloudflare/infrastructure 203/203; rendered Worker 35/35; type-check and lint |
+| Production artifact | PASS local — CSS 596.6/600.0 KiB; initial JS 295.4/320.0; largest lazy increment 208.1/240.0; fonts 453.6/512.0; images 564.4/640.0; Worker entry 3656.7/6144.0 |
+| Synthetic volume proxy | PASS measurement — 15,931 legacy characters to 6,155 compact characters, a 61.36% reduction on one artificial 12-turn long-history fixture |
+| Outcome target | UNVERIFIED — character count is not provider tokens, billing, latency, answer quality or a production 30% cost-reduction result |
+| Release boundary | UNPUBLISHED — no Worker, Sites, migration, DNS, notification or customer-data mutation |
+
 ## Anthropic prompt-cache candidate
 
 | Gate | Result |
@@ -62,15 +77,15 @@ under the current goal boundary.
 
 | Gate | Result |
 | --- | --- |
-| Exact implementation source | PASS candidate — registry `9eee8d54`; source-backed history `2a57cc88` |
+| Exact implementation source | PASS candidate — registry `9eee8d54`; source-backed history `2a57cc88`; compact-context v3 implementation `c7c6d35e` |
 | Runtime/display drift control | PASS — authenticated chat, guest chat and document-analysis run hashes use the same code-owned registry rendered by protected Admin |
 | Data boundary | PASS — Admin receives three current version IDs and the review/evaluation gate; system-prompt text and secrets are not exposed |
 | Operations access | PASS source — localized links point to the existing cost, AI-quality, emergency feature-control and provider-health pages |
 | Experiment truthfulness | PASS — RU/UZ copy states that no A/B prompt experiment is active and requires matched quality, cost and source evaluation before a variant |
-| Prompt history | PASS source — four release records link exact introducing commits/dates; legal-chat v1 is explicitly superseded by v2 and all three current records match runtime identities |
-| Focused regression | PASS — 9/9 prompt-registry/history and reasoning-mode tests |
-| Full Platform release gate | PASS — core 1123/1123, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check, lint and production artifact validation |
-| Artifact budgets | PASS — CSS 596.6/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3647.0/6144.0 KiB |
+| Prompt history | PASS source — five release records link exact introducing commits/dates; legal-chat v1 → v2 → v3 is explicit and all three current records match runtime identities |
+| Focused regression | PASS — conversation context, query planner, branch history and prompt registry 20/20 |
+| Full Platform release gate | PASS — core 1129/1129, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check, lint and production artifact validation |
+| Artifact budgets | PASS — CSS 596.6/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3656.7/6144.0 KiB |
 | Protected browser replay | NOT RUN — no authorized real Admin/MFA session was available; no signed-in browser claim is made |
 | History boundary | PASS code-owned — source history is reviewable in git and Admin; no mutable D1 prompt-history ledger is claimed |
 | Release boundary | NOT DEPLOYED — no Worker/Sites publish, migration, D1, DNS, notification or customer-data mutation |

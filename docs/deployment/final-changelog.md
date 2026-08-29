@@ -11,6 +11,24 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `c7c6d35e` compacts authenticated legal-chat history without a new
+  model call or migration: the latest three branch-local turns remain recent,
+  up to five redacted older turns become deterministic summaries, and the
+  remainder are explicitly omitted.
+- Follow-up rewriting, planning, OpenAI and Anthropic share the compact context;
+  current verified sources still govern legal grounding. Metrics retain only
+  counts and serialized character totals, not prompts, summaries or answers.
+- The legal-chat prompt identity is now `juro-legal-chat-v3-compact-context`,
+  with an exact source-backed v1 → v2 → v3 chain.
+- Focused 20/20, core 1129/1129, Cloudflare/infrastructure 203/203, rendered
+  Worker 35/35, type-check, lint and production artifact validation passed.
+  Worker entry is 3656.7/6144.0 KiB and all emitted budgets remain within limits.
+- One synthetic 12-turn fixture reduced serialized characters from 15,931 to
+  6,155 (61.36%). This is not provider token, billing, latency, answer-quality
+  or production-cost evidence; the 30% target remains `UNVERIFIED`.
+- No Worker/Sites publish, migration, DNS, notification or customer-data
+  mutation occurred. Production remains Worker 170 and Sites v86.
+
 - Candidate `d1da89a1` adds explicit five-minute Anthropic prompt caching for
   the static system-instruction block only. Questions, history, memory, sources
   and documents stay in an unmarked user message.

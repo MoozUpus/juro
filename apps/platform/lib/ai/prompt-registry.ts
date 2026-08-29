@@ -1,5 +1,5 @@
 export const AI_PROMPT_VERSIONS = {
-  legalChat: "juro-legal-chat-v2-conversation",
+  legalChat: "juro-legal-chat-v3-compact-context",
   guestLegalChat: "juro-guest-legal-chat-v1",
   documentAnalysis: "juro-document-analysis-v1",
 } as const;
@@ -54,9 +54,18 @@ export const aiPromptReleaseHistory = [
     key: "legalChat",
     version: AI_PROMPT_VERSIONS.legalChat,
     status: "current",
+    introducedAt: "2026-08-29T12:46:28+05:00",
+    sourceCommit: "c7c6d35eb88baaec157f8709ee214b936c07b64a",
+    releaseGate: "code_review_and_evaluation",
+  },
+  {
+    key: "legalChat",
+    version: "juro-legal-chat-v2-conversation",
+    status: "superseded",
     introducedAt: "2026-08-10T04:36:29+02:00",
     sourceCommit: "7e7bac1485f35ccbee6e03784cd314c668d878d2",
     releaseGate: "code_review_and_evaluation",
+    supersededBy: AI_PROMPT_VERSIONS.legalChat,
   },
   {
     key: "guestLegalChat",
@@ -81,6 +90,6 @@ export const aiPromptReleaseHistory = [
     introducedAt: "2026-07-30T23:37:04+05:00",
     sourceCommit: "fc21def3d62afd37f2852e7a98e24d5473c6d2c3",
     releaseGate: "code_review_and_evaluation",
-    supersededBy: AI_PROMPT_VERSIONS.legalChat,
+    supersededBy: "juro-legal-chat-v2-conversation",
   },
 ] as const satisfies readonly AiPromptReleaseEntry[];

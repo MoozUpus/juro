@@ -20,6 +20,26 @@ Responses without a selected Batch/Flex/Priority tier and global Anthropic
 inference without `inference_geo=us`. A route change requires a new price
 version, not mutation of history.
 
+## Deterministic conversation compaction
+
+Candidate `c7c6d35e` stops resending every retained branch turn verbatim on
+each authenticated legal-chat request. From the already bounded 12-turn query,
+JURO keeps the latest three turns as recent context, converts up to five older
+turns into redacted deterministic summaries, and explicitly counts any
+remaining turns as omitted. Stored structured summaries are schema-validated;
+malformed legacy results fall back to bounded, redacted visible text. The
+summary is untrusted conversational context and never replaces the current
+verified Lex source packet.
+
+No additional model call, migration, prompt-content telemetry or request-global
+mutable state is introduced. The content-free completion/failure metrics record
+turn counts plus legacy/current serialized character counts and their reduction.
+On the synthetic 12-turn long-history fixture, provider-bound characters fell
+from 15,931 to 6,155 (61.36%). This is a character-volume proxy, not provider
+tokens, billing, answer quality or a production cost result. Real token/cost and
+quality benefit, including the overall 30% target, remains `UNVERIFIED` until a
+controlled comparable sample exists.
+
 ## Privacy-bounded Anthropic prompt cache
 
 Candidate `d1da89a1` marks only the code-owned Anthropic system-instruction

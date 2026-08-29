@@ -1,5 +1,15 @@
 # Anthropic integration
 
+## Compact conversation context candidate — 2026-08-29
+
+Candidate `c7c6d35e` gives Anthropic the same branch-aware compact context as
+OpenAI: three recent turns and up to five redacted deterministic summaries of
+older turns, with the remainder omitted. The dynamic summary remains in the
+uncached user message; only the static code-owned system block retains the
+explicit cache marker. No additional Anthropic call performs summarization, and
+the summary cannot substitute for current verified legal sources. This is local
+contract evidence, not a live fallback, cache-hit, cost or quality claim.
+
 ## Runtime checkpoint — 2026-08-04
 
 The retained closed probe `staging-anthropic-legal-chat-v23` succeeded against

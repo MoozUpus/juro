@@ -4,6 +4,31 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 Compact conversation-context candidate
+
+Commit `c7c6d35eb88baaec157f8709ee214b936c07b64a` implements branch-aware,
+deterministic context compaction for authenticated legal chat. From the existing
+bounded 12-turn read, the latest three turns remain recent, up to five older
+turns become redacted summaries, and the remainder are explicitly omitted. The
+same context reaches follow-up rewrite, planning, OpenAI and Anthropic. It makes
+no additional provider or D1 read and treats the summary as untrusted context;
+current verified sources remain the legal grounding boundary.
+
+Focused 20/20, full core 1129/1129, Cloudflare/infrastructure 203/203, rendered
+Worker 35/35, type-check, lint and production artifact validation passed
+locally. Emitted budgets passed at CSS 596.6/600.0 KiB, initial JS
+295.4/320.0, largest lazy increment 208.1/240.0, fonts 453.6/512.0, images
+564.4/640.0 and Worker entry 3656.7/6144.0 KiB. A synthetic long-history
+fixture measured 15,931 legacy versus 6,155 compact serialized characters
+(61.36% lower), but that is not a token, billing, latency, quality or production
+cost measurement. The 30% target remains `UNVERIFIED`.
+
+The legal-chat prompt identity advances to
+`juro-legal-chat-v3-compact-context`, with source-backed v1 → v2 → v3 history.
+No migration, Worker/Sites publish, DNS, notification or customer-data mutation
+occurred. Production remains Worker 170 and Sites v86 pending explicit release
+authorization.
+
 ## 2026-08-29 Anthropic prompt-cache candidate
 
 Commit `d1da89a1` applies an explicit five-minute Anthropic cache breakpoint

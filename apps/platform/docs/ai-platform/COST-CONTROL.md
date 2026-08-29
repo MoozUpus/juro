@@ -2,6 +2,15 @@
 
 Status: local candidate includes migrations `0162` and `0163`; production remains unchanged.
 
+Candidate `c7c6d35e` also bounds repeated authenticated-chat context without a
+new migration or provider call. It retains the latest three branch-local turns,
+summarizes up to five older turns deterministically after redaction, and omits
+the remainder. Completion and failure evidence stores only turn counts and
+legacy/current serialized character totals, never the summary or message text.
+A synthetic 12-turn fixture reduced provider-bound characters from 15,931 to
+6,155 (61.36%); this is a serialized-character proxy only. Provider token,
+billing, quality and production cost improvements remain unverified.
+
 Provider and queue actions are server-side and record bounded technical/cost
 metadata where implemented. Synthetic provider probes are one-time, staging-only,
 non-legal requests behind an explicit disabled-by-default flag; they are not retry

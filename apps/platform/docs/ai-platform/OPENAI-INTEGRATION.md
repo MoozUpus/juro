@@ -1,5 +1,16 @@
 # OpenAI integration
 
+## Compact conversation context candidate — 2026-08-29
+
+Candidate `c7c6d35e` sends OpenAI the latest three branch-local turns plus up to
+five redacted deterministic summaries of older turns instead of repeatedly
+sending the full bounded history. Follow-up rewriting and legal query planning
+receive the same compact context. No extra Responses API call is used for
+summarization, `store: false` remains unchanged, and current verified sources
+remain mandatory for legal grounding. Content-free character/turn metrics are a
+measurement proxy; no live token, latency, cost or quality improvement is
+claimed before an authorized comparable sample.
+
 ## Interactive reliability staging checkpoint — 2026-08-12
 
 The deployed staging artifact applies one 30-second absolute execution budget to

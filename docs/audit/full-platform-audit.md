@@ -9,6 +9,19 @@ authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
 the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
+**Compact conversation-context candidate:** commit `c7c6d35e` keeps the latest
+three branch-local turns, deterministically summarizes up to five redacted older
+turns, and explicitly omits the remainder from the already bounded 12-turn
+history. Rewrite, planning, OpenAI and Anthropic share the compact context; no
+new provider/D1 read is added and current verified sources remain authoritative.
+The prompt registry now records legal-chat v3 with an explicit v1 → v2 → v3
+chain. Focused 20/20, core 1129/1129, Cloudflare/infrastructure 203/203,
+rendered Worker 35/35, type-check, lint and production artifact validation
+passed; Worker entry is 3656.7/6144.0 KiB. One synthetic fixture reduced
+serialized characters 15,931 → 6,155 (61.36%), which is not provider-token,
+billing, latency, quality or production-cost evidence. The candidate is
+unpublished and the 30% target remains `UNVERIFIED`.
+
 **Anthropic prompt-cache candidate:** commit `d1da89a1` marks only the static
 code-owned system block for an explicit five-minute cache; user questions,
 history, memories, source packets and documents remain outside the breakpoint.
@@ -118,8 +131,9 @@ review/evaluation gate and links to existing cost, quality, emergency-control
 and provider-health surfaces; prompt text and secrets remain server-side. RU/UZ
 copy truthfully records that no A/B prompt experiment is active. Follow-up
 `2a57cc88` adds a git-source-backed history for the three current identities and
-superseded legal-chat v1, including exact introducing commits/dates and the
-v1-to-v2 replacement. Focused 9/9, core 1123/1123,
+superseded legal-chat v1. Candidate `c7c6d35e` advances legal chat to v3 compact
+context and completes the exact v1-to-v2-to-v3 replacement chain. Focused
+conversation/prompt coverage is 20/20, core 1129/1129,
 Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
 production artifact budgets passed. This is a code-owned release history, not a
 mutable D1 prompt ledger, and no signed-in Admin browser replay is claimed. The

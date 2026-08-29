@@ -12,7 +12,7 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), "u
 
 test("prompt registry exposes every persisted AI instruction identity exactly once", () => {
   assert.deepEqual(AI_PROMPT_VERSIONS, {
-    legalChat: "juro-legal-chat-v2-conversation",
+    legalChat: "juro-legal-chat-v3-compact-context",
     guestLegalChat: "juro-guest-legal-chat-v1",
     documentAnalysis: "juro-document-analysis-v1",
   });
@@ -27,7 +27,8 @@ test("prompt registry exposes every persisted AI instruction identity exactly on
 
 test("prompt release history is source-backed and resolves every current version", () => {
   assert.deepEqual(aiPromptReleaseHistory.map(({ key, version, status, sourceCommit }) => ({ key, version, status, sourceCommit })), [
-    { key: "legalChat", version: "juro-legal-chat-v2-conversation", status: "current", sourceCommit: "7e7bac1485f35ccbee6e03784cd314c668d878d2" },
+    { key: "legalChat", version: "juro-legal-chat-v3-compact-context", status: "current", sourceCommit: "c7c6d35eb88baaec157f8709ee214b936c07b64a" },
+    { key: "legalChat", version: "juro-legal-chat-v2-conversation", status: "superseded", sourceCommit: "7e7bac1485f35ccbee6e03784cd314c668d878d2" },
     { key: "guestLegalChat", version: "juro-guest-legal-chat-v1", status: "current", sourceCommit: "2c4754d30d24289d0da5fd2fd5e732d1a4c7a805" },
     { key: "documentAnalysis", version: "juro-document-analysis-v1", status: "current", sourceCommit: "2456742373ef045328e4d9df09ac6c6ef95bc03a" },
     { key: "legalChat", version: "juro-legal-chat-v1", status: "superseded", sourceCommit: "fc21def3d62afd37f2852e7a98e24d5473c6d2c3" },
@@ -38,8 +39,11 @@ test("prompt release history is source-backed and resolves every current version
   );
   assert.equal(aiPromptReleaseHistory.every((entry) => /^[0-9a-f]{40}$/.test(entry.sourceCommit)), true);
   assert.equal(aiPromptReleaseHistory.every((entry) => Number.isFinite(Date.parse(entry.introducedAt))), true);
-  const superseded = aiPromptReleaseHistory.find((entry) => entry.status === "superseded");
-  assert.equal(superseded && "supersededBy" in superseded ? superseded.supersededBy : null, AI_PROMPT_VERSIONS.legalChat);
+  const legalHistory = aiPromptReleaseHistory.filter((entry) => entry.key === "legalChat");
+  assert.deepEqual(
+    legalHistory.map((entry) => "supersededBy" in entry ? entry.supersededBy : null),
+    [null, "juro-legal-chat-v3-compact-context", "juro-legal-chat-v2-conversation"],
+  );
 });
 
 test("runtime hashes and Admin prompt visibility share the code-owned registry", () => {

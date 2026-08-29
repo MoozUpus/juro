@@ -20,6 +20,14 @@ The central OpenAI Responses adapter sends `store: false`. JURO persists its own
 minimum operational records; it does not ask OpenAI to retain response objects as
 provider-side application state.
 
+Candidate `c7c6d35e` adds branch-aware conversation compaction before either
+legal-chat provider is called. The latest three of the already bounded 12 turns
+remain recent context; up to five older turns become redacted deterministic
+summaries and the remainder are explicitly omitted. The same compact context is
+used by follow-up rewriting, query planning, OpenAI and Anthropic. It adds no
+summarization provider call and does not weaken the rule that current verified
+sources, not conversation text, ground legal conclusions.
+
 The Anthropic adapter in candidate `d1da89a1` uses an explicit five-minute
 prompt-cache breakpoint on the static, code-owned system block only. Dynamic
 questions, history, memory, source packets and documents remain in the separate
@@ -74,10 +82,11 @@ surfaces.
 
 The same module now keeps a newest-first release manifest grounded in the git
 commits that introduced each persisted identity. It records current legal-chat
-v2, guest-chat v1 and document-analysis v1 plus superseded legal-chat v1, with
-introduction dates, exact source commits, status and replacement link. Admin
-renders this metadata with links to the immutable GitHub sources; it remains a
-code-owned git history rather than a mutable D1 event ledger.
+v3 compact context, guest-chat v1 and document-analysis v1 plus the superseded
+legal-chat v2 and v1 chain, with introduction dates, exact source commits,
+status and replacement links. Admin renders this metadata with links to the
+immutable GitHub sources; it remains a code-owned git history rather than a
+mutable D1 event ledger.
 
 No A/B prompt experiment is active. A future prompt variant still needs matched
 quality, cost and source evaluation plus code review before release.
