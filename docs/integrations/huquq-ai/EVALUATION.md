@@ -58,8 +58,9 @@ proved by the 44 independent checkpoints.
 These values are release policy thresholds, not reported product achievements.
 The completed 314-scenario direct-source review is necessary evidence, but it
 does not pass this separate indexed-corpus gate: the staging corpus is still
-growing, the frozen snapshot benchmark has not run, and dense Qdrant retrieval
-remains disabled.
+under the acquisition freeze, the approved shard-3 dense backfill is still
+running, and the frozen snapshot benchmark has not run. Dense Qdrant remains
+staging-only and is not enabled in production.
 
 The independent Qdrant engine gate passed again on the private-staging-service
 head in GitHub Actions run
