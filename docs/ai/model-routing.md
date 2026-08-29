@@ -66,6 +66,12 @@ IDs, without sending system-prompt text or secrets to the browser, and links to
 the existing cost, quality, emergency-feature-control and provider-health
 surfaces.
 
-This registry is current-state transparency, not an append-only prompt-history
-store. No A/B prompt experiment is active. A future prompt variant still needs
-matched quality, cost and source evaluation plus code review before release.
+The same module now keeps a newest-first release manifest grounded in the git
+commits that introduced each persisted identity. It records current legal-chat
+v2, guest-chat v1 and document-analysis v1 plus superseded legal-chat v1, with
+introduction dates, exact source commits, status and replacement link. Admin
+renders this metadata with links to the immutable GitHub sources; it remains a
+code-owned git history rather than a mutable D1 event ledger.
+
+No A/B prompt experiment is active. A future prompt variant still needs matched
+quality, cost and source evaluation plus code review before release.

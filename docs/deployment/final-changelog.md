@@ -17,9 +17,12 @@
   quality, emergency-control and provider-health links without exposing prompt
   text or secrets.
 - RU/UZ Admin copy states that no A/B prompt experiment is active and requires
-  matched quality, cost and source evaluation before a variant. This does not
-  claim an append-only historical prompt ledger.
-- Local gates passed focused 8/8, core 1122/1122,
+  matched quality, cost and source evaluation before a variant.
+- Follow-up `2a57cc88` adds four source-backed release records: the three
+  current identities and superseded legal-chat v1, with introduction dates,
+  exact GitHub commits and the v1-to-v2 replacement. This is code-owned git
+  history, not a mutable D1 prompt-history ledger.
+- Local gates passed focused 9/9, core 1123/1123,
   Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check,
   lint and production artifact validation. No real Admin/MFA browser session
   was available, so signed-in verification is not claimed.

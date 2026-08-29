@@ -14,16 +14,22 @@ cost, quality, emergency feature-control and provider-health surfaces, and
 truthfully states in RU/UZ that no A/B prompt experiment is active. Prompt text
 and secrets are not sent to the browser.
 
-Focused 8/8, core 1122/1122, Cloudflare/infrastructure 203/203, rendered Worker
+Commit `2a57cc88` adds a source-backed release manifest with exact introducing
+commits and dates for current legal-chat v2, guest-chat v1 and document-analysis
+v1 plus superseded legal-chat v1 and its v2 replacement. The localized Admin
+history links to those immutable GitHub sources without exposing prompt text.
+
+Focused 9/9, core 1123/1123, Cloudflare/infrastructure 203/203, rendered Worker
 HTML 35/35, type-check, lint and production artifact validation passed locally.
 Emitted budgets passed at CSS 596.6/600.0 KiB, initial JS 295.4/320.0 KiB,
 largest lazy increment 208.1/240.0 KiB, fonts 453.6/512.0 KiB, images
 564.4/640.0 KiB and Worker entry 3647.0/6144.0 KiB.
 
-This is current-state transparency, not an append-only historical prompt
-ledger. No authorized real Admin/MFA session was available, so protected
-browser replay is not claimed. The candidate is unpublished and made no Worker,
-Sites, D1/migration, DNS, notification or customer-data mutation.
+The release manifest is code-owned and reviewable in git; no mutable D1
+prompt-history ledger is claimed. No authorized real Admin/MFA session was
+available, so protected browser replay is not claimed. The candidate is
+unpublished and made no Worker, Sites, D1/migration, DNS, notification or
+customer-data mutation.
 
 ## 2026-08-29 Admin AI routing-transparency candidate
 

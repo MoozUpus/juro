@@ -77,10 +77,13 @@ analysis. Their persisted run hashes and the protected localized Admin console
 share the same code-owned registry. Admin exposes only version IDs, the
 review/evaluation gate and links to existing cost, quality, emergency-control
 and provider-health surfaces; prompt text and secrets remain server-side. RU/UZ
-copy truthfully records that no A/B prompt experiment is active. Focused 8/8,
-core 1122/1122, Cloudflare/infrastructure 203/203, rendered Worker 35/35,
-type-check, lint and production artifact budgets passed. This does not claim an
-append-only historical prompt ledger or a signed-in Admin browser replay. The
+copy truthfully records that no A/B prompt experiment is active. Follow-up
+`2a57cc88` adds a git-source-backed history for the three current identities and
+superseded legal-chat v1, including exact introducing commits/dates and the
+v1-to-v2 replacement. Focused 9/9, core 1123/1123,
+Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
+production artifact budgets passed. This is a code-owned release history, not a
+mutable D1 prompt ledger, and no signed-in Admin browser replay is claimed. The
 candidate is not deployed.
 
 ## Current production recovery
