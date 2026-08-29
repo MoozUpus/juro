@@ -1,5 +1,20 @@
 # Test report — current evidence through 2026-08-29
 
+## Document Builder conditional-panel split
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `942ff677` |
+| Loading contract | PASS — six state-specific panels use lazy imports and a visible `role="status"` fallback; their server permissions and APIs are unchanged |
+| Focused regression | PASS — Document Builder 60/60, including the conditional-import boundary |
+| Full local regression | PASS — core 1139/1139; Cloudflare/infrastructure 203/203 |
+| Static gates | PASS — type-check and lint |
+| Rendered Worker | PASS — 35/35 |
+| Production artifact | PASS — CSS 596.9/600.0 KiB; initial JS 295.6/320.0; largest lazy increment 175.5/240.0; fonts 453.6/512.0; images 564.4/640.0; Worker 3724.4/6144.0 |
+| Measured change | PASS artifact proxy — largest lazy increment 208.1 → 175.5 KiB, down 32.6 KiB / 15.7% |
+| Authenticated Chrome | NOT TESTED — the available genuine session is unauthenticated and redirects to login; no identity was fabricated |
+| Release boundary | UNPUBLISHED — no Worker, Sites, migration, DNS, notification or customer-data mutation |
+
 ## Privacy-safe product KPI candidate
 
 | Gate | Result |

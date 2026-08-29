@@ -11,6 +11,14 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `942ff677` defers six state-specific Document Builder panels and
+  keeps a visible status fallback while their chunks load. The largest lazy
+  route increment fell from 208.1 to 175.5 KiB emitted raw JS (32.6 KiB / 15.7%).
+  Focused 60/60, core 1139/1139, Cloudflare/infrastructure 203/203, rendered
+  Worker 35/35, type-check, lint and production artifact validation passed.
+  Authenticated Chrome coverage remains unclaimed because the available real
+  session redirects this private route to login.
+
 - Added a fresh-MFA protected RU/UZ product KPI dashboard and no-store aggregate
   API for mature activation, TTFV, plan completion and lawyer-request acceptance.
 - Candidate `8602e4101e2a61089ac7e5a66a13c6916abd1044` extends it with

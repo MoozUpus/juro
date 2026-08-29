@@ -9,6 +9,16 @@ authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
 the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
+**Document Builder performance candidate:** commit `942ff677` defers six
+state-specific panels behind accessible loading boundaries. The production
+artifact's largest lazy route increment fell from 208.1 to 175.5 KiB emitted
+raw JS (32.6 KiB / 15.7%) while CSS, initial JS, fonts, images and Worker stayed
+inside their budgets. Focused tests passed 60/60, rendered Worker 35/35,
+core 1139/1139, Cloudflare/infrastructure 203/203, type-check, lint and
+production artifact validation passed. This is unpublished artifact evidence;
+authenticated Chrome coverage remains unclaimed because the available real
+browser session redirects the private route to login.
+
 **Privacy-safe product KPI candidate:** the protected RU/UZ Admin dashboard now
 computes mature signup activation, TTFV, plan completion, lawyer-request
 acceptance, 7-day engaged return and the exact first-question → validated answer

@@ -4,6 +4,21 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 Document Builder conditional-panel candidate
+
+Commit `942ff677` turns collaboration, assets, version history, manual editing,
+analysis launch and final-success actions into state-specific client imports.
+Slow secondary loads retain localized status feedback. No authentication,
+authorization, API, storage, document or AI behavior changes.
+
+The rebuilt production artifact reduced the largest lazy route increment from
+208.1 to 175.5 KiB emitted raw JS (32.6 KiB / 15.7%). Focused tests passed
+60/60, the full suites passed core 1139/1139 and Cloudflare/infrastructure
+203/203, rendered Worker passed 35/35, and type-check, lint and production
+artifact validation passed. The available Chrome session redirects the
+protected route to login, so this evidence does not claim authenticated runtime
+coverage or Core Web Vitals improvement. The candidate is not deployed.
+
 ## 2026-08-29 privacy-safe product KPI and funnel candidate
 
 The Draft PR now includes a protected RU/UZ product KPI surface and no-store

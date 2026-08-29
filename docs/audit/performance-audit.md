@@ -1,5 +1,27 @@
 # Performance audit — current evidence through 2026-08-29
 
+## Document Builder conditional-panel split
+
+Candidate `942ff677` removes six conditionally rendered panels from the
+Document Builder's eager client import graph. Collaboration, document assets,
+version history, manual editing, post-generation actions and analysis now load
+only when their matching state is rendered. Each boundary retains a visible
+`role="status"` fallback, so a slow secondary request does not become an
+unlabelled blank region.
+
+The exact production artifact changed its largest lazy route increment from
+208.1 KiB to 175.5 KiB of emitted raw JavaScript: 32.6 KiB less, or 15.7%.
+CSS changed 596.7 → 596.9 KiB, initial browser JS 295.4 → 295.6 KiB and the
+Worker entry 3724.1 → 3724.4 KiB; all remain inside their regression budgets.
+Focused Document Builder tests passed 60/60, rendered Worker tests passed 35/35,
+the full core suite passed 1139/1139, Cloudflare/infrastructure passed 203/203,
+and type-check, lint and production artifact validation passed.
+
+This is artifact and source-branch evidence, not an authenticated runtime
+coverage claim. The available Chrome DevTools session correctly redirects the
+private route to login; no user or staff identity was fabricated. Authenticated
+interaction and request-waterfall replay therefore remain open.
+
 ## What is measured
 
 The production artifact passed raw emitted-byte regression budgets:

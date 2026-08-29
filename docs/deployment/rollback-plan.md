@@ -38,6 +38,15 @@ rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.
 
+## Prepared Document Builder performance change — not deployed
+
+Candidate `942ff677` changes only client chunk boundaries and accessible loading
+feedback; it has no D1 migration or write-path change. If a future release
+causes a panel-load or render regression, return traffic to the verified
+pre-release Worker and leave D1/R2 untouched. Re-test owner and collaborator
+documents, manual editor, analysis launcher, version history, assets and final
+generation before restoring traffic to a forward fix.
+
 ## Prepared product KPI aggregate changes — not deployed
 
 Candidate `3101525c12dd53171494515e0c9668859b92408c` adds only an aggregate
