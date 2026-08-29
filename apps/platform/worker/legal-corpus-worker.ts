@@ -658,7 +658,13 @@ export async function handleLegalCorpusScheduled(
     // This local D1 reconciliation does not fetch a source. It removes only
     // known Lex reader-control labels that an older parser build could have
     // stored inside a title, keeping source cards and sparse title boosts clean.
-    const titleRepairs = await reconcileLegalCorpusTitleUiNoise(env.DB);
+    // Queue-only staging runs deliberately defer this best-effort housekeeping:
+    // the marker probe has no covering index and would scan the full corpus
+    // before it can drain an already-approved durable queue. Auto-ingest runs
+    // retain the repair, while the release evidence records the deferred count.
+    const titleRepairs = ingestionEnabled(env)
+      ? await reconcileLegalCorpusTitleUiNoise(env.DB)
+      : { documents: 0, variants: 0 };
     const wait = async (delayMs: number) => {
       await renewRunLease(env, run);
       await scheduler.wait(delayMs);
