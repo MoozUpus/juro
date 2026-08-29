@@ -133,8 +133,14 @@ export interface LegalSourceProvider {
 }
 
 function directSearchUrl(query: string, locale: "ru" | "uz"): URL {
-  const url = new URL(`https://lex.uz/${locale}/search/all`);
-  url.searchParams.set("searchtitle", query.slice(0, 240));
+  // Lex separates act-title search (`search/all?searchtitle=`) from national
+  // legislation full-text search. Legal query understanding produces
+  // provision wording, so sending it to the title-only endpoint silently
+  // returned no candidates for ordinary provision-focused questions. The
+  // public advanced-search form uses this exact national-law
+  // route and `query` parameter for words and phrases inside legal texts.
+  const url = new URL(`https://lex.uz/${locale}/search/nat`);
+  url.searchParams.set("query", query.slice(0, 100));
   return url;
 }
 
@@ -365,7 +371,15 @@ function officialDocumentUrls(
     const raw = href?.[1] ?? href?.[2] ?? href?.[3];
     if (!raw || raw.length > 2_000) continue;
     try {
-      const reference = classifyLegalSourceUrl(new URL(raw, origin).href);
+      const candidateUrl = new URL(raw, origin);
+      // Lex appends the full-text `query` and a result fragment solely to
+      // highlight matching words in its document reader. Neither is part of
+      // the legal source identity and the fetch boundary intentionally rejects
+      // both, so remove only those known presentation components before
+      // canonical validation.
+      candidateUrl.searchParams.delete("query");
+      candidateUrl.hash = "";
+      const reference = classifyLegalSourceUrl(candidateUrl.href);
       if (reference.sourceKind !== "lex" || seen.has(reference.canonicalUrl)) continue;
       seen.add(reference.canonicalUrl);
       candidates.push({ url: reference.canonicalUrl, title: match[2] ?? "", order });
