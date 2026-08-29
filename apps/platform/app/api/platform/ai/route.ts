@@ -80,6 +80,7 @@ import {
   type AiReasoningMode,
 } from "../../../../lib/ai/reasoning-mode";
 import { AI_PROMPT_VERSIONS } from "../../../../lib/ai/prompt-registry";
+import { buildConversationContext } from "../../../../lib/ai/conversation-context";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -334,11 +335,12 @@ async function executePostWithinBudget(
   // Editing/regenerating replaces the selected turn for model purposes. The
   // immutable old version remains available in history, but is not presented
   // as an earlier statement that the user made twice.
-  const conversationHistory = boundedConversationHistory(
+  const conversationContext = buildConversationContext(
     branchInput.operation === "edit" || branchInput.operation === "regenerate"
       ? branchTurns.slice(0, -1)
       : branchTurns,
   );
+  const { conversationHistory, conversationSummary } = conversationContext;
   const intent = classifyLegalIntent(question);
   if (intent.intent === "conversation" || intent.intent === "out_of_scope") {
     return completeNonChargeableIntent({
@@ -390,11 +392,17 @@ async function executePostWithinBudget(
       return response({ code: error.code, error: error.message }, error.status);
     }
   }
-  const rewrite = gateway.rewriteFollowUp({ question, locale, conversationHistory });
+  const rewrite = gateway.rewriteFollowUp({
+    question,
+    locale,
+    conversationHistory,
+    conversationSummary,
+  });
   const researchPlan = gateway.planOfficialResearch({
     question: rewrite.query,
     locale,
     conversationHistory,
+    conversationSummary,
   });
   // Preserve the user's legal intent through the retrieval boundary. The
   // direct retriever compacts this into its own bounded Lex search query, but
@@ -708,6 +716,7 @@ async function executePostWithinBudget(
       applicableAt: applicableAt?.toISOString(),
       requestId: reservation.correlationId, safetyIdentifier,
       conversationHistory,
+      conversationSummary,
       memories: memories.map((memory) => ({
         category: memory.category,
         statement: memory.statement,
@@ -764,6 +773,7 @@ async function executePostWithinBudget(
       providerErrorType: error instanceof AiUnavailableError ? error.providerErrorType : null,
       attemptedProviders: providerCalls.map((call) => ({ provider: call.provider, model: call.model })),
       providerFailures,
+      conversationContext: conversationContext.metrics,
       correlationId: reservation.correlationId,
     }));
     // Store the same non-content metadata in the durable workspace audit log.
@@ -784,6 +794,7 @@ async function executePostWithinBudget(
           providerErrorType: error instanceof AiUnavailableError ? error.providerErrorType : null,
           attemptedProviders: providerCalls.map((call) => ({ provider: call.provider, model: call.model })),
           providerFailures,
+          conversationContext: conversationContext.metrics,
         }),
         isoNow(),
       ).run();
@@ -1089,6 +1100,7 @@ async function executePostWithinBudget(
       trustedPrivateSourceCount: result.sources.filter((source) => source.sourceClass === "USER_TRUSTED_PRIVATE").length,
       branchId, operation: branchInput.operation,
       sourceMessageId: branchInput.forkedFromMessageId,
+      conversationContext: conversationContext.metrics,
     }), now),
   ];
   const persistenceStage = budget.beginStage("persistence");
@@ -1379,22 +1391,6 @@ async function conversationTurnsForClient(input: {
     });
   }
   return output;
-}
-
-function boundedConversationHistory(
-  turns: Array<{ question: string; answer: string }>,
-): Array<{ user: string; assistant: string }> {
-  const selected: Array<{ user: string; assistant: string }> = [];
-  let characters = 0;
-  for (const turn of turns.slice(-12).reverse()) {
-    const user = turn.question.trim().slice(0, 8_000);
-    const assistant = turn.answer.trim().slice(0, 8_000);
-    const size = user.length + assistant.length;
-    if (selected.length > 0 && characters + size > 24_000) break;
-    selected.push({ user, assistant });
-    characters += size;
-  }
-  return selected.reverse();
 }
 
 function metadataOnlyLegalResult(result: ReturnType<typeof parseLegalChatResponse>) {

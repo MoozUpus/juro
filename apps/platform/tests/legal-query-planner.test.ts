@@ -36,6 +36,26 @@ test("follow-up rewrite uses at most recent relevant subject and redacts sensiti
   assert.doesNotMatch(rewritten.query, /12345678901234/u);
 });
 
+test("follow-up rewrite can recover an older subject from compact conversation context", () => {
+  const rewritten = rewriteLegalFollowUp({
+    question: "А какие документы нужны?",
+    locale: "ru",
+    conversationHistory: [],
+    conversationSummary: {
+      includedTurns: 1,
+      omittedTurns: 3,
+      turns: [{
+        user: "Как зарегистрировать ООО в Узбекистане?",
+        assistant: "Проверен общий порядок регистрации.",
+        openQuestions: [],
+      }],
+    },
+  });
+
+  assert.equal(rewritten.rewritten, true);
+  assert.match(rewritten.query, /зарегистрировать ООО/iu);
+});
+
 test("planner expands LLC aliases and prefers direct lookup for an article", () => {
   const ru = planLegalResearch({ question: "Как открыть ООО?", locale: "ru" });
   assert.equal(ru.domain, "business");

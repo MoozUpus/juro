@@ -32,6 +32,7 @@ import {
   type LegalSourceSpan,
 } from "./provider";
 import type { AiReasoningMode } from "./reasoning-mode";
+import type { ConversationContextSummary } from "./conversation-context";
 
 const claimTypeSchema = z.enum(["legal_basis", "action", "deadline", "risk", "fact"]);
 
@@ -102,11 +103,13 @@ export interface LegalAiGateway {
     question: string;
     locale: "ru" | "uz";
     conversationHistory?: readonly { user: string; assistant: string }[];
+    conversationSummary?: ConversationContextSummary | null;
   }): { query: string; rewritten: boolean };
   planOfficialResearch(input: {
     question: string;
     locale: "ru" | "uz";
     conversationHistory?: readonly { user: string; assistant: string }[];
+    conversationSummary?: ConversationContextSummary | null;
   }): LegalResearchPlan;
   generateGroundedAnswer(
     input: LegalChatRequest,

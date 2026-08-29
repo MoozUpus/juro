@@ -9,6 +9,8 @@
  * direct-live Lex.uz discovery plans.
  */
 
+import type { ConversationContextSummary } from "./conversation-context";
+
 export const legalIntentKinds = [
   "conversation",
   "legal_question",
@@ -186,8 +188,18 @@ export function classifyLegalIntent(question: string): LegalIntentDecision {
   return { intent: "legal_question", confidence: "low", shouldRetrieveLex: true, chargeableOnSuccess: true };
 }
 
-function relevantHistorySubject(history: readonly { user: string; assistant: string }[]): string | null {
+function relevantHistorySubject(
+  history: readonly { user: string; assistant: string }[],
+  summary?: ConversationContextSummary | null,
+): string | null {
   for (const turn of [...history].slice(-6).reverse()) {
+    const candidate = redactLegalQuerySensitiveData(turn.user);
+    if (candidate.length < 4 || GREETING.test(candidate) || THANKS.test(candidate)) continue;
+    if (classifyLegalIntent(candidate).intent === "legal_question" || DOCUMENT_REQUEST.test(candidate)) {
+      return candidate.slice(0, 500);
+    }
+  }
+  for (const turn of [...(summary?.turns ?? [])].reverse()) {
     const candidate = redactLegalQuerySensitiveData(turn.user);
     if (candidate.length < 4 || GREETING.test(candidate) || THANKS.test(candidate)) continue;
     if (classifyLegalIntent(candidate).intent === "legal_question" || DOCUMENT_REQUEST.test(candidate)) {
@@ -201,12 +213,13 @@ export function rewriteLegalFollowUp(input: {
   question: string;
   locale: "ru" | "uz";
   conversationHistory?: readonly { user: string; assistant: string }[];
+  conversationSummary?: ConversationContextSummary | null;
 }): { query: string; rewritten: boolean } {
   const question = redactLegalQuerySensitiveData(input.question).slice(0, 500);
   const history = input.conversationHistory ?? [];
   const shortFollowUp = question.length <= 120 && (FOLLOW_UP.test(question) || FOLLOW_UP_NOUN.test(question));
   if (!shortFollowUp) return { query: question, rewritten: false };
-  const subject = relevantHistorySubject(history);
+  const subject = relevantHistorySubject(history, input.conversationSummary);
   if (!subject) return { query: question, rewritten: false };
   const query = input.locale === "ru"
     ? `${subject}. Уточняющий вопрос: ${question}`
@@ -249,6 +262,7 @@ export function planLegalResearch(input: {
   question: string;
   locale: "ru" | "uz";
   conversationHistory?: readonly { user: string; assistant: string }[];
+  conversationSummary?: ConversationContextSummary | null;
 }): LegalResearchPlan {
   const rewrite = rewriteLegalFollowUp(input);
   const normalized = rewrite.query;
