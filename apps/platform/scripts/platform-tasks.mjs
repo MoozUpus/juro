@@ -261,6 +261,7 @@ const coreTestFiles = [
   "tests/platform-shell-motion.test.ts",
   "tests/provider-cost-control.test.ts",
   "tests/provider-usage.test.ts",
+  "tests/scoped-cost-budget.test.ts",
   "tests/staging-lawyer-handoff-seed.test.ts",
   "tests/system-status.test.ts",
   "tests/ui-theme-resilience.test.ts",

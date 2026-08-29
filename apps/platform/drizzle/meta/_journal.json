@@ -1135,6 +1135,13 @@
       "when": 1787970942759,
       "tag": "0161_balanced_ai_reasoning_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1787983200000,
+      "tag": "0162_scoped_ai_cost_budgets",
+      "breakpoints": true
     }
   ]
 }

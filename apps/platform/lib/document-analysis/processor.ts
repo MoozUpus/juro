@@ -6,6 +6,10 @@ import {
 } from "../ai/provider-cost-control";
 import { ProviderUsageError, recordProviderUsage } from "../ai/provider-usage";
 import {
+  evaluateScopedCostBudgets,
+  ScopedCostBudgetError,
+} from "../ai/scoped-cost-budget";
+import {
   ComparisonProcessingError,
   type AnalysisPackageContext,
   type ExtractedDocument,
@@ -167,6 +171,7 @@ export type DocumentAnalysisDiagnosticDetail =
   | "PROVIDER_HTTP_5XX"
   | "PROVIDER_TIMEOUT"
   | "PROVIDER_CIRCUIT_OPEN"
+  | "AI_COST_BUDGET_EXHAUSTED"
   | "PROVIDER_COST_CONTROL_INVALID"
   | "PROVIDER_COST_CONTROL_PERSISTENCE_FAILED"
   | "PROVIDER_USAGE_INVALID"
@@ -204,6 +209,7 @@ export function documentAnalysisDiagnosticDetail(
     }
     if (error.code === "PROVIDER_TIMEOUT") return "PROVIDER_TIMEOUT";
     if (error.code === "PROVIDER_CIRCUIT_OPEN") return "PROVIDER_CIRCUIT_OPEN";
+    if (error.code === "AI_COST_BUDGET_EXHAUSTED") return "AI_COST_BUDGET_EXHAUSTED";
     switch (error.providerStatus) {
       case 400: return "PROVIDER_HTTP_400";
       case 401: return "PROVIDER_HTTP_401";
@@ -565,6 +571,13 @@ async function analyzeObject(
           runtimeSettings,
           beforeProviderCall: async (call) => {
             try {
+              await evaluateScopedCostBudgets({
+                db: env.DB,
+                environment: providerEnvironment,
+                feature: "document_analysis",
+                userId: row.ownerUserId,
+                reasoningMode: null,
+              });
               await assertProviderCallAllowed({
                 db: env.DB,
                 environment: providerEnvironment,
@@ -575,6 +588,13 @@ async function analyzeObject(
                 throw new AiUnavailableError(
                   "AI-провайдер остановлен системой контроля расходов.",
                   "PROVIDER_CIRCUIT_OPEN",
+                  false,
+                );
+              }
+              if (error instanceof ScopedCostBudgetError && error.code === "AI_COST_BUDGET_EXHAUSTED") {
+                throw new AiUnavailableError(
+                  "Для анализа документов достигнут настроенный AI-бюджет.",
+                  "AI_COST_BUDGET_EXHAUSTED",
                   false,
                 );
               }
@@ -788,7 +808,7 @@ async function analyzeObject(
       const code = error.code === "INVALID_AI_OUTPUT"
         ? "DOCUMENT_ANALYSIS_INVALID_OUTPUT"
         : "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE";
-      const status = (error.code === "PROVIDER_UNAVAILABLE" || error.code === "PROVIDER_CIRCUIT_OPEN") && !error.retryable
+      const status = (error.code === "PROVIDER_UNAVAILABLE" || error.code === "PROVIDER_CIRCUIT_OPEN" || error.code === "AI_COST_BUDGET_EXHAUSTED") && !error.retryable
         ? "awaiting_ai_configuration"
         : error.retryable ? "retrying" : "failed";
       await setAnalysisState(env.DB, row, status, code);
@@ -1133,14 +1153,14 @@ async function setAnalysisState(
 }
 
 function isAiProviderError(error: unknown): error is {
-  code: "PROVIDER_UNAVAILABLE" | "PROVIDER_TIMEOUT" | "INVALID_AI_OUTPUT" | "AI_REFUSED" | "PROVIDER_CIRCUIT_OPEN";
+  code: "PROVIDER_UNAVAILABLE" | "PROVIDER_TIMEOUT" | "INVALID_AI_OUTPUT" | "AI_REFUSED" | "PROVIDER_CIRCUIT_OPEN" | "AI_COST_BUDGET_EXHAUSTED";
   retryable: boolean;
 } {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { name?: unknown; code?: unknown; retryable?: unknown };
   return candidate.name === "AiUnavailableError"
     && typeof candidate.retryable === "boolean"
-    && ["PROVIDER_UNAVAILABLE", "PROVIDER_TIMEOUT", "INVALID_AI_OUTPUT", "AI_REFUSED", "PROVIDER_CIRCUIT_OPEN"]
+    && ["PROVIDER_UNAVAILABLE", "PROVIDER_TIMEOUT", "INVALID_AI_OUTPUT", "AI_REFUSED", "PROVIDER_CIRCUIT_OPEN", "AI_COST_BUDGET_EXHAUSTED"]
       .includes(String(candidate.code));
 }
 

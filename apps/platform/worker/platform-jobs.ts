@@ -891,8 +891,10 @@ async function executeJob(
       `SELECT 1 AS found FROM operational_alert_jobs WHERE id=?
        UNION ALL
        SELECT 1 AS found FROM legal_corpus_alert_jobs WHERE id=?
+       UNION ALL
+       SELECT 1 AS found FROM ai_scope_budget_alert_jobs WHERE id=?
        LIMIT 1`,
-    ).bind(envelope.subjectId, envelope.subjectId).first<{ found: number }>();
+    ).bind(envelope.subjectId, envelope.subjectId, envelope.subjectId).first<{ found: number }>();
     try {
       let delivery: { providerMessageId: string | null; alreadySent: boolean };
       if (isMonitoringEmailJobId(envelope.subjectId)) {

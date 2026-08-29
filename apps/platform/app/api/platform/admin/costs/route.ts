@@ -15,12 +15,18 @@ import {
   providerCircuitMutationSchema,
   setProviderCircuitState,
 } from "../../../../../lib/ai/provider-cost-control";
+import {
+  createScopedCostBudgetPolicyVersion,
+  scopedCostBudgetPolicyMutationSchema,
+  ScopedCostBudgetError,
+} from "../../../../../lib/ai/scoped-cost-budget";
 import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 
 const privateHeaders = { "cache-control": "private, no-store", pragma: "no-cache" };
 const mutationSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("price"), value: aiModelPriceMutationSchema }).strict(),
   z.object({ action: z.literal("policy"), value: costGuardPolicyMutationSchema }).strict(),
+  z.object({ action: z.literal("scope_policy"), value: scopedCostBudgetPolicyMutationSchema }).strict(),
   z.object({ action: z.literal("circuit"), value: providerCircuitMutationSchema }).strict(),
 ]);
 
@@ -64,6 +70,15 @@ async function postCosts(request: Request): Promise<Response> {
       });
       return json(created, 201);
     }
+    if (parsed.data.action === "scope_policy") {
+      const created = await createScopedCostBudgetPolicyVersion({
+        db: requireD1(),
+        environment: environment(),
+        actorUserId: staff.userId,
+        value: parsed.data.value,
+      });
+      return json(created, 201);
+    }
     const changed = await setProviderCircuitState({
       db: requireD1(),
       environment: environment(),
@@ -80,6 +95,12 @@ async function postCosts(request: Request): Promise<Response> {
       return json(
         { code: error.code },
         error.code === "PROVIDER_COST_CONTROL_INVALID" ? 400 : 409,
+      );
+    }
+    if (error instanceof ScopedCostBudgetError) {
+      return json(
+        { code: error.code },
+        error.code === "AI_SCOPE_BUDGET_INVALID" ? 400 : 409,
       );
     }
     throw error;

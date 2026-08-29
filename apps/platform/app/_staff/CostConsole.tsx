@@ -79,6 +79,25 @@ const copy = {
     enabled: "Автоматическая защита включена",
     savePolicy: "Сохранить версию порогов",
     policySuccess: "Версия порогов добавлена",
+    scopePolicy: "Бюджет пользователя или функции",
+    scopeType: "Область бюджета",
+    scopeUser: "Технический пользователь",
+    scopeFeature: "Функция",
+    scopeKey: "Технический ID пользователя",
+    monthlyLimit: "Месячный лимит, USD",
+    enforcement: "Действие при достижении",
+    alertOnly: "Только уведомить",
+    disableDeep: "Отключить только Deep",
+    blockCalls: "Остановить вызовы области",
+    saveScopePolicy: "Сохранить scoped-бюджет",
+    scopePolicySuccess: "Версия scoped-бюджета добавлена",
+    scopedBudgets: "Активные бюджеты областей",
+    dailySpend: "Сегодня / лимит",
+    monthlySpend: "Месяц / лимит",
+    pricingIncomplete: "Есть вызовы без цены",
+    budgetEvents: "Срабатывания scoped-бюджетов",
+    period: "Период",
+    action: "Действие",
     open: "Открыт — вызовы заблокированы",
     closed: "Закрыт — вызовы разрешены",
     openAction: "Остановить провайдера",
@@ -152,6 +171,25 @@ const copy = {
     enabled: "Avtomatik himoya yoqilgan",
     savePolicy: "Limit versiyasini saqlash",
     policySuccess: "Limit versiyasi qo‘shildi",
+    scopePolicy: "Foydalanuvchi yoki funksiya budjeti",
+    scopeType: "Budjet sohasi",
+    scopeUser: "Texnik foydalanuvchi",
+    scopeFeature: "Funksiya",
+    scopeKey: "Foydalanuvchining texnik ID-si",
+    monthlyLimit: "Oylik limit, USD",
+    enforcement: "Limitga yetgandagi amal",
+    alertOnly: "Faqat xabar berish",
+    disableDeep: "Faqat Deep rejimini o‘chirish",
+    blockCalls: "Soha chaqiruvlarini to‘xtatish",
+    saveScopePolicy: "Scoped budjetni saqlash",
+    scopePolicySuccess: "Scoped budjet versiyasi qo‘shildi",
+    scopedBudgets: "Faol soha budjetlari",
+    dailySpend: "Bugun / limit",
+    monthlySpend: "Oy / limit",
+    pricingIncomplete: "Narxsiz chaqiruvlar bor",
+    budgetEvents: "Scoped budjet ishga tushishlari",
+    period: "Davr",
+    action: "Amal",
     open: "Ochiq — chaqiruvlar bloklangan",
     closed: "Yopiq — chaqiruvlarga ruxsat",
     openAction: "Provayderni to‘xtatish",
@@ -201,6 +239,7 @@ export function CostConsole({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [scopeType, setScopeType] = useState<"user" | "feature">("feature");
 
   async function reload() {
     setData(await json<AiCostDashboard>(await fetch("/api/platform/admin/costs", { cache: "no-store" })));
@@ -275,6 +314,28 @@ export function CostConsole({
       },
     }, t.policySuccess);
     if (saved) formElement.reset();
+  }
+
+  async function submitScopePolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const saved = await mutate({
+      action: "scope_policy",
+      value: {
+        scopeType: form.get("scopeType"),
+        scopeKey: form.get("scopeKey"),
+        dailyCostLimitMicrousd: Math.round(Number(form.get("dailyLimit")) * 1_000_000),
+        monthlyCostLimitMicrousd: Math.round(Number(form.get("monthlyLimit")) * 1_000_000),
+        action: form.get("enforcement"),
+        enabled: form.get("enabled") === "on",
+        effectiveFrom: new Date(String(form.get("effectiveFrom"))).toISOString(),
+      },
+    }, t.scopePolicySuccess);
+    if (saved) {
+      formElement.reset();
+      setScopeType("feature");
+    }
   }
 
   const currentPolicy = (provider: Provider) => data.policies.find((policy) => policy.provider === provider);
@@ -372,6 +433,30 @@ export function CostConsole({
           <label>{t.source}<input name="sourceUrl" type="url" inputMode="url" placeholder="https://openai.com/api/pricing/"/></label>
           <button className="staff-approve" disabled={busy}><Plus aria-hidden="true"/>{t.savePrice}</button>
         </form>
+
+        <form className="cost-price-form" onSubmit={(event) => void submitScopePolicy(event)}>
+          <h2><ShieldAlert aria-hidden="true"/>{t.scopePolicy}</h2>
+          <label>{t.scopeType}<select name="scopeType" value={scopeType} onChange={(event) => setScopeType(event.target.value as "user" | "feature")}><option value="feature">{t.scopeFeature}</option><option value="user">{t.scopeUser}</option></select></label>
+          {scopeType === "feature"
+            ? <label>{t.scopeFeature}<select name="scopeKey" defaultValue="legal_chat"><option value="legal_chat">legal_chat</option><option value="guest_legal_chat">guest_legal_chat</option><option value="document_analysis">document_analysis</option><option value="document_indexing">document_indexing</option><option value="document_search">document_search</option></select></label>
+            : <label>{t.scopeKey}<input name="scopeKey" required minLength={1} maxLength={120} pattern="[A-Za-z0-9._:-]+" autoComplete="off"/></label>}
+          <label>{t.dailyLimit}<input name="dailyLimit" type="number" min="0.000001" max="1000000000" step="0.000001" required/></label>
+          <label>{t.monthlyLimit}<input name="monthlyLimit" type="number" min="0.000001" max="1000000000" step="0.000001" required/></label>
+          <label>{t.enforcement}<select name="enforcement" defaultValue="disable_deep"><option value="alert_only">{t.alertOnly}</option><option value="disable_deep">{t.disableDeep}</option><option value="block_calls">{t.blockCalls}</option></select></label>
+          <label>{t.effective}<input name="effectiveFrom" type="datetime-local" required/></label>
+          <label className="cost-checkbox"><input name="enabled" type="checkbox" defaultChecked/>{t.enabled}</label>
+          <button className="staff-approve" disabled={busy}><Plus aria-hidden="true"/>{t.saveScopePolicy}</button>
+        </form>
+      </section>
+
+      <section className="cost-usage" aria-labelledby="cost-scope-status-title">
+        <h2 id="cost-scope-status-title">{t.scopedBudgets}</h2>
+        {data.scopeBudgetStatuses.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.scopeType}</th><th>{t.action}</th><th>{t.dailySpend}</th><th>{t.monthlySpend}</th><th>{t.status}</th></tr></thead><tbody>{data.scopeBudgetStatuses.map((row) => <tr key={row.id}><td>{row.scopeType === "feature" ? <code>{row.scopeKey}</code> : <code title={row.scopeKey}>{shortId(row.scopeKey)}</code>}</td><td>{row.action}</td><td>{usd(row.dailyCostMicrousd)} / {usd(row.dailyCostLimitMicrousd)}</td><td>{usd(row.monthlyCostMicrousd)} / {usd(row.monthlyCostLimitMicrousd)}</td><td>{row.pricingIncomplete ? t.pricingIncomplete : row.dailyLimitReached || row.monthlyLimitReached ? t.open : t.closed}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.protectionMissing}</p>}
+      </section>
+
+      <section className="cost-usage" aria-labelledby="cost-scope-events-title">
+        <h2 id="cost-scope-events-title">{t.budgetEvents}</h2>
+        {data.scopeBudgetEvents.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.date}</th><th>{t.scopeType}</th><th>{t.period}</th><th>{t.reason}</th><th>{t.action}</th><th>{t.status}</th></tr></thead><tbody>{data.scopeBudgetEvents.map((event) => <tr key={event.id}><td><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ")}</time></td><td><code title={event.scopeKey}>{event.scopeType === "user" ? shortId(event.scopeKey) : event.scopeKey}</code></td><td>{event.periodType} · {event.periodKey}</td><td>{event.reason}</td><td>{event.action}</td><td>{event.thresholdValue === null ? event.observedValue : `${usd(event.observedValue)} / ${usd(event.thresholdValue)}`}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
       </section>
 
       <section className="cost-prices" aria-labelledby="cost-prices-title">
@@ -397,7 +482,7 @@ export function CostConsole({
 
       <section className="cost-usage" aria-labelledby="cost-alerts-title">
         <h2 id="cost-alerts-title">{t.alerts}</h2>
-        {data.alerts.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.date}</th><th>{t.provider}</th><th>{t.reason}</th><th>{t.status}</th></tr></thead><tbody>{data.alerts.map((alert) => <tr key={alert.id}><td><time dateTime={alert.createdAt}>{new Date(alert.createdAt).toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ")}</time></td><td>{alert.provider}</td><td>{alert.reason}</td><td>{alert.status}{alert.errorCode ? ` · ${alert.errorCode}` : ""}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
+        {data.alerts.length || data.scopeBudgetAlerts.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.date}</th><th>{t.provider}</th><th>{t.reason}</th><th>{t.status}</th></tr></thead><tbody>{data.alerts.map((alert) => <tr key={alert.id}><td><time dateTime={alert.createdAt}>{new Date(alert.createdAt).toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ")}</time></td><td>{alert.provider}</td><td>{alert.reason}</td><td>{alert.status}{alert.errorCode ? ` · ${alert.errorCode}` : ""}</td></tr>)}{data.scopeBudgetAlerts.map((alert) => <tr key={alert.id}><td><time dateTime={alert.createdAt}>{new Date(alert.createdAt).toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ")}</time></td><td><code title={alert.scopeKey}>{alert.scopeType === "user" ? shortId(alert.scopeKey) : alert.scopeKey}</code></td><td>{alert.periodType} · {alert.reason}</td><td>{alert.status}{alert.errorCode ? ` · ${alert.errorCode}` : ""}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
       </section>
     </main>
   </div>;

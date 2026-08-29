@@ -5,6 +5,13 @@ import {
   readProviderCostControlDashboard,
   type ProviderCostControlDashboard,
 } from "./provider-cost-control";
+import {
+  AI_COST_FEATURES,
+  evaluateScopedCostBudgets,
+  readScopedCostBudgetDashboard,
+  ScopedCostBudgetError,
+  type ScopedCostBudgetDashboard,
+} from "./scoped-cost-budget";
 
 const PROVIDERS = ["openai", "anthropic"] as const;
 const MAX_RATE_MICROUSD = 1_000_000_000_000;
@@ -149,7 +156,7 @@ export type AiCostDashboard = {
   operational: AiCostOperationalView;
   unpricedEvents: number;
   measurement: AiCostMeasurementView;
-} & ProviderCostControlDashboard;
+} & ProviderCostControlDashboard & ScopedCostBudgetDashboard;
 
 export class ProviderUsageError extends Error {
   constructor(readonly code: "PROVIDER_USAGE_INVALID" | "PROVIDER_USAGE_PERSISTENCE_FAILED") {
@@ -372,8 +379,18 @@ export async function recordProviderUsage(input: ProviderUsageInput): Promise<Pr
       provider: input.provider,
       now: completedAt,
     });
+    if ((AI_COST_FEATURES as readonly string[]).includes(feature)) {
+      await evaluateScopedCostBudgets({
+        db: input.db,
+        environment: input.environment,
+        feature,
+        userId: input.userId,
+        now: completedAt,
+        enforce: false,
+      });
+    }
   } catch (error) {
-    if (error instanceof ProviderCostControlError) {
+    if (error instanceof ProviderCostControlError || error instanceof ScopedCostBudgetError) {
       throw new ProviderUsageError("PROVIDER_USAGE_PERSISTENCE_FAILED");
     }
     throw error;
@@ -452,7 +469,7 @@ export async function readAiCostDashboard(input: {
   const cutoff = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const cutoffTimestamp = `${cutoff}T00:00:00.000Z`;
   const windowEnd = now.toISOString();
-  const [prices, daily, byUser, byPlan, operationalRow, legalChatRow, unpriced, measurementRow, control] = await Promise.all([
+  const [prices, daily, byUser, byPlan, operationalRow, legalChatRow, unpriced, measurementRow, control, scopedControl] = await Promise.all([
     input.db.prepare(
       `SELECT id,provider,model,operation,
         input_microusd_per_million_tokens AS inputMicrousdPerMillionTokens,
@@ -571,6 +588,7 @@ export async function readAiCostDashboard(input: {
       estimatedCostMicrousd: number;
     }>(),
     readProviderCostControlDashboard({ db: input.db, environment: input.environment }),
+    readScopedCostBudgetDashboard({ db: input.db, environment: input.environment, now }),
   ]);
   const successfulRequests = Number(measurementRow?.successfulRequests ?? 0);
   const failedRequests = Number(measurementRow?.failedRequests ?? 0);
@@ -650,5 +668,6 @@ export async function readAiCostDashboard(input: {
       status,
     },
     ...control,
+    ...scopedControl,
   };
 }

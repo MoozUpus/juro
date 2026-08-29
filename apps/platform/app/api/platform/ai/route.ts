@@ -69,6 +69,10 @@ import {
   ProviderCostControlError,
 } from "../../../../lib/ai/provider-cost-control";
 import { recordProviderUsage } from "../../../../lib/ai/provider-usage";
+import {
+  evaluateScopedCostBudgets,
+  ScopedCostBudgetError,
+} from "../../../../lib/ai/scoped-cost-budget";
 import { resolveAiRuntimeSettings } from "../../../../lib/ai/runtime-settings";
 import {
   aiReasoningRuntimeRoute,
@@ -445,6 +449,13 @@ async function executePostWithinBudget(
         discoverOfficialUrls: async (query, discoveryLocale, discoverySignal) => {
           const usage = await usageSummary(db, workspace.id, user.id, entitlements.aiAnswerCyclesMonthly);
           if (usage.used >= usage.limit) throw new Error("PLAN_LIMIT_PRECHECK");
+          await evaluateScopedCostBudgets({
+            db,
+            environment: providerEnvironment,
+            feature: "legal_chat",
+            userId: user.id,
+            reasoningMode,
+          });
           await assertProviderCallAllowed({ db, environment: providerEnvironment, provider: "openai" });
           const startedAt = isoNow();
           return discoverOfficialLexUrls({
@@ -513,6 +524,13 @@ async function executePostWithinBudget(
       return { sources: [], evidence: [], errors: [] };
     }
     try {
+      await evaluateScopedCostBudgets({
+        db,
+        environment: providerEnvironment,
+        feature: "legal_chat",
+        userId: user.id,
+        reasoningMode,
+      });
       await assertProviderCallAllowed({ db, environment: providerEnvironment, provider: "openai" });
       const result = await retrieveTrustedUserDocumentSources({
         APP_ENV: bindings.APP_ENV,
@@ -654,6 +672,13 @@ async function executePostWithinBudget(
   }> = [];
   const beforeProviderCall = async (call: { provider: "openai" | "anthropic"; model: string; attempt: number }) => {
     try {
+      await evaluateScopedCostBudgets({
+        db,
+        environment: providerEnvironment,
+        feature: "legal_chat",
+        userId: user.id,
+        reasoningMode,
+      });
       await assertProviderCallAllowed({
         db,
         environment: providerEnvironment,
@@ -722,7 +747,12 @@ async function executePostWithinBudget(
     providerStage.complete();
   } catch (error) {
     providerStage.fail();
-    const code = error instanceof AiUnavailableError ? error.code : "PROVIDER_UNAVAILABLE";
+    const code = error instanceof AiUnavailableError
+      ? error.code
+      : error instanceof ScopedCostBudgetError
+        && (error.code === "AI_COST_BUDGET_EXHAUSTED" || error.code === "AI_COST_DEEP_DISABLED")
+        ? error.code
+        : "PROVIDER_UNAVAILABLE";
     // Keep staging/provider incidents diagnosable without emitting the legal
     // question, user identifiers, source excerpts, or provider response body.
     // The request correlation id already belongs to the client-safe response
@@ -817,7 +847,11 @@ async function executePostWithinBudget(
       code,
       correlationId: reservation.correlationId,
       error: localizedProviderError(locale, code),
-    }, code === "AI_REFUSED" || code === "INVALID_AI_OUTPUT" ? 422 : 503);
+    }, code === "AI_REFUSED" || code === "INVALID_AI_OUTPUT"
+      ? 422
+      : code === "AI_COST_BUDGET_EXHAUSTED" || code === "AI_COST_DEEP_DISABLED"
+        ? 429
+        : 503);
   }
 
   let result;
@@ -1521,6 +1555,8 @@ function localizedProviderError(locale: "ru" | "uz", code: string) {
     AI_REFUSED: "Запрос не был обработан AI. Лимит не списан.",
     PROVIDER_UNAVAILABLE: "AI-провайдер временно недоступен. Лимит не списан.",
     PROVIDER_CIRCUIT_OPEN: "AI временно остановлен системой контроля расходов. Лимит не списан.",
+    AI_COST_BUDGET_EXHAUSTED: "Для этой функции или учётной записи достигнут настроенный AI-бюджет. Лимит не списан.",
+    AI_COST_DEEP_DISABLED: "Глубокий анализ временно отключён политикой расходов. Выберите быстрый или сбалансированный режим.",
     AI_CANCELLED: "Генерация остановлена. Лимит не списан.",
   };
   const uz: Record<string, string> = {
@@ -1529,6 +1565,8 @@ function localizedProviderError(locale: "ru" | "uz", code: string) {
     AI_REFUSED: "So‘rov AI tomonidan qayta ishlanmadi. Limit yechilmadi.",
     PROVIDER_UNAVAILABLE: "AI-provayder vaqtincha ishlamayapti. Limit yechilmadi.",
     PROVIDER_CIRCUIT_OPEN: "AI xarajat nazorati tomonidan vaqtincha to‘xtatildi. Limit yechilmadi.",
+    AI_COST_BUDGET_EXHAUSTED: "Bu funksiya yoki hisob uchun sozlangan AI budjetiga yetildi. Limit yechilmadi.",
+    AI_COST_DEEP_DISABLED: "Chuqur tahlil xarajat siyosati bo‘yicha vaqtincha o‘chirilgan. Tez yoki muvozanatli rejimni tanlang.",
     AI_CANCELLED: "Javob yaratish to‘xtatildi. Limit yechilmadi.",
   };
   return (locale === "ru" ? ru : uz)[code] || (locale === "ru" ? ru.PROVIDER_UNAVAILABLE : uz.PROVIDER_UNAVAILABLE);
@@ -1542,6 +1580,8 @@ function publicAiFailureCode(code: string) {
     "PROVIDER_TIMEOUT",
     "PROVIDER_UNAVAILABLE",
     "PROVIDER_CIRCUIT_OPEN",
+    "AI_COST_BUDGET_EXHAUSTED",
+    "AI_COST_DEEP_DISABLED",
   ]).has(code) ? code : "AI_RUN_FAILED";
 }
 

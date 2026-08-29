@@ -30,9 +30,26 @@ const legalCorpusAlertRowSchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
 }).strict();
 
+const scopeBudgetAlertRowSchema = z.object({
+  id: z.string().uuid(),
+  environment: z.enum(["development", "staging", "production"]),
+  scopeType: z.enum(["user", "feature"]),
+  scopeKey: z.string().min(1).max(120).regex(/^[A-Za-z0-9._:-]+$/u),
+  periodType: z.enum(["daily", "monthly"]),
+  periodKey: z.string().min(7).max(10).regex(/^\d{4}-\d{2}(?:-\d{2})?$/u),
+  reason: z.enum(["cost_limit", "unpriced_usage"]),
+  action: z.enum(["alert_only", "disable_deep", "block_calls"]),
+  observedValue: z.number().int().nonnegative(),
+  thresholdValue: z.number().int().positive().nullable(),
+  status: z.enum(["pending", "sending", "retrying", "sent", "failed"]),
+  providerMessageId: z.string().nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+}).strict();
+
 type OperationalAlertRow =
   | (z.infer<typeof providerAlertRowSchema> & { domain: "provider" })
-  | (z.infer<typeof legalCorpusAlertRowSchema> & { domain: "legal_corpus" });
+  | (z.infer<typeof legalCorpusAlertRowSchema> & { domain: "legal_corpus" })
+  | (z.infer<typeof scopeBudgetAlertRowSchema> & { domain: "scope_budget" });
 
 export type OperationalAlertEmailEnv = {
   DB: D1Database;
@@ -89,6 +106,19 @@ function alertCopy(row: OperationalAlertRow): { subject: string; html: string } 
       html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>${subject}</h2><p><strong>Причина:</strong> ${reason}<br><strong>Свежесть:</strong> ${freshness}<br><strong>Событие:</strong> ${row.id}<br><strong>Время:</strong> ${row.createdAt}</p><p>Проверьте журнал синхронизации, Queue/DLQ и состояние источника в защищённой панели JURO. Не считайте базу актуальной до успешного полного запуска.</p></div>`,
     };
   }
+  if (row.domain === "scope_budget") {
+    const reason = row.reason === "cost_limit"
+      ? "достигнут настроенный лимит стоимости"
+      : "обнаружены успешные вызовы без действующей версии цены";
+    const metric = row.thresholdValue === null
+      ? `${row.observedValue.toLocaleString("en-US")} вызовов без цены`
+      : `${row.observedValue.toLocaleString("en-US")} / ${row.thresholdValue.toLocaleString("en-US")} µUSD`;
+    const subject = `[JURO ${row.environment}] AI budget: ${row.scopeType} ${row.periodType}`;
+    return {
+      subject,
+      html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>${subject}</h2><p><strong>Область:</strong> ${row.scopeType} / ${row.scopeKey}<br><strong>Период:</strong> ${row.periodKey}<br><strong>Причина:</strong> ${reason}<br><strong>Метрика / порог:</strong> ${metric}<br><strong>Действие:</strong> ${row.action}<br><strong>Событие:</strong> ${row.id}<br><strong>Время:</strong> ${row.createdAt}</p><p>Проверьте цены, usage и активную версию scoped-бюджета в защищённой панели JURO. Порог не меняется автоматически.</p></div>`,
+    };
+  }
   const reason = ({
     manual: "ручное аварийное отключение",
     daily_cost_limit: "достигнут дневной лимит стоимости",
@@ -121,13 +151,25 @@ async function alertJob(db: D1Database, jobId: string): Promise<OperationalAlert
       provider_message_id AS providerMessageId,created_at AS createdAt
      FROM legal_corpus_alert_jobs WHERE id=? LIMIT 1`,
   ).bind(jobId).first<Record<string, unknown>>();
-  if (!legalRow) return null;
-  const parsed = legalCorpusAlertRowSchema.safeParse(legalRow);
-  return parsed.success ? { ...parsed.data, domain: "legal_corpus" } : null;
+  if (legalRow) {
+    const parsed = legalCorpusAlertRowSchema.safeParse(legalRow);
+    return parsed.success ? { ...parsed.data, domain: "legal_corpus" } : null;
+  }
+  const scopeRow = await db.prepare(
+    `SELECT id,environment,scope_type AS scopeType,scope_key AS scopeKey,
+      period_type AS periodType,period_key AS periodKey,reason,action,
+      observed_value AS observedValue,threshold_value AS thresholdValue,status,
+      provider_message_id AS providerMessageId,created_at AS createdAt
+     FROM ai_scope_budget_alert_jobs WHERE id=? LIMIT 1`,
+  ).bind(jobId).first<Record<string, unknown>>();
+  if (!scopeRow) return null;
+  const scopeParsed = scopeBudgetAlertRowSchema.safeParse(scopeRow);
+  return scopeParsed.success ? { ...scopeParsed.data, domain: "scope_budget" } : null;
 }
 
-function alertTable(row: OperationalAlertRow): "operational_alert_jobs" | "legal_corpus_alert_jobs" {
-  return row.domain === "provider" ? "operational_alert_jobs" : "legal_corpus_alert_jobs";
+function alertTable(row: OperationalAlertRow): "operational_alert_jobs" | "legal_corpus_alert_jobs" | "ai_scope_budget_alert_jobs" {
+  if (row.domain === "provider") return "operational_alert_jobs";
+  return row.domain === "legal_corpus" ? "legal_corpus_alert_jobs" : "ai_scope_budget_alert_jobs";
 }
 
 async function updateFailure(

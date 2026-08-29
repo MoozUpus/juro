@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { recordProviderUsage } from "../ai/provider-usage";
+import {
+  evaluateScopedCostBudgets,
+  ScopedCostBudgetError,
+} from "../ai/scoped-cost-budget";
 
 const EMBEDDING_DIMENSIONS = 1536;
 const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-large";
@@ -15,6 +19,7 @@ export const USER_DOCUMENT_VECTOR_ERROR_CODES = [
   "USER_DOCUMENT_VECTOR_CONFIGURATION_UNAVAILABLE",
   "USER_DOCUMENT_VECTOR_OBJECT_INVALID",
   "USER_DOCUMENT_VECTOR_EMBEDDING_FAILED",
+  "USER_DOCUMENT_VECTOR_BUDGET_EXHAUSTED",
   "USER_DOCUMENT_VECTOR_USAGE_PERSISTENCE_FAILED",
   "USER_DOCUMENT_VECTOR_MUTATION_FAILED",
   "USER_DOCUMENT_VECTOR_PERSISTENCE_FAILED",
@@ -151,6 +156,20 @@ async function createEmbeddings(
   }
   const startedAt = new Date().toISOString();
   const requestedModel = env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
+  try {
+    await evaluateScopedCostBudgets({
+      db: env.DB,
+      environment: env.APP_ENV,
+      feature: usage.feature,
+      userId: usage.userId,
+      reasoningMode: null,
+    });
+  } catch (error) {
+    if (error instanceof ScopedCostBudgetError && error.code === "AI_COST_BUDGET_EXHAUSTED") {
+      throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_BUDGET_EXHAUSTED", false);
+    }
+    throw error;
+  }
   const recordFailure = async (errorCode: string): Promise<void> => {
     try {
       await recordProviderUsage({

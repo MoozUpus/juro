@@ -42,6 +42,10 @@ import {
   ProviderCostControlError,
 } from "../../../../lib/ai/provider-cost-control";
 import { recordProviderUsage } from "../../../../lib/ai/provider-usage";
+import {
+  evaluateScopedCostBudgets,
+  ScopedCostBudgetError,
+} from "../../../../lib/ai/scoped-cost-budget";
 import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { sha256Json } from "../../../../lib/ai/run-store";
 import {
@@ -539,6 +543,13 @@ export async function POST(request: Request): Promise<Response> {
       attempt: number;
     }) => {
       try {
+        await evaluateScopedCostBudgets({
+          db,
+          environment: providerEnvironment,
+          feature: "guest_legal_chat",
+          userId: null,
+          reasoningMode: "fast",
+        });
         await assertProviderCallAllowed({
           db,
           environment: providerEnvironment,
@@ -580,7 +591,9 @@ export async function POST(request: Request): Promise<Response> {
       providerStage.fail();
       const code = error instanceof AiUnavailableError
         ? error.code
-        : "PROVIDER_UNAVAILABLE";
+        : error instanceof ScopedCostBudgetError && error.code === "AI_COST_BUDGET_EXHAUSTED"
+          ? error.code
+          : "PROVIDER_UNAVAILABLE";
       const completedAt = new Date().toISOString();
       try {
         for (const [callIndex, call] of providerCalls.entries()) {
@@ -619,10 +632,16 @@ export async function POST(request: Request): Promise<Response> {
         correlationId: reservation.run.correlationId,
         error: copy(
           locale,
-          "AI-провайдер временно недоступен. Гостевой ответ не использован.",
-          "AI-provayder vaqtincha mavjud emas. Mehmon javobi ishlatilmadi.",
+          code === "AI_COST_BUDGET_EXHAUSTED"
+            ? "Для гостевого AI достигнут настроенный бюджет. Ответ не использован."
+            : "AI-провайдер временно недоступен. Гостевой ответ не использован.",
+          code === "AI_COST_BUDGET_EXHAUSTED"
+            ? "Mehmon AI uchun sozlangan budjetga yetildi. Javob ishlatilmadi."
+            : "AI-provayder vaqtincha mavjud emas. Mehmon javobi ishlatilmadi.",
         ),
-      }, code === "AI_REFUSED" || code === "INVALID_AI_OUTPUT" ? 422 : 503,
+      }, code === "AI_REFUSED" || code === "INVALID_AI_OUTPUT"
+        ? 422
+        : code === "AI_COST_BUDGET_EXHAUSTED" ? 429 : 503,
       sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
     }
 
