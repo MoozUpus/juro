@@ -1,6 +1,6 @@
 # Cost control
 
-Status: local candidate includes migration `0162`; production remains unchanged.
+Status: local candidate includes migrations `0162` and `0163`; production remains unchanged.
 
 Provider and queue actions are server-side and record bounded technical/cost
 metadata where implemented. Synthetic provider probes are one-time, staging-only,
@@ -105,3 +105,15 @@ Migration 0162 is local-only and excluded from the production
 migration and exact-Worker rehearsal, reviewed operator thresholds, controlled
 daily/monthly crossings, real delivery/retry evidence, and authenticated Admin
 verification. The 30% cost-reduction target remains unverified.
+
+Migration `0163_anthropic_prompt_cache_accounting.sql` adds content-free
+cache-write token counters to immutable provider events and daily aggregates.
+The Anthropic transport marks only its static system-instruction block with an
+explicit five-minute cache breakpoint; user messages, history, retrieved
+sources and documents remain outside it. Because Anthropic reports uncached,
+cache-read and cache-write input separately, JURO normalizes total input and
+prices five-minute writes at the documented 1.25x ordinary input rate using
+integer arithmetic. Admin shows write-token volume separately from hit rate and
+read-token share. The migration and matching Worker are local-only; real cache
+hit, latency and cost-reduction evidence still require an authorized release and
+comparable sample.

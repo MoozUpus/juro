@@ -4,6 +4,33 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 Anthropic prompt-cache candidate
+
+Commit `d1da89a1` applies an explicit five-minute Anthropic cache breakpoint
+only to the static code-owned system instruction block. Questions,
+conversation history, memory, retrieved sources and document payloads remain
+in the separate user message and have no cache marker. The provider's disjoint
+uncached/read/write counters are normalized into total input while read and
+write tokens remain independently observable.
+
+Migration `0163_anthropic_prompt_cache_accounting.sql` adds default-zero,
+non-negative cache-write counters to immutable usage events and daily
+aggregates. Five-minute cache writes are priced at the documented 1.25x
+ordinary Anthropic input rate with integer arithmetic. The protected RU/UZ
+Admin console shows write-token volume and explicitly states that user content
+is not cached.
+
+Focused provider-cost 8/8 and Anthropic/document-provider 15/15 tests, full
+core 1128/1128, Cloudflare/infrastructure 203/203, rendered Worker 35/35,
+type-check, lint and production artifact validation passed. The emitted Worker
+entry is 3652.5/6144.0 KiB; CSS, initial JS, lazy-route JS, fonts and images are
+also within their checked-in limits. Production remains unchanged: migration
+0163 is outside the production migration pattern, and no D1, Worker, Sites,
+DNS, notification or customer-data mutation occurred. A restored-backup
+migration rehearsal, controlled staging cache create/read, billing
+reconciliation, role-correct Admin replay and a comparable cost/quality sample
+remain release gates; the 30% reduction target is still `UNVERIFIED`.
+
 ## 2026-08-29 scoped AI budget candidate
 
 Commit `f312a930e9e93a690a71ad963ea0ff59ab1a4ab6` adds operator-defined daily

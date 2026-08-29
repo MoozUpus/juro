@@ -11,6 +11,23 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `d1da89a1` adds explicit five-minute Anthropic prompt caching for
+  the static system-instruction block only. Questions, history, memory, sources
+  and documents stay in an unmarked user message.
+- Anthropic uncached, cache-read and cache-write input counters are normalized
+  to total input while read/write evidence remains separate. Five-minute writes
+  use the documented 1.25x input-rate multiplier with integer cost arithmetic.
+- Migration `0163_anthropic_prompt_cache_accounting.sql` adds only default-zero
+  token counters to immutable events/daily aggregates; Admin shows write-token
+  volume and the user-content exclusion in RU/UZ.
+- Focused cost 8/8 and Anthropic/document-provider 15/15, full core 1128/1128,
+  Cloudflare/infrastructure 203/203, rendered Worker 35/35, development build,
+  type-check, lint and production artifact validation passed; the Worker entry
+  is 3652.5/6144.0 KiB and every emitted-asset budget is within its limit.
+  Migration 0163 is excluded from production configuration; no remote
+  migration, Worker/Sites publish, DNS, notification or customer-data mutation
+  occurred. Real cache benefit and the 30% reduction target remain unverified.
+
 - Candidate `f312a930` adds immutable per-user and per-feature daily/monthly AI
   budgets with operator-selected `alert_only`, `disable_deep`, or `block_calls`
   enforcement. No monetary threshold is seeded.

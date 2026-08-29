@@ -20,6 +20,12 @@ The central OpenAI Responses adapter sends `store: false`. JURO persists its own
 minimum operational records; it does not ask OpenAI to retain response objects as
 provider-side application state.
 
+The Anthropic adapter in candidate `d1da89a1` uses an explicit five-minute
+prompt-cache breakpoint on the static, code-owned system block only. Dynamic
+questions, history, memory, source packets and documents remain in the separate
+user message and carry no cache marker. Provider-reported cache reads and writes
+are recorded as content-free token counts; no cached text is copied into D1.
+
 ## Production feature state
 
 - `LEGAL_DIRECT_RETRIEVAL_ENABLED=true`.

@@ -9,6 +9,19 @@ authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
 the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
+**Anthropic prompt-cache candidate:** commit `d1da89a1` marks only the static
+code-owned system block for an explicit five-minute cache; user questions,
+history, memories, source packets and documents remain outside the breakpoint.
+Provider-reported cache reads and writes are counted separately, migration 0163
+retains content-free write-token evidence, and the 1.25x five-minute write rate
+is applied with integer cost arithmetic. Focused cost 8/8 and provider 15/15,
+full core 1128/1128, Cloudflare/infrastructure 203/203, rendered Worker 35/35,
+type-check, lint and production artifact validation passed; the Worker entry is
+3652.5/6144.0 KiB and all emitted-asset budgets remain within their limits. The
+candidate is unpublished, migration 0163 is excluded from production
+configuration, and real cache/cost improvement plus the overall 30% target
+remain `UNVERIFIED`.
+
 **Admin AI cost-observability candidate:** commit `a08698df` adds content-free
 cost views by technical user/workspace and current subscription plan, plus
 provider failure rate, average recorded latency, request cache-hit rate,

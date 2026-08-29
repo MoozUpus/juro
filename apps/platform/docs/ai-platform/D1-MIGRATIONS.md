@@ -1,5 +1,27 @@
 # JURO D1 migrations
 
+## Pending 0163 — Anthropic prompt-cache accounting
+
+`0163_anthropic_prompt_cache_accounting.sql` additively adds one non-negative
+`cache_creation_input_tokens` counter to immutable provider usage events and
+daily cost aggregates. Existing rows receive zero. No prompt, answer, cached
+text, document, filename or identity field is added.
+
+Candidate `d1da89a1` uses the counter to retain Anthropic's provider-reported
+five-minute cache writes separately from cache reads and uncached input. The
+application derives the documented 1.25x cache-write charge from the active
+ordinary input price with exact integer arithmetic. The cache breakpoint covers
+only static code-owned system instructions; dynamic user content is excluded.
+
+Focused cost 8/8 and Anthropic/document-provider 15/15, full core 1128/1128,
+Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check and lint
+pass locally. Migration 0163 is excluded by the production
+`migrations_pattern` and has not been applied to any remote D1. Release
+requires the complete ordered 0161-0163 migration
+rehearsal from a freshly restored production backup, column/default/check
+verification, exact-worker staging cache read/write evidence, Admin display
+verification and provider-billing reconciliation.
+
 ## Pending 0162 — scoped AI cost budgets
 
 `0162_scoped_ai_cost_budgets.sql` additively creates immutable, effective-dated

@@ -1,5 +1,21 @@
 # Test report — current evidence through 2026-08-29
 
+## Anthropic prompt-cache candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `d1da89a1` |
+| Privacy boundary | PASS — only the static system block has `cache_control`; the dynamic user message carrying question/history/sources/document input has no cache marker |
+| Usage normalization | PASS — Anthropic uncached input + cache reads + cache writes becomes provider-neutral total input; reads and writes remain separate counters |
+| Cost arithmetic | PASS — a synthetic 1,000 uncached + 1,000 cache-read + 1,000 five-minute cache-write request at the configured rates produces exact `$0.007050` estimated cost |
+| Migration | PASS local — 0163 adds default-zero non-negative cache-write counters without content fields |
+| Admin evidence | PASS source — RU/UZ console exposes write-token volume and describes the content exclusion |
+| Focused regression | PASS — provider-cost 8/8 and Anthropic/document-provider 15/15 |
+| Full Platform regression | PASS — core 1128/1128, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35 |
+| Static/artifact gates | PASS — development build, type-check, lint and production artifact validation; Worker entry 3652.5/6144.0 KiB |
+| Production/release boundary | NOT DEPLOYED — migration 0163 is excluded from the production migration pattern; no remote schema or Worker/Sites/DNS mutation occurred |
+| Outcome target | UNVERIFIED — no real production cache-hit/latency/cost comparison exists yet |
+
 ## Scoped AI budget candidate
 
 | Gate | Result |
@@ -14,7 +30,7 @@
 | Migration | PASS local — `0162_scoped_ai_cost_budgets.sql` applies in the ordered migration matrix, retains immutable policy/event evidence, and passes foreign-key checks |
 | Focused regression | PASS — 3/3 scoped-budget tests, including Deep-only/user hard limits, exact-once alert delivery, unpriced usage, immutability and route boundaries |
 | Full Platform regression | PASS — core 1127/1127 including the scoped suite, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35 |
-| Static/artifact gates | PASS — type-check, lint, production artifact validation and emitted-asset budgets; Worker entry 3652.3/6144.0 KiB |
+| Static/artifact gates | PASS — type-check, lint, production artifact validation and emitted-asset budgets; Worker entry 3652.5/6144.0 KiB |
 | Production/release boundary | NOT DEPLOYED — migration 0162 remains excluded from the production migration pattern; no threshold, D1 migration, Worker/Sites publish, DNS, email, notification or customer-data mutation occurred |
 | Outcome target | UNVERIFIED — controls are ready for operator thresholds, but the required 30% cost reduction with quality non-regression still lacks a comparable production sample |
 

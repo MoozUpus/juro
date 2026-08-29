@@ -20,6 +20,31 @@ Responses without a selected Batch/Flex/Priority tier and global Anthropic
 inference without `inference_geo=us`. A route change requires a new price
 version, not mutation of history.
 
+## Privacy-bounded Anthropic prompt cache
+
+Candidate `d1da89a1` marks only the code-owned Anthropic system-instruction
+block with an explicit five-minute `ephemeral` cache breakpoint. The current
+question, conversation history, memory, retrieved sources and document payload
+remain in the separate user message and are not marked for caching. OpenAI
+continues to use its provider-reported automatic cached-input accounting.
+
+Anthropic reports uncached input, cache reads and cache writes as disjoint
+counters. JURO normalizes their sum as total input, retains cache reads and
+cache writes separately, and prices a five-minute cache write at 1.25 times
+the effective ordinary Anthropic input rate under the
+[official prompt-caching contract](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
+Integer quarter-rate arithmetic keeps per-request micro-USD rounding
+deterministic. Migration
+`0163_anthropic_prompt_cache_accounting.sql` adds only non-negative token-count
+columns to immutable usage events and daily aggregates; it stores no cached
+text or user content. The Admin console exposes cache-write token count beside
+the existing hit/share signals.
+
+This is an unpublished optimization candidate. A marked prefix below the
+provider's model-specific minimum can legitimately produce zero cache reads
+and writes, so real cost/latency improvement remains unverified until a
+comparable post-release sample exists.
+
 ## Observed baseline
 
 The last-30-day production usage snapshot taken on 2026-08-25 contained 58

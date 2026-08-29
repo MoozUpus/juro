@@ -87,6 +87,26 @@ do not edit the migration ledger. A database restore is an explicit incident
 decision only; because concurrent provider calls can overshoot a D1 boundary,
 reconcile provider billing before choosing the recovery point.
 
+## Prepared migration 0163 gate — not applied
+
+Candidate migration `0163_anthropic_prompt_cache_accounting.sql` adds default-
+zero cache-write token counters to immutable provider events and daily
+aggregates. It remains excluded from the production `migrations_pattern` and
+has not been applied remotely.
+
+Before an explicitly approved release, repeat the private backup and isolated
+restore procedure for the full ordered ledger through 0163. Require
+`quick_check=ok`, zero foreign-key violations, exact existing row-count parity,
+zero cache-write values on pre-existing rows and intact immutability triggers.
+Then exercise one controlled Anthropic cache creation and read in staging,
+reconcile provider usage/cost, and deploy only the exact tested Worker.
+
+If application behavior regresses after 0163, restore the prior Worker first.
+The old Worker ignores the additive columns, so keep them and their evidence;
+do not edit the migration ledger or delete usage rows. A database restore is
+reserved for a separately approved schema incident with explicit recovery-point
+and provider-billing reconciliation.
+
 ## Zone TLS rollback
 
 The current zone encryption mode is explicit `Full (strict)`. If a verified
