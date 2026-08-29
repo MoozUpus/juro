@@ -56,3 +56,16 @@ Balanced; Deep has its own model field. Version history records the chat, Deep
 and Anthropic fallback model identifiers so an operator can compare a saved
 configuration with the active one without inferring routing from a generic
 "chat model" label.
+
+## Admin prompt registry
+
+The authenticated legal chat, guest legal chat and document-analysis run hashes
+now read their prompt identities from one code-owned `AI_PROMPT_VERSIONS`
+registry. The protected Admin console renders those same three current version
+IDs, without sending system-prompt text or secrets to the browser, and links to
+the existing cost, quality, emergency-feature-control and provider-health
+surfaces.
+
+This registry is current-state transparency, not an append-only prompt-history
+store. No A/B prompt experiment is active. A future prompt variant still needs
+matched quality, cost and source evaluation plus code review before release.

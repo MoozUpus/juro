@@ -11,6 +11,18 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `9eee8d54` centralizes the current authenticated-chat, guest-chat
+  and document-analysis prompt identities. Persisted run hashes and protected
+  Admin now share the registry; Admin exposes version IDs and real cost,
+  quality, emergency-control and provider-health links without exposing prompt
+  text or secrets.
+- RU/UZ Admin copy states that no A/B prompt experiment is active and requires
+  matched quality, cost and source evaluation before a variant. This does not
+  claim an append-only historical prompt ledger.
+- Local gates passed focused 8/8, core 1122/1122,
+  Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check,
+  lint and production artifact validation. No real Admin/MFA browser session
+  was available, so signed-in verification is not claimed.
 - Candidate `6bb8d607` makes protected Admin AI settings expose the actual
   Fast/Balanced/Deep runtime mapping. Execution, run reservation, fallback and
   the localized operator summary use the same contract; the cards show the

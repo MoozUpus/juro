@@ -71,6 +71,18 @@ type-check, lint and artifact budgets passed. The CSS budget is tight at
 596.6/600.0 KiB. No real Admin/MFA session was available, so protected browser
 verification is not claimed. The candidate is not deployed.
 
+**Admin AI prompt-registry candidate:** commit `9eee8d54` centralizes the
+current prompt identities for authenticated chat, guest chat and document
+analysis. Their persisted run hashes and the protected localized Admin console
+share the same code-owned registry. Admin exposes only version IDs, the
+review/evaluation gate and links to existing cost, quality, emergency-control
+and provider-health surfaces; prompt text and secrets remain server-side. RU/UZ
+copy truthfully records that no A/B prompt experiment is active. Focused 8/8,
+core 1122/1122, Cloudflare/infrastructure 203/203, rendered Worker 35/35,
+type-check, lint and production artifact budgets passed. This does not claim an
+append-only historical prompt ledger or a signed-in Admin browser replay. The
+candidate is not deployed.
+
 ## Current production recovery
 
 Worker 161 safely classified the repeated Anthropic HTTP 400 as

@@ -1,5 +1,21 @@
 # Test report — current evidence through 2026-08-29
 
+## Admin AI prompt-registry candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `9eee8d54` |
+| Runtime/display drift control | PASS — authenticated chat, guest chat and document-analysis run hashes use the same code-owned registry rendered by protected Admin |
+| Data boundary | PASS — Admin receives three current version IDs and the review/evaluation gate; system-prompt text and secrets are not exposed |
+| Operations access | PASS source — localized links point to the existing cost, AI-quality, emergency feature-control and provider-health pages |
+| Experiment truthfulness | PASS — RU/UZ copy states that no A/B prompt experiment is active and requires matched quality, cost and source evaluation before a variant |
+| Focused regression | PASS — 8/8 prompt-registry and reasoning-mode tests |
+| Full Platform release gate | PASS — core 1122/1122, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check, lint and production artifact validation |
+| Artifact budgets | PASS — CSS 596.6/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3647.0/6144.0 KiB |
+| Protected browser replay | NOT RUN — no authorized real Admin/MFA session was available; no signed-in browser claim is made |
+| History boundary | OPEN — this exposes the current code-owned identities; append-only historical prompt-release records are not claimed |
+| Release boundary | NOT DEPLOYED — no Worker/Sites publish, migration, D1, DNS, notification or customer-data mutation |
+
 ## Admin Fast/Balanced/Deep routing transparency candidate
 
 | Gate | Result |
