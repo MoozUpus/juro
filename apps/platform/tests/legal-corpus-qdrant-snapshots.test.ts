@@ -182,6 +182,7 @@ test("frozen dense corpus writes checksum-verified Qdrant snapshot and deduplica
       BACKUP_BUCKET: r2 as unknown as R2Bucket,
       LEGAL_CORPUS_DENSE_ENABLED: "true",
       LEGAL_CORPUS_AUTO_INGEST_ENABLED: "false",
+      LEGAL_CORPUS_QDRANT_REBUILD_APPROVED: "true",
       QDRANT_URL: "https://qdrant.internal",
       QDRANT_API_KEY: "secret",
       QDRANT_COLLECTION: "juro_legal_staging",

@@ -436,6 +436,9 @@ export async function ensureLegalCorpusQdrantAvailable(
 ): Promise<EnsureLegalCorpusQdrantResult> {
   const client = options.client ?? new QdrantLegalCorpusClient(env);
   const ledger = await denseLedger(env.DB);
+  const snapshotRow = await env.DB.prepare(
+    "SELECT 1 AS present FROM legal_corpus_snapshots LIMIT 1",
+  ).first<{ present: number }>();
   const exists = await client.collectionExists();
   if (exists) {
     await client.assertCompatible();
@@ -453,6 +456,7 @@ export async function ensureLegalCorpusQdrantAvailable(
     env.APP_ENV === "staging"
     && env.LEGAL_CORPUS_AUTO_INGEST_ENABLED !== "true"
     && env.LEGAL_CORPUS_QDRANT_REBUILD_APPROVED === "true"
+    && !snapshotRow
   ) {
     // The approved staging recovery path is intentionally disjoint from the
     // normal restore path: when an ephemeral Container was reset before any
