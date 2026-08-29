@@ -22,9 +22,12 @@ database.
   environment.
 - There is no production environment in the shard config.
 - `LEGAL_CORPUS_DENSE_ENABLED=true` only for the explicitly approved staging
-  backfill; `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` keeps source acquisition
-  and new Lex.uz ingestion frozen. The private Qdrant and embedding bindings
-  remain staging-only and the separate benchmark/restore gate is still open.
+  backfill. During the separately approved catch-up window,
+  `LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED=true` drains only existing durable
+  fetch/version jobs while `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` keeps
+  catalog discovery and metadata seeding frozen. The private Qdrant and
+  embedding bindings remain staging-only and the separate benchmark/restore
+  gate is still open.
 - The primary legal-corpus Worker still points to v2; its capacity guard fails
   closed before source work. It does not share a crawl stream with the shard.
 

@@ -88,9 +88,12 @@ All corpus flags are server-side and default to `false`. Production keeps every
 corpus flag disabled. After explicit approval, verified D1 backup/restore and
 the fail-closed release verifier were in place, staging alone enabled bounded
 official-source acquisition, multilingual parsing, historical discovery and
-shadow retrieval. Staging also has a private, route-free Qdrant Container and
-embedding service binding, but dense Qdrant retrieval remains disabled and the
-container remains dormant. The direct
+shadow retrieval. During the current catch-up window,
+`LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED=true` drains only already-materialized
+fetch/version jobs; `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` keeps new catalog
+discovery and metadata seeding frozen. Staging also has a private, route-free
+Qdrant Container and embedding service binding, but dense Qdrant retrieval
+remains disabled while the approved queue drain runs. The direct
 request-scoped Lex flow continues to serve visible answers until the staging
 evidence gate verifies indexed retrieval. When
 enabled, chat searches indexed trusted chunks first and uses the validated
@@ -313,8 +316,9 @@ Production declares neither private binding and remains fail-closed.
 
 Cloudflare Container disk is ephemeral, so a persisted D1 vector ID is never
 accepted as proof that the point still exists. Dense backfill is structurally
-blocked while Lex acquisition is enabled. After acquisition is frozen and one
-entire cron invocation starts with no missing vectors or pending jobs, the
+blocked while Lex acquisition or the approved queue-only drain is enabled.
+After acquisition is frozen and one entire cron invocation starts with no
+missing vectors or pending jobs, the
 corpus Worker creates a Qdrant collection snapshot, streams it to the private
 `BACKUP_BUCKET` with Qdrant's SHA-256 as the R2 write checksum, verifies the R2
 head and stores a hashed manifest in `legal_corpus_snapshots`. A later cold

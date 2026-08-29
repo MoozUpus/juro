@@ -335,6 +335,7 @@ type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED?: string;
   LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN?: string;
   LEGAL_CORPUS_QDRANT_BACKFILL_BATCHES_PER_RUN?: string;
+  LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED?: string;
 };
 
 type ClaimedRun = {
@@ -398,10 +399,22 @@ function ingestionEnabled(env: LegalCorpusWorkerEnv): boolean {
     && featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED");
 }
 
+/**
+ * Drain only already-materialized ingestion jobs during an approved staging
+ * catch-up window. Catalog discovery, metadata seeding and live source
+ * expansion remain behind LEGAL_CORPUS_AUTO_INGEST_ENABLED.
+ */
+function queueProcessingEnabled(env: LegalCorpusWorkerEnv): boolean {
+  return env.APP_ENV === "staging"
+    && featureEnabled(env, "LEGAL_CORPUS_ENABLED")
+    && env.LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED === "true";
+}
+
 function denseBackfillEnabled(env: LegalCorpusWorkerEnv): boolean {
   return featureEnabled(env, "LEGAL_CORPUS_ENABLED")
     && featureEnabled(env, "LEGAL_CORPUS_DENSE_ENABLED")
-    && !ingestionEnabled(env);
+    && !ingestionEnabled(env)
+    && !queueProcessingEnabled(env);
 }
 
 function sparseCompressionBackfillEnabled(env: LegalCorpusWorkerEnv): boolean {
@@ -410,7 +423,7 @@ function sparseCompressionBackfillEnabled(env: LegalCorpusWorkerEnv): boolean {
 }
 
 function enabled(env: LegalCorpusWorkerEnv): boolean {
-  return ingestionEnabled(env) || denseBackfillEnabled(env);
+  return ingestionEnabled(env) || queueProcessingEnabled(env) || denseBackfillEnabled(env);
 }
 
 function processCron(env: LegalCorpusWorkerEnv): string {
@@ -646,46 +659,49 @@ export async function handleLegalCorpusScheduled(
     // known Lex reader-control labels that an older parser build could have
     // stored inside a title, keeping source cards and sparse title boosts clean.
     const titleRepairs = await reconcileLegalCorpusTitleUiNoise(env.DB);
-    if (ingestionEnabled(env)) {
+    const wait = async (delayMs: number) => {
       await renewRunLease(env, run);
-      catalog = await seedLexCatalogDiscoveryCheckpoints(env);
-      const wait = async (delayMs: number) => {
+      await scheduler.wait(delayMs);
+      await renewRunLease(env, run);
+    };
+    const pacerStats = { robotsNetworkRequests: 0, persistentRobotsCacheHits: 0 };
+    const fetchImpl = createPacedLexFetch({ db: env.DB, wait, stats: pacerStats });
+    if (ingestionEnabled(env) || queueProcessingEnabled(env)) {
+      const autoIngest = ingestionEnabled(env);
+      await renewRunLease(env, run);
+      if (autoIngest) {
+        catalog = await seedLexCatalogDiscoveryCheckpoints(env);
         await renewRunLease(env, run);
-        await scheduler.wait(delayMs);
+        coreCodeSeeds = await seedLexCoreCodeJobs(env, { now: new Date(controller.scheduledTime) });
         await renewRunLease(env, run);
-      };
-      const pacerStats = { robotsNetworkRequests: 0, persistentRobotsCacheHits: 0 };
-      const fetchImpl = createPacedLexFetch({ db: env.DB, wait, stats: pacerStats });
-      await renewRunLease(env, run);
-      coreCodeSeeds = await seedLexCoreCodeJobs(env, { now: new Date(controller.scheduledTime) });
-      await renewRunLease(env, run);
-      coreCode = await runNextLexCoreCodeDiscovery(env, {
-        now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
-      });
-      if (coreCode.status === "all_settled") {
-        for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
-          await renewRunLease(env, run);
-          const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl, pacingAlreadyApplied: true });
-          discoveries.push(result);
-          if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
+        coreCode = await runNextLexCoreCodeDiscovery(env, {
+          now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
+        });
+        if (coreCode.status === "all_settled") {
+          for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
+            await renewRunLease(env, run);
+            const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl, pacingAlreadyApplied: true });
+            discoveries.push(result);
+            if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
+          }
         }
+        // A shard handoff can preserve immutable discovery rows while an
+        // interrupted source export omits their matching fetch jobs. Repair
+        // that durable gap regardless of the core-code pager status: discovery
+        // rows already committed in a completed catalogue are safe to queue,
+        // and keeping this outside the code gate ensures laws/ПКМ/ПП/УП cannot
+        // be starved by a stale core target marker. Network work remains in the
+        // bounded single-stream fetch path below.
+        await reconcileLexCatalogFetchJobs(env, {
+          now: new Date(controller.scheduledTime),
+          limit: MAX_STAGING_INGESTION_JOBS_PER_RUN * 12,
+        });
       }
-      // A shard handoff can preserve immutable discovery rows while an
-      // interrupted source export omits their matching fetch jobs. Repair
-      // that durable gap regardless of the core-code pager status: discovery
-      // rows already committed in a completed catalogue are safe to queue,
-      // and keeping this outside the code gate ensures laws/ПКМ/ПП/УП cannot
-      // be starved by a stale core target marker. Network work remains in the
-      // bounded single-stream fetch path below.
-      await reconcileLexCatalogFetchJobs(env, {
-        now: new Date(controller.scheduledTime),
-        limit: MAX_STAGING_INGESTION_JOBS_PER_RUN * 12,
-      });
-      const preferredCoreCodeIds = [...new Set([
+      const preferredCoreCodeIds = autoIngest ? [...new Set([
         ...LEX_CORE_CODE_SEED_IDS,
         ...coreCode.priorityCanonicalDocumentIds,
-      ])];
-      const coverageBootstrapTarget = coreCode.status === "all_settled"
+      ])] : [];
+      const coverageBootstrapTarget = autoIngest && coreCode.status === "all_settled"
         ? await nextLegalCorpusCoverageBootstrapTarget(env.DB)
         : null;
       const nominalIngestionBudget = legalCorpusIngestionJobBudget(discoveries, {
@@ -695,7 +711,8 @@ export async function handleLegalCorpusScheduled(
           configured: env.LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN,
         }),
       });
-      let corePagerContinuationRequired = legalCorpusCorePagerContinuationRequired(coreCode);
+      let corePagerContinuationRequired = autoIngest
+        && legalCorpusCorePagerContinuationRequired(coreCode);
       let corePagerContinuationAttempted = false;
       const ingestionBudget = legalCorpusIngestionBudgetForCorePager({
         ingestionBudget: nominalIngestionBudget,
@@ -722,6 +739,7 @@ export async function handleLegalCorpusScheduled(
         }) && !reservedVersionSlot;
         const preferredSlotIndex = index - versionSlotIndexes.filter((slot) => slot < index).length;
         const result = await runNextLegalCorpusIngestionJob(env, {
+          allowQueuedProcessing: queueProcessingEnabled(env),
           wait,
           fetchImpl,
           heartbeat: () => renewRunLease(env, run),

@@ -1511,6 +1511,12 @@ export async function runNextLegalCorpusIngestionJob(
   env: LegalCorpusIngestionEnv,
   input: {
     now?: Date;
+    /**
+     * Staging-only queue drain approval. This permits processing jobs that
+     * already exist in the durable queue while keeping catalog discovery and
+     * metadata seeding behind LEGAL_CORPUS_AUTO_INGEST_ENABLED.
+     */
+    allowQueuedProcessing?: boolean;
     wait?: (delayMs: number) => Promise<void>;
     fetchImpl?: FetchLike;
     heartbeat?: () => Promise<void>;
@@ -1532,7 +1538,9 @@ export async function runNextLegalCorpusIngestionJob(
     preferredCanonicalDocumentIds?: readonly string[];
   } = {},
 ): Promise<LegalCorpusJobRunResult> {
-  if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
+  if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED")
+    || (!featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")
+      && input.allowQueuedProcessing !== true)) {
     return { claimed: false, status: "disabled", jobId: null, safeErrorCode: null };
   }
   const nowDate = input.now ?? new Date();

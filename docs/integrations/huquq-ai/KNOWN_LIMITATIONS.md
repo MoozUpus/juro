@@ -30,13 +30,15 @@
   and do not affect legal-answer freshness. User-upload factual grounding now
   has a separate private provider path; it does not promote owner material into
   global law or make a private document an official source.
-- Staging corpus acquisition is intentionally stopped for the current release
-  evidence phase. The shard Worker remains on
-  `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` (dense-backfill version
-  `99e4216c-35af-40d5-b4a1-1f2fed7ff609`); post-deploy read-only probes found
-  no new documents and `rows_written=0`. The shard-3 control row remains
-  `active` and its durable queued jobs were not deleted or rewritten, so the
-  ingestion queue is not yet a release-frozen queue. The read-only federated
+- Staging source discovery and metadata seeding remain disabled. Under the
+  owner's explicit queue-processing approval, the shard Worker now uses the
+  staging-only `LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED=true` path while keeping
+  `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` and live Lex disabled. It drains only
+  already-materialized durable `fetch/version` jobs through the existing
+  single-stream robots pacer and lock; it does not start new catalog discovery.
+  The shard-3 control row remains `active` and queued jobs are not deleted or
+  rewritten, so the ingestion queue is not yet a release-frozen queue. The
+  read-only federated
   runtime routes the frozen legacy, v2, shard-1 and shard-2 bindings; shard-3
   remains outside that release set. Per-database totals, queue reconciliation,
   duplicate identity findings and the remaining release gates are recorded in

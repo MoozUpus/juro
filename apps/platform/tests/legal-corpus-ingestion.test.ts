@@ -190,6 +190,36 @@ test("official Lex ingestion is article-first, immutable and idempotent", async 
   }
 });
 
+test("approved queue-only processing drains an existing job while auto-ingest stays disabled", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = { ...envFor(d1, bucket), LEGAL_CORPUS_AUTO_INGEST_ENABLED: "false" as const };
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/12347",
+      now,
+      correlationId: "approved-queue-only",
+    });
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      allowQueuedProcessing: true,
+      now,
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const job = sqlite.prepare(
+      "SELECT status,last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?",
+    ).get(queued.jobId) as { status: string; errorCode: string | null };
+    assert.deepEqual({ ...job }, { status: "completed", errorCode: null });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("large version writes renew the scheduler lease between D1 batches", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
