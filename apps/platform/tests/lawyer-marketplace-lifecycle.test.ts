@@ -11,6 +11,8 @@ import {
 } from "../lib/platform/lawyer-marketplace";
 import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
 import { localizedLawyerProfileStatusNotification } from "../lib/platform/lawyer-profile-notifications";
+import { moderateLawyerProfile } from "../lib/platform/lawyer-profile-moderation-service";
+import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const completeProfile: LawyerMarketplaceCompletionInput = {
   displayName: "Юрист JURO",
@@ -145,8 +147,80 @@ test("availability-only edits preserve an approved public profile", () => {
   const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
   assert.match(profileRoute, /preservesPublishedProfile/);
   assert.match(profileRoute, /!moderatedFieldsChanged\(current, next\)/);
-  assert.match(profileRoute, /public_approved_at=CASE WHEN \?='public_approved' THEN public_approved_at ELSE NULL END/);
+  assert.match(profileRoute, /availability_status=\?,next_available_at=\?,updated_at=\?/);
+  assert.match(profileRoute, /resultingRevision = preservesPublishedProfile/);
+  assert.doesNotMatch(
+    profileRoute.match(/const updateStatement = preservesPublishedProfile[\s\S]*?\n    : db/)?.[0] ?? "",
+    /profile_revision=profile_revision\+1|public_approved_at/u,
+  );
   assert.match(profileRoute, /publicationPreserved: preservesPublishedProfile/);
+});
+
+test("availability-only updates retain the exact moderated revision at the D1 boundary", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const now = "2026-08-29T22:20:00.000Z";
+  const moderatorId = "10000000-0000-4000-8000-000000000001";
+  const lawyerId = "10000000-0000-4000-8000-000000000002";
+  const workspaceId = "20000000-0000-4000-8000-000000000001";
+  const profileId = "30000000-0000-4000-8000-000000000001";
+  try {
+    sqlite.prepare(
+      `INSERT INTO user_profiles (id,email,locale,account_type,created_at,updated_at)
+       VALUES (?,'moderator@example.test','ru','individual',?,?),
+         (?,'lawyer@example.test','ru','lawyer',?,?)`,
+    ).run(moderatorId, now, now, lawyerId, now, now);
+    sqlite.prepare(
+      "INSERT INTO workspaces(id,type,name,locale,created_at,updated_at) VALUES (?,'individual','Lawyer workspace','ru',?,?)",
+    ).run(workspaceId, now, now);
+    sqlite.prepare(
+      "UPDATE user_profiles SET default_workspace_id=?,phone='+998901234567' WHERE id=?",
+    ).run(workspaceId, lawyerId);
+    sqlite.prepare(
+      `INSERT INTO lawyer_profiles (
+        id,user_id,display_name,specialties_json,languages_json,status,marketplace_status,
+        experience_years,price_description,availability_status,advocate_status,firm_name,
+        city,region,education,consultation_formats_json,profile_photo_key,created_at,updated_at
+      ) VALUES (?,?,'JURO Lawyer','["contracts"]','["ru"]','pending','pending_review',
+        5,'By agreement','available','declared','JURO Legal','Tashkent','Tashkent',
+        'Law school','["video"]','lawyer-profiles/test/photo.webp',?,?)`,
+    ).run(profileId, lawyerId, now, now);
+
+    await moderateLawyerProfile(d1, {
+      profileId,
+      moderatorUserId: moderatorId,
+      decision: "approved",
+      reason: "Profile completeness confirmed.",
+      now: new Date(now),
+    });
+    sqlite.prepare(
+      `UPDATE lawyer_profiles SET availability_status='limited',
+        next_available_at='2026-09-01T09:00:00.000Z',updated_at=?
+       WHERE id=? AND profile_revision=1 AND status='public_approved'
+         AND marketplace_status='public_approved'`,
+    ).run("2026-08-29T22:25:00.000Z", profileId);
+
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        `SELECT status,marketplace_status AS marketplaceStatus,
+          profile_revision AS profileRevision,availability_status AS availabilityStatus
+         FROM lawyer_profiles WHERE id=?`,
+      ).get(profileId) },
+      {
+        status: "public_approved",
+        marketplaceStatus: "public_approved",
+        profileRevision: 1,
+        availabilityStatus: "limited",
+      },
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM lawyer_profile_moderation WHERE lawyer_profile_id=? AND profile_revision=1",
+      ).get(profileId) as { total: number }).total,
+      1,
+    );
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("a correction-requested profile remains fail-closed if it reaches a directory projection", () => {

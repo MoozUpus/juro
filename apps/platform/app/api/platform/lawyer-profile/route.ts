@@ -521,44 +521,62 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     locale,
     marketplaceStatus,
   );
+  const resultingRevision = preservesPublishedProfile
+    ? profile.profileRevision
+    : profile.profileRevision + 1;
+  const updateStatement = preservesPublishedProfile
+    ? db
+        .prepare(
+          `UPDATE lawyer_profiles SET
+         availability_status=?,next_available_at=?,updated_at=?
+         WHERE id=? AND user_id=? AND profile_revision=?
+           AND status='public_approved' AND marketplace_status='public_approved'`,
+        )
+        .bind(
+          next.availabilityStatus,
+          next.nextAvailableAt,
+          now,
+          profile.id,
+          user.id,
+          profile.profileRevision,
+        )
+    : db
+        .prepare(
+          `UPDATE lawyer_profiles SET
+         display_name=?,specialties_json=?,languages_json=?,experience_years=?,
+         price_description=?,consultation_duration_minutes=?,additional_services_json=?,
+         availability_status=?,next_available_at=?,advocate_status=?,
+         firm_name=?,bio=?,city=?,region=?,education=?,consultation_formats_json=?,
+         profile_revision=profile_revision+1,status=?,marketplace_status=?,
+         public_approved_at=NULL,updated_at=?
+         WHERE id=? AND user_id=? AND profile_revision=?`,
+        )
+        .bind(
+          next.displayName,
+          JSON.stringify(next.specialties),
+          JSON.stringify(next.languages),
+          next.experienceYears,
+          next.priceDescription,
+          next.consultationDurationMinutes,
+          JSON.stringify(next.additionalServices),
+          next.availabilityStatus,
+          next.nextAvailableAt,
+          next.advocateStatus,
+          next.firmName,
+          next.bio,
+          next.city,
+          next.region,
+          next.education,
+          JSON.stringify(next.consultationFormats),
+          profileStatus,
+          marketplaceStatus,
+          now,
+          profile.id,
+          user.id,
+          profile.profileRevision,
+        );
   const statements = [
-    db
-      .prepare(
-        `UPDATE lawyer_profiles SET
-       display_name=?,specialties_json=?,languages_json=?,experience_years=?,
-       price_description=?,consultation_duration_minutes=?,additional_services_json=?,
-       availability_status=?,next_available_at=?,advocate_status=?,
-       firm_name=?,bio=?,city=?,region=?,education=?,consultation_formats_json=?,
-       profile_revision=profile_revision+1,status=?,marketplace_status=?,
-       public_approved_at=CASE WHEN ?='public_approved' THEN public_approved_at ELSE NULL END,
-       updated_at=?
-       WHERE id=? AND user_id=? AND profile_revision=?`,
-      )
-      .bind(
-        next.displayName,
-        JSON.stringify(next.specialties),
-        JSON.stringify(next.languages),
-        next.experienceYears,
-        next.priceDescription,
-        next.consultationDurationMinutes,
-        JSON.stringify(next.additionalServices),
-        next.availabilityStatus,
-        next.nextAvailableAt,
-        next.advocateStatus,
-        next.firmName,
-        next.bio,
-        next.city,
-        next.region,
-        next.education,
-        JSON.stringify(next.consultationFormats),
-        profileStatus,
-        marketplaceStatus,
-        marketplaceStatus,
-        now,
-        profile.id,
-        user.id,
-        profile.profileRevision,
-      ),
+    updateStatement,
     db
       .prepare(
         `INSERT INTO workspace_audit_events
@@ -584,7 +602,7 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
         now,
         profile.id,
         user.id,
-        profile.profileRevision + 1,
+        resultingRevision,
         profileStatus,
         marketplaceStatus,
         now,
@@ -612,7 +630,7 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
           now,
           profile.id,
           user.id,
-          profile.profileRevision + 1,
+          resultingRevision,
           profileStatus,
           marketplaceStatus,
           now,
