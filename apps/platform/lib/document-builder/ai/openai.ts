@@ -48,7 +48,13 @@ interface ResponsesApiPayload {
   incomplete_details?: { reason?: string } | null;
   output?: Array<{
     type?: string;
-    content?: Array<{ type?: string; text?: string; refusal?: string }>;
+    action?: { sources?: Array<{ type?: string; url?: string }> };
+    content?: Array<{
+      type?: string;
+      text?: string;
+      refusal?: string;
+      annotations?: Array<{ type?: string; url?: string; title?: string }>;
+    }>;
   }>;
   usage?: {
     input_tokens?: number;
@@ -74,7 +80,22 @@ export type AiStructuredResult<T> = {
   latencyMs: number;
   usage: AiProviderUsage;
   fallbackFromProvider: "openai" | "anthropic" | null;
+  /** True only for a server-built answer copied from already verified spans
+   * after every configured synthesis provider failed. */
+  sourceFallback?: boolean;
+  sourceFallbackReason?: "PROVIDER_TIMEOUT" | "PROVIDER_UNAVAILABLE" | "INVALID_AI_OUTPUT";
+  /** Provider-observed web URLs only; model-authored URLs are excluded. */
+  webSources?: Array<{ url: string; title: string | null }>;
 };
+
+export type OpenAiWebSearchPolicy =
+  | {
+    purpose: "official_lex_discovery";
+    allowedDomains: readonly ("lex.uz" | "www.lex.uz")[];
+  }
+  | {
+    purpose: "secondary_research";
+  };
 export type AiStructuredProgress =
   | { stage: "provider_started"; provider: "openai"; model: string }
   | { stage: "provider_delta"; receivedCharacters: number };
@@ -135,8 +156,10 @@ export async function callOpenAiStructured<T>(options: {
   textVerbosity?: "low" | "medium" | "high";
   /** Bound generated output for latency-sensitive structured interactions. */
   maxOutputTokens?: number;
-  /** The only browsing tool supported by this low-level adapter. */
-  webSearchAllowedDomains?: readonly ("lex.uz" | "www.lex.uz")[];
+  /** Browsing is opt-in and constrained to a server-owned purpose. */
+  webSearch?: OpenAiWebSearchPolicy;
+  /** Bounds provider-managed built-in tool calls for one structured response. */
+  maxToolCalls?: number;
 }): Promise<AiStructuredResult<T>> {
   const configuration = runtimeEnv();
   const apiKey = configuration.OPENAI_API_KEY || (configuration.AI_PROVIDER === "openai" ? configuration.AI_PROVIDER_API_KEY : undefined);
@@ -182,12 +205,22 @@ export async function callOpenAiStructured<T>(options: {
             ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
             ...(options.reasoningEffort ? { reasoning: { effort: options.reasoningEffort } } : {}),
             ...(options.maxOutputTokens ? { max_output_tokens: options.maxOutputTokens } : {}),
-            ...(options.webSearchAllowedDomains?.length ? {
+            ...(options.webSearch ? {
               tools: [{
                 type: "web_search",
-                filters: { allowed_domains: [...options.webSearchAllowedDomains] },
+                external_web_access: true,
+                search_context_size: options.webSearch.purpose === "secondary_research" ? "medium" : "low",
+                ...(options.webSearch.purpose === "official_lex_discovery" ? {
+                  filters: { allowed_domains: [...options.webSearch.allowedDomains] },
+                } : {}),
               }],
-              tool_choice: "auto",
+              // Discovery must be grounded in an actual provider-observed
+              // search call; model memory or a guessed URL is never enough.
+              tool_choice: "required",
+              include: ["web_search_call.action.sources"],
+              ...(options.maxToolCalls
+                ? { max_tool_calls: Math.max(1, Math.min(Math.floor(options.maxToolCalls), 8)) }
+                : {}),
             } : {}),
             stream: Boolean(options.onProgress),
             text: {
@@ -244,10 +277,44 @@ export async function callOpenAiStructured<T>(options: {
       const text = content.find((item) => item.type === "output_text" && item.text)?.text;
       if (!text) {
         if (attempt < maxAttempts) continue;
-        throw new AiUnavailableError("AI-проверка не вернула структурированный результат.", "INVALID_AI_OUTPUT", false);
+        throw new AiUnavailableError(
+          "AI-проверка не вернула структурированный результат.",
+          "INVALID_AI_OUTPUT",
+          false,
+          null,
+          "structured_output_missing",
+        );
+      }
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(text);
+      } catch {
+        if (attempt < maxAttempts) continue;
+        throw new AiUnavailableError(
+          "AI-проверка вернула некорректный JSON.",
+          "INVALID_AI_OUTPUT",
+          false,
+          null,
+          "structured_json_invalid",
+        );
       }
       try {
-        const data = options.parse(JSON.parse(text));
+        const data = options.parse(decoded);
+        const webSourceTitles = new Map<string, string>();
+        for (const item of payload.output ?? []) {
+          for (const contentItem of item.content ?? []) {
+            for (const annotation of contentItem.annotations ?? []) {
+              if (annotation.type === "url_citation" && annotation.url) {
+                webSourceTitles.set(annotation.url, annotation.title?.trim() || "");
+              }
+            }
+          }
+        }
+        const webSources = [...new Set((payload.output ?? []).flatMap((item) =>
+          item.type === "web_search_call"
+            ? (item.action?.sources ?? []).flatMap((source) => source.type === "url" && source.url ? [source.url] : [])
+            : [],
+        ))].map((url) => ({ url, title: webSourceTitles.get(url) || null }));
         return {
           data,
           provider: "openai",
@@ -257,10 +324,17 @@ export async function callOpenAiStructured<T>(options: {
           latencyMs: Date.now() - startedAt,
           usage: totalUsage,
           fallbackFromProvider: null,
+          ...(webSources.length ? { webSources } : {}),
         };
       } catch {
         if (attempt < maxAttempts) continue;
-        throw new AiUnavailableError("AI-проверка вернула результат, не соответствующий контракту.", "INVALID_AI_OUTPUT", false);
+        throw new AiUnavailableError(
+          "AI-проверка вернула результат, не соответствующий контракту.",
+          "INVALID_AI_OUTPUT",
+          false,
+          null,
+          "structured_contract_invalid",
+        );
       }
     } catch (error) {
       if (error instanceof AiUnavailableError) {

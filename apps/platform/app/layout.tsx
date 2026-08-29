@@ -4,6 +4,7 @@ import "./globals.css";
 import "./invite/invite.css";
 import "./legal/legal.css";
 import "./_platform/lawyer-workspace.css";
+import "./_platform/legal-answer.css";
 import { THEME_BOOTSTRAP_SCRIPT } from "./_theme/theme";
 
 const manrope = Manrope({

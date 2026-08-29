@@ -1,5 +1,10 @@
 import { z } from "zod";
 import type { LegalDatabaseFreshness } from "../legal/verified-retrieval";
+import {
+  nonRepeatingLegalDetail,
+  sanitizeClarificationQuestions,
+} from "./legal-output-safety";
+export { deriveLegalEvidenceMode } from "./legal-evidence-mode";
 
 const sourceIdList = z.array(z.string().min(1).max(160)).max(12);
 
@@ -8,6 +13,25 @@ export const legalFindingSchema = z.object({
   explanation: z.string().min(1).max(4_000),
   sourceIds: sourceIdList,
 }).strict();
+
+/**
+ * Non-authoritative context attached by JURO, never by the model. A secondary
+ * public-web material can explain background but cannot establish legislation,
+ * so it is presented here instead of under `confirmedFindings`.
+ */
+export const legalReferenceNoteSchema = z.object({
+  title: z.string().min(1).max(240),
+  note: z.string().min(1).max(3_000),
+  sourceIds: sourceIdList,
+}).strict();
+
+export const legalConditionalBranchSchema = z.object({
+  condition: z.string().min(1).max(1_000),
+  outcome: z.string().min(1).max(3_000),
+  sourceIds: sourceIdList,
+}).strict();
+
+const legalConditionalBranchListSchema = z.array(legalConditionalBranchSchema).max(8);
 
 export const legalAssumptionSchema = z.object({
   statement: z.string().min(1).max(1_000),
@@ -52,7 +76,7 @@ export const legalSourceRefSchema = legalSourceRefModelSchema.extend({
     "SECONDARY_REFERENCE",
   ]).optional(),
   language: z.enum(["uz-Latn", "uz-Cyrl", "ru", "en"]).optional(),
-  sourceOrigin: z.enum(["indexed", "live"]).optional(),
+  sourceOrigin: z.enum(["indexed", "live", "web"]).optional(),
 }).strict();
 
 export const requiredDocumentSchema = z.object({
@@ -90,6 +114,7 @@ export const legalChatResponseSchema = z.object({
   responseKind: z.enum(["answer", "clarification_required"]),
   summary: z.string().min(1).max(1_500),
   answer: z.string().min(1).max(20_000),
+  conditionalBranches: legalConditionalBranchListSchema.optional(),
   language: z.enum(["ru", "uz"]),
   jurisdiction: z.literal("UZ"),
   answerMode: z.enum(["short", "detailed"]),
@@ -110,10 +135,12 @@ export const legalChatResponseSchema = z.object({
   suggestedDocument: suggestedDocumentSchema.nullable(),
   suggestLawyer: z.boolean(),
   legalDatabaseAsOf: z.string().max(64),
-  sourceAccessMode: z.enum(["direct", "approved_package"]).optional(),
+  sourceAccessMode: z.enum(["direct", "approved_package", "mixed"]).optional(),
+  evidenceMode: z.enum(["official", "mixed", "secondary_only", "private_only", "none"]).optional(),
   sourcesRetrievedAt: z.string().max(64).nullable().optional(),
   sourceValidationStatus: z.enum(["validated", "unavailable"]).optional(),
   coverageStatus: z.enum(["good_coverage", "partial_coverage", "weak_coverage", "no_coverage"]).optional(),
+  referenceNotes: z.array(legalReferenceNoteSchema).max(8).optional(),
 }).strict();
 
 export type LegalChatResponse = z.infer<typeof legalChatResponseSchema>;
@@ -122,16 +149,24 @@ export type LegalChatResponse = z.infer<typeof legalChatResponseSchema>;
  * Source-access fields are attached by the server after direct retrieval has
  * been validated. They are intentionally absent from the provider contract:
  * OpenAI Structured Outputs requires every property in an object schema to be
- * listed as required, whereas these three fields must remain server-owned.
+ * listed as required, whereas these fields must remain server-owned.
+ * `referenceNotes` is server-owned for a second reason: the model must not be
+ * able to choose which material is demoted to non-authoritative context.
  */
 export const legalChatModelResponseSchema = legalChatResponseSchema
   .omit({
     sourceAccessMode: true,
+    evidenceMode: true,
     sourcesRetrievedAt: true,
     sourceValidationStatus: true,
     coverageStatus: true,
+    referenceNotes: true,
+    conditionalBranches: true,
   })
-  .extend({ sources: z.array(legalSourceRefModelSchema).max(12) });
+  .extend({
+    conditionalBranches: legalConditionalBranchListSchema,
+    sources: z.array(legalSourceRefModelSchema).max(12),
+  });
 
 export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, {
   target: "draft-7",
@@ -151,12 +186,23 @@ export function forceClarificationWithoutVerifiedSources(
     legalDatabaseAsOf: string;
   },
 ): LegalChatResponse {
-  // When no verified source survives, no provider-authored prose may remain in
-  // the terminal payload — including a seemingly harmless clarification that
-  // can smuggle an unsupported deadline, document list or legal premise.
-  const clarificationQuestions = [options.locale === "ru"
-    ? "Какие факты и даты можно уточнить?"
-    : "Qaysi faktlar va sanalarni aniqlashtirish mumkin?"];
+  // No verified source survived any tier of the authority ladder: the JURO
+  // index, live Lex.uz and public-web reference material were all empty for
+  // this request. No provider-authored prose may remain in the terminal
+  // payload, because an answer written from the model's general knowledge is
+  // indistinguishable, to the reader, from one grounded in Uzbek law. Only
+  // fixed refusal text and sanitized follow-up questions survive — a
+  // "question" can otherwise smuggle an unsupported deadline, document list
+  // or legal premise. This step does not charge the answer limit.
+  const clarificationQuestions = sanitizeClarificationQuestions(
+    result.clarificationQuestions,
+    options.locale,
+  );
+  if (clarificationQuestions.length === 0) {
+    clarificationQuestions.push(options.locale === "ru"
+      ? "Какие ключевые даты, документы и действия сторон уже известны?"
+      : "Qaysi asosiy sanalar, hujjatlar va tomonlarning harakatlari ma’lum?");
+  }
   return {
     ...result,
     responseKind: "clarification_required",
@@ -166,12 +212,14 @@ export function forceClarificationWithoutVerifiedSources(
     answer: options.locale === "ru"
       ? "JURO пока не сформировал правовой вывод: релевантный фрагмент не удалось получить напрямую из доступных официальных источников. Ответьте на уточняющие вопросы или попробуйте позже — этот шаг не списывает лимит ответа."
       : "JURO hozircha huquqiy xulosa tuzmadi: tegishli parcha mavjud rasmiy manbalardan bevosita olinmadi. Aniqlashtiruvchi savollarga javob bering yoki keyinroq urinib ko‘ring — bu bosqich javob limitidan yechilmaydi.",
+    conditionalBranches: [],
     language: options.locale,
     jurisdiction: "UZ",
     answerMode: options.answerMode,
     reasoningMode: options.reasoningMode,
     clarificationQuestions,
     confirmedFindings: [],
+    referenceNotes: [],
     assumptions: [],
     risks: [],
     sources: [],
@@ -182,6 +230,7 @@ export function forceClarificationWithoutVerifiedSources(
     suggestedDocument: null,
     suggestLawyer: result.suggestLawyer || result.urgency !== "normal",
     legalDatabaseAsOf: options.legalDatabaseAsOf,
+    evidenceMode: "none",
   };
 }
 
@@ -195,12 +244,15 @@ export function enforceLegalDatabaseFreshness(
   },
 ): LegalChatResponse {
   if (freshness.status === "unavailable") {
-    const privateFactsOnly = result.sources.length > 0
-      && result.sources.every((source) => source.sourceClass === "USER_TRUSTED_PRIVATE");
-    if (privateFactsOnly) {
+    const nonLegislativeFactsOnly = result.sources.length > 0
+      && result.sources.every((source) =>
+        source.sourceClass === "USER_TRUSTED_PRIVATE"
+        || source.sourceClass === "SECONDARY_REFERENCE"
+      );
+    if (nonLegislativeFactsOnly) {
       const warning = options.locale === "ru"
-        ? "Факты ниже подтверждены только содержанием вашего документа. Достаточная норма в правовой базе JURO не найдена; документ не является официальным источником законодательства."
-        : "Quyidagi faktlar faqat sizning hujjatingiz mazmuni bilan tasdiqlangan. JURO huquqiy bazasida yetarli norma topilmadi; hujjat qonunchilikning rasmiy manbasi emas.";
+        ? "Факты ниже опираются только на ваши документы и/или справочные интернет-материалы. Достаточная норма Lex.uz не найдена; каждый такой материал не является официальным источником законодательства."
+        : "Quyidagi faktlar faqat hujjatlaringiz va/yoki internetdagi ma’lumotnoma materiallariga tayangan. Yetarli Lex.uz normasi topilmadi; bu materiallar qonunchilik tasdig‘i emas.";
       return {
         ...result,
         assumptions: [{
@@ -209,6 +261,7 @@ export function enforceLegalDatabaseFreshness(
             : "Huquqiy asos alohida tekshirilishi kerak",
           impact: warning,
         }, ...result.assumptions].slice(0, 16),
+        conditionalBranches: [],
         deadlines: [],
         successOutlook: null,
         suggestLawyer: true,
@@ -233,22 +286,35 @@ export function enforceLegalDatabaseFreshness(
       : "Huquqiy bazaning dolzarbligi tasdiqlanishi kerak",
     impact: warning.slice(0, 2_000),
   };
-  const formerFindings = result.confirmedFindings.map((finding) => ({
-    statement: finding.title.slice(0, 1_000),
-    impact: (options.locale === "ru"
-      ? `Ранее подтверждённый вывод переведён в предварительный до обновления базы: ${finding.explanation}`
-      : `Oldin tasdiqlangan xulosa baza yangilanguncha dastlabki deb ko‘rsatiladi: ${finding.explanation}`
-    ).slice(0, 2_000),
-  }));
+  const formerFindings = result.confirmedFindings.map((finding) => {
+    const uniqueDetail = nonRepeatingLegalDetail(finding.title, finding.explanation);
+    const prefix = options.locale === "ru"
+      ? "Ранее подтверждённый вывод переведён в предварительный до обновления базы"
+      : "Oldin tasdiqlangan xulosa baza yangilanguncha dastlabki deb ko‘rsatiladi";
+    return {
+      statement: finding.title.slice(0, 1_000),
+      impact: (uniqueDetail ? `${prefix}: ${uniqueDetail}` : `${prefix}.`).slice(0, 2_000),
+    };
+  });
+  const assumptions = [
+    staleAssumption,
+    ...result.assumptions,
+    ...formerFindings,
+  ].filter((assumption, index, all) => {
+    const key = `${assumption.statement.trim()}\n${assumption.impact.trim()}`;
+    return all.findIndex((candidate) =>
+      `${candidate.statement.trim()}\n${candidate.impact.trim()}` === key
+    ) === index;
+  }).slice(0, 16);
+  const answer = result.answer.includes(warning)
+    ? result.answer
+    : `${warning}\n\n${result.answer}`.slice(0, 20_000);
   return {
     ...result,
-    answer: `${warning}\n\n${result.answer}`.slice(0, 20_000),
+    answer,
     confirmedFindings: [],
-    assumptions: [
-      staleAssumption,
-      ...result.assumptions,
-      ...formerFindings,
-    ].slice(0, 16),
+    conditionalBranches: [],
+    assumptions,
     deadlines: result.deadlines.map((deadline) => ({
       ...deadline,
       confidence: "preliminary" as const,
@@ -263,6 +329,8 @@ export function referencedSourceIds(result: LegalChatResponse): Set<string> {
   return new Set([
     ...result.sources.map((source) => source.sourceId),
     ...result.confirmedFindings.flatMap((finding) => finding.sourceIds),
+    ...(result.conditionalBranches ?? []).flatMap((branch) => branch.sourceIds),
+    ...(result.referenceNotes ?? []).flatMap((note) => note.sourceIds),
     ...result.risks.flatMap((risk) => risk.sourceIds),
     ...result.actionPlan.flatMap((step) => step.sourceIds),
     ...result.deadlines.flatMap((deadline) => deadline.sourceIds),
@@ -287,6 +355,8 @@ export function enforceLegalChatSourceBoundary(
   }
   const citedSourceIds = new Set([
     ...result.confirmedFindings.flatMap((finding) => finding.sourceIds),
+    ...(result.conditionalBranches ?? []).flatMap((branch) => branch.sourceIds),
+    ...(result.referenceNotes ?? []).flatMap((note) => note.sourceIds),
     ...result.risks.flatMap((risk) => risk.sourceIds),
     ...result.actionPlan.flatMap((step) => step.sourceIds),
     ...result.deadlines.flatMap((deadline) => deadline.sourceIds),
@@ -298,6 +368,12 @@ export function enforceLegalChatSourceBoundary(
   }
   if (result.confirmedFindings.some((finding) => finding.sourceIds.length === 0)) {
     throw new Error("AI_CONFIRMED_FINDING_REQUIRES_CITATION");
+  }
+  if ((result.conditionalBranches ?? []).some((branch) => branch.sourceIds.length === 0)) {
+    throw new Error("AI_CONDITIONAL_BRANCH_REQUIRES_CITATION");
+  }
+  if ((result.referenceNotes ?? []).some((note) => note.sourceIds.length === 0)) {
+    throw new Error("AI_REFERENCE_NOTE_REQUIRES_CITATION");
   }
   if (result.deadlines.some((deadline) =>
     deadline.confidence === "confirmed" && deadline.sourceIds.length === 0

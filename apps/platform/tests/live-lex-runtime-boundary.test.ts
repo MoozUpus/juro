@@ -15,7 +15,10 @@ test("user AI prefers the gated corpus with direct Lex fallback while other path
     source("worker/platform-scheduled.ts"),
   ]);
   assert.match(platformAi, /retrieveCorpusAwareLegalSources/);
-  assert.match(platformAi, /const retrievalQuestion = rewrite\.query;/);
+  assert.match(platformAi, /const retrievalUnderstandingPromise = \(async/);
+  assert.match(platformAi, /const retrievalQuestion = retrievalUnderstanding\.standaloneQuestion;/);
+  assert.match(platformAi, /indexQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.corpusQueries\)/);
+  assert.match(platformAi, /lexSearchQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.lexSearchQueries\)/);
   assert.doesNotMatch(platformAi, /const retrievalQuestion = researchPlan\.primaryQuery;/);
   assert.match(guestAi, /retrieveCorpusAwareLegalSources/);
   assert.match(corpusAware, /retrieveLiveLexSources/);

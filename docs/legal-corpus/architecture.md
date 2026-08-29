@@ -18,10 +18,41 @@ inert until a separate server-side feature flag and infrastructure are approved.
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
 | Retrieval | Exportable D1 BM25 terms plus optional Qdrant dense+sparse candidates and RRF | Every vector ID is rehydrated from D1 under current-version/status/scope filters |
 | Dense indexing | OpenAI 1,536-dimensional embeddings plus deterministic sparse term hashes | Dedicated corpus Worker only; Qdrant collection must already expose named `dense` and `sparse` vectors |
-| Provider contract | Indexed Lex first, live Lex fallback only when needed | Typed source shape; no arbitrary URL tool |
+| Provider contract | Indexed legal corpus, live Lex, then secondary web research; user-scoped documents remain separate case-fact context | Typed source shape; no arbitrary-URL fetch tool; private facts and secondary web citations cannot establish law, deadlines or calculations |
 | Citation validation | Filters model-proposed citations against source packets | No generated URLs, title/article/quote checks |
 | Source UX | Server-owned cards and full-article modal | Type, number, adopting authority, language, live/indexed origin, available official variants and immutable version history are read from the validated corpus packet, never authored by the model |
 | Admin control | Metrics, coverage proof, bounded seed/retry and immutable audit | Isolated `apps/admin` Worker, host-only admin cookie, service binding and fresh source MFA |
+
+## Local development against the staging index
+
+Use the dedicated opt-in command from the repository root:
+
+```powershell
+npm run dev:platform:staging-corpus
+```
+
+The command requires an authenticated Cloudflare developer session, but it
+does **not** deploy anything and does **not** select the staging Wrangler
+environment. The platform Worker, authentication bypass, D1 `DB`, R2, queues
+and all application write paths stay local. During Vite `serve` only, the
+configuration injects a second D1 binding named `LEGAL_CORPUS_READ_DB` for the
+existing `juro-staging` database and marks only that binding `remote: true`.
+The agentic research loop uses it for four bounded read operations:
+
+- `find_juro_legal_sources` — hybrid retrieval over global official legislation;
+- `inspect_juro_legal_act` — server-owned metadata for a returned chunk;
+- `read_juro_legal_provisions` — an exact immutable provision window around it;
+- `hydrate_juro_legal_sources` — act metadata and provision windows for at most four selected anchors in one read-only batch.
+
+Tenant IDs, user IDs and matter IDs are never sent to the staging corpus. The
+remote binding is wrapped before retrieval: only a single comment-free
+`SELECT` or read-only `WITH` statement can be prepared, statement `run()` and
+database `batch()`, `exec()`, `withSession()` and `dump()` are rejected. This
+is a code-enforced guard because D1 remote bindings do not expose a separate
+read-only connection mode; the Cloudflare login still needs access to the
+database. Ordinary `npm run dev:platform` remains fully local. Do not use
+`CLOUDFLARE_ENV=staging` or mark the platform `DB` binding remote merely to
+test retrieval: that would broaden staging access to application write paths.
 
 ## Current-version invariant
 
@@ -93,8 +124,27 @@ embedding service binding, but dense Qdrant retrieval remains disabled and the
 container remains dormant. The direct
 request-scoped Lex flow continues to serve visible answers until the staging
 evidence gate verifies indexed retrieval. When
-enabled, chat searches indexed trusted chunks first and uses the validated
-direct Lex path only for weak, stale or absent coverage. A validated live
+enabled, chat searches user-scoped trusted documents first, then indexed
+trusted Lex chunks, and uses the validated direct Lex path only for weak,
+stale or absent official coverage. If official coverage remains weak or absent,
+an independently metered and kill-switchable hosted web search may add cited
+`SECONDARY_REFERENCE` context. That final tier is never treated as legislation
+and cannot ground a statutory deadline, legal calculation or mandatory step.
+A bounded structured model step interprets each request once and supplies the
+same request-scoped semantic query to all three retrieval tiers. For indexed
+retrieval it also produces request-scoped concept facets (action, actor/status,
+circumstance and outcome, each with bounded lexical alternatives). A passage
+must cover every required facet before it can enter a diversified per-query
+candidate pool. When candidates compete or the requested provision is
+ambiguous, a second bounded model step cross-encodes that pool for direct
+responsiveness; it can only reorder allowlisted chunk IDs, while deterministic
+fusion retains facet-valid coverage of materially different readings. A single
+explicit act/article provision is selected deterministically even when its text
+is split across multiple chunks, so it does not spend a reranker call. Exact
+sequential text windows and act metadata are then reloaded from D1. Neither
+model output is evidence. No topic-specific synonym table, act/article map or
+phrase-specific ranking bonus participates in chat retrieval.
+A validated live
 document is queued idempotently for permanent ingestion when auto-ingest is
 enabled. Shadow mode consults the index but preserves the existing visible
 answer path.

@@ -36,6 +36,13 @@ test("compact theme controls retain a 44px touch target", () => {
   assert.match(globals, /\.theme-switcher\.is-compact button\s*\{[^}]*width:\s*44px;/s);
 });
 
+test("the single global theme picker exposes only light and dark choices", () => {
+  const switcher = source("app/_theme/ThemeSwitcher.tsx");
+  assert.match(switcher, /\["light", Sun/);
+  assert.match(switcher, /\["dark", Moon/);
+  assert.doesNotMatch(switcher, /\["system", Laptop/);
+});
+
 test("a delayed account theme response cannot override a newer user choice", () => {
   const switcher = source("app/_theme/ThemeSwitcher.tsx");
 

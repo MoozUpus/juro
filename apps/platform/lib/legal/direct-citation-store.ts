@@ -1,5 +1,6 @@
 import type { LegalSourceContext } from "../ai/provider";
 import { parsePrivateDocumentLocator } from "../document-analysis/private-document-locator";
+import { canonicalSecondaryInternetUrl } from "./secondary-internet-url";
 
 type ReturnedCitation = {
   sourceId: string;
@@ -13,7 +14,7 @@ type ReturnedCitation = {
   verifiedAt: string;
 };
 
-export type LegalCitationAccessMode = "direct" | "approved_package";
+export type LegalCitationAccessMode = "direct" | "approved_package" | "mixed";
 
 /**
  * Persists only source metadata already exposed in a completed answer. It is
@@ -38,9 +39,8 @@ export function legalCitationStatements(input: {
   const seen = new Set<string>();
   return input.citations.flatMap((citation) => {
     const source = contexts.get(citation.sourceId);
-    const validatedLex = input.sourceAccessMode === "direct"
-      ? source?.verificationState === "direct_validated"
-      : source?.verificationState === "verified";
+    const validatedLex = source?.verificationState === "direct_validated"
+      || source?.verificationState === "verified";
     const officialLex = (() => {
       try {
         const url = new URL(source?.officialUrl ?? "");
@@ -53,15 +53,25 @@ export function legalCitationStatements(input: {
       && source.status === "user_supplied"
       && parsePrivateDocumentLocator(source.officialUrl) !== null
       && source.sourceQuality?.passed === true;
+    const trustedSecondary = source?.sourceType === "advice"
+      && source.sourceClass === "SECONDARY_REFERENCE"
+      && source.verificationState === "web_cited"
+      && source.status === "unconfirmed"
+      && canonicalSecondaryInternetUrl(source.officialUrl) === source.officialUrl
+      && source.sourceQuality?.passed === true;
     const accepted = source
       && citation.originalUrl === source.officialUrl
-      && ((source.sourceType === "lex" && officialLex && validatedLex) || trustedPrivate);
-    if (!accepted || seen.has(source.officialUrl)) return [];
+      && ((source.sourceType === "lex" && officialLex && validatedLex) || trustedPrivate || trustedSecondary);
+    if (!source || !accepted) return [];
+    const citationKey = `${source.id}\u0000${citation.article ?? ""}`;
+    if (seen.has(citationKey)) return [];
     const candidateExcerpt = citation.excerpt;
     const exactExcerpt = candidateExcerpt && source.spans?.some((span) => span.text.startsWith(candidateExcerpt))
       ? candidateExcerpt.slice(0, 1_200)
       : null;
-    seen.add(source.officialUrl);
+    // A single act URL can support several cited provisions. Persist each
+    // article separately so opening article 408 can never reuse article 215.
+    seen.add(citationKey);
     return [input.db.prepare(
       `INSERT INTO legal_source_references (
         id,ai_run_id,guest_run_id,conversation_id,message_id,source_kind,source_locale,
@@ -91,7 +101,7 @@ export function legalCitationStatements(input: {
       source.contentSha256,
       "success",
       "validated",
-      input.sourceAccessMode,
+      source.verificationState === "direct_validated" ? "direct" : "approved_package",
       input.now,
     )];
   });

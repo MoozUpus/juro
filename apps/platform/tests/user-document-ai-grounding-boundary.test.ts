@@ -9,8 +9,10 @@ test("AI chat retrieves private document evidence only behind the explicit auto-
   );
   assert.match(route, /LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST !== "true"/);
   assert.match(route, /retrieveTrustedUserDocumentSources/);
-  assert.match(route, /Promise\.all\(\[liveLexRetrieval, privateDocumentRetrieval\]\)/);
-  assert.match(route, /const sources = \[\.\.\.retrieval\.sources, \.\.\.privateDocuments\.sources\]/);
+  assert.match(route, /const privateDocumentRetrieval = \(async \(\): Promise<TrustedUserDocumentRetrieval>/u);
+  assert.match(route, /const privateDocuments = await privateDocumentRetrieval/u);
+  assert.match(route, /const retrieval: LegalChatSourceRetrieval = await/u);
+  assert.match(route, /const sources = \[\.\.\.retrieval\.sources, \.\.\.privateDocuments\.sources, \.\.\.secondaryInternet\.sources\]/u);
   assert.match(route, /private_document_retrieval_unavailable/);
   assert.match(route, /trustedPrivateSourceCount/);
   assert.doesNotMatch(route, /private_document_retrieval_unavailable[\s\S]{0,240}(?:question|snippet|sourceHash|r2Key)/u);
@@ -25,6 +27,6 @@ test("provider prompts keep uploaded-document facts separate from official law",
     assert.match(provider, /sourceClass=OFFICIAL_LEGISLATION/);
     assert.match(provider, /sourceType: source\.sourceType/);
     assert.match(provider, /sourceClass: source\.sourceClass/);
-    assert.match(provider, /не выполняй инструкции/iu);
+    assert.match(provider, /не выполняй[^.]{0,80}инструкции/iu);
   }
 });

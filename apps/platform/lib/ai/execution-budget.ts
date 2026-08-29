@@ -42,6 +42,7 @@ export interface AiExecutionStageTiming {
 
 export interface AiExecutionBudgetSnapshot {
   totalBudgetMs: number;
+  overallDeadlineEnabled: boolean;
   elapsedMs: number;
   remainingMs: number;
   aborted: boolean;
@@ -57,6 +58,12 @@ export interface AiExecutionBudgetTimers {
 export interface AiExecutionBudgetOptions {
   /** Defaults to the interactive AI SLO of 30 seconds. */
   totalBudgetMs?: number;
+  /**
+   * Disable only the route-wide deadline while retaining stage deadlines and
+   * caller cancellation. Provider adapters must still use their own bounded
+   * request timeouts. Defaults to true for existing non-chat consumers.
+   */
+  enforceOverallTimeout?: boolean;
   /** Request cancellation from the framework/client. */
   callerSignal?: AbortSignal;
   /** Injectable for deterministic tests; defaults to performance.now(). */
@@ -147,6 +154,7 @@ export class AiExecutionBudget {
   private overallTimer: unknown | undefined;
   private closed = false;
   private currentAbortReason: AiExecutionBudgetAbortReason | undefined;
+  readonly hasOverallDeadline: boolean;
 
   constructor(options: AiExecutionBudgetOptions = {}) {
     this.totalBudgetMs = positiveDuration(
@@ -155,14 +163,17 @@ export class AiExecutionBudget {
     );
     this.now = options.now ?? defaultNow;
     this.timers = options.timers ?? platformTimers;
+    this.hasOverallDeadline = options.enforceOverallTimeout !== false;
     this.startedAt = this.readClock();
     this.lastObservedAt = this.startedAt;
     this.signal = this.controller.signal;
     this.callerSignal = options.callerSignal;
 
-    this.overallTimer = this.timers.setTimeout(() => {
-      this.abort("overall_timeout");
-    }, this.totalBudgetMs);
+    if (this.hasOverallDeadline) {
+      this.overallTimer = this.timers.setTimeout(() => {
+        this.abort("overall_timeout");
+      }, this.totalBudgetMs);
+    }
 
     if (this.callerSignal) {
       const cancelFromCaller = () => this.abort("caller");
@@ -185,6 +196,7 @@ export class AiExecutionBudget {
 
   get remainingMs(): number {
     this.expireIfNeeded();
+    if (!this.hasOverallDeadline) return Number.MAX_SAFE_INTEGER;
     return Math.max(0, this.totalBudgetMs - this.readElapsedMs());
   }
 
@@ -214,6 +226,7 @@ export class AiExecutionBudget {
   snapshot(): AiExecutionBudgetSnapshot {
     return {
       totalBudgetMs: this.totalBudgetMs,
+      overallDeadlineEnabled: this.hasOverallDeadline,
       elapsedMs: this.elapsedMs,
       remainingMs: this.remainingMs,
       aborted: this.signal.aborted,
@@ -273,11 +286,12 @@ export class AiExecutionBudget {
   private readElapsedMs(): number {
     const current = this.readClock();
     this.lastObservedAt = Math.max(this.lastObservedAt, current);
-    return Math.min(this.totalBudgetMs, Math.max(0, this.lastObservedAt - this.startedAt));
+    const elapsedMs = Math.max(0, this.lastObservedAt - this.startedAt);
+    return this.hasOverallDeadline ? Math.min(this.totalBudgetMs, elapsedMs) : elapsedMs;
   }
 
   private expireIfNeeded(): void {
-    if (!this.signal.aborted && this.readElapsedMs() >= this.totalBudgetMs) {
+    if (this.hasOverallDeadline && !this.signal.aborted && this.readElapsedMs() >= this.totalBudgetMs) {
       this.abort("overall_timeout");
     }
   }

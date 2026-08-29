@@ -21,17 +21,27 @@ import {
 } from "../../../../lib/ai/provider";
 import {
   enforceLegalDatabaseFreshness,
-  enforceLegalChatSourceBoundary,
   parseLegalChatResponse,
 } from "../../../../lib/ai/legal-chat-schema";
+import { validateLegalGatewayAnswer } from "../../../../lib/ai/legal-ai-gateway";
 import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
-import { retrieveCorpusAwareLegalSources } from "../../../../lib/legal-corpus/chat-retrieval";
-import { directSourceCards } from "../../../../lib/legal/direct-retrieval";
+import {
+  retrieveCorpusAwareLegalSources,
+  shouldRetrieveSecondaryInternet,
+} from "../../../../lib/legal-corpus/chat-retrieval";
+import {
+  fallbackLegalRetrievalUnderstanding,
+  rerankLegalCorpusCandidates,
+  understandLegalRetrievalQuery,
+} from "../../../../lib/legal/legal-retrieval-understanding";
+import {
+  retrieveSecondaryInternetSources,
+  type SecondaryInternetRetrieval,
+} from "../../../../lib/legal/secondary-internet-retrieval";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import {
-  AI_INTERACTIVE_FINALIZATION_RESERVE_MS,
   createAiExecutionBudget,
   type AiExecutionBudget,
 } from "../../../../lib/ai/execution-budget";
@@ -84,6 +94,11 @@ function json(
 
 function copy(locale: "ru" | "uz", ru: string, uz: string): string {
   return locale === "ru" ? ru : uz;
+}
+
+function rethrowGuestCancellation(error: unknown, signal: AbortSignal): void {
+  if (signal.aborted) signal.throwIfAborted();
+  if (error instanceof Error && error.name === "AbortError") throw error;
 }
 
 type GuestAiSloContext = {
@@ -425,12 +440,19 @@ export async function POST(request: Request): Promise<Response> {
       question: parsed.data.question,
       locale,
     });
-    // Guest chat follows the same official Lex-only boundary as the
-    // authenticated route. The feature-gated immutable corpus is preferred;
-    // otherwise the existing request-scoped live validator remains exact.
+    const safetyIdentifier = await sha256Json({
+      scope: "guest-openai-safety-v1",
+      sessionId: sessionContext.session.id,
+    });
+    // Guest chat uses the same public source ladder as authenticated chat:
+    // indexed corpus -> live Lex.uz -> secondary internet only when combined
+    // official coverage remains weak. It intentionally has no private context.
     const configuredProvider = provider.name === "anthropic" ? "anthropic" : "openai";
     const configuredModel = providerStatus.model;
-    budget = createAiExecutionBudget({ callerSignal: request.signal });
+    budget = createAiExecutionBudget({
+      callerSignal: request.signal,
+      enforceOverallTimeout: false,
+    });
     telemetry = {
       db,
       budget,
@@ -444,26 +466,96 @@ export async function POST(request: Request): Promise<Response> {
       providerStartedAtMs: null,
       fallbackFromProvider: null,
     };
+    let retrievalUnderstanding = fallbackLegalRetrievalUnderstanding(effectiveQuestion);
+    const understandingStage = budget.beginStage("query_understanding", { timeoutMs: 6_200 });
+    try {
+      retrievalUnderstanding = await understandLegalRetrievalQuery({
+        query: effectiveQuestion,
+        locale,
+        requestId: `${idempotencyKey}:understanding`,
+        safetyIdentifier,
+        signal: understandingStage.signal,
+        timeoutMs: 6_000,
+        maxAttempts: 1,
+      });
+      understandingStage.complete();
+    } catch (error) {
+      understandingStage.fail();
+      rethrowGuestCancellation(error, budget.signal);
+    }
+
     let retrieval;
-    const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 2_900 });
+    const retrievalBudget = budget;
+    const retrievalStage = retrievalBudget.beginStage("live_lex_retrieval", { timeoutMs: 12_500 });
     try {
       retrieval = await retrieveCorpusAwareLegalSources({
         env: { ...runtimeEnv(), DB: db },
         query: effectiveQuestion,
         locale,
+        indexQueries: retrievalUnderstanding.corpusQueries,
+        rerankingQuestion: retrievalUnderstanding.standaloneQuestion,
+        requiredConcepts: retrievalUnderstanding.requiredConcepts,
+        lexSearchQueries: retrievalUnderstanding.lexSearchQueries,
         signal: retrievalStage.signal,
-        limit: 2,
-        budgetMs: 2_750,
+        limit: 4,
+        budgetMs: 12_000,
         correlationId: idempotencyKey,
         scope: { asOfDate: applicableAt ? parsed.data.legalContextDate ?? null : null },
+        rerankCandidates: async ({ question, candidates, limit }) => {
+          const rerankingStage = retrievalBudget.beginStage("corpus_reranking", { timeoutMs: 7_200 });
+          try {
+            const ranked = await rerankLegalCorpusCandidates({
+              question,
+              locale,
+              candidates,
+              limit,
+              requestId: `${idempotencyKey}:corpus-reranking`,
+              safetyIdentifier,
+              signal: rerankingStage.signal,
+              timeoutMs: 7_000,
+            });
+            rerankingStage.complete();
+            return ranked;
+          } catch (error) {
+            rerankingStage.fail();
+            throw error;
+          }
+        },
       });
       retrievalStage.complete();
-    } catch {
+    } catch (error) {
       retrievalStage.fail();
+      rethrowGuestCancellation(error, budget.signal);
       retrieval = await retrieveCorpusAwareLegalSources({
         env: { ...runtimeEnv(), DB: db }, query: "", locale, limit: 1, budgetMs: 1,
       });
     }
+    const secondaryInternet: SecondaryInternetRetrieval = !applicableAt
+      && shouldRetrieveSecondaryInternet(retrieval)
+      ? await (async () => {
+        const secondaryStage = budget.beginStage("secondary_web_retrieval", { timeoutMs: 6_200 });
+        try {
+          const secondary = await retrieveSecondaryInternetSources({
+            db,
+            query: retrievalUnderstanding.webSearchQuery,
+            locale,
+            requestId: `${idempotencyKey}:secondary`,
+            safetyIdentifier,
+            signal: secondaryStage.signal,
+            timeoutMs: 6_000,
+          });
+          secondaryStage.complete();
+          return secondary;
+        } catch (error) {
+          secondaryStage.fail();
+          rethrowGuestCancellation(error, budget.signal);
+          return { sources: [], evidence: [], errors: [{ code: "SECONDARY_RESEARCH_UNAVAILABLE" }] };
+        }
+      })()
+      : { sources: [], evidence: [], errors: [] };
+    const authoritativeSources = retrieval.sources;
+    const allRetrievedSources = [...authoritativeSources, ...secondaryInternet.sources];
+    const evidence = [...retrieval.evidence, ...secondaryInternet.evidence];
     const requestHash = await sha256Json({
       question: effectiveQuestion,
       locale,
@@ -479,8 +571,8 @@ export async function POST(request: Request): Promise<Response> {
     });
     const sourceVersionHash = await sha256Json({
       freshness: retrieval.freshness,
-      evidence: retrieval.evidence,
-      sources: retrieval.sources.map((source) => ({
+      evidence,
+      sources: allRetrievedSources.map((source) => ({
         id: source.id,
         hash: source.contentSha256,
         excerpt: source.excerpt ?? null,
@@ -525,17 +617,15 @@ export async function POST(request: Request): Promise<Response> {
     try {
       aiResult = await provider.runLegalChat({
         question: effectiveQuestion,
+        retrievalQuery: retrievalUnderstanding.corpusQueries.join(" "),
         locale,
         answerMode: "short",
         reasoningMode: "fast",
-        sources: retrieval.sources,
+        sources: authoritativeSources,
         legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
         applicableAt: applicableAt?.toISOString(),
         requestId: reservation.run.correlationId,
-        safetyIdentifier: await sha256Json({
-          scope: "guest-openai-safety-v1",
-          sessionId: sessionContext.session.id,
-        }),
+        safetyIdentifier,
         runtimeSettings,
       }, { signal: budget.signal, budget });
       providerStage.complete();
@@ -564,39 +654,23 @@ export async function POST(request: Request): Promise<Response> {
     let result;
     const validationStage = budget.beginStage("validation");
     try {
-      const bounded = enforceLegalChatSourceBoundary(
-        parseLegalChatResponse(aiResult.data),
-        new Set(
-          retrieval.sources
-            .filter((source) => source.excerpt?.trim())
-            .map((source) => source.id),
-        ),
-      );
-      const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
-      // Lex cards come from a technically validated live fetch, not
-      // from a model claim. This preserves the empty-claim safety boundary.
-      const returnedSources = bounded.sources.length > 0
-        ? bounded.sources
-        : directSourceCards(retrieval.sources);
+      const validated = validateLegalGatewayAnswer({
+        result: parseLegalChatResponse(aiResult.data),
+        run: aiResult,
+        sources: allRetrievedSources,
+        question: effectiveQuestion,
+        retrievalQuery: retrievalUnderstanding.corpusQueries.join(" "),
+        locale,
+        answerMode: "short",
+        reasoningMode: "fast",
+        legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
+      });
       result = enforceLegalDatabaseFreshness({
-        ...bounded,
-        sources: returnedSources.map((reference) => {
-          const source = sourceById.get(reference.sourceId)!;
-          return {
-            sourceId: source.id,
-            actTitle: source.actTitle,
-            actIdentifier: source.actIdentifier,
-            article: source.article ?? null,
-            excerpt: source.excerpt ?? null,
-            originalUrl: source.officialUrl,
-            status: source.applicabilityStatus ?? "current" as const,
-            effectiveDate: source.effectiveDate ?? null,
-            verifiedAt: source.verifiedAt,
-          };
-        }),
+        ...validated.run.data,
         sourceAccessMode: retrieval.sourceAccessMode,
         sourcesRetrievedAt: retrieval.sourcesRetrievedAt,
         sourceValidationStatus: retrieval.sourceValidationStatus,
+        coverageStatus: retrieval.coverageStatus,
       }, retrieval.freshness, {
         locale,
         answerMode: "short",
@@ -624,11 +698,9 @@ export async function POST(request: Request): Promise<Response> {
       }, 422, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
     }
 
-    // Do not persist/consume a guest turn once the shared interactive deadline
-    // no longer leaves room for the atomic completion. The same provider
-    // reserve protects registered chat; this explicit boundary keeps the
-    // guest's one allowed answer equally non-chargeable on a late result.
-    if (budget.signal.aborted || budget.remainingMs < AI_INTERACTIVE_FINALIZATION_RESERVE_MS) {
+    // A disconnected guest request is released. Retrieval and LLM calls keep
+    // their own bounded timeouts, so there is no unrelated route-wide cutoff.
+    if (budget.signal.aborted) {
       await failGuestAiRun({ db, run: reservation.run, errorCode: "PROVIDER_TIMEOUT" });
       await recordGuestAiSlo({
         telemetry: telemetry && {

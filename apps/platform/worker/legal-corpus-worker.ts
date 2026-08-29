@@ -24,6 +24,10 @@ import {
   compactLegacySparseJsonBatch,
   LegalCorpusSparseIndexError,
 } from "../lib/legal-corpus/sparse-index";
+import {
+  handleJuroLegalCorpusReadToolRequest,
+  isJuroLegalCorpusReadToolPath,
+} from "../lib/legal-corpus/legal-read-service";
 
 export const LEGAL_CORPUS_PROCESS_CRON = "*/5 * * * *";
 export const LEGAL_CORPUS_STAGING_PROCESS_CRON = "*/4 * * * *";
@@ -490,6 +494,9 @@ function response(body: unknown, status = 200): Response {
 const worker = {
   async fetch(request: Request, env: LegalCorpusWorkerEnv): Promise<Response> {
     const url = new URL(request.url);
+    if (isJuroLegalCorpusReadToolPath(url.pathname)) {
+      return handleJuroLegalCorpusReadToolRequest(request, env);
+    }
     if (request.method !== "GET") return response({ code: "METHOD_NOT_ALLOWED" }, 405);
     if (url.pathname === "/health") {
       return response({

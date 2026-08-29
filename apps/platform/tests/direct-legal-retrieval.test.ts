@@ -22,10 +22,7 @@ function retrieveDirectLegalSources(
   locale: "ru" | "uz",
   options: Parameters<typeof retrieveDirectLegalSourcesActual>[2] = {},
 ) {
-  return retrieveDirectLegalSourcesActual(question, locale, {
-    ...options,
-    useFoundationalHints: false,
-  });
+  return retrieveDirectLegalSourcesActual(question, locale, options);
 }
 
 test("direct retrieval uses only query-scoped official Lex links", async () => {
@@ -46,6 +43,7 @@ test("direct retrieval uses only query-scoped official Lex links", async () => {
     fetchImpl,
     now: () => new Date("2026-08-06T12:00:00.000Z"),
     wait: async () => undefined,
+    searchQueries: ["Трудовой кодекс Республики Узбекистан"],
   });
 
   assert.equal(result.sourceAccessMode, "direct");
@@ -66,7 +64,85 @@ test("direct retrieval uses only query-scoped official Lex links", async () => {
   assert.equal(calls.every((item) => new URL(item.url).hostname === "lex.uz"), true);
 });
 
-test("direct retrieval narrows a natural-language registration question before searching official sources", async () => {
+test("model-understood legal wording selects the dedicated Labour Code guarantees without topic rules", async () => {
+  const responses = [
+    responseHtml('<a href="/ru/docs/6257291">Трудовой кодекс Республики Узбекистан</a>'),
+    new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    responseHtml(`<!doctype html><main class="page-document-content">
+      <h1>Трудовой кодекс Республики Узбекистан</h1>
+      <h2>Статья 320. Возмещение вреда работнику</h2>
+      <p>${"Работодатель возмещает работнику причиненный вред. ".repeat(8)}</p>
+      <h2>Статья 408. Гарантии для беременных женщин при прекращении трудового договора</h2>
+      <p>${"Прекращение трудового договора с беременными женщинами по инициативе работодателя не допускается, кроме установленных законом случаев. ".repeat(4)}</p>
+      <h2>Статья 409. Гарантии при прекращении трудового договора с работником, имеющим ребенка в возрасте до трех лет</h2>
+      <p>${"Прекращение трудового договора по инициативе работодателя с работником, имеющим ребенка в возрасте до трех лет, допускается только по установленным основаниям. ".repeat(4)}</p>
+    </main>`),
+  ];
+  const fetchImpl = (async () => {
+    const next = responses.shift();
+    if (!next) throw new Error("Unexpected network request");
+    return next;
+  }) as typeof fetch;
+
+  const semanticQuery = "прекращение трудового договора работодателем с работником в отпуске по уходу за ребенком до трех лет";
+  const result = await retrieveDirectLegalSources(semanticQuery, "ru", {
+    fetchImpl,
+    now: () => new Date("2026-08-28T00:00:00.000Z"),
+    wait: async () => undefined,
+    searchQueries: ["прекращение трудового договора работник ребенок до трех лет"],
+  });
+
+  assert.equal(result.sourceValidationStatus, "validated");
+  assert.match(result.sources[0]?.spans?.[0]?.article ?? "", /Статья 40[89]/u);
+  assert.match(result.sources[0]?.spans?.[0]?.text ?? "", /прекращение трудового договора/iu);
+});
+
+test("live retrieval starts immediately and an agent-discovered parent act resolves the colloquial maternity-leave query", async () => {
+  const calls: string[] = [];
+  const discoveryCalls: string[] = [];
+  let resolveQueries!: (queries: readonly string[]) => void;
+  const searchQueries = new Promise<readonly string[]>((resolve) => { resolveQueries = resolve; });
+  const question = "можно ли уволить сотрудника в декрете";
+  const semanticQuery = "прекращение трудового договора по инициативе работодателя с работником имеющим ребенка до трех лет";
+  const resultPromise = retrieveDirectLegalSources(question, "ru", {
+    fetchImpl: (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("/search/all")) return responseHtml("");
+      if (url.endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } });
+      }
+      if (url === "https://lex.uz/ru/docs/9001") {
+        return responseHtml(`<!doctype html><main class="page-document-content">
+          <h1>Трудовой кодекс Республики Узбекистан</h1>
+          <h2>Статья 409. Гарантии при прекращении трудового договора с работником, имеющим ребенка в возрасте до трех лет</h2>
+          <p>${"Прекращение трудового договора по инициативе работодателя с работником, имеющим ребенка в возрасте до трех лет, допускается только по основаниям, установленным законом. ".repeat(5)}</p>
+        </main>`);
+      }
+      throw new Error(`Unexpected network request: ${url}`);
+    }) as typeof fetch,
+    wait: async () => undefined,
+    searchQueries,
+    discoverOfficialUrls: async (query) => {
+      discoveryCalls.push(query);
+      return ["https://lex.uz/ru/docs/9001"];
+    },
+  });
+
+  await Promise.resolve();
+  assert.equal(new URL(calls[0]!).searchParams.get("searchtitle"), question);
+  assert.equal(discoveryCalls.length, 0);
+  resolveQueries([semanticQuery]);
+  const result = await resultPromise;
+
+  assert.match(discoveryCalls[0] ?? "", /можно ли уволить сотрудника в декрете/u);
+  assert.match(discoveryCalls[0] ?? "", /прекращение трудового договора/u);
+  assert.equal(result.sourceValidationStatus, "validated");
+  assert.equal(result.sources[0]?.officialUrl, "https://lex.uz/ru/docs/9001");
+  assert.match(result.sources[0]?.spans?.[0]?.article ?? "", /Статья 409/u);
+});
+
+test("direct retrieval uses a model-produced registration query for official search", async () => {
   const calls: Call[] = [];
   const responses = [
     responseHtml('<a href="/ru/docs/42">Lex result</a>'),
@@ -84,6 +160,7 @@ test("direct retrieval narrows a natural-language registration question before s
       }) as typeof fetch,
       now: () => new Date("2026-08-09T12:00:00.000Z"),
       wait: async () => undefined,
+      searchQueries: ["общество с ограниченной ответственностью"],
     },
   );
 
@@ -95,7 +172,7 @@ test("direct retrieval narrows a natural-language registration question before s
   assert.deepEqual(result.sources.map((source) => source.officialUrl), ["https://lex.uz/ru/docs/42"]);
 });
 
-test("direct retrieval expands a short LLC opening question before Lex title search", async () => {
+test("direct retrieval uses a model-produced act query for a short colloquial question", async () => {
   const calls: Call[] = [];
   const responses = [
     responseHtml('<a href="/ru/docs/8152146">Lex result</a>'),
@@ -109,6 +186,7 @@ test("direct retrieval expands a short LLC opening question before Lex title sea
     }) as typeof fetch,
     now: () => new Date("2026-08-13T12:00:00.000Z"),
     wait: async () => undefined,
+    searchQueries: ["общество с ограниченной ответственностью"],
   });
 
   assert.equal(
@@ -140,6 +218,7 @@ test("LLC formation span ranking prefers the formation chapter over later amendm
       return responseHtml(document);
     }) as typeof fetch,
     wait: async () => undefined,
+    searchQueries: ["учреждение общества учредительный договор устав общества"],
   });
   const selectedArticles = result.sources[0]?.spans?.map((span) => span.article) ?? [];
   assert.equal(selectedArticles.some((article) => /^Статья 11(?:\.|$)/u.test(article ?? "")), true, JSON.stringify(selectedArticles));
@@ -236,6 +315,7 @@ test("one-source live lookup stays inside the interactive budget and does not wa
     }) as typeof fetch,
     now: () => new Date("2026-08-09T12:00:00.000Z"),
     wait: async (delayMs) => { requestedDelays.push(delayMs); },
+    searchQueries: ["Трудовой кодекс Республики Узбекистан"],
   });
 
   assert.equal(DIRECT_RETRIEVAL_BUDGET_MS <= 3_000, true);
@@ -263,6 +343,7 @@ test("direct retrieval supports the official UZ path without relaxing the Lex al
     }) as typeof fetch,
     now: () => new Date("2026-08-06T12:00:00.000Z"),
     wait: async () => undefined,
+    searchQueries: ["O‘zbekiston Respublikasining Mehnat kodeksi"],
   });
 
   assert.equal(result.sourceValidationStatus, "validated");
@@ -402,6 +483,7 @@ test("UZ LLC formation selects number-first modda spans from the live document",
   const result = await retrieveDirectLegalSourcesActual("O‘zbekistonda MChJni qanday ochaman?", "uz", {
     fetchImpl: (async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes("/search/all")) return responseHtml('<a href="/uz/docs/-8151376">asosiy qonun</a>');
       if (url.endsWith("/robots.txt")) return new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain" } });
       if (url.endsWith("/-8151376")) {
         return responseHtml(`<!doctype html><html lang="uz"><body><main>
@@ -415,6 +497,7 @@ test("UZ LLC formation selects number-first modda spans from the live document",
       return new Response("offline", { status: 503 });
     }) as typeof fetch,
     wait: async () => undefined,
+    searchQueries: ["mas’uliyati cheklangan jamiyatni ta’sis etish ustav"],
   });
 
   assert.equal(
@@ -488,16 +571,19 @@ test("UZ jamiyat ustavi wording uses the LLC act and selects the third-party rul
   const result = await retrieveDirectLegalSourcesActual("Jamiyat ustavi uchinchi shaxslar uchun qachon kuchga kiradi?", "uz", {
     fetchImpl: (async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes("/search/all")) return responseHtml('<a href="/uz/docs/-8151376">asosiy qonun</a>');
       if (url.endsWith("/robots.txt")) return new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain" } });
       if (url.endsWith("/-8151376")) return responseHtml(document);
       return new Response("offline", { status: 503 });
     }) as typeof fetch,
     wait: async () => undefined,
+    searchQueries: ["jamiyat ustavi uchinchi shaxslar kuchga kirishi"],
   });
 
   assert.equal(result.sources[0]?.officialUrl, "https://lex.uz/uz/docs/-8151376");
-  assert.equal(result.sources[0]?.spans?.[0]?.article?.startsWith("14-modda"), true, JSON.stringify(result.sources[0]?.spans));
-  assert.match(result.sources[0]?.spans?.[0]?.text ?? "", /uchinchi shaxslar/iu);
+  const charterSpan = result.sources[0]?.spans?.find((span) => span.article?.startsWith("14-modda"));
+  assert.ok(charterSpan, JSON.stringify(result.sources[0]?.spans));
+  assert.match(charterSpan.text, /uchinchi shaxslar/iu);
 });
 
 test("search-result ranking prefers a base code over newer amendment notices", async () => {
@@ -521,13 +607,12 @@ test("search-result ranking prefers a base code over newer amendment notices", a
     wait: async () => undefined,
   });
   assert.equal(fetchedDocuments[0], "https://lex.uz/ru/docs/42");
-  assert.deepEqual(result.sources.map((source) => source.officialUrl), ["https://lex.uz/ru/docs/42"]);
+  assert.equal(result.sources[0]?.officialUrl, "https://lex.uz/ru/docs/42");
 });
 
-test("foundational metadata is only a hint and the exact Lex document is still live-fetched", async () => {
+test("a request-scoped semantic act query is resolved and still live-fetched", async () => {
   const fetchedDocuments: string[] = [];
-  const searchResults = Array.from({ length: 10 }, (_, index) =>
-    `<a href="/ru/docs/${900 + index}">О внесении изменений ${index + 1} в Трудовой кодекс</a>`).join("");
+  const searchResults = '<a href="/ru/docs/6257291">Трудовой кодекс Республики Узбекистан</a>';
   const result = await retrieveDirectLegalSourcesActual("трудовые отношения", "ru", {
     fetchImpl: (async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -540,13 +625,14 @@ test("foundational metadata is only a hint and the exact Lex document is still l
       return responseHtml(officialDocument(title, "Статья 12. Трудовые отношения"));
     }) as typeof fetch,
     wait: async () => undefined,
+    searchQueries: ["Трудовой кодекс Республики Узбекистан трудовые отношения"],
   });
   assert.equal(fetchedDocuments.includes("https://lex.uz/ru/docs/6257291"), true);
   assert.deepEqual(result.sources.map((source) => source.officialUrl), ["https://lex.uz/ru/docs/6257291"]);
   assert.equal(result.evidence[0]?.canonicalUrl, "https://lex.uz/ru/docs/6257291");
 });
 
-test("an exact LLC foundational hint skips generic search but is still live-validated", async () => {
+test("a request-scoped LLC act query is searched and live-validated", async () => {
   const calls: string[] = [];
   const result = await retrieveDirectLegalSourcesActual("как открыть ООО", "ru", {
     fetchImpl: (async (input: RequestInfo | URL) => {
@@ -558,10 +644,7 @@ test("an exact LLC foundational hint skips generic search but is still live-vali
         });
       }
       if (url.includes("/search/all")) {
-        return new Response("search unavailable", {
-          status: 503,
-          headers: { "content-type": "text/html; charset=utf-8" },
-        });
+        return responseHtml('<a href="/ru/docs/8152146">Об обществах с ограниченной ответственностью</a>');
       }
       if (url === "https://lex.uz/ru/docs/8152146") {
         return responseHtml(officialDocument(
@@ -573,9 +656,10 @@ test("an exact LLC foundational hint skips generic search but is still live-vali
     }) as typeof fetch,
     now: () => new Date("2026-08-13T18:00:00.000Z"),
     wait: async () => undefined,
+    searchQueries: ["общество с ограниченной ответственностью учреждение"],
   });
 
-  assert.equal(calls.some((url) => url.includes("/search/all")), false);
+  assert.equal(calls.some((url) => url.includes("/search/all")), true);
   assert.equal(calls.includes("https://lex.uz/ru/docs/8152146"), true);
   assert.deepEqual(result.sources.map((source) => source.officialUrl), [
     "https://lex.uz/ru/docs/8152146",

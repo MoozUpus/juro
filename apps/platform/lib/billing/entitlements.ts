@@ -9,6 +9,8 @@ export type WorkspaceEntitlements = {
   documentComparison: boolean;
 };
 
+export type AiAnswerCycleLimit = number | null;
+
 const AI_ANSWER_CYCLE_LIMITS = {
   free: 20,
   individual: 120,
@@ -73,4 +75,16 @@ export async function workspaceEntitlements(
     "SELECT plan_code AS planCode,status,current_period_ends_at AS currentPeriodEndsAt FROM subscriptions WHERE workspace_id=? LIMIT 1",
   ).bind(workspaceId).first<SubscriptionEvidence>();
   return entitlementsForSubscription(subscription ?? null, now);
+}
+
+/**
+ * Local AI development is intentionally unmetered so repeated retrieval and
+ * answer-quality testing cannot exhaust a billing-plan allowance. Deployed
+ * environments always retain the entitlement-backed limit.
+ */
+export function resolveAiAnswerCycleLimit(
+  environment: "development" | "staging" | "production" | undefined,
+  entitlementLimit: number,
+): AiAnswerCycleLimit {
+  return environment === "development" ? null : entitlementLimit;
 }

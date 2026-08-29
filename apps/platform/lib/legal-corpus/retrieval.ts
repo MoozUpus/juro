@@ -3,6 +3,7 @@ import {
   detectLegalQueryLanguage,
   normalizeLegalSearchQuery,
   transliterateUzbek,
+  transliterateUzbekToCyrillic,
 } from "../legal/legal-language";
 import {
   canAccessCorpusScope,
@@ -46,7 +47,11 @@ export type LegalCorpusRetrievalItem = {
   provider?: string;
   sparseRank?: number;
   denseRank?: number;
+  /** Raw provider similarity, used only for coverage calibration. */
+  semanticScore?: number;
   fusionScore?: number;
+  /** True only after an exact immutable D1 window was loaded around the hit. */
+  windowHydrated?: boolean;
 };
 
 export type DenseCorpusCandidate = Pick<LegalCorpusRetrievalItem, "chunkId"> & {
@@ -88,6 +93,7 @@ function queryVariants(query: string): string[] {
   const variants = new Set<string>([trimmed]);
   variants.add(normalizeLegalSearchQuery(trimmed, language === "ru" ? "ru" : "uz"));
   if (language === "uz-Cyrl" || language === "mixed") variants.add(transliterateUzbek(trimmed));
+  if (language === "uz-Latn" || language === "mixed") variants.add(transliterateUzbekToCyrillic(trimmed));
   for (const article of detectArticleNumbers(trimmed)) variants.add(article);
   return [...variants].filter(Boolean);
 }
@@ -161,7 +167,7 @@ export function reciprocalRankFusion(
   dense.forEach((item, index) => {
     const existing = byChunk.get(item.chunkId);
     if (!existing || existing.denseRank !== undefined) return;
-    byChunk.set(item.chunkId, { ...existing, denseRank: index + 1 });
+    byChunk.set(item.chunkId, { ...existing, denseRank: index + 1, semanticScore: item.score });
     score.set(item.chunkId, (score.get(item.chunkId) ?? 0) + 1 / (RRF_K + index + 1));
   });
   return [...byChunk.values()]
@@ -188,6 +194,9 @@ async function hydrateDenseCandidates(input: {
   const userId = scope.userId ?? null;
   const matterId = scope.matterId ?? null;
   const placeholders = chunkIds.map(() => "?").join(",");
+  // Candidate recall favors passages covering more distinct query concepts.
+  // Repeated occurrences of one common token are only a secondary signal;
+  // final ordering is calculated by BM25 after this bounded SQL selection.
   const rows = await input.db.prepare(`
     SELECT chunk.id AS chunkId,
       document.id AS documentId,coalesce(variant.title,document.title) AS documentTitle,
@@ -210,7 +219,9 @@ async function hydrateDenseCandidates(input: {
     INNER JOIN legal_corpus_documents AS document ON document.id=provision.document_id
     WHERE chunk.id IN (${placeholders})
       AND document.availability_status='ready'
-      AND (?=0 OR document.provider='lex_uz')
+      AND (?=0 OR (document.provider='lex_uz'
+        AND document.source_class='OFFICIAL_LEGISLATION'
+        AND document.scope='global'))
       AND (
         (? IS NULL AND variant.current_version_id=version.id
           AND (?=1 OR provision.status='active'))
@@ -311,20 +322,27 @@ export async function retrieveLegalCorpus(input: {
 
   const termStats = await input.db.prepare(`
     WITH sparse_entries AS (${sparseEntriesForTerms})
-    SELECT term,COUNT(*) AS documentFrequency,
-      (SELECT COUNT(*) FROM legal_corpus_chunks) AS corpusCount
+    SELECT term,COUNT(*) AS documentFrequency
     FROM sparse_entries
     GROUP BY term
   `).bind(...sparseTermBindings).all<{
     term: string;
     documentFrequency: number;
-    corpusCount: number;
   }>();
   const documentFrequency = new Map(termStats.results.map((row) => [
     row.term,
     Number(row.documentFrequency),
   ]));
-  const corpusCount = Math.max(1, Number(termStats.results[0]?.corpusCount ?? 1));
+  // A global COUNT(*) over the complete chunk table made every interactive
+  // search scan the full corpus merely to calculate BM25's N. On the staging
+  // corpus that is more than one million rows and can consume the entire chat
+  // deadline before candidate retrieval begins. Query-relative N preserves
+  // the useful IDF ordering (rare query terms outrank common query terms)
+  // while touching only the postings already selected by the bounded query.
+  const corpusCount = Math.max(
+    2,
+    ...termStats.results.map((row) => Math.max(1, Number(row.documentFrequency)) + 1),
+  );
 
   const rows = await input.db.prepare(`
     WITH sparse_entries AS (${sparseEntriesForTerms}),
@@ -345,7 +363,9 @@ export async function retrieveLegalCorpus(input: {
       INNER JOIN legal_corpus_variants AS candidate_variant ON candidate_variant.id=candidate_provision.variant_id
       INNER JOIN legal_corpus_documents AS candidate_document ON candidate_document.id=candidate_provision.document_id
       WHERE candidate_document.availability_status='ready'
-        AND (?=0 OR candidate_document.provider='lex_uz')
+        AND (?=0 OR (candidate_document.provider='lex_uz'
+          AND candidate_document.source_class='OFFICIAL_LEGISLATION'
+          AND candidate_document.scope='global'))
         AND (
           (? IS NULL AND candidate_variant.current_version_id=candidate_version.id
             AND (?=1 OR candidate_provision.status='active'))
@@ -373,7 +393,7 @@ export async function retrieveLegalCorpus(input: {
             AND (candidate_document.matter_id IS NULL OR candidate_document.matter_id=?))
         )
       GROUP BY sparse.chunkId
-      ORDER BY rawScore DESC,matchedTermCount DESC,sparse.chunkId ASC
+      ORDER BY matchedTermCount DESC,rawScore DESC,sparse.chunkId ASC
       LIMIT ?
     )
     SELECT candidate.chunkId AS chunkId,
@@ -489,6 +509,7 @@ export async function retrieveLegalCorpus(input: {
 export function assessLegalCorpusCoverage(input: {
   query: string;
   sources: readonly LegalCorpusRetrievalItem[];
+  preferredLanguage?: LegalCorpusLanguage;
 }): "good_coverage" | "partial_coverage" | "weak_coverage" | "no_coverage" {
   if (input.sources.length === 0) return "no_coverage";
   const requestedArticles = detectArticleNumbers(input.query);
@@ -496,6 +517,28 @@ export function assessLegalCorpusCoverage(input: {
   if (requestedArticles.length > 0 && requestedArticles.some((article) => !foundArticles.has(article))) {
     return foundArticles.size > 0 ? "partial_coverage" : "weak_coverage";
   }
-  if (input.sources.length === 1 && !input.sources[0]?.articleNumber) return "weak_coverage";
-  return "good_coverage";
+  const best = input.sources.reduce((score, source) => {
+    const normalizedFusion = Math.min(1, Math.max(0, (source.fusionScore ?? 0) * (RRF_K + 1) / 2));
+    const semantic = source.semanticScore === undefined
+      ? normalizedFusion
+      : Math.min(1, Math.max(0, source.semanticScore));
+    const officialQuality = source.provider === "lex_uz"
+      && Boolean(source.sourceUrl)
+      && /^[a-f0-9]{64}$/u.test(source.contentHash)
+      && source.exactQuote.trim().length >= 40 ? 1 : 0;
+    const versionQuality = source.status === "active" && source.validTo === null ? 1 : 0;
+    const languageQuality = !input.preferredLanguage || source.language === input.preferredLanguage ? 1 : 0.65;
+    const hydrationQuality = source.windowHydrated === false ? 0 : 1;
+    return Math.max(score,
+      normalizedFusion * 0.25
+      + semantic * 0.15
+      + officialQuality * 0.25
+      + versionQuality * 0.15
+      + languageQuality * 0.10
+      + hydrationQuality * 0.10,
+    );
+  }, 0);
+  if (best >= 0.76) return "good_coverage";
+  if (best >= 0.56) return "partial_coverage";
+  return "weak_coverage";
 }

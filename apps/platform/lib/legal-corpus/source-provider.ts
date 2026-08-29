@@ -192,6 +192,8 @@ export async function resolveLegalSources(input: {
       versionDate: source.version_date,
       fetchedAt: source.fetched_at,
       contentHash: source.content_hash,
+      provider: source.provider,
+      fusionScore: source.confidence,
     })),
   });
   if (coverage === "good_coverage" || coverage === "partial_coverage"

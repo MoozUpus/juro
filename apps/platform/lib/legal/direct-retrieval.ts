@@ -1,5 +1,5 @@
-import { planLegalResearch, type LegalResearchPlan } from "../ai/legal-query-planner";
 import type { LegalSourceContext, LegalSourceSpan } from "../ai/provider";
+import { detectArticleNumbers } from "./legal-language";
 import { legalDatabaseFreshnessFromAsOf, type LegalDatabaseFreshness } from "./verified-retrieval";
 import {
   classifyLegalSourceUrl,
@@ -40,45 +40,52 @@ const DOCUMENT_MAX_BYTES = 8_500_000;
 /** A live, user-initiated Lex lookup must leave the request budget to the AI. */
 export const DIRECT_RETRIEVAL_BUDGET_MS = 2_750;
 const MAX_CANDIDATES_PER_PROVIDER = 3;
+const MAX_CONCURRENT_DOCUMENT_FETCHES = 3;
 // Six focused spans keep fast-mode structured generation inside the shared
 // 30-second request budget while still covering a base rule plus formation
 // steps. Ranking, not truncation order, decides which spans survive.
 const MAX_SOURCE_SPANS = 6;
 const MAX_SPAN_CHARACTERS = 2_400;
 /**
- * Stable Lex document identifiers used only as search/discovery hints when a
- * full Lex result page contains newer amendment notices ahead of a base act.
- * No legal text or proposition is stored here: every hinted URL is fetched
- * live and must pass the same parser, locale, quality and hash gates.
+ * Words that frame a request instead of naming its legal subject: grammar,
+ * politeness, the requested answer format, the jurisdiction and the platform
+ * itself. Excluding them is a precision boundary, not a topic vocabulary — no
+ * entry may name an actor, an act, a right, an obligation or a procedure, so
+ * retrieval stays able to reach any subject the query-understanding step asks
+ * for. The jurisdiction entries earn their place structurally: virtually every
+ * Uzbek act repeats "Республики Узбекистан" and the word "официальный", so
+ * matching them distinguishes nothing.
  */
-const FOUNDATIONAL_LEX_URLS: Partial<Record<LegalResearchPlan["domain"], {
-  ru: readonly string[];
-  uz: readonly string[];
-}>> = {
-  labor: { ru: ["https://lex.uz/ru/docs/6257291"], uz: ["https://lex.uz/uz/docs/-6257288"] },
-  family: { ru: ["https://lex.uz/ru/docs/104723"], uz: ["https://lex.uz/uz/docs/-104720"] },
-  civil: { ru: ["https://lex.uz/ru/docs/111189"], uz: ["https://lex.uz/uz/docs/-111189"] },
-  housing: { ru: ["https://lex.uz/ru/docs/111189"], uz: ["https://lex.uz/uz/docs/-111189"] },
-  business: { ru: ["https://lex.uz/ru/docs/8152146"], uz: ["https://lex.uz/uz/docs/-8151376"] },
-  tax: { ru: ["https://lex.uz/ru/docs/4674902"], uz: ["https://lex.uz/uz/docs/-4674902"] },
-  consumer: { ru: ["https://lex.uz/ru/docs/4704"], uz: ["https://lex.uz/uz/docs/-4704"] },
-  administrative: { ru: ["https://lex.uz/ru/docs/3492199"], uz: ["https://lex.uz/uz/docs/-3492199"] },
-  litigation: { ru: ["https://lex.uz/ru/docs/3517337"], uz: ["https://lex.uz/uz/docs/-3517337"] },
-  banking_finance: { ru: ["https://lex.uz/ru/docs/4590452"], uz: ["https://lex.uz/uz/docs/-4590452"] },
-  digital_rights: { ru: ["https://lex.uz/ru/docs/4396419"], uz: ["https://lex.uz/uz/docs/-4396419"] },
-};
-const QUERY_STOPWORDS = new Set([
-  "about", "after", "before", "could", "from", "have", "into", "need", "should", "that", "the", "this", "what", "with",
-  // These words identify a jurisdiction, an answer format, or the platform —
-  // not a legal subject.  They must never make an otherwise unrelated page
-  // eligible as a citation card (for example, an apostille page for an LLC
-  // registration query just because both mention Uzbekistan and documents).
-  "быть", "какие", "какой", "когда", "нужны", "нужно", "основные", "главные", "шаги", "дайте", "обычно", "после", "праву", "порядок", "почему", "сейчас", "также", "чтобы", "этом",
-  "официальные", "официальный", "официальными", "источники", "источник", "ответ", "ответьте", "кратко", "подробно", "узбекистан", "узбекистана", "узбекистане", "juro", "staging", "smoke",
-  "bilan", "uchun", "qanday", "kerak", "keyin", "oldin", "qayerda", "qonun", "bo‘yicha", "boyicha", "rasmiy", "manba", "javob", "qisqa", "o‘zbekiston", "ozbekiston",
+const REQUEST_FRAME_TERMS = new Set([
+  // Grammar and discourse.
+  "about", "after", "and", "are", "before", "could", "for", "from", "have", "into",
+  "need", "should", "that", "the", "this", "what", "which", "with",
+  "быть", "есть", "его", "ему", "или", "как", "какие", "какой", "когда", "мне", "они",
+  "нужны", "нужно", "основные", "главные", "почему", "при", "сейчас", "также",
+  "чем", "что", "чтобы", "это", "этом", "для", "где",
+  "bilan", "bo‘yicha", "boyicha", "bu", "ham", "kerak", "keyin", "oldin", "qanday",
+  "qayerda", "shu", "uchun", "uni", "va", "yoki",
+  // Requested answer format.
+  "дайте", "кратко", "обычно", "ответ", "ответьте", "подробно", "после", "шаги",
+  "javob", "qisqa",
+  // Jurisdiction, source framing and the product name.
+  "официальные", "официальный", "официальными", "источник", "источники",
+  "республика", "республики", "узбекистан", "узбекистана", "узбекистане",
+  "manba", "o‘zbekiston", "ozbekiston", "rasmiy", "respublikasi", "respublikasining",
+  "juro", "smoke", "staging",
 ]);
-const LLC_RU_TERMS = ["общество", "ограниченной", "ответственностью"];
-const LLC_UZ_TERMS = ["mas'uliyati", "cheklangan", "jamiyat"];
+/**
+ * A stem shorter than this carries too little signal for prefix matching: the
+ * four letters of "прав" would make a question about "право" match every
+ * "правовое" in the corpus. Such terms must occur as a whole word instead.
+ */
+const MIN_PREFIX_STEM_LENGTH = 5;
+/**
+ * A candidate span that repeats an already selected one adds no evidence. Lex
+ * acts carry long runs of near-identical amendment and registration wording,
+ * and without this they crowd out the provisions that answer the question.
+ */
+const MAX_SPAN_OVERLAP = 0.8;
 
 type FetchLike = typeof fetch;
 
@@ -264,9 +271,20 @@ async function waitWithAbort(
   });
 }
 
+// Structural act families only. These describe what kind of instrument a title
+// announces — an amendment notice, a draft, a repeal, a local decision, a code
+// — and never its subject matter, so no legal topic is privileged over another.
 const AMENDMENT_TITLE = /(?:изменен|дополнен|внесени|o[‘’ʼʻ']?zgartir|qo[‘’ʼʻ']?shimcha|kiritish\s+haqida)/iu;
-const LOW_VALUE_TITLE = /(?:тариф|tarif|narx|abonent|водоснабжен|ichimlik\s+suvi|проект|loyiha|утратил\s+силу|o[‘’ʼʻ']?z\s+kuchini\s+yo[‘’ʼʻ']?qot)/iu;
-const BASE_ACT_TITLE = /^(?:(?:o[‘’ʼʻ']?zbekiston respublikasining\s+)?(?:mehnat|oila|soliq|fuqarolik(?:\s+protsessual)?)\s+kodeksi(?:\s*\([^)]*\))?|(?:трудовой|семейный|налоговый|гражданский(?:\s+процессуальный)?)\s+кодекс(?:\s+республики\s+узбекистан)?|«?об обществах с ограниченной ответственностью|mas.?.uliyati cheklangan jamiyatlar to.g.risida|«?о защите прав потребителей|iste.molchilarning huquqlarini himoya qilish to.g.risida|«?об административных процедурах|ma.muriy tartib-taomillar to.g.risida|«?о персональных данных|shaxsga doir ma.lumotlar to.g.risida)/iu;
+const NON_NORMATIVE_TITLE = /(?:проект|loyiha|утратил\p{L}*\s+силу|признан\p{L}*\s+утративш|o[‘’ʼʻ']?z\s+kuchini\s+yo[‘’ʼʻ']?qot)/iu;
+/**
+ * A district, regional or city instrument binds one locality. It is genuine law
+ * but never the national rule a chat question asks about, and it dominates Lex
+ * search results because localities publish far more acts than the republic.
+ */
+const LOCAL_AUTHORITY_TITLE = /(?:\btuman(?:i|ining|idagi)\b|\bviloyat(?:i|ining)\b|\bshahri(?:ning)?\b|\bрайон\p{L}*\b|\bобласт\p{L}*\b|\bгородск\p{L}*\s+кенгаш)/iu;
+const CODE_TITLE = /(?:кодекс|kodeks|code)\b/iu;
+const NAMED_ACT_TITLE = /(?:to[‘’ʼʻ']?g[‘’ʼʻ']?risida|^«?об?\s|^закон|^qonun)/iu;
+const PARLIAMENTARY_WRAPPER_TITLE = /^о\s+законе\s+республики\s+узбекистан/iu;
 
 function plainSearchTitle(value: string): string {
   return value
@@ -279,18 +297,64 @@ function plainSearchTitle(value: string): string {
     .trim();
 }
 
-function searchCandidateRank(titleValue: string, query: string, order: number): number {
+/**
+ * One request-scoped relevance term, prepared once so span scoring can compare
+ * hundreds of candidates without rebuilding a matcher per comparison.
+ */
+type RelevanceTerm = { term: string; stem: string; wholeWord: RegExp | null };
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/**
+ * Relevance vocabulary for one request. It is derived only from the question
+ * and from the searches actually issued for it, so a topic gains weight by
+ * being asked about — never by appearing in a dictionary shipped with JURO.
+ */
+function relevanceTerms(query: string): RelevanceTerm[] {
+  const seen = new Set<string>();
+  const terms: RelevanceTerm[] = [];
+  for (const token of query.toLocaleLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []) {
+    if (seen.has(token) || REQUEST_FRAME_TERMS.has(token)) continue;
+    seen.add(token);
+    const stem = queryStem(token);
+    terms.push({
+      term: token,
+      stem,
+      wholeWord: stem.length >= MIN_PREFIX_STEM_LENGTH
+        ? null
+        : new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(stem)}(?![\\p{L}\\p{N}])`, "u"),
+    });
+    if (terms.length >= 16) break;
+  }
+  return terms;
+}
+
+function termMatches(haystack: string, term: RelevanceTerm): boolean {
+  return term.wholeWord ? term.wholeWord.test(haystack) : haystack.includes(term.stem);
+}
+
+function countTermMatches(haystack: string, terms: readonly RelevanceTerm[]): number {
+  return terms.reduce((total, term) => total + (termMatches(haystack, term) ? 1 : 0), 0);
+}
+
+function searchCandidateRank(titleValue: string, terms: readonly RelevanceTerm[], order: number): number {
   const title = plainSearchTitle(titleValue).toLocaleLowerCase();
-  const terms = directQueryTerms(query);
-  let score = terms.reduce((total, term) => total + (title.includes(queryStem(term)) ? 7 : 0), 0);
-  if (BASE_ACT_TITLE.test(title)) score += 80;
-  if (/^о\s+законе\s+республики\s+узбекистан/iu.test(title)) score -= 45;
+  let score = countTermMatches(title, terms) * 7;
+  if (CODE_TITLE.test(title) && !AMENDMENT_TITLE.test(title)) score += 80;
+  if (PARLIAMENTARY_WRAPPER_TITLE.test(title)) score -= 45;
   if (AMENDMENT_TITLE.test(title)) score -= 90;
-  if (LOW_VALUE_TITLE.test(title)) score -= 120;
+  if (NON_NORMATIVE_TITLE.test(title)) score -= 120;
+  if (LOCAL_AUTHORITY_TITLE.test(title)) score -= 120;
   return score - order / 1_000;
 }
 
-function officialDocumentUrls(html: string, query: string, limit = MAX_CANDIDATES_PER_PROVIDER): string[] {
+function officialDocumentUrls(
+  html: string,
+  terms: readonly RelevanceTerm[],
+  limit = MAX_CANDIDATES_PER_PROVIDER,
+): string[] {
   const origin = "https://lex.uz";
   const candidates: Array<{ url: string; title: string; order: number }> = [];
   const seen = new Set<string>();
@@ -310,32 +374,19 @@ function officialDocumentUrls(html: string, query: string, limit = MAX_CANDIDATE
     }
   }
   return candidates
-    .sort((left, right) => searchCandidateRank(right.title, query, right.order) - searchCandidateRank(left.title, query, left.order))
+    .sort((left, right) => searchCandidateRank(right.title, terms, right.order) - searchCandidateRank(left.title, terms, left.order))
     .slice(0, limit)
     .map((candidate) => candidate.url);
 }
 
-function relevantExcerpt(plainText: string, query: string): string {
+function relevantExcerpt(plainText: string, terms: readonly RelevanceTerm[]): string {
   const normalized = plainText.replace(/\s+/gu, " ").trim();
-  const terms = directQueryTerms(query);
   const lower = normalized.toLocaleLowerCase();
   const index = terms
-    .map((term) => lower.indexOf(term))
+    .map((term) => lower.indexOf(term.stem))
     .find((value) => value >= 0) ?? 0;
   const start = Math.max(0, index - 220);
   return normalized.slice(start, start + 1_200);
-}
-
-function directQueryTerms(query: string): string[] {
-  return [...new Set(
-    (query.toLocaleLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])
-      .filter((term) => term.length >= 4 || term === "ооо" || term === "ип")
-      .filter((term) => !QUERY_STOPWORDS.has(term)),
-  )].slice(0, 12);
-}
-
-function isLimitedLiabilityCompanyQuestion(question: string): boolean {
-  return /(?:(?:^|[^\p{L}\p{N}])(?:ооо|llc|мчж|mchj)(?:$|[^\p{L}\p{N}])|jamiyat(?:ning)?\s+ustav)/iu.test(question);
 }
 
 function validatedOfficialDocumentUrls(values: readonly string[], locale: "ru" | "uz"): string[] {
@@ -355,12 +406,6 @@ function validatedOfficialDocumentUrls(values: readonly string[], locale: "ru" |
   return urls;
 }
 
-function directRelevanceTerms(question: string): string[] {
-  const terms = directQueryTerms(question);
-  if (!isLimitedLiabilityCompanyQuestion(question)) return terms;
-  return [...new Set([...terms, ...LLC_RU_TERMS, ...LLC_UZ_TERMS])];
-}
-
 function queryStem(term: string): string {
   const uzbekRoot = term.replace(/(?:larining|laridagi|lariga|lardan|larning|sining|ining|ning|lari|larni|larda|lar)$/iu, "");
   if (uzbekRoot !== term && uzbekRoot.length >= 4) return uzbekRoot;
@@ -372,28 +417,27 @@ function queryStem(term: string): string {
 
 /**
  * A direct page is a source card only when its parsed, official text matches
- * the question. This deliberately runs after URL validation and does not use
+ * the request. This deliberately runs after URL validation and does not use
  * model output, so an unrelated search result cannot become a citation.
+ *
+ * The act title is evidence here, not a gate. A broad act can answer a narrow
+ * question through one provision even when its title shares no useful query
+ * terms. Provision headings and hashed span text therefore count the same as
+ * the title, while two independent term matches stay mandatory so an unrelated
+ * act cannot qualify on one incidental word.
  */
-function isRelevantDirectSource(source: LegalSourceContext, question: string): boolean {
-  const terms = directRelevanceTerms(question);
+function isRelevantDirectSource(
+  source: LegalSourceContext,
+  terms: readonly RelevanceTerm[],
+): boolean {
   if (terms.length === 0) return false;
-  // Search-result pages can contain unrelated navigation and recommendation
-  // text, so a matching official act title remains mandatory. A foundational
-  // act, however, often has a broad title (for example, the Labour Code) while
-  // the user's narrower terms occur in the verified excerpt. Requiring a title
-  // match plus a second, independent match in the parsed official text keeps
-  // that citation path conservative without silently discarding that act.
-  const title = source.actTitle.toLocaleLowerCase();
-  const excerpt = source.excerpt?.toLocaleLowerCase() ?? "";
-  const titleMatches = terms.filter((term) => title.includes(queryStem(term)));
-  if (titleMatches.length === 0) return false;
-  if (terms.length === 1) return true;
-  const matchedTerms = new Set([
-    ...titleMatches,
-    ...terms.filter((term) => excerpt.includes(queryStem(term))),
-  ]);
-  return matchedTerms.size >= 2;
+  const evidence = [
+    source.actTitle,
+    source.article ?? "",
+    source.excerpt ?? "",
+    ...(source.spans ?? []).flatMap((span) => [span.article ?? "", span.text]),
+  ].join(" ").toLocaleLowerCase();
+  return countTermMatches(evidence, terms) >= Math.min(2, terms.length);
 }
 
 function officialDisplayTitle(value: string): string {
@@ -478,55 +522,57 @@ function splitLegalText(value: string): string[] {
 
 function sourceSpanScore(
   text: string,
-  plan: LegalResearchPlan,
+  articleNumberRequested: string | null,
   article: string | null,
-  question: string,
+  terms: readonly RelevanceTerm[],
 ): number {
-  const lower = `${article ?? ""} ${text}`.toLocaleLowerCase();
   const heading = (article ?? "").toLocaleLowerCase();
   const body = text.toLocaleLowerCase();
-  const questionTerms = directQueryTerms(question);
-  const terms = directRelevanceTerms(`${question} ${plan.primaryQuery} ${plan.expandedQueries.join(" ")}`);
-  let score = terms.reduce((total, term) => total + (lower.includes(queryStem(term)) ? 3 : 0), 0);
-  // A term in the official article heading is a much stronger relevance
-  // signal than the same word repeated somewhere in a long provision. Keep
-  // this deterministic and query-scoped so a nearby high-frequency article
-  // (for example, transfer of a share) cannot outrank the dedicated article
-  // answering a rights or duties question.
-  const headingMatches = questionTerms.filter((term) => heading.includes(queryStem(term))).length;
-  const bodyMatches = questionTerms.filter((term) => body.includes(queryStem(term))).length;
-  score += headingMatches * 10;
+  // A term in the official article heading is a much stronger relevance signal
+  // than the same word repeated somewhere in a long provision: the heading is
+  // the legislator's own statement of what the provision governs. Keeping the
+  // two counts separate lets the article dedicated to the question outrank a
+  // neighbouring one that merely reuses its vocabulary.
+  const headingMatches = countTermMatches(heading, terms);
+  const bodyMatches = countTermMatches(body, terms);
+  let score = headingMatches * 10 + bodyMatches * 8;
   if (headingMatches >= 2) score += 8;
-  score += bodyMatches * 8;
   if (bodyMatches >= 2) score += 8;
-  if (plan.articleNumber && articleNumberFromText(text) === plan.articleNumber) score += 25;
+  if (articleNumberRequested && articleNumberFromText(text) === articleNumberRequested) score += 25;
   if (ARTICLE_HEADING_START.test(text)) score += 2;
-  // For an LLC/MChJ formation question the base law's formation chapter is
-  // materially more useful than later amendment-registration provisions that
-  // happen to repeat the word "documents". These are selection weights only:
-  // the text remains request-scoped and every chosen span is still hashed and
-  // claim-validated before it can reach the user.
-  if (plan.domain === "business" && plan.needsActionPlan) {
-    const articleNumber = articleNumberFromText(lower);
-    const asksForDocuments = /(?:документ|устав|hujjat|ustav)/iu.test(question);
-    const formationPriority = asksForDocuments
-      ? new Map([["12", 70], ["13", 55], ["14", 50], ["11", 45], ["3", 30], ["5", 25]])
-      : new Map([["11", 70], ["12", 60], ["14", 55], ["3", 45], ["13", 40], ["5", 30]]);
-    score += articleNumber ? (formationPriority.get(articleNumber) ?? 0) : 0;
-  }
-  // The LLC act repeats "third parties" and registration language in later
-  // capital/share provisions. For the standalone question about when the
-  // charter itself takes effect, Article 14 is the dedicated rule; selecting
-  // Article 19 would answer only a narrower capital-increase amendment case.
-  if (plan.domain === "business"
-    && /jamiyat(?:ning)?\s+ustav/iu.test(question)
-    && /uchinchi\s+shaxs/iu.test(question)
-    && /kuchga\s+kir/iu.test(question)) {
-    const articleNumber = articleNumberFromText(lower);
-    if (articleNumber === "14") score += 120;
-    if (articleNumber === "19" || articleNumber === "21") score -= 30;
-  }
   return score;
+}
+
+/**
+ * Word bigrams, used only to recognise that two candidate spans say the same
+ * thing. Bigrams rather than words because Lex boilerplate reuses the same
+ * vocabulary in genuinely different provisions.
+ */
+function spanBigrams(text: string): Set<string> {
+  const words = (text.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []).slice(0, 400);
+  const bigrams = new Set<string>();
+  for (let index = 0; index + 1 < words.length; index += 1) {
+    bigrams.add(`${words[index]} ${words[index + 1]}`);
+  }
+  return bigrams;
+}
+
+/**
+ * True when nearly everything the candidate says is already covered. The ratio
+ * is deliberately one-directional: a longer span that happens to contain a
+ * shorter selected one still adds the surrounding provision, which is how an
+ * enumerated list stays attached to the sentence introducing it.
+ */
+function alreadyCovered(candidate: Set<string>, selected: readonly Set<string>[]): boolean {
+  if (candidate.size === 0) return false;
+  return selected.some((existing) => {
+    if (existing.size === 0) return false;
+    let shared = 0;
+    for (const bigram of candidate) {
+      if (existing.has(bigram)) shared += 1;
+    }
+    return shared / candidate.size >= MAX_SPAN_OVERLAP;
+  });
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -537,8 +583,8 @@ async function sha256Hex(value: string): Promise<string> {
 async function requestScopedSourceSpans(input: {
   snapshot: NormalizedLegalSourceSnapshot;
   contentSha256: string;
-  plan: LegalResearchPlan;
-  question: string;
+  articleNumberRequested: string | null;
+  terms: readonly RelevanceTerm[];
 }): Promise<LegalSourceSpan[]> {
   let currentArticle: string | null = null;
   const articleHeadingsByNumber = new Map<string, string>();
@@ -563,7 +609,7 @@ async function requestScopedSourceSpans(input: {
       paragraph,
       text: normalized,
       quality: "high",
-      score: sourceSpanScore(normalized, input.plan, article, input.question),
+      score: sourceSpanScore(normalized, input.articleNumberRequested, article, input.terms),
       order,
     });
   };
@@ -602,27 +648,20 @@ async function requestScopedSourceSpans(input: {
     );
   }
   const ordered = candidates.sort((left, right) => right.score - left.score || left.order - right.order);
-  const formationArticles = new Set(["11", "12", "13", "14", "3", "5"]);
-  const preferred = input.plan.domain === "business" && input.plan.needsActionPlan
-    ? ordered.filter((span) => {
-      const articleNumber = articleNumberFromText(span.article ?? span.text);
-      return articleNumber !== null && formationArticles.has(articleNumber);
-    })
-    : [];
-  const seenPreferredArticles = new Set<string>();
-  const uniquePreferred = preferred.filter((span) => {
-    const articleNumber = articleNumberFromText(span.article ?? span.text);
-    if (articleNumber === null || seenPreferredArticles.has(articleNumber)) return false;
-    seenPreferredArticles.add(articleNumber);
-    return true;
-  });
-  // When the verified act contains its dedicated formation chapter, generic
-  // scope provisions must not displace it merely because they repeat the act
-  // title. Keep the rest as bounded backfill for short or amended documents.
-  const selected = (uniquePreferred.length >= 2
-    ? [...uniquePreferred, ...ordered.filter((span) => !uniquePreferred.includes(span))]
-    : ordered)
-    .slice(0, MAX_SOURCE_SPANS);
+  // Selection is by score, then by novelty. Both passes above intentionally
+  // produce overlapping views of the same act — one per parsed block and one
+  // per article-level chunk — and long acts repeat amendment and registration
+  // wording across many provisions. Without the novelty check those near-copies
+  // fill the whole budget and the provisions that answer the question are cut.
+  const selectedBigrams: Set<string>[] = [];
+  const selected: typeof ordered = [];
+  for (const span of ordered) {
+    if (selected.length >= MAX_SOURCE_SPANS) break;
+    const bigrams = spanBigrams(span.text);
+    if (alreadyCovered(bigrams, selectedBigrams)) continue;
+    selectedBigrams.push(bigrams);
+    selected.push(span);
+  }
   return Promise.all(selected.map(async (span) => ({
     id: span.id,
     article: span.article,
@@ -664,57 +703,39 @@ function sourceQuality(input: {
   return { passed: Object.values(checks).every(Boolean), ...checks };
 }
 
+/**
+ * Ranks by instrument kind, not by subject. A code outranks a named act, which
+ * outranks subordinate regulation; drafts and repeals are excluded outright and
+ * amendment notices rank below the act they amend, because a question is almost
+ * never answered by the notice that changed a provision.
+ */
 function sourceRank(source: LegalSourceContext): number {
   const title = source.actTitle.toLocaleLowerCase();
-  if (LOW_VALUE_TITLE.test(title) || /признан\p{L}*\s+утративш/iu.test(title)) return -100;
-  if (/^о\s+законе\s+республики\s+узбекистан/iu.test(title)) return 8;
-  if (BASE_ACT_TITLE.test(title)) return 45;
-  if (/^(?:«?об обществах с ограниченной ответственностью|mas.?.uliyati cheklangan jamiyatlar to.g.risida)/iu.test(title)) return 55;
-  if (/(?:кодекс|code|kodeks|закон|qonun)/iu.test(title) && !AMENDMENT_TITLE.test(title)) return 40;
-  if (/(?:положение|nizom)/iu.test(title)) return 25;
+  if (NON_NORMATIVE_TITLE.test(title)) return -100;
+  if (LOCAL_AUTHORITY_TITLE.test(title)) return 5;
+  if (PARLIAMENTARY_WRAPPER_TITLE.test(title)) return 8;
   if (AMENDMENT_TITLE.test(title)) return 10;
+  if (CODE_TITLE.test(title)) return 45;
+  if (NAMED_ACT_TITLE.test(title)) return 40;
+  if (/(?:положение|nizom)/iu.test(title)) return 25;
   return 20;
 }
 
 class OfficialDirectProvider implements LegalSourceProvider {
   constructor(
     readonly kind: DirectLegalSourceKind,
-    private readonly query: string,
     private readonly locale: "ru" | "uz",
     private readonly fetchImpl: FetchLike,
     private readonly now: () => Date,
     private readonly wait: (delayMs: number) => Promise<void>,
     private readonly signal: AbortSignal,
-    private readonly plan: LegalResearchPlan,
-    private readonly useFoundationalHints: boolean,
+    private readonly articleNumberRequested: string | null,
+    private readonly terms: readonly RelevanceTerm[],
   ) {}
 
   async search(query: string, locale: "ru" | "uz"): Promise<string[]> {
-    const hints = this.useFoundationalHints
-      ? (FOUNDATIONAL_LEX_URLS[this.plan.domain]?.[locale] ?? [])
-      : [];
-    if (hints.length > 0 && (this.plan.directLookupPreferred || isLimitedLiabilityCompanyQuestion(this.query))) {
-      // The planner has identified an exact act family. Going through the
-      // generic Lex results page adds latency and can fail independently of
-      // document delivery. This remains live retrieval: only the canonical ID
-      // is known ahead of time, and the document itself is fetched and passes
-      // every normal validation gate below.
-      return [...hints].slice(0, MAX_CANDIDATES_PER_PROVIDER);
-    }
-    let rankedSearchUrls: string[] = [];
-    try {
-      const html = await boundedSearchHtml(directSearchUrl(query, locale), this.fetchImpl, this.signal);
-      rankedSearchUrls = officialDocumentUrls(html, query, 20);
-    } catch (error) {
-      // Lex search and Lex document delivery are separate upstream paths. A
-      // transient search-page failure must not prevent a live fetch of a
-      // known canonical base act. The hint contains metadata only; the target
-      // document still passes robots, redirects, SSRF, content, parser,
-      // relevance, quality and hash validation below. Without a suitable hint
-      // the original search error remains authoritative.
-      if (hints.length === 0) throw error;
-    }
-    return [...new Set([...hints, ...rankedSearchUrls])].slice(0, MAX_CANDIDATES_PER_PROVIDER);
+    const html = await boundedSearchHtml(directSearchUrl(query, locale), this.fetchImpl, this.signal);
+    return officialDocumentUrls(html, this.terms, 20).slice(0, MAX_CANDIDATES_PER_PROVIDER);
   }
 
   async fetchDocument(url: string): Promise<{ source: LegalSourceContext; evidence: DirectLegalSourceEvidence }> {
@@ -742,8 +763,8 @@ class OfficialDirectProvider implements LegalSourceProvider {
     const spans = await requestScopedSourceSpans({
       snapshot,
       contentSha256: fetched.contentSha256,
-      plan: this.plan,
-      question: this.query,
+      articleNumberRequested: this.articleNumberRequested,
+      terms: this.terms,
     });
     // Direct-answer source cards predate the `uz-Cyrl` value. Preserve the
     // exact UZC page in the packet while using Uzbek query quality rules; the
@@ -771,7 +792,7 @@ class OfficialDirectProvider implements LegalSourceProvider {
       verifiedAt: fetchedAt,
       contentSha256: fetched.contentSha256,
       article: spans.find((span) => span.article)?.article ?? articleReference(snapshot.blocks),
-      excerpt: spans.map((span) => span.text).join(" ").slice(0, 1_200) || relevantExcerpt(snapshot.plainText, this.query),
+      excerpt: spans.map((span) => span.text).join(" ").slice(0, 1_200) || relevantExcerpt(snapshot.plainText, this.terms),
       effectiveDate: null,
       applicabilityStatus: "current",
       spans,
@@ -822,8 +843,8 @@ export async function retrieveDirectLegalSources(
       locale: "ru" | "uz",
       signal: AbortSignal,
     ) => Promise<string[]>;
-    /** Test/diagnostic override; production callers use the safe default. */
-    useFoundationalHints?: boolean;
+    /** Model-understood, request-scoped Lex searches. No topic dictionary is used. */
+    searchQueries?: readonly string[] | Promise<readonly string[]>;
   } = {},
 ): Promise<DirectLegalRetrieval> {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -841,92 +862,156 @@ export async function retrieveDirectLegalSources(
   const sources: LegalSourceContext[] = [];
   const evidence: DirectLegalSourceEvidence[] = [];
   const errors: Array<{ provider: DirectLegalSourceKind; code: string }> = [];
+  const immediateQueries = Array.isArray(options.searchQueries)
+    ? options.searchQueries
+      .map((value) => value.replace(/\s+/gu, " ").trim().slice(0, 240))
+      .filter(Boolean)
+    : null;
+  const initialQuery = immediateQueries?.[0] ?? question;
+  const baseTerms = relevanceTerms([question, initialQuery].join(" "));
+  const articleNumberRequested = detectArticleNumbers(question)[0] ?? null;
   try {
-    const plan = planLegalResearch({ question, locale });
-    const foundationalUrlSet = new Set(options.useFoundationalHints === false
-      ? []
-      : (FOUNDATIONAL_LEX_URLS[plan.domain]?.[locale] ?? []));
-    const providers = [new OfficialDirectProvider(
-      "lex", question, locale, boundedFetch, now, wait, signal, plan,
-      options.useFoundationalHints !== false,
-    )] as const;
+    // Start the original Lex request before semantic understanding resolves.
+    // This removes a model round trip from the lexical path without weakening
+    // later reranking: fetched documents still use the complete request-scoped
+    // semantic vocabulary below.
+    const initialProvider = new OfficialDirectProvider(
+      "lex", locale, boundedFetch, now, wait, signal, articleNumberRequested, baseTerms,
+    );
+    const originalCandidates = initialProvider.search(initialQuery, locale).then(
+      (candidates) => ({ candidates, error: null as unknown }),
+      (error: unknown) => ({ candidates: [] as string[], error }),
+    );
+    const semanticQueries = (await Promise.resolve(options.searchQueries ?? []).catch(() => []))
+      .map((value) => value.replace(/\s+/gu, " ").trim().slice(0, 240))
+      .filter(Boolean);
+    const queries = [...new Set([
+      ...(immediateQueries?.length ? [] : [question]),
+      ...semanticQueries,
+    ]
+      .filter((value): value is string => Boolean(value)))].slice(0, 4);
+    if (queries.length === 0) queries.push(question);
+    const terms = relevanceTerms([question, ...queries].join(" "));
+    const provider = new OfficialDirectProvider(
+      "lex", locale, boundedFetch, now, wait, signal, articleNumberRequested, terms,
+    );
     const sourceLimit = Math.max(1, Math.min(options.limit ?? 4, 8));
-    for (const provider of providers) {
-      throwIfRequestAborted(options.signal);
-      if (sources.length >= sourceLimit || budgetController.signal.aborted) break;
-      try {
-        const seenUrls = new Set<string>();
-        const preferPrimary = plan.directLookupPreferred || plan.domain === "business";
-        const queries = (preferPrimary
-          ? [plan.primaryQuery, plan.expandedQueries[0]]
-          : [plan.expandedQueries[0], plan.primaryQuery]
-        ).filter((value): value is string => Boolean(value));
-        for (const [queryIndex, query] of queries.entries()) {
-          if (budgetController.signal.aborted || sources.length >= sourceLimit) break;
-          if (queryIndex > 0 && sources.length > 0) break;
-          const candidates = (await provider.search(query, locale)).filter((candidate) => {
-            if (seenUrls.has(candidate)) return false;
-            seenUrls.add(candidate);
-            return true;
-          });
-          throwIfRequestAborted(options.signal);
-          const fetched = await Promise.allSettled(
-            candidates.slice(0, MAX_CANDIDATES_PER_PROVIDER).map((candidate) => provider.fetchDocument(candidate)),
-          );
-          throwIfRequestAborted(options.signal);
-          for (const result of fetched) {
-            if (budgetController.signal.aborted || sources.length >= sourceLimit) break;
-            if (result.status === "rejected") {
-              errors.push({ provider: provider.kind, code: publicErrorCode(result.reason) });
-              continue;
-            }
-            if (!foundationalUrlSet.has(result.value.source.officialUrl)
-                && !isRelevantDirectSource(result.value.source, question)) continue;
-            if (sourceRank(result.value.source) < 0) continue;
-            sources.push(result.value.source);
-            evidence.push(result.value.evidence);
-          }
-        }
-        if (sources.length === 0 && options.discoverOfficialUrls && !budgetController.signal.aborted) {
-          const discovered = validatedOfficialDocumentUrls(
-            await options.discoverOfficialUrls(plan.primaryQuery, locale, signal),
-            locale,
-          ).filter((candidate) => !seenUrls.has(candidate));
-          const fetched = await Promise.allSettled(
-            discovered.map((candidate) => provider.fetchDocument(candidate)),
-          );
-          throwIfRequestAborted(options.signal);
-          for (const result of fetched) {
-            if (budgetController.signal.aborted || sources.length >= sourceLimit) break;
-            if (result.status === "rejected") {
-              errors.push({ provider: provider.kind, code: publicErrorCode(result.reason) });
-              continue;
-            }
-            if (!foundationalUrlSet.has(result.value.source.officialUrl)
-                && !isRelevantDirectSource(result.value.source, question)) continue;
-            if (sourceRank(result.value.source) < 0) continue;
-            sources.push(result.value.source);
-            evidence.push(result.value.evidence);
-          }
-        }
-      } catch (error) {
-        throwIfRequestAborted(options.signal);
-        errors.push({ provider: provider.kind, code: publicErrorCode(error) });
+    const seenUrls = new Set<string>();
+    let ordinaryCandidatesReserved = 0;
+    let discoveryCandidatesReserved = 0;
+    let activeDocumentFetches = 0;
+    const documentFetchWaiters: Array<() => void> = [];
+    const acquireDocumentFetch = async () => {
+      if (activeDocumentFetches >= MAX_CONCURRENT_DOCUMENT_FETCHES) {
+        await new Promise<void>((resolve) => { documentFetchWaiters.push(resolve); });
       }
-    }
+      activeDocumentFetches += 1;
+    };
+    const releaseDocumentFetch = () => {
+      activeDocumentFetches = Math.max(0, activeDocumentFetches - 1);
+      documentFetchWaiters.shift()?.();
+    };
+    const record = (fetched: PromiseSettledResult<{ source: LegalSourceContext; evidence: DirectLegalSourceEvidence }>) => {
+      if (budgetController.signal.aborted || sources.length >= sourceLimit) return;
+      if (fetched.status === "rejected") {
+        errors.push({ provider: provider.kind, code: publicErrorCode(fetched.reason) });
+        return;
+      }
+      if (!isRelevantDirectSource(fetched.value.source, terms)) return;
+      if (sourceRank(fetched.value.source) < 0) return;
+      sources.push(fetched.value.source);
+      evidence.push(fetched.value.evidence);
+    };
+    const fetchCandidates = async (
+      candidates: readonly string[],
+      channel: "lex_search" | "agent_discovery" = "lex_search",
+    ) => {
+      const unseen = candidates.filter((candidate) => {
+        if (seenUrls.has(candidate)) return false;
+        if (channel === "agent_discovery") {
+          if (discoveryCandidatesReserved >= MAX_CANDIDATES_PER_PROVIDER) return false;
+          discoveryCandidatesReserved += 1;
+        } else {
+          // Keep title-search fan-out globally bounded while reserving a
+          // separate candidate allowance for the semantic discovery agent.
+          if (ordinaryCandidatesReserved >= MAX_CANDIDATES_PER_PROVIDER) return false;
+          ordinaryCandidatesReserved += 1;
+        }
+        seenUrls.add(candidate);
+        return true;
+      });
+      const fetched = await Promise.all(unseen.map(async (candidate): Promise<PromiseSettledResult<{
+        source: LegalSourceContext;
+        evidence: DirectLegalSourceEvidence;
+      }>> => {
+        await acquireDocumentFetch();
+        try {
+          if (budgetController.signal.aborted || sources.length >= sourceLimit) {
+            return { status: "rejected", reason: new Error("LEGAL_SOURCE_TIMEOUT") };
+          }
+          try {
+            return { status: "fulfilled", value: await provider.fetchDocument(candidate) };
+          } catch (error) {
+            return { status: "rejected", reason: error };
+          }
+        } finally {
+          releaseDocumentFetch();
+        }
+      }));
+      throwIfRequestAborted(options.signal);
+      for (const result of fetched) record(result);
+    };
+
+    // Lex's own search is title-only and its title search alone surfaces
+    // amendment/draft notices ahead of base acts. Run the already-started
+    // original search, complementary semantic searches, and bounded official-
+    // domain discovery as independent tool branches; all candidates converge
+    // on the same canonical fetch and exact-span validation boundary.
+    await Promise.all([
+      (async () => {
+        const original = await originalCandidates;
+        if (original.error) {
+          errors.push({ provider: provider.kind, code: publicErrorCode(original.error) });
+          return;
+        }
+        await fetchCandidates(original.candidates);
+      })(),
+      ...queries.slice(1).map(async (query) => {
+        if (budgetController.signal.aborted || sources.length >= sourceLimit) return;
+        try {
+          await fetchCandidates(await provider.search(query, locale));
+        } catch (error) {
+          errors.push({ provider: provider.kind, code: publicErrorCode(error) });
+        }
+      }),
+      (async () => {
+        if (!options.discoverOfficialUrls || budgetController.signal.aborted) return;
+        throwIfRequestAborted(options.signal);
+        // Supply the agent all distinct request-scoped formulations in one
+        // bounded prompt. It may refine web-search calls from their results,
+        // while application code remains free of legal-topic vocabulary.
+        const discoveryQuery = queries.join("\n").slice(0, 500);
+        const discovered = validatedOfficialDocumentUrls(
+          await options.discoverOfficialUrls(discoveryQuery || question, locale, signal),
+          locale,
+        );
+        throwIfRequestAborted(options.signal);
+        await fetchCandidates(discovered, "agent_discovery");
+      })(),
+    ]);
+    throwIfRequestAborted(options.signal);
+  } catch (error) {
+    throwIfRequestAborted(options.signal);
+    errors.push({ provider: "lex", code: publicErrorCode(error) });
   } finally {
     clearTimeout(budgetTimer);
   }
   const retrievedAt = evidence.map((item) => item.retrievedAt).sort()[0] ?? null;
-  const plan = planLegalResearch({ question, locale });
-  const foundationalUrlSet = new Set(options.useFoundationalHints === false
-    ? []
-    : (FOUNDATIONAL_LEX_URLS[plan.domain]?.[locale] ?? []));
   const scored = sources
     .map((source, index) => ({
       source,
       evidence: evidence[index],
-      score: foundationalUrlSet.has(source.officialUrl) ? Math.max(45, sourceRank(source)) : sourceRank(source),
+      score: sourceRank(source),
     }))
     .sort((left, right) => right.score - left.score);
   const bestScore = scored[0]?.score ?? Number.NEGATIVE_INFINITY;
@@ -974,19 +1059,19 @@ export async function fetchDirectOfficialLexDocument(
   const timer = setTimeout(() => controller.abort(), budgetMs);
   const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
   const question = options.query?.trim() || reference.canonicalUrl;
-  const plan = planLegalResearch({ question, locale });
   const wait = options.wait ?? ((delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
+  const terms = relevanceTerms(question);
+  const articleNumberRequested = detectArticleNumbers(question)[0] ?? null;
   try {
     return await new OfficialDirectProvider(
       "lex",
-      question,
       locale,
       abortableFetch(options.fetchImpl ?? fetch, signal),
       options.now ?? (() => new Date()),
       wait,
       signal,
-      plan,
-      false,
+      articleNumberRequested,
+      terms,
     ).fetchDocument(reference.canonicalUrl);
   } finally {
     clearTimeout(timer);

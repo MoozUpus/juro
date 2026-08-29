@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { pruneUnusedVinextFontArtifacts } from "./prune-unused-vinext-font-artifacts.mjs";
 
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const runtimeRoot = resolve(
@@ -142,6 +143,7 @@ const coreTestFiles = [
   "tests/legal-corpus-ingestion.test.ts",
   "tests/legal-corpus-provider.test.ts",
   "tests/legal-corpus-chat-retrieval.test.ts",
+  "tests/legal-corpus-read-service.test.ts",
   "tests/legal-corpus-citation-validation.test.ts",
   "tests/legal-corpus-catalog-discovery.test.ts",
   "tests/legal-corpus-admin-operations.test.ts",
@@ -149,6 +151,8 @@ const coreTestFiles = [
   "tests/legal-source-trust.test.ts",
   "tests/legal-corpus-worker-boundary.test.ts",
   "tests/legal-corpus-retrieval.test.ts",
+  "tests/legal-research-loop.test.ts",
+  "tests/legal-retrieval-understanding.test.ts",
   "tests/legal-corpus-sparse-index.test.ts",
   "tests/legal-corpus-embeddings.test.ts",
   "tests/legal-corpus-qdrant.test.ts",
@@ -172,6 +176,9 @@ const coreTestFiles = [
   "tests/legal-source-review.test.ts",
   "tests/ai-platform.test.ts",
   "tests/ai-chat-slo-contract.test.ts",
+  "tests/ai-chat-retrieval-safety.test.ts",
+  "tests/ai-safe-markdown.test.ts",
+  "tests/secondary-internet-page-verification.test.ts",
   "tests/ai-execution-budget.test.ts",
   "tests/legal-chat-timeout.test.ts",
   "tests/ai-provider-fallback.test.ts",
@@ -263,6 +270,7 @@ const coreTestFiles = [
   "tests/operational-feature-flags.test.ts",
   "tests/operational-jobs.test.ts",
   "tests/platform-audit-log.test.ts",
+  "tests/vinext-font-artifacts.test.mjs",
 ];
 
 const cloudflareTestFiles = [
@@ -855,6 +863,12 @@ async function build(environment) {
       "SITES_BUILD_KILL_AFTER",
     ),
   });
+  const fontPrune = await pruneUnusedVinextFontArtifacts({
+    artifactRoot: resolve(projectRoot, "dist"),
+  });
+  if (fontPrune.removedFamilies.length > 0) {
+    console.log(`Removed unused Vinext font artifacts: ${fontPrune.removedFamilies.join(", ")}`);
+  }
   await removePackagedSecretFiles();
   await normalizeGeneratedWranglerConfig();
   await validateArtifact(environment);
@@ -1114,6 +1128,23 @@ async function main() {
         },
       );
       return;
+    case "dev-staging-corpus":
+      assertNoArgs("dev-staging-corpus", args);
+      await runInteractiveTask(
+        "vite",
+        "vite",
+        [],
+        {
+          JURO_AGENT_PREVIEW_COMPATIBILITY_DATE: "2026-05-22",
+          JURO_STAGING_CORPUS_READS: "true",
+          LOCAL_AUTH_BYPASS: process.env.LOCAL_AUTH_BYPASS ?? "true",
+          LOCAL_AUTH_EMAIL:
+            process.env.LOCAL_AUTH_EMAIL ?? "developer@local.juro.uz",
+          LOCAL_AUTH_FULL_NAME:
+            process.env.LOCAL_AUTH_FULL_NAME ?? "JURO Local Developer",
+        },
+      );
+      return;
     case "start":
       await runInteractiveTask("vinext", "vinext", ["start", ...args], {});
       return;
@@ -1229,7 +1260,7 @@ async function main() {
     }
     default:
       throw new Error(
-        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|smoke-case-create|type-check|lint|build|artifact|performance-budget|matrix|cf-types|cf-types-check|db-generate>",
+        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|dev-staging-corpus|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|smoke-case-create|type-check|lint|build|artifact|performance-budget|matrix|cf-types|cf-types-check|db-generate>",
       );
   }
 }

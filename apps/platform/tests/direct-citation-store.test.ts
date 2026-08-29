@@ -84,6 +84,42 @@ test("citation persistence accepts only an exact validated span excerpt", () => 
     sourceAccessMode: "direct",
   });
   assert.equal(bindings[0]?.[13], null);
+
+  const secondArticle: LegalSourceContext = {
+    ...source,
+    id: "source-408",
+    article: "408",
+    excerpt: "Статья 408. Отдельная проверенная гарантия.",
+    spans: [{
+      id: "span-408",
+      article: "408",
+      paragraph: null,
+      text: "Статья 408. Отдельная проверенная гарантия.",
+      textSha256: "c".repeat(64),
+      quality: "high",
+    }],
+  };
+  bindings.length = 0;
+  const sameActStatements = legalCitationStatements({
+    db,
+    sources: [source, secondArticle],
+    citations: [source, secondArticle].map((item) => ({
+      sourceId: item.id,
+      actTitle: item.actTitle,
+      actIdentifier: item.actIdentifier,
+      article: item.article ?? null,
+      excerpt: item.excerpt ?? null,
+      originalUrl: item.officialUrl,
+      status: "current",
+      effectiveDate: null,
+      verifiedAt: item.verifiedAt,
+    })),
+    aiRunId: "run-same-act",
+    now: "2026-08-15T08:03:00.000Z",
+    sourceAccessMode: "direct",
+  });
+  assert.equal(sameActStatements.length, 2);
+  assert.deepEqual(bindings.map((values) => values[12]), ["7", "408"]);
 });
 
 test("citation persistence accepts a validated private locator without treating it as Lex", () => {

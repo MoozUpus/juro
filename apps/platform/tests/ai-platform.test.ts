@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
+  deriveLegalEvidenceMode,
   enforceLegalChatSourceBoundary,
   forceClarificationWithoutVerifiedSources,
   legalChatJsonSchema,
@@ -19,6 +20,7 @@ import {
 } from "../lib/ai/run-store";
 import { readResponsesSse, ResponsesSseError } from "../lib/ai/responses-sse";
 import { completeStreamingJsonArrayObjects } from "../lib/ai/streaming-json";
+import { attachSecondaryReferenceContext } from "../lib/ai/secondary-reference-result";
 
 const validLegalResponse = {
   responseKind: "clarification_required" as const,
@@ -49,6 +51,122 @@ test("LegalChatResponse is strict, bilingual, and JSON-schema backed", () => {
   assert.equal(legalChatResponseSchema.safeParse({ ...validLegalResponse, hidden: "not allowed" }).success, false);
   assert.equal(legalChatJsonSchema.type, "object");
   assert.ok(Array.isArray(legalChatJsonSchema.required));
+  assert.ok(legalChatJsonSchema.required.includes("conditionalBranches"));
+});
+
+test("legacy stored responses derive authority mode when the optional field is absent", () => {
+  const official = {
+    sourceId: "legacy-lex",
+    actTitle: "Legacy Lex act",
+    actIdentifier: "1",
+    article: "1",
+    excerpt: "A previously stored exact excerpt.",
+    originalUrl: "https://lex.uz/ru/docs/1",
+    status: "current" as const,
+    effectiveDate: null,
+    verifiedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const web = {
+    ...official,
+    sourceId: "legacy-web",
+    actIdentifier: null,
+    originalUrl: "https://guidance.example/article",
+    status: "unconfirmed" as const,
+  };
+  assert.equal(deriveLegalEvidenceMode({ sources: [official] }), "official");
+  assert.equal(deriveLegalEvidenceMode({ sources: [web] }), "secondary_only");
+  assert.equal(deriveLegalEvidenceMode({ sources: [official, web] }), "mixed");
+  assert.equal(deriveLegalEvidenceMode({ sources: [] }), "none");
+});
+
+test("secondary context is attached to an authoritative answer only as a reference note", () => {
+  const official = {
+    sourceId: "official-1",
+    actTitle: "Трудовой кодекс",
+    actIdentifier: "ТК",
+    article: "Статья 163",
+    excerpt: "Увольнение в период отпуска не допускается.",
+    originalUrl: "https://lex.uz/ru/docs/6257288",
+    status: "current" as const,
+    effectiveDate: null,
+    verifiedAt: "2026-08-29T00:00:00.000Z",
+    sourceClass: "OFFICIAL_LEGISLATION" as const,
+  };
+  const secondary = {
+    ...official,
+    sourceId: "secondary-1",
+    actTitle: "Практический комментарий",
+    actIdentifier: null,
+    article: null,
+    excerpt: "Практическое пояснение.",
+    originalUrl: "https://example.org/commentary",
+    status: "unconfirmed" as const,
+    sourceClass: "SECONDARY_REFERENCE" as const,
+    sourceOrigin: "web" as const,
+  };
+  const authoritative = legalChatResponseSchema.parse({
+    ...validLegalResponse,
+    responseKind: "answer",
+    summary: "Увольнение запрещено.",
+    answer: "Работодатель не вправе уволить работника в отпуске.",
+    confirmedFindings: [{ title: "Запрет", explanation: "Увольнение не допускается.", sourceIds: [official.sourceId] }],
+    sources: [official],
+    evidenceMode: "official",
+  });
+
+  const attached = attachSecondaryReferenceContext({
+    result: authoritative,
+    secondarySources: [secondary],
+    referenceNotes: [{ title: secondary.actTitle, note: secondary.excerpt, sourceIds: [secondary.sourceId] }],
+    locale: "ru",
+  });
+
+  assert.equal(attached.evidenceMode, "mixed");
+  assert.deepEqual(attached.confirmedFindings, authoritative.confirmedFindings);
+  assert.deepEqual(attached.referenceNotes?.[0]?.sourceIds, [secondary.sourceId]);
+});
+
+test("secondary-only context clears every field that could communicate legal authority", () => {
+  const secondary = {
+    sourceId: "secondary-only-1",
+    actTitle: "Практический комментарий",
+    actIdentifier: null,
+    article: null,
+    excerpt: "Справочный материал о практике.",
+    originalUrl: "https://example.org/commentary",
+    status: "unconfirmed" as const,
+    effectiveDate: null,
+    verifiedAt: "2026-08-29T00:00:00.000Z",
+    sourceClass: "SECONDARY_REFERENCE" as const,
+    sourceOrigin: "web" as const,
+  };
+  const unsafeAuthority = legalChatResponseSchema.parse({
+    ...validLegalResponse,
+    responseKind: "answer",
+    summary: "Неподтверждённый вывод.",
+    answer: "Неподтверждённый ответ.",
+    confirmedFindings: [{ title: "Вывод", explanation: "Требование.", sourceIds: [] }],
+    conditionalBranches: [{ condition: "Если наступит событие", outcome: "Возникает обязанность.", sourceIds: [] }],
+    risks: [{ level: "high", title: "Риск", explanation: "Возможна ответственность.", sourceIds: [] }],
+    requiredDocuments: [{ name: "Документ", reason: "Для выполнения требования.", required: true }],
+    sources: [],
+  });
+
+  const attached = attachSecondaryReferenceContext({
+    result: unsafeAuthority,
+    secondarySources: [secondary],
+    referenceNotes: [{ title: secondary.actTitle, note: secondary.excerpt, sourceIds: [secondary.sourceId] }],
+    locale: "ru",
+  });
+
+  assert.equal(attached.evidenceMode, "secondary_only");
+  assert.match(attached.summary, /официальная норма Lex\.uz не подтверждена/iu);
+  assert.deepEqual(attached.confirmedFindings, []);
+  assert.deepEqual(attached.conditionalBranches, []);
+  assert.deepEqual(attached.risks, []);
+  assert.deepEqual(attached.requiredDocuments, []);
+  assert.deepEqual(attached.actionPlan, []);
+  assert.deepEqual(attached.deadlines, []);
 });
 
 test("source boundary rejects a provider-invented source id", () => {
@@ -127,10 +245,12 @@ test("source boundary requires replayable citation references and unique sources
   );
 });
 
-test("no-source output is canonicalized to a non-chargeable clarification without legal claims", () => {
+test("no-source output replaces every provider field with a non-chargeable canned refusal", () => {
   const result = forceClarificationWithoutVerifiedSources({
     ...validLegalResponse,
     responseKind: "answer",
+    summary: "Предварительно увольнение ограничено.",
+    answer: "Предварительно работодатель не может уволить работника только из-за отпуска по уходу за ребёнком.",
     confirmedFindings: [{ title: "Неподтверждённый вывод", explanation: "Не должен пройти", sourceIds: ["fake"] }],
     risks: [{ level: "high", title: "Риск", explanation: "Не подтверждён", sourceIds: ["fake"] }],
     sources: [{ sourceId: "fake", actTitle: "Fake", actIdentifier: null, article: null, excerpt: null, originalUrl: "https://example.com", status: "unconfirmed", effectiveDate: null, verifiedAt: "never" }],
@@ -143,6 +263,24 @@ test("no-source output is canonicalized to a non-chargeable clarification withou
   assert.deepEqual(result.sources, []);
   assert.deepEqual(result.deadlines, []);
   assert.equal(result.suggestedDocument, null);
+  // Not a word of provider prose may survive — a general-knowledge assessment
+  // is indistinguishable from grounded law once the reader sees it.
+  assert.doesNotMatch(result.summary, /Предварительно увольнение/iu);
+  assert.doesNotMatch(result.answer, /Предварительно работодатель/iu);
+  assert.match(result.summary, /нужны дополнительные факты и проверенный правовой источник/iu);
+  assert.match(result.answer, /не сформировал правовой вывод/iu);
+  assert.match(result.answer, /не списывает лимит ответа/iu);
+  assert.deepEqual(result.clarificationQuestions, ["Когда произошло событие?"]);
+  assert.deepEqual(result.assumptions, []);
+  assert.deepEqual(result.referenceNotes, []);
+  const repeated = forceClarificationWithoutVerifiedSources(result, {
+    locale: "ru",
+    answerMode: "detailed",
+    reasoningMode: "fast",
+    legalDatabaseAsOf: "unavailable",
+  });
+  assert.equal(repeated.answer, result.answer);
+  assert.equal(repeated.summary, result.summary);
 });
 
 test("OpenAI Responses SSE parser handles split structured-output frames and reports bounded progress", async () => {
@@ -503,16 +641,17 @@ test("timed-out AI run releases reserved usage before a retry can be offered", a
   assert.equal(ledger.status, "released");
 });
 
-test("interactive stale AI reservations recover inside the bounded retry window", async () => {
+test("AI reservations recover after the longest bounded provider chain", async () => {
   const { sqlite, d1 } = aiDatabase();
   const reserved = await reserveAiRun(reservationInput(d1, "interactive-stale-window", 1));
   assert.equal(reserved.kind, "reserved");
   if (reserved.kind !== "reserved") return;
 
+  const staleAt = new Date(Date.now() - (10 * 60 * 1_000 + 1_000)).toISOString();
   sqlite.prepare("UPDATE idempotency_keys SET updated_at=? WHERE key=?")
-    .run(new Date(Date.now() - 91_000).toISOString(), "legal-chat:workspace-1:user-1:interactive-stale-window");
+    .run(staleAt, "legal-chat:workspace-1:user-1:interactive-stale-window");
   sqlite.prepare("UPDATE ai_runs SET updated_at=? WHERE id=?")
-    .run(new Date(Date.now() - 91_000).toISOString(), reserved.runId);
+    .run(staleAt, reserved.runId);
 
   const retry = await reserveAiRun(reservationInput(d1, "interactive-stale-window", 1));
   assert.equal(retry.kind, "expired");
@@ -555,7 +694,29 @@ test("AI usage reservation enforces a monthly limit and request hash binding", a
   );
 });
 
-function reservationInput(db: D1Database, idempotencyKey: string, monthlyLimit: number) {
+test("conditional branches are citation-bound legal propositions", () => {
+  assert.throws(
+    () => enforceLegalChatSourceBoundary({
+      ...validLegalResponse,
+      responseKind: "answer",
+      conditionalBranches: [{ condition: "Если факт подтвердится", outcome: "Применяется отдельное правило.", sourceIds: [] }],
+    }, new Set()),
+    /AI_CONDITIONAL_BRANCH_REQUIRES_CITATION/,
+  );
+});
+
+test("AI usage reservation is unmetered when the local limit is explicitly disabled", async () => {
+  const { d1 } = aiDatabase();
+  const first = await reserveAiRun(reservationInput(d1, "unmetered-request-one", null));
+  const second = await reserveAiRun({
+    ...reservationInput(d1, "unmetered-request-two", null),
+    requestHash: "hash-two",
+  });
+  assert.equal(first.kind, "reserved");
+  assert.equal(second.kind, "reserved");
+});
+
+function reservationInput(db: D1Database, idempotencyKey: string, monthlyLimit: number | null) {
   return {
     db,
     workspaceId: "workspace-1",
