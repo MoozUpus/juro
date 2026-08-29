@@ -19,7 +19,8 @@ The crawl used rendered HTML from every sitemap URL, resolved relative links, re
 
 | URL / host | Evidence | Impact | Status / action |
 | --- | --- | --- | --- |
-| `https://lawyer.juro.uz/ru/individual/dashboard` | Worker v173 continues to `https://lawyer.juro.uz/ru/auth/login?returnTo=%2Fru%2Flawyer%2Fdashboard`, final `200`; UZ equivalent also verified | The reported cross-persona “Not Found” is removed without exposing unrelated individual routes | `VERIFIED` for the anonymous boundary; authenticated Lawyer journey remains a separate evidence gate |
+| `https://lawyer.juro.uz/ru/individual/dashboard` | Worker v175 continues to `https://lawyer.juro.uz/ru/auth/login?returnTo=%2Fru%2Flawyer%2Fdashboard`, final `200`; UZ equivalent was previously verified on the same host boundary | The reported cross-persona “Not Found” remains removed without exposing unrelated individual routes | `VERIFIED` for the anonymous boundary; authenticated Lawyer journey remains a separate evidence gate |
+| `https://app.juro.uz/ru/individual/document-analysis` | Worker v175 resolves the protected entry to `https://app.juro.uz/ru/auth/login?returnTo=%2Fru%2Findividual%2Fdocument-review`, final `200`; no private content is rendered anonymously | Canonical protected route is reachable without a 404 or data disclosure | `VERIFIED` for the anonymous boundary; authenticated upload and completed-result flow remain separate evidence gates |
 | `https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/` | `200`, canonical to `juro.uz/ru`, but indexable | Duplicate provider-host copy can be indexed | `SECURITY RISK`; validated noindex fix is saved as v95 |
 | `https://api.juro.uz/` | DNS does not resolve | Stale docs/links would fail | `DEPRECATED`; remove current-state references unless provisioned |
 | `https://app.staging.juro.uz/` | DNS does not resolve | Wrong staging spelling in the Sites v94 analytics bridge | `BROKEN`; use `staging.app.juro.uz` |

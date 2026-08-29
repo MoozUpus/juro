@@ -10,28 +10,30 @@ Production is currently reachable, the lawyer cross-persona deep link is repaire
 
 | Surface | Current state | Evidence | Rollback point |
 | --- | --- | --- | --- |
-| GitHub main | Merge commit `0b2582fc0408cd737d409a9c7f22bfee2bb4b6f6` from PR #71; reviewed content head `fe79bebcd59a4a184f32dcc2917f79c26604aa13` | Exact-head CI run `33273684311` completed successfully for website and platform; security diff scan `abec8572-61bd-4749-82c8-b284850d4231` reviewed 23/23 source items with no reportable findings | Previous Git commit selected through normal Git release process |
+| GitHub main | Merge commit `7a430af8d90dc9e5fc14ed3fea6505bdcbe72e4b` from PR #73; reviewed content head `6d7207dae114666c6fe45184b7d0a8296422c11c` | Exact-head CI run `33276513529` completed successfully for website and platform; security diff scan `03a50b72-5d35-4cec-af4a-95c03b590994` reviewed 7/7 changed source files with no findings or candidates | Previous Git commit selected through normal Git release process |
 | Public Sites | Live version **94**, source `6f5c70f947df14597cca2e289c3b38bbd36b589d` | Sites deployment succeeded; `juro.uz` is active and 78/78 sitemap URLs return `200` | Redeploy saved v94 if a later Sites release fails |
 | Public Sites candidate | Saved version **95**, source `855ba2161b716daabb96ac469456c101e5d3bb2c` | Build, 48/48 route/SEO tests, type-check, lint, artifact validation, and 56 automated accessibility configurations passed | Not deployed; live production remains v94 |
-| Platform Worker | Worker version **173**, version ID `3b662149-29db-4100-b7ef-74bd2eb2bd3d`; deployment `3e049065-5e32-4df8-8600-017468609ac9` | 100% traffic since `2026-08-29T20:59:55Z`; Chrome verified RU/UZ stale-dashboard recovery, fail-closed unrelated individual route, and edge overwrite of a spoofed request-path header | Prior stable version **171**, ID `addd006b-2620-4cf2-9b7d-49a4bac71b28`, deployment `c97c604b-9c2a-4eca-8b54-56bafd38249d` |
+| Platform Worker | Worker version **175**, version ID `91e87ef8-2042-4ca3-b888-1ab22079ab32`; deployment `dfa906d0-6a82-4d84-ae82-2aa1a098cd21` | 100% traffic since `2026-08-29T21:44:26Z`; Chrome verified fresh operational document-analysis evidence and the anonymous protected-route boundary | Prior stable version **173**, ID `3b662149-29db-4100-b7ef-74bd2eb2bd3d`, deployment `3e049065-5e32-4df8-8600-017468609ac9` |
 | Admin Worker | Version `67065fd8-fcc8-4c15-93c8-bc7b46ce4fcb`; deployment `2be71fe7-ee92-4e43-9bbd-d500f7deac5e` | 100% traffic since `2026-08-23T11:01:31Z`; production admin is reached through the platform host boundary | Use the immediately preceding Admin version only after reproducing the fault and validating the service binding |
 | Platform staging Worker | Version `ca612aa6-3b01-4b6e-82e1-f337999a5f20`; deployment `6ef0e9fc-5f3a-4d0b-9ff0-2b95500f3e22` | Latest deployment `2026-08-28T23:54:16Z` | Previous staging version `6b700785-a72e-43b1-a2aa-e7f6839c4f0d` |
 
-No database migration was performed. Platform Worker v173 was built from merge commit `0b2582fc0408cd737d409a9c7f22bfee2bb4b6f6` with the production-only deploy wrapper and `--containers-rollout none`.
+No database migration was performed. Platform Worker v175 was built from merge commit `7a430af8d90dc9e5fc14ed3fea6505bdcbe72e4b` with the production-only deploy wrapper and `--containers-rollout none`.
 
 ## Live health
 
-Production `/api/status` at `2026-08-29T19:08:52Z` (pre-v173 availability snapshot; not refreshed in the excluded legislation-database workstream):
+Production `/api/status` at `2026-08-29T21:46:43Z` after the v175 cutover:
 
 - overall: `operational`;
 - components: **8/8 operational**;
 - active incidents: **0**;
-- OpenAI synthetic probe: operational, **4,309 ms**;
-- Anthropic synthetic probe: operational, **6,007 ms**;
-- private R2 probe: operational, **2,140 ms**;
-- queue probe: operational, **2,059 ms**;
-- malware scanner probe: operational, **27,916 ms**;
-- D1 scheduled probe: operational, **48,797 ms**.
+- document-analysis synthetic probe: `operational`, checked at `2026-08-29T21:46:35.856Z`, latency `8,840 ms`;
+- document-analysis dependencies also reported fresh operational evidence for queues, DLQ, private R2, malware scanning, OpenAI, and Anthropic;
+- OpenAI synthetic probe: operational, **3,312 ms**;
+- Anthropic synthetic probe: operational, **5,369 ms**;
+- private R2 probe: operational, **846 ms**;
+- queue probe: operational, **4,044 ms**;
+- malware scanner probe: operational, **24,221 ms**;
+- D1 scheduled probe: operational, **60,000 ms**.
 
 The operational label is current evidence of availability, not proof that every product flow meets the brief's latency targets. In particular, the observed D1 and malware-scanner probe latencies require trend/p95 review before a broad performance claim.
 
@@ -58,6 +60,8 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 - Release PR #71 passed website and platform CI at exact head `fe79bebcd59a4a184f32dcc2917f79c26604aa13`, passed the 23/23 source security diff review, and merged as `0b2582fc0408cd737d409a9c7f22bfee2bb4b6f6`.
 - Platform Worker v173 deployed successfully with explicit production bindings and no database migration.
 - Chrome production QA verified `lawyer.juro.uz/{ru,uz}/individual/dashboard` continues to the equivalent lawyer login destination, an unrelated individual route remains `404`, and a client-supplied `x-juro-request-path` cannot replace the edge-derived return path.
+- Document-analysis runtime PR #73 passed exact-head CI run `33276513529`, local focused tests (82/82), core tests (1,119/1,119), worker/runtime tests (202/202), lint, type-check, production artifact validation, Cloudflare matrix dry-run, dependency audit, license policy, and a 7/7 source security diff review with no findings or candidates.
+- Platform Worker v175 deployed successfully with no database migration. Chrome then observed fresh operational document-analysis evidence (`8,840 ms`) and confirmed the protected document-analysis route returns the localized login boundary without exposing private content.
 
 ## Blocking gaps before a production-ready claim
 
