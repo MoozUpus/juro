@@ -169,3 +169,17 @@ test("document workspace dialogs trap and restore keyboard focus", async () => {
   assert.match(documents, /ref=\{deleteDialogRef\}[\s\S]*aria-describedby="delete-document-description"/);
   assert.match(documents, /data-dialog-initial-focus/);
 });
+
+test("standalone document icon actions expose localized accessible names", async () => {
+  const [documents, copy] = await Promise.all([
+    source("../app/_document-builder/documents/DocumentsClient.tsx"),
+    source("../lib/platform/builder-workspace-copy.ts"),
+  ]);
+  assert.match(documents, /aria-label=\{copy\.close\} title=\{copy\.close\}/);
+  assert.match(documents, /aria-label=\{`\$\{copy\.rename\}: \$\{file\.fileName\}`\}/);
+  assert.match(documents, /aria-label=\{`\$\{copy\.restore\}: \$\{file\.fileName\}`\}/);
+  assert.match(documents, /aria-label=\{`\$\{copy\.moveArchive\}: \$\{file\.fileName\}`\}/);
+  assert.match(documents, /aria-label=\{`\$\{copy\.remove\}: \$\{file\.fileName\}`\}/);
+  assert.match(copy, /close: "Закрыть сообщение"/);
+  assert.match(copy, /close: "Xabarni yopish"/);
+});
