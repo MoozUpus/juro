@@ -214,6 +214,19 @@ function hexToArrayBuffer(value: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+function safeR2Failure(error: unknown): { errorCode: string | null; reason: string } {
+  const message = error instanceof Error ? error.message : "";
+  const code = message.match(/\((\d{5})\)\s*$/u)?.[1] ?? null;
+  const reason = /stream|body/iu.test(message)
+    ? "stream"
+    : /checksum|digest/iu.test(message)
+      ? "checksum"
+      : /size|length/iu.test(message)
+        ? "size"
+        : "runtime";
+  return { errorCode: code, reason };
+}
+
 async function verifiedObject(
   storage: R2Bucket,
   key: string,
@@ -289,7 +302,11 @@ async function storeSnapshotObject(input: {
   }
   let stored: R2Object | null;
   try {
-    stored = await bucket(input.env).put(input.objectKey, input.response.body, {
+    // Re-wrap the service-binding stream in this Worker realm before handing
+    // it to R2. Some Cloudflare runtime combinations reject a cross-service
+    // ReadableStream with a TypeError even though both APIs use web streams.
+    const snapshotBody = input.response.body.pipeThrough(new TransformStream());
+    stored = await bucket(input.env).put(input.objectKey, snapshotBody, {
       httpMetadata: { contentType: "application/octet-stream" },
       customMetadata: {
         environment: input.env.APP_ENV,
@@ -304,12 +321,16 @@ async function storeSnapshotObject(input: {
       sha256: hexToArrayBuffer(input.info.checksumSha256),
     });
   } catch (error) {
+    const failure = safeR2Failure(error);
     console.error(JSON.stringify({
       service: "legal-corpus-qdrant-snapshot",
       event: "qdrant.snapshot_stage_failed",
       environment: input.env.APP_ENV,
       stage: "r2-snapshot-put",
-      errorCode: "UNCLASSIFIED",
+      errorCode: failure.errorCode ?? "UNCLASSIFIED",
+      reason: failure.reason,
+      declaredSize,
+      snapshotSize: input.info.size,
       errorType: error instanceof Error ? error.name : typeof error,
     }));
     throw error;
