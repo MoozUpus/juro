@@ -7,6 +7,7 @@ import {
   PRODUCT_KPI_PRIVACY_MIN_SAMPLE,
   readProductKpiDashboard,
 } from "../lib/analytics/product-kpis";
+import { recordLawyerDirectoryVisit } from "../lib/analytics/product-funnel-observations";
 import { platformStaffRoleAllows } from "../lib/auth/staff-access";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -109,12 +110,26 @@ test("product KPI dashboard computes mature activation without returning identit
         .run(`activation-plan-${index}`, caseId, userId, createdAt, createdAt);
     }
 
+    for (let index = 0; index < 3; index += 1) {
+      const userId = `cohort-0${index}`;
+      seedCase(sqlite, {
+        id: `return-case-${index}`,
+        workspaceId: `workspace-${userId}`,
+        userId,
+        createdAt: `2026-08-0${index + 3}T10:00:00.000Z`,
+      });
+    }
+
     const requestStatuses = ["accepted", "offer_proposed", "offer_accepted", "completed", "conflict_check_pending"];
     for (let index = 0; index < 5; index += 1) {
       const userId = `cohort-0${index}`;
       const workspaceId = `workspace-${userId}`;
       const caseId = `workflow-case-${index}`;
       const createdAt = `2026-08-28T0${index + 1}:00:00.000Z`;
+      const firstViewedAt = `2026-08-22T0${index}:00:00.000Z`;
+      sqlite.prepare(`INSERT INTO lawyer_directory_daily_visits
+        (user_id,visit_day,first_viewed_at,last_viewed_at)
+        VALUES (?,'2026-08-22',?,?)`).run(userId, firstViewedAt, firstViewedAt);
       seedCase(sqlite, { id: caseId, workspaceId, userId, createdAt });
       sqlite.prepare(`INSERT INTO action_plans
         (id,case_id,created_by_user_id,title,status,progress_percent,created_at,updated_at)
@@ -141,6 +156,16 @@ test("product KPI dashboard computes mature activation without returning identit
       p75: 14_400,
       p95: 18_000,
     });
+    assert.deepEqual(dashboard.engagedReturn, {
+      cohortStartedAt: "2026-07-16T12:00:00.000Z",
+      cohortEndedAt: "2026-08-15T12:00:00.000Z",
+      activationWindowDays: 7,
+      returnWindowDays: 7,
+      activatedUsers: 5,
+      returningUsers: 3,
+      rateBasisPoints: 6_000,
+      readiness: "insufficient_sample",
+    });
     assert.deepEqual(dashboard.workflows.plans, {
       created: 7,
       completed: 3,
@@ -152,6 +177,15 @@ test("product KPI dashboard computes mature activation without returning identit
       acceptedOrLater: 4,
       completed: 1,
       acceptanceRateBasisPoints: 8_000,
+      readiness: "insufficient_sample",
+    });
+    assert.deepEqual(dashboard.workflows.lawyerMarketplace, {
+      cohortStartedAt: "2026-07-23T12:00:00.000Z",
+      cohortEndedAt: "2026-08-22T12:00:00.000Z",
+      conversionWindowDays: 7,
+      directoryVisitors: 5,
+      requestingVisitors: 5,
+      conversionRateBasisPoints: 10_000,
       readiness: "insufficient_sample",
     });
     const serialized = JSON.stringify(dashboard);
@@ -180,6 +214,52 @@ test("product KPI dashboard suppresses rates and TTFV below the privacy threshol
     assert.equal(dashboard.activation.readiness, "privacy_threshold");
     assert.equal(dashboard.activation.rateBasisPoints, null);
     assert.deepEqual(dashboard.activation.ttfvSeconds, { p50: null, p75: null, p95: null });
+    assert.equal(dashboard.engagedReturn.rateBasisPoints, null);
+    assert.equal(dashboard.workflows.lawyerMarketplace.conversionRateBasisPoints, null);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("lawyer directory visits are daily-deduplicated without storing page or profile content", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seedProfile(sqlite, "visit-user");
+    await recordLawyerDirectoryVisit({
+      db: d1,
+      userId: "visit-user",
+      observedAt: new Date("2026-08-22T10:00:00.000Z"),
+    });
+    await recordLawyerDirectoryVisit({
+      db: d1,
+      userId: "visit-user",
+      observedAt: new Date("2026-08-22T15:00:00.000Z"),
+    });
+    await recordLawyerDirectoryVisit({
+      db: d1,
+      userId: "visit-user",
+      observedAt: new Date("2026-08-23T09:00:00.000Z"),
+    });
+    assert.deepEqual(
+      sqlite.prepare(`SELECT visit_day AS visitDay,first_viewed_at AS firstViewedAt,
+        last_viewed_at AS lastViewedAt
+        FROM lawyer_directory_daily_visits ORDER BY visit_day`).all().map((row) => ({ ...row })),
+      [
+        {
+          visitDay: "2026-08-22",
+          firstViewedAt: "2026-08-22T10:00:00.000Z",
+          lastViewedAt: "2026-08-22T15:00:00.000Z",
+        },
+        {
+          visitDay: "2026-08-23",
+          firstViewedAt: "2026-08-23T09:00:00.000Z",
+          lastViewedAt: "2026-08-23T09:00:00.000Z",
+        },
+      ],
+    );
+    const columns = sqlite.prepare("PRAGMA table_info(lawyer_directory_daily_visits)").all()
+      .map((column) => String((column as { name: string }).name));
+    assert.deepEqual(columns, ["user_id", "visit_day", "first_viewed_at", "last_viewed_at"]);
   } finally {
     sqlite.close();
   }
@@ -189,6 +269,8 @@ test("product KPI console is no-store, administrator-only and fresh-MFA-gated", 
   const api = readFileSync(new URL("../app/api/platform/admin/product-kpis/route.ts", import.meta.url), "utf8");
   const page = readFileSync(new URL("../app/[locale]/admin/product-kpis/page.tsx", import.meta.url), "utf8");
   const service = readFileSync(new URL("../lib/analytics/product-kpis.ts", import.meta.url), "utf8");
+  const observation = readFileSync(new URL("../lib/analytics/product-funnel-observations.ts", import.meta.url), "utf8");
+  const directoryRoute = readFileSync(new URL("../app/api/platform/lawyers/route.ts", import.meta.url), "utf8");
   assert.equal(platformStaffRoleAllows("administrator", "staff.operations.manage"), true);
   assert.equal(platformStaffRoleAllows("support", "staff.operations.manage"), false);
   assert.match(api, /requirePlatformStaffRequest\(request, "staff\.operations\.manage", \{/);
@@ -198,4 +280,8 @@ test("product KPI console is no-store, administrator-only and fresh-MFA-gated", 
   assert.match(page, /robots: \{ index: false, follow: false, nocache: true \}/);
   assert.doesNotMatch(service, /SELECT\s+profile\.email|SELECT\s+message\.content|email\s+AS|content\s+AS/i);
   assert.match(service, /rawIdentifiersReturned: false/);
+  assert.match(service, /date\(engagement\.engagedAt\)>date\(first\.firstValueAt\)/);
+  assert.match(observation, /ON CONFLICT\(user_id,visit_day\) DO UPDATE/);
+  assert.match(directoryRoute, /recordLawyerDirectoryVisit\(\{ db, userId: user\.id \}\)/);
+  assert.doesNotMatch(observation, /profile_id|lawyer_id|case_id|workspace_id|content|query/i);
 });

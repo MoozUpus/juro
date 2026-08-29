@@ -28,6 +28,16 @@ export type ProductKpiDashboard = {
     };
     ttfvSeconds: { p50: number | null; p75: number | null; p95: number | null };
   };
+  engagedReturn: {
+    cohortStartedAt: string;
+    cohortEndedAt: string;
+    activationWindowDays: 7;
+    returnWindowDays: 7;
+    activatedUsers: number;
+    returningUsers: number;
+    rateBasisPoints: number | null;
+    readiness: ProductKpiReadiness;
+  };
   workflows: {
     windowStartedAt: string;
     windowEndedAt: string;
@@ -42,6 +52,15 @@ export type ProductKpiDashboard = {
       acceptedOrLater: number;
       completed: number;
       acceptanceRateBasisPoints: number | null;
+      readiness: ProductKpiReadiness;
+    };
+    lawyerMarketplace: {
+      cohortStartedAt: string;
+      cohortEndedAt: string;
+      conversionWindowDays: 7;
+      directoryVisitors: number;
+      requestingVisitors: number;
+      conversionRateBasisPoints: number | null;
       readiness: ProductKpiReadiness;
     };
   };
@@ -64,6 +83,8 @@ type ActivationSummaryRow = {
 type DurationRow = { durationSeconds: number };
 type PlanSummaryRow = { created: number; completed: number };
 type LawyerRequestSummaryRow = { created: number; acceptedOrLater: number; completed: number };
+type EngagedReturnSummaryRow = { activatedUsers: number; returningUsers: number };
+type LawyerMarketplaceSummaryRow = { directoryVisitors: number; requestingVisitors: number };
 
 const investorDemoIds = [
   "10000000-0000-4000-8000-000000000001",
@@ -165,6 +186,32 @@ SELECT CAST(round((julianday(firstValueAt)-julianday(onboardedAt))*86400) AS INT
 FROM first_values JOIN eligible USING(userId)
 ORDER BY durationSeconds`;
 
+const engagedReturnSummarySql = `${activationCtes},
+engagement_events AS (
+  SELECT conversation.owner_user_id AS userId,message.created_at AS engagedAt
+  FROM conversation_messages message
+  JOIN conversations conversation ON conversation.id=message.conversation_id
+  WHERE message.author_type='user'
+  UNION ALL
+  SELECT matter.owner_user_id AS userId,matter.created_at AS engagedAt FROM cases matter
+  UNION ALL
+  SELECT document.owner_user_id AS userId,document.created_at AS engagedAt FROM documents document
+  UNION ALL
+  SELECT analysis.owner_user_id AS userId,analysis.created_at AS engagedAt FROM document_analyses analysis
+  UNION ALL
+  SELECT request.requester_user_id AS userId,request.created_at AS engagedAt FROM lawyer_requests request
+),
+returning_users AS (
+  SELECT DISTINCT first.userId
+  FROM first_values first
+  JOIN engagement_events engagement ON engagement.userId=first.userId
+  WHERE date(engagement.engagedAt)>date(first.firstValueAt)
+    AND julianday(engagement.engagedAt)<=julianday(first.firstValueAt)+7
+)
+SELECT
+  (SELECT count(*) FROM first_values) AS activatedUsers,
+  (SELECT count(*) FROM returning_users) AS returningUsers`;
+
 const planSummarySql = `
 SELECT count(*) AS created,
   COALESCE(sum(CASE WHEN plan.status='completed' THEN 1 ELSE 0 END),0) AS completed
@@ -183,6 +230,30 @@ JOIN user_profiles profile ON profile.id=request.requester_user_id
 WHERE request.created_at>=? AND request.created_at<?
   AND ${excludedUserPredicate}`;
 
+const lawyerMarketplaceSummarySql = `
+WITH first_visits AS (
+  SELECT user_id AS userId,min(first_viewed_at) AS firstViewedAt
+  FROM lawyer_directory_daily_visits
+  GROUP BY user_id
+),
+eligible_visits AS (
+  SELECT visit.userId,visit.firstViewedAt
+  FROM first_visits visit
+  JOIN user_profiles profile ON profile.id=visit.userId
+  WHERE visit.firstViewedAt>=? AND visit.firstViewedAt<?
+    AND ${excludedUserPredicate}
+),
+requesting_visitors AS (
+  SELECT DISTINCT visit.userId
+  FROM eligible_visits visit
+  JOIN lawyer_requests request ON request.requester_user_id=visit.userId
+  WHERE julianday(request.created_at)>=julianday(visit.firstViewedAt)
+    AND julianday(request.created_at)<=julianday(visit.firstViewedAt)+7
+)
+SELECT
+  (SELECT count(*) FROM eligible_visits) AS directoryVisitors,
+  (SELECT count(*) FROM requesting_visitors) AS requestingVisitors`;
+
 export async function readProductKpiDashboard(input: {
   db: D1Database;
   now?: Date;
@@ -191,20 +262,28 @@ export async function readProductKpiDashboard(input: {
   const asOf = now.toISOString();
   const cohortStartedAt = isoDaysBefore(now, 37);
   const cohortEndedAt = isoDaysBefore(now, 7);
+  const returnCohortStartedAt = isoDaysBefore(now, 44);
+  const returnCohortEndedAt = isoDaysBefore(now, 14);
   const workflowStartedAt = isoDaysBefore(now, 30);
   const activationBindings = [cohortStartedAt, cohortEndedAt, asOf] as const;
+  const returnBindings = [returnCohortStartedAt, returnCohortEndedAt, asOf] as const;
   const workflowBindings = [workflowStartedAt, asOf, asOf] as const;
+  const marketplaceBindings = [cohortStartedAt, cohortEndedAt, asOf] as const;
 
-  const [summaryResult, durationResult, planResult, lawyerResult] = await input.db.batch([
+  const [summaryResult, durationResult, returnResult, planResult, lawyerResult, marketplaceResult] = await input.db.batch([
     input.db.prepare(activationSummarySql).bind(...activationBindings),
     input.db.prepare(activationDurationsSql).bind(...activationBindings),
+    input.db.prepare(engagedReturnSummarySql).bind(...returnBindings),
     input.db.prepare(planSummarySql).bind(...workflowBindings),
     input.db.prepare(lawyerRequestSummarySql).bind(...workflowBindings),
+    input.db.prepare(lawyerMarketplaceSummarySql).bind(...marketplaceBindings),
   ]);
 
   const summary = (summaryResult.results?.[0] ?? {}) as Partial<ActivationSummaryRow>;
   const plan = (planResult.results?.[0] ?? {}) as Partial<PlanSummaryRow>;
   const lawyer = (lawyerResult.results?.[0] ?? {}) as Partial<LawyerRequestSummaryRow>;
+  const engagedReturn = (returnResult.results?.[0] ?? {}) as Partial<EngagedReturnSummaryRow>;
+  const marketplace = (marketplaceResult.results?.[0] ?? {}) as Partial<LawyerMarketplaceSummaryRow>;
   const durations = (durationResult.results ?? [])
     .map((row) => numeric((row as Partial<DurationRow>).durationSeconds))
     .filter((value) => value >= 0)
@@ -213,6 +292,8 @@ export async function readProductKpiDashboard(input: {
   const activatedSignups = numeric(summary.activatedSignups);
   const createdPlans = numeric(plan.created);
   const createdRequests = numeric(lawyer.created);
+  const activatedReturnUsers = numeric(engagedReturn.activatedUsers);
+  const directoryVisitors = numeric(marketplace.directoryVisitors);
 
   return {
     asOf,
@@ -237,6 +318,16 @@ export async function readProductKpiDashboard(input: {
         p95: percentile(durations, 0.95),
       },
     },
+    engagedReturn: {
+      cohortStartedAt: returnCohortStartedAt,
+      cohortEndedAt: returnCohortEndedAt,
+      activationWindowDays: 7,
+      returnWindowDays: 7,
+      activatedUsers: activatedReturnUsers,
+      returningUsers: numeric(engagedReturn.returningUsers),
+      rateBasisPoints: rateBasisPoints(numeric(engagedReturn.returningUsers), activatedReturnUsers),
+      readiness: readiness(activatedReturnUsers),
+    },
     workflows: {
       windowStartedAt: workflowStartedAt,
       windowEndedAt: asOf,
@@ -252,6 +343,15 @@ export async function readProductKpiDashboard(input: {
         completed: numeric(lawyer.completed),
         acceptanceRateBasisPoints: rateBasisPoints(numeric(lawyer.acceptedOrLater), createdRequests),
         readiness: readiness(createdRequests),
+      },
+      lawyerMarketplace: {
+        cohortStartedAt,
+        cohortEndedAt,
+        conversionWindowDays: 7,
+        directoryVisitors,
+        requestingVisitors: numeric(marketplace.requestingVisitors),
+        conversionRateBasisPoints: rateBasisPoints(numeric(marketplace.requestingVisitors), directoryVisitors),
+        readiness: readiness(directoryVisitors),
       },
     },
     privacy: {

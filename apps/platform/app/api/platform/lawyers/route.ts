@@ -2,9 +2,10 @@ import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { projectPublicLawyerDirectory } from "../../../../lib/platform/lawyer-directory-reviews";
 import { trackProductEvent } from "../../../../lib/platform/analytics";
+import { recordLawyerDirectoryVisit } from "../../../../lib/analytics/product-funnel-observations";
 
 export const GET = withApiErrors(async function GET() {
-  await requireApiUser();
+  const user = await requireApiUser();
   const db = requireD1();
   const now = new Date().toISOString();
   const lawyers = await db.prepare(
@@ -63,7 +64,15 @@ export const GET = withApiErrors(async function GET() {
     ORDER BY lawyerProfileId ASC,createdAt DESC`,
   ).all<{ reviewId: string; lawyerProfileId: string; overallRating: number; body: string | null; createdAt: string; replyBody: string | null; replyCreatedAt: string | null }>();
   const directory = projectPublicLawyerDirectory(lawyers.results, aggregates.results, reviews.results);
-  if (directory.length > 0) trackProductEvent({ event: "lawyer_viewed", surface: "lawyer_marketplace" });
+  if (directory.length > 0) {
+    trackProductEvent({ event: "lawyer_viewed", surface: "lawyer_marketplace" });
+    try {
+      await recordLawyerDirectoryVisit({ db, userId: user.id });
+    } catch {
+      // Funnel telemetry must never block the marketplace or disclose identity.
+      console.error(JSON.stringify({ event: "lawyer_directory_visit.persistence_failed" }));
+    }
+  }
   return Response.json({
     lawyers: directory,
   }, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });

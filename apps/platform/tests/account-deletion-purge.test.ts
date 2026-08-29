@@ -185,6 +185,11 @@ function seedContent(
   sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
   bucket: FakeR2Bucket,
 ): void {
+  for (const userId of [USER_ID, OTHER_USER_ID]) {
+    sqlite.prepare(`INSERT INTO lawyer_directory_daily_visits
+      (user_id,visit_day,first_viewed_at,last_viewed_at)
+      VALUES (?,'2026-07-30',?,?)`).run(userId, NOW, NOW);
+  }
   sqlite.prepare(
     `INSERT INTO document_templates (
        id,key,category,active,created_at,updated_at
@@ -431,6 +436,14 @@ test("purge removes D1/R2 content, redacts shared comments, and retains immutabl
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS total FROM user_memory_settings WHERE user_id=?").get(USER_ID) as { total: number }).total,
       0,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM lawyer_directory_daily_visits WHERE user_id=?").get(USER_ID) as { total: number }).total,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM lawyer_directory_daily_visits WHERE user_id=?").get(OTHER_USER_ID) as { total: number }).total,
+      1,
     );
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS total FROM memory_sources WHERE id='purge-memory-source'").get() as { total: number }).total,

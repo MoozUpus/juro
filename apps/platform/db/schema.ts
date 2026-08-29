@@ -1726,6 +1726,20 @@ export const lawyerRequests = sqliteTable("lawyer_requests", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), requesterUserId: text("requester_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), lawyerProfileId: text("lawyer_profile_id").references(() => lawyerProfiles.id, { onDelete: "set null" }), status: text("status").notNull().default("requested"), anonymizedSummary: text("anonymized_summary").notNull(), requestedScopeJson: text("requested_scope_json").notNull(), lawyerDecisionClaimId: text("lawyer_decision_claim_id"), lawyerDecisionByUserId: text("lawyer_decision_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }), lawyerDecisionAt: text("lawyer_decision_at"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [index("lawyer_requests_workspace_idx").on(table.workspaceId, table.updatedAt), index("lawyer_requests_lawyer_idx").on(table.lawyerProfileId, table.status), uniqueIndex("lawyer_requests_decision_claim_uidx").on(table.lawyerDecisionClaimId)]);
 
+export const lawyerDirectoryDailyVisits = sqliteTable("lawyer_directory_daily_visits", {
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  visitDay: text("visit_day").notNull(),
+  firstViewedAt: text("first_viewed_at").notNull(),
+  lastViewedAt: text("last_viewed_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.visitDay] }),
+  index("lawyer_directory_daily_visits_first_viewed_idx").on(table.firstViewedAt, table.userId),
+  check("lawyer_directory_daily_visits_day_length_check", sql`length(${table.visitDay}) = 10`),
+  check("lawyer_directory_daily_visits_first_day_check", sql`${table.visitDay} = substr(${table.firstViewedAt},1,10)`),
+  check("lawyer_directory_daily_visits_last_day_check", sql`${table.visitDay} = substr(${table.lastViewedAt},1,10)`),
+  check("lawyer_directory_daily_visits_time_order_check", sql`${table.firstViewedAt} <= ${table.lastViewedAt}`),
+]);
+
 export const lawyerConsultations = sqliteTable("lawyer_consultations", {
   id: text("id").primaryKey(),
   lawyerRequestId: text("lawyer_request_id").notNull().references(() => lawyerRequests.id, { onDelete: "cascade" }),

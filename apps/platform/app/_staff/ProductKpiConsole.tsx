@@ -30,6 +30,12 @@ const copy = {
     analysis: "Завершённый анализ документа",
     casePlan: "Созданные дело и план",
     pathwaysNote: "Один пользователь может попасть в несколько путей; общий activated считается один раз по самому раннему результату.",
+    engagedReturn: "Возврат после первой ценности",
+    returnCohort: "Зрелая когорта",
+    returnActivated: "Получили первую ценность",
+    returned: "Вернулись к осмысленному действию",
+    returnRate: "7-day engaged return",
+    returnNote: "Возврат — новое явное действие пользователя в другой UTC-день в течение 7 дней после первой ценности. Фоновое обновление сессии и пассивный просмотр не засчитываются.",
     workflows: "Операционные воронки за 30 дней",
     plansCreated: "Планы созданы",
     plansCompleted: "Планы завершены",
@@ -38,6 +44,12 @@ const copy = {
     requestsAccepted: "Приняты или дошли дальше",
     requestsCompleted: "Завершены",
     requestRate: "Acceptance rate",
+    marketplace: "Каталог юристов → заявка",
+    marketplaceCohort: "Когорта первого просмотра",
+    directoryVisitors: "Уникально открыли каталог",
+    requestingVisitors: "Создали заявку за 7 дней",
+    marketplaceRate: "Browse-to-request conversion",
+    marketplaceNote: "Просмотр дедуплицируется по пользователю и UTC-дню; в отчёт попадают только агрегаты. Первый просмотр закрепляет когорту, повторный вход её не переносит.",
     method: "Границы доказательства",
     methodText: "Из когорт исключены legal-eval, синтетический investor-demo и действующие сотрудники платформы. Ставки и TTFV скрываются до 5 наблюдений; статус достаточной сопоставимой выборки требует 30. Метрики показывают сохранённые рабочие результаты, но сами по себе не доказывают юридическое качество.",
     noData: "Нет данных",
@@ -71,6 +83,12 @@ const copy = {
     analysis: "Tugallangan hujjat tahlili",
     casePlan: "Yaratilgan ish va reja",
     pathwaysNote: "Bitta foydalanuvchi bir nechta yo‘lga kirishi mumkin; umumiy activated eng erta natija bo‘yicha bir marta sanaladi.",
+    engagedReturn: "Birinchi qiymatdan keyingi qaytish",
+    returnCohort: "Yetilgan kohorta",
+    returnActivated: "Birinchi qiymatni olganlar",
+    returned: "Mazmunli harakatga qaytganlar",
+    returnRate: "7-day engaged return",
+    returnNote: "Qaytish — birinchi qiymatdan keyin 7 kun ichida boshqa UTC kunida foydalanuvchining yangi aniq harakati. Fon seansi yangilanishi va passiv ko‘rish hisoblanmaydi.",
     workflows: "30 kunlik operatsion voronkalar",
     plansCreated: "Rejalar yaratildi",
     plansCompleted: "Rejalar tugallandi",
@@ -79,6 +97,12 @@ const copy = {
     requestsAccepted: "Qabul qilingan yoki keyingi bosqichda",
     requestsCompleted: "Tugallangan",
     requestRate: "Acceptance rate",
+    marketplace: "Yuristlar katalogi → so‘rov",
+    marketplaceCohort: "Birinchi ko‘rish kohortasi",
+    directoryVisitors: "Katalogni noyob ochganlar",
+    requestingVisitors: "7 kunda so‘rov yaratganlar",
+    marketplaceRate: "Browse-to-request conversion",
+    marketplaceNote: "Ko‘rish foydalanuvchi va UTC kuni bo‘yicha deduplikatsiya qilinadi; hisobotga faqat agregatlar chiqadi. Birinchi ko‘rish kohortani belgilaydi, takroriy kirish uni ko‘chirmaydi.",
     method: "Dalil chegaralari",
     methodText: "Legal-eval, sintetik investor-demo va faol platforma xodimlari kohortadan chiqarilgan. Stavka va TTFV 5 kuzatuvgacha yashiriladi; taqqoslanadigan namuna holati uchun 30 ta kerak. Ko‘rsatkichlar saqlangan ish natijalarini ko‘rsatadi, ammo o‘z-o‘zidan yuridik sifatni isbotlamaydi.",
     noData: "Ma’lumot yo‘q",
@@ -127,6 +151,7 @@ export function ProductKpiConsole({
     ready: t.ready,
   };
   const activation = dashboard.activation;
+  const engagedReturn = dashboard.engagedReturn;
   const workflows = dashboard.workflows;
   const otherLocale = locale === "ru" ? "uz" : "ru";
   return <div className="staff-console">
@@ -149,6 +174,17 @@ export function ProductKpiConsole({
           <a href={`/${locale}/admin/audit-log`}>{t.audit}</a>
           <a href={`/${locale}/admin/product-kpis`}><RefreshCw aria-hidden="true"/>{t.refresh}</a>
         </nav>
+      </section>
+
+      <section className="jobs-summary" aria-labelledby="engaged-return-heading">
+        <h2 id="engaged-return-heading">{t.engagedReturn}</h2>
+        <p className="staff-count">{t.returnCohort}: <time dateTime={engagedReturn.cohortStartedAt}>{dateTime(engagedReturn.cohortStartedAt, locale)}</time> — <time dateTime={engagedReturn.cohortEndedAt}>{dateTime(engagedReturn.cohortEndedAt, locale)}</time> · {readinessLabel[engagedReturn.readiness]}</p>
+        <div>
+          <article><span>{t.returnActivated}</span><b>{engagedReturn.activatedUsers}</b></article>
+          <article><span>{t.returned}</span><b>{engagedReturn.returningUsers}</b></article>
+          <article><span>{t.returnRate}</span><b>{percent(engagedReturn.rateBasisPoints)}</b></article>
+        </div>
+        <p className="staff-count">{t.returnNote}</p>
       </section>
 
       <section className="jobs-summary" aria-labelledby="activation-heading">
@@ -185,6 +221,17 @@ export function ProductKpiConsole({
           <article><span>{t.requestsCompleted}</span><b>{workflows.lawyerRequests.completed}</b></article>
           <article><span>{t.requestRate}</span><b>{percent(workflows.lawyerRequests.acceptanceRateBasisPoints)}</b></article>
         </div>
+      </section>
+
+      <section className="jobs-summary" aria-labelledby="marketplace-heading">
+        <h2 id="marketplace-heading">{t.marketplace}</h2>
+        <p className="staff-count">{t.marketplaceCohort}: <time dateTime={workflows.lawyerMarketplace.cohortStartedAt}>{dateTime(workflows.lawyerMarketplace.cohortStartedAt, locale)}</time> — <time dateTime={workflows.lawyerMarketplace.cohortEndedAt}>{dateTime(workflows.lawyerMarketplace.cohortEndedAt, locale)}</time> · {readinessLabel[workflows.lawyerMarketplace.readiness]}</p>
+        <div>
+          <article><span>{t.directoryVisitors}</span><b>{workflows.lawyerMarketplace.directoryVisitors}</b></article>
+          <article><span>{t.requestingVisitors}</span><b>{workflows.lawyerMarketplace.requestingVisitors}</b></article>
+          <article><span>{t.marketplaceRate}</span><b>{percent(workflows.lawyerMarketplace.conversionRateBasisPoints)}</b></article>
+        </div>
+        <p className="staff-count">{t.marketplaceNote}</p>
       </section>
 
       <section className="staff-sync" aria-labelledby="method-heading">
