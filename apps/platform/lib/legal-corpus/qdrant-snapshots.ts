@@ -325,7 +325,18 @@ export async function createLegalCorpusQdrantSnapshot(
   bucket(env);
   const client = options.client ?? new QdrantLegalCorpusClient(env);
   if (!(await client.collectionExists())) {
-    throw new QdrantCorpusError("QDRANT_SNAPSHOT_REQUIRED", false);
+    // A container can disappear after the last D1 dense ID was persisted. In
+    // approved staging, let the disjoint recovery path recreate the private
+    // collection and reset deterministic IDs; the next bounded backfill tick
+    // will repopulate it before another snapshot attempt. Never create an
+    // untracked empty snapshot.
+    const recovery = await ensureLegalCorpusQdrantAvailable(env, { client });
+    if (recovery.resetDensePointIds > 0) {
+      return { status: "not_ready", snapshotId: null };
+    }
+    if (!(await client.collectionExists())) {
+      throw new QdrantCorpusError("QDRANT_SNAPSHOT_REQUIRED", false);
+    }
   }
   await client.assertCompatible();
   const [totalPoints, currentPoints] = await Promise.all([
@@ -468,6 +479,17 @@ export async function ensureLegalCorpusQdrantAvailable(
   if (exists) {
     await client.assertCompatible();
     const totalPoints = await client.countPoints(false);
+    console.warn(JSON.stringify({
+      service: "legal-corpus-qdrant-recovery",
+      event: "qdrant.recovery_state",
+      environment: env.APP_ENV,
+      collectionExists: true,
+      ledgerTotalPoints: ledger.denseTrackedPoints,
+      qdrantTotalPoints: totalPoints,
+      snapshotPresent: Boolean(snapshotRow),
+      rebuildApproved: env.LEGAL_CORPUS_QDRANT_REBUILD_APPROVED === "true",
+      autoIngestEnabled: env.LEGAL_CORPUS_AUTO_INGEST_ENABLED === "true",
+    }));
     if (totalPoints === ledger.denseTrackedPoints) {
       return { status: "existing", resetDensePointIds: 0 };
     }
@@ -555,6 +577,17 @@ export async function ensureLegalCorpusQdrantAvailable(
     }));
     return { status: "created", resetDensePointIds };
   }
+
+  console.warn(JSON.stringify({
+    service: "legal-corpus-qdrant-recovery",
+    event: "qdrant.recovery_state",
+    environment: env.APP_ENV,
+    collectionExists: false,
+    ledgerTotalPoints: ledger.denseTrackedPoints,
+    snapshotPresent: Boolean(snapshotRow),
+    rebuildApproved: env.LEGAL_CORPUS_QDRANT_REBUILD_APPROVED === "true",
+    autoIngestEnabled: env.LEGAL_CORPUS_AUTO_INGEST_ENABLED === "true",
+  }));
 
   bucket(env);
   const holderId = await claimRecoveryLock(env.DB, options.now ?? new Date());

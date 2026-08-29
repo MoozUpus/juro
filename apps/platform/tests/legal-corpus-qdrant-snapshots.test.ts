@@ -425,6 +425,47 @@ test("approved staging rebuild clears a partially populated collection before re
   }
 });
 
+test("snapshot attempt recovers a disappeared staging collection before returning not_ready", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const r2 = new MemoryR2();
+  let exists = false;
+  let ensured = 0;
+  try {
+    seedDenseChunk(sqlite, { suffix: "47", indexedAt: "2026-08-15T16:00:00.000Z" });
+    const client = {
+      async collectionExists() { return exists; },
+      async assertCompatible() {},
+      async countPoints() { return 0; },
+      async deleteAllPoints() {},
+      async createSnapshot() { throw new Error("not used"); },
+      async deleteSnapshot() {},
+      async downloadSnapshot() { throw new Error("not used"); },
+      async ensureCompatible() { exists = true; ensured += 1; return "created" as const; },
+      async restoreSnapshot() { throw new Error("not used"); },
+    };
+    const result = await createLegalCorpusQdrantSnapshot({
+      APP_ENV: "staging",
+      DB: d1,
+      BACKUP_BUCKET: r2 as unknown as R2Bucket,
+      LEGAL_CORPUS_DENSE_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "false",
+      LEGAL_CORPUS_QDRANT_REBUILD_APPROVED: "true",
+      QDRANT_URL: "https://qdrant.internal",
+      QDRANT_API_KEY: "secret",
+      QDRANT_COLLECTION: "juro_legal_staging",
+    }, { client });
+    assert.deepEqual(result, { status: "not_ready", snapshotId: null });
+    assert.equal(ensured, 1);
+    const row = sqlite.prepare(
+      "SELECT dense_vector_id AS denseVectorId,indexed_at AS indexedAt FROM legal_corpus_chunks LIMIT 1",
+    ).get() as { denseVectorId: string | null; indexedAt: string | null };
+    assert.equal(row.denseVectorId, null);
+    assert.equal(row.indexedAt, null);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("R2 checksum option rejects corrupted snapshot bytes before a ledger row exists", async () => {
   const good = new TextEncoder().encode("good");
   const bad = new TextEncoder().encode("bad");
