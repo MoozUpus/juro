@@ -292,6 +292,44 @@ test("ephemeral collection restore requires the verified R2 snapshot and resets 
   }
 });
 
+test("approved staging rebuild recreates an empty ephemeral collection before the first snapshot", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  let ensured = 0;
+  try {
+    seedDenseChunk(sqlite, { suffix: "45", indexedAt: "2026-08-15T16:00:00.000Z" });
+    const restored = await ensureLegalCorpusQdrantAvailable({
+      APP_ENV: "staging",
+      DB: d1,
+      LEGAL_CORPUS_DENSE_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "false",
+      LEGAL_CORPUS_QDRANT_REBUILD_APPROVED: "true",
+      QDRANT_URL: "https://qdrant.internal",
+      QDRANT_API_KEY: "secret",
+      QDRANT_COLLECTION: "juro_legal_staging",
+    }, {
+      client: {
+        async collectionExists() { return false; },
+        async assertCompatible() {},
+        async countPoints() { return 0; },
+        async createSnapshot() { throw new Error("not used"); },
+        async deleteSnapshot() {},
+        async downloadSnapshot() { throw new Error("not used"); },
+        async ensureCompatible() { ensured += 1; return "created" as const; },
+        async restoreSnapshot() { throw new Error("not used"); },
+      },
+    });
+    assert.deepEqual(restored, { status: "created", resetDensePointIds: 1 });
+    assert.equal(ensured, 1);
+    const row = sqlite.prepare(
+      "SELECT dense_vector_id AS denseVectorId,indexed_at AS indexedAt FROM legal_corpus_chunks LIMIT 1",
+    ).get() as { denseVectorId: string | null; indexedAt: string | null };
+    assert.equal(row.denseVectorId, null);
+    assert.equal(row.indexedAt, null);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("R2 checksum option rejects corrupted snapshot bytes before a ledger row exists", async () => {
   const good = new TextEncoder().encode("good");
   const bad = new TextEncoder().encode("bad");

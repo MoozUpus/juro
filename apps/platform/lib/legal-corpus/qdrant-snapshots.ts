@@ -20,6 +20,9 @@ export type LegalCorpusQdrantSnapshotEnv = QdrantCorpusEnv & {
   BACKUP_BUCKET?: R2Bucket;
   LEGAL_CORPUS_DENSE_ENABLED?: string;
   LEGAL_CORPUS_AUTO_INGEST_ENABLED?: string;
+  /** Explicit staging-only recovery after a Container code update can reset
+   * its ephemeral collection before the first verified snapshot exists. */
+  LEGAL_CORPUS_QDRANT_REBUILD_APPROVED?: string;
 };
 
 type DenseLedger = {
@@ -446,6 +449,38 @@ export async function ensureLegalCorpusQdrantAvailable(
   } else if (ledger.denseTrackedPoints === 0) {
     await client.ensureCompatible();
     return { status: "created", resetDensePointIds: 0 };
+  } else if (
+    env.APP_ENV === "staging"
+    && env.LEGAL_CORPUS_AUTO_INGEST_ENABLED !== "true"
+    && env.LEGAL_CORPUS_QDRANT_REBUILD_APPROVED === "true"
+  ) {
+    // The approved staging recovery path is intentionally disjoint from the
+    // normal restore path: when an ephemeral Container was reset before any
+    // verified snapshot existed, clear only deterministic point metadata for
+    // the global legal corpus and rebuild them from source text. No user
+    // documents are in this scope, and the flag is never enabled in
+    // production. Keep the operation explicit and safe to retry.
+    await client.ensureCompatible();
+    const reset = await env.DB.prepare(`UPDATE legal_corpus_chunks
+      SET dense_vector_id=NULL,indexed_at=NULL
+      WHERE dense_vector_id IS NOT NULL
+        AND id IN (
+          SELECT chunk.id
+          FROM legal_corpus_chunks chunk
+          INNER JOIN legal_corpus_provisions provision ON provision.id=chunk.provision_id
+          INNER JOIN legal_corpus_documents document ON document.id=provision.document_id
+          WHERE document.provider IN ('lex_uz','juro_owner')
+            AND document.scope='global' AND document.availability_status='ready'
+        )`).run();
+    const resetDensePointIds = Math.max(0, Number(reset.meta?.changes ?? 0));
+    console.warn(JSON.stringify({
+      service: "legal-corpus-qdrant-recovery",
+      event: "qdrant.disjoint_rebuild_reset",
+      environment: env.APP_ENV,
+      resetDensePointIds,
+      reason: "approved_staging_rebuild_after_ephemeral_collection_reset",
+    }));
+    return { status: "created", resetDensePointIds };
   }
 
   bucket(env);
