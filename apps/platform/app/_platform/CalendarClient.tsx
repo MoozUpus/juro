@@ -19,6 +19,7 @@ import {
 import {
   formatPlatformLongDate,
   formatPlatformMonth,
+  formatPlatformTime,
 } from "../../lib/platform/date-time";
 import { platformStatusLabel } from "../../lib/platform/presentation-labels";
 import { usePlatformBasePath } from "./PlatformRouteContext";
@@ -270,6 +271,7 @@ export function CalendarClient({ locale }: { locale: "ru" | "uz" }) {
                     item={item}
                     base={base}
                     label={t.open}
+                    locale={locale}
                   />
                 ))}
                 {dayItems.length > 3 && (
@@ -342,17 +344,19 @@ function CalendarLink({
   item,
   base,
   label,
+  locale,
 }: {
   item: CalendarItem;
   base: string;
   label: string;
+  locale: "ru" | "uz";
 }) {
   return (
     <Link href={itemHref(item, base)} aria-label={`${label}: ${item.title}`}>
       <span>
         {item.title}
         {item.source === "consultation" && item.startsAt
-          ? ` · ${formatCalendarTime(item.startsAt)}`
+          ? ` · ${formatPlatformTime(item.startsAt, locale)}`
           : ""}
       </span>
     </Link>
@@ -390,7 +394,7 @@ function CalendarRow({
       </div>
       <time dateTime={item.startsAt || item.dueAt}>
         {displayDate(item.dueAt, locale)}
-        {item.startsAt ? ` · ${formatCalendarTime(item.startsAt)}` : ""}
+        {item.startsAt ? ` · ${formatPlatformTime(item.startsAt, locale)}` : ""}
       </time>
       <span className={`calendar-status status-${item.status}`}>
         {platformStatusLabel(item.status, locale)}
@@ -398,11 +402,4 @@ function CalendarRow({
       <span className="sr-only">{label}</span>
     </Link>
   );
-}
-function formatCalendarTime(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Tashkent",
-  }).format(new Date(value));
 }

@@ -40,6 +40,10 @@ export function formatPlatformDateTime(value: Date | string, locale: PlatformDat
   return formatPlatformDate(value, locale, { dateStyle: "medium", timeStyle: "short" });
 }
 
+export function formatPlatformTime(value: Date | string, locale: PlatformDateLocale): string {
+  return formatPlatformDate(value, locale, { hour: "2-digit", minute: "2-digit" });
+}
+
 export function formatPlatformMonth(value: Date | string, locale: PlatformDateLocale): string {
   return formatPlatformDate(value, locale, { month: "long", year: "numeric" });
 }

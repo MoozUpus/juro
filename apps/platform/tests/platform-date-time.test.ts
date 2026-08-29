@@ -5,6 +5,7 @@ import {
   PLATFORM_TIME_ZONE,
   formatPlatformDate,
   formatPlatformDateTime,
+  formatPlatformTime,
   platformDate,
   platformIntlLocale,
 } from "../lib/platform/date-time";
@@ -29,4 +30,14 @@ test("platform date helpers preserve a calendar date and reject invalid input sa
   assert.equal(platformDate("not a date"), null);
   assert.equal(formatPlatformDate("not a date", "uz"), "");
   assert.match(formatPlatformDateTime("2026-08-12T20:30:00.000Z", "uz"), /13/);
+  assert.match(formatPlatformTime("2026-08-12T20:30:00.000Z", "uz"), /01:30/);
+});
+
+test("calendar time formatting accepts the selected RU or UZ locale", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("../app/_platform/CalendarClient.tsx", import.meta.url), "utf8"),
+  );
+
+  assert.match(source, /formatPlatformTime\(item\.startsAt, locale\)/);
+  assert.doesNotMatch(source, /Intl\.DateTimeFormat\("ru-RU"/);
 });
