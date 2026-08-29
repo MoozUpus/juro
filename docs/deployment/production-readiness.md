@@ -4,6 +4,17 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 Admin audit-table semantics candidate
+
+Commit `9e5b814f` adds a localized accessible caption to the protected audit-log
+table and explicit column scope to all six headers. It changes no audit query,
+CSV export, integrity chain, role or persisted data.
+
+Focused shell/Admin accessibility tests passed 15/15. Type-check, lint,
+production artifact validation and rendered Worker 36/36 passed with unchanged
+budgets. No fresh-MFA Admin or screen-reader session was fabricated, so this is
+source and artifact evidence only. The candidate is not deployed.
+
 ## 2026-08-29 Admin cost-table semantics candidate
 
 Commit `95774e80` adds localized accessible captions to all eight protected

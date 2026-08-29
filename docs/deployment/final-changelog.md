@@ -11,6 +11,12 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `9e5b814f` gives the protected audit-log table a localized
+  accessible caption and all six column headers explicit column scope. Focused
+  shell/Admin accessibility 15/15, rendered Worker 36/36, type-check, lint and
+  production artifact validation pass. Authenticated assistive-technology
+  behavior remains unclaimed without a real fresh-MFA Admin session.
+
 - Candidate `95774e80` gives all eight protected cost-console tables localized
   accessible captions and all 44 column headers explicit column scope. Focused
   shell/Admin accessibility 14/14, rendered Worker 36/36, type-check, lint and

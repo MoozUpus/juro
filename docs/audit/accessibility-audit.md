@@ -226,10 +226,10 @@ for:
    but the rest of this workflow remains open;
 3. document upload, analysis findings, comparison tabs and export actions;
 4. case deadlines and lawyer request/consultation dialogs;
-5. admin status tables and authenticated cost-table rendering. Commit
-   `95774e80` covers the eight cost-table captions and 44 scoped column headers
-   in source; runtime assistive-technology evidence still requires a real
-   fresh-MFA Admin session.
+5. authenticated Admin table rendering. Commits `95774e80` and `9e5b814f`
+   cover the eight cost tables plus the audit-log table in source: nine
+   localized captions and 50 scoped column headers. Runtime
+   assistive-technology evidence still requires a real fresh-MFA Admin session.
 
 For each sample verify logical heading order, unique accessible names, focus
 order, visible focus, dialog focus containment/return, live-status announcement,

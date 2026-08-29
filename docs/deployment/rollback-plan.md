@@ -38,6 +38,15 @@ rollback farther than the documented immediate version can remove monitoring
 cadence or later lockout/encryption behavior and is therefore a separate
 incident decision, not the ordinary rollback path.
 
+## Prepared Admin audit-table semantics change — not deployed
+
+Candidate `9e5b814f` changes only the table caption and header scope in the
+protected audit log. It has no migration, query, CSV export, integrity-chain or
+data change. If a future release causes an audit-console rendering regression,
+return traffic to the verified pre-release Worker and leave D1/R2 untouched.
+Re-test the RU/UZ table behind fresh MFA before restoring traffic to a forward
+fix.
+
 ## Prepared Admin cost-table semantics change — not deployed
 
 Candidate `95774e80` changes only table captions and header scope in the
