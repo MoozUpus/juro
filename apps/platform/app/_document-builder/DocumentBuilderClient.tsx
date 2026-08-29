@@ -30,6 +30,7 @@ import { BuilderAnalysisLauncher } from "./_components/BuilderAnalysisLauncher";
 import { BuilderVersionHistory } from "./_components/BuilderVersionHistory";
 import { apiFetch, downloadAuthenticatedFile } from "./_components/api-client";
 import { useDebouncedEffect } from "./_hooks/useDebouncedEffect";
+import { useModalFocus } from "./_hooks/useModalFocus";
 import { builderNavigationPaths } from "../../lib/platform/builder-paths";
 
 const GUEST_KEY = "juro-document-builder-draft-v1";
@@ -94,6 +95,23 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
   initialConsultation?: { type: "ai" | "lawyer"; requestId: string } | null;
 }) {
   const paths = builderNavigationPaths(usePathname());
+  const consultationCopy = paths.locale === "uz" ? {
+    title: "Maslahat olish",
+    description: "Hujjat konteksti va anketa javoblari avtomatik ravishda biriktiriladi.",
+    aiTitle: "AI-yurist",
+    aiDescription: "To‘liq kontekst bilan murojaat yaratish",
+    lawyerTitle: "Jonli yurist",
+    lawyerDescription: "Faylni qayta yuklamasdan so‘rovni ro‘yxatdan o‘tkazish",
+    close: "Yopish",
+  } : {
+    title: "Получить консультацию",
+    description: "Контекст документа и ответы анкеты будут прикреплены автоматически.",
+    aiTitle: "AI-юрист",
+    aiDescription: "Создать обращение с полным контекстом",
+    lawyerTitle: "Живой юрист",
+    lawyerDescription: "Зарегистрировать заявку без повторной загрузки",
+    close: "Закрыть",
+  };
   const [user] = useState(initialUser);
   const [phase, setPhase] = useState<Phase>(initialDocumentId ? "builder" : "intro");
   const [answers, setAnswers] = useState<ReceiptAnswers>(() => createDefaultAnswers("ru"));
@@ -119,6 +137,8 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
   const [hydrated, setHydrated] = useState(false);
   const [accessRole, setAccessRole] = useState<"owner" | "collaborator">("owner");
   const [consultationOpen, setConsultationOpen] = useState(false);
+  const closeConsultation = useCallback(() => setConsultationOpen(false), []);
+  const consultationDialogRef = useModalFocus<HTMLElement>(consultationOpen, closeConsultation);
   const createPromise = useRef<Promise<string> | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const agreementWarningShown = useRef(false);
@@ -448,7 +468,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
 
   if (phase === "intro") return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><div className="dbt-intro"><section className="dbt-intro-copy"><span className="dbt-eyebrow"><FileCheck2 size={16}/>Первый бесплатный документ JURO</span><h1>Расписка в получении денежных средств</h1><p>Документ подтверждает передачу денежных средств в качестве займа и обязанность их возврата.</p><div className="dbt-intro-meta"><span><strong>≈ 5 минут</strong><small>примерное время заполнения</small></span><span><strong>DOCX + PDF</strong><small>настоящие готовые файлы</small></span></div><fieldset className="dbt-language"><legend>Язык документа</legend><label className={answers.language === "ru" ? "selected" : ""}><input type="radio" checked={answers.language === "ru"} onChange={() => changeLanguage("ru")}/><span><strong>Русский</strong><small>Полная русская версия</small></span></label><label className={answers.language === "uz-cyrl" ? "selected" : ""}><input type="radio" checked={answers.language === "uz-cyrl"} onChange={() => changeLanguage("uz-cyrl")}/><span><strong>Ўзбекча</strong><small>Ўзбек кирилл алифбосида</small></span></label></fieldset><button type="button" className="dbt-start" onClick={start}>Создать документ<ArrowRight size={19}/></button><p className="dbt-intro-note">Начать можно без регистрации. До входа ответы сохраняются только в текущей вкладке.</p></section><DocumentPreview document={example} example/></div></div>;
 
-  if (phase === "success" && files) return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><div className="dbt-success-wrap">{error && <div className="dbt-global-error" role="alert">{error}</div>}<FinalSuccess files={files} libraryPath={paths.library} onDownload={(file) => void download(file)} onPrint={() => window.open(`${paths.document(documentId)}?print=1`, "_blank", "noopener,noreferrer")} onConsultation={() => setConsultationOpen(true)}/>{consultationOpen && <div className="dbt-modal-backdrop" role="presentation" onMouseDown={() => setConsultationOpen(false)}><section className="dbt-consultation-modal" role="dialog" aria-modal="true" aria-labelledby="consultation-title" onMouseDown={(event) => event.stopPropagation()}><h2 id="consultation-title">Получить консультацию</h2><p>Контекст документа и ответы анкеты будут прикреплены автоматически.</p><button type="button" onClick={() => void requestConsultation("ai")}><Sparkles size={20}/><span><strong>AI-юрист</strong><small>Создать обращение с полным контекстом</small></span></button><button type="button" onClick={() => void requestConsultation("lawyer")}><PenLine size={20}/><span><strong>Живой юрист</strong><small>Зарегистрировать заявку без повторной загрузки</small></span></button><button type="button" className="dbt-modal-close" onClick={() => setConsultationOpen(false)}>Закрыть</button></section></div>}</div></div>;
+  if (phase === "success" && files) return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><div className="dbt-success-wrap">{error && <div className="dbt-global-error" role="alert">{error}</div>}<FinalSuccess files={files} libraryPath={paths.library} onDownload={(file) => void download(file)} onPrint={() => window.open(`${paths.document(documentId)}?print=1`, "_blank", "noopener,noreferrer")} onConsultation={() => setConsultationOpen(true)}/>{consultationOpen && <div className="dbt-modal-backdrop" role="presentation" onMouseDown={closeConsultation}><section ref={consultationDialogRef} className="dbt-consultation-modal" role="dialog" aria-modal="true" aria-labelledby="consultation-title" aria-describedby="consultation-description" onMouseDown={(event) => event.stopPropagation()}><h2 id="consultation-title">{consultationCopy.title}</h2><p id="consultation-description">{consultationCopy.description}</p><button type="button" onClick={() => void requestConsultation("ai")}><Sparkles size={20}/><span><strong>{consultationCopy.aiTitle}</strong><small>{consultationCopy.aiDescription}</small></span></button><button type="button" onClick={() => void requestConsultation("lawyer")}><PenLine size={20}/><span><strong>{consultationCopy.lawyerTitle}</strong><small>{consultationCopy.lawyerDescription}</small></span></button><button type="button" className="dbt-modal-close" onClick={closeConsultation}>{consultationCopy.close}</button></section></div>}</div></div>;
 
   if (accessRole === "collaborator") return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><div className="dbt-collaborator-page">{error && <div className="dbt-global-error" role="alert">{error}</div>}<div className="dbt-collaborator-document"><DocumentPreview document={printableReceipt(finalText)} mobileOpen/></div>{documentId && <CollaborationPanel documentId={documentId} accessRole="collaborator" finalText={finalText} currentUserEmail={user?.email} signedFileId={signedFileId} onApplied={() => window.location.reload()}/>}</div></div>;
 
