@@ -38,6 +38,9 @@ const LEGACY_GUEST_KEY = ["juro", "document", "builder", "test", "draft"].join("
 
 type Phase = "intro" | "builder" | "success";
 type SaveState = "idle" | "saving" | "saved" | "error";
+type ConfirmationDecision =
+  | { kind: "leave"; href: string }
+  | { kind: "agreement" };
 
 interface GuestDraft {
   phase: Phase;
@@ -112,6 +115,33 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     lawyerDescription: "Зарегистрировать заявку без повторной загрузки",
     close: "Закрыть",
   };
+  const confirmationCopy = paths.locale === "uz" ? {
+    leave: {
+      title: "Konstruktordan chiqasizmi?",
+      description: "Oxirgi o‘zgarishlar hali saqlanayotgan bo‘lishi mumkin. Hozir chiqasizmi?",
+      cancel: "Qolish",
+      confirm: "Chiqish",
+    },
+    agreement: {
+      title: "Kelishuv bekor qilinsinmi?",
+      description: "Keyingi saqlashdan so‘ng «Kelishilgan» holati bekor qilinadi va ikkinchi tomon yangi tahrirni qayta kelishishi kerak bo‘ladi.",
+      cancel: "Bekor qilish",
+      confirm: "Tahrirlashni davom ettirish",
+    },
+  } : {
+    leave: {
+      title: "Уйти из конструктора?",
+      description: "Последние изменения могут ещё сохраняться. Уйти сейчас?",
+      cancel: "Остаться",
+      confirm: "Уйти",
+    },
+    agreement: {
+      title: "Отменить согласование?",
+      description: "После следующего сохранения статус «Согласован» будет отменён, и второй стороне потребуется согласовать новую редакцию.",
+      cancel: "Отмена",
+      confirm: "Продолжить редактирование",
+    },
+  };
   const [user] = useState(initialUser);
   const [phase, setPhase] = useState<Phase>(initialDocumentId ? "builder" : "intro");
   const [answers, setAnswers] = useState<ReceiptAnswers>(() => createDefaultAnswers("ru"));
@@ -139,6 +169,14 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
   const [consultationOpen, setConsultationOpen] = useState(false);
   const closeConsultation = useCallback(() => setConsultationOpen(false), []);
   const consultationDialogRef = useModalFocus<HTMLElement>(consultationOpen, closeConsultation);
+  const pendingAgreementAction = useRef<(() => void) | null>(null);
+  const allowNavigationRef = useRef(false);
+  const [confirmationDecision, setConfirmationDecision] = useState<ConfirmationDecision | null>(null);
+  const closeConfirmation = useCallback(() => {
+    pendingAgreementAction.current = null;
+    setConfirmationDecision(null);
+  }, []);
+  const confirmationDialogRef = useModalFocus<HTMLElement>(Boolean(confirmationDecision), closeConfirmation);
   const createPromise = useRef<Promise<string> | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const agreementWarningShown = useRef(false);
@@ -293,27 +331,31 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
   }, [hydrated, user, documentId, accessRole, phase, title, answers, autoText, finalText, manuallyEdited], 900);
 
   useEffect(() => {
-    if (phase !== "builder") return;
-    const handler = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = "Введённые данные могут быть потеряны."; };
+    if (phase !== "builder" || accessRole === "collaborator") return;
+    const handler = (event: BeforeUnloadEvent) => {
+      if (allowNavigationRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [phase]);
+  }, [accessRole, phase]);
 
   useEffect(() => {
-    if (phase !== "builder") return;
+    if (phase !== "builder" || accessRole === "collaborator") return;
     const guardNavigation = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
       if (!target || target.target === "_blank" || target.hasAttribute("download")) return;
       const destination = new URL(target.href, window.location.href);
       if (destination.href === window.location.href) return;
-      if (!window.confirm("Вы действительно хотите покинуть конструктор? Введённые данные могут быть потеряны.")) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      setConfirmationDecision({ kind: "leave", href: destination.href });
     };
     document.addEventListener("click", guardNavigation, true);
     return () => document.removeEventListener("click", guardNavigation, true);
-  }, [phase]);
+  }, [accessRole, phase]);
 
   useEffect(() => {
     if (printMode && hydrated && finalText) {
@@ -322,20 +364,25 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     }
   }, [printMode, hydrated, finalText]);
 
-  const guardAgreementEdit = (): boolean => {
-    if (status !== "Согласован" || agreementWarningShown.current) return true;
-    const confirmed = window.confirm("Изменение документа отменит согласование второй стороны");
-    if (confirmed) agreementWarningShown.current = true;
-    return confirmed;
+  const runWithAgreementGuard = (action: () => void) => {
+    if (status !== "Согласован" || agreementWarningShown.current) {
+      action();
+      return;
+    }
+    pendingAgreementAction.current = action;
+    setConfirmationDecision({ kind: "agreement" });
   };
 
   const changeAnswers = (next: ReceiptAnswers) => {
-    if (!guardAgreementEdit()) return;
-    const expectedWords = amountToWords(next.loanAmountNumeric, next.language, next.currency, next.includeCents);
-    const normalized = !next.loanAmountWordsManuallyEdited ? { ...next, loanAmountWords: expectedWords } : next;
-    setAnswers(normalized);
-    if (!manuallyEdited) setFinalText(renderReceipt(normalized).plainText);
+    runWithAgreementGuard(() => {
+      const expectedWords = amountToWords(next.loanAmountNumeric, next.language, next.currency, next.includeCents);
+      const normalized = !next.loanAmountWordsManuallyEdited ? { ...next, loanAmountWords: expectedWords } : next;
+      setAnswers(normalized);
+      if (!manuallyEdited) setFinalText(renderReceipt(normalized).plainText);
+    });
   };
+
+  const changeTitle = (next: string) => runWithAgreementGuard(() => setTitle(next));
 
   const start = () => {
     const next = { ...answers, loanAmountWords: amountToWords(answers.loanAmountNumeric, answers.language, answers.currency, answers.includeCents) };
@@ -356,27 +403,47 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
   };
 
   const editFinalText = (value: string) => {
-    if (!guardAgreementEdit()) return;
-    setUndoStack((stack) => [...stack.slice(-49), finalText]);
-    setRedoStack([]);
-    setFinalText(value);
-    setManuallyEdited(value !== autoText);
+    runWithAgreementGuard(() => {
+      setUndoStack((stack) => [...stack.slice(-49), finalText]);
+      setRedoStack([]);
+      setFinalText(value);
+      setManuallyEdited(value !== autoText);
+    });
   };
   const undo = () => {
-    if (!guardAgreementEdit()) return;
-    const previous = undoStack.at(-1); if (previous === undefined) return;
-    setRedoStack((stack) => [...stack, finalText]); setUndoStack((stack) => stack.slice(0, -1)); setFinalText(previous); setManuallyEdited(previous !== autoText);
+    runWithAgreementGuard(() => {
+      const previous = undoStack.at(-1); if (previous === undefined) return;
+      setRedoStack((stack) => [...stack, finalText]); setUndoStack((stack) => stack.slice(0, -1)); setFinalText(previous); setManuallyEdited(previous !== autoText);
+    });
   };
   const redo = () => {
-    if (!guardAgreementEdit()) return;
-    const next = redoStack.at(-1); if (next === undefined) return;
-    setUndoStack((stack) => [...stack, finalText]); setRedoStack((stack) => stack.slice(0, -1)); setFinalText(next); setManuallyEdited(next !== autoText);
+    runWithAgreementGuard(() => {
+      const next = redoStack.at(-1); if (next === undefined) return;
+      setUndoStack((stack) => [...stack, finalText]); setRedoStack((stack) => stack.slice(0, -1)); setFinalText(next); setManuallyEdited(next !== autoText);
+    });
   };
-  const resetText = () => { if (!guardAgreementEdit()) return; setUndoStack((stack) => [...stack, finalText]); setRedoStack([]); setFinalText(autoText); setManuallyEdited(false); };
+  const resetText = () => runWithAgreementGuard(() => { setUndoStack((stack) => [...stack, finalText]); setRedoStack([]); setFinalText(autoText); setManuallyEdited(false); });
+
+  const confirmDecision = () => {
+    const decision = confirmationDecision;
+    if (!decision) return;
+    if (decision.kind === "leave") {
+      allowNavigationRef.current = true;
+      setConfirmationDecision(null);
+      window.location.assign(decision.href);
+      return;
+    }
+    const pending = pendingAgreementAction.current;
+    pendingAgreementAction.current = null;
+    agreementWarningShown.current = true;
+    setConfirmationDecision(null);
+    pending?.();
+  };
 
   const signIn = () => {
     const guest: GuestDraft = { phase: "builder", step, title, answers, finalText: finalText || autoText, manuallyEdited };
     sessionStorage.setItem(GUEST_KEY, JSON.stringify(guest));
+    allowNavigationRef.current = true;
     window.location.assign(signInPath);
   };
 
@@ -396,6 +463,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
   const download = async (file: GeneratedFile) => {
     try {
       await downloadAuthenticatedFile(file.url, file.name);
+      allowNavigationRef.current = true;
       window.location.assign(paths.documents);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Скачивание не выполнено."); }
   };
@@ -404,6 +472,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     if (!documentId) return;
     try {
       const result = await apiFetch<{ handoffUrl: string }>("/api/document-builder/consultations", { method: "POST", body: JSON.stringify({ documentId, type }) });
+      allowNavigationRef.current = true;
       window.location.assign(result.handoffUrl);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось создать обращение."); }
   };
@@ -473,7 +542,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
   if (accessRole === "collaborator") return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><div className="dbt-collaborator-page">{error && <div className="dbt-global-error" role="alert">{error}</div>}<div className="dbt-collaborator-document"><DocumentPreview document={printableReceipt(finalText)} mobileOpen/></div>{documentId && <CollaborationPanel documentId={documentId} accessRole="collaborator" finalText={finalText} currentUserEmail={user?.email} signedFileId={signedFileId} onApplied={() => window.location.reload()}/>}</div></div>;
 
   return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><div className="dbt-builder">
-    <div className="dbt-builder-top"><div><Link href={paths.builder} className="dbt-back"><ArrowLeft size={16}/>Новый документ</Link><h1>Расписка в получении денежных средств</h1><div className="dbt-status-line"><span className={`dbt-save-state ${saveState}`}>{!user ? <><LockKeyhole size={14}/>Гостевой режим</> : saveState === "saving" ? <><LoaderCircle size={14}/>Сохраняем…</> : saveState === "error" ? "Ошибка сохранения" : <><Save size={14}/>Черновик сохранён</>}</span>{documentId && <span>ID: {documentId.slice(0, 8)}</span>}<span>Ревизия: {revision}</span><span>Статус: {status}</span></div></div><div className="dbt-title-edit"><label><span>Название документа</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={suggestedDocumentTitle(answers)}/></label><small>Категория: Займы и расписки</small></div></div>
+    <div className="dbt-builder-top"><div><Link href={paths.builder} className="dbt-back"><ArrowLeft size={16}/>Новый документ</Link><h1>Расписка в получении денежных средств</h1><div className="dbt-status-line"><span className={`dbt-save-state ${saveState}`}>{!user ? <><LockKeyhole size={14}/>Гостевой режим</> : saveState === "saving" ? <><LoaderCircle size={14}/>Сохраняем…</> : saveState === "error" ? "Ошибка сохранения" : <><Save size={14}/>Черновик сохранён</>}</span>{documentId && <span>ID: {documentId.slice(0, 8)}</span>}<span>Ревизия: {revision}</span><span>Статус: {status}</span></div></div><div className="dbt-title-edit"><label><span>Название документа</span><input value={title} onChange={(event) => changeTitle(event.target.value)} placeholder={suggestedDocumentTitle(answers)}/></label><small>Категория: Займы и расписки</small></div></div>
     {initialConsultation && <div className="dbt-handoff-banner" role="status"><Sparkles size={18}/><span><strong>{initialConsultation.type === "ai" ? "Запрос AI-юристу создан" : "Заявка живому юристу создана"}</strong><small>Контекст документа и анкеты прикреплён. Номер обращения: {initialConsultation.requestId.slice(0, 8)}</small></span></div>}
     {error && <div className="dbt-global-error" role="alert"><span>{error}</span>{!user && <button type="button" onClick={signIn}>Войти</button>}<button type="button" aria-label="Закрыть сообщение" onClick={() => setError("")}>×</button></div>}
     <div className="dbt-progress"><div><span style={{ "--progress": progress / 100 } as CSSProperties}/></div><strong>{progress}%</strong></div>
@@ -482,5 +551,6 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     <div className="dbt-workspace"><div className="dbt-form-column"><BuilderQuestionnaire answers={answers} onChange={changeAnswers} step={step} profile={profile} contacts={contacts} onSaveProfile={saveProfile} onUpdateContact={updateContact}/><div className="dbt-form-nav"><button type="button" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}><ArrowLeft size={17}/>Назад</button>{step < 4 ? <button type="button" className="primary" onClick={() => setStep(Math.min(4, step + 1))}>Продолжить<ArrowRight size={17}/></button> : <button type="button" className="primary" onClick={() => void generate()} disabled={generating}>{generating ? <><LoaderCircle className="spin" size={18}/>Формируем DOCX, PDF и ZIP…</> : user ? <>Создать файлы<FileCheck2 size={18}/></> : <>Войти и создать файлы<LockKeyhole size={18}/></>}</button>}</div>{user && step === 4 && <BuilderAnalysisLauncher locale={answers.language === "ru" ? "ru" : "uz"} reviewPath={paths.documentReview} onPrepare={async () => { const id = await createDraft(); await persist(id); return id; }}/>}</div><DocumentPreview document={visibleReceipt} mobileOpen={mobilePreview} onClose={() => setMobilePreview(false)}/></div>
     <div className="dbt-editor-wrap"><div className="dbt-editor-heading"><button type="button" onClick={() => setEditorOpen(!editorOpen)}><PenLine size={17}/>{editorOpen ? "Скрыть ручной редактор" : "Открыть ручной редактор"}</button>{!user && <span>Доступен после входа</span>}</div>{editorOpen && <ManualEditor value={finalText || autoText} onChange={editFinalText} onUndo={undo} onRedo={redo} onReset={resetText} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0} locked={!user}/>}</div>
     {documentId && user && <><BuilderVersionHistory documentId={documentId} locale={answers.language === "ru" ? "ru" : "uz"} refreshKey={revision} onPrepare={async () => { await persist(documentId); return { documentId, revision: revisionRef.current }; }} onRestored={async () => { const result = await apiFetch<{ document: StoredDocument }>(`/api/document-builder/documents/${documentId}`); skipNextAutosave.current = true; hydrateDocument(result.document); }}/><DocumentAssetsPanel documentId={documentId} onDocumentChange={syncDocumentMetadata}/><CollaborationPanel documentId={documentId} accessRole="owner" finalText={finalText || autoText} currentUserEmail={user.email} signedFileId={signedFileId} onApplied={() => window.location.reload()}/></>}
+    {confirmationDecision && <div className="dbt-modal-backdrop" role="presentation" onMouseDown={closeConfirmation}><section ref={confirmationDialogRef} className="dbt-delete-choice dbt-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="builder-confirmation-title" aria-describedby="builder-confirmation-description" onMouseDown={(event) => event.stopPropagation()}><h2 id="builder-confirmation-title">{confirmationCopy[confirmationDecision.kind].title}</h2><p id="builder-confirmation-description">{confirmationCopy[confirmationDecision.kind].description}</p><button type="button" className="cancel" data-dialog-initial-focus onClick={closeConfirmation}>{confirmationCopy[confirmationDecision.kind].cancel}</button><button type="button" className="confirm" onClick={confirmDecision}>{confirmationCopy[confirmationDecision.kind].confirm}</button></section></div>}
   </div></div>;
 }
