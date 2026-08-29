@@ -23,7 +23,6 @@ import {
 import { requireChatGPTUser } from "../chatgpt-auth";
 import { PlatformShell } from "./PlatformShell";
 import { safeDisplayName } from "../../lib/platform/display-name";
-import { headers } from "next/headers";
 import {
   isLawyerHostRequest,
   lawyerLandingDestination,
