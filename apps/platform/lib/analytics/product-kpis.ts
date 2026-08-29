@@ -28,6 +28,15 @@ export type ProductKpiDashboard = {
     };
     ttfvSeconds: { p50: number | null; p75: number | null; p95: number | null };
   };
+  caseCreation: {
+    cohortStartedAt: string;
+    cohortEndedAt: string;
+    conversionWindowDays: 7;
+    eligibleSignups: number;
+    caseCreatingUsers: number;
+    rateBasisPoints: number | null;
+    readiness: ProductKpiReadiness;
+  };
   engagedReturn: {
     cohortStartedAt: string;
     cohortEndedAt: string;
@@ -118,6 +127,7 @@ type ActivationSummaryRow = {
   groundedAnswerUsers: number;
   documentAnalysisUsers: number;
   casePlanUsers: number;
+  caseCreatedUsers: number;
 };
 
 type DurationRow = { durationSeconds: number };
@@ -238,7 +248,13 @@ SELECT
   (SELECT count(*) FROM first_values) AS activatedSignups,
   (SELECT count(DISTINCT userId) FROM value_events WHERE outcome='grounded_answer') AS groundedAnswerUsers,
   (SELECT count(DISTINCT userId) FROM value_events WHERE outcome='document_analysis') AS documentAnalysisUsers,
-  (SELECT count(DISTINCT userId) FROM value_events WHERE outcome='case_plan') AS casePlanUsers`;
+  (SELECT count(DISTINCT userId) FROM value_events WHERE outcome='case_plan') AS casePlanUsers,
+  (SELECT count(DISTINCT eligible.userId)
+    FROM eligible
+    JOIN cases matter ON matter.owner_user_id=eligible.userId
+    WHERE julianday(matter.created_at)>=julianday(eligible.onboardedAt)
+      AND julianday(matter.created_at)<=julianday(eligible.onboardedAt)+7
+  ) AS caseCreatedUsers`;
 
 const activationDurationsSql = `${activationCtes}
 SELECT CAST(round((julianday(firstValueAt)-julianday(onboardedAt))*86400) AS INTEGER) AS durationSeconds
@@ -479,6 +495,7 @@ export async function readProductKpiDashboard(input: {
     .sort((a, b) => a - b);
   const eligibleSignups = numeric(summary.eligibleSignups);
   const activatedSignups = numeric(summary.activatedSignups);
+  const caseCreatingUsers = numeric(summary.caseCreatedUsers);
   const createdPlans = numeric(plan.created);
   const createdRequests = numeric(lawyer.created);
   const activatedReturnUsers = numeric(engagedReturn.activatedUsers);
@@ -511,6 +528,15 @@ export async function readProductKpiDashboard(input: {
         p75: percentile(durations, 0.75),
         p95: percentile(durations, 0.95),
       },
+    },
+    caseCreation: {
+      cohortStartedAt,
+      cohortEndedAt,
+      conversionWindowDays: 7,
+      eligibleSignups,
+      caseCreatingUsers,
+      rateBasisPoints: rateBasisPoints(caseCreatingUsers, eligibleSignups),
+      readiness: readiness(eligibleSignups),
     },
     engagedReturn: {
       cohortStartedAt: returnCohortStartedAt,

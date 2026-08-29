@@ -22,6 +22,10 @@ const copy = {
     eligible: "Завершили регистрацию",
     activated: "Получили ценность за 7 дней",
     activationRate: "Verified activation rate",
+    caseCreation: "Регистрация → созданное дело",
+    caseCreatingUsers: "Создали дело за 7 дней",
+    caseCreationRate: "Case creation rate",
+    caseCreationNote: "Каждый пользователь считается один раз. Засчитываются только дела, созданные не раньше завершения регистрации и не позже 7 дней; когорта уже имеет полное окно наблюдения.",
     p50: "TTFV p50",
     p75: "TTFV p75",
     p95: "TTFV p95",
@@ -103,6 +107,10 @@ const copy = {
     eligible: "Ro‘yxatdan o‘tishni tugatganlar",
     activated: "7 kunda qiymat olganlar",
     activationRate: "Verified activation rate",
+    caseCreation: "Ro‘yxatdan o‘tish → yaratilgan ish",
+    caseCreatingUsers: "7 kunda ish yaratganlar",
+    caseCreationRate: "Case creation rate",
+    caseCreationNote: "Har bir foydalanuvchi bir marta sanaladi. Faqat ro‘yxatdan o‘tish tugaganidan keyin va 7 kundan kech bo‘lmay yaratilgan ishlar hisoblanadi; kohortaning kuzatuv oynasi to‘liq.",
     p50: "TTFV p50",
     p75: "TTFV p75",
     p95: "TTFV p95",
@@ -207,6 +215,7 @@ export function ProductKpiConsole({
     ready: t.ready,
   };
   const activation = dashboard.activation;
+  const caseCreation = dashboard.caseCreation;
   const engagedReturn = dashboard.engagedReturn;
   const answerFunnel = dashboard.answerFunnel;
   const feedbackQuality = dashboard.feedbackQuality;
@@ -257,6 +266,17 @@ export function ProductKpiConsole({
           <article><span>{t.p75}</span><b>{duration(activation.ttfvSeconds.p75)}</b></article>
           <article><span>{t.p95}</span><b>{duration(activation.ttfvSeconds.p95)}</b></article>
         </div>
+      </section>
+
+      <section className="jobs-summary" aria-labelledby="case-creation-heading">
+        <h2 id="case-creation-heading">{t.caseCreation}</h2>
+        <p className="staff-count">{t.cohort}: <time dateTime={caseCreation.cohortStartedAt}>{dateTime(caseCreation.cohortStartedAt, locale)}</time> — <time dateTime={caseCreation.cohortEndedAt}>{dateTime(caseCreation.cohortEndedAt, locale)}</time> · {readinessLabel[caseCreation.readiness]}</p>
+        <div>
+          <article><span>{t.eligible}</span><b>{caseCreation.eligibleSignups}</b></article>
+          <article><span>{t.caseCreatingUsers}</span><b>{caseCreation.caseCreatingUsers}</b></article>
+          <article><span>{t.caseCreationRate}</span><b>{percent(caseCreation.rateBasisPoints)}</b></article>
+        </div>
+        <p className="staff-count">{t.caseCreationNote}</p>
       </section>
 
       <section className="jobs-summary" aria-labelledby="answer-funnel-heading">

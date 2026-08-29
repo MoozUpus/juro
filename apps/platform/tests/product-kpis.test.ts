@@ -272,6 +272,15 @@ test("product KPI dashboard computes mature activation without returning identit
       p75: 14_400,
       p95: 18_000,
     });
+    assert.deepEqual(dashboard.caseCreation, {
+      cohortStartedAt: "2026-07-23T12:00:00.000Z",
+      cohortEndedAt: "2026-08-22T12:00:00.000Z",
+      conversionWindowDays: 7,
+      eligibleSignups: 30,
+      caseCreatingUsers: 5,
+      rateBasisPoints: 1_667,
+      readiness: "ready",
+    });
     assert.deepEqual(dashboard.engagedReturn, {
       cohortStartedAt: "2026-07-16T12:00:00.000Z",
       cohortEndedAt: "2026-08-15T12:00:00.000Z",
@@ -370,6 +379,9 @@ test("product KPI dashboard suppresses rates and TTFV below the privacy threshol
     assert.equal(dashboard.activation.readiness, "privacy_threshold");
     assert.equal(dashboard.activation.rateBasisPoints, null);
     assert.deepEqual(dashboard.activation.ttfvSeconds, { p50: null, p75: null, p95: null });
+    assert.equal(dashboard.caseCreation.caseCreatingUsers, 0);
+    assert.equal(dashboard.caseCreation.rateBasisPoints, null);
+    assert.equal(dashboard.caseCreation.readiness, "privacy_threshold");
     assert.equal(dashboard.engagedReturn.rateBasisPoints, null);
     assert.equal(dashboard.answerFunnel.answerCompletionRateBasisPoints, null);
     assert.equal(dashboard.answerFunnel.sourceOpenRateBasisPoints, null);
@@ -509,4 +521,6 @@ test("product KPI console is no-store, administrator-only and fresh-MFA-gated", 
   assert.doesNotMatch(service, /SELECT[^;]*feedback\.comment/is);
   assert.match(service, /PARTITION BY event\.userId[\s\S]*outcomeRank=1/);
   assert.match(service, /request\.requester_user_id=outcome\.userId/);
+  assert.match(service, /matter\.created_at\)>=julianday\(eligible\.onboardedAt\)/);
+  assert.match(service, /count\(DISTINCT eligible\.userId\)/);
 });
