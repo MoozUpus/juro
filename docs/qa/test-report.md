@@ -1,5 +1,23 @@
 # Test report — current evidence through 2026-08-29
 
+## Admin AI cost-observability candidate
+
+| Gate | Result |
+| --- | --- |
+| Exact implementation source | PASS candidate — `a08698df` |
+| User/plan breakdown | PASS source — 30-day provider totals are grouped by technical user/workspace and by the workspace's current subscription plan; guest/system and unassigned scopes remain explicit |
+| Attribution honesty | PASS — RU/UZ Admin copy labels tariff attribution as a current read-time workspace snapshot, not the historical plan at event time |
+| Cache contract | PASS — request hit rate uses successful calls with positive input tokens as the denominator; cached-token share is reported separately |
+| Escalation/fallback contract | PASS — Deep and provider-fallback counts/rates use completed authenticated legal-chat runs only; guest AI and document analysis are excluded from that denominator |
+| Provider operations | PASS source — provider failure count/rate and average recorded provider-call latency share the same bounded telemetry window |
+| Data boundary | PASS — no new migration or content field; cost rows retain technical identifiers, provider/model/operation/tokens/status/cost only and expose no prompt, answer, document text, filename, email or phone |
+| Focused regression | PASS — 6/6 provider-cost tests |
+| Full Platform release gate | PASS — core 1124/1124, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check, lint and production artifact validation |
+| Artifact budgets | PASS — CSS 596.6/600.0 KiB; initial JS 295.4/320.0 KiB; largest lazy increment 208.1/240.0 KiB; fonts 453.6/512.0 KiB; images 564.4/640.0 KiB; Worker entry 3647.0/6144.0 KiB |
+| Protected browser replay | NOT RUN — no authorized real Admin/MFA session was available; no signed-in UI claim is made |
+| Production sample | UNCHANGED — the last verified production cost checkpoint remains 4/30 priced successes and does not prove the 30% reduction target |
+| Release boundary | NOT DEPLOYED — no Worker/Sites publish, migration, D1, DNS, notification or customer-data mutation |
+
 ## Admin AI prompt-registry candidate
 
 | Gate | Result |

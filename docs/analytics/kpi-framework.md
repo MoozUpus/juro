@@ -69,7 +69,12 @@ one queryable schema without adding identity or content.
 | Source open rate | `source_opened / successful answer outcomes` in the same window | Instrumented; current counts are too small and unlinked for a rate claim |
 | Cost per successful answer | priced successful provider cost / priced successful answers | `INSUFFICIENT_SAMPLE`; 4/30 priced successes, `$0.104549` total |
 | Average AI cost | priced provider cost / fully priced provider requests, reported separately for success/failure | `INSUFFICIENT_SAMPLE`; zero-token failures may understate billed failed work |
-| Escalation rate | lawyer requests created / eligible AI or case outcomes | Instrumented numerator; eligible denominator is not yet comparable |
+| AI cache-hit request rate | successful provider calls with positive input and cached-input tokens / successful provider calls with positive input tokens | Instrumented in candidate `a08698df`; no production value is claimed before release |
+| AI Deep escalation rate | completed authenticated legal-chat runs in Deep mode / all completed authenticated legal-chat runs in the same window | Instrumented in candidate `a08698df`; excludes guest AI and document analysis by definition |
+| Provider fallback rate | completed authenticated legal-chat runs with `fallback_from_provider` / completed authenticated legal-chat runs | Instrumented in candidate `a08698df`; minimum comparable sample is still required |
+| Lawyer escalation rate | lawyer requests created / eligible AI or case outcomes | Instrumented numerator; eligible denominator is not yet comparable |
+| AI cost by user | priced/unpriced provider totals grouped by technical user and workspace identifier | Instrumented in candidate `a08698df`; content and direct contact fields are excluded |
+| AI cost by plan | provider totals grouped by the workspace's current subscription plan at read time | Instrumented in candidate `a08698df`; current-plan snapshot is not historical event-time attribution |
 | Web fallback rate | `retrieval_fallback / first_question_sent`, same locale/window | Instrumented; current counts are too small and may include controlled QA |
 | Citation validation failure | failed citation-validation outcomes / answers subject to validation | `UNVERIFIED`; no dedicated aggregate outcome is emitted |
 | Outdated source rate | answers using an outdated source / source-backed answers | `UNVERIFIED`; user feedback subtype `outdated` is a report signal, not proof of source state |

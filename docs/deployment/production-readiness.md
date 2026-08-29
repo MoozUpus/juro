@@ -4,6 +4,30 @@ This is an evidence record for the signed-share/HTTPS baseline and the
 privacy-safe analytics/effective-cost follow-up. It does not claim that every
 item in the wider ecosystem audit is complete.
 
+## 2026-08-29 Admin AI cost-observability candidate
+
+Commit `a08698df` extends the fresh-MFA Admin cost console with content-free
+cost totals by technical user/workspace and current subscription plan, plus
+provider error rate, average recorded provider latency, cache-hit request rate,
+cached-input token share, Deep escalation and provider fallback. Deep/fallback
+rates use only completed authenticated legal-chat runs; guest AI and document
+analysis are not silently mixed into their denominator. Plan attribution is
+explicitly labelled in RU/UZ as a read-time current-plan snapshot rather than
+historical event-time truth.
+
+The implementation adds no migration or user-content field. Focused 6/6, core
+1124/1124, Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35,
+type-check, lint and production artifact validation passed locally. Emitted
+budgets passed at CSS 596.6/600.0 KiB, initial JS 295.4/320.0 KiB, largest lazy
+increment 208.1/240.0 KiB, fonts 453.6/512.0 KiB, images 564.4/640.0 KiB and
+Worker entry 3647.0/6144.0 KiB.
+
+No authorized real Admin/MFA session was available, so protected browser replay
+is not claimed. The last verified production sample remains 4/30 and the 30%
+cost-reduction target remains `UNVERIFIED`. The candidate is unpublished and
+made no Worker, Sites, D1/migration, DNS, notification or customer-data
+mutation.
+
 ## 2026-08-29 Admin AI prompt-registry candidate
 
 Commit `9eee8d54` centralizes the current prompt identities for authenticated

@@ -9,6 +9,17 @@ authenticated Client 390/320 px and keyboard/dialog replay, exact-source CI and
 the recovered scheduled `/api/status` snapshot passed after deployment; Worker
 169 is the immediate application rollback.
 
+**Admin AI cost-observability candidate:** commit `a08698df` adds content-free
+cost views by technical user/workspace and current subscription plan, plus
+provider failure rate, average recorded latency, request cache-hit rate,
+cached-token share, Deep escalation and provider fallback. Plan attribution is
+labelled as a read-time snapshot; Deep/fallback rates use only completed
+authenticated legal-chat runs. Focused 6/6, core 1124/1124,
+Cloudflare/infrastructure 203/203, rendered Worker 35/35, type-check, lint and
+production artifact budgets passed. No real Admin/MFA session was available,
+so protected UI replay is not claimed. This candidate is not deployed and does
+not change the 4/30 production sample or the `UNVERIFIED` 30% reduction target.
+
 **Public Sites checkpoint:** a read-only Chrome replay of live v86 preserved
 the RU/UZ/EN SEO/document structure but found stale accessibility defects:
 sub-12 px labels, 32 px theme targets, a closed-menu dangling `aria-controls`,
@@ -206,7 +217,7 @@ The detailed route and domain evidence is in `domain-route-inventory.md` and
 | Document/case/lawyer workflows | PASS from prior authenticated release evidence; PARTIAL for this delta | The analytics delta is covered by server-side success-boundary tests. Fresh in-app browser checks proved guest, Client login, dedicated Lawyer login, Admin re-auth and status boundaries; no new OTP-authenticated mutable workflow was submitted for this delta. |
 | Payments | DEMO / NOT APPROVED | Production approval flag false; no live-payment claim. |
 | Product analytics | DEPLOYED / INSUFFICIENT SAMPLE | Exact 21-event content-free contract, optional public consent and bounded route are live. A scoped Cloudflare rule rate-limits only the public ingestion route. The 2026-08-28 read-only recheck retained 24 represented events from 25 August onward and found zero events at or after the Worker 166 release boundary, so no conversion baseline is invented. |
-| AI costs | ACTIVE MEASUREMENT / INSUFFICIENT SAMPLE | Four official, effective-dated production price rows passed backup/restore gates. The protected console now reports 100% current price coverage, `$0.104549` estimated cost and 4/30 priced successes; it refuses to call the sample ready and explicitly shows that production cost-guard policies are not configured. The 30% reduction target remains `UNVERIFIED`. Candidate `1ed17501` adds bounded Fast/Balanced/Deep routing with Balanced on the chat model by default, but it is not deployed and therefore does not change this production sample. |
+| AI costs | ACTIVE MEASUREMENT / INSUFFICIENT SAMPLE | Four official, effective-dated production price rows passed backup/restore gates. The protected production console reports 100% current price coverage, `$0.104549` estimated cost and 4/30 priced successes; it refuses to call the sample ready and explicitly shows that production cost-guard policies are not configured. Candidate `a08698df` adds user/current-plan, cache, Deep-escalation, fallback, provider-error and latency views with explicit denominator/attribution caveats; candidate `1ed17501` adds bounded Fast/Balanced/Deep routing. Neither is deployed, so the 30% reduction target remains `UNVERIFIED`. |
 | Artifact performance | PASS | CSS/JS/font/image/Worker budgets green; no Core Web Vitals claim. |
 | Accessibility | PARTIAL | The exact public candidate source passed the pinned Chrome/axe 56/56 RU/UZ/EN desktop/mobile light/dark matrix, the 44 px and ARIA-reference runtime guards, and retained 320/390/981/1101 px keyboard/visual samples. The deployed Sites v86 replay is now complete and recorded as a live FAIL for its stale sub-12 px labels, 32 px theme targets, dangling menu reference, duplicate accessible closer and missing skip-to-main focus transfer; commit `7e07b562` fixes them only in the unpublished candidate. Workers 156–158 close confirmed Client comparison, Lawyer professional and non-corpus Admin interaction-target defects, and Workers 168–170 close the sampled Client focus/shell defects in production. No signed-in Lawyer/Admin, real OTP/MFA error, screen reader or physical mobile device was used. Protected Lawyer/Admin rendering and live auth-error assistive-technology replay remain open, so this is not a WCAG conformance claim. |
 | Cloudflare continuity | PARTIAL | Scoped public-analytics rate limiting is active, the 31-rule Free Managed Ruleset is always active, and zone origin TLS is `Full (strict)` with production/staging smoke. Fresh app/status reads reconfirmed Anthropic and document analysis operational after the reported account top-up. The authenticated dashboard verifies the complete 22-record DNS inventory. A fresh control-plane inventory also exactly matched 17 production queues, two production schedules and the active Worker 170 bindings; all three private R2 buckets have no custom domain and public `r2.dev` access disabled. The narrower OAuth token still receives authentication errors from DNS/ruleset/list endpoints. Cloudflare's one partially exposed origin-IP recommendation, overdue infrastructure billing and unavailable real CWV tracing remain explicit risks. |

@@ -11,6 +11,21 @@
 
 ## Prepared in Draft PR, not shipped
 
+- Candidate `a08698df` adds content-free Admin AI-cost breakdowns by technical
+  user/workspace and current subscription plan, plus provider failure rate,
+  average provider latency, cache-hit request rate, cached-input token share,
+  Deep escalation and provider fallback.
+- RU/UZ copy states that plan attribution is a current read-time workspace
+  snapshot, not historical event-time truth. Deep/fallback denominators include
+  only completed authenticated legal-chat runs and exclude guest AI/document
+  analysis.
+- Local gates passed focused 6/6, core 1124/1124,
+  Cloudflare/infrastructure 203/203, rendered Worker HTML 35/35, type-check,
+  lint and production artifact validation. No new migration or content field
+  was added; no real Admin/MFA browser session was available.
+- The candidate does not change the last verified 4/30 production cost sample
+  or prove the 30% reduction target. It is not deployed and made no Worker,
+  Sites, D1, DNS, notification or customer-data mutation.
 - Candidate `9eee8d54` centralizes the current authenticated-chat, guest-chat
   and document-analysis prompt identities. Persisted run hashes and protected
   Admin now share the registry; Admin exposes version IDs and real cost,

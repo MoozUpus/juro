@@ -57,6 +57,30 @@ contained four priced successes, two zero-token failures, zero unpriced
 successes and `$0.104549` estimated cost. Coverage was 100%, but the sample was
 only 4/30, so the reduction target remains `UNVERIFIED`.
 
+## Control-center metric contract
+
+Candidate `a08698df` extends the protected Admin cost console from provider/day/
+feature totals to the following content-free views over the same bounded window:
+
+- cost by technical user and workspace identifiers, without email, phone,
+  prompt, answer, document text or filename;
+- cost by subscription plan, with guest/system and unassigned scopes kept
+  explicit;
+- provider failure count/rate and average recorded provider-call latency;
+- request cache-hit rate: successful calls with positive input tokens and
+  positive cached-input tokens / successful calls with positive input tokens;
+- cached-input token share: cached input tokens / all successful input tokens;
+- Deep escalation count/rate among completed authenticated legal-chat runs;
+- provider-fallback count/rate among those same completed authenticated runs.
+
+Plan attribution is deliberately labelled as the **current workspace plan at
+read time**. The usage ledger does not store an immutable historical plan
+version on each provider event, so the console must not imply that an older
+call occurred under the workspace's current plan. Guest AI and document
+analysis are excluded from the authenticated legal-chat escalation denominator.
+These metric definitions are implemented and locally tested in the candidate;
+they are not production observations until an explicitly approved release.
+
 ## Controls and alerts
 
 - Preserve per-request token dimensions, provider/model/operation, result, and
