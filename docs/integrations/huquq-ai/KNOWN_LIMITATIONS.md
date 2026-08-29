@@ -9,16 +9,17 @@
 - Advice.uz and court-practice retrieval remain unavailable unless separately verified;
   they must not be presented as official APIs.
 - A pinned Qdrant 1.18.2 container and private service-binding proxy are deployed
-  only in staging. The separate corpus Worker reaches Qdrant and the platform-owned
-  OpenAI embedding credential through private bindings; neither service has a public
-  route and the credential is not copied into the corpus Worker. Dense retrieval is
-  still disabled, so the container is dormant and no full-corpus collection has been
-  created or backfilled. Activation still requires the frozen-corpus benchmark,
-  point-count parity, a retained snapshot and a proved restore. The application
-  now implements checksum-verified private-R2 snapshot persistence and cold
-  restore for the Container's ephemeral disk, but no full-corpus staging snapshot
-  exists while dense remains disabled. Production has no Qdrant binding and every
-  corpus flag remains disabled.
+  only in staging. The separate shard-3 Worker reaches Qdrant and the
+  platform-owned OpenAI embedding credential through private bindings; neither
+  service has a public route and the credential is not copied into the corpus
+  Worker. Dense retrieval is explicitly enabled only for the approved sequential
+  shard-3 backfill while source acquisition and live Lex remain disabled. The
+  backfill is resumable through deterministic D1 point IDs and is not a release
+  benchmark: it still requires completion, point-count parity, a retained
+  checksum-verified snapshot and a proved restore. The application implements
+  private-R2 snapshot persistence and cold restore for the Container's ephemeral
+  disk. Production has no Qdrant binding and every production corpus flag remains
+  disabled.
 - The owner-material promotion path is implemented, regression-tested and
   enabled only in staging. No owner document had been promoted as of
   2026-08-15 14:11 +05:00. Its first use still requires a real completed
@@ -30,9 +31,9 @@
   has a separate private provider path; it does not promote owner material into
   global law or make a private document an official source.
 - Staging corpus acquisition is intentionally stopped for the current release
-  evidence phase. The shard Worker was redeployed with
-  `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` (version
-  `d7641662-02a1-4611-a9ff-e3f505cd9770`); a post-deploy read-only probe found
+  evidence phase. The shard Worker remains on
+  `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` (dense-backfill version
+  `99e4216c-35af-40d5-b4a1-1f2fed7ff609`); post-deploy read-only probes found
   no new documents and `rows_written=0`. The shard-3 control row remains
   `active` and its durable queued jobs were not deleted or rewritten, so the
   ingestion queue is not yet a release-frozen queue. The read-only federated
@@ -42,10 +43,10 @@
   `STAGING_FEDERATED_RETRIEVAL_2026-08-28.md` and
   `STAGING_ACQUISITION_FREEZE_2026-08-28.json`. These totals are not summed as
   a unique-corpus metric: cross-source overlap requires a formal
-  partition/deduplication manifest. The isolated shard-1 D1 export/restore now
-  has a verified local `quick_check=ok` and zero foreign-key violations, but no
-  federated snapshot, indexed 314-scenario benchmark or full-corpus Qdrant
-  evidence has been claimed.
+  partition/deduplication manifest. Isolated shard-1, shard-2, v2 and shard-3
+  D1 export/restore rehearsals now have verified local `quick_check=ok` and zero
+  foreign-key violations, but no federated snapshot, indexed 314-scenario
+  benchmark or full-corpus Qdrant evidence has been claimed.
 - The new source-card and full-article modal passed type-check, focused boundary
   tests and staging artifact/deployment checks. Authenticated desktop QA passed
   for the AI-chat light/dark empty state and caught one dark-history contrast
