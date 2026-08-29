@@ -13,11 +13,14 @@ import {
 import { buildDocumentAnalysisProviderInput } from "../lib/document-analysis/input";
 import {
   documentAnalysisFallbackAllowed,
+  documentAnalysisFallbackTimeoutMs,
   documentAnalysisMaxOutputTokens,
   documentAnalysisProviderMaxAttempts,
   documentAnalysisTimeoutMs,
   documentFallbackEligible,
+  QUICK_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS,
   runDocumentAnalysis,
+  safeDocumentAnalysisProviderFailure,
 } from "../lib/document-analysis/provider";
 import type { AiRuntimeSettings } from "../lib/ai/runtime-settings";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
@@ -259,8 +262,119 @@ test("quick document analysis has an explicit compact output budget", () => {
   assert.equal(documentAnalysisMaxOutputTokens("quick"), 3_600);
   assert.equal(documentAnalysisMaxOutputTokens("full"), 8_192);
   assert.equal(documentAnalysisMaxOutputTokens("expert"), 8_192);
-  assert.equal(documentAnalysisTimeoutMs("quick"), 60_000);
-  assert.equal(documentAnalysisTimeoutMs("expert"), 90_000);
+  assert.equal(documentAnalysisTimeoutMs("quick"), 80_000);
+  assert.equal(documentAnalysisFallbackTimeoutMs("quick"), 30_000);
+  assert.equal(QUICK_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS, 110_000);
+  assert.equal(documentAnalysisTimeoutMs("full"), 120_000);
+  assert.equal(documentAnalysisTimeoutMs("expert"), 150_000);
+});
+
+test("document analysis provider diagnostics expose fixed categories only", () => {
+  assert.deepEqual(
+    safeDocumentAnalysisProviderFailure(
+      "openai",
+      new AiUnavailableError("provider body must remain private", "PROVIDER_UNAVAILABLE", false, 400, "untrusted_detail"),
+    ),
+    {
+      event: "document_analysis.provider_failed",
+      provider: "openai",
+      errorCode: "PROVIDER_UNAVAILABLE",
+      httpCategory: "HTTP_400",
+    },
+  );
+  assert.deepEqual(
+    safeDocumentAnalysisProviderFailure("anthropic", new Error("untrusted dynamic failure")),
+    {
+      event: "document_analysis.provider_failed",
+      provider: "anthropic",
+      errorCode: "PROVIDER_UNAVAILABLE",
+      httpCategory: null,
+    },
+  );
+});
+
+test("quick document analysis prefers bounded low-reasoning OpenAI structured output", async () => {
+  const runtime = env as unknown as {
+    ANTHROPIC_API_KEY?: string;
+    OPENAI_API_KEY?: string;
+    AI_PROVIDER?: string;
+    AI_PROVIDER_API_KEY?: string;
+  };
+  const originalRuntime = {
+    ANTHROPIC_API_KEY: runtime.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: runtime.OPENAI_API_KEY,
+    AI_PROVIDER: runtime.AI_PROVIDER,
+    AI_PROVIDER_API_KEY: runtime.AI_PROVIDER_API_KEY,
+  };
+  const originalFetch = globalThis.fetch;
+  const settings: AiRuntimeSettings = {
+    environment: "staging",
+    version: 1,
+    openaiChatModel: "gpt-test",
+    openaiDeepModel: "gpt-test",
+    anthropicChatFallbackModel: "claude-test",
+    anthropicDocumentModel: "claude-test",
+    openaiDocumentFallbackModel: "gpt-test",
+    responseTone: "clear",
+    configHash: "b".repeat(64),
+    source: "environment",
+    createdAt: null,
+  };
+  try {
+    runtime.OPENAI_API_KEY = "synthetic-openai-key";
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    delete runtime.AI_PROVIDER;
+    delete runtime.AI_PROVIDER_API_KEY;
+    globalThis.fetch = async (input, init) => {
+      assert.equal(String(input), "https://api.openai.com/v1/responses");
+      const request = JSON.parse(String(init?.body)) as {
+        model?: string;
+        max_output_tokens?: number;
+        reasoning?: { effort?: string };
+        text?: { verbosity?: string };
+      };
+      assert.equal(request.model, "gpt-test");
+      assert.equal(request.max_output_tokens, 3_600);
+      assert.deepEqual(request.reasoning, { effort: "low" });
+      assert.equal(request.text?.verbosity, "low");
+      return Response.json({
+        id: "resp_document_quick",
+        model: "gpt-test",
+        status: "completed",
+        output: [{
+          type: "message",
+          content: [{ type: "output_text", text: JSON.stringify(base) }],
+        }],
+        usage: { input_tokens: 20, output_tokens: 30 },
+      });
+    };
+    const result = await runDocumentAnalysis({
+      fileName: "synthetic-contract.txt",
+      mimeType: "text/plain",
+      extractedText: "срок определяется дополнительно",
+      detectedLanguage: "ru",
+      extractionWarnings: [],
+      packageContext: null,
+      locale: "ru",
+      mode: "quick",
+      userSide: null,
+      sources: [],
+      legalDatabaseAsOf: "unavailable",
+      requestId: "synthetic-document-openai-quick",
+    }, {
+      runtimeSettings: settings,
+      providerMaxAttempts: 1,
+    });
+    assert.equal(result.provider, "openai");
+    assert.equal(result.fallbackFromProvider, null);
+    assert.equal(result.data.summary, base.summary);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(originalRuntime)) {
+      if (value === undefined) delete runtime[key as keyof typeof originalRuntime];
+      else runtime[key as keyof typeof originalRuntime] = value;
+    }
+  }
 });
 
 test("document analysis sends Anthropic a forced envelope and restores the canonical validated result", async () => {

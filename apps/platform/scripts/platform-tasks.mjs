@@ -102,6 +102,7 @@ const coreTestFiles = [
   "tests/document-analysis-upload.test.ts",
   "tests/document-analysis-route-boundary.test.ts",
   "tests/document-analysis-provider.test.ts",
+  "tests/document-analysis-runtime-recovery.test.ts",
   "tests/clamav-output.test.ts",
   "tests/document-analysis-processor.test.ts",
   "tests/document-analysis-chunking.test.ts",
