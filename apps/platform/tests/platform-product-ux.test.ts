@@ -193,3 +193,20 @@ test("document workspace error dismissals and loading state follow the active lo
   assert.match(configuredBuilder, /aria-label=\{language === "uz" \? "Xabarni yopish" : "Закрыть сообщение"\}/);
   assert.match(configuredBuilder, /language === "uz" \? "Konstruktor yuklanmoqda…" : "Загружаем конструктор…"/);
 });
+
+test("document rename uses the JURO dialog instead of a native prompt", async () => {
+  const [documents, copy, styles] = await Promise.all([
+    source("../app/_document-builder/documents/DocumentsClient.tsx"),
+    source("../lib/platform/builder-workspace-copy.ts"),
+    source("../app/_document-builder/document-builder.css"),
+  ]);
+  assert.doesNotMatch(documents, /window\.prompt/);
+  assert.match(documents, /useModalFocus<HTMLFormElement>\(Boolean\(renameDecision\), closeRename\)/);
+  assert.match(documents, /role="dialog" aria-modal="true" aria-labelledby="rename-document-title" aria-describedby="rename-document-description"/);
+  assert.match(documents, /data-dialog-initial-focus required minLength=\{1\}/);
+  assert.match(documents, /renameDecision\.kind === "standalone" \? 180 : 300/);
+  assert.match(documents, /JSON\.stringify\(\{ action: "rename", title: renameTitle\.trim\(\) \}\)/);
+  assert.match(copy, /renameDialogTitle: "Переименовать документ"/);
+  assert.match(copy, /renameDialogTitle: "Hujjat nomini o‘zgartirish"/);
+  assert.match(styles, /\.dbt-rename-dialog \{ width: min\(480px, 100%\); \}/);
+});

@@ -466,6 +466,8 @@
 .dbt-contact-form > footer { margin-top: 16px; justify-content: flex-end; gap: 8px; }
 .dbt-contact-form > footer button { min-height: 44px; min-width: 44px; padding: 9px 12px; border: 1px solid #cbd2d7; border-radius: 8px; background: white; color: var(--dbt-navy); cursor: pointer; }
 .dbt-contact-form > footer button.primary { background: var(--dbt-navy); color: white; }
+.dbt-rename-dialog { width: min(480px, 100%); }
+.dbt-rename-dialog > p { margin: 0 0 16px; color: var(--dbt-muted); line-height: 1.5; }
 
 .dbt-notification-list { display: grid; gap: 8px; }
 .dbt-notification-list article { padding: 13px; display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; background: white; border: 1px solid var(--dbt-line); border-radius: 10px; }
