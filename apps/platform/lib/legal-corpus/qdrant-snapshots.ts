@@ -11,6 +11,7 @@ import { featureEnabled } from "./trust";
 const COLLECTION_PATTERN = /^[A-Za-z0-9_-]{1,80}$/u;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const OBJECT_KEY_PATTERN = /^legal-corpus\/qdrant\/[A-Za-z0-9._\/-]{1,700}$/u;
+const QDRANT_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})?$/u;
 const MANIFEST_LIMIT_BYTES = 64 * 1024;
 const RECOVERY_LOCK_NAME = "legal-corpus-qdrant-recovery";
 const RECOVERY_LOCK_MS = 3 * 60_000;
@@ -76,7 +77,7 @@ const manifestSchema: z.ZodType<LegalCorpusQdrantSnapshotManifest> = z.object({
   denseIndexedThrough: z.string().datetime({ offset: true }).nullable(),
   qdrant: z.object({
     snapshotName: z.string().min(1).max(240),
-    creationTime: z.string().datetime({ offset: true }),
+    creationTime: z.string().regex(QDRANT_TIMESTAMP_PATTERN),
     size: z.number().int().positive().safe(),
     checksumSha256: z.string().regex(SHA256_PATTERN),
     totalPoints: z.number().int().nonnegative(),
