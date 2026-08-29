@@ -21,9 +21,10 @@ database.
 - Binding: `DB` points only to `juro-staging-corpus-shard-3` in the staging
   environment.
 - There is no production environment in the shard config.
-- `LEGAL_CORPUS_DENSE_ENABLED=false`; the private Qdrant and embedding
-  bindings are dormant until the queue is frozen and the separate benchmark
-  gate is approved.
+- `LEGAL_CORPUS_DENSE_ENABLED=true` only for the explicitly approved staging
+  backfill; `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` keeps source acquisition
+  and new Lex.uz ingestion frozen. The private Qdrant and embedding bindings
+  remain staging-only and the separate benchmark/restore gate is still open.
 - The primary legal-corpus Worker still points to v2; its capacity guard fails
   closed before source work. It does not share a crawl stream with the shard.
 
