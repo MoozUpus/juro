@@ -420,9 +420,12 @@ export async function createLegalCorpusQdrantSnapshot(
   const snapshotObjectKey = `${prefix}/${collection(env)}.snapshot`;
   const manifestObjectKey = `${prefix}/manifest.json`;
   let info: QdrantSnapshotInfo | null = null;
+  let stage = "snapshot-create";
   try {
     info = await client.createSnapshot();
+    stage = "snapshot-download";
     const response = await client.downloadSnapshot(info.name);
+    stage = "r2-snapshot-store";
     const object = await storeSnapshotObject({ env, info, response, objectKey: snapshotObjectKey });
     const manifest: LegalCorpusQdrantSnapshotManifest = {
       schemaVersion: 1,
@@ -454,6 +457,7 @@ export async function createLegalCorpusQdrantSnapshot(
     };
     const manifestBytes = canonicalManifest(manifest);
     const manifestSha256 = await sha256Hex(manifestBytes);
+    stage = "r2-manifest-store";
     const storedManifest = await bucket(env).put(manifestObjectKey, manifestBytes, {
       httpMetadata: { contentType: "application/json; charset=utf-8" },
       customMetadata: {
@@ -467,12 +471,30 @@ export async function createLegalCorpusQdrantSnapshot(
     if (!storedManifest) {
       throw new LegalCorpusQdrantSnapshotError("LEGAL_CORPUS_QDRANT_SNAPSHOT_WRITE_FAILED", true);
     }
+    stage = "r2-manifest-verify";
     await verifiedObject(bucket(env), manifestObjectKey, manifestBytes.byteLength, manifestSha256);
     const snapshotId = crypto.randomUUID();
+    stage = "d1-snapshot-ledger";
     await env.DB.prepare(`INSERT INTO legal_corpus_snapshots
       (id,manifest_object_key,registry_sha256,created_at,created_by_run_id)
       VALUES (?,?,?,?,NULL)`).bind(snapshotId, manifestObjectKey, manifestSha256, createdAt).run();
     return { status: "created", snapshotId, manifest };
+  } catch (error) {
+    const explicitCode = typeof error === "object" && error !== null && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+    const errorCode = typeof explicitCode === "string" && /^[A-Z0-9_]{1,80}$/u.test(explicitCode)
+      ? explicitCode
+      : "UNCLASSIFIED";
+    console.error(JSON.stringify({
+      service: "legal-corpus-qdrant-snapshot",
+      event: "qdrant.snapshot_stage_failed",
+      environment: env.APP_ENV,
+      stage,
+      errorCode,
+      errorType: error instanceof Error ? error.name : typeof error,
+    }));
+    throw error;
   } finally {
     if (info) await client.deleteSnapshot(info.name).catch(() => undefined);
   }
