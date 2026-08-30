@@ -10,6 +10,7 @@ import {
   productionDependencyProbesEnabled,
   productionOpenAiProbeOptions,
   runProductionDependencyProbes,
+  safeProviderFailureReason,
 } from "../worker/production-dependency-probes";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -125,6 +126,31 @@ test("production provider probes stay bounded and isolate OpenAI from fallback",
   });
 });
 
+test("Anthropic probe diagnostics classify only documented content-free 400 causes", () => {
+  const failure = (message: string) => Object.assign(new Error(message), {
+    providerStatus: 400,
+    providerErrorType: "invalid_request_error",
+  });
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "You have reached your specified workspace API usage limits. Access resumes later.",
+  )), "anthropic_workspace_spend_limit");
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "You have reached your specified API usage limits. Access resumes later.",
+  )), "anthropic_organization_spend_limit");
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "anthropic-workspace-id is required when authenticating with an identity-linked API key; send the id.",
+  )), "anthropic_workspace_header_required");
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "anthropic-workspace-id header must be a valid workspace ID.",
+  )), "anthropic_workspace_header_invalid");
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "messages.0.content contains private request text that must never be logged",
+  )), null);
+  assert.equal(safeProviderFailureReason("openai", failure(
+    "You have reached your specified API usage limits.",
+  )), null);
+});
+
 test("fresh operational evidence skips every production dependency probe", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
@@ -215,6 +241,7 @@ test("provider probe failures log only bounded diagnostic fields", async () => {
       errorName: "Error",
       providerStatus: 429,
       providerErrorType: "first_byte_timeout",
+      providerFailureReason: null,
       elapsedMs: 0,
     });
     assert.equal(errors[0].includes("raw provider message"), false);
@@ -224,6 +251,44 @@ test("provider probe failures log only bounded diagnostic fields", async () => {
       state: "degraded",
       safeErrorCode: "PROVIDER_TIMEOUT",
     });
+  } finally {
+    console.error = originalConsoleError;
+    sqlite.close();
+  }
+});
+
+test("Anthropic probe logs a fixed spend-limit reason without the upstream message", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const originalConsoleError = console.error;
+  const errors: string[] = [];
+  console.error = (...values: unknown[]) => { errors.push(values.join(" ")); };
+  try {
+    const env = probeEnv(d1);
+    await seedOperational(env, ["anthropic"]);
+    const failure = Object.assign(new Error(
+      "You have reached your specified workspace API usage limits. private-upstream-marker",
+    ), {
+      code: "PROVIDER_UNAVAILABLE",
+      providerStatus: 400,
+      providerErrorType: "invalid_request_error",
+    });
+    const summary = await runProductionDependencyProbes(env, {
+      anthropic: async () => { throw failure; },
+    });
+    assert.equal(summary?.anthropic, "failed");
+    assert.equal(errors.length, 1);
+    const log = JSON.parse(errors[0]) as Record<string, unknown>;
+    assert.deepEqual({ ...log, elapsedMs: 0 }, {
+      event: "production_dependency_probe.provider_failed",
+      provider: "anthropic",
+      safeCode: "PROVIDER_UNAVAILABLE",
+      errorName: "Error",
+      providerStatus: 400,
+      providerErrorType: "invalid_request_error",
+      providerFailureReason: "anthropic_workspace_spend_limit",
+      elapsedMs: 0,
+    });
+    assert.equal(errors[0].includes("private-upstream-marker"), false);
   } finally {
     console.error = originalConsoleError;
     sqlite.close();

@@ -286,6 +286,43 @@ function safeProviderCode(error: unknown): string {
   return "PROVIDER_UNAVAILABLE";
 }
 
+export type SafeProviderFailureReason =
+  | "anthropic_organization_spend_limit"
+  | "anthropic_workspace_spend_limit"
+  | "anthropic_workspace_header_required"
+  | "anthropic_workspace_header_invalid"
+  | null;
+
+export function safeProviderFailureReason(
+  provider: "openai" | "anthropic",
+  error: unknown,
+): SafeProviderFailureReason {
+  if (provider !== "anthropic" || !(error instanceof Error)) return null;
+  const candidate = error as Error & {
+    providerStatus?: unknown;
+    providerErrorType?: unknown;
+  };
+  if (candidate.providerStatus !== 400 || candidate.providerErrorType !== "invalid_request_error") {
+    return null;
+  }
+  // Anthropic documents these exact content-free failure classes for HTTP 400.
+  // Match known text only and emit a fixed enum; never log or persist the
+  // upstream message because an unrelated validation error may echo input.
+  if (/You have reached your specified workspace API usage limits/iu.test(candidate.message)) {
+    return "anthropic_workspace_spend_limit";
+  }
+  if (/You have reached your specified API usage limits/iu.test(candidate.message)) {
+    return "anthropic_organization_spend_limit";
+  }
+  if (/anthropic-workspace-id is required when authenticating with an identity-linked API key/iu.test(candidate.message)) {
+    return "anthropic_workspace_header_required";
+  }
+  if (/anthropic-workspace-id header must be a valid workspace ID/iu.test(candidate.message)) {
+    return "anthropic_workspace_header_invalid";
+  }
+  return null;
+}
+
 function safeProviderFailureDetails(error: unknown): {
   errorName: string;
   providerStatus: number | null;
@@ -372,6 +409,7 @@ async function runOneProviderProbe(
       provider,
       safeCode,
       ...safeProviderFailureDetails(error),
+      providerFailureReason: safeProviderFailureReason(provider, error),
       elapsedMs: Math.max(0, Date.now() - startedAt),
     }));
     await recordDependencyHealthEvidence(env, {
