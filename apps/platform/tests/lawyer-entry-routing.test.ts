@@ -32,10 +32,12 @@ const client: LawyerEntryProfile = {
   lawyerMarketplaceStatus: null,
 };
 
-test("lawyer public origin is selected only for known production and staging hosts", () => {
+test("lawyer public origin uses the dedicated production host and canonical shared staging host", () => {
   assert.equal(lawyerPublicOrigin("app.juro.uz"), "https://lawyer.juro.uz");
   assert.equal(lawyerPublicOrigin("lawyer.juro.uz:443"), "https://lawyer.juro.uz");
-  assert.equal(lawyerPublicOrigin("app.staging.juro.uz"), "https://lawyer.staging.juro.uz");
+  assert.equal(lawyerPublicOrigin("staging.app.juro.uz"), "https://staging.app.juro.uz");
+  assert.equal(lawyerPublicOrigin("app.staging.juro.uz"), null);
+  assert.equal(lawyerPublicOrigin("lawyer.staging.juro.uz"), null);
   assert.equal(lawyerPublicOrigin("attacker.invalid"), null);
 });
 
@@ -99,4 +101,39 @@ test("approved lawyers are canonicalized from the client host", () => {
     requestHost: "app.juro.uz",
     profile: approvedLawyer,
   }), "https://lawyer.juro.uz/ru/dashboard");
+});
+
+test("canonical staging keeps lawyer routes on the Access-protected shared host", () => {
+  assert.equal(
+    lawyerLandingDestination(approvedLawyer, false, "staging.app.juro.uz"),
+    "https://staging.app.juro.uz/ru/lawyer/dashboard",
+  );
+  assert.equal(
+    lawyerLandingDestination(pendingLawyer, false, "staging.app.juro.uz"),
+    "https://staging.app.juro.uz/ru/lawyer/profile",
+  );
+  assert.equal(
+    lawyerLandingDestination(
+      { ...pendingLawyer, onboardingCompleted: false },
+      false,
+      "staging.app.juro.uz",
+    ),
+    "https://staging.app.juro.uz/ru/onboarding",
+  );
+  assert.equal(accountModuleRedirect({
+    requestedLocale: "ru",
+    requestedAccountType: "lawyer",
+    module: "dashboard",
+    lawyerHost: false,
+    requestHost: "staging.app.juro.uz",
+    profile: approvedLawyer,
+  }), null);
+  assert.equal(accountModuleRedirect({
+    requestedLocale: "ru",
+    requestedAccountType: "individual",
+    module: "dashboard",
+    lawyerHost: false,
+    requestHost: "staging.app.juro.uz",
+    profile: approvedLawyer,
+  }), "https://staging.app.juro.uz/ru/lawyer/dashboard");
 });

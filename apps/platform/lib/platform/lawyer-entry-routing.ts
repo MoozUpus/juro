@@ -34,6 +34,8 @@ const pendingLawyerModules = new Set<PlatformModule>([
   "security",
 ]);
 
+const sharedStagingOrigin = "https://staging.app.juro.uz";
+
 export function isLawyerHostRequest(headers: Pick<Headers, "get">): boolean {
   return headers.get("x-juro-lawyer-host") === "1";
 }
@@ -43,12 +45,7 @@ export function lawyerPublicOrigin(requestHost: string | null): string | null {
   if (host === "app.juro.uz" || host === "lawyer.juro.uz") {
     return "https://lawyer.juro.uz";
   }
-  if (
-    host === "app.staging.juro.uz"
-    || host === "lawyer.staging.juro.uz"
-  ) {
-    return "https://lawyer.staging.juro.uz";
-  }
+  if (host === "staging.app.juro.uz") return sharedStagingOrigin;
   return null;
 }
 
@@ -67,6 +64,15 @@ function lawyerPublicDestination(
   const path = `/${locale}/${page}`;
   if (lawyerHost) return path;
   const origin = lawyerPublicOrigin(requestHost);
+  if (origin === sharedStagingOrigin) {
+    if (page === "onboarding") return `${origin}/${locale}/onboarding`;
+    const sharedPage = page === "application"
+      ? "lawyer/profile"
+      : page.startsWith("lawyer/")
+        ? page
+        : `lawyer/${page}`;
+    return `${origin}/${locale}/${sharedPage}`;
+  }
   return origin ? `${origin}${path}` : path;
 }
 
@@ -158,7 +164,8 @@ export function accountModuleRedirect({
       requestHost,
     );
   }
-  if (!lawyerHost && lawyerPublicOrigin(requestHost)) {
+  const publicOrigin = lawyerPublicOrigin(requestHost);
+  if (!lawyerHost && publicOrigin && publicOrigin !== sharedStagingOrigin) {
     return lawyerPublicDestination(
       profile.locale,
       publicPageForModule(module, operational),

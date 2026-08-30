@@ -134,7 +134,7 @@ const worker = {
     let routedUrl = url;
 
     const hostname = url.hostname.toLowerCase();
-    const isLawyerHost = hostname === "lawyer.juro.uz" || hostname === "lawyer.staging.juro.uz";
+    const isLawyerHost = hostname === "lawyer.juro.uz";
     const lawyerPassthrough = url.pathname.startsWith("/_next/")
       || url.pathname.startsWith("/api/")
       || url.pathname.startsWith("/legal/")
