@@ -227,6 +227,7 @@ test("provider probe failures log only bounded diagnostic fields", async () => {
       code: "PROVIDER_TIMEOUT",
       providerStatus: 429,
       providerErrorType: "first_byte_timeout",
+      providerRequestId: "untrusted request id with spaces",
     });
     const summary = await runProductionDependencyProbes(env, {
       openai: async () => { throw failure; },
@@ -241,6 +242,7 @@ test("provider probe failures log only bounded diagnostic fields", async () => {
       errorName: "Error",
       providerStatus: 429,
       providerErrorType: "first_byte_timeout",
+      providerRequestId: null,
       providerFailureReason: null,
       elapsedMs: 0,
     });
@@ -271,6 +273,7 @@ test("Anthropic probe logs a fixed spend-limit reason without the upstream messa
       code: "PROVIDER_UNAVAILABLE",
       providerStatus: 400,
       providerErrorType: "invalid_request_error",
+      providerRequestId: "req_anthropicprobe1234",
     });
     const summary = await runProductionDependencyProbes(env, {
       anthropic: async () => { throw failure; },
@@ -285,6 +288,7 @@ test("Anthropic probe logs a fixed spend-limit reason without the upstream messa
       errorName: "Error",
       providerStatus: 400,
       providerErrorType: "invalid_request_error",
+      providerRequestId: "req_anthropicprobe1234",
       providerFailureReason: "anthropic_workspace_spend_limit",
       elapsedMs: 0,
     });

@@ -24,6 +24,7 @@ export class AiUnavailableError extends Error {
   readonly retryable: boolean;
   readonly providerStatus: number | null;
   readonly providerErrorType: string | null;
+  readonly providerRequestId: string | null;
 
   constructor(
     message: string,
@@ -31,6 +32,7 @@ export class AiUnavailableError extends Error {
     retryable = true,
     providerStatus: number | null = null,
     providerErrorType: string | null = null,
+    providerRequestId: string | null = null,
   ) {
     super(message);
     this.name = "AiUnavailableError";
@@ -38,6 +40,7 @@ export class AiUnavailableError extends Error {
     this.retryable = retryable;
     this.providerStatus = providerStatus;
     this.providerErrorType = providerErrorType;
+    this.providerRequestId = providerRequestId;
   }
 }
 

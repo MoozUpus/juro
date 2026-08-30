@@ -23,6 +23,7 @@ import {
   safeDocumentAnalysisProviderFailure,
 } from "../lib/document-analysis/provider";
 import type { AiRuntimeSettings } from "../lib/ai/runtime-settings";
+import { callAnthropicStructured } from "../lib/document-builder/ai/anthropic";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 
 const base = {
@@ -411,6 +412,11 @@ test("document analysis sends Anthropic a forced envelope and restores the canon
     delete runtime.AI_PROVIDER_API_KEY;
     globalThis.fetch = async (input, init) => {
       assert.equal(String(input), "https://api.anthropic.com/v1/messages");
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("x-api-key"), "synthetic-anthropic-key");
+      assert.equal(headers.get("anthropic-version"), "2023-06-01");
+      assert.equal(headers.get("content-type"), "application/json");
+      assert.equal(headers.get("x-client-request-id"), null);
       const request = JSON.parse(String(init?.body)) as {
         model?: string;
         max_tokens?: number;
@@ -475,6 +481,43 @@ test("document analysis sends Anthropic a forced envelope and restores the canon
       if (value === undefined) delete runtime[key as keyof typeof originalRuntime];
       else runtime[key as keyof typeof originalRuntime] = value;
     }
+  }
+});
+
+test("Anthropic failures preserve only the documented provider request id", async () => {
+  const runtime = env as unknown as { ANTHROPIC_API_KEY?: string };
+  const originalApiKey = runtime.ANTHROPIC_API_KEY;
+  const originalFetch = globalThis.fetch;
+  try {
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    globalThis.fetch = async (_input, init) => {
+      assert.equal(new Headers(init?.headers).get("x-client-request-id"), null);
+      return Response.json({
+        type: "error",
+        error: { type: "invalid_request_error", message: "private provider detail" },
+        request_id: "req_bodyfallback1234",
+      }, {
+        status: 400,
+        headers: { "request-id": "req_headerpreferred1234" },
+      });
+    };
+    await assert.rejects(() => callAnthropicStructured({
+      instructions: "Return a result.",
+      input: { synthetic: true },
+      schema: { type: "object", additionalProperties: false, properties: {} },
+      parse: (value) => value,
+      model: "claude-sonnet-4-6",
+      requestId: "local-correlation-id-must-not-be-sent",
+      maxAttempts: 1,
+      strictOutput: false,
+    }), (error: unknown) => error instanceof AiUnavailableError
+      && error.providerStatus === 400
+      && error.providerErrorType === "invalid_request_error"
+      && error.providerRequestId === "req_headerpreferred1234");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) delete runtime.ANTHROPIC_API_KEY;
+    else runtime.ANTHROPIC_API_KEY = originalApiKey;
   }
 });
 
