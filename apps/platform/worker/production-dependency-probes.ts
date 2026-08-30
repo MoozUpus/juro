@@ -28,6 +28,8 @@ export const PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS = 55_000;
 export const PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS = 20_000;
 export const PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS = 3_000;
 export const PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS = 5_000;
+export const PRODUCTION_DOCUMENT_ANALYSIS_PROVIDER_TIMEOUT_MS = 25_000;
+export const PRODUCTION_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS = 55_000;
 
 const r2Payload = new TextEncoder().encode(
   "JURO production private R2 synthetic dependency probe v1\n",
@@ -85,13 +87,16 @@ async function probeDue(
   now = new Date(),
 ): Promise<boolean> {
   const row = await env.DB.prepare(
-    `SELECT state,checked_at AS checkedAt
+    `SELECT checked_at AS checkedAt
        FROM dependency_health_checks
       WHERE environment=? AND dependency_key=?
       ORDER BY checked_at DESC,id DESC
       LIMIT 1`,
-  ).bind(env.APP_ENV, key).first<{ state: string; checkedAt: string }>();
-  if (!row || row.state !== "operational") return true;
+  ).bind(env.APP_ENV, key).first<{ checkedAt: string }>();
+  if (!row) return true;
+  // A failure is still a completed observation. Ignoring its timestamp makes
+  // every degraded dependency run on the five-minute scheduler heartbeat,
+  // bypassing the per-probe cost and ledger-growth intervals above.
   const checkedAt = Date.parse(row.checkedAt);
   return !Number.isFinite(checkedAt) || now.getTime() - checkedAt >= intervalMs;
 }
@@ -568,27 +573,97 @@ async function runOneProviderProbe(
   }
 }
 
+export function productionDocumentAnalysisProbeOptions(now = Date.now()) {
+  return {
+    providerTimeoutMs: PRODUCTION_DOCUMENT_ANALYSIS_PROVIDER_TIMEOUT_MS,
+    providerMaxAttempts: 1,
+    deadlineAt: now + PRODUCTION_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS,
+  } as const;
+}
+
+type DocumentAnalysisProbeProvider = "openai" | "anthropic";
+
+function withDocumentAnalysisProbeProvider(
+  error: unknown,
+  provider: DocumentAnalysisProbeProvider | null,
+): Error & { documentAnalysisProbeProvider: DocumentAnalysisProbeProvider | null } {
+  if (error instanceof Error) return Object.assign(error, { documentAnalysisProbeProvider: provider });
+  return Object.assign(new Error("DOCUMENT_ANALYSIS_PROBE_FAILED"), {
+    code: "ANALYSIS_JOB_FAILED",
+    documentAnalysisProbeProvider: provider,
+  });
+}
+
+function documentAnalysisProbeProvider(error: unknown): DocumentAnalysisProbeProvider | null {
+  if (typeof error !== "object" || error === null || !("documentAnalysisProbeProvider" in error)) return null;
+  const provider = (error as { documentAnalysisProbeProvider?: unknown }).documentAnalysisProbeProvider;
+  return provider === "openai" || provider === "anthropic" ? provider : null;
+}
+
+export function documentAnalysisProbeFailureCode(error: unknown): DependencyHealthSafeErrorCode {
+  const provider = documentAnalysisProbeProvider(error);
+  const safeCode = safeProviderCode(error);
+  if (!provider) return "ANALYSIS_JOB_FAILED";
+  const diagnosticCode = providerDiagnosticSafeErrorCode(safeProviderFailureReason(provider, error));
+  if (diagnosticCode) return diagnosticCode;
+  if (safeCode === "PROBE_CONFIGURATION_ERROR") return "PROBE_CONFIGURATION_ERROR";
+  if (safeCode === "PROVIDER_TIMEOUT") return "PROVIDER_TIMEOUT";
+  if (
+    safeCode === "PROVIDER_UNAVAILABLE"
+    || safeCode === "PROVIDER_CIRCUIT_OPEN"
+    || safeCode === "ANTHROPIC_PREFLIGHT_FAILED"
+    || safeCode === "ANTHROPIC_REQUEST_FAILED"
+  ) {
+    return "PROVIDER_UNAVAILABLE";
+  }
+  return "ANALYSIS_JOB_FAILED";
+}
+
+function logDocumentAnalysisProbeFailure(
+  error: unknown,
+  safeErrorCode: DependencyHealthSafeErrorCode,
+  startedAt: number,
+): void {
+  const provider = documentAnalysisProbeProvider(error);
+  console.error(JSON.stringify({
+    event: "production_dependency_probe.document_analysis_failed",
+    provider,
+    safeCode: safeProviderCode(error),
+    safeErrorCode,
+    ...safeProviderFailureDetails(error),
+    providerFailureReason: provider ? safeProviderFailureReason(provider, error) : null,
+    elapsedMs: Math.max(0, Date.now() - startedAt),
+  }));
+}
+
 async function defaultDocumentAnalysisProbe(): Promise<void> {
   const { runDocumentAnalysis } = await import("../lib/document-analysis/provider");
-  await runDocumentAnalysis({
-    fileName: "juro-production-synthetic-probe.txt",
-    mimeType: "text/plain",
-    extractedText: "Synthetic technical health-check document. It contains no user data and no legal claim.",
-    detectedLanguage: "en",
-    extractionWarnings: [],
-    packageContext: null,
-    locale: "ru",
-    mode: "quick",
-    userSide: null,
-    sources: [],
-    legalDatabaseAsOf: "unavailable",
-    requestId: crypto.randomUUID(),
-  }, {
-    providerTimeoutMs: 50_000,
-    providerMaxAttempts: 1,
-    deadlineAt: Date.now() + 55_000,
-    fallbackEnabled: false,
-  });
+  let lastProvider: DocumentAnalysisProbeProvider | null = null;
+  try {
+    await runDocumentAnalysis({
+      fileName: "juro-production-synthetic-probe.txt",
+      mimeType: "text/plain",
+      extractedText: "Synthetic technical health-check document. It contains no user data and no legal claim.",
+      detectedLanguage: "en",
+      extractionWarnings: [],
+      packageContext: null,
+      locale: "ru",
+      mode: "quick",
+      userSide: null,
+      sources: [],
+      legalDatabaseAsOf: "unavailable",
+      requestId: crypto.randomUUID(),
+    }, {
+      ...productionDocumentAnalysisProbeOptions(),
+      // This is a feature probe, not a provider probe. Follow the same quick
+      // OpenAI -> Anthropic route as a user analysis so one healthy provider
+      // keeps the feature operational. The dedicated provider probes above
+      // continue to isolate and report each provider independently.
+      beforeProviderCall: ({ provider }) => { lastProvider = provider; },
+    });
+  } catch (error) {
+    throw withDocumentAnalysisProbeProvider(error, lastProvider);
+  }
 }
 
 async function runDocumentAnalysisProbe(
@@ -601,8 +676,10 @@ async function runDocumentAnalysisProbe(
     await (hook ?? defaultDocumentAnalysisProbe)();
     await recordOperational(env, "document_analysis", startedAt);
     return "succeeded";
-  } catch {
-    await recordFailure(env, "document_analysis", "ANALYSIS_JOB_FAILED", startedAt);
+  } catch (error) {
+    const safeErrorCode = documentAnalysisProbeFailureCode(error);
+    logDocumentAnalysisProbeFailure(error, safeErrorCode, startedAt);
+    await recordFailure(env, "document_analysis", safeErrorCode, startedAt);
     return "failed";
   }
 }
