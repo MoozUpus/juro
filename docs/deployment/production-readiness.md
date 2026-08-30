@@ -69,6 +69,7 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 - Worker v179 deployed at 100% traffic through production workflow `33314211943`; Admin and public Sites jobs were skipped. Direct Cloudflare inspection confirmed version `7ffc07cd-4ebb-46ce-b659-ed4cf0ae9c79` in deployment `26f52ed8-bde8-4dc5-84c2-2ab74b912e40`.
 - Anonymous staging verification confirmed `staging.app.juro.uz/ru/lawyer/auth` redirects to Cloudflare Access with `no-store`; both rejected aliases remain absent from DNS. The staging Worker was not redeployed, so authenticated post-Access runtime QA remains open.
 - Chrome on v179 reproduced the truthful degraded 7/8 production status with zero active incidents and no console errors.
+- Superseded broad Draft PR #64 was closed without deleting its branch. Its 486-file candidate remains recoverable for separately audited extraction, but it is no longer presented as a mergeable release unit.
 
 ## Blocking gaps before a production-ready claim
 
@@ -80,7 +81,6 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 | P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
 | P1 | Authenticated role matrix incomplete | Only anonymous boundary checks are current | Chrome QA for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin with no fabricated session |
 | P2 | Staging v179 behavior is not deployed or authenticated | Main is normalized and the canonical host is Access-protected; staging Worker remains on its prior version | Deploy staging only in a safe non-legislation increment, then complete post-Access Client/Lawyer route QA with real authorized sessions |
-| P2 | Draft PR #64 still contains broad overlapping or conflicted work | Current GitHub PR list; superseded PR #63 is closed with its branch preserved | Reconcile the remaining independent branch separately; do not merge the broad Draft as-is |
 
 ## Rollback protocol
 
