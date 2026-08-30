@@ -170,6 +170,44 @@ test("0112 publishes unknown rather than stale when a mandatory dependency has n
   } finally { sqlite.close(); }
 });
 
+test("admin status keeps actionable provider diagnostics while public status redacts billing detail", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await seedOperationalDependencies(d1);
+    await recordDependencyHealth({
+      db: d1,
+      now: new Date("2026-08-05T09:01:00.000Z"),
+      value: {
+        environment: "development",
+        key: "anthropic",
+        state: "degraded",
+        latencyMs: 509,
+        safeErrorCode: "PROVIDER_CREDIT_BALANCE_LOW",
+        evidenceKind: "synthetic_probe",
+      },
+    });
+    const admin = await readStatusIncidentAdminDashboard({
+      db: d1,
+      environment: "development",
+      now: new Date("2026-08-05T09:02:00.000Z"),
+    });
+    assert.equal(admin.dependencies.find((dependency) => dependency.key === "anthropic")?.safeErrorCode, "PROVIDER_CREDIT_BALANCE_LOW");
+    assert.equal(admin.generatedAt, "2026-08-05T09:02:00.000Z");
+
+    const publicStatus = await readPublicStatus({
+      db: d1,
+      locale: "ru",
+      environment: "development",
+      now: new Date("2026-08-05T09:02:00.000Z"),
+    });
+    const publicAnthropic = publicStatus.components
+      .flatMap((component) => component.dependencies)
+      .find((dependency) => dependency.key === "anthropic");
+    assert.equal(publicAnthropic?.safeErrorCode, "PROVIDER_UNAVAILABLE");
+    assert.doesNotMatch(JSON.stringify(publicStatus), /PROVIDER_CREDIT_BALANCE_LOW/);
+  } finally { sqlite.close(); }
+});
+
 test("0083 rejects duplicate components and exposes no client-supplied actor", async () => {
   assert.equal(createStatusIncidentSchema.safeParse({
     titleRu: "Тестовый инцидент",
@@ -203,7 +241,11 @@ test("0083 rejects duplicate components and exposes no client-supplied actor", a
       }),
       (error: unknown) => error instanceof SystemStatusError && error.code === "SYSTEM_STATUS_PERSISTENCE_FAILED",
     );
-    assert.equal((await readStatusIncidentAdminDashboard(d1)).incidents.length, 0);
+    assert.equal((await readStatusIncidentAdminDashboard({
+      db: d1,
+      environment: "development",
+      now,
+    })).incidents.length, 0);
   } finally { sqlite.close(); }
 });
 
@@ -218,6 +260,7 @@ test("status routes use a fresh-MFA operations boundary and a narrow public host
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.doesNotMatch(route, /actorUserId:\s*parsed\.data/);
   assert.match(page, /requirePlatformStaffAccess\(runtime\.DB, session, "staff\.operations\.manage"/);
+  assert.match(page + route, /dependencyHealthEnvironment\(runtime(?:Env\(\))?\.APP_ENV\)/);
   assert.match(publicApi, /STATUS_TEMPORARILY_UNAVAILABLE/);
   assert.match(publicApi, /s-maxage=30/);
   assert.match(worker, /STATUS_HOSTNAME/);
@@ -225,6 +268,8 @@ test("status routes use a fresh-MFA operations boundary and a narrow public host
   assert.match(worker, /Method Not Allowed/);
   assert.doesNotMatch(ui + publicUi, /dangerouslySetInnerHTML|transition:\s*all|window\.confirm/);
   assert.match(ui, /aria-live="polite"/);
+  assert.match(ui, /status-dependency-health/);
+  assert.match(ui, /PROVIDER_CREDIT_BALANCE_LOW/);
   assert.match(publicUi, /role="status"/);
   assert.match(publicUi, /public-status-dependencies/);
   assert.match(publicUi, /dependency\.safeErrorCode/);

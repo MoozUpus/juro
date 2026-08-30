@@ -11,6 +11,7 @@ import {
   PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
   productionDependencyProbesEnabled,
   productionOpenAiProbeOptions,
+  providerDiagnosticSafeErrorCode,
   runAnthropicProductionProbe,
   runProductionDependencyProbes,
   safeProviderFailureReason,
@@ -220,6 +221,18 @@ test("Anthropic probe diagnostics classify only documented content-free 400 caus
   assert.equal(safeProviderFailureReason("openai", failure(
     "You have reached your specified API usage limits.",
   )), null);
+  assert.equal(safeProviderFailureReason("openai", Object.assign(new Error("safe"), {
+    providerStatus: 429,
+    providerErrorType: "credit_balance_exhausted",
+  })), "openai_credit_balance_exhausted");
+  assert.equal(safeProviderFailureReason("openai", Object.assign(new Error("safe"), {
+    providerStatus: 400,
+    providerErrorType: "credit_balance_exhausted",
+  })), null);
+  assert.equal(safeProviderFailureReason("openai", Object.assign(new Error("safe"), {
+    providerStatus: 429,
+    providerErrorType: "private_provider_reason_must_not_be_logged",
+  })), null);
   assert.equal(safeProviderFailureReason("anthropic", Object.assign(new Error("safe"), {
     providerStatus: 429,
     providerErrorType: "rate_limit_error",
@@ -235,6 +248,11 @@ test("Anthropic probe diagnostics classify only documented content-free 400 caus
     providerErrorType: "invalid_request_error",
     providerFailureReason: "private_provider_reason_must_not_be_logged",
   })), null);
+  assert.equal(providerDiagnosticSafeErrorCode("openai_credit_balance_exhausted"), "PROVIDER_CREDIT_BALANCE_LOW");
+  assert.equal(providerDiagnosticSafeErrorCode("anthropic_workspace_spend_limit"), "PROVIDER_SPEND_LIMIT_REACHED");
+  assert.equal(providerDiagnosticSafeErrorCode("anthropic_billing_configuration"), "PROVIDER_BILLING_CONFIGURATION");
+  assert.equal(providerDiagnosticSafeErrorCode("anthropic_workspace_policy"), "PROVIDER_WORKSPACE_CONFIGURATION");
+  assert.equal(providerDiagnosticSafeErrorCode("anthropic_request_model"), "PROVIDER_REQUEST_CONFIGURATION");
 });
 
 test("fresh operational evidence skips every production dependency probe", async () => {
@@ -383,6 +401,44 @@ test("Anthropic probe logs a fixed spend-limit reason without the upstream messa
       elapsedMs: 0,
     });
     assert.equal(errors[0].includes("private-upstream-marker"), false);
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='anthropic'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "degraded",
+      safeErrorCode: "PROVIDER_SPEND_LIMIT_REACHED",
+    });
+  } finally {
+    console.error = originalConsoleError;
+    sqlite.close();
+  }
+});
+
+test("OpenAI probe persists only the fixed low-credit diagnostic for an exact 429 code", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const originalConsoleError = console.error;
+  const errors: string[] = [];
+  console.error = (...values: unknown[]) => { errors.push(values.join(" ")); };
+  try {
+    const env = probeEnv(d1);
+    await seedOperational(env, ["openai"]);
+    const failure = Object.assign(new Error("private provider response"), {
+      code: "PROVIDER_UNAVAILABLE",
+      providerStatus: 429,
+      providerErrorType: "credit_balance_exhausted",
+    });
+    const summary = await runProductionDependencyProbes(env, {
+      openai: async () => { throw failure; },
+    });
+    assert.equal(summary?.openai, "failed");
+    const log = JSON.parse(errors[0]) as Record<string, unknown>;
+    assert.equal(log.providerFailureReason, "openai_credit_balance_exhausted");
+    assert.equal(errors[0].includes("private provider response"), false);
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='openai'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "degraded",
+      safeErrorCode: "PROVIDER_CREDIT_BALANCE_LOW",
+    });
   } finally {
     console.error = originalConsoleError;
     sqlite.close();
