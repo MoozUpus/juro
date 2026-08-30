@@ -2,40 +2,36 @@
 
 Assessment: **NOT READY for the full execution brief**
 
-Evidence cutoff: **2026-08-30 04:18 UZT (2026-08-29 23:18 UTC)**
+Evidence cutoff: **2026-08-30 17:48 UZT (2026-08-30 12:48 UTC)**
 
-Production is currently reachable, Worker v176 carries the lawyer lifecycle/profile release, the lawyer cross-persona deep link remains repaired, and the last captured public status surface reports operational. That is narrower than the requested Definition of Done: authenticated role journeys, staging reliability, provider-host indexing, legacy DNS ownership, and complete Chrome QA remain open.
+Production is currently reachable and Worker v178 is serving 100% of traffic. The release isolates OpenAI and Anthropic health probes so that an OpenAI failure can no longer be misattributed to the Anthropic fallback. The latest captured public status surface truthfully reports 7/8 components operational and AI degraded because the OpenAI account returns HTTP `429` with provider error type `credit_balance_exhausted`; Anthropic remains operational. That is narrower than the requested Definition of Done: authenticated role journeys, staging reliability, provider-host indexing, legacy DNS ownership, and complete Chrome QA remain open.
 
 ## Current release state
 
 | Surface | Current state | Evidence | Rollback point |
 | --- | --- | --- | --- |
-| GitHub main | Merge commit `e7434b6f3cb1dd937ee16b8950a849a61195168f` from PR #75; reviewed content head `ca915a9f743761e369825e7696f6d42ace15fbed` | Exact-head CI run `33279675792` completed successfully for website and platform; security diff scan `809696a4-d761-42ea-a7f3-3f9b8efecd3b` completed with 40/40 review items and no findings or candidates | Previous Git commit selected through normal Git release process |
+| GitHub main | Merge commit `651483a88315aa85136f291a88c356a401fa10c2` from PR #78; reviewed content head `160e4dc61139a18e69f4717d0dc65b7d1a174f54` | PR CI run `33311452240` and post-merge CI run `33311790415` completed successfully for website and platform | Previous Git commit selected through normal Git release process |
 | Public Sites | Live version **94**, source `6f5c70f947df14597cca2e289c3b38bbd36b589d` | Sites deployment succeeded; `juro.uz` is active and 78/78 sitemap URLs return `200` | Redeploy saved v94 if a later Sites release fails |
 | Public Sites candidate | Saved version **95**, source `855ba2161b716daabb96ac469456c101e5d3bb2c` | Build, 48/48 route/SEO tests, type-check, lint, artifact validation, and 56 automated accessibility configurations passed | Not deployed; live production remains v94 |
-| Platform Worker | Worker version **176**, version ID `a4abf98b-41c2-4b5e-b669-c13723da6497`; deployment `32334545-103f-4973-a57e-f926d16e8413` | 100% traffic since `2026-08-29T23:02:45Z`; Chrome verified operational 8/8 status, the public-approved lawyer directory contract and the anonymous lawyer boundary | Prior stable version **175**, ID `91e87ef8-2042-4ca3-b888-1ab22079ab32`, deployment `dfa906d0-6a82-4d84-ae82-2aa1a098cd21` |
+| Platform Worker | Worker version **178**, version ID `85bdf326-4f4a-44d1-9540-06b5ad88fc46`; deployment `9b32983c-dc42-49ad-9888-3e9e777a48f2` | 100% traffic since `2026-08-30T12:33:56Z`; production workflow `33311790082` deployed only `app.juro.uz` and skipped the Admin Worker and public Sites | Prior version **177**, ID `217998c8-4ddc-41dc-91de-ba6a02ceb3b6`, deployment `c947e423-25d2-450c-be41-0b8b48090821` |
 | Admin Worker | Version `67065fd8-fcc8-4c15-93c8-bc7b46ce4fcb`; deployment `2be71fe7-ee92-4e43-9bbd-d500f7deac5e` | 100% traffic since `2026-08-23T11:01:31Z`; production admin is reached through the platform host boundary | Use the immediately preceding Admin version only after reproducing the fault and validating the service binding |
 | Platform staging Worker | Version `ca612aa6-3b01-4b6e-82e1-f337999a5f20`; deployment `6ef0e9fc-5f3a-4d0b-9ff0-2b95500f3e22` | Latest deployment `2026-08-28T23:54:16Z` | Previous staging version `6b700785-a72e-43b1-a2aa-e7f6839c4f0d` |
 
-Platform Worker v176 was built from merge commit `e7434b6f3cb1dd937ee16b8950a849a61195168f` by production workflow `33279990329`. The production schema already contained the two lawyer-profile columns from a byte-equivalent historical migration. A guarded ledger-only reconciliation recorded repository migration `0146_lawyer_profile_services.sql` as ID 161 after validated pre/post backups, exact schema checks and zero foreign-key violations. The final migration check reported no pending migrations.
+Platform Worker v178 was built from merge commit `651483a88315aa85136f291a88c356a401fa10c2` by production workflow `33311790082`. This release changed provider-probe isolation and safe diagnostics only: normal user-facing OpenAI-to-Anthropic fallback remains enabled by default, while the OpenAI synthetic probe disables fallback and records only bounded allowlisted failure metadata. No database migration, DNS change, public Sites deployment, Admin Worker deployment, or legislation-corpus operation was performed.
 
 ## Live health
 
-Production `/api/status` generated at `2026-08-29T23:17:55.139Z` after the v176 cutover:
+Production `/api/status` fetched at `2026-08-30T12:48:27Z` after the v178 cutover:
 
-- overall: `operational`;
-- components: **8/8 operational**;
+- overall: `degraded`;
+- components: **7/8 operational**;
 - active incidents: **0**;
-- document-analysis synthetic probe: `operational`, checked at `2026-08-29T23:16:29.397Z`, latency `6,962 ms`;
-- lawyer-area synthetic probe: `operational`, checked at `2026-08-29T23:16:29.819Z`, latency `350 ms`;
-- OpenAI synthetic probe: operational, **3,229 ms**;
-- Anthropic synthetic probe: operational, **5,688 ms**;
-- private R2 probe: operational, **386 ms**;
-- queue probe: operational, **2,864 ms**;
-- malware scanner probe: operational, **23,047 ms**;
-- D1 scheduled probe: operational, **60,000 ms**.
+- OpenAI synthetic probe: `degraded`, checked at `2026-08-30T12:45:24.544Z`, latency `2,165 ms`, safe error `PROVIDER_UNAVAILABLE`;
+- Anthropic synthetic probe: `operational`, checked at `2026-08-30T12:42:29.130Z`, latency `5,554 ms`;
+- the matching v178 structured production log records OpenAI HTTP `429` and allowlisted provider error type `credit_balance_exhausted` without raw provider content or credentials;
+- Chrome showed the same degraded overall state, 7/8 operational components, no active incidents, and no browser-console errors.
 
-The operational label is current evidence of availability, not proof that every product flow meets the brief's latency targets. In particular, the observed D1 and malware-scanner probe latencies require trend/p95 review before a broad performance claim.
+The degraded label is the correct current release evidence. The v178 isolation fix improved diagnostic correctness but does not hide or reinterpret the external OpenAI billing failure. Anthropic balance and availability do not clear an exhausted OpenAI credit balance.
 
 Staging `/api/status` at `2026-08-29T19:08:53Z`:
 
@@ -65,12 +61,17 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 - Lawyer lifecycle/profile PR #75 passed exact-head CI run `33279675792`, focused lifecycle tests (14/14), runtime tests (202/202), the full platform suite, lint, type-check, artifact budgets, Cloudflare matrix, dependency audit and license policy. Security scan `809696a4-d761-42ea-a7f3-3f9b8efecd3b` completed 40/40 review items with no candidates or findings.
 - Platform Worker v176 deployed at 100% traffic. Production D1 migration ledger 0146 was reconciled only after exact live-schema validation; independently restorable pre/post SQL exports were hash-verified locally and after private R2 readback.
 - Chrome observed HTTP `200`, operational 8/8 status, only `public_approved` profiles from the public lawyer API, the safe private-dashboard login redirect and a 360 px registration layout without horizontal overflow. No real signed-in sessions were present, so authenticated roles remain open.
+- Security-remediation PR #77 merged as `98ca3c16b0f7e55beb85a00a03a4fdb5c6a64d3e`; CI run `33308098609` and production workflow `33308447146` completed successfully, publishing Worker v177 at 100% traffic without a migration or Sites change.
+- Provider-probe PR #78 passed 11/11 focused tests plus the full platform suites (33/33 rendered, 1,130/1,130 core, 204/204 Worker/runtime), lint, type-check, production artifact budgets, Cloudflare environment matrix, dependency audit, and licence policy. PR CI `33311452240` and post-merge CI `33311790415` both completed successfully.
+- Worker v178 deployed at 100% traffic through production workflow `33311790082`; Admin and public Sites jobs were skipped. Direct Cloudflare inspection confirmed version `85bdf326-4f4a-44d1-9540-06b5ad88fc46` in deployment `9b32983c-dc42-49ad-9888-3e9e777a48f2`.
+- Production log and status evidence prove the remaining AI degradation is OpenAI HTTP `429` / `credit_balance_exhausted`; Anthropic is operational. Chrome reproduced the truthful 7/8 status with no console errors.
 
 ## Blocking gaps before a production-ready claim
 
 | Priority | Gap | Evidence | Required action |
 | --- | --- | --- | --- |
 | P1 | Provider Sites hostname is indexable on live v94 | Live meta/header inspection | Publish saved v95 after explicit production approval, then recrawl both hosts |
+| P1 | OpenAI synthetic probe is degraded | v178 safe structured log: HTTP `429`, `credit_balance_exhausted`; production status is 7/8 operational | Refill or correct billing for the OpenAI project used by the production API key, then observe a fresh successful isolated OpenAI probe before claiming 8/8 health |
 | P1 | Staging health is degraded/stale after a newer deployment | Active cron delivery fails in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`; D1 reports 9,999,998,976 bytes | Resolve staging D1 capacity in the separately scoped legislation/corpus work, then verify fresh scheduler writes and 8/8 component health |
 | P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
 | P1 | Authenticated role matrix incomplete | Only anonymous boundary checks are current | Chrome QA for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin with no fabricated session |
@@ -91,7 +92,7 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 2. Run CI and artifact checks against the exact deploy commit.
 3. Apply D1 migration only when a separately reviewed change requires it, and verify schema plus a restorable backup before any ledger reconciliation.
 4. Deploy with the explicit production environment, then verify public/private boundaries, logs, status evidence freshness, error rate, and provider probes.
-5. Roll back to the recorded prior Worker version if a verified regression appears.
+5. For v178, roll back to Worker v177 version `217998c8-4ddc-41dc-91de-ba6a02ceb3b6` / deployment `c947e423-25d2-450c-be41-0b8b48090821` if a verified regression appears.
 
 ### DNS
 
