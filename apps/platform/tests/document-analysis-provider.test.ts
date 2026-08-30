@@ -662,13 +662,57 @@ test("Anthropic diagnostics discard unknown provider response text", () => {
   assert.equal(safeAnthropicFailureReason(400, {
     error: {
       type: "invalid_request_error",
-      message: "messages.0.content contains private request text that must never be logged",
+      message: "private request text that must never be logged",
     },
   }), null);
   assert.equal(safeAnthropicFailureReason(401, {
     error: {
       type: "invalid_request_error",
       message: "You have reached your specified API usage limits. private marker",
+    },
+  }), null);
+});
+
+test("Anthropic diagnostics reduce billing and request failures to fixed safe classes", () => {
+  assert.equal(safeAnthropicFailureReason(400, {
+    error: {
+      type: "invalid_request_error",
+      message: "Your credit balance is too low to access the Anthropic API.",
+    },
+  }), "anthropic_credit_balance_low");
+  assert.equal(safeAnthropicFailureReason(400, {
+    error: {
+      type: "invalid_request_error",
+      message: "The configured workspace cannot run this request.",
+    },
+  }), "anthropic_workspace_policy");
+  assert.equal(safeAnthropicFailureReason(400, {
+    error: {
+      type: "invalid_request_error",
+      message: "max_tokens is invalid for this request.",
+    },
+  }), "anthropic_request_max_tokens");
+  assert.equal(safeAnthropicFailureReason(400, {
+    error: {
+      type: "invalid_request_error",
+      message: "messages.0.content is invalid for this request.",
+    },
+  }), "anthropic_request_messages");
+  assert.equal(safeAnthropicFailureReason(402, {
+    error: { type: "billing_error", message: "private billing detail" },
+  }), "anthropic_billing_configuration");
+  assert.equal(safeAnthropicFailureReason(429, {
+    error: {
+      type: "rate_limit_error",
+      message: "private spend-cap detail",
+      details: { error_code: "enforced_spend_limit_reached" },
+    },
+  }), "anthropic_enforced_spend_limit");
+  assert.equal(safeAnthropicFailureReason(429, {
+    error: {
+      type: "rate_limit_error",
+      message: "private rate-limit detail",
+      details: { error_code: "unrecognized_private_code" },
     },
   }), null);
 });

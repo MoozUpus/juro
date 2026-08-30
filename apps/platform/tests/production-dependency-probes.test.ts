@@ -220,6 +220,21 @@ test("Anthropic probe diagnostics classify only documented content-free 400 caus
   assert.equal(safeProviderFailureReason("openai", failure(
     "You have reached your specified API usage limits.",
   )), null);
+  assert.equal(safeProviderFailureReason("anthropic", Object.assign(new Error("safe"), {
+    providerStatus: 429,
+    providerErrorType: "rate_limit_error",
+    providerFailureReason: "anthropic_enforced_spend_limit",
+  })), "anthropic_enforced_spend_limit");
+  assert.equal(safeProviderFailureReason("anthropic", Object.assign(new Error("safe"), {
+    providerStatus: 400,
+    providerErrorType: "invalid_request_error",
+    providerFailureReason: "anthropic_enforced_spend_limit",
+  })), null);
+  assert.equal(safeProviderFailureReason("anthropic", Object.assign(new Error("safe"), {
+    providerStatus: 400,
+    providerErrorType: "invalid_request_error",
+    providerFailureReason: "private_provider_reason_must_not_be_logged",
+  })), null);
 });
 
 test("fresh operational evidence skips every production dependency probe", async () => {
