@@ -67,6 +67,11 @@ test("dependency evidence classifies provider configuration/auth failures withou
     state: "outage",
     safeErrorCode: "PROBE_AUTH_ERROR",
   });
+  assert.deepEqual(providerFailureEvidence("anthropic", "PROVIDER_UNAVAILABLE", "PROVIDER_CREDIT_BALANCE_LOW"), {
+    key: "anthropic",
+    state: "degraded",
+    safeErrorCode: "PROVIDER_CREDIT_BALANCE_LOW",
+  });
   assert.equal(dependencyHealthLatencyMs(0, 120_000), 60_000);
 });
 

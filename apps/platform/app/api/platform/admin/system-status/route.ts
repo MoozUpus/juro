@@ -2,7 +2,8 @@ import { z } from "zod";
 import { parseJsonRequest } from "../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../lib/auth/safe-write";
 import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../lib/auth/staff-http";
-import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
+import { dependencyHealthEnvironment } from "../../../../../lib/operations/dependency-health";
 import {
   appendStatusIncidentUpdate,
   appendStatusUpdateSchema,
@@ -24,7 +25,10 @@ function json(body: unknown, status = 200): Response {
 
 async function getSystemStatus(request: Request): Promise<Response> {
   await requirePlatformStaffRequest(request, "staff.operations.manage", { freshMfaWithinMs: 15 * 60 * 1_000 });
-  return json(await readStatusIncidentAdminDashboard(requireD1()));
+  return json(await readStatusIncidentAdminDashboard({
+    db: requireD1(),
+    environment: dependencyHealthEnvironment(runtimeEnv().APP_ENV),
+  }));
 }
 
 async function postSystemStatus(request: Request): Promise<Response> {

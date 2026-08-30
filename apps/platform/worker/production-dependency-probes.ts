@@ -14,6 +14,7 @@ import {
   providerFailureEvidence,
   recordDependencyHealthEvidence,
 } from "./dependency-health-evidence";
+import type { ProviderDiagnosticSafeErrorCode } from "./dependency-health-evidence";
 
 const R2_PROBE_INTERVAL_MS = 8 * 60_000;
 const MALWARE_PROBE_INTERVAL_MS = 10 * 60_000;
@@ -294,6 +295,7 @@ function safeProviderCode(error: unknown): string {
 }
 
 export type SafeProviderFailureReason =
+  | "openai_credit_balance_exhausted"
   | "anthropic_organization_spend_limit"
   | "anthropic_workspace_spend_limit"
   | "anthropic_workspace_header_required"
@@ -312,12 +314,18 @@ export function safeProviderFailureReason(
   provider: "openai" | "anthropic",
   error: unknown,
 ): SafeProviderFailureReason {
-  if (provider !== "anthropic" || !(error instanceof Error)) return null;
+  if (!(error instanceof Error)) return null;
   const candidate = error as Error & {
     providerStatus?: unknown;
     providerErrorType?: unknown;
     providerFailureReason?: unknown;
   };
+  if (provider === "openai") {
+    return candidate.providerStatus === 429
+      && candidate.providerErrorType === "credit_balance_exhausted"
+      ? "openai_credit_balance_exhausted"
+      : null;
+  }
   const safeReasons = new Set<Exclude<SafeProviderFailureReason, null>>([
     "anthropic_organization_spend_limit",
     "anthropic_workspace_spend_limit",
@@ -348,6 +356,40 @@ export function safeProviderFailureReason(
   return candidate.providerStatus === 400 && candidate.providerErrorType === "invalid_request_error"
     ? candidate.providerFailureReason as Exclude<SafeProviderFailureReason, null>
     : null;
+}
+
+export function providerDiagnosticSafeErrorCode(
+  reason: SafeProviderFailureReason,
+): ProviderDiagnosticSafeErrorCode | null {
+  if (reason === "openai_credit_balance_exhausted" || reason === "anthropic_credit_balance_low") {
+    return "PROVIDER_CREDIT_BALANCE_LOW";
+  }
+  if (
+    reason === "anthropic_organization_spend_limit"
+    || reason === "anthropic_workspace_spend_limit"
+    || reason === "anthropic_enforced_spend_limit"
+  ) {
+    return "PROVIDER_SPEND_LIMIT_REACHED";
+  }
+  if (reason === "anthropic_billing_configuration") {
+    return "PROVIDER_BILLING_CONFIGURATION";
+  }
+  if (
+    reason === "anthropic_workspace_header_required"
+    || reason === "anthropic_workspace_header_invalid"
+    || reason === "anthropic_workspace_policy"
+    || reason === "anthropic_organization_policy"
+  ) {
+    return "PROVIDER_WORKSPACE_CONFIGURATION";
+  }
+  if (
+    reason === "anthropic_request_model"
+    || reason === "anthropic_request_max_tokens"
+    || reason === "anthropic_request_messages"
+  ) {
+    return "PROVIDER_REQUEST_CONFIGURATION";
+  }
+  return null;
 }
 
 function safeProviderFailureDetails(error: unknown): {
@@ -508,16 +550,17 @@ async function runOneProviderProbe(
     return "succeeded";
   } catch (error) {
     const safeCode = safeProviderCode(error);
+    const providerFailureReason = safeProviderFailureReason(provider, error);
     console.error(JSON.stringify({
       event: "production_dependency_probe.provider_failed",
       provider,
       safeCode,
       ...safeProviderFailureDetails(error),
-      providerFailureReason: safeProviderFailureReason(provider, error),
+      providerFailureReason,
       elapsedMs: Math.max(0, Date.now() - startedAt),
     }));
     await recordDependencyHealthEvidence(env, {
-      ...providerFailureEvidence(provider, safeCode),
+      ...providerFailureEvidence(provider, safeCode, providerDiagnosticSafeErrorCode(providerFailureReason)),
       evidenceKind: "synthetic_probe",
       startedAt,
     });

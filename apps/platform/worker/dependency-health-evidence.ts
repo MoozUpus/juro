@@ -36,6 +36,15 @@ type FailedEvidence = {
 
 export type DependencyHealthEvidence = OperationalEvidence | FailedEvidence;
 
+export type ProviderDiagnosticSafeErrorCode = Extract<
+  DependencyHealthSafeErrorCode,
+  | "PROVIDER_CREDIT_BALANCE_LOW"
+  | "PROVIDER_SPEND_LIMIT_REACHED"
+  | "PROVIDER_BILLING_CONFIGURATION"
+  | "PROVIDER_WORKSPACE_CONFIGURATION"
+  | "PROVIDER_REQUEST_CONFIGURATION"
+>;
+
 const maxLatencyMs = 60_000;
 
 export function dependencyHealthLatencyMs(
@@ -186,9 +195,13 @@ export async function recordLawyerAccessGrantCompletionEvidence(
 export function providerFailureEvidence(
   provider: "openai" | "anthropic",
   code: string,
+  diagnosticSafeErrorCode: ProviderDiagnosticSafeErrorCode | null = null,
 ): Pick<FailedEvidence, "key" | "state" | "safeErrorCode"> {
   const normalized = code.toUpperCase();
   const key = provider;
+  if (diagnosticSafeErrorCode) {
+    return { key, state: "degraded", safeErrorCode: diagnosticSafeErrorCode };
+  }
   if (normalized.includes("CONFIG") || normalized.includes("NOT_CONFIGURED")) {
     return { key, state: "outage", safeErrorCode: "PROBE_CONFIGURATION_ERROR" };
   }

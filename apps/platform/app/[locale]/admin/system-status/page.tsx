@@ -7,6 +7,7 @@ import { requirePlatformStaffAccess } from "../../../../lib/auth/staff-access";
 import { localSessionForRequest } from "../../../../lib/auth/mfa-http";
 import { runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { readStatusIncidentAdminDashboard } from "../../../../lib/operations/system-status";
+import { dependencyHealthEnvironment } from "../../../../lib/operations/dependency-health";
 import { isLocale } from "../../../../lib/platform/routing";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,9 @@ export default async function SystemStatusAdminPage({ params }: { params: Promis
     await requirePlatformStaffAccess(runtime.DB, session, "staff.operations.manage", { now, freshMfaWithinMs: 15 * 60 * 1_000 });
     staffName = session.fullName || session.email;
   } catch { notFound(); }
-  const initial = await readStatusIncidentAdminDashboard(runtime.DB);
+  const initial = await readStatusIncidentAdminDashboard({
+    db: runtime.DB,
+    environment: dependencyHealthEnvironment(runtime.APP_ENV),
+  });
   return <SystemStatusConsole locale={locale} staffName={staffName} initial={initial}/>;
 }
