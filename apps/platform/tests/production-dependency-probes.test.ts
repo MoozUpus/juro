@@ -6,6 +6,7 @@ import { recordDependencyHealthEvidence } from "../worker/dependency-health-evid
 import type { PlatformJobEnv } from "../worker/platform-jobs";
 import {
   PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS,
+  PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS,
   PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS,
   PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
   productionDependencyProbesEnabled,
@@ -122,7 +123,9 @@ test("the production malware probe allows a bounded ClamAV cold start", () => {
 
 test("production provider probes stay bounded and isolate OpenAI from fallback", () => {
   assert.equal(PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS, 20_000);
+  assert.equal(PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS, 3_000);
   assert.equal(PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS, 5_000);
+  assert.ok(PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS < PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS);
   assert.ok(PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS < PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS);
   assert.deepEqual(productionOpenAiProbeOptions(), {
     providerTimeoutMs: 20_000,
@@ -130,9 +133,10 @@ test("production provider probes stay bounded and isolate OpenAI from fallback",
   });
 });
 
-test("Anthropic production probe runs connectivity before the legal-chat contract", async () => {
+test("Anthropic production probe runs model access, connectivity, then the legal-chat contract", async () => {
   const calls: string[] = [];
   const result = await runAnthropicProductionProbe({
+    modelAccess: async () => { calls.push("model-access"); },
     connectivity: async () => { calls.push("connectivity"); },
     legalChat: async () => {
       calls.push("legal-chat");
@@ -143,7 +147,7 @@ test("Anthropic production probe runs connectivity before the legal-chat contrac
       };
     },
   });
-  assert.deepEqual(calls, ["connectivity", "legal-chat"]);
+  assert.deepEqual(calls, ["model-access", "connectivity", "legal-chat"]);
   assert.deepEqual(result, {
     provider: "anthropic",
     fallbackFromProvider: null,
@@ -151,9 +155,26 @@ test("Anthropic production probe runs connectivity before the legal-chat contrac
   });
 });
 
+test("Anthropic production probe stops at model-access failure and tags the stage", async () => {
+  let connectivityCalled = false;
+  let legalChatCalled = false;
+  await assert.rejects(() => runAnthropicProductionProbe({
+    modelAccess: async () => { throw new Error("private model-access detail"); },
+    connectivity: async () => { connectivityCalled = true; },
+    legalChat: async () => {
+      legalChatCalled = true;
+      throw new Error("must not run");
+    },
+  }), (error: unknown) => error instanceof Error
+    && (error as Error & { providerProbeStage?: unknown }).providerProbeStage === "anthropic_model_access");
+  assert.equal(connectivityCalled, false);
+  assert.equal(legalChatCalled, false);
+});
+
 test("Anthropic production probe stops at connectivity failure and tags the stage", async () => {
   let legalChatCalled = false;
   await assert.rejects(() => runAnthropicProductionProbe({
+    modelAccess: async () => undefined,
     connectivity: async () => { throw new Error("private connectivity detail"); },
     legalChat: async () => {
       legalChatCalled = true;
@@ -166,6 +187,7 @@ test("Anthropic production probe stops at connectivity failure and tags the stag
 
 test("Anthropic production probe tags a legal-chat contract failure after connectivity succeeds", async () => {
   await assert.rejects(() => runAnthropicProductionProbe({
+    modelAccess: async () => undefined,
     connectivity: async () => undefined,
     legalChat: async () => { throw new Error("private legal-chat detail"); },
   }), (error: unknown) => error instanceof Error
