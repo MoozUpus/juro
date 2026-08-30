@@ -27,6 +27,7 @@ import {
   callAnthropicStructured,
   probeAnthropicConnectivity,
   probeAnthropicModelAccess,
+  safeAnthropicFailureReason,
 } from "../lib/document-builder/ai/anthropic";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 
@@ -632,7 +633,10 @@ test("Anthropic connectivity failures preserve a bounded request id without expo
     runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
     globalThis.fetch = async () => Response.json({
       type: "error",
-      error: { type: "invalid_request_error", message: "private provider diagnostic" },
+      error: {
+        type: "invalid_request_error",
+        message: "You have reached your specified workspace API usage limits. private provider diagnostic",
+      },
     }, {
       status: 400,
       headers: { "request-id": "req_connectivity1234" },
@@ -644,12 +648,29 @@ test("Anthropic connectivity failures preserve a bounded request id without expo
       && error.message.includes("private provider diagnostic") === false
       && error.providerStatus === 400
       && error.providerErrorType === "invalid_request_error"
-      && error.providerRequestId === "req_connectivity1234");
+      && error.providerRequestId === "req_connectivity1234"
+      && (error as AiUnavailableError & { providerFailureReason?: unknown }).providerFailureReason
+        === "anthropic_workspace_spend_limit");
   } finally {
     globalThis.fetch = originalFetch;
     if (originalApiKey === undefined) delete runtime.ANTHROPIC_API_KEY;
     else runtime.ANTHROPIC_API_KEY = originalApiKey;
   }
+});
+
+test("Anthropic diagnostics discard unknown provider response text", () => {
+  assert.equal(safeAnthropicFailureReason(400, {
+    error: {
+      type: "invalid_request_error",
+      message: "messages.0.content contains private request text that must never be logged",
+    },
+  }), null);
+  assert.equal(safeAnthropicFailureReason(401, {
+    error: {
+      type: "invalid_request_error",
+      message: "You have reached your specified API usage limits. private marker",
+    },
+  }), null);
 });
 
 test("Anthropic document failures carry bounded non-content output diagnostics", async () => {
