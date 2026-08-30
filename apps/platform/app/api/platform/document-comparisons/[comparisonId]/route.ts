@@ -8,7 +8,7 @@ import {
   parsedSummary,
   verifiedSourcesForChanges,
 } from "../../../../../lib/document-comparison/storage";
-import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -66,7 +66,7 @@ export const PATCH = withApiErrors(async function PATCH(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { comparisonId } = await context.params;
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
@@ -104,7 +104,7 @@ export const DELETE = withApiErrors(async function DELETE(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { comparisonId } = await context.params;
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);

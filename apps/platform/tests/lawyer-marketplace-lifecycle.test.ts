@@ -72,6 +72,26 @@ test("restricted profiles are locked for edits and excluded from new handoff wor
   assert.doesNotMatch(migration, /DROP\s+TABLE|DELETE\s+FROM/iu);
 });
 
+test("restricting a lawyer revokes stale grants and operational routes recheck profile state", () => {
+  const lifecycle = readFileSync(new URL("../lib/platform/lawyer-profile-lifecycle-service.ts", import.meta.url), "utf8");
+  const verification = readFileSync(new URL("../app/api/platform/document-analysis/[analysisId]/lawyer-verification/route.ts", import.meta.url), "utf8");
+  const consultations = readFileSync(new URL("../app/api/platform/lawyer-consultations/route.ts", import.meta.url), "utf8");
+  const proposals = readFileSync(new URL("../app/api/cases/[caseId]/proposals/route.ts", import.meta.url), "utf8");
+  const accessGrant = readFileSync(new URL("../app/api/platform/lawyer-requests/[requestId]/access-grant/route.ts", import.meta.url), "utf8");
+  assert.match(lifecycle, /UPDATE lawyer_access_grants[\s\S]*revoked_at=\?,revoke_reason=\?/);
+  assert.match(lifecycle, /profile_\$\{input\.action\}/);
+  for (const route of [verification, consultations, proposals]) {
+    assert.match(route, /status='public_approved'/);
+    assert.match(route, /marketplace_status='public_approved'/);
+  }
+  assert.match(proposals, /g\.expires_at IS NULL OR g\.expires_at>\?/);
+  assert.match(consultations, /OPERATIONAL_LAWYER_REQUIRED/);
+  assert.match(accessGrant, /INSERT INTO lawyer_access_grants[\s\S]*SELECT \?,r\.id,r\.case_id,p\.user_id/);
+  assert.match(accessGrant, /p\.status='public_approved' AND p\.marketplace_status='public_approved'/);
+  assert.match(accessGrant, /NOT EXISTS \([\s\S]*lawyer_access_grants existing/);
+  assert.match(accessGrant, /Number\(results\[0\]\?\.meta\.changes \?\? 0\) !== 1/);
+});
+
 test("profile status notifications are localized and preserve only a bounded review reason", () => {
   const ru = localizedLawyerProfileStatusNotification("ru", "changes_requested", "Уточните формат консультации.");
   assert.equal(ru.title, "Профиль юриста нужно доработать");

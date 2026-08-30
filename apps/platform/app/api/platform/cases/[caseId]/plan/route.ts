@@ -9,7 +9,7 @@ import { requireD1 } from "../../../../../../lib/document-builder/storage/runtim
 import { confirmedActionPlanPatchSchema } from "../../../../../../lib/platform/action-plan";
 import { calculateDeadline } from "../../../../../../lib/platform/deadline-calculator";
 import { taskStatusForPlanStep, taskStatusIsTerminal } from "../../../../../../lib/platform/task-status";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
@@ -35,7 +35,7 @@ export const PATCH = withApiErrors(async function PATCH(
   }
 
   const db = requireD1();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const plan = await db.prepare(
     "SELECT p.id,p.current_revision AS currentRevision FROM action_plans p JOIN cases c ON c.id=p.case_id WHERE c.id=? AND c.workspace_id=? AND c.archived_at IS NULL LIMIT 1",
   ).bind(caseId, workspace.id).first<{ id: string; currentRevision: number }>();

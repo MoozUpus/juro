@@ -5,7 +5,7 @@ import {
   ComparisonDecisionError,
   decideComparisonChange,
 } from "../../../../../../../lib/document-comparison/review-decision";
-import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../../../lib/platform/workspace";
 
 const decisionSchema = z.object({
   decision: z.enum(["accepted", "rejected", "pending"]),
@@ -23,7 +23,7 @@ export const PATCH = withApiErrors(async function PATCH(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { comparisonId, changeId } = await context.params;
   const parsed = decisionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

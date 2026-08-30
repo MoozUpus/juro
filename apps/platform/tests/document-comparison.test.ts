@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { PDFDocument, StandardFonts } from "pdf-lib";
@@ -176,6 +177,25 @@ test("Builder Markdown snapshot enters the same structured analysis pipeline", a
   assert.match(result.text, /Заказчик оплачивает/u);
   assert.ok(result.sections.length >= 2);
   assert.equal(result.detectedLanguage, "ru");
+});
+
+test("comparison upload and processing preflight DOCX archives with strict expansion bounds", async () => {
+  const [uploadRoute, processRoute] = await Promise.all([
+    readFile(new URL("../app/api/platform/document-comparisons/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/document-comparisons/[comparisonId]/process/route.ts", import.meta.url), "utf8"),
+  ]);
+  for (const route of [uploadRoute, processRoute]) {
+    assert.match(route, /verifyArchiveBytes/);
+    assert.match(route, /maxUncompressedBytes:\s*25 \* 1024 \* 1024/);
+    assert.match(route, /maxExpansionRatio:\s*40/);
+  }
+  assert.match(uploadRoute, /await verifyArchiveBytes[\s\S]*await putPrivateObject/);
+  const existingPreflight = uploadRoute.indexOf("await verifyArchiveBytes(bytes, existing.mimeType");
+  const existingLegacyParser = uploadRoute.indexOf("const inspection = validateUploadBytes", existingPreflight);
+  const freshPreflight = uploadRoute.indexOf("await verifyArchiveBytes(bytes, file.type");
+  const freshLegacyParser = uploadRoute.indexOf("const inspection = validateUploadBytes", freshPreflight);
+  assert.ok(existingPreflight >= 0 && existingLegacyParser > existingPreflight);
+  assert.ok(freshPreflight >= 0 && freshLegacyParser > freshPreflight);
 });
 
 test("TXT, passive HTML and JSON enter the same non-executing extraction pipeline", async () => {

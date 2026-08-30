@@ -9,7 +9,16 @@ import {
   validateUploadBytes,
 } from "../../../../lib/document-builder/storage/files";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
-import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { ArchiveInspectionError, verifyArchiveBytes } from "../../../../lib/document-analysis/archive-inspector";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
+
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const COMPARISON_DOCX_LIMITS = {
+  timeoutMs: 8_000,
+  maxEntries: 500,
+  maxUncompressedBytes: 25 * 1024 * 1024,
+  maxExpansionRatio: 40,
+} as const;
 
 type ExistingFile = {
   id: string;
@@ -54,19 +63,24 @@ async function prepareFile(input: {
     if (!["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(existing.mimeType)) {
       throw new Error("UNSUPPORTED_FILE");
     }
-    if (!existing.sha256) {
+    if (!existing.sha256 || existing.mimeType === DOCX_MIME) {
       const object = await getPrivateObject(existing.r2Key);
       if (!object) throw new Error("COMPARISON_FILE_ACCESS_DENIED");
       const bytes = new Uint8Array(await object.arrayBuffer());
+      if (existing.mimeType === DOCX_MIME) {
+        await verifyArchiveBytes(bytes, existing.mimeType, COMPARISON_DOCX_LIMITS);
+      }
       const inspection = validateUploadBytes(
         new File([Uint8Array.from(bytes).buffer], existing.fileName, { type: existing.mimeType }),
         bytes,
       );
       if (inspection) throw new Error(`${inspection.code}:${inspection.message}`);
-      existing.sha256 = await sha256Hex(bytes);
-      await db.prepare(
-        "UPDATE document_files SET sha256=?,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
-      ).bind(existing.sha256, isoNow(), existing.id, input.workspaceId, input.userId).run();
+      if (!existing.sha256) {
+        existing.sha256 = await sha256Hex(bytes);
+        await db.prepare(
+          "UPDATE document_files SET sha256=?,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
+        ).bind(existing.sha256, isoNow(), existing.id, input.workspaceId, input.userId).run();
+      }
     }
     return { ...existing, created: false, bytes: null };
   }
@@ -74,6 +88,9 @@ async function prepareFile(input: {
   const file = input.form.get(input.fileField);
   if (!(file instanceof File)) throw new Error(`COMPARISON_${input.version.toLocaleUpperCase()}_FILE_REQUIRED`);
   const bytes = new Uint8Array(await file.arrayBuffer());
+  if (file.type === DOCX_MIME) {
+    await verifyArchiveBytes(bytes, file.type, COMPARISON_DOCX_LIMITS);
+  }
   const inspection = validateUploadBytes(file, bytes);
   if (inspection) throw new Error(`${inspection.code}:${inspection.message}`);
   const id = crypto.randomUUID();
@@ -122,7 +139,7 @@ export const GET = withApiErrors(async function GET() {
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const form = await request.formData();
   const locale = form.get("locale") === "uz" ? "uz" : "ru";
   if (form.get("consent") !== "true") {
@@ -218,6 +235,14 @@ export const POST = withApiErrors(async function POST(request: Request) {
     await Promise.all(prepared
       .filter((file) => file.created)
       .map((file) => deletePrivateObject(file.r2Key).catch(() => undefined)));
+    if (error instanceof ArchiveInspectionError) {
+      return response({
+        error: locale === "ru"
+          ? "DOCX не прошёл безопасную проверку структуры и распаковки."
+          : "DOCX tuzilma va ochish xavfsizligi tekshiruvidan o‘tmadi.",
+        code: error.code,
+      }, 400);
+    }
     const message = error instanceof Error ? error.message : String(error);
     const [code, detail] = message.includes(":") ? message.split(/:(.*)/s, 2) : [message, ""];
     if ([

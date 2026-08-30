@@ -277,7 +277,7 @@ test("builder analysis route and UI retain security, idempotency and compatibili
   assert.match(route, /assertOperationalFeatureEnabled/);
   assert.match(route, /idempotency-key/);
   assert.match(applyRoute, /assertSafeWrite/);
-  assert.match(applyRoute, /workspaceForUser/);
+  assert.match(applyRoute, /workspaceForContentEditor/);
   assert.match(applyRoute, /handoff\.status='ready'/);
   assert.match(applyRoute, /applyProjectedDocumentContentVersion/);
   assert.match(applyRoute, /source: "analysis_correction"/);

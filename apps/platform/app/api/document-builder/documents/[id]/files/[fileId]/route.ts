@@ -23,7 +23,7 @@ export async function GET(request: Request, context: Context): Promise<Response>
     let allowed = access.role === "owner" || access.canDownload;
     let signedInline = false;
     const requestedInline = new URL(request.url).searchParams.get("inline") === "1";
-    if (file.kind === "attachment" && access.role === "collaborator" && requestedInline) {
+    if (file.kind === "attachment" && access.role === "collaborator") {
       const visible = await db.prepare(
         "SELECT 1 AS allowed FROM document_attachments WHERE document_id = ? AND file_id = ? AND visible_to_collaborator = 1 LIMIT 1",
       ).bind(id, fileId).first<{ allowed: number }>();

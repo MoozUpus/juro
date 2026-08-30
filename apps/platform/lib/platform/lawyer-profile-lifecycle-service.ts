@@ -125,7 +125,7 @@ export async function transitionLawyerProfileLifecycle(
     restore: "lawyer_profile_restored",
   };
   try {
-    const results = await db.batch([
+    const statements = [
       db.prepare(
         `INSERT INTO lawyer_profile_lifecycle_events (
            id,lawyer_profile_id,from_profile_revision,to_profile_revision,
@@ -179,8 +179,16 @@ export async function transitionLawyerProfileLifecycle(
         target.status, target.marketplaceStatus, target.profileRevision, now,
         profile.id, profile.profileRevision, profile.status, profile.marketplaceStatus,
       ),
-    ]);
-    if (results.some((result) => Number(result.meta.changes ?? 0) !== 1)) {
+      ...(input.action === "restore" ? [] : [
+        db.prepare(
+          `UPDATE lawyer_access_grants
+           SET revoked_at=?,revoke_reason=?
+           WHERE lawyer_user_id=? AND revoked_at IS NULL`,
+        ).bind(now, `profile_${input.action}`, profile.userId),
+      ]),
+    ];
+    const results = await db.batch(statements);
+    if (results.slice(0, 4).some((result) => Number(result.meta.changes ?? 0) !== 1)) {
       throw new LawyerProfileLifecycleError("PROFILE_STATE_CONFLICT");
     }
   } catch (error) {

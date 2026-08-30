@@ -5,7 +5,7 @@ import {
   documentAnalysisUploadForUser,
   DocumentAnalysisUploadError,
 } from "../../../../../../lib/document-analysis/upload-pipeline";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../../../lib/platform/workspace";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -38,7 +38,7 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
 export const PUT = withApiErrors(async function PUT(request: Request, context: Context) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { analysisId } = await context.params;
   const db = requireD1();
   try {

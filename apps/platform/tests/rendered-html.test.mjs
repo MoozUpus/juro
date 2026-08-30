@@ -3,9 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("protects the application root without demo-only metadata", async () => {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+  const worker = await createWorker();
 
   const response = await worker.fetch(
     new Request("http://localhost/", {
@@ -28,7 +26,9 @@ test("protects the application root without demo-only metadata", async () => {
 
 async function createWorker() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${Math.random()}`);
+  // React 19 permits one RSC renderer implementation per process. Reuse the
+  // built Worker module just as a warm production isolate reuses its module.
+  workerUrl.searchParams.set("test", "rendered-html");
   return (await import(workerUrl.href)).default;
 }
 

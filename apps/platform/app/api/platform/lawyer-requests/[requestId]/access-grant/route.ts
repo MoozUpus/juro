@@ -37,25 +37,60 @@ export const POST = withApiErrors(async function POST(request: Request, context:
   if (!handoff) return response({ code: "CONFLICT_REQUIRED", error: localizedHandoffError(locale, "CONFLICT_REQUIRED") }, 409);
 
   const existing = await db.prepare(
-    "SELECT id FROM lawyer_access_grants WHERE lawyer_request_id=? AND revoked_at IS NULL LIMIT 1",
+    "SELECT id FROM lawyer_access_grants WHERE lawyer_request_id=? LIMIT 1",
   ).bind(handoff.id).first();
   if (existing) return response({ code: "GRANT_EXISTS", error: localizedHandoffError(locale, "GRANT_EXISTS") }, 409);
 
   const now = isoNow();
   const grantId = crypto.randomUUID();
-  await db.batch([
+  const results = await db.batch([
     db.prepare(
-      "INSERT INTO lawyer_access_grants (id,lawyer_request_id,case_id,lawyer_user_id,granted_by_user_id,created_at) VALUES (?,?,?,?,?,?)",
-    ).bind(grantId, handoff.id, handoff.caseId, handoff.lawyerUserId, user.id, now),
-    db.prepare("UPDATE lawyer_requests SET status='access_granted',updated_at=? WHERE id=? AND status='awaiting_user_consent'")
-      .bind(now, handoff.id),
+      `INSERT INTO lawyer_access_grants
+        (id,lawyer_request_id,case_id,lawyer_user_id,granted_by_user_id,created_at)
+       SELECT ?,r.id,r.case_id,p.user_id,?,?
+       FROM lawyer_requests r
+       JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id
+        AND p.status='public_approved' AND p.marketplace_status='public_approved'
+       JOIN conflict_checks c ON c.lawyer_request_id=r.id
+        AND c.lawyer_profile_id=p.id AND c.status='clear'
+       WHERE r.id=? AND r.workspace_id=? AND r.requester_user_id=?
+        AND r.case_id=? AND p.user_id=? AND r.status='awaiting_user_consent'
+        AND NOT EXISTS (
+          SELECT 1 FROM lawyer_access_grants existing
+          WHERE existing.lawyer_request_id=r.id
+        )`,
+    ).bind(
+      grantId, user.id, now, handoff.id, workspace.id, user.id,
+      handoff.caseId, handoff.lawyerUserId,
+    ),
     db.prepare(
-      "INSERT INTO consents (id,user_id,workspace_id,type,version,scope_json,granted_at) VALUES (?,?,?,'lawyer_case_access','2026-08-06',?,?)",
-    ).bind(crypto.randomUUID(), user.id, workspace.id, JSON.stringify({ requestId: handoff.id, caseId: handoff.caseId, lawyerUserId: handoff.lawyerUserId, phoneContact: true, reciprocalPhoneDisclosure: true }), now),
+      `UPDATE lawyer_requests SET status='access_granted',updated_at=?
+       WHERE id=? AND status='awaiting_user_consent'
+        AND EXISTS (SELECT 1 FROM lawyer_access_grants WHERE id=? AND lawyer_request_id=?)`,
+    ).bind(now, handoff.id, grantId, handoff.id),
     db.prepare(
-      "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_access_grant',?,'lawyer_case_access_granted',?,?)",
-    ).bind(crypto.randomUUID(), workspace.id, user.id, grantId, JSON.stringify({ requestId: handoff.id, caseId: handoff.caseId, lawyerUserId: handoff.lawyerUserId, phoneContact: true, reciprocalPhoneDisclosure: true }), now),
+      `INSERT INTO consents (id,user_id,workspace_id,type,version,scope_json,granted_at)
+       SELECT ?,?,?,'lawyer_case_access','2026-08-06',?,?
+       WHERE EXISTS (SELECT 1 FROM lawyer_access_grants WHERE id=? AND lawyer_request_id=?)`,
+    ).bind(
+      crypto.randomUUID(), user.id, workspace.id,
+      JSON.stringify({ requestId: handoff.id, caseId: handoff.caseId, lawyerUserId: handoff.lawyerUserId, phoneContact: true, reciprocalPhoneDisclosure: true }),
+      now, grantId, handoff.id,
+    ),
+    db.prepare(
+      `INSERT INTO workspace_audit_events
+        (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
+       SELECT ?,?,?,'lawyer_access_grant',?,'lawyer_case_access_granted',?,?
+       WHERE EXISTS (SELECT 1 FROM lawyer_access_grants WHERE id=? AND lawyer_request_id=?)`,
+    ).bind(
+      crypto.randomUUID(), workspace.id, user.id, grantId,
+      JSON.stringify({ requestId: handoff.id, caseId: handoff.caseId, lawyerUserId: handoff.lawyerUserId, phoneContact: true, reciprocalPhoneDisclosure: true }),
+      now, grantId, handoff.id,
+    ),
   ]);
+  if (Number(results[0]?.meta.changes ?? 0) !== 1) {
+    return response({ code: "CONFLICT_REQUIRED", error: localizedHandoffError(locale, "CONFLICT_REQUIRED") }, 409);
+  }
   await recordLawyerAccessGrantCompletionEvidence({
     APP_ENV: runtimeEnv().APP_ENV ?? "development",
     DB: db,

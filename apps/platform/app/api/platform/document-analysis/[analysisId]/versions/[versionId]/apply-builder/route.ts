@@ -8,7 +8,7 @@ import {
   analysisVersionForDownload,
   verifiedAnalysisVersionObject,
 } from "../../../../../../../../lib/document-analysis/revisions";
-import { workspaceForUser } from "../../../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../../../../lib/platform/workspace";
 
 const bodySchema = z.object({ sourceRevision: z.number().int().positive() }).strict();
 
@@ -25,7 +25,7 @@ export const POST = withApiErrors(async function POST(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { analysisId, versionId } = await context.params;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return jsonResponse({ code: "BUILDER_ANALYSIS_INVALID_REVISION", error: "Некорректная версия конструктора." }, { status: 400 });

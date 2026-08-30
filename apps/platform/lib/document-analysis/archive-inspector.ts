@@ -21,6 +21,13 @@ export type ArchiveInspection = {
   docxPackage: boolean;
 };
 
+export type ArchiveInspectionOptions = {
+  timeoutMs?: number;
+  maxEntries?: number;
+  maxUncompressedBytes?: number;
+  maxExpansionRatio?: number;
+};
+
 type ArchiveEntry = {
   name: string;
   nameBytes: Uint8Array;
@@ -49,15 +56,15 @@ export class ArchiveInspectionError extends Error {
 }
 
 export function inspectArchiveBytes(bytes: Uint8Array, mimeType: string): ArchiveInspection {
-  return parseArchiveBytes(bytes, mimeType).inspection;
+  return parseArchiveBytes(bytes, mimeType, {}).inspection;
 }
 
 export async function verifyArchiveBytes(
   bytes: Uint8Array,
   mimeType: string,
-  options: { timeoutMs?: number } = {},
+  options: ArchiveInspectionOptions = {},
 ): Promise<ArchiveInspection> {
-  const parsed = parseArchiveBytes(bytes, mimeType);
+  const parsed = parseArchiveBytes(bytes, mimeType, options);
   const timeoutMs = options.timeoutMs ?? DEFAULT_VERIFICATION_TIMEOUT_MS;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) {
     fail("ARCHIVE_VERIFICATION_TIMEOUT", "Archive verification timeout is invalid.");
@@ -76,7 +83,12 @@ export async function verifyArchiveBytes(
       actualSize = compressed.byteLength;
       crc = updateCrc32(crc, compressed);
     } else {
-      const verified = await verifyDeflatedEntry(compressed, entry.uncompressedBytes, deadline);
+      const verified = await verifyDeflatedEntry(
+        compressed,
+        entry.uncompressedBytes,
+        deadline,
+        options.maxUncompressedBytes ?? MAX_UNCOMPRESSED_BYTES,
+      );
       actualSize = verified.size;
       crc = verified.crc;
     }
@@ -90,7 +102,11 @@ export async function verifyArchiveBytes(
   return parsed.inspection;
 }
 
-function parseArchiveBytes(bytes: Uint8Array, mimeType: string): ParsedArchive {
+function parseArchiveBytes(
+  bytes: Uint8Array,
+  mimeType: string,
+  options: ArchiveInspectionOptions,
+): ParsedArchive {
   if (bytes.byteLength < 22) fail("ARCHIVE_CORRUPT", "ZIP does not contain an end record.");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const eocd = findEocd(view);
@@ -107,7 +123,18 @@ function parseArchiveBytes(bytes: Uint8Array, mimeType: string): ParsedArchive {
     fail("ARCHIVE_ZIP64_UNSUPPORTED", "ZIP64 metadata is not accepted for this bounded upload path.");
   }
   const docxPackage = mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  const entryLimit = docxPackage ? MAX_DOCX_ENTRIES : MAX_ARCHIVE_ENTRIES;
+  const defaultEntryLimit = docxPackage ? MAX_DOCX_ENTRIES : MAX_ARCHIVE_ENTRIES;
+  const entryLimit = boundedOption(options.maxEntries, defaultEntryLimit, "ARCHIVE_ENTRY_LIMIT");
+  const maxUncompressedBytes = boundedOption(
+    options.maxUncompressedBytes,
+    MAX_UNCOMPRESSED_BYTES,
+    "ARCHIVE_EXPANDED_SIZE_LIMIT",
+  );
+  const maxExpansionRatio = boundedOption(
+    options.maxExpansionRatio,
+    MAX_EXPANSION_RATIO,
+    "ARCHIVE_RATIO_LIMIT",
+  );
   if (entryCount < 1 || entryCount > entryLimit) {
     fail("ARCHIVE_ENTRY_LIMIT", `Archive entry count must be between 1 and ${entryLimit}.`);
   }
@@ -159,7 +186,7 @@ function parseArchiveBytes(bytes: Uint8Array, mimeType: string): ParsedArchive {
     if (!directory) {
       fileCount += 1;
       if (compressed === 0 && uncompressed > 0) fail("ARCHIVE_RATIO_LIMIT", "Archive expansion ratio is unsafe.");
-      if (compressed > 0 && uncompressed / compressed > MAX_EXPANSION_RATIO) {
+      if (compressed > 0 && uncompressed / compressed > maxExpansionRatio) {
         fail("ARCHIVE_RATIO_LIMIT", "Archive expansion ratio exceeds the safe limit.");
       }
       if (!docxPackage) validatePackageMember(name);
@@ -168,8 +195,8 @@ function parseArchiveBytes(bytes: Uint8Array, mimeType: string): ParsedArchive {
     }
     compressedBytes += compressed;
     uncompressedBytes += uncompressed;
-    if (!Number.isSafeInteger(uncompressedBytes) || uncompressedBytes > MAX_UNCOMPRESSED_BYTES) {
-      fail("ARCHIVE_EXPANDED_SIZE_LIMIT", "Expanded archive size exceeds 200 MB.");
+    if (!Number.isSafeInteger(uncompressedBytes) || uncompressedBytes > maxUncompressedBytes) {
+      fail("ARCHIVE_EXPANDED_SIZE_LIMIT", "Expanded archive size exceeds the safe limit.");
     }
     entries.push({
       name,
@@ -275,6 +302,7 @@ async function verifyDeflatedEntry(
   compressed: Uint8Array,
   expectedSize: number,
   deadline: number,
+  maxUncompressedBytes: number,
 ): Promise<{ size: number; crc: number }> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
@@ -292,7 +320,7 @@ async function verifyDeflatedEntry(
       const result = await readBeforeDeadline(reader, deadline);
       if (result.done) break;
       size += result.value.byteLength;
-      if (size > expectedSize || size > MAX_UNCOMPRESSED_BYTES) {
+      if (size > expectedSize || size > maxUncompressedBytes) {
         fail("ARCHIVE_SIZE_MISMATCH", "Expanded ZIP entry exceeds its declared bounded size.");
       }
       crc = updateCrc32(crc, result.value);
@@ -311,6 +339,14 @@ async function verifyDeflatedEntry(
       // Reader cancellation is cleanup only; the validation result remains authoritative.
     }
   }
+}
+
+function boundedOption(value: number | undefined, maximum: number, code: string): number {
+  const candidate = value ?? maximum;
+  if (!Number.isSafeInteger(candidate) || candidate < 1 || candidate > maximum) {
+    fail(code, "Archive inspection limit is invalid.");
+  }
+  return candidate;
 }
 
 async function readBeforeDeadline(

@@ -176,6 +176,32 @@ test("archive и restore следуют утвержденным статуса�
 test("удаление требует решения только для подписанного PDF", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/route.ts", root), "utf8"); assert.match(source, /SIGNED_FILE_DECISION_REQUIRED/); });
 test("подписанный файл ограничен PDF и 10 МБ", async () => { const source = await readFile(new URL("lib/document-builder/storage/file-validation.ts", root), "utf8"); assert.match(source, /10 \* 1024 \* 1024/); assert.match(source, /signedPdfOnly/); });
 
+test("builder uploads pass byte validation and checksum-bound malware quarantine before private storage", async () => {
+  const [attachment, signed, pipeline] = await Promise.all([
+    readFile(new URL("app/api/document-builder/documents/[id]/attachments/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/[id]/signed-file/route.ts", root), "utf8"),
+    readFile(new URL("lib/document-builder/storage/quarantined-upload.ts", root), "utf8"),
+  ]);
+  for (const route of [attachment, signed]) {
+    assert.match(route, /validateUploadBytes\(file, bytes\)/);
+    assert.match(route, /quarantineScanAndStorePrivateObject/);
+    assert.ok(route.indexOf("quarantineScanAndStorePrivateObject") < route.indexOf("INSERT INTO document_files"));
+  }
+  assert.match(pipeline, /requireQuarantineR2\(\)/);
+  assert.match(pipeline, /malwareScannerResponseSchema\.safeParse/);
+  assert.match(pipeline, /parsed\.data\.sourceSha256 !== checksum/);
+  assert.match(pipeline, /parsed\.data\.verdict !== "clean"/);
+  assert.match(pipeline, /scanStatus: "clean"/);
+  assert.match(pipeline, /destination\.delete\(input\.key\)/);
+});
+
+test("hidden collaborator attachments stay hidden for inline and download responses", async () => {
+  const route = await readFile(new URL("app/api/document-builder/documents/[id]/files/[fileId]/route.ts", root), "utf8");
+  assert.match(route, /file\.kind === "attachment" && access\.role === "collaborator"/);
+  assert.doesNotMatch(route, /file\.kind === "attachment" && access\.role === "collaborator" && requestedInline/);
+  assert.match(route, /visible_to_collaborator = 1/);
+});
+
 test("collaboration проверяет owner и collaborator", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(source, /hasDocumentPermission\(access, "invite_participant"\)/); assert.match(source, /access\.role === "collaborator"/); assert.match(source, /ALREADY_COLLABORATOR/); });
 test("collaboration назначает роль, вторую или третью сторону и проверяет server-side permissions", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(source, /partyNumber/); assert.match(source, /requestedRole/); assert.match(source, /hasDocumentPermission/); });
 test("приглашение использует случайный token, hash, срок действия и привязку к пользователю", async () => { const invitation = await readFile(new URL("app/api/document-builder/invitations/[token]/route.ts", root), "utf8"); const collaboration = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(collaboration, /randomToken\(\)/); assert.match(collaboration, /sha256\(token\)/); assert.match(collaboration, /addDays\(now, 7\)/); assert.match(invitation, /targetIdentifierHash/); assert.match(invitation, /assertSafeWrite/); });
