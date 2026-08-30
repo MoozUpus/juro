@@ -84,8 +84,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       : "individual";
     const requestHostname = new URL(request.url).hostname;
     const normalizedHostname = requestHostname.toLowerCase();
-    const lawyerHost = normalizedHostname === "lawyer.juro.uz"
-      || normalizedHostname === "lawyer.staging.juro.uz";
+    const lawyerHost = normalizedHostname === "lawyer.juro.uz";
     const lawyerProfile = accountType === "lawyer"
       ? await requireD1().prepare(
           `SELECT status AS lawyerProfileStatus,

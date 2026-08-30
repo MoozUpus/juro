@@ -240,8 +240,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
   const requestHostname = new URL(request.url).hostname;
   const normalizedHostname = requestHostname.toLowerCase();
-  const lawyerHost = normalizedHostname === "lawyer.juro.uz"
-    || normalizedHostname === "lawyer.staging.juro.uz";
+  const lawyerHost = normalizedHostname === "lawyer.juro.uz";
   const redirectTo = accountType === "lawyer"
     ? lawyerLandingDestination({
         locale,
