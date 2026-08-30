@@ -21,7 +21,11 @@ interface AnthropicMessagesPayload {
     output_tokens?: number;
     cache_read_input_tokens?: number;
   };
-  error?: { type?: string; message?: string };
+  error?: {
+    type?: string;
+    message?: string;
+    details?: { error_code?: string };
+  };
   request_id?: string;
 }
 
@@ -29,12 +33,28 @@ export type AnthropicSafeFailureReason =
   | "anthropic_organization_spend_limit"
   | "anthropic_workspace_spend_limit"
   | "anthropic_workspace_header_required"
-  | "anthropic_workspace_header_invalid";
+  | "anthropic_workspace_header_invalid"
+  | "anthropic_enforced_spend_limit"
+  | "anthropic_credit_balance_low"
+  | "anthropic_billing_configuration"
+  | "anthropic_workspace_policy"
+  | "anthropic_organization_policy"
+  | "anthropic_request_model"
+  | "anthropic_request_max_tokens"
+  | "anthropic_request_messages";
 
 export function safeAnthropicFailureReason(
   status: number,
   payload: AnthropicMessagesPayload,
 ): AnthropicSafeFailureReason | null {
+  if (status === 429
+      && payload.error?.type === "rate_limit_error"
+      && payload.error.details?.error_code === "enforced_spend_limit_reached") {
+    return "anthropic_enforced_spend_limit";
+  }
+  if (status === 402 && payload.error?.type === "billing_error") {
+    return "anthropic_billing_configuration";
+  }
   if (status !== 400 || payload.error?.type !== "invalid_request_error") return null;
   const message = payload.error.message;
   if (typeof message !== "string") return null;
@@ -55,6 +75,28 @@ export function safeAnthropicFailureReason(
   }
   if (message === "anthropic-workspace-id header must be a valid workspace ID.") {
     return "anthropic_workspace_header_invalid";
+  }
+  const normalized = message.toLowerCase();
+  if (normalized.includes("credit balance") && normalized.includes("too low")) {
+    return "anthropic_credit_balance_low";
+  }
+  if (normalized.includes("billing") || normalized.includes("payment")) {
+    return "anthropic_billing_configuration";
+  }
+  if (normalized.includes("anthropic-workspace-id") || normalized.includes("workspace")) {
+    return "anthropic_workspace_policy";
+  }
+  if (normalized.includes("organization") || normalized.includes("organisation")) {
+    return "anthropic_organization_policy";
+  }
+  if (normalized.includes("max_tokens") || normalized.includes("maximum number of tokens")) {
+    return "anthropic_request_max_tokens";
+  }
+  if (normalized.includes("model")) {
+    return "anthropic_request_model";
+  }
+  if (normalized.includes("messages") || normalized.includes("content") || normalized.includes("role")) {
+    return "anthropic_request_messages";
   }
   return null;
 }

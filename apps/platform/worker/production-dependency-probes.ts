@@ -298,6 +298,14 @@ export type SafeProviderFailureReason =
   | "anthropic_workspace_spend_limit"
   | "anthropic_workspace_header_required"
   | "anthropic_workspace_header_invalid"
+  | "anthropic_enforced_spend_limit"
+  | "anthropic_credit_balance_low"
+  | "anthropic_billing_configuration"
+  | "anthropic_workspace_policy"
+  | "anthropic_organization_policy"
+  | "anthropic_request_model"
+  | "anthropic_request_max_tokens"
+  | "anthropic_request_messages"
   | null;
 
 export function safeProviderFailureReason(
@@ -310,17 +318,34 @@ export function safeProviderFailureReason(
     providerErrorType?: unknown;
     providerFailureReason?: unknown;
   };
-  if (candidate.providerStatus !== 400 || candidate.providerErrorType !== "invalid_request_error") {
-    return null;
-  }
   const safeReasons = new Set<Exclude<SafeProviderFailureReason, null>>([
     "anthropic_organization_spend_limit",
     "anthropic_workspace_spend_limit",
     "anthropic_workspace_header_required",
     "anthropic_workspace_header_invalid",
+    "anthropic_enforced_spend_limit",
+    "anthropic_credit_balance_low",
+    "anthropic_billing_configuration",
+    "anthropic_workspace_policy",
+    "anthropic_organization_policy",
+    "anthropic_request_model",
+    "anthropic_request_max_tokens",
+    "anthropic_request_messages",
   ]);
-  return typeof candidate.providerFailureReason === "string"
-      && safeReasons.has(candidate.providerFailureReason as Exclude<SafeProviderFailureReason, null>)
+  if (typeof candidate.providerFailureReason !== "string"
+      || !safeReasons.has(candidate.providerFailureReason as Exclude<SafeProviderFailureReason, null>)) {
+    return null;
+  }
+  if (candidate.providerFailureReason === "anthropic_enforced_spend_limit") {
+    return candidate.providerStatus === 429 && candidate.providerErrorType === "rate_limit_error"
+      ? candidate.providerFailureReason
+      : null;
+  }
+  if (candidate.providerFailureReason === "anthropic_billing_configuration"
+      && candidate.providerStatus === 402 && candidate.providerErrorType === "billing_error") {
+    return candidate.providerFailureReason;
+  }
+  return candidate.providerStatus === 400 && candidate.providerErrorType === "invalid_request_error"
     ? candidate.providerFailureReason as Exclude<SafeProviderFailureReason, null>
     : null;
 }
