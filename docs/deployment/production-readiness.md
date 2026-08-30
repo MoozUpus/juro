@@ -2,15 +2,15 @@
 
 Assessment: **NOT READY for the full execution brief**
 
-Evidence cutoff: **2026-08-30 18:30 UZT (2026-08-30 13:30 UTC)**
+Evidence cutoff: **2026-08-30 19:08 UZT (2026-08-30 14:08 UTC)**
 
-Production is currently reachable and Worker v179 is serving 100% of traffic. v178 isolated OpenAI and Anthropic health probes; v179 removes non-resolving staging lawyer aliases and keeps production on the dedicated `lawyer.juro.uz` persona while canonical staging uses `staging.app.juro.uz/{locale}/lawyer/**`. The latest captured public status surface truthfully reports 7/8 components operational and AI degraded: OpenAI remains `PROVIDER_UNAVAILABLE`, while Anthropic remains operational. That is narrower than the requested Definition of Done: authenticated role journeys, staging reliability, provider-host indexing, legacy DNS ownership, and complete Chrome QA remain open.
+Production is currently reachable and Worker v179 is serving 100% of traffic. v178 isolated OpenAI and Anthropic health probes; v179 removes non-resolving staging lawyer aliases and keeps production on the dedicated `lawyer.juro.uz` persona while canonical staging uses `staging.app.juro.uz/{locale}/lawyer/**`. The latest captured public status surface truthfully reports 6/8 components operational, with AI and document analysis degraded: OpenAI and Anthropic both report `PROVIDER_UNAVAILABLE`. That is narrower than the requested Definition of Done: provider recovery, authenticated role journeys, staging reliability, provider-host indexing, legacy DNS ownership, and complete Chrome QA remain open.
 
 ## Current release state
 
 | Surface | Current state | Evidence | Rollback point |
 | --- | --- | --- | --- |
-| GitHub main | Merge commit `8b650f566ec2f5a9511565a6fdb62eca8a86a7b6` from PR #80; reviewed content head `d42ff9db537313f83851559d9bd7a5b282c333b1` | PR CI run `33313838079` and post-merge CI run `33314211797` completed successfully for website and platform | Previous Git commit selected through normal Git release process |
+| GitHub main | Current docs commit `4e263e37644a19193745bafcd5ecb1b810148804`; live Worker v179 application source remains merge commit `8b650f566ec2f5a9511565a6fdb62eca8a86a7b6` from PR #80, reviewed content head `d42ff9db537313f83851559d9bd7a5b282c333b1` | PR #80 CI `33313838079` and post-merge CI `33314211797` completed successfully; later docs-only PRs #81 and #82 also completed CI and skipped all deploy jobs | Previous Git commit selected through normal Git release process |
 | Public Sites | Live version **94**, source `6f5c70f947df14597cca2e289c3b38bbd36b589d` | Sites deployment succeeded; `juro.uz` is active and 78/78 sitemap URLs return `200` | Redeploy saved v94 if a later Sites release fails |
 | Public Sites candidate | Saved version **95**, source `855ba2161b716daabb96ac469456c101e5d3bb2c` | Build, 48/48 route/SEO tests, type-check, lint, artifact validation, and 56 automated accessibility configurations passed | Not deployed; live production remains v94 |
 | Platform Worker | Worker version **179**, version ID `7ffc07cd-4ebb-46ce-b659-ed4cf0ae9c79`; deployment `26f52ed8-bde8-4dc5-84c2-2ab74b912e40` | 100% traffic since `2026-08-30T13:27:58Z`; production workflow `33314211943` deployed only `app.juro.uz` and skipped the Admin Worker and public Sites | Prior version **178**, ID `85bdf326-4f4a-44d1-9540-06b5ad88fc46`, deployment `9b32983c-dc42-49ad-9888-3e9e777a48f2` |
@@ -21,17 +21,18 @@ Platform Worker v179 was built from merge commit `8b650f566ec2f5a9511565a6fdb62e
 
 ## Live health
 
-Production `/api/status` fetched at `2026-08-30T13:30:09Z` after the v179 cutover:
+Production `/api/status` generated at `2026-08-30T14:08:54.890Z` after the v179 cutover:
 
 - overall: `degraded`;
-- components: **7/8 operational**;
+- components: **6/8 operational**;
 - active incidents: **0**;
-- OpenAI synthetic probe: `degraded`, checked at `2026-08-30T13:27:16.441Z`, latency `3,765 ms`, safe error `PROVIDER_UNAVAILABLE`;
-- Anthropic synthetic probe: `operational`, checked at `2026-08-30T13:27:22.567Z`, latency `5,677 ms`;
-- the earlier matching v178 structured production log isolated the same OpenAI failure class as HTTP `429` with allowlisted provider error type `credit_balance_exhausted`, without raw provider content or credentials;
-- Chrome showed the same degraded overall state, 7/8 operational components, no active incidents, and no browser-console errors.
+- OpenAI synthetic probe: `degraded`, checked at `2026-08-30T14:05:27.584Z`, latency `2,504 ms`, safe error `PROVIDER_UNAVAILABLE`;
+- Anthropic synthetic probe: `degraded`, checked at `2026-08-30T14:05:28.436Z`, latency `490 ms`, safe error `PROVIDER_UNAVAILABLE`;
+- a narrowly filtered v179 production log isolated OpenAI as HTTP `429` with allowlisted provider error type `credit_balance_exhausted`, and Anthropic as HTTP `400` with allowlisted provider error type `invalid_request_error`, without raw provider content, request bodies, credentials, or user traffic;
+- AI and its dependent document-analysis component are degraded; the other six components remain operational;
+- Chrome showed the same degraded overall state, 6/8 operational components, no active incidents, and no browser-console errors.
 
-The degraded label is the correct current release evidence. The v178 isolation fix improved diagnostic correctness, and v179 preserves that behavior while correcting staging routing. Anthropic balance and availability do not clear an exhausted OpenAI credit balance.
+The degraded label is the correct current release evidence. The v178 isolation fix improved diagnostic correctness, and v179 preserves that behavior while correcting staging routing. Anthropic was operational on the same Worker at `2026-08-30T13:27:22.567Z` and later returned HTTP `400` without a deployment. [Anthropic documents `invalid_request_error`](https://platform.claude.com/docs/en/api/errors) as covering either request format/content or an organization/workspace spend limit, while its [public status page](https://status.claude.com/) reported the Claude API operational and no incident at this cutoff. An external account/workspace limit is therefore plausible but remains an inference until the production key's correct Console organization and workspace are checked; request-side rejection also remains possible.
 
 Staging `/api/status` at `2026-08-29T19:08:53Z`:
 
@@ -64,11 +65,12 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 - Security-remediation PR #77 merged as `98ca3c16b0f7e55beb85a00a03a4fdb5c6a64d3e`; CI run `33308098609` and production workflow `33308447146` completed successfully, publishing Worker v177 at 100% traffic without a migration or Sites change.
 - Provider-probe PR #78 passed 11/11 focused tests plus the full platform suites (33/33 rendered, 1,130/1,130 core, 204/204 Worker/runtime), lint, type-check, production artifact budgets, Cloudflare environment matrix, dependency audit, and licence policy. PR CI `33311452240` and post-merge CI `33311790415` both completed successfully.
 - Worker v178 deployed at 100% traffic through production workflow `33311790082`; Admin and public Sites jobs were skipped. Direct Cloudflare inspection confirmed version `85bdf326-4f4a-44d1-9540-06b5ad88fc46` in deployment `9b32983c-dc42-49ad-9888-3e9e777a48f2`.
-- Production log and status evidence prove the remaining AI degradation is OpenAI HTTP `429` / `credit_balance_exhausted`; Anthropic is operational. Chrome reproduced the truthful 7/8 status with no console errors.
+- Historical v178 production log and status evidence proved that snapshot's AI degradation was OpenAI HTTP `429` / `credit_balance_exhausted` while Anthropic was operational. This statement is time-bounded and does not override the later v179 health snapshot below.
 - Staging-host PR #80 passed 7/7 focused routing tests, 31/31 expanded auth/MFA/Worker tests, the full platform suites (33/33 rendered, 1,130/1,130 core, 204/204 Worker/runtime), lint, type-check, artifact budgets, Cloudflare environment matrix, dependency audit, and licence policy. PR CI `33313838079` and post-merge CI `33314211797` both completed successfully.
 - Worker v179 deployed at 100% traffic through production workflow `33314211943`; Admin and public Sites jobs were skipped. Direct Cloudflare inspection confirmed version `7ffc07cd-4ebb-46ce-b659-ed4cf0ae9c79` in deployment `26f52ed8-bde8-4dc5-84c2-2ab74b912e40`.
 - Anonymous staging verification confirmed `staging.app.juro.uz/ru/lawyer/auth` redirects to Cloudflare Access with `no-store`; both rejected aliases remain absent from DNS. The staging Worker was not redeployed, so authenticated post-Access runtime QA remains open.
-- Chrome on v179 reproduced the truthful degraded 7/8 production status with zero active incidents and no console errors.
+- Chrome on v179 first reproduced the truthful degraded 7/8 production status, then the later 6/8 state after Anthropic changed to `PROVIDER_UNAVAILABLE`; both captures had zero active incidents and no console errors.
+- Narrowly filtered v179 provider-probe logs isolated OpenAI HTTP `429` / `credit_balance_exhausted` and Anthropic HTTP `400` / `invalid_request_error` without reading user traffic or exposing provider payloads or credentials.
 - Superseded broad Draft PR #64 was closed without deleting its branch. Its 486-file candidate remains recoverable for separately audited extraction, but it is no longer presented as a mergeable release unit.
 
 ## Blocking gaps before a production-ready claim
@@ -76,7 +78,8 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 | Priority | Gap | Evidence | Required action |
 | --- | --- | --- | --- |
 | P1 | Provider Sites hostname is indexable on live v94 | Live meta/header inspection | Publish saved v95 after explicit production approval, then recrawl both hosts |
-| P1 | OpenAI synthetic probe is degraded | v179 status: `PROVIDER_UNAVAILABLE`; v178 safe structured log isolated HTTP `429`, `credit_balance_exhausted`; production status is 7/8 operational | Refill or correct billing for the OpenAI project used by the production API key, then observe a fresh successful isolated OpenAI probe before claiming 8/8 health |
+| P1 | OpenAI synthetic probe is degraded | v179 status: `PROVIDER_UNAVAILABLE`; safe structured log isolated HTTP `429`, `credit_balance_exhausted`; production status is 6/8 operational | Refill or correct billing for the OpenAI project used by the production API key, then observe a fresh successful isolated OpenAI probe before claiming full health |
+| P1 | Anthropic synthetic probe is degraded | v179 status: `PROVIDER_UNAVAILABLE`; safe structured log isolated HTTP `400`, `invalid_request_error`. Anthropic documents this class for request format/content or an organization/workspace spend limit; its public API status is operational. The current Chrome session is not authenticated to Anthropic Console | Sign in to the Anthropic Console organization/workspace tied to the production key and verify its credit balance and spend limit. If both are sufficient, reproduce the isolated synthetic request with provider request ID and safe diagnostics before changing code or claiming a cause |
 | P1 | Staging health is degraded/stale after a newer deployment | Active cron delivery fails in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`; D1 reports 9,999,998,976 bytes | Resolve staging D1 capacity in the separately scoped legislation/corpus work, then verify fresh scheduler writes and 8/8 component health |
 | P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
 | P1 | Authenticated role matrix incomplete | Only anonymous boundary checks are current | Chrome QA for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin with no fabricated session |
