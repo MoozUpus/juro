@@ -209,6 +209,7 @@ test("private dense services stay behind service bindings and staging-only flags
     "utf8",
   );
   const corpusConfig = readFileSync(new URL("../wrangler.legal-corpus.jsonc", import.meta.url), "utf8");
+  const corpusWorker = readFileSync(new URL("../worker/legal-corpus-worker.ts", import.meta.url), "utf8");
   assert.match(platformWorker, /url\.hostname === "qdrant\.internal"/u);
   assert.match(platformWorker, /url\.hostname === "embeddings\.internal"/u);
   assert.match(privateServices, /secretMatches\(providedApiKey, expectedApiKey\)/u);
@@ -222,6 +223,8 @@ test("private dense services stay behind service bindings and staging-only flags
   assert.match(corpusConfig, /"binding": "QDRANT_SERVICE"/u);
   assert.match(corpusConfig, /"binding": "LEGAL_CORPUS_EMBEDDING_SERVICE"/u);
   assert.match(corpusConfig, /"binding": "BACKUP_BUCKET"/u);
+  assert.match(corpusWorker, /url\.pathname === TARGET_LEGAL_ANSWER_PATH/u);
+  assert.match(corpusWorker, /createRuntimeTargetLegalAnswerRetriever\(env\)/u);
   const production = corpusConfig.slice(corpusConfig.indexOf('"production"'));
   assert.doesNotMatch(production, /"binding": "QDRANT_SERVICE"/u);
   assert.match(production, /"LEGAL_CORPUS_DENSE_ENABLED": "false"/u);

@@ -70,6 +70,12 @@
       "bucket_name": "juro-development-quarantine"
     }
   ],
+  "services": [
+    {
+      "binding": "LEGAL_CORPUS_READ_SERVICE",
+      "service": "juro-legal-corpus-development"
+    }
+  ],
   "queues": {
     "producers": [
       {
@@ -272,6 +278,10 @@
         {
           "binding": "MALWARE_SCANNER",
           "service": "juro-platform-staging"
+        },
+        {
+          "binding": "LEGAL_CORPUS_READ_SERVICE",
+          "service": "juro-legal-corpus-staging"
         }
       ],
       "r2_buckets": [
@@ -619,6 +629,10 @@
         {
           "binding": "ADMIN_CONSOLE",
           "service": "juro-admin"
+        },
+        {
+          "binding": "LEGAL_CORPUS_READ_SERVICE",
+          "service": "juro-legal-corpus"
         }
       ],
       "r2_buckets": [

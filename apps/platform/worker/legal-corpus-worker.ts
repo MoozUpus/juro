@@ -36,6 +36,29 @@ import {
   resolveActiveLegalSearchIndex,
   resolveLegalSearchIndexManifest,
 } from "../lib/legal-corpus/search-index-manifest";
+import {
+  handleLegalTargetReadinessRequest,
+  LEGAL_TARGET_READINESS_PATH,
+  type LegalTargetReadinessEnv,
+} from "../lib/legal-corpus/target-storage";
+import {
+  handleOfficialEvidenceRequest,
+  OFFICIAL_EVIDENCE_RESOLVE_PATH,
+  type OfficialEvidenceEnv,
+} from "../lib/legal-corpus/target-evidence";
+import {
+  handleReleaseLifecycleRequest,
+  RELEASE_LIFECYCLE_RESOLVE_PATH,
+  type ReleaseLifecycleEnv,
+} from "../lib/legal-corpus/target-release";
+import {
+  handleTargetLegalAnswerRequest,
+  TARGET_LEGAL_ANSWER_PATH,
+} from "../lib/legal-corpus/target-retrieval";
+import {
+  createRuntimeTargetLegalAnswerRetriever,
+  type TargetRetrievalRuntimeEnv,
+} from "../lib/legal-corpus/target-runtime";
 
 export const LEGAL_CORPUS_PROCESS_CRON = "*/5 * * * *";
 export const LEGAL_CORPUS_STAGING_PROCESS_CRON = "*/4 * * * *";
@@ -113,7 +136,9 @@ export function legalCorpusIngestionStartAllowed(
   return Math.max(0, now - scheduledTime) < INGESTION_START_CUTOFF_MS;
 }
 
-type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
+type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv
+  & LegalTargetReadinessEnv & OfficialEvidenceEnv & ReleaseLifecycleEnv
+  & TargetRetrievalRuntimeEnv & {
   BACKUP_BUCKET?: R2Bucket;
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
@@ -550,6 +575,25 @@ function response(body: unknown, status = 200): Response {
 const worker = {
   async fetch(request: Request, env: LegalCorpusWorkerEnv): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === LEGAL_TARGET_READINESS_PATH) {
+      return handleLegalTargetReadinessRequest(request, env);
+    }
+    if (url.pathname === OFFICIAL_EVIDENCE_RESOLVE_PATH) {
+      return handleOfficialEvidenceRequest(request, env);
+    }
+    if (url.pathname === RELEASE_LIFECYCLE_RESOLVE_PATH) {
+      return handleReleaseLifecycleRequest(request, env);
+    }
+    if (url.pathname === TARGET_LEGAL_ANSWER_PATH) {
+      try {
+        return handleTargetLegalAnswerRequest(request, {
+          environment: env.APP_ENV,
+          retriever: createRuntimeTargetLegalAnswerRetriever(env),
+        });
+      } catch {
+        return response({ code: "TARGET_LEGAL_ANSWER_UNAVAILABLE" }, 503);
+      }
+    }
     if (isJuroLegalCorpusReadToolPath(url.pathname)) {
       return handleJuroLegalCorpusReadToolRequest(request, env);
     }

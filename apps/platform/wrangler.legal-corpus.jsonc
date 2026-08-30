@@ -17,7 +17,8 @@
     "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
     "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
     "LEGAL_CORPUS_DENSE_ENABLED": "false",
-    "LEGAL_CORPUS_SHADOW_MODE": "false"
+    "LEGAL_CORPUS_SHADOW_MODE": "false",
+    "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-development"
   },
   "triggers": {
     "crons": ["*/5 * * * *", "5 19 * * *"]
@@ -28,6 +29,11 @@
       "database_name": "juro-development",
       "database_id": "d07670cf-f7bf-460c-a668-101671d4c330",
       "migrations_dir": "./drizzle"
+    },
+    {
+      "binding": "LEGAL_DB",
+      "database_name": "juro-legal-catalog-development",
+      "migrations_dir": "./legal-drizzle"
     }
   ],
   "r2_buckets": [
@@ -38,6 +44,10 @@
     {
       "binding": "BACKUP_BUCKET",
       "bucket_name": "juro-development-backups"
+    },
+    {
+      "binding": "LEGAL_EVIDENCE_BUCKET",
+      "bucket_name": "juro-legal-evidence-development"
     }
   ],
   "observability": {
@@ -68,6 +78,7 @@
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
         "LEGAL_CORPUS_DENSE_ENABLED": "true",
         "LEGAL_CORPUS_SHADOW_MODE": "true",
+        "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-staging",
         "QDRANT_URL": "https://qdrant.internal",
         "QDRANT_COLLECTION": "juro_legal_staging_provision_v1",
         "LEGAL_CORPUS_INDEX_VERSION": "staging-20260830-provision-v1",
@@ -82,6 +93,11 @@
           "database_name": "juro-staging",
           "database_id": "bb716a96-b2fb-4823-90d6-6c228fed181a",
           "migrations_dir": "./drizzle"
+        },
+        {
+          "binding": "LEGAL_DB",
+          "database_name": "juro-legal-catalog-staging",
+          "migrations_dir": "./legal-drizzle"
         }
       ],
       "r2_buckets": [
@@ -92,6 +108,10 @@
         {
           "binding": "BACKUP_BUCKET",
           "bucket_name": "juro-staging-backups"
+        },
+        {
+          "binding": "LEGAL_EVIDENCE_BUCKET",
+          "bucket_name": "juro-legal-evidence-staging"
         }
       ],
       "services": [
@@ -119,7 +139,8 @@
         "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
         "LEGAL_CORPUS_DENSE_ENABLED": "false",
-        "LEGAL_CORPUS_SHADOW_MODE": "false"
+        "LEGAL_CORPUS_SHADOW_MODE": "false",
+        "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-production"
       },
       "triggers": {
         "crons": ["*/5 * * * *", "5 19 * * *"]
@@ -131,6 +152,11 @@
           "database_id": "4cce509b-0e02-4ca9-a3ba-a5ce1327aeda",
           "migrations_dir": "./drizzle",
           "migrations_pattern": "./drizzle/{0121,012[4-9],013[0-9],014[0-4]}_*.sql"
+        },
+        {
+          "binding": "LEGAL_DB",
+          "database_name": "juro-legal-catalog-production",
+          "migrations_dir": "./legal-drizzle"
         }
       ],
       "r2_buckets": [
@@ -141,6 +167,10 @@
         {
           "binding": "BACKUP_BUCKET",
           "bucket_name": "juro-production-backups"
+        },
+        {
+          "binding": "LEGAL_EVIDENCE_BUCKET",
+          "bucket_name": "juro-legal-evidence-production"
         }
       ]
     }

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 type SqliteBinding = null | number | bigint | string;
@@ -89,6 +89,41 @@ export function sqliteD1Fixture(): {
       new URL(`${entry.tag}.sql`, drizzleRoot),
       "utf8",
     );
+    for (const statement of statements(sql)) sqlite.exec(statement);
+  }
+  const d1 = {
+    prepare(sql: string) {
+      return new SqliteStatement(sqlite, sql);
+    },
+    async batch(batchStatements: D1PreparedStatement[]) {
+      sqlite.exec("BEGIN IMMEDIATE");
+      try {
+        const results = batchStatements.map((statement) =>
+          (statement as unknown as SqliteStatement).execute()
+        );
+        sqlite.exec("COMMIT");
+        return results;
+      } catch (error) {
+        sqlite.exec("ROLLBACK");
+        throw error;
+      }
+    },
+  } as unknown as D1Database;
+  return { sqlite, d1 };
+}
+
+export function sqliteD1FixtureFromDirectory(root: URL): {
+  sqlite: DatabaseSync;
+  d1: D1Database;
+} {
+  const migrationFiles = readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /^\d+_.+\.sql$/u.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec("PRAGMA foreign_keys = ON");
+  for (const migrationFile of migrationFiles) {
+    const sql = readFileSync(new URL(migrationFile, root), "utf8");
     for (const statement of statements(sql)) sqlite.exec(statement);
   }
   const d1 = {

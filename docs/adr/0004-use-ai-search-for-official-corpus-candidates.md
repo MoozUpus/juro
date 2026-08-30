@@ -1,0 +1,17 @@
+# Use AI Search for official-corpus candidate retrieval
+
+Status: accepted
+
+JURO will keep every immutable official-corpus body in a dedicated R2 bucket and relational identity, authority, temporal applicability, lineage, release manifests, and activation state in a dedicated legal-corpus D1 database. Versioned Cloudflare AI Search hybrid instances will provide sparse and dense candidates for the Indexed Official Corpus through a private JURO-owned `LegalCandidateIndex` Interface. JURO will use only search results: Question Interpretation, D1 eligibility revalidation, R2 hash-verified hydration, provision grouping, coverage mapping, semantic reranking, the Source Ladder, Citations, and Legal Answer generation remain JURO responsibilities.
+
+## Consequences
+
+Current-law, point-in-time, and comparative questions use capability-scoped, manifest-selected corpus slices so superseded law is not silently mixed with current law. Current search may activate before historical search; an unsupported Temporal Scope continues to Live Official Search. Before indexed comparisons activate, their current and historical Search Releases must come from the same Corpus Snapshot and be selected together by one atomic Activation Set.
+
+A Search Release is built off-side from one deterministic R2 object per JURO chunk, sharded below AI Search limits, and activated only after every shard, language lane, metadata row, object hash, retrieval-quality, failure, latency, privacy, and cost gate passes. Any missing required shard, partial namespace response, unknown key, wrong-release key, configuration drift, or R2 hash mismatch invalidates the whole indexed packet and becomes Source Unavailability.
+
+The certified or adopted state-language expression is the Controlling Text. Other-language expressions remain explicitly ranked and linked translations; language-family membership never implies equal legal authority. Editorial Text Revisions and sourced legal Applicability Periods are modeled independently, with provision lineage supporting renumbering, movement, split, merge, amendment, and repeal.
+
+AI Search and its embedding provider receive only public release artifacts and query formulations after JURO's deterministic provider-boundary privacy transform. Dedicated environment-specific gateways and provider projects have payload logging, Gateway caching, and AI Search similarity caching disabled. Production query embeddings require the accepted provider privacy controls and spend gates.
+
+Direct Vectorize remains appropriate for access-controlled user and internal corpora, but is rejected as the sole official-corpus index because it does not provide the mandatory BM25 channel. The current Qdrant/D1 Adapter remains available for rollback until the complete AI Search target has been stable for 90 days and a backup-restore rehearsal has passed.
