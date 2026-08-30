@@ -6,7 +6,9 @@ import { recordDependencyHealthEvidence } from "../worker/dependency-health-evid
 import type { PlatformJobEnv } from "../worker/platform-jobs";
 import {
   PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS,
+  PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
   productionDependencyProbesEnabled,
+  productionOpenAiProbeOptions,
   runProductionDependencyProbes,
 } from "../worker/production-dependency-probes";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
@@ -115,6 +117,14 @@ test("the production malware probe allows a bounded ClamAV cold start", () => {
   assert.ok(PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS < 60_000);
 });
 
+test("production provider probes stay bounded and isolate OpenAI from fallback", () => {
+  assert.equal(PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS, 20_000);
+  assert.deepEqual(productionOpenAiProbeOptions(), {
+    providerTimeoutMs: 20_000,
+    fallbackEnabled: false,
+  });
+});
+
 test("fresh operational evidence skips every production dependency probe", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
@@ -175,6 +185,47 @@ test("provider probes publish operational evidence only for exact non-fallback r
       { dependencyKey: "openai", state: "operational", evidenceKind: "synthetic_probe" },
     ]);
   } finally {
+    sqlite.close();
+  }
+});
+
+test("provider probe failures log only bounded diagnostic fields", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const originalConsoleError = console.error;
+  const errors: string[] = [];
+  console.error = (...values: unknown[]) => { errors.push(values.join(" ")); };
+  try {
+    const env = probeEnv(d1);
+    await seedOperational(env, ["openai"]);
+    const failure = Object.assign(new Error("raw provider message must stay private"), {
+      code: "PROVIDER_TIMEOUT",
+      providerStatus: 429,
+      providerErrorType: "first_byte_timeout",
+    });
+    const summary = await runProductionDependencyProbes(env, {
+      openai: async () => { throw failure; },
+    });
+    assert.equal(summary?.openai, "failed");
+    assert.equal(errors.length, 1);
+    const log = JSON.parse(errors[0]) as Record<string, unknown>;
+    assert.deepEqual({ ...log, elapsedMs: 0 }, {
+      event: "production_dependency_probe.provider_failed",
+      provider: "openai",
+      safeCode: "PROVIDER_TIMEOUT",
+      errorName: "Error",
+      providerStatus: 429,
+      providerErrorType: "first_byte_timeout",
+      elapsedMs: 0,
+    });
+    assert.equal(errors[0].includes("raw provider message"), false);
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='openai'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "degraded",
+      safeErrorCode: "PROVIDER_TIMEOUT",
+    });
+  } finally {
+    console.error = originalConsoleError;
     sqlite.close();
   }
 });

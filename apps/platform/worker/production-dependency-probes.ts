@@ -24,6 +24,7 @@ const LAWYER_AREA_PROBE_INTERVAL_MS = 25 * 60_000;
 const EMAIL_PROBE_INTERVAL_MS = 23 * 60 * 60_000;
 const MAX_PROVIDER_RESPONSE_BYTES = 4_096;
 export const PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS = 55_000;
+export const PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS = 20_000;
 
 const r2Payload = new TextEncoder().encode(
   "JURO production private R2 synthetic dependency probe v1\n",
@@ -285,13 +286,50 @@ function safeProviderCode(error: unknown): string {
   return "PROVIDER_UNAVAILABLE";
 }
 
+function safeProviderFailureDetails(error: unknown): {
+  errorName: string;
+  providerStatus: number | null;
+  providerErrorType: string | null;
+} {
+  if (typeof error !== "object" || error === null) {
+    return { errorName: "UnknownError", providerStatus: null, providerErrorType: null };
+  }
+  const candidate = error as {
+    name?: unknown;
+    providerStatus?: unknown;
+    providerErrorType?: unknown;
+  };
+  const errorName = typeof candidate.name === "string"
+    && /^[A-Za-z][A-Za-z0-9]{0,63}$/u.test(candidate.name)
+    ? candidate.name
+    : "UnknownError";
+  const providerStatus = typeof candidate.providerStatus === "number"
+    && Number.isInteger(candidate.providerStatus)
+    && candidate.providerStatus >= 400
+    && candidate.providerStatus <= 599
+    ? candidate.providerStatus
+    : null;
+  const providerErrorType = typeof candidate.providerErrorType === "string"
+    && /^[A-Za-z0-9_-]{1,96}$/u.test(candidate.providerErrorType)
+    ? candidate.providerErrorType
+    : null;
+  return { errorName, providerStatus, providerErrorType };
+}
+
+export function productionOpenAiProbeOptions() {
+  return {
+    providerTimeoutMs: PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
+    // This probe measures OpenAI only. A fallback result or failure must never
+    // be attributed to the OpenAI dependency-health row.
+    fallbackEnabled: false,
+  } as const;
+}
+
 async function defaultOpenAiProbe(): Promise<ProviderProbeResult> {
   const { legalAiProvider } = await import("../lib/ai/provider");
   const provider = legalAiProvider();
   if (!provider) throw Object.assign(new Error("OPENAI_NOT_CONFIGURED"), { code: "PROBE_CONFIGURATION_ERROR" });
-  const result = await provider.runLegalChat(providerRequest(), {
-    providerTimeoutMs: 20_000,
-  });
+  const result = await provider.runLegalChat(providerRequest(), productionOpenAiProbeOptions());
   return {
     provider: result.provider,
     fallbackFromProvider: result.fallbackFromProvider,
@@ -302,8 +340,8 @@ async function defaultOpenAiProbe(): Promise<ProviderProbeResult> {
 async function defaultAnthropicProbe(): Promise<ProviderProbeResult> {
   const { runAnthropicLegalChat } = await import("../lib/ai/anthropic-provider");
   const result = await runAnthropicLegalChat(providerRequest(), {
-    providerTimeoutMs: 20_000,
-    nonStreamingResponseStartTimeoutMs: 20_000,
+    providerTimeoutMs: PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
+    nonStreamingResponseStartTimeoutMs: PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
   });
   return {
     provider: result.provider,
@@ -328,8 +366,16 @@ async function runOneProviderProbe(
     await recordOperational(env, provider, startedAt);
     return "succeeded";
   } catch (error) {
+    const safeCode = safeProviderCode(error);
+    console.error(JSON.stringify({
+      event: "production_dependency_probe.provider_failed",
+      provider,
+      safeCode,
+      ...safeProviderFailureDetails(error),
+      elapsedMs: Math.max(0, Date.now() - startedAt),
+    }));
     await recordDependencyHealthEvidence(env, {
-      ...providerFailureEvidence(provider, safeProviderCode(error)),
+      ...providerFailureEvidence(provider, safeCode),
       evidenceKind: "synthetic_probe",
       startedAt,
     });
