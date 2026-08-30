@@ -5,10 +5,12 @@ import type { DependencyHealthKey } from "../lib/operations/dependency-health";
 import { recordDependencyHealthEvidence } from "../worker/dependency-health-evidence";
 import type { PlatformJobEnv } from "../worker/platform-jobs";
 import {
+  PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS,
   PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS,
   PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
   productionDependencyProbesEnabled,
   productionOpenAiProbeOptions,
+  runAnthropicProductionProbe,
   runProductionDependencyProbes,
   safeProviderFailureReason,
 } from "../worker/production-dependency-probes";
@@ -120,10 +122,54 @@ test("the production malware probe allows a bounded ClamAV cold start", () => {
 
 test("production provider probes stay bounded and isolate OpenAI from fallback", () => {
   assert.equal(PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS, 20_000);
+  assert.equal(PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS, 5_000);
+  assert.ok(PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS < PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS);
   assert.deepEqual(productionOpenAiProbeOptions(), {
     providerTimeoutMs: 20_000,
     fallbackEnabled: false,
   });
+});
+
+test("Anthropic production probe runs connectivity before the legal-chat contract", async () => {
+  const calls: string[] = [];
+  const result = await runAnthropicProductionProbe({
+    connectivity: async () => { calls.push("connectivity"); },
+    legalChat: async () => {
+      calls.push("legal-chat");
+      return {
+        provider: "anthropic",
+        fallbackFromProvider: null,
+        responseKind: "clarification_required",
+      };
+    },
+  });
+  assert.deepEqual(calls, ["connectivity", "legal-chat"]);
+  assert.deepEqual(result, {
+    provider: "anthropic",
+    fallbackFromProvider: null,
+    responseKind: "clarification_required",
+  });
+});
+
+test("Anthropic production probe stops at connectivity failure and tags the stage", async () => {
+  let legalChatCalled = false;
+  await assert.rejects(() => runAnthropicProductionProbe({
+    connectivity: async () => { throw new Error("private connectivity detail"); },
+    legalChat: async () => {
+      legalChatCalled = true;
+      throw new Error("must not run");
+    },
+  }), (error: unknown) => error instanceof Error
+    && (error as Error & { providerProbeStage?: unknown }).providerProbeStage === "anthropic_connectivity");
+  assert.equal(legalChatCalled, false);
+});
+
+test("Anthropic production probe tags a legal-chat contract failure after connectivity succeeds", async () => {
+  await assert.rejects(() => runAnthropicProductionProbe({
+    connectivity: async () => undefined,
+    legalChat: async () => { throw new Error("private legal-chat detail"); },
+  }), (error: unknown) => error instanceof Error
+    && (error as Error & { providerProbeStage?: unknown }).providerProbeStage === "anthropic_legal_chat_contract");
 });
 
 test("Anthropic probe diagnostics classify only documented content-free 400 causes", () => {
@@ -243,6 +289,7 @@ test("provider probe failures log only bounded diagnostic fields", async () => {
       providerStatus: 429,
       providerErrorType: "first_byte_timeout",
       providerRequestId: null,
+      providerProbeStage: null,
       providerFailureReason: null,
       elapsedMs: 0,
     });
@@ -274,6 +321,7 @@ test("Anthropic probe logs a fixed spend-limit reason without the upstream messa
       providerStatus: 400,
       providerErrorType: "invalid_request_error",
       providerRequestId: "req_anthropicprobe1234",
+      providerProbeStage: "anthropic_connectivity",
     });
     const summary = await runProductionDependencyProbes(env, {
       anthropic: async () => { throw failure; },
@@ -289,6 +337,7 @@ test("Anthropic probe logs a fixed spend-limit reason without the upstream messa
       providerStatus: 400,
       providerErrorType: "invalid_request_error",
       providerRequestId: "req_anthropicprobe1234",
+      providerProbeStage: "anthropic_connectivity",
       providerFailureReason: "anthropic_workspace_spend_limit",
       elapsedMs: 0,
     });
