@@ -327,14 +327,21 @@ function safeProviderFailureDetails(error: unknown): {
   errorName: string;
   providerStatus: number | null;
   providerErrorType: string | null;
+  providerRequestId: string | null;
 } {
   if (typeof error !== "object" || error === null) {
-    return { errorName: "UnknownError", providerStatus: null, providerErrorType: null };
+    return {
+      errorName: "UnknownError",
+      providerStatus: null,
+      providerErrorType: null,
+      providerRequestId: null,
+    };
   }
   const candidate = error as {
     name?: unknown;
     providerStatus?: unknown;
     providerErrorType?: unknown;
+    providerRequestId?: unknown;
   };
   const errorName = typeof candidate.name === "string"
     && /^[A-Za-z][A-Za-z0-9]{0,63}$/u.test(candidate.name)
@@ -350,7 +357,13 @@ function safeProviderFailureDetails(error: unknown): {
     && /^[A-Za-z0-9_-]{1,96}$/u.test(candidate.providerErrorType)
     ? candidate.providerErrorType
     : null;
-  return { errorName, providerStatus, providerErrorType };
+  // Anthropic documents `request-id` as the support correlation identifier.
+  // Keep only its bounded opaque form; never persist or log the response body.
+  const providerRequestId = typeof candidate.providerRequestId === "string"
+    && /^req_[A-Za-z0-9]{8,128}$/u.test(candidate.providerRequestId)
+    ? candidate.providerRequestId
+    : null;
+  return { errorName, providerStatus, providerErrorType, providerRequestId };
 }
 
 export function productionOpenAiProbeOptions() {

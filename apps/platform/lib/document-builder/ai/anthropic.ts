@@ -22,6 +22,12 @@ interface AnthropicMessagesPayload {
     cache_read_input_tokens?: number;
   };
   error?: { type?: string; message?: string };
+  request_id?: string;
+}
+
+function anthropicProviderRequestId(response: Response, payload: AnthropicMessagesPayload): string | null {
+  const candidate = response.headers.get("request-id") || payload.request_id;
+  return candidate && /^req_[A-Za-z0-9]{8,128}$/u.test(candidate) ? candidate : null;
 }
 
 export function hasAnthropicConfiguration(): boolean {
@@ -105,7 +111,6 @@ export async function callAnthropicStructured<T>(options: {
             "x-api-key": apiKey,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
-            ...(options.requestId ? { "x-client-request-id": options.requestId } : {}),
           },
           body: JSON.stringify({
             model,
@@ -149,6 +154,7 @@ export async function callAnthropicStructured<T>(options: {
           retryable,
           response.status,
           payload.error?.type ?? null,
+          anthropicProviderRequestId(response, payload),
         );
       }
       if (payload.stop_reason === "refusal") {
