@@ -26,6 +26,7 @@ import type { AiRuntimeSettings } from "../lib/ai/runtime-settings";
 import {
   callAnthropicStructured,
   probeAnthropicConnectivity,
+  probeAnthropicModelAccess,
 } from "../lib/document-builder/ai/anthropic";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 
@@ -554,6 +555,68 @@ test("Anthropic connectivity probe sends only a fixed minimal documented request
       model: "claude-sonnet-4-6",
       timeoutMs: 1_000,
     }), { providerResponseId: "msg_connectivity_probe" });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) delete runtime.ANTHROPIC_API_KEY;
+    else runtime.ANTHROPIC_API_KEY = originalApiKey;
+  }
+});
+
+test("Anthropic model-access probe uses the documented read-only Models API", async () => {
+  const runtime = env as unknown as { ANTHROPIC_API_KEY?: string };
+  const originalApiKey = runtime.ANTHROPIC_API_KEY;
+  const originalFetch = globalThis.fetch;
+  try {
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    globalThis.fetch = async (input, init) => {
+      assert.equal(String(input), "https://api.anthropic.com/v1/models/claude-sonnet-4-6");
+      assert.equal(init?.method, "GET");
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("x-api-key"), "synthetic-anthropic-key");
+      assert.equal(headers.get("anthropic-version"), "2023-06-01");
+      assert.equal(headers.get("content-type"), null);
+      assert.equal(init?.body, undefined);
+      return Response.json({
+        id: "claude-sonnet-4-6",
+        type: "model",
+        display_name: "Claude Sonnet 4.6",
+      }, { headers: { "request-id": "req_modelaccess1234" } });
+    };
+    assert.deepEqual(await probeAnthropicModelAccess({
+      model: "claude-sonnet-4-6",
+      timeoutMs: 1_000,
+    }), {
+      model: "claude-sonnet-4-6",
+      providerRequestId: "req_modelaccess1234",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) delete runtime.ANTHROPIC_API_KEY;
+    else runtime.ANTHROPIC_API_KEY = originalApiKey;
+  }
+});
+
+test("Anthropic model-access failures expose only bounded status and request id", async () => {
+  const runtime = env as unknown as { ANTHROPIC_API_KEY?: string };
+  const originalApiKey = runtime.ANTHROPIC_API_KEY;
+  const originalFetch = globalThis.fetch;
+  try {
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    globalThis.fetch = async () => Response.json({
+      type: "error",
+      error: { type: "not_found_error", message: "private workspace detail" },
+    }, {
+      status: 404,
+      headers: { "request-id": "req_modelaccess5678" },
+    });
+    await assert.rejects(() => probeAnthropicModelAccess({
+      model: "claude-sonnet-4-6",
+      timeoutMs: 1_000,
+    }), (error: unknown) => error instanceof AiUnavailableError
+      && error.message.includes("private workspace detail") === false
+      && error.providerStatus === 404
+      && error.providerErrorType === null
+      && error.providerRequestId === "req_modelaccess5678");
   } finally {
     globalThis.fetch = originalFetch;
     if (originalApiKey === undefined) delete runtime.ANTHROPIC_API_KEY;

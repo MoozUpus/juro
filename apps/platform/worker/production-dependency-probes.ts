@@ -25,6 +25,7 @@ const EMAIL_PROBE_INTERVAL_MS = 23 * 60 * 60_000;
 const MAX_PROVIDER_RESPONSE_BYTES = 4_096;
 export const PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS = 55_000;
 export const PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS = 20_000;
+export const PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS = 3_000;
 export const PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS = 5_000;
 
 const r2Payload = new TextEncoder().encode(
@@ -58,6 +59,7 @@ export type ProviderProbeResult = {
 };
 
 export type AnthropicProductionProbeStage =
+  | "anthropic_model_access"
   | "anthropic_connectivity"
   | "anthropic_legal_chat_contract";
 
@@ -371,7 +373,8 @@ function safeProviderFailureDetails(error: unknown): {
     && /^req_[A-Za-z0-9]{8,128}$/u.test(candidate.providerRequestId)
     ? candidate.providerRequestId
     : null;
-  const providerProbeStage = candidate.providerProbeStage === "anthropic_connectivity"
+  const providerProbeStage = candidate.providerProbeStage === "anthropic_model_access"
+    || candidate.providerProbeStage === "anthropic_connectivity"
     || candidate.providerProbeStage === "anthropic_legal_chat_contract"
     ? candidate.providerProbeStage
     : null;
@@ -411,10 +414,28 @@ function withAnthropicProbeStage(
 }
 
 export async function runAnthropicProductionProbe(hooks: {
+  modelAccess?: () => Promise<void>;
   connectivity?: () => Promise<void>;
   legalChat?: () => Promise<ProviderProbeResult>;
 } = {}): Promise<ProviderProbeResult> {
   const deadlineAt = Date.now() + PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS;
+  try {
+    if (hooks.modelAccess) {
+      await hooks.modelAccess();
+    } else {
+      const { probeAnthropicModelAccess } = await import("../lib/document-builder/ai/anthropic");
+      await probeAnthropicModelAccess({
+        timeoutMs: Math.max(1, Math.min(
+          PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS,
+          deadlineAt - Date.now(),
+        )),
+        deadlineAt,
+      });
+    }
+  } catch (error) {
+    throw withAnthropicProbeStage(error, "anthropic_model_access");
+  }
+
   try {
     if (hooks.connectivity) {
       await hooks.connectivity();

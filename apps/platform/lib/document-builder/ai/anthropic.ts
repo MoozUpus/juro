@@ -34,6 +34,80 @@ export function hasAnthropicConfiguration(): boolean {
   return Boolean(runtimeEnv().ANTHROPIC_API_KEY);
 }
 
+export async function probeAnthropicModelAccess(options: {
+  model?: string;
+  timeoutMs?: number;
+  deadlineAt?: number;
+  signal?: AbortSignal;
+} = {}): Promise<{ model: string; providerRequestId: string | null }> {
+  const configuration = runtimeEnv();
+  const apiKey = configuration.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new AiUnavailableError("Резервный AI-провайдер не подключён: отсутствует серверный ключ.");
+  }
+  const model = options.model || (await resolveAiRuntimeSettings({
+    db: configuration.DB,
+    env: configuration,
+  })).anthropicChatFallbackModel;
+  const timeoutMs = options.timeoutMs ?? 3_000;
+
+  try {
+    const { response } = await runProviderRequestWithTimeouts({
+      firstByteTimeoutMs: timeoutMs,
+      totalResponseTimeoutMs: timeoutMs,
+      deadlineAt: options.deadlineAt,
+      callerSignal: options.signal,
+      start: (signal) => fetch(`https://api.anthropic.com/v1/models/${encodeURIComponent(model)}`, {
+        method: "GET",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        signal,
+      }),
+      consume: async (response) => {
+        if (response.body) await response.body.cancel();
+        return { response };
+      },
+    });
+    const providerRequestId = anthropicProviderRequestId(response, {});
+    if (!response.ok) {
+      const retryable = response.status === 408 || response.status === 409
+        || response.status === 429 || response.status >= 500;
+      throw new AiUnavailableError(
+        "Резервный AI-провайдер не подтвердил доступ к настроенной модели.",
+        "PROVIDER_UNAVAILABLE",
+        retryable,
+        response.status,
+        null,
+        providerRequestId,
+      );
+    }
+    return { model, providerRequestId };
+  } catch (error) {
+    if (error instanceof AiUnavailableError) throw error;
+    if (error instanceof ProviderRequestAbortError) {
+      if (error.reason === "caller") {
+        throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
+      }
+      throw new AiUnavailableError(
+        error.reason === "first_byte_timeout"
+          ? "Резервный AI-провайдер не начал проверку модели в допустимое время."
+          : "Проверка доступа к модели резервного AI-провайдера превысила допустимое время.",
+        "PROVIDER_TIMEOUT",
+        true,
+        null,
+        error.reason,
+      );
+    }
+    throw new AiUnavailableError(
+      "Резервный AI-провайдер временно недоступен.",
+      "PROVIDER_UNAVAILABLE",
+      true,
+    );
+  }
+}
+
 export async function probeAnthropicConnectivity(options: {
   model?: string;
   timeoutMs?: number;
