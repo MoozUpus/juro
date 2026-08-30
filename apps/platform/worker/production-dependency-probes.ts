@@ -25,6 +25,7 @@ const EMAIL_PROBE_INTERVAL_MS = 23 * 60 * 60_000;
 const MAX_PROVIDER_RESPONSE_BYTES = 4_096;
 export const PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS = 55_000;
 export const PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS = 20_000;
+export const PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS = 5_000;
 
 const r2Payload = new TextEncoder().encode(
   "JURO production private R2 synthetic dependency probe v1\n",
@@ -50,11 +51,15 @@ export type ProductionDependencyProbeSummary = {
   lawyerArea: ProbeOutcome;
 };
 
-type ProviderProbeResult = {
+export type ProviderProbeResult = {
   provider: "openai" | "anthropic";
   fallbackFromProvider: "openai" | "anthropic" | null;
   responseKind: string;
 };
+
+export type AnthropicProductionProbeStage =
+  | "anthropic_connectivity"
+  | "anthropic_legal_chat_contract";
 
 export type ProductionDependencyProbeHooks = {
   fetchImpl?: typeof fetch;
@@ -328,6 +333,7 @@ function safeProviderFailureDetails(error: unknown): {
   providerStatus: number | null;
   providerErrorType: string | null;
   providerRequestId: string | null;
+  providerProbeStage: AnthropicProductionProbeStage | null;
 } {
   if (typeof error !== "object" || error === null) {
     return {
@@ -335,6 +341,7 @@ function safeProviderFailureDetails(error: unknown): {
       providerStatus: null,
       providerErrorType: null,
       providerRequestId: null,
+      providerProbeStage: null,
     };
   }
   const candidate = error as {
@@ -342,6 +349,7 @@ function safeProviderFailureDetails(error: unknown): {
     providerStatus?: unknown;
     providerErrorType?: unknown;
     providerRequestId?: unknown;
+    providerProbeStage?: unknown;
   };
   const errorName = typeof candidate.name === "string"
     && /^[A-Za-z][A-Za-z0-9]{0,63}$/u.test(candidate.name)
@@ -363,7 +371,11 @@ function safeProviderFailureDetails(error: unknown): {
     && /^req_[A-Za-z0-9]{8,128}$/u.test(candidate.providerRequestId)
     ? candidate.providerRequestId
     : null;
-  return { errorName, providerStatus, providerErrorType, providerRequestId };
+  const providerProbeStage = candidate.providerProbeStage === "anthropic_connectivity"
+    || candidate.providerProbeStage === "anthropic_legal_chat_contract"
+    ? candidate.providerProbeStage
+    : null;
+  return { errorName, providerStatus, providerErrorType, providerRequestId, providerProbeStage };
 }
 
 export function productionOpenAiProbeOptions() {
@@ -387,17 +399,55 @@ async function defaultOpenAiProbe(): Promise<ProviderProbeResult> {
   };
 }
 
-async function defaultAnthropicProbe(): Promise<ProviderProbeResult> {
-  const { runAnthropicLegalChat } = await import("../lib/ai/anthropic-provider");
-  const result = await runAnthropicLegalChat(providerRequest(), {
-    providerTimeoutMs: PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
-    nonStreamingResponseStartTimeoutMs: PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
+function withAnthropicProbeStage(
+  error: unknown,
+  providerProbeStage: AnthropicProductionProbeStage,
+): Error & { providerProbeStage: AnthropicProductionProbeStage } {
+  if (error instanceof Error) return Object.assign(error, { providerProbeStage });
+  return Object.assign(new Error("PROVIDER_UNAVAILABLE"), {
+    code: "PROVIDER_UNAVAILABLE",
+    providerProbeStage,
   });
-  return {
-    provider: result.provider,
-    fallbackFromProvider: result.fallbackFromProvider,
-    responseKind: result.data.responseKind,
-  };
+}
+
+export async function runAnthropicProductionProbe(hooks: {
+  connectivity?: () => Promise<void>;
+  legalChat?: () => Promise<ProviderProbeResult>;
+} = {}): Promise<ProviderProbeResult> {
+  const deadlineAt = Date.now() + PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS;
+  try {
+    if (hooks.connectivity) {
+      await hooks.connectivity();
+    } else {
+      const { probeAnthropicConnectivity } = await import("../lib/document-builder/ai/anthropic");
+      await probeAnthropicConnectivity({
+        timeoutMs: Math.max(1, Math.min(
+          PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS,
+          deadlineAt - Date.now(),
+        )),
+        deadlineAt,
+      });
+    }
+  } catch (error) {
+    throw withAnthropicProbeStage(error, "anthropic_connectivity");
+  }
+
+  try {
+    if (hooks.legalChat) return await hooks.legalChat();
+    const remainingMs = Math.max(1, deadlineAt - Date.now());
+    const { runAnthropicLegalChat } = await import("../lib/ai/anthropic-provider");
+    const result = await runAnthropicLegalChat(providerRequest(), {
+      providerTimeoutMs: remainingMs,
+      nonStreamingResponseStartTimeoutMs: remainingMs,
+    });
+    return {
+      provider: result.provider,
+      fallbackFromProvider: result.fallbackFromProvider,
+      responseKind: result.data.responseKind,
+    };
+  } catch (error) {
+    throw withAnthropicProbeStage(error, "anthropic_legal_chat_contract");
+  }
 }
 
 async function runOneProviderProbe(
@@ -408,7 +458,7 @@ async function runOneProviderProbe(
   if (!(await probeDue(env, provider, PROVIDER_PROBE_INTERVAL_MS))) return "skipped";
   const startedAt = Date.now();
   try {
-    const result = await (hook ?? (provider === "openai" ? defaultOpenAiProbe : defaultAnthropicProbe))();
+    const result = await (hook ?? (provider === "openai" ? defaultOpenAiProbe : runAnthropicProductionProbe))();
     if (result.provider !== provider || result.fallbackFromProvider !== null
       || result.responseKind !== "clarification_required") {
       throw Object.assign(new Error("PROVIDER_PROBE_BOUNDARY_FAILED"), { code: "PROVIDER_UNAVAILABLE" });

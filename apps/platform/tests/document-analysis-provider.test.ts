@@ -23,7 +23,10 @@ import {
   safeDocumentAnalysisProviderFailure,
 } from "../lib/document-analysis/provider";
 import type { AiRuntimeSettings } from "../lib/ai/runtime-settings";
-import { callAnthropicStructured } from "../lib/document-builder/ai/anthropic";
+import {
+  callAnthropicStructured,
+  probeAnthropicConnectivity,
+} from "../lib/document-builder/ai/anthropic";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 
 const base = {
@@ -514,6 +517,71 @@ test("Anthropic failures preserve only the documented provider request id", asyn
       && error.providerStatus === 400
       && error.providerErrorType === "invalid_request_error"
       && error.providerRequestId === "req_headerpreferred1234");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) delete runtime.ANTHROPIC_API_KEY;
+    else runtime.ANTHROPIC_API_KEY = originalApiKey;
+  }
+});
+
+test("Anthropic connectivity probe sends only a fixed minimal documented request", async () => {
+  const runtime = env as unknown as { ANTHROPIC_API_KEY?: string };
+  const originalApiKey = runtime.ANTHROPIC_API_KEY;
+  const originalFetch = globalThis.fetch;
+  try {
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    globalThis.fetch = async (input, init) => {
+      assert.equal(String(input), "https://api.anthropic.com/v1/messages");
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("x-api-key"), "synthetic-anthropic-key");
+      assert.equal(headers.get("anthropic-version"), "2023-06-01");
+      assert.equal(headers.get("content-type"), "application/json");
+      assert.equal(headers.get("x-client-request-id"), null);
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        model: "claude-sonnet-4-6",
+        max_tokens: 1,
+        messages: [{ role: "user", content: "Reply OK." }],
+      });
+      return Response.json({
+        id: "msg_connectivity_probe",
+        model: "claude-sonnet-4-6",
+        stop_reason: "max_tokens",
+        content: [{ type: "text", text: "O" }],
+        usage: { input_tokens: 8, output_tokens: 1 },
+      });
+    };
+    assert.deepEqual(await probeAnthropicConnectivity({
+      model: "claude-sonnet-4-6",
+      timeoutMs: 1_000,
+    }), { providerResponseId: "msg_connectivity_probe" });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) delete runtime.ANTHROPIC_API_KEY;
+    else runtime.ANTHROPIC_API_KEY = originalApiKey;
+  }
+});
+
+test("Anthropic connectivity failures preserve a bounded request id without exposing the provider body", async () => {
+  const runtime = env as unknown as { ANTHROPIC_API_KEY?: string };
+  const originalApiKey = runtime.ANTHROPIC_API_KEY;
+  const originalFetch = globalThis.fetch;
+  try {
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    globalThis.fetch = async () => Response.json({
+      type: "error",
+      error: { type: "invalid_request_error", message: "private provider diagnostic" },
+    }, {
+      status: 400,
+      headers: { "request-id": "req_connectivity1234" },
+    });
+    await assert.rejects(() => probeAnthropicConnectivity({
+      model: "claude-sonnet-4-6",
+      timeoutMs: 1_000,
+    }), (error: unknown) => error instanceof AiUnavailableError
+      && error.message.includes("private provider diagnostic") === false
+      && error.providerStatus === 400
+      && error.providerErrorType === "invalid_request_error"
+      && error.providerRequestId === "req_connectivity1234");
   } finally {
     globalThis.fetch = originalFetch;
     if (originalApiKey === undefined) delete runtime.ANTHROPIC_API_KEY;
