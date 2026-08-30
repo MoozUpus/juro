@@ -25,6 +25,40 @@ interface AnthropicMessagesPayload {
   request_id?: string;
 }
 
+export type AnthropicSafeFailureReason =
+  | "anthropic_organization_spend_limit"
+  | "anthropic_workspace_spend_limit"
+  | "anthropic_workspace_header_required"
+  | "anthropic_workspace_header_invalid";
+
+export function safeAnthropicFailureReason(
+  status: number,
+  payload: AnthropicMessagesPayload,
+): AnthropicSafeFailureReason | null {
+  if (status !== 400 || payload.error?.type !== "invalid_request_error") return null;
+  const message = payload.error.message;
+  if (typeof message !== "string") return null;
+
+  // Anthropic documents these content-free HTTP 400 failure classes. Convert
+  // the upstream message to a fixed enum at the provider boundary so callers
+  // never need to retain, log, or persist arbitrary provider response text.
+  if (message.startsWith("You have reached your specified workspace API usage limits")) {
+    return "anthropic_workspace_spend_limit";
+  }
+  if (message.startsWith("You have reached your specified API usage limits")) {
+    return "anthropic_organization_spend_limit";
+  }
+  if (message.startsWith(
+    "anthropic-workspace-id is required when authenticating with an identity-linked API key",
+  )) {
+    return "anthropic_workspace_header_required";
+  }
+  if (message === "anthropic-workspace-id header must be a valid workspace ID.") {
+    return "anthropic_workspace_header_invalid";
+  }
+  return null;
+}
+
 function anthropicProviderRequestId(response: Response, payload: AnthropicMessagesPayload): string | null {
   const candidate = response.headers.get("request-id") || payload.request_id;
   return candidate && /^req_[A-Za-z0-9]{8,128}$/u.test(candidate) ? candidate : null;
@@ -153,14 +187,16 @@ export async function probeAnthropicConnectivity(options: {
     if (!response.ok) {
       const retryable = response.status === 408 || response.status === 409
         || response.status === 429 || response.status >= 500;
-      throw new AiUnavailableError(
+      throw Object.assign(new AiUnavailableError(
         "Резервный AI-провайдер не прошёл проверку соединения.",
         "PROVIDER_UNAVAILABLE",
         retryable,
         response.status,
         payload.error?.type ?? null,
         anthropicProviderRequestId(response, payload),
-      );
+      ), {
+        providerFailureReason: safeAnthropicFailureReason(response.status, payload),
+      });
     }
     return {
       providerResponseId: payload.id || anthropicProviderRequestId(response, payload),

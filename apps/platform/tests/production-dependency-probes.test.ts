@@ -195,24 +195,27 @@ test("Anthropic production probe tags a legal-chat contract failure after connec
 });
 
 test("Anthropic probe diagnostics classify only documented content-free 400 causes", () => {
-  const failure = (message: string) => Object.assign(new Error(message), {
+  const failure = (providerFailureReason: string) => Object.assign(new Error(
+    "Резервный AI-провайдер не прошёл проверку соединения.",
+  ), {
     providerStatus: 400,
     providerErrorType: "invalid_request_error",
+    providerFailureReason,
   });
   assert.equal(safeProviderFailureReason("anthropic", failure(
-    "You have reached your specified workspace API usage limits. Access resumes later.",
+    "anthropic_workspace_spend_limit",
   )), "anthropic_workspace_spend_limit");
   assert.equal(safeProviderFailureReason("anthropic", failure(
-    "You have reached your specified API usage limits. Access resumes later.",
+    "anthropic_organization_spend_limit",
   )), "anthropic_organization_spend_limit");
   assert.equal(safeProviderFailureReason("anthropic", failure(
-    "anthropic-workspace-id is required when authenticating with an identity-linked API key; send the id.",
+    "anthropic_workspace_header_required",
   )), "anthropic_workspace_header_required");
   assert.equal(safeProviderFailureReason("anthropic", failure(
-    "anthropic-workspace-id header must be a valid workspace ID.",
+    "anthropic_workspace_header_invalid",
   )), "anthropic_workspace_header_invalid");
   assert.equal(safeProviderFailureReason("anthropic", failure(
-    "messages.0.content contains private request text that must never be logged",
+    "private_provider_reason_must_not_be_logged",
   )), null);
   assert.equal(safeProviderFailureReason("openai", failure(
     "You have reached your specified API usage limits.",
@@ -337,13 +340,14 @@ test("Anthropic probe logs a fixed spend-limit reason without the upstream messa
     const env = probeEnv(d1);
     await seedOperational(env, ["anthropic"]);
     const failure = Object.assign(new Error(
-      "You have reached your specified workspace API usage limits. private-upstream-marker",
+      "Резервный AI-провайдер не прошёл проверку соединения.",
     ), {
       code: "PROVIDER_UNAVAILABLE",
       providerStatus: 400,
       providerErrorType: "invalid_request_error",
       providerRequestId: "req_anthropicprobe1234",
       providerProbeStage: "anthropic_connectivity",
+      providerFailureReason: "anthropic_workspace_spend_limit",
     });
     const summary = await runProductionDependencyProbes(env, {
       anthropic: async () => { throw failure; },
