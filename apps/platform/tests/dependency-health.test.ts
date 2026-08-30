@@ -123,6 +123,34 @@ test("0112 marks old green evidence stale without erasing the last success", asy
   } finally { sqlite.close(); }
 });
 
+test("document analysis health follows its routed feature probe instead of one named provider", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await recordAllOperational(d1);
+    await recordDependencyHealth({
+      db: d1,
+      now: new Date("2026-08-12T05:01:00.000Z"),
+      value: {
+        environment: "staging",
+        key: "anthropic",
+        state: "degraded",
+        latencyMs: 25,
+        safeErrorCode: "PROVIDER_UNAVAILABLE",
+        evidenceKind: "synthetic_probe",
+      },
+    });
+    const components = deriveComponentHealth(await readDependencyHealth({
+      db: d1,
+      environment: "staging",
+      now: new Date("2026-08-12T05:01:00.000Z"),
+    }));
+    assert.equal(components.find((component) => component.key === "ai")?.status, "degraded");
+    assert.equal(components.find((component) => component.key === "document_analysis")?.status, "operational");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("0112 gives missing mandatory evidence precedence over stale evidence, but not a hard failure", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {

@@ -106,7 +106,9 @@ export const dependencyKeysByComponent = {
     "queues",
     "queue_dlq",
     "malware_scanner",
-    "anthropic",
+    // Provider availability is an OR condition implemented by the routed
+    // feature probe below. Requiring one named provider here would mark the
+    // feature degraded even when its bounded fallback completed successfully.
     "document_analysis",
   ],
   upload: ["d1", "private_r2", "malware_scanner"],
