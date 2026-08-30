@@ -27,19 +27,24 @@ function assertReadQuery(query: string): void {
   }
 }
 
-function protectStatement(statement: D1PreparedStatement): D1PreparedStatement {
-  return new Proxy(statement, {
+function protectStatement(
+  statement: D1PreparedStatement,
+  protectedStatementTargets: WeakMap<D1PreparedStatement, D1PreparedStatement>,
+): D1PreparedStatement {
+  const protectedStatement = new Proxy(statement, {
     get(target, property) {
       if (property === "run") {
         return () => rejectWrite("D1PreparedStatement.run() is disabled for the staging corpus.");
       }
       if (property === "bind") {
-        return (...values: unknown[]) => protectStatement(target.bind(...values));
+        return (...values: unknown[]) => protectStatement(target.bind(...values), protectedStatementTargets);
       }
       const value = Reflect.get(target, property, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+  protectedStatementTargets.set(protectedStatement, statement);
+  return protectedStatement;
 }
 
 /**
@@ -48,17 +53,34 @@ function protectStatement(statement: D1PreparedStatement): D1PreparedStatement {
  * binding must never be passed to migrations, ingestion, jobs, or app storage.
  */
 export function createReadOnlyLegalCorpusDatabase(database: D1Database): D1Database {
+  // Keep statement ownership local to this wrapper. A protected statement from
+  // another D1 binding must not be accepted by this database's batch method.
+  const protectedStatementTargets = new WeakMap<D1PreparedStatement, D1PreparedStatement>();
   return new Proxy(database, {
     get(target, property) {
       if (property === "prepare") {
         return (query: string) => {
           assertReadQuery(query);
-          return protectStatement(target.prepare(query));
+          return protectStatement(target.prepare(query), protectedStatementTargets);
+        };
+      }
+      if (property === "batch") {
+        return (statements: D1PreparedStatement[]) => {
+          if (!Array.isArray(statements) || statements.length === 0) {
+            rejectWrite("D1Database.batch() requires protected read statements.");
+          }
+          const unwrapped = statements.map((statement) => {
+            const targetStatement = protectedStatementTargets.get(statement);
+            if (!targetStatement) {
+              return rejectWrite("D1Database.batch() accepts only read statements prepared through this corpus boundary.");
+            }
+            return targetStatement;
+          });
+          return target.batch(unwrapped);
         };
       }
       if (
-        property === "batch"
-        || property === "exec"
+        property === "exec"
         || property === "withSession"
         || property === "dump"
       ) {

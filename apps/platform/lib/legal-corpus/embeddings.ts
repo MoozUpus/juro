@@ -5,8 +5,17 @@ import { assertProviderCallAllowed } from "../ai/provider-cost-control";
 
 export const LEGAL_CORPUS_EMBEDDING_DIMENSIONS = 1_536;
 const DEFAULT_MODEL = "text-embedding-3-large";
-const MAX_BATCH = 32;
-const MAX_INPUT_CHARS = 24_000;
+const MAX_BATCH = 64;
+// Corpus imports occasionally contain a large schedule in one source chunk.
+// Keep a hard pre-normalization memory bound even though the provider packet
+// below is reduced much further.
+const MAX_RAW_INPUT_CHARS = 100_000;
+// The embedding API limits tokens, not JavaScript characters. Bounding UTF-8
+// bytes is tokenizer-independent because a BPE token always represents at
+// least one input byte. Leave headroom below the provider's 8,192-token cap.
+const MAX_INPUT_UTF8_BYTES = 7_500;
+const TRUNCATION_MARKER = "\n…\n";
+const utf8Encoder = new TextEncoder();
 const REQUEST_TIMEOUT_MS = 20_000;
 const RESPONSE_LIMIT_BYTES = 2_500_000;
 
@@ -21,7 +30,11 @@ export type LegalCorpusEmbeddingEnv = {
 export interface LegalCorpusEmbeddingProvider {
   embed(
     inputs: readonly string[],
-    usage: { feature: "legal_corpus_indexing" | "legal_corpus_retrieval" },
+    usage: {
+      feature: "legal_corpus_indexing" | "legal_corpus_retrieval";
+      signal?: AbortSignal;
+      timeoutMs?: number;
+    },
   ): Promise<number[][]>;
 }
 
@@ -55,6 +68,43 @@ export class LegalCorpusEmbeddingError extends Error {
 
 function retryableStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 429 || status >= 500;
+}
+
+function utf8Prefix(input: string, byteBudget: number): string {
+  let used = 0;
+  let result = "";
+  for (const character of input) {
+    const bytes = utf8Encoder.encode(character).byteLength;
+    if (used + bytes > byteBudget) break;
+    result += character;
+    used += bytes;
+  }
+  return result;
+}
+
+function utf8Suffix(input: string, byteBudget: number): string {
+  let used = 0;
+  const result: string[] = [];
+  const characters = [...input];
+  for (let index = characters.length - 1; index >= 0; index -= 1) {
+    const character = characters[index]!;
+    const bytes = utf8Encoder.encode(character).byteLength;
+    if (used + bytes > byteBudget) break;
+    result.push(character);
+    used += bytes;
+  }
+  return result.reverse().join("");
+}
+
+function boundedEmbeddingInput(input: string): string {
+  if (utf8Encoder.encode(input).byteLength <= MAX_INPUT_UTF8_BYTES) return input;
+  const markerBytes = utf8Encoder.encode(TRUNCATION_MARKER).byteLength;
+  const contentBudget = MAX_INPUT_UTF8_BYTES - markerBytes;
+  const headBudget = Math.floor(contentBudget * 2 / 3);
+  return `${utf8Prefix(input, headBudget)}${TRUNCATION_MARKER}${utf8Suffix(
+    input,
+    contentBudget - headBudget,
+  )}`;
 }
 
 async function limitedJson(response: Response): Promise<unknown> {
@@ -98,15 +148,22 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
 
   async embed(
     inputs: readonly string[],
-    usage: { feature: "legal_corpus_indexing" | "legal_corpus_retrieval" },
+    usage: {
+      feature: "legal_corpus_indexing" | "legal_corpus_retrieval";
+      signal?: AbortSignal;
+      timeoutMs?: number;
+    },
   ): Promise<number[][]> {
-    const normalized = inputs.map((input) => input.normalize("NFKC").trim());
     if (
       (!this.env.OPENAI_API_KEY?.trim() && !this.env.LEGAL_CORPUS_EMBEDDING_SERVICE)
-      || normalized.length < 1
-      || normalized.length > MAX_BATCH
-      || normalized.some((input) => input.length < 1 || input.length > MAX_INPUT_CHARS)
+      || inputs.length < 1
+      || inputs.length > MAX_BATCH
+      || inputs.some((input) => input.length < 1 || input.length > MAX_RAW_INPUT_CHARS)
     ) {
+      throw new LegalCorpusEmbeddingError("LEGAL_CORPUS_EMBEDDING_CONFIGURATION_REJECTED", false);
+    }
+    const normalized = inputs.map((input) => boundedEmbeddingInput(input.normalize("NFKC").trim()));
+    if (normalized.some((input) => input.length < 1)) {
       throw new LegalCorpusEmbeddingError("LEGAL_CORPUS_EMBEDDING_CONFIGURATION_REJECTED", false);
     }
     const model = this.env.EMBEDDING_MODEL?.trim() || DEFAULT_MODEL;
@@ -142,7 +199,19 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
           startedAt,
           completedAt: new Date().toISOString(),
         });
-      } catch {
+      } catch (error) {
+        if (this.env.APP_ENV !== "production") {
+          const cause = (error as { code?: unknown } | null)?.code;
+          console.error(JSON.stringify({
+            event: "legal_corpus.embedding_usage_failed",
+            environment: this.env.APP_ENV,
+            feature: usage.feature,
+            itemCount: normalized.length,
+            code: typeof cause === "string" && /^[A-Z][A-Z0-9_]{2,80}$/u.test(cause)
+              ? cause
+              : "PROVIDER_USAGE_FAILED",
+          }));
+        }
         throw new LegalCorpusEmbeddingError("LEGAL_CORPUS_EMBEDDING_USAGE_FAILED", true);
       }
     };
@@ -154,8 +223,21 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
         : "https://api.openai.com/v1/embeddings";
       const init: RequestInit = {
         method: "POST",
-        redirect: "error",
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        // Cloudflare service bindings reject `redirect: "error"`. Manual mode
+        // keeps redirects visible and the non-OK branch below rejects them.
+        redirect: "manual",
+        signal: usage.signal
+          ? AbortSignal.any([
+            usage.signal,
+            AbortSignal.timeout(Math.max(1, Math.min(
+              usage.timeoutMs ?? REQUEST_TIMEOUT_MS,
+              REQUEST_TIMEOUT_MS,
+            ))),
+          ])
+          : AbortSignal.timeout(Math.max(1, Math.min(
+            usage.timeoutMs ?? REQUEST_TIMEOUT_MS,
+            REQUEST_TIMEOUT_MS,
+          ))),
         headers: {
           ...(!this.env.LEGAL_CORPUS_EMBEDDING_SERVICE && this.env.OPENAI_API_KEY
             ? { authorization: `Bearer ${this.env.OPENAI_API_KEY}` }
@@ -197,6 +279,7 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
       parsed.data.length !== normalized.length
       || parsed.data.some((item, index) => item.index !== index)
       || parsed.usage.total_tokens < parsed.usage.prompt_tokens
+      || parsed.model !== model
     ) {
       await recordFailure("PROVIDER_RESPONSE_INVALID");
       throw new LegalCorpusEmbeddingError("LEGAL_CORPUS_EMBEDDING_RESPONSE_REJECTED", false);
@@ -219,7 +302,19 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
         startedAt,
         completedAt: new Date().toISOString(),
       });
-    } catch {
+    } catch (error) {
+      if (this.env.APP_ENV !== "production") {
+        const cause = (error as { code?: unknown } | null)?.code;
+        console.error(JSON.stringify({
+          event: "legal_corpus.embedding_usage_failed",
+          environment: this.env.APP_ENV,
+          feature: usage.feature,
+          itemCount: normalized.length,
+          code: typeof cause === "string" && /^[A-Z][A-Z0-9_]{2,80}$/u.test(cause)
+            ? cause
+            : "PROVIDER_USAGE_FAILED",
+        }));
+      }
       throw new LegalCorpusEmbeddingError("LEGAL_CORPUS_EMBEDDING_USAGE_FAILED", true);
     }
     return parsed.data.map((item) => item.embedding);

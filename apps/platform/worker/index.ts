@@ -37,6 +37,7 @@ type FrameworkEnv = PlatformJobEnv & {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_CHAT_MODEL?: string;
+  OPENAI_RETRIEVAL_MODEL?: string;
   OPENAI_DEEP_MODEL?: string;
   OPENAI_FALLBACK_MODEL?: string;
   ANTHROPIC_API_KEY?: string;

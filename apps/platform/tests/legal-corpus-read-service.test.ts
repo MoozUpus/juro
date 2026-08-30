@@ -83,7 +83,21 @@ function seedOfficialProvision(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlit
 function inProcessService(db: D1Database): Fetcher {
   return {
     fetch(input: RequestInfo | URL, init?: RequestInit) {
-      return handleJuroLegalCorpusReadToolRequest(new Request(input, init), { DB: db });
+      return handleJuroLegalCorpusReadToolRequest(new Request(input, init), { DB: db }, {
+        denseSearch: async () => [],
+      });
+    },
+  } as Fetcher;
+}
+
+function inProcessHybridService(db: D1Database): Fetcher {
+  return {
+    fetch(input: RequestInfo | URL, init?: RequestInit) {
+      return handleJuroLegalCorpusReadToolRequest(new Request(input, init), { DB: db }, {
+        denseSearch: async () => [{ chunkId, score: 0.91 }],
+        denseBatchSearch: async (queries) => queries.map(() => [{ chunkId, score: 0.91 }]),
+        denseSearchIncludesSparse: true,
+      });
     },
   } as Fetcher;
 }
@@ -91,6 +105,7 @@ function inProcessService(db: D1Database): Fetcher {
 test("renamed JURO tools search, inspect and hydrate through the read-only boundary", async () => {
   assert.deepEqual(JURO_LEGAL_CORPUS_TOOL_NAMES, {
     findLegalSources: "find_juro_legal_sources",
+    findLegalSourcesBatch: "find_juro_legal_sources_batch",
     inspectLegalAct: "inspect_juro_legal_act",
     readLegalProvisions: "read_juro_legal_provisions",
     hydrateLegalSources: "hydrate_juro_legal_sources",
@@ -109,6 +124,58 @@ test("renamed JURO tools search, inspect and hydrate through the read-only bound
     assert.equal(act?.title, "Трудовой кодекс");
     assert.equal(spans[0]?.id, chunkId);
     assert.equal(spans[0]?.textSha256, sources[0]?.contentHash);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("the private read boundary reports and performs hybrid retrieval", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seedOfficialProvision(sqlite);
+    const tools = createJuroLegalCorpusReadServiceTools({ service: inProcessHybridService(d1) });
+    assert.equal(tools.supportsHybrid, true);
+    const sources = await tools.findLegalSources({
+      query: "прекращение трудового договора",
+      locale: "ru",
+      limit: 8,
+    });
+    assert.equal(sources[0]?.chunkId, chunkId);
+    assert.equal(sources[0]?.denseRank, 1);
+    assert.equal(sources[0]?.candidateExcerptOnly, false);
+    assert.equal(sources[0]?.windowHydrated, true);
+    const batches = await tools.findLegalSourcesBatch!({
+      queries: ["прекращение договора", "гарантия отпуска"],
+      locale: "ru",
+      limit: 8,
+    });
+    assert.equal(batches.length, 2);
+    assert.ok(batches.every((items) => items[0]?.denseRank === 1));
+    assert.ok(batches.every((items) => items[0]?.candidateExcerptOnly === false));
+    assert.ok(batches.every((items) => items[0]?.windowHydrated === true));
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a failed hybrid provider is unavailable rather than empty coverage", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const path = `/internal/legal-corpus/read-tools/${JURO_LEGAL_CORPUS_TOOL_NAMES.findLegalSources}`;
+    const response = await handleJuroLegalCorpusReadToolRequest(
+      new Request(`http://legal-corpus.internal${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query: "прекращение трудового договора", locale: "ru" }),
+      }),
+      { DB: d1 },
+      {
+        denseSearch: async () => { throw new Error("QDRANT_UNAVAILABLE"); },
+        denseSearchIncludesSparse: true,
+      },
+    );
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { code: "LEGAL_CORPUS_READ_FAILED" });
   } finally {
     sqlite.close();
   }

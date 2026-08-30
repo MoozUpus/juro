@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { LegalDatabaseFreshness } from "../legal/verified-retrieval";
 import {
-  nonRepeatingLegalDetail,
   sanitizeClarificationQuestions,
 } from "./legal-output-safety";
 export { deriveLegalEvidenceMode } from "./legal-evidence-mode";
@@ -286,20 +285,9 @@ export function enforceLegalDatabaseFreshness(
       : "Huquqiy bazaning dolzarbligi tasdiqlanishi kerak",
     impact: warning.slice(0, 2_000),
   };
-  const formerFindings = result.confirmedFindings.map((finding) => {
-    const uniqueDetail = nonRepeatingLegalDetail(finding.title, finding.explanation);
-    const prefix = options.locale === "ru"
-      ? "Ранее подтверждённый вывод переведён в предварительный до обновления базы"
-      : "Oldin tasdiqlangan xulosa baza yangilanguncha dastlabki deb ko‘rsatiladi";
-    return {
-      statement: finding.title.slice(0, 1_000),
-      impact: (uniqueDetail ? `${prefix}: ${uniqueDetail}` : `${prefix}.`).slice(0, 2_000),
-    };
-  });
   const assumptions = [
     staleAssumption,
     ...result.assumptions,
-    ...formerFindings,
   ].filter((assumption, index, all) => {
     const key = `${assumption.statement.trim()}\n${assumption.impact.trim()}`;
     return all.findIndex((candidate) =>
@@ -312,8 +300,6 @@ export function enforceLegalDatabaseFreshness(
   return {
     ...result,
     answer,
-    confirmedFindings: [],
-    conditionalBranches: [],
     assumptions,
     deadlines: result.deadlines.map((deadline) => ({
       ...deadline,

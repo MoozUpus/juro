@@ -66,10 +66,11 @@
         "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "true",
         "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "true",
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
-        "LEGAL_CORPUS_DENSE_ENABLED": "false",
+        "LEGAL_CORPUS_DENSE_ENABLED": "true",
         "LEGAL_CORPUS_SHADOW_MODE": "true",
         "QDRANT_URL": "https://qdrant.internal",
-        "QDRANT_COLLECTION": "juro_legal_staging",
+        "QDRANT_COLLECTION": "juro_legal_staging_provision_v1",
+        "LEGAL_CORPUS_INDEX_VERSION": "staging-20260830-provision-v1",
         "EMBEDDING_MODEL": "text-embedding-3-large"
       },
       "triggers": {

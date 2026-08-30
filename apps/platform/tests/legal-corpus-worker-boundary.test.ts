@@ -216,6 +216,9 @@ test("private dense services stay behind service bindings and staging-only flags
   assert.doesNotMatch(privateServices, /providedApiKey\s*!==\s*expectedApiKey/u);
   assert.match(privateServices, /enableInternet = false/u);
   assert.match(privateServices, /QDRANT__SERVICE__API_KEY/u);
+  assert.match(privateServices, /legal_corpus_search_index_builds/u);
+  assert.match(privateServices, /legal_corpus_search_index_manifests/u);
+  assert.match(privateServices, /environment=\? AND qdrant_collection=\?/u);
   assert.match(corpusConfig, /"binding": "QDRANT_SERVICE"/u);
   assert.match(corpusConfig, /"binding": "LEGAL_CORPUS_EMBEDDING_SERVICE"/u);
   assert.match(corpusConfig, /"binding": "BACKUP_BUCKET"/u);
@@ -304,6 +307,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /runNextLegalCorpusQdrantBackfillBatch/u);
   assert.match(corpusWorker, /backfillCompressedSparseIndexBatch/u);
   assert.match(corpusWorker, /createPacedLexFetch/u);
+  assert.match(corpusWorker, /pinnedManifestId[\s\S]*resolveLegalSearchIndexManifest/u);
   assert.match(corpusWorker, /pacingAlreadyApplied: true/u);
   assert.match(corpusWorker, /persistentRobotsPolicy: pacerStats\.persistentRobotsCacheHits > 0/u);
   assert.match(corpusWorker, /scheduled_locks/u);
@@ -341,9 +345,15 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     assert.equal(environment.workers_dev, false);
     assert.equal(environment.preview_urls, false);
     assert.deepEqual(environment.routes ?? [], []);
-    assert.equal(environment.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
     assert.equal(environment.r2_buckets.some(({ binding }) => binding === "BACKUP_BUCKET"), true);
   }
+  assert.equal(config.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
+  assert.equal(config.env.production.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_DENSE_ENABLED, "true");
+  assert.equal(
+    config.env.staging.vars.LEGAL_CORPUS_INDEX_VERSION,
+    "staging-20260830-provision-v1",
+  );
   assert.deepEqual(config.triggers.crons, [LEGAL_CORPUS_PROCESS_CRON, LEGAL_CORPUS_SEED_CRON]);
   assert.deepEqual(config.env.production.triggers.crons, [
     LEGAL_CORPUS_PROCESS_CRON,

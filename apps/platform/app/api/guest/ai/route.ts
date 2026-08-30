@@ -467,6 +467,7 @@ export async function POST(request: Request): Promise<Response> {
       fallbackFromProvider: null,
     };
     let retrievalUnderstanding = fallbackLegalRetrievalUnderstanding(effectiveQuestion);
+    let retrievalPlanningAvailable = false;
     const understandingStage = budget.beginStage("query_understanding", { timeoutMs: 6_200 });
     try {
       retrievalUnderstanding = await understandLegalRetrievalQuery({
@@ -478,6 +479,7 @@ export async function POST(request: Request): Promise<Response> {
         timeoutMs: 6_000,
         maxAttempts: 1,
       });
+      retrievalPlanningAvailable = true;
       understandingStage.complete();
     } catch (error) {
       understandingStage.fail();
@@ -495,18 +497,26 @@ export async function POST(request: Request): Promise<Response> {
         indexQueries: retrievalUnderstanding.corpusQueries,
         rerankingQuestion: retrievalUnderstanding.standaloneQuestion,
         requiredConcepts: retrievalUnderstanding.requiredConcepts,
+        coverageRequirements: retrievalUnderstanding.requiredConcepts.map((requirement, index) => ({
+          id: `requirement-${index + 1}`,
+          statement: requirement.statement,
+          alternatives: requirement.alternatives,
+        })),
+        planningAvailable: retrievalPlanningAvailable,
         lexSearchQueries: retrievalUnderstanding.lexSearchQueries,
         signal: retrievalStage.signal,
         limit: 4,
         budgetMs: 12_000,
+        requireHybrid: true,
         correlationId: idempotencyKey,
         scope: { asOfDate: applicableAt ? parsed.data.legalContextDate ?? null : null },
-        rerankCandidates: async ({ question, candidates, limit }) => {
+        rerankCandidates: async ({ question, requirements, candidates, limit }) => {
           const rerankingStage = retrievalBudget.beginStage("corpus_reranking", { timeoutMs: 7_200 });
           try {
             const ranked = await rerankLegalCorpusCandidates({
               question,
               locale,
+              requirements,
               candidates,
               limit,
               requestId: `${idempotencyKey}:corpus-reranking`,

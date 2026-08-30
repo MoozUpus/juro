@@ -202,6 +202,18 @@ test("the staging corpus D1 facade blocks every exposed write path", async () =>
     const readOnly = createReadOnlyLegalCorpusDatabase(d1);
     const row = await readOnly.prepare("SELECT 7 AS value").first<{ value: number }>();
     assert.equal(row?.value, 7);
+    const batched = await readOnly.batch([
+      readOnly.prepare("SELECT 8 AS value"),
+      readOnly.prepare("SELECT 9 AS value"),
+    ]);
+    assert.deepEqual(
+      batched.map((result) => Number((result.results[0] as { value: number }).value)),
+      [8, 9],
+    );
+    const otherReadOnly = createReadOnlyLegalCorpusDatabase(d1);
+    assert.throws(() => readOnly.batch([otherReadOnly.prepare("SELECT 10 AS value")]), {
+      name: "LegalCorpusReadOnlyDatabaseError",
+    });
     assert.throws(() => readOnly.prepare("INSERT INTO users DEFAULT VALUES"), {
       name: "LegalCorpusReadOnlyDatabaseError",
     });

@@ -190,6 +190,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST",
       "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
       "LEGAL_CORPUS_HISTORICAL_ENABLED",
+      "LEGAL_CORPUS_DENSE_ENABLED",
       "LEGAL_CORPUS_SHADOW_MODE",
     ]);
     for (const flag of [

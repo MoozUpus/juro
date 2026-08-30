@@ -36,10 +36,16 @@ export default defineConfig(async ({ command }) => {
       // This command exists to exercise the indexed staging corpus. Keep the
       // slower live-Lex freshness fallback out of this opt-in mode; stale
       // indexed evidence is still labelled by the normal freshness warning.
-      LEGAL_CORPUS_LIVE_LEXUZ_ENABLED: "false",
+      LEGAL_CORPUS_LIVE_LEXUZ_ENABLED: process.env.JURO_STAGING_LIVE_LEXUZ === "true" ? "true" : "false",
       LEGAL_CORPUS_REMOTE_READ_ENABLED: "true",
       LEGAL_CORPUS_SHADOW_MODE: "false",
-      LEGAL_CORPUS_DENSE_ENABLED: "false",
+      LEGAL_CORPUS_DENSE_ENABLED: "true",
+      LEGAL_RERANKER_VERSION: "provision-set-v1",
+      LEGAL_CORPUS_INDEX_VERSION: "staging-20260830-provision-v1",
+      OPENAI_RETRIEVAL_MODEL: "gpt-5.6-terra",
+      OPENAI_RERANK_MODEL: "text-embedding-3-large",
+      QDRANT_URL: "https://qdrant.internal",
+      QDRANT_COLLECTION: "juro_legal_staging_provision_v1",
     }
     : localVars;
 
@@ -70,6 +76,10 @@ export default defineConfig(async ({ command }) => {
             userConfig.compatibility_date = agentPreviewCompatibilityDate;
           }
           if (useStagingCorpusReads) {
+            // The deployed corpus Worker may lag local read-tool changes, so
+            // development binds the staging database read-only at the corpus
+            // boundary. Retrieval batches statistics, candidates and evidence
+            // hydration to keep this path to a small number of remote trips.
             userConfig.d1_databases = [
               {
                 binding: "LEGAL_CORPUS_READ_DB",
@@ -79,6 +89,16 @@ export default defineConfig(async ({ command }) => {
               },
               ...(userConfig.d1_databases ?? []).filter(
                 (binding) => binding.binding !== "LEGAL_CORPUS_READ_DB",
+              ),
+            ];
+            userConfig.services = [
+              {
+                binding: "LEGAL_CORPUS_READ_SERVICE",
+                service: "juro-legal-corpus-staging",
+                remote: true,
+              },
+              ...(userConfig.services ?? []).filter(
+                (binding) => binding.binding !== "LEGAL_CORPUS_READ_SERVICE",
               ),
             ];
           }

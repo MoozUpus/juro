@@ -254,11 +254,45 @@ test("bounded research starts the original hybrid search before generated tasks 
       "semantic act provision",
       "second statutory formulation",
       "third statutory formulation",
+      "fourth statutory formulation",
+      "fifth statutory formulation",
     ]);
-    assert.equal(result.queriesRun, 4);
+    assert.equal(result.queriesRun, 6);
   } finally {
     sqlite.close();
   }
+});
+
+test("each Coverage Requirement remains an independent precise search branch", async () => {
+  const calls: string[] = [];
+  const result = await runJuroLegalResearchLoop({
+    db: {} as D1Database,
+    originalQuery: "ребенку исполнилось три года",
+    generatedQueries: [],
+    coverageRequirements: [
+      {
+        id: "status",
+        statement: "социальный отпуск по уходу за ребенком до трех лет",
+        alternatives: ["социальный отпуск по уходу за ребенком до трех лет"],
+      },
+      {
+        id: "preservation",
+        statement: "сохранение места работы в период отпуска",
+        alternatives: ["сохранение места работы в период отпуска"],
+      },
+    ],
+    locale: "ru",
+    search: async ({ query }) => {
+      calls.push(query);
+      return [];
+    },
+  });
+  assert.deepEqual(calls, [
+    "ребенку исполнилось три года",
+    "социальный отпуск по уходу за ребенком до трех лет",
+    "сохранение места работы в период отпуска",
+  ]);
+  assert.equal(result.queriesRun, 3);
 });
 
 test("semantic reranking can reject a one-word collision before exact-window hydration", async () => {
@@ -384,7 +418,7 @@ test("semantic reranking can reject a one-word collision before exact-window hyd
   }
 });
 
-test("one exact article split across chunks bypasses the model reranker", async () => {
+test("one exact provision split across chunks bypasses the model reranker and deduplicates the provision", async () => {
   const hash = "e".repeat(64);
   const exact = {
     chunkId: "labour-409",
@@ -461,7 +495,7 @@ test("one exact article split across chunks bypasses the model reranker", async 
   assert.equal(hydrationBatches, 2);
   assert.equal(results.every((result) => result.rerankingOutcome === "not_needed"), true);
   for (const result of results) {
-    assert.deepEqual(result.hits.map((hit) => hit.passage.chunkId), [exact.chunkId, continuation.chunkId]);
+    assert.deepEqual(result.hits.map((hit) => hit.passage.chunkId), [exact.chunkId]);
   }
 });
 
@@ -491,6 +525,7 @@ test("bare article and generic jurisdiction wording do not bypass reranking", as
     "статья 163",
     "статья 163 закона Республики Узбекистан",
     "трудовой спор, статья 163",
+    "По ст. 163 Трудового кодекса можно ли уволить работника и какие ещё гарантии действуют?",
   ]) {
     const result = await runJuroLegalResearchLoop({
       db: {} as D1Database,
@@ -506,7 +541,7 @@ test("bare article and generic jurisdiction wording do not bypass reranking", as
     assert.equal(result.rerankingOutcome, "rejected");
     assert.deepEqual(result.hits, []);
   }
-  assert.equal(rerankerCalls, 3);
+  assert.equal(rerankerCalls, 4);
 });
 
 test("an aborted batch hydration never starts individual fallback reads", async () => {
@@ -710,7 +745,7 @@ test("configured semantic reranker fails closed on rejection or an empty decisio
   assert.equal(hydrationCalls, 0);
 });
 
-test("reranker outage keeps multiple strictly grounded fallback candidates for final synthesis", async () => {
+test("mandatory reranker outage discards the indexed packet instead of guessing a fallback", async () => {
   const hash = "e".repeat(64);
   const passage = (chunkId: string, articleNumber: string, exactQuote: string) => ({
     chunkId,
@@ -788,9 +823,128 @@ test("reranker outage keeps multiple strictly grounded fallback candidates for f
     },
   });
 
-  assert.equal(result.rerankingOutcome, "deterministic_fallback");
-  assert.deepEqual(result.hits.map((hit) => hit.passage.chunkId), [leave.chunkId, pregnancy.chunkId]);
-  assert.equal(result.hits.every((hit) => hit.selectionMethod === "deterministic_fallback"), true);
+  assert.equal(result.rerankingOutcome, "failed_closed");
+  assert.equal(result.rerankingFailureCode, "Error");
+  assert.deepEqual(result.hits, []);
+});
+
+test("reranker maps a provision set to requirements and performs one repair search", async () => {
+  const hash = "9".repeat(64);
+  const passage = (provisionId: string, articleNumber: string, exactQuote: string) => ({
+    chunkId: `${provisionId}:chunk-1`,
+    provisionId,
+    documentId: "labour-code",
+    documentTitle: "Трудовой кодекс Республики Узбекистан",
+    documentType: "code",
+    documentNumber: null,
+    adoptingAuthority: null,
+    sourceClass: "OFFICIAL_LEGISLATION" as const,
+    articleNumber,
+    articleTitle: `Гарантия ${articleNumber}`,
+    exactQuote,
+    sourceUrl: "https://lex.uz/ru/docs/-6257288",
+    language: "ru" as const,
+    status: "active" as const,
+    validFrom: "2023-04-30",
+    validTo: null,
+    versionDate: "2026-07-25",
+    fetchedAt: "2026-08-28T00:00:00.000Z",
+    contentHash: hash,
+  });
+  const leave = passage(
+    "labour-215",
+    "215",
+    "В период социального отпуска место работы сохраняется, а прекращение договора работодателем не допускается.",
+  );
+  const pregnancy = passage(
+    "labour-408",
+    "408",
+    "Прекращение трудового договора работодателем с беременной женщиной не допускается.",
+  );
+  const byChunk = new Map([leave, pregnancy].map((item) => [item.chunkId, item]));
+  const searches: string[] = [];
+  let rerankerCalls = 0;
+  const result = await runJuroLegalResearchLoop({
+    db: {} as D1Database,
+    originalQuery: "можно ли уволить сотрудницу в декрете",
+    rerankingQuestion: "увольнение сотрудницы в социальном отпуске или при беременности",
+    coverageRequirements: [{
+      id: "leave",
+      statement: "гарантия сохранения работы во время социального отпуска",
+      alternatives: ["социальный отпуск", "сохранение места работы"],
+    }],
+    locale: "ru",
+    readTools: {
+      findLegalSources: async ({ query }) => {
+        searches.push(query);
+        return /беремен/u.test(query) ? [pregnancy] : [leave];
+      },
+      inspectLegalAct: async ({ anchorChunkId }) => {
+        const item = byChunk.get(anchorChunkId)!;
+        return {
+          documentId: item.documentId,
+          title: item.documentTitle,
+          documentType: item.documentType,
+          documentNumber: null,
+          adoptingAuthority: null,
+          adoptionDate: null,
+          publicationDate: null,
+          language: item.language,
+          status: item.status,
+          validFrom: item.validFrom,
+          validTo: null,
+          versionDate: item.versionDate,
+          sourceUrl: item.sourceUrl,
+          fetchedAt: item.fetchedAt,
+        };
+      },
+      readLegalProvisions: async ({ anchorChunkId }) => {
+        const item = byChunk.get(anchorChunkId)!;
+        return [{
+          id: item.chunkId,
+          article: item.articleNumber,
+          paragraph: null,
+          text: item.exactQuote,
+          textSha256: hash,
+          quality: "high",
+        }];
+      },
+    },
+    rerankCandidates: async ({ candidates, requirements }) => {
+      rerankerCalls += 1;
+      const ids = new Set(candidates.map((candidate) => candidate.provisionId));
+      const pregnancyRequirement = requirements.find((requirement) =>
+        /берем/u.test(requirement.statement)
+      );
+      return {
+        outcome: "selected",
+        selections: [
+          ...(ids.has(leave.provisionId) ? [{ provisionId: leave.provisionId!, requirementIds: ["leave"] }] : []),
+          ...(ids.has(pregnancy.provisionId) && pregnancyRequirement
+            ? [{ provisionId: pregnancy.provisionId!, requirementIds: [pregnancyRequirement.id] }]
+            : []),
+        ],
+        discoveredRequirements: rerankerCalls === 1 ? [{
+          statement: "запрет увольнения беременной женщины",
+          alternatives: ["беременная женщина", "беременность"],
+        }] : [],
+      };
+    },
+  });
+
+  assert.equal(rerankerCalls, 2);
+  assert.equal(result.repairQueriesRun, 1);
+  assert.equal(searches.length, 3);
+  assert.equal(result.coverageStatus, "good_coverage");
+  assert.deepEqual(result.coverageRequirements.map((requirement) => [
+    requirement.requirementId,
+    requirement.status,
+    requirement.provisionIds,
+  ]), [
+    ["leave", "covered", ["labour-215"]],
+    ["discovered-2", "covered", ["labour-408"]],
+  ]);
+  assert.deepEqual(result.hits.map((hit) => hit.passage.articleNumber), ["215", "408"]);
 });
 
 test("selected anchors retain independently responsive provisions from their exact window", async () => {
@@ -868,14 +1022,12 @@ test("selected anchors retain independently responsive provisions from their exa
         provisionSequence: 407,
       }],
     },
-    rerankCandidates: async () => {
-      throw new Error("transient reranker failure");
-    },
+    rerankCandidates: async () => [anchor.chunkId],
   });
 
-  assert.equal(result.rerankingOutcome, "deterministic_fallback");
-  assert.equal(result.rerankingFailureCode, "Error");
-  assert.equal(result.hits[0]?.selectionMethod, "deterministic_fallback");
+  assert.equal(result.rerankingOutcome, "selected");
+  assert.equal(result.rerankingFailureCode, null);
+  assert.equal(result.hits[0]?.selectionMethod, "semantic_reranker");
   assert.deepEqual(
     result.hits[0]?.responsiveSpans.map((span) => span.article?.match(/\d+/u)?.[0]),
     ["408", "409"],
@@ -933,9 +1085,7 @@ test("selected anchors retain independently responsive provisions from their exa
         provisionSequence: 408,
       }],
     },
-    rerankCandidates: async () => {
-      throw new Error("transient reranker failure");
-    },
+    rerankCandidates: async () => [reverseAnchor.chunkId],
   });
 
   assert.deepEqual(
@@ -992,6 +1142,26 @@ test("bilingual colloquial benchmark reaches recall@8 >= 90% and hydrates every 
       "request-scoped statutory query must bridge colloquial wording without dense vectors",
     );
     assert.equal(sparseOnly.hits.some((hit) => hit.passage.denseRank !== undefined), false);
+
+    let rerankerCalls = 0;
+    const mandatoryDenseFailure = await runJuroLegalResearchLoop({
+      db: d1,
+      originalQuery: maternityCase.question,
+      generatedQueries: [maternityCase.semanticQuery],
+      locale: maternityCase.locale,
+      requireDense: true,
+      denseSearch: async () => { throw new Error("provider unavailable"); },
+      rerankCandidates: async () => {
+        rerankerCalls += 1;
+        return { outcome: "selected", selections: [] };
+      },
+    });
+    assert.equal(rerankerCalls, 0, "sparse-only candidates must not reach the mandatory reranker");
+    assert.equal(mandatoryDenseFailure.hits.length, 0);
+    assert.equal(mandatoryDenseFailure.denseUnavailable, true);
+    assert.equal(mandatoryDenseFailure.rerankingOutcome, "failed_closed");
+    assert.equal(mandatoryDenseFailure.rerankingFailureCode, "DENSE_UNAVAILABLE");
+    assert.equal(mandatoryDenseFailure.indexedAvailability, "unavailable");
 
     const production = await Promise.all([
       readFile(new URL("../lib/legal-corpus/retrieval.ts", import.meta.url), "utf8"),

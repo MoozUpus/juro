@@ -26,6 +26,7 @@ export interface BuilderRuntimeEnv {
   LEGAL_CORPUS_HISTORICAL_ENABLED?: string;
   LEGAL_CORPUS_DENSE_ENABLED?: string;
   LEGAL_CORPUS_SHADOW_MODE?: string;
+  LEGAL_CORPUS_INDEX_VERSION?: string;
   /** Vite-dev-only staging corpus binding, wrapped as read-only before use. */
   LEGAL_CORPUS_READ_DB?: D1Database;
   /** Optional private corpus Worker read service for deployed environments. */
@@ -35,6 +36,11 @@ export interface BuilderRuntimeEnv {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_CHAT_MODEL?: string;
+  /** Dedicated low-latency legal retrieval planner. */
+  OPENAI_RETRIEVAL_MODEL?: string;
+  /** Dedicated, independently deployable legal provision-set reranker. */
+  OPENAI_RERANK_MODEL?: string;
+  LEGAL_RERANKER_VERSION?: string;
   OPENAI_DEEP_MODEL?: string;
   OPENAI_FALLBACK_MODEL?: string;
   OPENAI_TRANSCRIPTION_MODEL?: string;

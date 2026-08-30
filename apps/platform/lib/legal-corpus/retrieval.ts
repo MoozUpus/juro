@@ -23,10 +23,14 @@ export type LegalCorpusSearchScope = {
   /** Uzbekistan legal calendar date. When present, retrieval selects the
    * immutable version whose half-open validity interval covers this date. */
   asOfDate?: string | null;
+  /** Frozen sparse view paired with the active dense collection. */
+  indexManifestId?: string | null;
 };
 
 export type LegalCorpusRetrievalItem = {
   chunkId: string;
+  /** Stable immutable provision identity. Multiple chunks may belong to one provision. */
+  provisionId?: string;
   documentId: string;
   documentTitle: string;
   documentType: string | null;
@@ -52,6 +56,8 @@ export type LegalCorpusRetrievalItem = {
   fusionScore?: number;
   /** True only after an exact immutable D1 window was loaded around the hit. */
   windowHydrated?: boolean;
+  /** Private-boundary search packet; never publish without exact D1 hydration. */
+  candidateExcerptOnly?: boolean;
 };
 
 export type DenseCorpusCandidate = Pick<LegalCorpusRetrievalItem, "chunkId"> & {
@@ -190,6 +196,10 @@ async function hydrateDenseCandidates(input: {
 
   const scope = input.scope;
   const asOfDate = scope.asOfDate ?? null;
+  const indexManifestId = scope.indexManifestId ?? null;
+  if (indexManifestId && !/^[A-Za-z0-9:_-]{1,160}$/u.test(indexManifestId)) {
+    throw new TypeError("LEGAL_CORPUS_INDEX_MANIFEST_REJECTED");
+  }
   const tenantId = scope.tenantId ?? null;
   const userId = scope.userId ?? null;
   const matterId = scope.matterId ?? null;
@@ -198,7 +208,7 @@ async function hydrateDenseCandidates(input: {
   // Repeated occurrences of one common token are only a secondary signal;
   // final ordering is calculated by BM25 after this bounded SQL selection.
   const rows = await input.db.prepare(`
-    SELECT chunk.id AS chunkId,
+    SELECT chunk.id AS chunkId,provision.id AS provisionId,
       document.id AS documentId,coalesce(variant.title,document.title) AS documentTitle,
       document.document_type AS documentType,document.document_number AS documentNumber,
       document.adopting_authority AS adoptingAuthority,document.source_class AS sourceClass,
@@ -223,8 +233,14 @@ async function hydrateDenseCandidates(input: {
         AND document.source_class='OFFICIAL_LEGISLATION'
         AND document.scope='global'))
       AND (
-        (? IS NULL AND variant.current_version_id=version.id
-          AND (?=1 OR provision.status='active'))
+        (? IS NULL AND (
+          (? IS NULL AND variant.current_version_id=version.id)
+          OR (? IS NOT NULL AND EXISTS (
+            SELECT 1 FROM legal_corpus_search_index_versions index_version
+            WHERE index_version.manifest_id=? AND index_version.variant_id=variant.id
+              AND index_version.version_id=version.id
+          ))
+        ) AND (?=1 OR provision.status='active'))
         OR
         (? IS NOT NULL AND version.valid_from IS NOT NULL
           AND version.valid_from<=?
@@ -251,7 +267,8 @@ async function hydrateDenseCandidates(input: {
   `).bind(
     ...chunkIds,
     input.officialOnly ? 1 : 0,
-    asOfDate, scope.includeHistorical ? 1 : 0,
+    asOfDate, indexManifestId, indexManifestId, indexManifestId,
+    scope.includeHistorical ? 1 : 0,
     asOfDate, asOfDate, asOfDate,
     asOfDate, asOfDate, asOfDate,
     tenantId, tenantId,
@@ -266,6 +283,7 @@ async function hydrateDenseCandidates(input: {
     if (!row) return [];
     return [{
       chunkId: row.chunkId,
+      provisionId: row.provisionId,
       documentId: row.documentId,
       documentTitle: row.documentTitle,
       documentType: row.documentType,
@@ -299,12 +317,19 @@ export async function retrieveLegalCorpus(input: {
   scope?: LegalCorpusSearchScope;
   limit?: number;
   denseSearch?: (query: string, limit: number) => Promise<DenseCorpusCandidate[]>;
+  /** The versioned Qdrant candidate provider already fuses its named dense
+   * and sparse vectors. Avoid repeating the complete sparse scan in D1. */
+  denseSearchIncludesSparse?: boolean;
   officialOnly?: boolean;
 }): Promise<LegalCorpusRetrievalItem[]> {
   const scope = input.scope ?? {};
   const asOfDate = scope.asOfDate ?? null;
+  const indexManifestId = scope.indexManifestId ?? null;
   if (asOfDate !== null && !/^\d{4}-\d{2}-\d{2}$/u.test(asOfDate)) {
     throw new TypeError("LEGAL_CORPUS_AS_OF_DATE_REJECTED");
+  }
+  if (indexManifestId && !/^[A-Za-z0-9:_-]{1,160}$/u.test(indexManifestId)) {
+    throw new TypeError("LEGAL_CORPUS_INDEX_MANIFEST_REJECTED");
   }
   const limit = Math.max(1, Math.min(input.limit ?? 8, 30));
   const variants = queryVariants(input.query);
@@ -320,31 +345,17 @@ export async function retrieveLegalCorpus(input: {
   const matterId = scope.matterId ?? null;
   const candidateLimit = Math.min(360, limit * 12);
 
-  const termStats = await input.db.prepare(`
+  let termStats: Array<{ term: string; documentFrequency: number }> = [];
+  let rows: SparseCandidateRow[] = [];
+  if (!input.denseSearchIncludesSparse) {
+    const termStatsStatement = input.db.prepare(`
     WITH sparse_entries AS (${sparseEntriesForTerms})
     SELECT term,COUNT(*) AS documentFrequency
     FROM sparse_entries
     GROUP BY term
-  `).bind(...sparseTermBindings).all<{
-    term: string;
-    documentFrequency: number;
-  }>();
-  const documentFrequency = new Map(termStats.results.map((row) => [
-    row.term,
-    Number(row.documentFrequency),
-  ]));
-  // A global COUNT(*) over the complete chunk table made every interactive
-  // search scan the full corpus merely to calculate BM25's N. On the staging
-  // corpus that is more than one million rows and can consume the entire chat
-  // deadline before candidate retrieval begins. Query-relative N preserves
-  // the useful IDF ordering (rare query terms outrank common query terms)
-  // while touching only the postings already selected by the bounded query.
-  const corpusCount = Math.max(
-    2,
-    ...termStats.results.map((row) => Math.max(1, Number(row.documentFrequency)) + 1),
-  );
+  `).bind(...sparseTermBindings);
 
-  const rows = await input.db.prepare(`
+    const rowsStatement = input.db.prepare(`
     WITH sparse_entries AS (${sparseEntriesForTerms}),
     candidate_chunks AS (
       SELECT sparse.chunkId AS chunkId,
@@ -367,8 +378,14 @@ export async function retrieveLegalCorpus(input: {
           AND candidate_document.source_class='OFFICIAL_LEGISLATION'
           AND candidate_document.scope='global'))
         AND (
-          (? IS NULL AND candidate_variant.current_version_id=candidate_version.id
-            AND (?=1 OR candidate_provision.status='active'))
+          (? IS NULL AND (
+            (? IS NULL AND candidate_variant.current_version_id=candidate_version.id)
+            OR (? IS NOT NULL AND EXISTS (
+              SELECT 1 FROM legal_corpus_search_index_versions index_version
+              WHERE index_version.manifest_id=? AND index_version.variant_id=candidate_variant.id
+                AND index_version.version_id=candidate_version.id
+            ))
+          ) AND (?=1 OR candidate_provision.status='active'))
           OR
           (? IS NOT NULL AND candidate_version.valid_from IS NOT NULL
             AND candidate_version.valid_from<=?
@@ -396,7 +413,7 @@ export async function retrieveLegalCorpus(input: {
       ORDER BY matchedTermCount DESC,rawScore DESC,sparse.chunkId ASC
       LIMIT ?
     )
-    SELECT candidate.chunkId AS chunkId,
+    SELECT candidate.chunkId AS chunkId,provision.id AS provisionId,
       document.id AS documentId,coalesce(variant.title,document.title) AS documentTitle,
       document.document_type AS documentType,document.document_number AS documentNumber,
       document.adopting_authority AS adoptingAuthority,document.source_class AS sourceClass,
@@ -425,15 +442,45 @@ export async function retrieveLegalCorpus(input: {
   `).bind(
     ...sparseTermBindings,
     input.officialOnly ? 1 : 0,
-    asOfDate, scope.includeHistorical ? 1 : 0,
+    asOfDate, indexManifestId, indexManifestId, indexManifestId,
+    scope.includeHistorical ? 1 : 0,
     asOfDate, asOfDate, asOfDate,
     asOfDate, asOfDate, asOfDate,
     tenantId, tenantId,
     userId, userId, tenantId, matterId,
     candidateLimit,
-  ).all<SparseCandidateRow>();
+  );
 
-  const candidates = rows.results.filter((row) => scopeAllows(row, scope));
+  // D1 batch executes both independent reads in one remote round trip. This
+  // is especially important for local authenticated verification against the
+  // staging corpus, where a four-query research plan previously doubled its
+  // network latency by awaiting these reads sequentially.
+    const [termStatsResult, rowsResult] = await input.db.batch([
+      termStatsStatement,
+      rowsStatement,
+    ]);
+    termStats = termStatsResult.results as Array<{
+      term: string;
+      documentFrequency: number;
+    }>;
+    rows = rowsResult.results as SparseCandidateRow[];
+  }
+  const documentFrequency = new Map(termStats.map((row) => [
+    row.term,
+    Number(row.documentFrequency),
+  ]));
+  // A global COUNT(*) over the complete chunk table made every interactive
+  // search scan the full corpus merely to calculate BM25's N. On the staging
+  // corpus that is more than one million rows and can consume the entire chat
+  // deadline before candidate retrieval begins. Query-relative N preserves
+  // the useful IDF ordering (rare query terms outrank common query terms)
+  // while touching only the postings already selected by the bounded query.
+  const corpusCount = Math.max(
+    2,
+    ...termStats.map((row) => Math.max(1, Number(row.documentFrequency)) + 1),
+  );
+
+  const candidates = rows.filter((row) => scopeAllows(row, scope));
   const lengths = candidates.map((row) => Math.max(1, Number(row.sparseLength ?? 1)));
   const averageLength = lengths.length > 0
     ? lengths.reduce((total, length) => total + length, 0) / lengths.length
@@ -465,6 +512,7 @@ export async function retrieveLegalCorpus(input: {
   const sparse = scored.slice(0, limit * 2)
     .map(({ row }, index) => ({
       chunkId: row.chunkId,
+      provisionId: row.provisionId,
       documentId: row.documentId,
       documentTitle: row.documentTitle,
       documentType: row.documentType,
@@ -496,9 +544,13 @@ export async function retrieveLegalCorpus(input: {
         scope,
         officialOnly: input.officialOnly ?? false,
       });
-    } catch {
-      // Dense search is an optional provider. Sparse results remain a safe,
-      // complete fallback and no provider error is surfaced as legal evidence.
+    } catch (error) {
+      // A versioned Qdrant provider owns both retrieval branches. Silently
+      // swallowing its failure would turn an unavailable hybrid index into an
+      // apparently valid empty result, so callers must fail the indexed-source
+      // ladder closed. A truly independent dense-only provider remains an
+      // optional enhancement over the D1 sparse branch.
+      if (input.denseSearchIncludesSparse) throw error;
       dense = [];
       hydratedDense = [];
     }

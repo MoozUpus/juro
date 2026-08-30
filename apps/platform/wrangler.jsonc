@@ -197,7 +197,7 @@
         "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "true",
         "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "true",
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
-        "LEGAL_CORPUS_DENSE_ENABLED": "false",
+        "LEGAL_CORPUS_DENSE_ENABLED": "true",
         "LEGAL_CORPUS_SHADOW_MODE": "false",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
         "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
@@ -211,12 +211,16 @@
         "STATUS_HOSTNAME": "status.staging.juro.uz",
         "ADMIN_CONSOLE_ORIGIN": "https://admin.staging.juro.uz",
         "OPENAI_CHAT_MODEL": "gpt-5.6-terra",
+        "OPENAI_RETRIEVAL_MODEL": "gpt-5.6-terra",
+        "OPENAI_RERANK_MODEL": "text-embedding-3-large",
+        "LEGAL_RERANKER_VERSION": "provision-set-v1",
         "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
         "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
         "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
         "ANTHROPIC_DOCUMENT_MODEL": "claude-sonnet-4-6",
         "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6",
-        "QDRANT_COLLECTION": "juro_legal_staging"
+        "QDRANT_URL": "https://qdrant.internal",
+        "QDRANT_COLLECTION": "juro_legal_staging_provision_v1"
       },
       "d1_databases": [
         {

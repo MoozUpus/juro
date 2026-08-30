@@ -272,7 +272,13 @@ export async function callOpenAiStructured<T>(options: {
       }
       if (payload.status && payload.status !== "completed") {
         const reason = payload.incomplete_details?.reason || payload.status;
-        throw new AiUnavailableError(`AI-проверка не завершена: ${reason}.`, "PROVIDER_UNAVAILABLE", true);
+        throw new AiUnavailableError(
+          `AI-проверка не завершена: ${reason}.`,
+          "PROVIDER_UNAVAILABLE",
+          true,
+          null,
+          reason,
+        );
       }
       const text = content.find((item) => item.type === "output_text" && item.text)?.text;
       if (!text) {

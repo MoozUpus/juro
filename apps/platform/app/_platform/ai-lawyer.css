@@ -212,8 +212,44 @@
 }
 
 .ai-context section { border-color: var(--ai-line); }
-.ai-context h2 { color: var(--ai-copy); font-size: 14px; }
-.ai-context section > p { color: var(--ai-muted); font-size: 12px; }
+.ai-context h2 { margin: 0; color: var(--ai-copy); font-size: 14px; line-height: 1.35; }
+.ai-context section > p { color: var(--ai-muted); font-size: 12px; line-height: 1.55; }
+
+.ai-context > section,
+.ai-context > :not([hidden]) + section {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-context > header + section,
+.ai-context-tabs + section,
+.ai-context > section + section { margin-top: 14px; }
+
+.ai-context-empty {
+  min-height: 260px;
+  padding: 30px 14px;
+  align-content: center;
+  justify-items: center;
+  border: 1px dashed var(--ai-line);
+  border-radius: 16px;
+  background: var(--ai-panel-subtle);
+  text-align: center;
+}
+
+.ai-context-empty > span {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 2px;
+  place-items: center;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--brand-gold) 15%, var(--ai-panel));
+  color: var(--brand-gold-text);
+}
+
+.ai-context-empty > span svg { width: 21px; height: 21px; }
+.ai-context-empty .ai-coverage { width: 100%; margin: 2px 0 0; }
+.ai-context-empty > p:last-child { max-width: 29ch; margin: 0; }
 
 .ai-fact,
 .ai-source-card {
@@ -231,6 +267,118 @@
 .ai-fact button svg { width: 14px; }
 .ai-fact small { grid-column: 1 / -1; color: var(--status-success); font-size: 10px; }
 .ai-fact.rejected { opacity: .55; }
+
+/* Feedback is intentionally a quiet answer footer. It expands only when the
+   reader needs to report a specific quality problem. */
+.ai-feedback {
+  display: grid;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--ai-line);
+  border-radius: 14px;
+  background: var(--ai-panel-subtle);
+  color: var(--ai-copy);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.ai-feedback > div:first-child { min-width: 0; }
+.ai-feedback h2 { margin: 0; color: var(--ai-copy); font-size: 13px; line-height: 1.4; }
+.ai-feedback > div:first-child > p { margin: 3px 0 0; color: var(--ai-muted); font-size: 11px; line-height: 1.45; }
+
+.ai-feedback-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ai-feedback-actions > button,
+.ai-feedback summary,
+.ai-feedback-form > button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--ai-line);
+  border-radius: 10px;
+  background: var(--ai-panel);
+  color: var(--ai-copy);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.ai-feedback-actions > button.selected {
+  border-color: color-mix(in srgb, var(--status-success) 42%, var(--ai-line));
+  background: var(--green-bg);
+  color: var(--status-success);
+}
+
+.ai-feedback-actions svg { width: 15px; height: 15px; }
+.ai-feedback details { position: relative; }
+.ai-feedback summary { cursor: pointer; list-style: none; }
+.ai-feedback summary::-webkit-details-marker { display: none; }
+.ai-feedback summary::after { content: "+"; color: var(--ai-muted); font-size: 15px; font-weight: 500; line-height: 1; }
+.ai-feedback details[open] summary::after { content: "−"; }
+
+.ai-feedback-form {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  width: min(430px, calc(100vw - 32px));
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--ai-line);
+  border-radius: 14px;
+  background: var(--ai-panel);
+  color: var(--ai-copy);
+  box-shadow: 0 18px 52px var(--shadow-color);
+}
+
+.ai-feedback-categories,
+.ai-feedback-form label { display: grid; gap: 7px; color: var(--ai-muted); font-size: 11px; font-weight: 700; }
+.ai-feedback-categories > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-feedback-categories button {
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 1px solid var(--ai-line);
+  border-radius: 9px;
+  background: var(--ai-panel-subtle);
+  color: var(--ai-copy);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 740;
+  line-height: 1.3;
+}
+.ai-feedback-categories button.selected {
+  border-color: var(--brand-gold);
+  background: color-mix(in srgb, var(--brand-gold) 14%, var(--ai-panel));
+  color: var(--ai-copy);
+}
+.ai-feedback-form textarea {
+  width: 100%;
+  min-height: 82px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--ai-panel-subtle);
+  color: var(--ai-copy);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.ai-feedback-form textarea::placeholder { color: var(--ai-muted); }
+.ai-feedback-form > button { justify-self: end; border-color: transparent; background: var(--interactive-primary); color: var(--text-inverse); }
+.ai-feedback-status { grid-column: 1 / -1; margin: 0; color: var(--ai-muted); font-size: 11px; }
 
 .ai-workspace-loading { display: grid; min-height: 55vh; place-items: center; }
 .ai-workspace-loading svg { width: 35px; }
@@ -395,6 +543,7 @@
   .ai-context { height: 100%; min-height: 0; }
   .ai-conversations { display: flex; overflow: hidden; flex-direction: column; }
   .ai-dialog { display: flex; overflow: hidden; flex-direction: column; }
+  .ai-dialog { grid-column: 2; }
   .ai-context { overflow-y: auto; overscroll-behavior: contain; }
 }
 
@@ -463,6 +612,12 @@
   .ai-composer-options .ai-modes { grid-template-columns: 1fr 1fr; }
   .ai-date-field { grid-column: 1 / -1; }
   .ai-composer-hint { display: none; }
+  .ai-feedback { padding: 13px; grid-template-columns: 1fr; align-items: stretch; }
+  .ai-feedback-actions { justify-content: stretch; }
+  .ai-feedback-actions > button,
+  .ai-feedback details { flex: 1; }
+  .ai-feedback summary { width: 100%; }
+  .ai-feedback-form { position: fixed; z-index: 120; right: 10px; bottom: calc(78px + env(safe-area-inset-bottom)); left: 10px; width: auto; max-height: min(72dvh, 620px); overflow: auto; }
 }
 
 @media (max-width: 520px) {

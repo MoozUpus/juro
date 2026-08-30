@@ -102,6 +102,63 @@ test("legal corpus embedding provider validates dimensions and records system us
   }
 });
 
+test("legal corpus embedding provider rejects a response from a different model", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const provider = new OpenAiLegalCorpusEmbeddingProvider({
+      APP_ENV: "staging",
+      DB: d1,
+      OPENAI_API_KEY: "server-secret",
+      EMBEDDING_MODEL: "text-embedding-3-large",
+    }, async () => Response.json({
+      object: "list",
+      model: "text-embedding-3-small",
+      data: [{ object: "embedding", index: 0, embedding: Array.from({ length: 1536 }, () => 0.01) }],
+      usage: { prompt_tokens: 4, total_tokens: 4 },
+    }));
+
+    await assert.rejects(
+      () => provider.embed(["legal query"], { feature: "legal_corpus_retrieval" }),
+      (error: unknown) => error instanceof LegalCorpusEmbeddingError
+        && error.code === "LEGAL_CORPUS_EMBEDDING_RESPONSE_REJECTED",
+    );
+    assert.equal(Number((sqlite.prepare(
+      "SELECT count(*) AS count FROM ai_provider_usage_events WHERE status='succeeded'",
+    ).get() as { count: number }).count), 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("legal corpus embedding provider bounds oversized Unicode inputs without dropping their tail", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  let relayedInput = "";
+  try {
+    const provider = new OpenAiLegalCorpusEmbeddingProvider({
+      APP_ENV: "staging", DB: d1, OPENAI_API_KEY: "server-secret",
+    }, async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { input: string[] };
+      relayedInput = body.input[0] ?? "";
+      return Response.json({
+        object: "list",
+        model: "text-embedding-3-large",
+        data: [{ object: "embedding", index: 0, embedding: Array.from({ length: 1536 }, () => 0.01) }],
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      });
+    });
+
+    await provider.embed([
+      `HEAD_SENTINEL ${"Б".repeat(7_000)} TAIL_SENTINEL`,
+    ], { feature: "legal_corpus_indexing" });
+
+    assert.ok(new TextEncoder().encode(relayedInput).byteLength <= 7_500);
+    assert.match(relayedInput, /^HEAD_SENTINEL/u);
+    assert.match(relayedInput, /TAIL_SENTINEL$/u);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("isolated corpus Worker can relay embeddings without receiving the OpenAI secret", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const requests: Request[] = [];
@@ -132,6 +189,7 @@ test("isolated corpus Worker can relay embeddings without receiving the OpenAI s
     assert.equal(vectors[0]?.length, 1536);
     assert.equal(directCalls, 0);
     assert.equal(requests[0]?.url, "https://embeddings.internal/v1/embeddings");
+    assert.equal(requests[0]?.redirect, "manual");
     assert.equal(requests[0]?.headers.get("authorization"), null);
     assert.doesNotMatch(await requests[0]!.clone().text(), /secret|api[_-]?key/iu);
     assert.equal(Number((sqlite.prepare(

@@ -46,6 +46,7 @@ import {
   sparseStorageMode,
   sparseTermWriteStatements,
 } from "./sparse-index";
+import { EXACT_QUOTE_FROM_TEXT } from "./provision-storage";
 
 const MAX_PROVISIONS_PER_VERSION = 8_000;
 const MAX_CHUNKS_PER_VERSION = 16_000;
@@ -1059,7 +1060,7 @@ export async function ingestOfficialLexDocument(
     `).bind(
       provisionId, documentId, variantId, versionId, provision.articleNumber,
       provision.articleNumberNormalized, provision.title, provision.sequence,
-      provision.text, provision.text, currentDocument.language, versionStatus,
+      provision.text, EXACT_QUOTE_FROM_TEXT, currentDocument.language, versionStatus,
       revisionDate, validTo, sourceUrl, provisionHash, now,
     ));
   }

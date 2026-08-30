@@ -15,7 +15,7 @@ import {
 } from "../lib/legal-corpus/lex-core-code-discovery";
 import { featureEnabled } from "../lib/legal-corpus/trust";
 import { runNextLegalCorpusQdrantBackfillBatch } from "../lib/legal-corpus/qdrant-indexing";
-import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
+import { QdrantLegalCorpusClient, type QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
 import { createLegalCorpusQdrantSnapshot } from "../lib/legal-corpus/qdrant-snapshots";
 import { createPacedLexFetch } from "../lib/legal-corpus/lex-request-pacer";
 import { scheduleLegalCorpusMaintenance } from "../lib/legal-corpus/maintenance";
@@ -28,6 +28,14 @@ import {
   handleJuroLegalCorpusReadToolRequest,
   isJuroLegalCorpusReadToolPath,
 } from "../lib/legal-corpus/legal-read-service";
+import {
+  handleLegalSearchIndexBuildRequest,
+  isLegalSearchIndexBuildPath,
+} from "../lib/legal-corpus/search-index-build-service";
+import {
+  resolveActiveLegalSearchIndex,
+  resolveLegalSearchIndexManifest,
+} from "../lib/legal-corpus/search-index-manifest";
 
 export const LEGAL_CORPUS_PROCESS_CRON = "*/5 * * * *";
 export const LEGAL_CORPUS_STAGING_PROCESS_CRON = "*/4 * * * *";
@@ -109,6 +117,7 @@ type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   BACKUP_BUCKET?: R2Bucket;
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
+  LEGAL_CORPUS_INDEX_VERSION?: string;
   LEGAL_CORPUS_EMBEDDING_SERVICE?: Fetcher;
 };
 
@@ -121,6 +130,42 @@ type CorpusWorkResult = {
   status: string;
   safeErrorCode: string | null;
 };
+
+async function versionedSearchIndexOwnsDenseWrites(db: D1Database): Promise<boolean> {
+  try {
+    const row = await db.prepare(`SELECT EXISTS(
+      SELECT 1 FROM legal_corpus_search_index_builds
+      WHERE status IN ('building','complete','finalized')
+    ) AS configured`).first<{ configured: number | string }>();
+    return Number(row?.configured ?? 0) === 1;
+  } catch (error) {
+    if (error instanceof Error && /no such table:\s*legal_corpus_search_index_builds/iu.test(error.message)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function keepActiveLegalSearchIndexAwake(env: LegalCorpusWorkerEnv): Promise<boolean> {
+  const pinnedManifestId = env.LEGAL_CORPUS_INDEX_VERSION?.trim();
+  const active = pinnedManifestId
+    ? await resolveLegalSearchIndexManifest(env.DB, env.APP_ENV, pinnedManifestId)
+    : await resolveActiveLegalSearchIndex(env.DB, env.APP_ENV);
+  if (!active) return false;
+  const client = new QdrantLegalCorpusClient({
+    ...env,
+    QDRANT_COLLECTION: active.qdrantCollection,
+  });
+  await client.assertCompatible();
+  // A schema-compatible collection can still be a fresh empty disk after a
+  // Container stop. The scheduled path is allowed to pay for an exact count;
+  // interactive chat is not. Keep the recovery condition operationally
+  // visible instead of reporting a misleading successful keepalive.
+  if (await client.countPoints(false) !== active.densePointCount) {
+    throw new TypeError("LEGAL_SEARCH_BUILD_COUNT_MISMATCH");
+  }
+  return true;
+}
 
 export function legalCorpusActionableRunErrorCode(input: {
   coreCode: CorpusWorkResult;
@@ -319,6 +364,13 @@ export async function handleLegalCorpusScheduled(
       return;
     }
 
+    // Qdrant's Cloudflare Container filesystem is ephemeral. Touch the active
+    // finalized collection on every four-minute staging process tick so the
+    // singleton cannot scale to zero between user requests. If it was lost,
+    // fail the scheduled run visibly; the frozen manifest can be reconciled
+    // without mutating its identity.
+    const activeSearchIndexAwake = await keepActiveLegalSearchIndexAwake(env);
+
     // The process schedule must be self-starting. Requiring a staff member to
     // press the admin seed button would turn a resumable automatic corpus into
     // a manual approval gate. The seed operation is idempotent, so a fresh or
@@ -400,14 +452,15 @@ export async function handleLegalCorpusScheduled(
       ? await backfillCompressedSparseIndexBatch(env.DB)
       : 0;
     const ingestionClaimed = ingestions.some((result) => result.claimed);
-    if (denseBackfillEnabled(env) && !ingestionClaimed) {
+    const versionedDenseBuild = await versionedSearchIndexOwnsDenseWrites(env.DB);
+    if (denseBackfillEnabled(env) && !ingestionClaimed && !versionedDenseBuild) {
       for (let index = 0; index < QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN; index += 1) {
         const result = await runNextLegalCorpusQdrantBackfillBatch(env);
         qdrantBackfills.push(result);
         if (result.status === "empty" || result.status === "disabled") break;
       }
     }
-    const qdrantSnapshot = denseBackfillEnabled(env)
+    const qdrantSnapshot = denseBackfillEnabled(env) && !versionedDenseBuild
       // Snapshot only after an entire scheduled invocation starts with no
       // remaining backfill work. This creates a clean freeze boundary one
       // cron tick after the last vector write.
@@ -451,6 +504,7 @@ export async function handleLegalCorpusScheduled(
       qdrantBackfillBatches: qdrantBackfills.filter((result) => result.status === "indexed").length,
       qdrantBackfillChunks: qdrantBackfills.reduce((sum, result) => sum + result.chunkCount, 0),
       qdrantSnapshotStatus: qdrantSnapshot?.status ?? "not_attempted",
+      activeSearchIndexAwake,
       titleRepairsDocuments: titleRepairs.documents,
       titleRepairsVariants: titleRepairs.variants,
       resolvedSourceConditionCount,
@@ -459,6 +513,8 @@ export async function handleLegalCorpusScheduled(
   } catch (error) {
     const errorCode = error instanceof LegalCorpusSparseIndexError
       ? error.code
+      : error instanceof Error && /^[A-Z][A-Z0-9_]{2,80}$/u.test(error.message)
+        ? error.message
       : "LEGAL_CORPUS_WORKER_FAILED";
     try {
       await finishRun(env, run, "failed", errorCode);
@@ -496,6 +552,9 @@ const worker = {
     const url = new URL(request.url);
     if (isJuroLegalCorpusReadToolPath(url.pathname)) {
       return handleJuroLegalCorpusReadToolRequest(request, env);
+    }
+    if (isLegalSearchIndexBuildPath(url.pathname)) {
+      return handleLegalSearchIndexBuildRequest(request, env);
     }
     if (request.method !== "GET") return response({ code: "METHOD_NOT_ALLOWED" }, 405);
     if (url.pathname === "/health") {

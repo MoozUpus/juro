@@ -4,18 +4,52 @@ import { z } from "zod";
 import { LEGAL_CORPUS_EMBEDDING_DIMENSIONS } from "../lib/legal-corpus/embeddings";
 import { LEGAL_CORPUS_QDRANT_INSTANCE } from "../lib/legal-corpus/qdrant";
 
-const MAX_EMBEDDING_BATCH = 32;
+const MAX_EMBEDDING_BATCH = 64;
 const MAX_EMBEDDING_INPUT_CHARS = 24_000;
 const MAX_EMBEDDING_REQUEST_BYTES = 800_000;
 const EMBEDDING_TIMEOUT_MS = 20_000;
 const COLLECTION_PATTERN = /^[A-Za-z0-9_-]{1,80}$/u;
 
 type LegalCorpusPrivateServiceEnv = {
+  DB?: D1Database;
+  APP_ENV?: "development" | "staging" | "production";
   QDRANT_CONTAINER?: DurableObjectNamespace<LegalCorpusQdrantContainer>;
   QDRANT_API_KEY?: string;
   QDRANT_COLLECTION?: string;
   OPENAI_API_KEY?: string;
 };
+
+function requestedCollection(request: Request): string | null {
+  const match = new URL(request.url).pathname.match(/^\/collections\/([A-Za-z0-9_-]{1,80})(?:\/|$)/u);
+  return match?.[1] ?? null;
+}
+
+async function collectionBelongsToEnvironment(
+  env: LegalCorpusPrivateServiceEnv,
+  collection: string,
+): Promise<boolean> {
+  if (collection === env.QDRANT_COLLECTION?.trim()) return true;
+  if (!env.DB || !env.APP_ENV) return false;
+  try {
+    const row = await env.DB.prepare(`SELECT 1 AS present
+      FROM legal_corpus_search_index_builds
+      WHERE environment=? AND qdrant_collection=?
+      UNION ALL
+      SELECT 1 AS present FROM legal_corpus_search_index_manifests
+      WHERE environment=? AND qdrant_collection=?
+      LIMIT 1`).bind(
+      env.APP_ENV,
+      collection,
+      env.APP_ENV,
+      collection,
+    ).first<{ present: number }>();
+    return row?.present === 1;
+  } catch {
+    // Before the additive versioned-index migration, only the explicitly
+    // configured legacy collection remains reachable.
+    return false;
+  }
+}
 
 const embeddingRequestSchema = z.object({
   model: z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9._:-]+$/u),
@@ -85,13 +119,18 @@ export async function handleLegalCorpusQdrantServiceRequest(
   request: Request,
   env: LegalCorpusPrivateServiceEnv,
 ): Promise<Response> {
-  const collection = env.QDRANT_COLLECTION?.trim() ?? "";
+  const requestUrl = new URL(request.url);
+  const collection = requestedCollection(request)
+    ?? (request.method === "GET" && requestUrl.pathname === "/healthz"
+      ? env.QDRANT_COLLECTION?.trim() ?? ""
+      : "");
   const expectedApiKey = env.QDRANT_API_KEY?.trim() ?? "";
   const providedApiKey = request.headers.get("api-key") ?? "";
   if (
     !env.QDRANT_CONTAINER
     || !expectedApiKey
     || !COLLECTION_PATTERN.test(collection)
+    || !(await collectionBelongsToEnvironment(env, collection))
     || !qdrantRequestAllowed(request, collection)
   ) {
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
@@ -143,7 +182,9 @@ export async function handleLegalCorpusEmbeddingServiceRequest(
   try {
     const upstream = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
-      redirect: "error",
+      // Workers fetch does not implement `redirect: "error"`; a manual 3xx is
+      // relayed as non-OK and the embedding client rejects it.
+      redirect: "manual",
       signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
       headers: {
         authorization: `Bearer ${env.OPENAI_API_KEY}`,

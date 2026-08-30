@@ -7,6 +7,7 @@ import {
   sparseStorageMode,
   sparseTermWriteStatements,
 } from "./sparse-index";
+import { EXACT_QUOTE_FROM_TEXT } from "./provision-storage";
 import type { LegalCorpusLanguage } from "./trust";
 
 const MAX_PROVISIONS = 8_000;
@@ -370,7 +371,7 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
       ON CONFLICT(version_id,article_number_normalized,sequence) DO NOTHING`).bind(
       provisionId, documentId, variantId, versionId, provision.articleNumber,
       provision.articleNumberNormalized, provision.title, provision.sequence,
-      provision.text, provision.text, input.language, await sha256Hex(provision.text), createdAt,
+      provision.text, EXACT_QUOTE_FROM_TEXT, input.language, await sha256Hex(provision.text), createdAt,
     ));
   }
   for (const chunk of chunks) {

@@ -28,6 +28,13 @@ const COLLECTION_CONFIGURATION = {
   on_disk_payload: true,
 } as const;
 
+const SEARCH_PAYLOAD_INDEXES = [
+  { field_name: "environment", field_schema: "keyword" },
+  { field_name: "scope", field_schema: "keyword" },
+  { field_name: "status", field_schema: "keyword" },
+  { field_name: "is_current", field_schema: "bool" },
+] as const;
+
 export type QdrantCorpusEnv = {
   APP_ENV: "development" | "staging" | "production";
   QDRANT_URL?: string;
@@ -57,13 +64,16 @@ export type QdrantSparseVector = {
 export type QdrantCorpusPoint = {
   id: string;
   chunkId: string;
+  provisionId: string;
   documentId: string;
+  documentTitle: string;
   variantId: string;
   versionId: string;
   language: LegalCorpusLanguage;
   status: "active" | "repealed" | "historical" | "unknown";
   isCurrent: boolean;
   articleNumber: string | null;
+  articleTitle: string | null;
   dense: number[];
   sparse: QdrantSparseVector;
 };
@@ -104,6 +114,18 @@ const countResponseSchema = z.object({
   result: z.object({ count: z.number().int().nonnegative() }).passthrough(),
 }).passthrough();
 
+const queryBatchResponseSchema = z.object({
+  status: z.string(),
+  result: z.array(z.object({ points: z.array(pointSchema) }).passthrough()),
+}).passthrough();
+
+const retrievePointsResponseSchema = z.object({
+  status: z.string(),
+  result: z.array(z.object({
+    id: z.union([z.string(), z.number()]),
+  }).passthrough()),
+}).passthrough();
+
 const snapshotResponseSchema = z.object({
   status: z.string(),
   result: z.object({
@@ -124,6 +146,7 @@ export class QdrantCorpusError extends Error {
       | "QDRANT_SNAPSHOT_REQUIRED"
       | "QDRANT_SNAPSHOT_INVALID",
     readonly retryable: boolean,
+    readonly statusCode?: number,
   ) {
     super(code);
     this.name = "QdrantCorpusError";
@@ -218,7 +241,10 @@ async function requestResponse(
     }
     const requestInit: RequestInit = {
       ...init,
-      redirect: "error",
+      // Cloudflare service bindings reject `redirect: "error"`. Manual mode
+      // preserves fail-closed behaviour because every 3xx reaches the non-OK
+      // branch below and is never followed.
+      redirect: "manual",
       signal: timeout,
       headers,
     };
@@ -236,7 +262,11 @@ async function requestResponse(
     } else {
       response = await fetchImpl(endpoint(env, suffix), requestInit);
     }
-  } catch {
+  } catch (error) {
+    console.warn("legal_corpus_qdrant_request_failed", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message.slice(0, 300) : "unknown",
+    });
     throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", true);
   }
   if (options.allowNotFound && response.status === 404) {
@@ -247,7 +277,7 @@ async function requestResponse(
     const retryable = response.status === 408 || response.status === 409
       || response.status === 429 || response.status >= 500;
     await response.body?.cancel().catch(() => undefined);
-    throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", retryable);
+    throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", retryable, response.status);
   }
   return response;
 }
@@ -281,6 +311,30 @@ function candidates(result: unknown): DenseCorpusCandidate[] {
     output.push({ chunkId, score: point.score });
   }
   return output;
+}
+
+function fuseCandidateRankings(
+  rankings: readonly (readonly DenseCorpusCandidate[])[],
+  limit: number,
+): DenseCorpusCandidate[] {
+  const scores = new Map<string, number>();
+  for (const ranking of rankings) {
+    ranking.forEach((item, index) => {
+      scores.set(item.chunkId, (scores.get(item.chunkId) ?? 0) + 1 / (60 + index + 1));
+    });
+  }
+  return [...scores.entries()]
+    .map(([chunkId, score]) => ({ chunkId, score }))
+    .sort((left, right) => right.score - left.score || left.chunkId.localeCompare(right.chunkId))
+    .slice(0, limit);
+}
+
+function validSparseVector(vector: QdrantSparseVector): boolean {
+  return vector.indices.length > 0
+    && vector.indices.length === vector.values.length
+    && vector.indices.every((value, index) => Number.isInteger(value) && value >= 0
+      && (index === 0 || value > vector.indices[index - 1]!))
+    && vector.values.every((value) => Number.isFinite(value) && value > 0);
 }
 
 function officialFilter(environment: string) {
@@ -373,6 +427,27 @@ export class QdrantLegalCorpusClient {
     return "created";
   }
 
+  /** Ensures every field used by the mandatory official-source filter has a
+   * Qdrant payload index. Without these indexes, a filtered semantic query
+   * scans the complete on-disk collection and cannot meet the chat deadline.
+   * Qdrant treats recreating an identical field index as an idempotent update. */
+  async ensureSearchPayloadIndexes(): Promise<void> {
+    for (const index of SEARCH_PAYLOAD_INDEXES) {
+      const parsed = mutationResponseSchema.safeParse(await request(
+        this.env,
+        "/index?wait=true",
+        {
+          method: "PUT",
+          body: JSON.stringify(index),
+        },
+        this.fetchImpl,
+      ));
+      if (!parsed.success || parsed.data.status !== "ok") {
+        throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+      }
+    }
+  }
+
   async queryDense(vector: readonly number[], limit = 20): Promise<DenseCorpusCandidate[]> {
     if (vector.length !== VECTOR_DIMENSIONS || vector.some((value) => !Number.isFinite(value))) {
       throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
@@ -421,16 +496,58 @@ export class QdrantLegalCorpusClient {
       this.queryDense(input.dense, limit),
       this.querySparse(input.sparse, limit),
     ]);
-    const scores = new Map<string, number>();
-    for (const ranking of [dense, sparse]) {
-      ranking.forEach((item, index) => {
-        scores.set(item.chunkId, (scores.get(item.chunkId) ?? 0) + 1 / (60 + index + 1));
-      });
+    return fuseCandidateRankings([dense, sparse], limit);
+  }
+
+  /** Executes all dense and sparse branches through Qdrant's shared-filter
+   * batch planner, then applies the same JURO-owned RRF used by queryHybrid. */
+  async queryHybridBatch(inputs: readonly {
+    dense: readonly number[];
+    sparse: QdrantSparseVector;
+    limit?: number;
+  }[]): Promise<DenseCorpusCandidate[][]> {
+    if (inputs.length < 1 || inputs.length > 6) {
+      throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
     }
-    return [...scores.entries()]
-      .map(([chunkId, score]) => ({ chunkId, score }))
-      .sort((left, right) => right.score - left.score || left.chunkId.localeCompare(right.chunkId))
-      .slice(0, limit);
+    const searches: unknown[] = [];
+    const branchIndexes: Array<{ dense: number; sparse: number | null; limit: number }> = [];
+    for (const input of inputs) {
+      if (input.dense.length !== VECTOR_DIMENSIONS || input.dense.some((value) => !Number.isFinite(value))) {
+        throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
+      }
+      const limit = Math.max(1, Math.min(Math.trunc(input.limit ?? 20), 50));
+      const dense = searches.push({
+        query: input.dense,
+        using: "dense",
+        filter: officialFilter(this.env.APP_ENV),
+        limit,
+        with_payload: ["chunk_id"],
+        with_vector: false,
+      }) - 1;
+      const sparse = validSparseVector(input.sparse)
+        ? searches.push({
+          query: input.sparse,
+          using: "sparse",
+          filter: officialFilter(this.env.APP_ENV),
+          limit,
+          with_payload: ["chunk_id"],
+          with_vector: false,
+        }) - 1
+        : null;
+      branchIndexes.push({ dense, sparse, limit });
+    }
+    const parsed = queryBatchResponseSchema.safeParse(await request(this.env, "/points/query/batch", {
+      method: "POST",
+      body: JSON.stringify({ searches }),
+    }, this.fetchImpl));
+    if (!parsed.success || parsed.data.status !== "ok" || parsed.data.result.length !== searches.length) {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+    const rankings = parsed.data.result.map((result) => candidates({ status: "ok", result }));
+    return branchIndexes.map((indexes) => fuseCandidateRankings([
+      rankings[indexes.dense] ?? [],
+      ...(indexes.sparse === null ? [] : [rankings[indexes.sparse] ?? []]),
+    ], indexes.limit));
   }
 
   async countPoints(currentOnly = false): Promise<number> {
@@ -445,6 +562,23 @@ export class QdrantLegalCorpusClient {
       throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
     }
     return parsed.data.result.count;
+  }
+
+  async existingPointIds(pointIds: readonly string[]): Promise<Set<string>> {
+    const ids = [...new Set(pointIds)];
+    if (
+      ids.length < 1
+      || ids.length > 256
+      || ids.some((id) => !POINT_ID_PATTERN.test(id))
+    ) throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
+    const parsed = retrievePointsResponseSchema.safeParse(await request(this.env, "/points", {
+      method: "POST",
+      body: JSON.stringify({ ids, with_payload: false, with_vector: false }),
+    }, this.fetchImpl));
+    if (!parsed.success || parsed.data.status !== "ok") {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+    return new Set(parsed.data.result.map((point) => String(point.id)));
   }
 
   async createSnapshot(): Promise<QdrantSnapshotInfo> {
@@ -591,7 +725,9 @@ export class QdrantLegalCorpusClient {
           payload: {
             environment: this.env.APP_ENV,
             chunk_id: point.chunkId,
+            provision_id: point.provisionId,
             document_id: point.documentId,
+            document_title: point.documentTitle,
             variant_id: point.variantId,
             version_id: point.versionId,
             language: point.language,
@@ -599,6 +735,7 @@ export class QdrantLegalCorpusClient {
             is_current: point.isCurrent,
             scope: "global",
             article_number: point.articleNumber ?? "",
+            article_title: point.articleTitle ?? "",
           },
         })),
       }),

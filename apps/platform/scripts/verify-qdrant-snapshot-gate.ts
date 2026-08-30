@@ -80,13 +80,16 @@ async function makePoint(input: {
   return {
     id: await qdrantPointId(input.chunkId),
     chunkId: input.chunkId,
+    provisionId: `${input.documentId}:p${input.vectorIndex + 1}`,
     documentId: input.documentId,
+    documentTitle: `Document ${input.documentId}`,
     variantId: `${input.documentId}:ru`,
     versionId: `${input.documentId}:v1`,
     language: "ru",
     status: "active",
     isCurrent: true,
     articleNumber: String(input.vectorIndex + 1),
+    articleTitle: `Article ${input.vectorIndex + 1}`,
     dense: denseVector(input.vectorIndex),
     sparse: await encodeQdrantSparseTerms([{ term: input.term, weight: 4 }]),
   };

@@ -126,7 +126,7 @@ function citationText(source: LegalAnswerViewSource, locale: "ru" | "uz"): strin
   const act = source.actTitle
     .replace(/Республики Узбекистан/giu, locale === "ru" ? "РУз" : "O‘zR")
     .replace(/O‘zbekiston Respublikasi/giu, locale === "ru" ? "РУз" : "O‘zR");
-  if (article) return locale === "ru" ? `ст. ${article} · ${act}` : `${article}-modda · ${act}`;
+  if (article) return locale === "ru" ? `Ст. ${article} — ${act}` : `${article}-modda — ${act}`;
   if (source.documentNumber) return `${act} · № ${source.documentNumber}`;
   return act;
 }
@@ -152,9 +152,8 @@ function CitationList({
     {sources.map((source) => {
       const label = citationText(source, locale);
       const href = publicSourceUrl(source);
-      if (onCitationSelect) return <button type="button" key={source.sourceId} onClick={() => onCitationSelect(source.sourceId)}>{label}</button>;
       return href
-        ? <a href={href} target="_blank" rel="noopener noreferrer" key={source.sourceId} title={copy.openSource}>{label}<ExternalLink aria-hidden="true" /></a>
+        ? <a href={href} target="_blank" rel="noopener noreferrer" key={source.sourceId} title={copy.openSource} onClick={() => onCitationSelect?.(source.sourceId)}>{label}<ExternalLink aria-hidden="true" /></a>
         : <span key={source.sourceId}>{label}</span>;
     })}
   </span>;

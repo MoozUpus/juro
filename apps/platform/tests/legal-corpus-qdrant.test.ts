@@ -99,6 +99,7 @@ test("Qdrant requests prefer the private service binding over public fetch", asy
   assert.equal(directCalls, 0);
   assert.equal(serviceRequests[0]?.url,
     "https://qdrant.internal/collections/juro_legal_staging/points/query");
+  assert.equal(serviceRequests[0]?.redirect, "manual");
   assert.equal(serviceRequests[0]?.headers.get("api-key"), "test-secret");
 });
 
@@ -224,6 +225,41 @@ test("collection bootstrap refuses to replace an incompatible existing collectio
   assert.deepEqual(methods, ["GET"]);
 });
 
+test("search payload indexes cover every field in the official-source filter", async () => {
+  const requests: Array<{ url: string; method: string; body: unknown }> = [];
+  const client = new QdrantLegalCorpusClient(configured, async (input, init) => {
+    requests.push({
+      url: String(input),
+      method: String(init?.method ?? "GET"),
+      body: JSON.parse(String(init?.body ?? "{}")) as unknown,
+    });
+    return Response.json({ status: "ok", result: { status: "completed" } });
+  });
+  await client.ensureSearchPayloadIndexes();
+  assert.deepEqual(requests, [
+    {
+      url: "https://qdrant.internal.example/collections/juro_legal_staging/index?wait=true",
+      method: "PUT",
+      body: { field_name: "environment", field_schema: "keyword" },
+    },
+    {
+      url: "https://qdrant.internal.example/collections/juro_legal_staging/index?wait=true",
+      method: "PUT",
+      body: { field_name: "scope", field_schema: "keyword" },
+    },
+    {
+      url: "https://qdrant.internal.example/collections/juro_legal_staging/index?wait=true",
+      method: "PUT",
+      body: { field_name: "status", field_schema: "keyword" },
+    },
+    {
+      url: "https://qdrant.internal.example/collections/juro_legal_staging/index?wait=true",
+      method: "PUT",
+      body: { field_name: "is_current", field_schema: "bool" },
+    },
+  ]);
+});
+
 test("snapshot lifecycle preserves Qdrant checksum across download, upload and cleanup", async () => {
   const snapshotBytes = new TextEncoder().encode("verified-qdrant-snapshot");
   const checksum = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", snapshotBytes)),
@@ -295,6 +331,64 @@ test("hybrid Qdrant fusion preserves dense-only and sparse-only candidates", asy
   assert.ok(result.every((item) => item.score > 0));
 });
 
+test("hybrid Qdrant batches all query branches into one filtered request", async () => {
+  const requests: Array<{ url: string; body: { searches: Array<{ using: string }> } }> = [];
+  const client = new QdrantLegalCorpusClient(configured, async (input, init) => {
+    requests.push({
+      url: String(input),
+      body: JSON.parse(String(init?.body)) as { searches: Array<{ using: string }> },
+    });
+    return Response.json({
+      status: "ok",
+      result: [
+        { points: [{ id: 1, score: 0.9, payload: { chunk_id: "dense-a" } }] },
+        { points: [{ id: 2, score: 4.1, payload: { chunk_id: "sparse-a" } }] },
+        { points: [{ id: 3, score: 0.8, payload: { chunk_id: "dense-b" } }] },
+      ],
+    });
+  });
+
+  const result = await client.queryHybridBatch([
+    {
+      dense: denseVector(),
+      sparse: { indices: [2], values: [1] },
+      limit: 5,
+    },
+    {
+      dense: denseVector(0.2),
+      sparse: { indices: [], values: [] },
+      limit: 3,
+    },
+  ]);
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.url,
+    "https://qdrant.internal.example/collections/juro_legal_staging/points/query/batch");
+  assert.deepEqual(requests[0]?.body.searches.map((search) => search.using), [
+    "dense", "sparse", "dense",
+  ]);
+  assert.deepEqual(result[0]?.map((candidate) => candidate.chunkId), ["dense-a", "sparse-a"]);
+  assert.deepEqual(result[1], [{ chunkId: "dense-b", score: 1 / 61 }]);
+});
+
+test("Qdrant reconciliation can identify existing deterministic point IDs without vectors", async () => {
+  const first = await qdrantPointId("chunk:existing");
+  const second = await qdrantPointId("chunk:missing");
+  let requestBody: Record<string, unknown> | null = null;
+  const client = new QdrantLegalCorpusClient(configured, async (input, init) => {
+    assert.equal(String(input),
+      "https://qdrant.internal.example/collections/juro_legal_staging/points");
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json({ status: "ok", result: [{ id: first }] });
+  });
+  assert.deepEqual(await client.existingPointIds([first, second]), new Set([first]));
+  assert.deepEqual(requestBody, {
+    ids: [first, second],
+    with_payload: false,
+    with_vector: false,
+  });
+});
+
 test("sparse hashing and point IDs are deterministic and Qdrant-safe", async () => {
   const first = await encodeQdrantSparseTerms([
     { term: "Mehnat", weight: 1 },
@@ -326,13 +420,16 @@ test("upsert emits named dense+sparse vectors and no private scope payload", asy
   await client.upsert([{
     id: await qdrantPointId("chunk:1"),
     chunkId: "chunk:1",
+    provisionId: "provision:1",
     documentId: "document:1",
+    documentTitle: "Тестовый закон",
     variantId: "variant:1",
     versionId: "version:1",
     language: "ru",
     status: "active",
     isCurrent: true,
     articleNumber: "12",
+    articleTitle: "Тестовая статья",
     dense: denseVector(),
     sparse: { indices: [3, 7], values: [1, 0.5] },
   }]);

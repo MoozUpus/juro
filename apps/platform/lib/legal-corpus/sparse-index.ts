@@ -57,6 +57,7 @@ export function sparseTermsJson(entries: readonly SparseTermEntry[]): string {
 }
 
 type SparseStorageMode = "legacy" | "compressed";
+const sparseStorageModeChecks = new WeakMap<D1Database, Promise<SparseStorageMode>>();
 
 /**
  * The compressed tables are deliberately discovered at runtime. This lets the
@@ -64,11 +65,24 @@ type SparseStorageMode = "legacy" | "compressed";
  * of reading the legacy index without a schema-dependent deployment order.
  */
 export async function sparseStorageMode(db: D1Database): Promise<SparseStorageMode> {
-  const compressed = await db.prepare(`SELECT 1 AS present
+  const existing = sparseStorageModeChecks.get(db);
+  if (existing) return existing;
+  const pending = db.prepare(`SELECT 1 AS present
     FROM sqlite_master
     WHERE type='table' AND name='legal_corpus_sparse_postings'
-  `).first<{ present: number }>();
-  return compressed ? "compressed" : "legacy";
+  `).first<{ present: number }>().then((compressed) => compressed ? "compressed" as const : "legacy" as const);
+  sparseStorageModeChecks.set(db, pending);
+  try {
+    const mode = await pending;
+    // A deployment may start before the additive compressed-index migration.
+    // Recheck legacy mode on later calls, while sharing concurrent probes and
+    // permanently caching the migrated mode.
+    if (mode === "legacy") sparseStorageModeChecks.delete(db);
+    return mode;
+  } catch (error) {
+    sparseStorageModeChecks.delete(db);
+    throw error;
+  }
 }
 
 /**
@@ -184,36 +198,43 @@ export async function loadSparseTermEntriesByChunk(
   if (chunkIds.length > 64 || new Set(chunkIds).size !== chunkIds.length) {
     throw new TypeError("LEGAL_CORPUS_SPARSE_CHUNK_BATCH_REJECTED");
   }
-  const placeholders = chunkIds.map(() => "?").join(",");
   const mode = await sparseStorageMode(db);
-  const compressed = mode === "compressed" ? `
-    UNION ALL
-    SELECT chunk_key.chunk_id AS chunkId,term.term,
-      posting.term_frequency AS termFrequency,posting.title_frequency AS titleFrequency,
-      posting.article_frequency AS articleFrequency
-    FROM legal_corpus_sparse_postings AS posting
-    INNER JOIN legal_corpus_sparse_term_dictionary AS term ON term.id=posting.term_id
-    INNER JOIN legal_corpus_sparse_chunk_keys AS chunk_key ON chunk_key.id=posting.chunk_key_id
-    WHERE chunk_key.chunk_id IN (${placeholders})
-  ` : "";
-  const rows = await db.prepare(`SELECT chunk_id AS chunkId,term,
-      term_frequency AS termFrequency,title_frequency AS titleFrequency,
-      article_frequency AS articleFrequency
-    FROM legal_corpus_sparse_terms
-    WHERE chunk_id IN (${placeholders})
-    ${compressed}
-    ORDER BY chunkId,term`).bind(
-    ...chunkIds,
-    ...(mode === "compressed" ? chunkIds : []),
-  ).all<StoredSparseTermRow>();
   const byChunk = new Map<string, SparseTermEntry[]>();
-  for (const row of rows.results) {
-    const entries = byChunk.get(row.chunkId) ?? [];
-    if (entries.length >= MAX_SPARSE_TERMS_PER_CHUNK) {
-      throw new TypeError("LEGAL_CORPUS_SPARSE_VECTOR_REJECTED");
+  // Compressed mode binds every chunk id twice across the UNION. Keep each D1
+  // statement below the platform's 100-variable ceiling while allowing the
+  // embedding/upsert layer to retain its larger 64-chunk provider batch.
+  const queryBatchSize = mode === "compressed" ? 32 : 64;
+  for (let start = 0; start < chunkIds.length; start += queryBatchSize) {
+    const queryChunkIds = chunkIds.slice(start, start + queryBatchSize);
+    const placeholders = queryChunkIds.map(() => "?").join(",");
+    const compressed = mode === "compressed" ? `
+      UNION ALL
+      SELECT chunk_key.chunk_id AS chunkId,term.term,
+        posting.term_frequency AS termFrequency,posting.title_frequency AS titleFrequency,
+        posting.article_frequency AS articleFrequency
+      FROM legal_corpus_sparse_postings AS posting
+      INNER JOIN legal_corpus_sparse_term_dictionary AS term ON term.id=posting.term_id
+      INNER JOIN legal_corpus_sparse_chunk_keys AS chunk_key ON chunk_key.id=posting.chunk_key_id
+      WHERE chunk_key.chunk_id IN (${placeholders})
+    ` : "";
+    const rows = await db.prepare(`SELECT chunk_id AS chunkId,term,
+        term_frequency AS termFrequency,title_frequency AS titleFrequency,
+        article_frequency AS articleFrequency
+      FROM legal_corpus_sparse_terms
+      WHERE chunk_id IN (${placeholders})
+      ${compressed}
+      ORDER BY chunkId,term`).bind(
+      ...queryChunkIds,
+      ...(mode === "compressed" ? queryChunkIds : []),
+    ).all<StoredSparseTermRow>();
+    for (const row of rows.results) {
+      const entries = byChunk.get(row.chunkId) ?? [];
+      if (entries.length >= MAX_SPARSE_TERMS_PER_CHUNK) {
+        throw new TypeError("LEGAL_CORPUS_SPARSE_VECTOR_REJECTED");
+      }
+      entries.push(storedEntry(row));
+      byChunk.set(row.chunkId, entries);
     }
-    entries.push(storedEntry(row));
-    byChunk.set(row.chunkId, entries);
   }
   for (const chunkId of chunkIds) {
     if ((byChunk.get(chunkId)?.length ?? 0) === 0) {

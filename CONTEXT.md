@@ -36,6 +36,14 @@ _Avoid_: uncertain answer, likely answer, empty Legal Answer
 The visible connection between a legal proposition and the validated source evidence that supports it.
 _Avoid_: source link, bibliography entry, model reference
 
+**Official Citation**:
+A Citation to official law rendered with an act-and-provision label and the validated provision-specific Lex.uz URL, falling back to the validated act URL when necessary.
+_Avoid_: model-authored link, generated anchor, bare article number
+
+**Case Fact**:
+A user-supplied or case-specific circumstance that may be confirmed or rejected and can change the Legal Answer.
+_Avoid_: legal proposition, Citation, source-freshness state
+
 **Indexed Official Corpus**:
 JURO's reviewed and indexed collection of official legal sources that is searched before any online source.
 _Avoid_: knowledge base, local data, internal search
@@ -53,5 +61,17 @@ The strict escalation order from Indexed Official Corpus to Live Official Search
 _Avoid_: parallel search, blended search
 
 **Official Coverage**:
-The degree to which validated official evidence supports the legal propositions needed for a Legal Answer; coverage may be good, partial, weak, or absent.
-_Avoid_: confidence score, source count, retrieval success
+The degree to which validated official evidence collectively supports every material legal proposition needed for a Legal Answer; coverage may be good, partial, weak, or absent.
+_Avoid_: confidence score, best-source score, source count, retrieval success
+
+**Coverage Requirement**:
+A distinct legal proposition or materially different interpretation that must be supported or explicitly left unresolved before JURO can claim good Official Coverage.
+_Avoid_: facet, keyword, query concept
+
+**Provision Set**:
+The complementary official provisions selected to satisfy the Coverage Requirements for one Legal Answer.
+_Avoid_: top results, hit list, citation count
+
+**Source Unavailability**:
+A temporary operational condition that prevents JURO from completing a Source Ladder check. It is distinct from absent Official Coverage and must not be presented as evidence that no applicable law exists.
+_Avoid_: no coverage, no relevant law, insufficient evidence
