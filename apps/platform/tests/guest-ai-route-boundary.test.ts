@@ -33,6 +33,16 @@ test("guest AI route is server-only, same-origin protected, provider-backed, and
   assert.match(route, /enforceLegalDatabaseFreshness/);
   assert.match(route, /completeGuestAiRun/);
   assert.match(route, /failGuestAiRun/);
+  assert.match(route, /assertProviderCallAllowed/);
+  assert.match(route, /beforeProviderCall/);
+  assert.match(route, /recordProviderUsage/);
+  assert.match(route, /feature: "guest_legal_chat"/);
+  assert.match(route, /workspaceId: null/);
+  const validation = route.indexOf("const validated = validateLegalGatewayAnswer");
+  const invalidOutput = route.indexOf('errorCode: "INVALID_AI_OUTPUT"', validation);
+  const successfulUsage = route.indexOf('status: "succeeded"', validation);
+  assert.ok(validation >= 0 && invalidOutput > validation && successfulUsage > invalidOutput);
+  assert.match(route.slice(validation, successfulUsage), /status: "failed"[\s\S]*errorCode: "INVALID_AI_OUTPUT"/);
   assert.match(route, /GUEST_AI_DISABLED/);
   assert.doesNotMatch(route, /(?:mock|fake)(?:Answer|Response|Result)/i);
   assert.doesNotMatch(route, /OPENAI_API_KEY[^\n]+(?:json|Response)/);

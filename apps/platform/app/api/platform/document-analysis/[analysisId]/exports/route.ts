@@ -2,7 +2,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../.
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 import { AnalysisExportError, requestAnalysisExport } from "../../../../../../lib/document-analysis/exporter";
 import { requestAnalysisReportExport, type AnalysisReportFormat } from "../../../../../../lib/document-analysis/report-exporter";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../../../lib/platform/workspace";
 import { z } from "zod";
 
 const exportRequestSchema = z.object({
@@ -38,7 +38,7 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
 export const POST = withApiErrors(async function POST(request: Request, context: { params: Promise<{ analysisId: string }> }) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { analysisId } = await context.params;
   const parsed = exportRequestSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {

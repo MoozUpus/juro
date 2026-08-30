@@ -11,6 +11,7 @@ import {
   type WorkspaceRouteOption,
   type WorkspaceRouteSource,
 } from "./workspace-route-access";
+import { requireWorkspaceContentEditor } from "./permissions";
 
 export { workspaceForUserByIdInDatabase } from "./workspace-route-access";
 
@@ -139,4 +140,10 @@ export async function workspaceForUser(user: UserProfile): Promise<WorkspaceOpti
     name: membership.name,
     type: membership.type === "business" ? "business" : "individual",
   };
+}
+
+export async function workspaceForContentEditor(user: UserProfile): Promise<WorkspaceOption> {
+  const workspace = await workspaceForUser(user);
+  requireWorkspaceContentEditor(workspace.role);
+  return workspace;
 }

@@ -20,7 +20,7 @@ test("secure upload routes enforce streaming, checksum, tenant, quarantine, and 
   const pipeline = source("lib/document-analysis/upload-pipeline.ts");
   for (const route of [init, upload, finalize]) {
     assert.match(route, /requireApiUser/);
-    assert.match(route, /workspaceForUser/);
+    assert.match(route, /workspaceForContentEditor/);
   }
   assert.match(init, /idempotency-key/);
   assert.match(upload, /request\.body/);
@@ -94,9 +94,10 @@ test("analysis revision routes preserve auth, tenant, idempotency, and object-in
   const download = source("app/api/platform/document-analysis/[analysisId]/versions/[versionId]/file/route.ts");
   for (const route of [collection, decision, download]) {
     assert.match(route, /requireApiUser/);
-    assert.match(route, /workspaceForUser/);
     assert.doesNotMatch(route, /OPENAI_API_KEY|ANTHROPIC_API_KEY|callOpenAiJson|callAnthropic/);
   }
+  for (const route of [collection, decision]) assert.match(route, /workspaceForContentEditor/);
+  assert.match(download, /workspaceForUser/);
   assert.match(collection, /idempotency-key/);
   assert.match(collection, /applySuggestedRevisions/);
   assert.match(decision, /decideSuggestedRevision/);
@@ -114,7 +115,7 @@ test("comparison change decisions are validated, tenant-scoped, audited, and do 
   assert.match(route, /O‘zgarish topilmadi/);
   assert.match(route, /assertSafeWrite/);
   assert.match(route, /requireApiUser/);
-  assert.match(route, /workspaceForUser/);
+  assert.match(route, /workspaceForContentEditor/);
   assert.match(route, /decideComparisonChange/);
   assert.match(service, /comparison\.workspace_id=\?/);
   assert.match(service, /comparison\.owner_user_id=\?/);

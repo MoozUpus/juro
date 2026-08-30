@@ -8,7 +8,7 @@ import {
   validateTextUploadBytes,
   validateUploadMagicBytes,
 } from "../../../../../../../lib/document-analysis/upload-pipeline";
-import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../../../lib/platform/workspace";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -30,7 +30,7 @@ export const POST = withApiErrors(async function POST(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { analysisId } = await context.params;
   const db = requireD1();
   try {

@@ -7,7 +7,7 @@ import {
   parseDocumentAnalysisUploadIntent,
   parseUploadIdempotencyKey,
 } from "../../../../../lib/document-analysis/upload-pipeline";
-import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../lib/platform/workspace";
 import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../../lib/operations/operational-feature-flags";
 
 function response(body: unknown, status = 200, headers?: HeadersInit) {
@@ -20,7 +20,7 @@ function response(body: unknown, status = 200, headers?: HeadersInit) {
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   try {
     if (!request.headers.get("content-type")?.toLocaleLowerCase().startsWith("application/json")) {
       return response({ code: "INVALID_CONTENT_TYPE", error: "Инициализация загрузки принимает только JSON." }, 415);

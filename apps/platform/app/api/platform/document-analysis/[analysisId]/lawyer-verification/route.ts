@@ -27,6 +27,8 @@ async function accessibleAnalysis(db: D1Database, analysisId: string, userId: st
       WHERE a.id=? AND (
         a.owner_user_id=? OR EXISTS (
           SELECT 1 FROM lawyer_access_grants g
+           JOIN lawyer_profiles p ON p.user_id=g.lawyer_user_id
+             AND p.status='public_approved' AND p.marketplace_status='public_approved'
            WHERE g.case_id=a.case_id AND g.lawyer_user_id=? AND g.revoked_at IS NULL
              AND (g.expires_at IS NULL OR g.expires_at>?)
         )
@@ -67,6 +69,8 @@ export const POST = withApiErrors(async function POST(request: Request, context:
         AND v.version=(SELECT max(latest.version) FROM analysis_document_versions latest WHERE latest.analysis_id=a.id)
        JOIN lawyer_access_grants g ON g.case_id=a.case_id AND g.lawyer_user_id=?
         AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
+       JOIN lawyer_profiles p ON p.user_id=g.lawyer_user_id
+        AND p.status='public_approved' AND p.marketplace_status='public_approved'
       WHERE a.id=? AND a.case_id IS NOT NULL LIMIT 1`,
   ).bind(user.id, now, analysisId).first<{
     analysisId: string;
