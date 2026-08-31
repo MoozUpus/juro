@@ -45,6 +45,7 @@ export const dependencyHealthEvidenceKinds = [
 // cannot persist arbitrary provider messages, paths, e-mail addresses or IDs.
 export const dependencyHealthSafeErrorCodes = [
   "PROBE_TIMEOUT",
+  "PROBE_LATENCY_HIGH",
   "PROBE_NETWORK_ERROR",
   "PROBE_HTTP_ERROR",
   "PROBE_AUTH_ERROR",

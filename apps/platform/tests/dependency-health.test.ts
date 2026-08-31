@@ -55,6 +55,14 @@ test("0112 records only safe evidence and derives conservative component health"
       safeErrorCode: "PROVIDER_CREDIT_BALANCE_LOW",
       evidenceKind: "synthetic_probe",
     }).success, true);
+    assert.equal(recordDependencyHealthSchema.safeParse({
+      environment: "production",
+      key: "d1",
+      state: "degraded",
+      latencyMs: 2_001,
+      safeErrorCode: "PROBE_LATENCY_HIGH",
+      evidenceKind: "synthetic_probe",
+    }).success, true);
     const initial = await readDependencyHealth({ db: d1, environment: "staging", now });
     assert.equal(initial.length, dependencyHealthKeys.length);
     assert.ok(initial.every((entry) => entry.state === "unknown" && entry.checkedAt === null));

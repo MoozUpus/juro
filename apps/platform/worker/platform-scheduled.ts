@@ -17,7 +17,10 @@ import {
   expectedQueueName,
   type PlatformJobEnv,
 } from "./platform-jobs";
-import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
+import {
+  recordDependencyHealthEvidence,
+  recordScheduledD1HealthEvidence,
+} from "./dependency-health-evidence";
 import { reconcileQueueDlqHealth } from "./queue-dlq-health-reconciliation";
 
 const OUTBOX_CRON = "*/5 * * * *";
@@ -538,7 +541,6 @@ export async function handleScheduled(
     controller.noRetry();
     return;
   }
-  const startedAt = Date.now();
   let failureCode = "OUTBOX_DISPATCH_FAILED";
   try {
     failureCode = "TASK_REMINDER_ENQUEUE_FAILED";
@@ -651,15 +653,10 @@ export async function handleScheduled(
     }
     failureCode = "PRODUCTION_DEPENDENCY_PROBES_FAILED";
     const productionDependencyProbes = await maybeRunProductionDependencyProbes(env);
-    // `scheduled_runs` makes this completion idempotent per cron slot. This
-    // must be a heartbeat, not a throttled product event, otherwise cron
-    // jitter can suppress a real D1 success immediately before its age limit.
-    await recordDependencyHealthEvidence(env, {
-      key: "d1",
-      state: "operational",
-      evidenceKind: "scheduled_job",
-      startedAt,
-    });
+    // Measure D1 directly. The surrounding cron can include R2, queues,
+    // provider calls and retention work, so its total duration is not D1
+    // latency and must never be published as such.
+    await recordScheduledD1HealthEvidence(env);
     failureCode = "SCHEDULE_COMPLETION_FAILED";
     await finishSchedule(env, run, "completed", null);
     logScheduled("info", {

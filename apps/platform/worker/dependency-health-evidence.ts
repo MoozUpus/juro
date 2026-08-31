@@ -46,6 +46,12 @@ export type ProviderDiagnosticSafeErrorCode = Extract<
 >;
 
 const maxLatencyMs = 60_000;
+export const D1_HEALTH_DEGRADED_LATENCY_MS = 2_000;
+
+type D1HealthProbeClock = {
+  nowMs?: () => number;
+  now?: () => Date;
+};
 
 export function dependencyHealthLatencyMs(
   startedAt: number,
@@ -122,6 +128,58 @@ export async function recordDependencyHealthEvidence(
       evidenceKind: evidence.evidenceKind,
     }));
     return false;
+  }
+}
+
+/**
+ * Measure a dedicated, content-free D1 read instead of attributing the
+ * duration of an entire scheduled workflow to the database dependency.
+ * A slow successful read is still degraded evidence: it proves reachability,
+ * but not healthy request-path latency.
+ */
+export async function recordScheduledD1HealthEvidence(
+  env: DependencyHealthEvidenceEnv,
+  clock: D1HealthProbeClock = {},
+): Promise<boolean> {
+  const nowMs = clock.nowMs ?? Date.now;
+  const now = clock.now ?? (() => new Date());
+  const startedAt = nowMs();
+  try {
+    const value = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
+    const checkedAt = now();
+    const latencyMs = dependencyHealthLatencyMs(startedAt, checkedAt.getTime());
+    if (value?.ok !== 1) {
+      return recordDependencyHealthEvidence(env, {
+        key: "d1",
+        state: "degraded",
+        safeErrorCode: "DEPENDENCY_UNAVAILABLE",
+        evidenceKind: "synthetic_probe",
+        startedAt,
+      }, checkedAt);
+    }
+    return recordDependencyHealthEvidence(env, latencyMs > D1_HEALTH_DEGRADED_LATENCY_MS
+      ? {
+        key: "d1",
+        state: "degraded",
+        safeErrorCode: "PROBE_LATENCY_HIGH",
+        evidenceKind: "synthetic_probe",
+        startedAt,
+      }
+      : {
+        key: "d1",
+        state: "operational",
+        evidenceKind: "synthetic_probe",
+        startedAt,
+      }, checkedAt);
+  } catch {
+    const checkedAt = now();
+    return recordDependencyHealthEvidence(env, {
+      key: "d1",
+      state: "degraded",
+      safeErrorCode: "DEPENDENCY_UNAVAILABLE",
+      evidenceKind: "synthetic_probe",
+      startedAt,
+    }, checkedAt);
   }
 }
 
