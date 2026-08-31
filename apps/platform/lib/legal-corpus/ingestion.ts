@@ -1536,6 +1536,10 @@ export async function runNextLegalCorpusIngestionJob(
      * are taken before ordinary catalogue jobs. Due retries and an explicitly
      * reserved version slot retain precedence. */
     preferredCanonicalDocumentIds?: readonly string[];
+    /** Once a staging shard is above the release document floor, prefer
+     * already-queued non-catalogue work (reconciliation/version jobs) so the
+     * release-blocking queue can drain without enabling new discovery. */
+    preferNonCatalogQueuedJob?: boolean;
   } = {},
 ): Promise<LegalCorpusJobRunResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED")
@@ -1577,7 +1581,17 @@ export async function runNextLegalCorpusIngestionJob(
       ?? (languages.length > 0
         ? await findPreferredCatalogJob(env.DB, now, categories, [])
         : null);
-  const fifoCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate
+  const nonCatalogCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate
+    || input.preferNonCatalogQueuedJob !== true
+    ? null
+    : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
+      FROM legal_corpus_ingestion_jobs
+      WHERE status='queued' AND handoff_id IS NULL
+        AND (correlation_id IS NULL OR correlation_id NOT LIKE 'lex-catalog:%')
+        AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+      ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
+    `).bind(now).first<IngestionJob>();
+  const fifoCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate || nonCatalogCandidate
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
       FROM legal_corpus_ingestion_jobs
@@ -1585,7 +1599,8 @@ export async function runNextLegalCorpusIngestionJob(
         AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
     `).bind(now).first<IngestionJob>();
-  const candidate = retryCandidate ?? reservedCandidate ?? preferredCodeCandidate ?? preferredCandidate ?? fifoCandidate;
+  const candidate = retryCandidate ?? reservedCandidate ?? preferredCodeCandidate ?? preferredCandidate
+    ?? nonCatalogCandidate ?? fifoCandidate;
   if (!candidate) return { claimed: false, status: "empty", jobId: null, safeErrorCode: null };
   const claimed = await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
     SET status='running',attempt_count=attempt_count+1,updated_at=?

@@ -72,6 +72,10 @@ const INGESTION_JOBS_PER_RUN = 5;
 // elapsed-time fence above is authoritative and preserves the same
 // single-stream Lex pacing.
 const MAX_STAGING_INGESTION_JOBS_PER_RUN = 20;
+// The document floor is shared with the release gate. Keep this explicit in
+// the Worker so queue-only scheduling does not import the evidence validator
+// merely to choose a durable queue row.
+export const LEGAL_CORPUS_QUEUE_DRAIN_DOCUMENT_FLOOR = 1_500;
 // The coverage-bootstrap join is useful only after the durable fetch queue is
 // close to drained. With tens of thousands of queued discovery rows, scanning
 // every checkpoint, alias and variant before each paced batch can exhaust the
@@ -250,6 +254,23 @@ export function legalCorpusStagingIngestionJobsPerRun(input: {
   const parsed = Number(input.configured);
   if (!Number.isFinite(parsed)) return INGESTION_JOBS_PER_RUN;
   return Math.min(MAX_STAGING_INGESTION_JOBS_PER_RUN, Math.max(INGESTION_JOBS_PER_RUN, Math.floor(parsed)));
+}
+
+/**
+ * Queue-only staging remains fetch-first until the shard has enough canonical
+ * documents for the release floor. Once that floor is proven, let each
+ * bounded batch reserve version debt and prefer release-blocking non-catalogue
+ * jobs; catalog discovery rows remain durable but deferred.
+ */
+export function legalCorpusQueueOnlyPrefersNonCatalog(input: {
+  appEnv?: string;
+  autoIngestEnabled: boolean;
+  canonicalDocuments: number;
+}): boolean {
+  return input.appEnv === "staging"
+    && input.autoIngestEnabled === false
+    && Number.isFinite(input.canonicalDocuments)
+    && Math.floor(input.canonicalDocuments) >= LEGAL_CORPUS_QUEUE_DRAIN_DOCUMENT_FLOOR;
 }
 
 /**
@@ -724,17 +745,25 @@ export async function handleLegalCorpusScheduled(
         ingestionBudget: nominalIngestionBudget,
         continuePager: corePagerContinuationRequired,
       });
-      // The approved queue-only release path is fetch-first: this shard is
-      // below the canonical-document gate while provisions/chunks already
-      // exceed their targets. Due retrying version jobs still win globally,
-      // but reserving fresh version slots here would delay the document gate
-      // without discarding any version work (it remains durable in D1).
-      const versionSlotIndexes = queueProcessingEnabled(env)
-        ? []
-        : legalCorpusVersionSlotIndexes({
+      const queueOnlyReleaseDrain = queueProcessingEnabled(env)
+        ? legalCorpusQueueOnlyPrefersNonCatalog({
+          appEnv: env.APP_ENV,
+          autoIngestEnabled: autoIngest,
+          canonicalDocuments: Number((await env.DB.prepare(
+            "SELECT count(*) AS count FROM legal_corpus_documents",
+          ).first<{ count: number }>())?.count ?? 0),
+        })
+        : false;
+      // Below the document floor, queue-only staging remains fetch-first. Once
+      // the floor is met, reserve bounded version slots and prefer durable
+      // non-catalogue jobs so release-blocking work drains before deferred
+      // Lex-catalog rows. Auto-ingest keeps the historical version policy.
+      const versionSlotIndexes = !queueProcessingEnabled(env) || queueOnlyReleaseDrain
+        ? legalCorpusVersionSlotIndexes({
           ingestionBudget,
           queuedVersionJobs: await queuedLegalCorpusVersionJobs(env.DB),
-        });
+        })
+        : [];
       for (let index = 0; index < ingestionBudget; index += 1) {
         const startCutoffMs = env.APP_ENV === "staging"
           ? LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS
@@ -746,7 +775,7 @@ export async function handleLegalCorpusScheduled(
         await renewRunLease(env, run);
         const reservedVersionSlot = versionSlotIndexes.includes(index);
         const coverageBootstrapSlot = index === 0 && coverageBootstrapTarget !== null;
-        const preferredCatalogSlot = index < legalCorpusStagingIngestionJobsPerRun({
+        const preferredCatalogSlot = !queueOnlyReleaseDrain && index < legalCorpusStagingIngestionJobsPerRun({
           appEnv: env.APP_ENV,
           configured: env.LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN,
         }) && !reservedVersionSlot;
@@ -774,6 +803,7 @@ export async function handleLegalCorpusScheduled(
             ? "version"
             : undefined,
           preferredCanonicalDocumentIds: preferredCoreCodeIds,
+          preferNonCatalogQueuedJob: queueOnlyReleaseDrain,
         });
         ingestions.push(result);
         if (result.status === "empty" || result.status === "disabled") break;

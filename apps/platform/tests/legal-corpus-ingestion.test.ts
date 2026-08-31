@@ -220,6 +220,37 @@ test("approved queue-only processing drains an existing job while auto-ingest st
   }
 });
 
+test("queue-only release drain prefers non-catalogue jobs after the document floor", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = { ...envFor(d1, bucket), LEGAL_CORPUS_AUTO_INGEST_ENABLED: "false" as const };
+    const catalog = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/12348",
+      now,
+      correlationId: "lex-catalog:laws:ru",
+    });
+    const releaseBlocking = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/12349",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "legal-corpus-discovery-reconcile",
+    });
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      allowQueuedProcessing: true,
+      preferNonCatalogQueuedJob: true,
+      now: new Date(now.getTime() + 2_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.equal(run.jobId, releaseBlocking.jobId);
+    assert.equal(run.status, "completed");
+    const untouched = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(catalog.jobId) as { status: string };
+    assert.equal(untouched.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("large version writes renew the scheduler lease between D1 batches", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

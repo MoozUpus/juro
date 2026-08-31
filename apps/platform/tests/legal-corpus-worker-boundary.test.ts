@@ -10,6 +10,7 @@ import {
   legalCorpusCorePagerContinuationRequired,
   legalCorpusIngestionBudgetForCorePager,
   legalCorpusIngestionJobBudget,
+  legalCorpusQueueOnlyPrefersNonCatalog,
   legalCorpusStagingIngestionJobsPerRun,
   legalCorpusIngestionStartAllowed,
   legalCorpusWorkerErrorCode,
@@ -17,6 +18,7 @@ import {
   qdrantBackfillBatchesPerIdleRun,
   renewRunLease,
   LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES,
+  LEGAL_CORPUS_QUEUE_DRAIN_DOCUMENT_FLOOR,
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SCHEDULE_LEASE_MS,
   LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS,
@@ -231,6 +233,22 @@ test("staging shard may use a larger sequential budget without changing producti
   assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "999" }), 20);
   assert.equal(legalCorpusStagingIngestionJobsPerRun({ appEnv: "staging", configured: "bogus" }), 5);
   assert.equal(legalCorpusIngestionJobBudget([], { ingestionJobsPerRun: 20 }), 20);
+});
+
+test("queue-only staging drains release-blocking work after the document floor", () => {
+  assert.equal(LEGAL_CORPUS_QUEUE_DRAIN_DOCUMENT_FLOOR, 1_500);
+  assert.equal(legalCorpusQueueOnlyPrefersNonCatalog({
+    appEnv: "staging", autoIngestEnabled: false, canonicalDocuments: 1_499,
+  }), false);
+  assert.equal(legalCorpusQueueOnlyPrefersNonCatalog({
+    appEnv: "staging", autoIngestEnabled: false, canonicalDocuments: 1_500,
+  }), true);
+  assert.equal(legalCorpusQueueOnlyPrefersNonCatalog({
+    appEnv: "production", autoIngestEnabled: false, canonicalDocuments: 10_000,
+  }), false);
+  assert.equal(legalCorpusQueueOnlyPrefersNonCatalog({
+    appEnv: "staging", autoIngestEnabled: true, canonicalDocuments: 10_000,
+  }), false);
 });
 
 test("dense backfill throughput is explicitly bounded to staging", () => {
