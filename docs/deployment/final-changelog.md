@@ -2,9 +2,20 @@
 
 Status: **living changelog; the full execution goal remains active**
 
-Evidence cutoff: **2026-08-31 04:56 UZT (2026-08-30 23:56 UTC)**
+Evidence cutoff: **2026-08-31 06:37 UZT (2026-08-31 01:37 UTC)**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
+
+## Platform Worker v188
+
+- Merged PR #93 as `f14c3d9bd6b0645f3d9ef5da3bca7ab412138aae`.
+- Deployed Worker version ID `57387083-9f7f-4cd8-a9f2-84414f2604d6` at 100% traffic through workflow `33347775254`.
+- Replaced the misleading whole-cron D1 latency with a direct `SELECT 1 AS ok` probe.
+- Added a 2,000 ms high-latency threshold with safe public code `PROBE_LATENCY_HIGH`.
+- Preserved content-free diagnostics and ensured observability persistence cannot fail completed product work.
+- Verified fresh production D1 evidence: `35 ms`, `operational`, `synthetic_probe`.
+- Preserved truthful overall `degraded` status while OpenAI, Anthropic, and document analysis remain unavailable.
+- Retained Worker v187 ID `65ce3f7f-3469-4c43-854c-d073309befed` as rollback.
 
 ## Public Sites v95
 
@@ -27,15 +38,16 @@ This file records verified production increments. It must not be read as a claim
 - Preserved public redaction of provider-specific billing diagnostics.
 - Retained Worker v186 ID `7b269272-4fc4-4911-97ab-8dfc28c260d0` as rollback.
 
-## Validation summary
+## Latest validation summary
 
-- 25/25 focused provider/document-analysis tests passed.
+- 61/61 focused dependency/scheduler tests passed; the changed-file rerun passed 50/50.
 - 1,138/1,138 platform core tests passed.
-- 216/216 Worker/runtime tests passed.
+- 217/217 Worker/runtime tests passed.
 - Lint, type-check, Cloudflare matrix, generated types, production artifact validation, dependency audits, and licence policy passed.
 - PR, post-merge CI, and production deployment workflows passed.
 - Complete security diff coverage reported zero findings and zero deferred items.
-- Production `/api/status` returns HTTP `200`, remains truthfully `degraded`, reports 6/8 components operational, and reports no active incidents.
+- PR #93 exact-head CI `33347354764`, post-merge CI `33347774965`, and production workflow `33347775254` passed.
+- Production `/api/status` returns HTTP `200`, remains truthfully `degraded`, reports 6/8 components operational, reports no active incidents, and publishes direct D1 evidence at 35 ms.
 
 ## Current limitations
 
@@ -43,4 +55,5 @@ This file records verified production increments. It must not be read as a claim
 - Authenticated role QA remains incomplete for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin.
 - Staging scheduler persistence remains blocked by the excluded staging D1 capacity issue.
 - Legacy origin ownership/TLS risk and the full manual accessibility, responsive, performance, and E2E matrices remain open.
+- The status page has one P2 CSP cleanup: its cross-host `app.juro.uz/favicon.png` request is blocked by `img-src 'self' data: blob:`.
 - All legislation-database, corpus, Lex.uz, Advice.uz, vector, and source-record work remains excluded from this increment.

@@ -1,8 +1,8 @@
 # JURO Performance Audit
 
-Status: **living evidence report; one Worker fix is release-candidate only**
+Status: **living evidence report; Worker v188 deployed and production-verified**
 
-Evidence cutoff: **2026-08-31 06:19 UZT (2026-08-31 01:19 UTC)**
+Evidence cutoff: **2026-08-31 06:37 UZT (2026-08-31 01:37 UTC)**
 
 Scope: Chrome-only lab measurements for the public RU landing page and the public platform login boundary, production artifact budgets, and the truthfulness of published dependency latency. Legislation database/corpus ingestion, Lex.uz/Advice.uz, vectors, and staging-capacity remediation are excluded by owner instruction.
 
@@ -12,7 +12,7 @@ Scope: Chrome-only lab measurements for the public RU landing page and the publi
 - The repeat public-page trace on Fast 4G with 4x CPU throttling recorded **LCP 2,021 ms**, **TTFB 144 ms**, and **CLS 0.00**. The first cold trace recorded LCP 3,358 ms and TTFB 1,974 ms, so the result is variable and not field Core Web Vitals.
 - `https://app.juro.uz/ru/auth/login` recorded **LCP 1,387 ms**, **TTFB 128 ms**, and **CLS 0.0001** under the same mobile conditions; Accessibility scored **100**.
 - The platform login Best Practices score was **92** because the strict application CSP blocks Cloudflare's injected Web Analytics beacon. SEO scored **66** because the private auth route is deliberately protected by both meta and response-header `noindex`; that SEO result is expected and must not be “fixed” by making private application pages indexable.
-- The public production status API currently publishes D1 `latencyMs: 51,446` with `evidenceKind: scheduled_job`. Source inspection proved that v187 times the entire five-minute cron workload and mislabels it as database latency. The release candidate replaces that value with a dedicated constant `SELECT 1` probe and marks a successful probe over 2,000 ms as degraded.
+- Before v188, the public production status API published D1 `latencyMs: 51,446` with `evidenceKind: scheduled_job`. Source inspection proved that v187 timed the entire five-minute cron workload and mislabelled it as database latency. Worker v188 now uses a dedicated constant `SELECT 1` probe; the first accepted production record reported `35 ms`, `operational`, and `synthetic_probe`.
 
 This audit does not claim complete platform performance coverage. Authenticated role journeys, field data, INP, long-task interaction profiles, and every target viewport remain open.
 
@@ -67,7 +67,7 @@ The three Lighthouse failures have bounded explanations:
 2. The route is intentionally blocked from indexing with `meta robots=noindex, nofollow, nocache` and `X-Robots-Tag: noindex, nofollow, noarchive`.
 3. No change to CSP or indexing policy is included in this release. The CSP/Web Analytics conflict requires a separate decision between disabling the injected analytics beacon and explicitly allowing only the required Cloudflare analytics endpoints.
 
-## Production status-latency defect
+## Production status-latency defect and deployed fix
 
 Production `/api/status` at `2026-08-31T01:19:26.010Z` reported:
 
@@ -77,7 +77,7 @@ Production `/api/status` at `2026-08-31T01:19:26.010Z` reported:
 - D1 `evidenceKind: scheduled_job`;
 - OpenAI, Anthropic, and document analysis still degraded with public `PROVIDER_UNAVAILABLE`.
 
-The current production value does not measure a D1 query. The scheduler captured its start before reminders, legal-source health, outbox dispatch, queue/DLQ reconciliation, retention, R2 reconciliation, malware/document/provider probes, and then wrote the total duration as D1 health. The release candidate now:
+The v187 production value did not measure a D1 query. The scheduler captured its start before reminders, legal-source health, outbox dispatch, queue/DLQ reconciliation, retention, R2 reconciliation, malware/document/provider probes, and then wrote the total duration as D1 health. Worker v188 now:
 
 - runs `SELECT 1 AS ok` directly against the bound D1 instance;
 - measures only that awaited query;
@@ -89,7 +89,7 @@ The current production value does not measure a D1 query. The scheduler captured
 
 No migration, DNS change, Sites change, legal-corpus action, or authentication change is required.
 
-## Release-candidate verification
+## Release verification
 
 | Gate | Result |
 | --- | --- |
@@ -104,17 +104,22 @@ No migration, DNS change, Sites change, legal-corpus action, or authentication c
 | Production artifact and size budgets | PASS |
 | Licence policy | PASS, 802 locked packages |
 | Security diff scan | Complete, 4/4 production files, 0 candidates, 0 findings |
+| Pull request | PR #93, exact-head CI `33347354764` PASS |
+| Merge and post-merge CI | Merge `f14c3d9bd6b0645f3d9ef5da3bca7ab412138aae`; CI `33347774965` PASS |
+| Production deployment | Workflow `33347775254` PASS; Worker v188 ID `57387083-9f7f-4cd8-a9f2-84414f2604d6` at 100% traffic |
 
 Artifact sizes remain within the existing release budgets: client CSS 564.7 KiB, initial browser JavaScript 294.1 KiB, largest lazy-route increment 212.1 KiB, fonts 453.6 KiB, images 564.4 KiB, and Worker entry 3,575.4 KiB. These are raw build artifact sizes, not transfer sizes or Core Web Vitals.
 
-## Acceptance after deployment
+## Production acceptance
 
-The fix is accepted only when a later five-minute production schedule writes fresh D1 evidence that:
+The five-minute production schedule generated a fresh public status snapshot at `2026-08-31T01:36:34.129Z`. It proved that:
 
-1. has `evidenceKind: synthetic_probe`;
-2. reports a plausible dedicated-query latency rather than the 50+ second cron duration;
-3. is operational at or below 2,000 ms, or truthfully degraded with `PROBE_LATENCY_HIGH` above that threshold;
-4. leaves the overall status degraded if provider failures remain;
-5. renders consistently on the Chrome status page without new console errors.
+1. D1 has `evidenceKind: synthetic_probe`;
+2. the dedicated-query latency is `35 ms`, rather than the former 50+ second cron duration;
+3. D1 is correctly `operational` below the 2,000 ms threshold;
+4. overall status remains truthfully `degraded` because OpenAI, Anthropic, and document analysis still report public `PROVIDER_UNAVAILABLE`;
+5. Chrome renders the same component state and exposes the D1 evidence in the expanded technical checks.
+
+Chrome also logged one CSP error because `status.juro.uz` requests `https://app.juro.uz/favicon.png` while `img-src` permits only self/data/blob. This does not affect D1 evidence or release routing, but it is a separate P2 cleanup item; the audit therefore does not claim a completely clean status-page console.
 
 The full execution goal remains active after this increment.
