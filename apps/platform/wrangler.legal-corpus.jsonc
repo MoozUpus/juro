@@ -78,7 +78,7 @@
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
         "LEGAL_CORPUS_DENSE_ENABLED": "true",
         "LEGAL_CORPUS_SHADOW_MODE": "true",
-        "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-staging-green-20260831",
+        "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-staging-green2-20260831",
         "QDRANT_URL": "https://qdrant.internal",
         "QDRANT_COLLECTION": "juro_legal_staging_provision_v1",
         "LEGAL_CORPUS_INDEX_VERSION": "staging-20260830-provision-v1",
@@ -96,8 +96,8 @@
         },
         {
           "binding": "LEGAL_DB",
-          "database_name": "juro-legal-catalog-staging-green-20260831",
-          "database_id": "645daa2f-0449-4fbf-8935-ce295735443e",
+          "database_name": "juro-legal-catalog-staging-green2-20260831",
+          "database_id": "23863e4f-6a11-4c25-888a-63abf695248b",
           "migrations_dir": "./legal-drizzle"
         }
       ],
@@ -112,7 +112,7 @@
         },
         {
           "binding": "LEGAL_EVIDENCE_BUCKET",
-          "bucket_name": "juro-legal-evidence-staging-green-20260831"
+          "bucket_name": "juro-legal-evidence-staging-green2-20260831"
         }
       ],
       "services": [
