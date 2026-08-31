@@ -2,9 +2,9 @@
 
 Status: **live baseline, not a completion certificate**
 
-Evidence cutoff: **2026-08-30 19:08 UZT (2026-08-30 14:08 UTC)**
+Evidence cutoff: **2026-08-31 04:56 UZT (2026-08-30 23:56 UTC)**
 
-Repository baseline: `origin/main` at docs merge commit `4e263e37644a19193745bafcd5ecb1b810148804`; live Worker v179 was built from application merge commit `8b650f566ec2f5a9511565a6fdb62eca8a86a7b6`
+Repository baseline: `origin/main` at merge commit `8213511b9dcc89125a283672290bc9bca60a6e3f`; live Worker v187 and public Sites v95 were verified independently after deployment
 
 This inventory separates live production, protected staging, provider-owned Sites surfaces, code-only hostnames, and legacy DNS. It intentionally does not inspect or change the legislation database, legal-corpus contents, Lex.uz ingestion, Advice.uz ingestion, vectors, or legal-source records, following the owner's explicit scope exclusion.
 
@@ -14,7 +14,7 @@ Sources used:
 
 - Cloudflare DNS dashboard for the `juro.uz` zone: 22 active records, including seven Worker hostnames;
 - Wrangler 4.115.0 deployment and version metadata for the platform, admin, staging, and legacy app router Workers;
-- Sites project `appgprj_6a5e1b9547e88191bf759bbeae44d315`, live version 94;
+- Sites project `appgprj_6a5e1b9547e88191bf759bbeae44d315`, live version 95;
 - live HTTPS GETs with redirects enabled;
 - `https://juro.uz/sitemap.xml` and rendered canonical/robots metadata;
 - the current GitHub tree: 161 platform `page.tsx` route definitions and 227 API `route.ts` definitions.
@@ -27,13 +27,13 @@ An HTTP `200` after a redirect proves reachability and the public/auth boundary 
 
 | Host / URL | Environment | Purpose, role, auth, language | Discovery source | Live HTTP / redirect evidence | Indexing and sensitivity | Issue / next action | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| [juro.uz](https://juro.uz/) | production | Public website; anonymous; RU/UZ/EN | Cloudflare apex A records; Sites hosting metadata | `200`; `/`, `/ru`, `/uz`, `/en` all `200`; 78/78 sitemap URLs `200` with self-canonical metadata | `index, follow`; public | Provider hostname is still indexable on live v94; publish saved v95 after approval | `PARTIAL` |
+| [juro.uz](https://juro.uz/) | production | Public website; anonymous; RU/UZ/EN | Cloudflare apex A records; Sites hosting metadata | `200`; `/`, `/ru`, `/uz`, `/en` all `200`; 78/78 sitemap URLs `200` after v95 with self-canonical metadata | `index, follow`; public | v95 preserves the custom-domain indexing contract; saved v94 is the rollback | `VERIFIED` |
 | [www.juro.uz](https://www.juro.uz/) | production alias | Public website alias | Proxied CNAME | One redirect to `https://juro.uz/`, final `200` | Redirect-only; public | Keep as canonical alias | `VERIFIED` |
-| [juro-legaltech.muzaffarbekmurodoff.chatgpt.site](https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/) | production provider surface | Sites service hostname; anonymous; RU/UZ/EN content clone | Sites deployment result | `200`; canonical points to `https://juro.uz/ru` | Live v94 returns `meta robots=index, follow` and no `X-Robots-Tag` | SEO duplicate boundary regressed after v86. Fix is validated and saved as Sites v95, not deployed | `SECURITY RISK` |
+| [juro-legaltech.muzaffarbekmurodoff.chatgpt.site](https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/) | production provider surface | Sites service hostname; anonymous; RU/UZ/EN content clone | Sites deployment result | `200`; canonical points to `https://juro.uz/ru` | v95 returns `X-Robots-Tag: noindex, nofollow, noarchive` on `/`, RU/UZ/EN, `robots.txt`, and `sitemap.xml` | Duplicate-host indexing boundary restored while `juro.uz` remains indexable | `VERIFIED` |
 | [app.juro.uz](https://app.juro.uz/) | production | Client and business platform; auth required; RU/UZ | Cloudflare Worker v179 and `apps/platform/wrangler.jsonc` | One redirect to localized login, final `200`; public lawyer API returns only approved profiles | HTML and header both `noindex`; private data | Fresh status and directory contracts are operational; authenticated Client/Business flow remains incomplete | `PARTIAL` |
 | [lawyer.juro.uz](https://lawyer.juro.uz/) | production | Lawyer entry and workspace; public entry plus protected routes; RU/UZ | Cloudflare Worker v179 and platform host router | Root `200`; isolated `/ru/lawyer/dashboard` continues to lawyer login with the exact lawyer dashboard `returnTo`; registration renders at 360 px without horizontal overflow | `noindex`; private/professional data | Production keeps the dedicated lawyer persona; authenticated Lawyer Chrome flow remains open | `PARTIAL` |
 | [admin.juro.uz](https://admin.juro.uz/) | production | Staff/admin entry; strong auth required; RU | Cloudflare Worker domain; `juro` Worker service binding to `juro-admin` | Redirects to `app.juro.uz/ru/admin/console?reason=admin-session`, final `200` | `noindex`; highly sensitive | Authenticated staff/fresh-MFA Chrome QA is not proven in this audit | `PARTIAL` |
-| [status.juro.uz](https://status.juro.uz/) | production | Public-safe operational status; anonymous | Cloudflare Worker domain; `STATUS_HOSTNAME` | Root and `/api/status` return `200`; latest v179 snapshot reports 6/8 components operational, with AI and document analysis degraded | `noindex`; public-safe telemetry | OpenAI and Anthropic probes both report `PROVIDER_UNAVAILABLE`; retain the truthful degraded label and no-sensitive-data boundary | `PARTIAL` |
+| [status.juro.uz](https://status.juro.uz/) | production | Public-safe operational status; anonymous | Cloudflare Worker domain; `STATUS_HOSTNAME` | Root and `/api/status` return `200`; latest v187 snapshot reports 6/8 components operational, with AI and document analysis degraded | `noindex`; public-safe telemetry | Internal probes report low provider credit while the public API redacts both provider causes to `PROVIDER_UNAVAILABLE`; retain the truthful degraded label | `PARTIAL` |
 | [staging.app.juro.uz](https://staging.app.juro.uz/) | staging | Protected platform; test accounts; RU/UZ | Cloudflare Worker domain and Access | `/ru/lawyer/auth` returns `302` to Cloudflare Access with `no-store` | Access-protected; private test data | Main now uses this shared canonical staging origin; authenticated post-Access runtime QA and a safe staging deployment remain incomplete | `PARTIAL` |
 | [admin.staging.juro.uz](https://admin.staging.juro.uz/) | staging | Protected staff console | Cloudflare Worker domain and `apps/admin/wrangler.jsonc` | Redirects to Cloudflare Access login, final login page `200` | Access-protected; highly sensitive | Staging health is stale/degraded; staff browser QA remains incomplete | `PARTIAL` |
 | [status.staging.juro.uz](https://status.staging.juro.uz/) | staging | Public-safe staging status | Cloudflare Worker domain; `STATUS_HOSTNAME` | Root and `/api/status` return `200` | `noindex`; public-safe telemetry | All eight components are degraded/stale; active cron delivery fails before persistence because staging D1 has reached its maximum size | `BROKEN` |
@@ -100,9 +100,9 @@ The current tree defines 161 page files and 227 API route files. Dynamic paramet
 
 ## Confirmed gaps and priorities
 
-1. **P1 — provider-host indexing:** live Sites v94 exposes indexable duplicate HTML. A tested v95 is saved but not deployed.
+1. **Resolved — provider-host indexing:** Sites v95 is live. The provider hostname returns `X-Robots-Tag: noindex, nofollow, noarchive`, while `juro.uz` retains `index, follow`; 78/78 sitemap URLs and 149/149 discoverable JURO-zone links return `200`.
 2. **P1 — staging observability:** the staging status endpoint is reachable but reports all eight components degraded from stale evidence. Active Cloudflare schedules were verified, and a live five-minute cron failed in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`; capacity remediation stays in the separately excluded legislation/corpus scope.
 3. **P1 — legacy origin exposure:** Cloudflare flags partial origin exposure and `ftp.juro.uz` fails TLS hostname validation. Ownership must be confirmed before DNS changes.
 4. **Resolved code-only drift:** PR #80 removed the accepted `app.staging.juro.uz` and `lawyer.staging.juro.uz` aliases from platform auth and Worker routing. The canonical staging host remains `staging.app.juro.uz` behind Cloudflare Access; the staging Worker itself was not redeployed in this increment.
 5. **Open evidence gate:** authenticated Client, Business, Lawyer, Pending Lawyer, and Staff/Admin Chrome runs are still required before these families can be marked `VERIFIED`. No session was fabricated. Anonymous Chrome evidence preserves the lawyer persona boundary and public-approved directory contract on Worker v179.
-6. **P1 — production AI providers:** OpenAI is blocked by HTTP `429` / `credit_balance_exhausted`. Anthropic changed from operational to HTTP `400` / `invalid_request_error` without a Worker deployment; its exact account-side or request-side cause is not yet proven. The current browser session is not authenticated to the Anthropic Console, so the production key's organization/workspace balance and spend limit still require owner verification.
+6. **P1 — production AI providers:** v187 records `PROVIDER_CREDIT_BALANCE_LOW` for both OpenAI and Anthropic. The routed document-analysis probe now respects its cooldown and records `PROVIDER_UNAVAILABLE` after both providers fail; the public status surface exposes only the redacted provider code. Funding or workspace alignment still needs to produce a fresh successful probe before AI can be marked operational.
