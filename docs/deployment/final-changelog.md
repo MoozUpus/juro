@@ -2,9 +2,19 @@
 
 Status: **living changelog; the full execution goal remains active**
 
-Evidence cutoff: **2026-08-31 06:37 UZT (2026-08-31 01:37 UTC)**
+Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
+
+## Platform Worker v189
+
+- Merged PR #95 as `d133a470a49166875d9112b938ae3f7d765ee170`.
+- Deployed Worker version ID `102dcb2d-f79f-4172-9a3a-19d55d51f6ed` at 100% traffic through workflow `33404885913`.
+- Replaced cross-host status favicon metadata with absolute same-origin icon URLs selected from a Worker-owned, allowlisted status origin.
+- Covered the status root rewrite, unlocalized `/status`, RU/UZ localized routes, production/staging status hosts, localhost development, and the app-host fallback.
+- Preserved the existing CSP, DNS, bindings, secrets, databases, Sites release, authentication, and legislation/corpus scope.
+- Verified five production routes in Chrome with no console errors or warnings; raw HTML and asset requests confirmed same-origin icons and `200 image/png` responses.
+- Retained Worker v188 ID `57387083-9f7f-4cd8-a9f2-84414f2604d6` as rollback.
 
 ## Platform Worker v188
 
@@ -40,20 +50,19 @@ This file records verified production increments. It must not be read as a claim
 
 ## Latest validation summary
 
-- 61/61 focused dependency/scheduler tests passed; the changed-file rerun passed 50/50.
-- 1,138/1,138 platform core tests passed.
+- 4/4 focused status-metadata tests passed.
+- 1,142/1,142 platform core tests passed.
 - 217/217 Worker/runtime tests passed.
 - Lint, type-check, Cloudflare matrix, generated types, production artifact validation, dependency audits, and licence policy passed.
 - PR, post-merge CI, and production deployment workflows passed.
-- Complete security diff coverage reported zero findings and zero deferred items.
-- PR #93 exact-head CI `33347354764`, post-merge CI `33347774965`, and production workflow `33347775254` passed.
-- Production `/api/status` returns HTTP `200`, remains truthfully `degraded`, reports 6/8 components operational, reports no active incidents, and publishes direct D1 evidence at 35 ms.
+- The security diff scan reported zero reportable findings and exposed functional/CSP coverage gaps in the initial patch; those gaps were corrected before merge and verified by focused tests plus live Chrome/HTTP checks.
+- PR #95 exact-head CI `33352197361`, post-merge CI `33404886188`, and production workflow `33404885913` passed.
+- Production `/api/status` returns HTTP `200`, remains truthfully `degraded`, reports 6/8 components operational, reports no active incidents, and publishes direct D1 evidence at 192 ms in the checked snapshot.
 
 ## Current limitations
 
-- OpenAI and Anthropic production probes still report `PROVIDER_CREDIT_BALANCE_LOW`; AI and document analysis remain degraded until fresh successful probes exist.
+- OpenAI and Anthropic public production probes still report `PROVIDER_UNAVAILABLE`; AI and document analysis remain degraded until fresh successful probes exist. The owner-reported Anthropic top-up had not yet produced a successful probe at the evidence cutoff.
 - Authenticated role QA remains incomplete for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin.
 - Staging scheduler persistence remains blocked by the excluded staging D1 capacity issue.
 - Legacy origin ownership/TLS risk and the full manual accessibility, responsive, performance, and E2E matrices remain open.
-- The status page has one P2 CSP cleanup: its cross-host `app.juro.uz/favicon.png` request is blocked by `img-src 'self' data: blob:`.
 - All legislation-database, corpus, Lex.uz, Advice.uz, vector, and source-record work remains excluded from this increment.
