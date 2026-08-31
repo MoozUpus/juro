@@ -3,11 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { readDependencyHealth } from "../lib/operations/dependency-health";
 import {
+  D1_HEALTH_DEGRADED_LATENCY_MS,
   dependencyHealthLatencyMs,
   providerFailureEvidence,
   recordDocumentBuilderCompletionEvidence,
   recordDependencyHealthEvidence,
   recordLawyerAccessGrantCompletionEvidence,
+  recordScheduledD1HealthEvidence,
 } from "../worker/dependency-health-evidence";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -73,6 +75,42 @@ test("dependency evidence classifies provider configuration/auth failures withou
     safeErrorCode: "PROVIDER_CREDIT_BALANCE_LOW",
   });
   assert.equal(dependencyHealthLatencyMs(0, 120_000), 60_000);
+});
+
+test("scheduled D1 evidence measures the dedicated query and degrades slow success", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const env = { APP_ENV: "production", DB: d1 };
+    assert.equal(await recordScheduledD1HealthEvidence(env, {
+      nowMs: () => 1_000,
+      now: () => new Date(1_018),
+    }), true);
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,latency_ms AS latencyMs,
+      safe_error_code AS safeErrorCode,evidence_kind AS evidenceKind
+      FROM dependency_health_checks WHERE dependency_key='d1'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as Record<string, unknown>) }, {
+      state: "operational",
+      latencyMs: 18,
+      safeErrorCode: null,
+      evidenceKind: "synthetic_probe",
+    });
+
+    assert.equal(await recordScheduledD1HealthEvidence(env, {
+      nowMs: () => 60_000,
+      now: () => new Date(60_000 + D1_HEALTH_DEGRADED_LATENCY_MS + 1),
+    }), true);
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,latency_ms AS latencyMs,
+      safe_error_code AS safeErrorCode,evidence_kind AS evidenceKind
+      FROM dependency_health_checks WHERE dependency_key='d1'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as Record<string, unknown>) }, {
+      state: "degraded",
+      latencyMs: D1_HEALTH_DEGRADED_LATENCY_MS + 1,
+      safeErrorCode: "PROBE_LATENCY_HIGH",
+      evidenceKind: "synthetic_probe",
+    });
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("completed Builder generation and confirmed lawyer access emit only factual, content-free integration evidence", async () => {

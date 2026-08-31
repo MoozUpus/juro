@@ -2007,6 +2007,17 @@ test("reviewed outbox cron is locked, durable, and idempotent", async () => {
       (sqlite.prepare("SELECT count(*) AS total FROM scheduled_locks").get() as { total: number }).total,
       0,
     );
+    const d1Health = sqlite.prepare(`SELECT state,latency_ms AS latencyMs,
+      evidence_kind AS evidenceKind
+      FROM dependency_health_checks WHERE dependency_key='d1'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as {
+      state: string;
+      latencyMs: number;
+      evidenceKind: string;
+    };
+    assert.equal(d1Health.state, "operational");
+    assert.equal(d1Health.evidenceKind, "synthetic_probe");
+    assert.ok(d1Health.latencyMs <= 2_000, "D1 latency must measure the dedicated probe, not the full cron run");
 
     await handleScheduled(controller, env);
     assert.equal(noRetryCalls, 1);

@@ -118,6 +118,8 @@ function remediation(locale: StatusLocale, dependency: DependencyHealthSnapshot)
     case "PROVIDER_TIMEOUT":
     case "PROBE_TIMEOUT":
       return ru ? "Проверьте задержку провайдера и сеть. Если следующий замер не восстановится, создайте публичный инцидент." : "Provayder kechikishi va tarmoqni tekshiring. Keyingi o‘lchov tiklanmasa, ochiq hodisa yarating.";
+    case "PROBE_LATENCY_HIGH":
+      return ru ? "Зависимость доступна, но отдельная проверка превысила допустимую задержку. Сверьте следующий замер и создайте инцидент при повторении." : "Bog‘liqlik mavjud, ammo alohida tekshiruv ruxsat etilgan kechikishdan oshdi. Keyingi o‘lchovni tekshiring va takrorlansa hodisa yarating.";
     default:
       return dependency.state === "operational"
         ? healthCopy[locale].noAction
