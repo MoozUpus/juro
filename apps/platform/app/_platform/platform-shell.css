@@ -124,3 +124,38 @@
 }
 @media(max-width:340px){.platform-topbar-logout{display:none!important}}
 @media(max-width:520px){.platform-topbar>div:first-of-type{display:none}}
+
+/* The selected appearance owns the complete application chrome, including the
+   sidebar. Gold remains the stable brand accent in both palettes. */
+.platform-logo-on-dark{display:none!important}
+.platform-logo-on-light{display:block!important}
+.platform-sidebar{border-right:1px solid var(--border-subtle);background:var(--surface-raised);color:var(--text-primary)}
+.platform-account{border-color:var(--border-subtle);background:var(--surface-subtle)}
+.platform-account small{color:var(--text-secondary)}
+.platform-account select{color:var(--text-primary)}
+.platform-sidebar nav a,.platform-sidebar-bottom a,.platform-nav-documents summary,.platform-nav-more summary,.platform-collapse{color:var(--text-secondary)}
+.platform-sidebar nav a:hover,.platform-sidebar nav a.active,.platform-sidebar-bottom a:hover,.platform-nav-documents[open]>summary,.platform-nav-documents.is-active>summary,.platform-nav-more[open]>summary{background:var(--surface-subtle);color:var(--text-primary)}
+.platform-nav-documents.is-active>summary{box-shadow:inset 3px 0 var(--p-gold)}
+.platform-sidebar-bottom,.platform-nav-more{border-color:var(--border-subtle)}
+.platform-collapse{border-color:var(--border-subtle);background:var(--surface-subtle)}
+.platform-sidebar nav{scrollbar-color:var(--border-strong) transparent}
+.platform-sidebar nav::-webkit-scrollbar-thumb{background:var(--border-strong)}
+.platform-brand button{border-color:var(--border-subtle);color:var(--text-primary)}
+.platform-sidebar-logout{color:var(--text-secondary)}
+@media(hover:hover) and (pointer:fine){.platform-nav-documents summary:hover,.platform-nav-more summary:hover{background:var(--surface-subtle);color:var(--text-primary)}}
+
+html[data-theme=dark] .platform-logo-on-dark{display:block!important}
+html[data-theme=dark] .platform-logo-on-light{display:none!important}
+html[data-theme=dark] .platform-sidebar{border-right-color:transparent;background:var(--p-navy);color:#fff}
+html[data-theme=dark] .platform-account{border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.05)}
+html[data-theme=dark] .platform-account small{color:#a9b8c5}
+html[data-theme=dark] .platform-account select{color:#fff}
+html[data-theme=dark] .platform-sidebar nav a,html[data-theme=dark] .platform-sidebar-bottom a,html[data-theme=dark] .platform-nav-documents summary,html[data-theme=dark] .platform-nav-more summary,html[data-theme=dark] .platform-collapse{color:#b9c5d0}
+html[data-theme=dark] .platform-sidebar nav a:hover,html[data-theme=dark] .platform-sidebar nav a.active,html[data-theme=dark] .platform-sidebar-bottom a:hover,html[data-theme=dark] .platform-nav-documents[open]>summary,html[data-theme=dark] .platform-nav-documents.is-active>summary,html[data-theme=dark] .platform-nav-more[open]>summary{background:rgba(255,255,255,.1);color:#fff}
+html[data-theme=dark] .platform-sidebar-bottom,html[data-theme=dark] .platform-nav-more{border-color:rgba(255,255,255,.1)}
+html[data-theme=dark] .platform-collapse{border-color:rgba(255,255,255,.11);background:rgba(255,255,255,.04)}
+html[data-theme=dark] .platform-sidebar nav{scrollbar-color:rgba(255,255,255,.22) transparent}
+html[data-theme=dark] .platform-sidebar nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2)}
+html[data-theme=dark] .platform-brand button{border-color:rgba(255,255,255,.15);color:#fff}
+html[data-theme=dark] .platform-sidebar-logout{color:#b9c5d0}
+@media(hover:hover) and (pointer:fine){html[data-theme=dark] .platform-nav-documents summary:hover,html[data-theme=dark] .platform-nav-more summary:hover{background:rgba(255,255,255,.1);color:#fff}}

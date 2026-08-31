@@ -23,6 +23,13 @@ import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { documentBuilderMetadataCopy, localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
 import { isLawyerProfileDirectoryPreviewEnabled } from "../lib/platform/lawyer-profile-preview";
 import { notificationPreferencesSchema, optionalEmailPreferenceKeys } from "../lib/platform/notification-preferences";
+import {
+  globalSearchFuzzyNeedle,
+  globalSearchGroupScore,
+  globalSearchQueryMode,
+  rankGlobalSearchRows,
+  semanticGlobalSearchScore,
+} from "../lib/platform/global-search-policy";
 
 test("lawyer directory projects only moderation-approved review aggregates", () => {
   const directory = projectPublicLawyerDirectory(
@@ -1028,6 +1035,25 @@ test("global search is tenant-scoped, escapes LIKE input and avoids document-tex
   assert.match(client, /triggerRef = useRef<HTMLButtonElement>/);
   assert.match(client, /triggerRef\.current\?\.focus\(\)/);
   assert.match(client, /wasOpenRef\.current = open/);
+});
+
+test("global search policy ranks exact, prefix, fuzzy, and semantic matches in that order", () => {
+  assert.equal(globalSearchQueryMode(""), "recent");
+  assert.equal(globalSearchQueryMode("я"), "incomplete");
+  assert.equal(globalSearchQueryMode("!!"), "incomplete");
+  assert.equal(globalSearchQueryMode("увольнение"), "search");
+  assert.equal(globalSearchFuzzyNeedle("увольнение сотрудника"), "увол");
+
+  const ranked = rankGlobalSearchRows([
+    { id: "fuzzy", title: "Можно ли уволить сотрудника?", subtitle: "" },
+    { id: "contains", title: "Порядок: увольнение сотрудника", subtitle: "" },
+    { id: "prefix", title: "Увольнение сотрудника", subtitle: "" },
+    { id: "exact", title: "Увольнение", subtitle: "" },
+    { id: "unrelated", title: "Налоговый спор", subtitle: "" },
+  ], "увольнение", 6);
+  assert.deepEqual(ranked.map((row) => row.id), ["exact", "prefix", "contains", "fuzzy"]);
+  assert.ok(ranked[3]!.searchScore > semanticGlobalSearchScore(1));
+  assert.equal(globalSearchGroupScore(ranked), ranked[0]!.searchScore);
 });
 
 test("AI chat obtains its cycle limit from server-side workspace entitlements", async () => {
