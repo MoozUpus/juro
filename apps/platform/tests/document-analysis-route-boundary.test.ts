@@ -26,6 +26,11 @@ test("secure upload routes enforce streaming, checksum, tenant, quarantine, and 
   assert.match(upload, /request\.body/);
   assert.match(upload, /sha256: record\.sha256/);
   assert.match(upload, /content-length/);
+  assert.match(upload, /status='uploading'/);
+  assert.match(upload, /claimed\.meta\?\.changes/);
+  assert.match(upload, /finalized\[0\]\?\.meta\?\.changes/);
+  assert.match(upload, /finalized\[1\]\?\.meta\?\.changes/);
+  assert.match(upload, /await quarantine\.delete\(record\.r2Key\)/);
   assert.match(finalize, /validateUploadMagicBytes/);
   assert.match(finalize, /await verifyArchiveBytes\(/);
   assert.doesNotMatch(finalize, /inspectArchiveBytes\(/);
@@ -39,6 +44,23 @@ test("secure upload routes enforce streaming, checksum, tenant, quarantine, and 
   assert.match(finalize, /malware\.scan/);
   assert.doesNotMatch(`${upload}\n${finalize}`, /quarantine-bypass|analysis-direct|upload_direct_analysis_queued/);
   assert.doesNotMatch(`${upload}\n${finalize}`, /callOpenAiJson|callAnthropic/);
+});
+
+test("analysis deletion is owner-scoped, CSRF-protected, vector-aware, and retryable", () => {
+  const route = source("app/api/platform/document-analysis/[analysisId]/route.ts");
+  const retention = source("lib/document-analysis/resource-retention.ts");
+  const review = source("app/_platform/DocumentReviewClient.tsx");
+  assert.match(route, /assertSafeWrite/);
+  assert.match(route, /requireApiUser/);
+  assert.match(route, /workspaceForUser/);
+  assert.match(retention, /analysis\.owner_user_id=\?/);
+  assert.match(retention, /legal_corpus_owner_upload_requests/);
+  assert.match(retention, /document_comparisons/);
+  assert.match(retention, /deleteUserDocumentVectorsForAnalysis/);
+  assert.match(retention, /analysis_content_purged/);
+  assert.match(retention, /purge_attempt_count=purge_attempt_count\+1/);
+  assert.match(review, /Удалить анализ, исходный файл, результаты и экспорты/);
+  assert.match(review, /x-juro-csrf/);
 });
 
 test("archive finalize verifies local identity, bounded expansion, and CRC before direct analysis", () => {

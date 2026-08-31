@@ -24,6 +24,7 @@ export class AnalysisExportError extends Error {
       | "ANALYSIS_EXPORT_OBJECT_FAILED"
       | "ANALYSIS_EXPORT_NOT_TERMINAL"
       | "ANALYSIS_EXPORT_DELETE_FAILED"
+      | "ANALYSIS_EXPORT_CAPACITY_UNAVAILABLE"
       | "ANALYSIS_EXPORT_FORMAT_INVALID",
     readonly retryable: boolean,
     readonly status = 422,
@@ -50,6 +51,13 @@ export async function requestAnalysisExport(input: {
     }
     return { record: existing, replay: true };
   }
+  const idempotencyKeySha256 = await assertExportIdempotencyAvailable(
+    input.db,
+    input.idempotencyKey,
+    input.workspaceId,
+    input.userId,
+    "json",
+  );
   const source = await input.db.prepare(
     `SELECT id FROM document_analyses
      WHERE id=? AND workspace_id=? AND owner_user_id=? AND status='completed' LIMIT 1`,
@@ -62,6 +70,10 @@ export async function requestAnalysisExport(input: {
   const fileName = `juro-analysis-${input.analysisId}.json`;
   try {
     await input.db.batch([
+      input.db.prepare(
+        `INSERT INTO analysis_export_idempotency_registry
+         (idempotency_key,analysis_id,export_kind,created_at) VALUES (?,?,'json',?)`,
+      ).bind(input.idempotencyKey, input.analysisId, now),
       input.db.prepare(
         `INSERT INTO analysis_exports
          (id,analysis_id,workspace_id,owner_user_id,format,status,r2_key,file_name,mime_type,
@@ -79,11 +91,21 @@ export async function requestAnalysisExport(input: {
         `INSERT INTO workspace_audit_events
          (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
          VALUES (?,?,?,'analysis_export',?,'export_requested',?,?)`,
-      ).bind(crypto.randomUUID(), input.workspaceId, input.userId, id, JSON.stringify({ analysisId: input.analysisId, format: "json" }), now),
+      ).bind(
+        crypto.randomUUID(), input.workspaceId, input.userId, id,
+        JSON.stringify({ analysisId: input.analysisId, format: "json", idempotencyKeySha256 }),
+        now,
+      ),
     ]);
   } catch (error) {
     const raced = await exportByIdempotency(input.db, input.idempotencyKey, input.workspaceId, input.userId);
     if (raced?.analysisId === input.analysisId) return { record: raced, replay: true };
+    if (isAnalysisExportCapacityError(error)) {
+      throw new AnalysisExportError("ANALYSIS_EXPORT_CAPACITY_UNAVAILABLE", false, 429);
+    }
+    if (isAnalysisExportIdempotencyConflictError(error)) {
+      throw new AnalysisExportError("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT", false, 409);
+    }
     if (isUniqueConstraintError(error)) {
       throw new AnalysisExportError("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT", false, 409);
     }
@@ -356,6 +378,55 @@ async function deletionAuditExists(
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Error && /unique constraint/i.test(error.message);
+}
+
+export function isAnalysisExportCapacityError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("ANALYSIS_EXPORT_CAPACITY_EXCEEDED");
+}
+
+export function isAnalysisExportIdempotencyConflictError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT");
+}
+
+export async function assertExportIdempotencyAvailable(
+  db: D1Database,
+  key: string,
+  workspaceId: string,
+  userId: string,
+  kind: "json" | "report",
+): Promise<string> {
+  const allocated = await db.prepare(
+    `SELECT 1 AS found
+     FROM analysis_export_idempotency_registry registry
+     INNER JOIN document_analyses analysis ON analysis.id=registry.analysis_id
+     WHERE registry.idempotency_key=?
+       AND analysis.workspace_id=? AND analysis.owner_user_id=?
+     LIMIT 1`,
+  ).bind(key, workspaceId, userId).first<{ found: number }>();
+  if (allocated?.found) {
+    throw new AnalysisExportError("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT", false, 409);
+  }
+  const otherTable = kind === "json" ? "analysis_report_exports" : "analysis_exports";
+  const liveOther = await db.prepare(
+    `SELECT 1 AS found FROM ${otherTable}
+     WHERE idempotency_key=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
+  ).bind(key, workspaceId, userId).first<{ found: number }>();
+  if (liveOther?.found) {
+    throw new AnalysisExportError("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT", false, 409);
+  }
+  const digest = await sha256Hex(new TextEncoder().encode(key));
+  const retired = await db.prepare(
+    `SELECT 1 AS found FROM workspace_audit_events event
+     WHERE event.workspace_id=? AND event.actor_user_id=?
+       AND event.entity_type='analysis_export' AND event.action='export_requested'
+       AND CASE WHEN json_valid(event.metadata_json)
+         THEN json_extract(event.metadata_json,'$.idempotencyKeySha256') END=?
+     LIMIT 1`,
+  ).bind(workspaceId, userId, digest).first<{ found: number }>();
+  if (retired?.found) {
+    throw new AnalysisExportError("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT", false, 409);
+  }
+  return digest;
 }
 
 async function sha256Hex(value: Uint8Array): Promise<string> {

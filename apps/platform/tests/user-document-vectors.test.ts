@@ -3,6 +3,7 @@ import test from "node:test";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 import {
   chunkUserDocument,
+  deleteUserDocumentVectorsForAnalysis,
   deleteUserDocumentVectorsForOwner,
   executeUserDocumentIndexJob,
   scheduleUserDocumentIndexStatements,
@@ -46,10 +47,19 @@ class FakeVectorize {
   readonly vectors = new Map<string, VectorizeVector>();
   readonly deleted: string[] = [];
   tamper: ((vector: VectorizeVector) => VectorizeVector) | null = null;
+  failAfterUpsert = false;
 
   async upsert(vectors: VectorizeVector[]) {
     for (const vector of vectors) this.vectors.set(vector.id, vector);
+    if (this.failAfterUpsert) throw new Error("VECTORIZE_ACK_LOST");
     return { mutationId: `mutation-${this.vectors.size}` };
+  }
+
+  async getByIds(ids: string[]) {
+    return ids.flatMap((id) => {
+      const vector = this.vectors.get(id);
+      return vector ? [vector] : [];
+    });
   }
 
   async query() {
@@ -154,6 +164,65 @@ test("user document chunking is deterministic, overlapping and bounded", () => {
     windowsText.slice(windowsChunk.start, windowsChunk.end).replace(/\r\n?/g, "\n").trim(),
     windowsChunk.text,
   );
+});
+
+test("vector IDs are durable before an ambiguous upsert and analysis deletion verifies their absence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeBucket();
+  const vectorize = new FakeVectorize();
+  try {
+    seedIdentity(sqlite, "user-a", "workspace-a");
+    const text = "Синтетический договор с одним проверяемым обязательством.";
+    const r2Key = "analysis-versions/workspace-a/analysis-ambiguous/1-source.md";
+    const sourceHash = await bucket.putText(r2Key, text);
+    seedAnalysis(sqlite, {
+      userId: "user-a",
+      workspaceId: "workspace-a",
+      analysisId: "analysis-ambiguous",
+      versionId: "analysis-version-ambiguous",
+      r2Key,
+      text,
+      sha256: sourceHash,
+    });
+    await d1.batch(scheduleUserDocumentIndexStatements(d1, {
+      analysisId: "analysis-ambiguous",
+      documentVersionId: "analysis-version-ambiguous",
+      workspaceId: "workspace-a",
+      ownerUserId: "user-a",
+      sourceHash,
+      language: "ru",
+      now,
+    }));
+    const env = {
+      APP_ENV: "development" as const,
+      DB: d1,
+      BUCKET: bucket as unknown as R2Bucket,
+      USER_DOCUMENTS_INDEX: vectorize as unknown as VectorizeIndex,
+      OPENAI_API_KEY: "test-only-key",
+      EMBEDDING_MODEL: "text-embedding-3-large",
+    };
+    vectorize.failAfterUpsert = true;
+    await assert.rejects(executeUserDocumentIndexJob(
+      env,
+      "user-document-index-analysis-version-ambiguous",
+      "workspace-a",
+      { now: new Date(now), fetchImpl: embeddingFetch() },
+    ));
+    assert.equal(vectorize.vectors.size, 1);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS total FROM user_document_vector_chunks WHERE job_id='user-document-index-analysis-version-ambiguous'",
+    ).get() as { total: number }).total, 1);
+
+    vectorize.failAfterUpsert = false;
+    assert.equal(await deleteUserDocumentVectorsForAnalysis(env, {
+      analysisId: "analysis-ambiguous",
+      workspaceId: "workspace-a",
+      userId: "user-a",
+    }, now), 1);
+    assert.equal(vectorize.vectors.size, 0);
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("0080 indexes immutable text and search fails closed across tenants and tampered metadata", async () => {

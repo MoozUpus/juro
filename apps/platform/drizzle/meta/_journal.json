@@ -1037,6 +1037,13 @@
       "when": 1788196800000,
       "tag": "0147_signed_share_verification_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1788283200000,
+      "tag": "0148_document_analysis_resource_guardrails",
+      "breakpoints": true
     }
   ]
 }

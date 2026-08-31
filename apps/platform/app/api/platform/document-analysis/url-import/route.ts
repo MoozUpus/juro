@@ -99,6 +99,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       idempotencyKey,
       requestHash,
       intent: uploadIntent,
+      storageZone: "primary",
     });
     if (initialized.replay && !["initiated", "upload_failed"].includes(initialized.record.status)) {
       await bucket.delete(remote.temporaryKey);

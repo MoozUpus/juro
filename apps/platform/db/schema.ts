@@ -3147,11 +3147,23 @@ export const documentAnalyses = sqliteTable("document_analyses", {
   resultSha256: text("result_sha256"),
   errorCode: text("error_code"),
   consentVersion: text("consent_version").notNull(),
+  resourceScope: text("resource_scope"),
+  abandonedAfter: text("abandoned_after"),
+  deletionRequestedAt: text("deletion_requested_at"),
+  deletionReason: text("deletion_reason"),
+  purgeAttemptCount: integer("purge_attempt_count").notNull().default(0),
+  lastPurgeError: text("last_purge_error"),
   ...timestamps,
 }, (table) => [
   index("document_analyses_workspace_idx").on(table.workspaceId, table.createdAt),
   index("document_analyses_case_idx").on(table.workspaceId, table.caseId, table.updatedAt),
+  index("document_analyses_resource_quota_idx").on(table.workspaceId, table.ownerUserId, table.resourceScope, table.deletionRequestedAt),
+  index("document_analyses_abandoned_idx").on(table.resourceScope, table.deletionRequestedAt, table.abandonedAfter, table.updatedAt, table.id),
+  index("document_analyses_purge_retry_idx").on(table.deletionRequestedAt, table.updatedAt, table.id),
   uniqueIndex("document_analyses_file_uidx").on(table.uploadedFileId),
+  check("document_analyses_resource_scope_check", sql`${table.resourceScope} IS NULL OR ${table.resourceScope} = 'interactive_analysis'`),
+  check("document_analyses_deletion_reason_check", sql`${table.deletionReason} IS NULL OR ${table.deletionReason} IN ('owner_request','abandoned_upload')`),
+  check("document_analyses_purge_attempt_check", sql`${table.purgeAttemptCount} >= 0`),
 ]);
 
 export const builderDocumentAnalysisHandoffs = sqliteTable("builder_document_analysis_handoffs", {
@@ -3466,6 +3478,16 @@ export const analysisReportExports = sqliteTable("analysis_report_exports", {
       AND ${table.errorCode} IS NULL)
     OR (${table.status} <> 'completed' AND ${table.completedAt} IS NULL)
   `),
+]);
+
+export const analysisExportIdempotencyRegistry = sqliteTable("analysis_export_idempotency_registry", {
+  idempotencyKey: text("idempotency_key").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  exportKind: text("export_kind").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("analysis_export_idempotency_registry_analysis_idx").on(table.analysisId, table.createdAt),
+  check("analysis_export_idempotency_registry_kind_check", sql`${table.exportKind} IN ('json','report')`),
 ]);
 
 export const documentComparisons = sqliteTable("document_comparisons", {

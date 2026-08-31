@@ -9,6 +9,7 @@ import { runDirectLegalSourceHealthCheck } from "../lib/legal/direct-source-heal
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
+import { purgeExpiredDocumentAnalysisUploads } from "../lib/document-analysis/resource-retention";
 import { reconcileAnalysisVersionObjectWrites } from "../lib/document-analysis/version-object-write";
 import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/document-version-object-write";
 import { taskReminderSubjectId } from "../lib/notifications/task-reminder-dispatch";
@@ -627,6 +628,16 @@ export async function handleScheduled(
       quarantineBucket: env.QUARANTINE_BUCKET,
       now,
     });
+    failureCode = "DOCUMENT_ANALYSIS_RETENTION_CLEANUP_FAILED";
+    const documentAnalysisRetention = await purgeExpiredDocumentAnalysisUploads({
+      env: {
+        DB: env.DB,
+        BUCKET: env.BUCKET,
+        QUARANTINE_BUCKET: env.QUARANTINE_BUCKET,
+        USER_DOCUMENTS_INDEX: env.USER_DOCUMENTS_INDEX,
+      },
+      now,
+    });
     failureCode = "ANALYSIS_VERSION_OBJECT_RECONCILIATION_FAILED";
     const analysisVersionObjects = await reconcileAnalysisVersionObjectWrites({
       db: env.DB,
@@ -688,6 +699,10 @@ export async function handleScheduled(
       guestAiReservationsReleased: guestAiRetention.reservationsReleased,
       voiceRetentionEligible: voiceRetention.eligible,
       voiceRetentionPurged: voiceRetention.purged,
+      documentAnalysisRetentionEligible: documentAnalysisRetention.eligible,
+      documentAnalysisRetentionPurged: documentAnalysisRetention.purged,
+      documentAnalysisRetentionRetrying: documentAnalysisRetention.retrying,
+      documentAnalysisIdempotencyPurged: documentAnalysisRetention.idempotencyPurged,
       analysisVersionObjectsEligible: analysisVersionObjects.eligible,
       analysisVersionObjectsClaimed: analysisVersionObjects.claimed,
       analysisVersionObjectsAttached: analysisVersionObjects.attached,

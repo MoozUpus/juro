@@ -3,6 +3,8 @@ import { sanitizeFileName } from "../document-builder/storage/file-validation";
 
 export const DOCUMENT_ANALYSIS_MAX_FILE_SIZE = 50 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_MAX_FILES = 20;
+export const DOCUMENT_ANALYSIS_MAX_TOTAL_BYTES = 1024 * 1024 * 1024;
+export const DOCUMENT_ANALYSIS_ABANDONED_AFTER_MS = 24 * 60 * 60 * 1_000;
 /**
  * ZIP packages must stay within the bounded in-Worker extraction path until a
  * privacy-approved streaming extractor is actually deployed.  The broader
@@ -145,12 +147,14 @@ export async function initializeDocumentAnalysisUpload(input: {
   idempotencyKey: string;
   requestHash: string;
   intent: DocumentAnalysisUploadIntent;
+  storageZone?: "quarantine" | "primary";
 }): Promise<{ record: DocumentAnalysisUploadRecord; replay: boolean }> {
   const registryKey = uploadRegistryKey(input.workspaceId, input.userId, input.idempotencyKey);
   const analysisId = crypto.randomUUID();
   const fileId = crypto.randomUUID();
   const now = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const abandonedAfter = new Date(Date.parse(now) + DOCUMENT_ANALYSIS_ABANDONED_AFTER_MS).toISOString();
   const inserted = await input.db.prepare(
     `INSERT OR IGNORE INTO idempotency_keys
       (key,scope,request_hash,status,result_ref,expires_at,completed_at,created_at,updated_at)
@@ -186,9 +190,13 @@ export async function initializeDocumentAnalysisUpload(input: {
     return { record: await documentAnalysisUploadForUser(input.db, existing.resultRef, input.workspaceId, input.userId), replay: true };
   }
 
-  // Every untrusted upload starts in the isolated quarantine bucket. The
-  // malware-scanner is the only component allowed to promote it to BUCKET.
-  const r2Key = `quarantine-v2/${input.workspaceId}/${analysisId}/${fileId}`;
+  // Browser uploads start in the isolated quarantine bucket. The public-URL
+  // importer performs its own bounded archive/magic-byte validation and writes
+  // directly to the primary private bucket, so its key must identify that
+  // binding unambiguously for later retention cleanup.
+  const r2Key = input.storageZone === "primary"
+    ? `analysis-inputs-v1/${input.workspaceId}/${analysisId}/${fileId}`
+    : `quarantine-v2/${input.workspaceId}/${analysisId}/${fileId}`;
   try {
     await input.db.batch([
       input.db.prepare(
@@ -209,9 +217,18 @@ export async function initializeDocumentAnalysisUpload(input: {
       ),
       input.db.prepare(
         `INSERT INTO document_analyses
-         (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,created_at,updated_at)
-         VALUES (?,?,?,?,'initiated',?,NULL,'2026-07-30',?,?)`,
-      ).bind(analysisId, input.workspaceId, input.userId, fileId, JSON.stringify({ mode: input.intent.mode, locale: input.intent.locale }), now, now),
+         (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,resource_scope,abandoned_after,created_at,updated_at)
+         VALUES (?,?,?,?,'initiated',?,NULL,'2026-07-30','interactive_analysis',?,?,?)`,
+       ).bind(
+         analysisId,
+         input.workspaceId,
+         input.userId,
+         fileId,
+         JSON.stringify({ mode: input.intent.mode, locale: input.intent.locale }),
+         abandonedAfter,
+         now,
+         now,
+       ),
       ...(input.intent.caseId ? [input.db.prepare(
         `INSERT INTO analysis_case_link_events
          (id,analysis_id,workspace_id,owner_user_id,actor_user_id,from_case_id,to_case_id,mutation_version,idempotency_key,request_hash,created_at)
@@ -255,8 +272,17 @@ export async function initializeDocumentAnalysisUpload(input: {
     ]);
   } catch (error) {
     await input.db.prepare(
-      "UPDATE idempotency_keys SET status='failed',updated_at=? WHERE key=?",
-    ).bind(new Date().toISOString(), registryKey).run();
+      "DELETE FROM idempotency_keys WHERE key=? AND request_hash=? AND status='started'",
+    ).bind(registryKey, input.requestHash).run();
+    if (isDocumentAnalysisQuotaError(error)) {
+      throw new DocumentAnalysisUploadError(
+        "DOCUMENT_ANALYSIS_CAPACITY_UNAVAILABLE",
+        input.intent.locale === "ru"
+          ? `Можно хранить не более ${DOCUMENT_ANALYSIS_MAX_FILES} анализов общим объёмом до 1 ГБ. Удалите ненужный анализ и повторите загрузку.`
+          : `${DOCUMENT_ANALYSIS_MAX_FILES} tagacha, jami 1 GB hajmdagi tahlilni saqlash mumkin. Keraksiz tahlilni o‘chirib, yuklashni takrorlang.`,
+        429,
+      );
+    }
     throw error;
   }
   return {
@@ -277,6 +303,13 @@ export async function initializeDocumentAnalysisUpload(input: {
   };
 }
 
+function isDocumentAnalysisQuotaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("DOCUMENT_ANALYSIS_COUNT_QUOTA_EXCEEDED")
+    || message.includes("DOCUMENT_ANALYSIS_BYTE_QUOTA_EXCEEDED")
+    || message.includes("DOCUMENT_ANALYSIS_RETENTION_REQUIRED");
+}
+
 export async function documentAnalysisUploadForUser(
   db: D1Database,
   analysisId: string,
@@ -290,6 +323,7 @@ export async function documentAnalysisUploadForUser(
      FROM document_analyses a
      JOIN document_files f ON f.id=a.uploaded_file_id
      WHERE a.id=? AND a.workspace_id=? AND a.owner_user_id=?
+       AND a.deletion_requested_at IS NULL
        AND f.workspace_id=? AND f.owner_user_id=? AND f.archived_at IS NULL
      LIMIT 1`,
   ).bind(analysisId, workspaceId, userId, workspaceId, userId).first<DocumentAnalysisUploadRecord>();
