@@ -7,6 +7,7 @@ import { recordProvisionTemporalEvidence } from "../../lib/legal-corpus/target-t
 
 export class MemoryEvidenceBucket implements LegalEvidenceBucket {
   readonly objects = new Map<string, { bytes: Uint8Array; customMetadata: Record<string, string> }>();
+  putCalls = 0;
 
   async head(key: string): Promise<LegalEvidenceObject | null> {
     const stored = this.objects.get(key);
@@ -23,6 +24,7 @@ export class MemoryEvidenceBucket implements LegalEvidenceBucket {
     value: Uint8Array,
     options: { onlyIf: { etagDoesNotMatch: "*" }; customMetadata: Record<string, string> },
   ): Promise<LegalEvidenceObject | null> {
+    this.putCalls += 1;
     if (this.objects.has(key) && options.onlyIf.etagDoesNotMatch === "*") return null;
     const stored = { bytes: value.slice(), customMetadata: { ...options.customMetadata } };
     this.objects.set(key, stored);
@@ -64,14 +66,20 @@ export const representativeProvision = {
     sourceUrl: "https://lex.uz/ru/docs/100",
     recordedAt: "2026-08-30T00:00:00.000Z",
   },
+  canonicalInstrumentTitle: "Трудовой кодекс Республики Узбекистан",
   actTitle: "Трудовой кодекс Республики Узбекистан",
   documentType: "code",
   articleNumber: "10",
   articleTitle: "Прекращение трудового договора",
   provisionSequence: 10,
   provisionText: "Статья 10. Трудовой договор прекращается только по основаниям, установленным законом.",
+  normalizedRevision: `${JSON.stringify({
+    schemaVersion: 1,
+    text: "Статья 10. Трудовой договор прекращается только по основаниям, установленным законом.",
+  })}\n`,
   rawCapture: "<html><body>Статья 10. Трудовой договор прекращается только по основаниям, установленным законом.</body></html>",
   sourceUrl: "https://lex.uz/ru/docs/100",
+  canonicalInstrumentUrl: "https://lex.uz/docs/100",
   capturedAt: "2026-08-30T00:00:00.000Z",
 } as const;
 

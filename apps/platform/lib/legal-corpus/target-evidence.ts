@@ -34,6 +34,54 @@ const authorityEvidenceSchema = z.object({
   sourceUrl: lexDocumentUrlSchema,
   recordedAt: utcInstantSchema,
 }).strict();
+const rawEvidenceSchema = z.union([
+  z.string().min(1).max(16_000_000),
+  z.instanceof(Uint8Array).refine((value) => value.byteLength > 0 && value.byteLength <= 16_000_000),
+]);
+const normalizedEvidenceSchema = z.union([
+  z.string().min(1).max(8_000_000),
+  z.instanceof(Uint8Array).refine((value) => value.byteLength > 0 && value.byteLength <= 8_000_000),
+]);
+const editorialValiditySchema = z.object({
+  validFrom: utcInstantSchema,
+  validTo: utcInstantSchema.nullable(),
+  recordedAt: utcInstantSchema,
+}).strict().superRefine((value, context) => {
+  if (value.validTo !== null && Date.parse(value.validFrom) >= Date.parse(value.validTo)) {
+    context.addIssue({ code: "custom", message: "Editorial validity must be a non-empty interval" });
+  }
+});
+const applicabilitySchema = z.object({
+  id: z.string().min(1).max(200),
+  validFrom: utcInstantSchema,
+  validTo: utcInstantSchema.nullable(),
+  evidenceUrl: lexDocumentUrlSchema,
+  evidenceKind: z.enum(["commencement_clause", "amendment_act", "repeal_act", "official_timeline"]),
+  recordedAt: utcInstantSchema,
+}).strict().superRefine((value, context) => {
+  if (value.validTo !== null && Date.parse(value.validFrom) >= Date.parse(value.validTo)) {
+    context.addIssue({ code: "custom", message: "Applicability must be a non-empty interval" });
+  }
+});
+const currentPointerSchema = z.object({
+  evidenceUrl: lexDocumentUrlSchema,
+  verifiedAt: utcInstantSchema,
+  recordedAt: utcInstantSchema,
+}).strict();
+const temporalGapSchema = z.object({
+  id: z.string().min(1).max(200),
+  kind: z.enum(["unknown", "ambiguous", "disputed"]),
+  validFrom: utcInstantSchema.nullable().optional(),
+  validTo: utcInstantSchema.nullable().optional(),
+  evidenceUrl: lexDocumentUrlSchema,
+  reason: z.string().trim().min(10).max(2_000),
+  recordedAt: utcInstantSchema,
+}).strict().superRefine((value, context) => {
+  if (value.validFrom && value.validTo
+    && Date.parse(value.validFrom) >= Date.parse(value.validTo)) {
+    context.addIssue({ code: "custom", message: "Temporal gap must be a non-empty interval" });
+  }
+});
 
 const importObjectSchema = z.object({
   legalInstrumentId: legalInstrumentIdSchema,
@@ -53,17 +101,36 @@ const importObjectSchema = z.object({
   controllingOnConflict: z.boolean(),
   derivedFromExpressionId: officialExpressionIdSchema.nullable(),
   authorityEvidence: authorityEvidenceSchema.nullable(),
+  canonicalInstrumentTitle: z.string().trim().min(1).max(2_000).optional(),
   actTitle: z.string().trim().min(1).max(2_000),
   documentType: z.string().trim().min(1).max(160),
   articleNumber: z.string().trim().min(1).max(160),
-  articleTitle: z.string().trim().min(1).max(2_000).nullable().optional(),
+  // Lex.uz annex tables sometimes place an entire official cell in the title field.
+  // Preserve that source value exactly; truncation would make the imported evidence lossy.
+  articleTitle: z.string().trim().min(1).max(16_000).nullable().optional(),
   provisionSequence: z.number().int().nonnegative(),
   provisionText: z.string().min(1).max(500_000),
-  rawCapture: z.string().min(1).max(4_000_000),
+  renditionStatus: z.enum(["active", "historical", "repealed", "unknown"]).default("active"),
+  rawCapture: rawEvidenceSchema,
+  normalizedRevision: normalizedEvidenceSchema,
+  sourceRawSha256: sha256Schema.optional(),
+  sourceNormalizedSha256: sha256Schema.optional(),
+  sourceProvisionSha256: sha256Schema.optional(),
   sourceUrl: lexDocumentUrlSchema,
+  canonicalInstrumentUrl: lexDocumentUrlSchema.optional(),
   capturedAt: utcInstantSchema,
+  migrationRunId: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u).max(160).optional(),
+  cutoffAt: utcInstantSchema.optional(),
+  editorialValidity: editorialValiditySchema.optional(),
+  applicability: applicabilitySchema.optional(),
+  currentPointer: currentPointerSchema.optional(),
+  temporalGap: temporalGapSchema.optional(),
 }).strict();
-const importSchema = importObjectSchema.superRefine((value, context) => {
+
+function validateImport(
+  value: z.infer<typeof importObjectSchema>,
+  context: z.RefinementCtx,
+): void {
   if (
     value.textualAuthority === "controlling"
     && (!value.controllingOnConflict || !value.authorityEvidence)
@@ -79,6 +146,50 @@ const importSchema = importObjectSchema.superRefine((value, context) => {
     && !value.derivedFromExpressionId
   ) {
     context.addIssue({ code: "custom", message: "Translation derivation required" });
+  }
+  if (value.applicability && value.temporalGap) {
+    context.addIssue({
+      code: "custom",
+      path: ["temporalGap"],
+      message: "Applicability evidence and an unresolved temporal gap are mutually exclusive",
+    });
+  }
+}
+
+const importSchema = importObjectSchema.superRefine(validateImport);
+const currentMigrationImportSchema = importObjectSchema.extend({
+  renditionStatus: z.enum(["active", "historical", "repealed", "unknown"]),
+  sourceRawSha256: sha256Schema,
+  sourceNormalizedSha256: sha256Schema,
+  sourceProvisionSha256: sha256Schema,
+  canonicalInstrumentTitle: z.string().trim().min(1).max(2_000),
+  canonicalInstrumentUrl: lexDocumentUrlSchema,
+  migrationRunId: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u).max(160),
+  cutoffAt: utcInstantSchema,
+  currentPointer: currentPointerSchema,
+}).superRefine((value, context) => {
+  validateImport(value, context);
+  if ((value.applicability ? 1 : 0) + (value.temporalGap ? 1 : 0) !== 1) {
+    context.addIssue({
+      code: "custom",
+      message: "Exactly one applicability fact or gap is required for a current migration",
+    });
+  }
+  const observedAt = [
+    value.capturedAt,
+    value.authorityEvidence?.recordedAt,
+    value.editorialValidity?.recordedAt,
+    value.applicability?.recordedAt,
+    value.temporalGap?.recordedAt,
+    value.currentPointer.verifiedAt,
+    value.currentPointer.recordedAt,
+  ].filter((instant): instant is string => instant !== undefined);
+  if (observedAt.some((instant) => Date.parse(instant) > Date.parse(value.cutoffAt))) {
+    context.addIssue({
+      code: "custom",
+      path: ["cutoffAt"],
+      message: "Current migration evidence must be observed at or before its immutable cutoff",
+    });
   }
 });
 
@@ -100,6 +211,7 @@ const provisionObjectSchema = z.object({
   articleTitle: importObjectSchema.shape.articleTitle,
   provisionSequence: importObjectSchema.shape.provisionSequence,
   provisionText: importObjectSchema.shape.provisionText,
+  renditionStatus: importObjectSchema.shape.renditionStatus,
   sourceUrl: lexDocumentUrlSchema,
   capturedAt: importObjectSchema.shape.capturedAt,
   sourceNormalizedSha256: sha256Schema,
@@ -175,6 +287,10 @@ function utf8(value: string): Uint8Array {
   return new TextEncoder().encode(value);
 }
 
+function evidenceBytes(value: string | Uint8Array): Uint8Array {
+  return typeof value === "string" ? utf8(value) : value;
+}
+
 function hex(bytes: ArrayBuffer): string {
   return [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
@@ -232,10 +348,15 @@ async function immutablePut(input: {
   mediaType: string;
   bytes: Uint8Array;
   sourceNormalizedSha256?: string;
+  expectedSha256?: string;
+  optimisticCreate?: boolean;
   ordinal: number;
   createdAt: string;
 }): Promise<Locator> {
   const hashed = await sha256(input.bytes);
+  if (input.expectedSha256 && input.expectedSha256 !== hashed.hex) {
+    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  }
   const locator: Locator = {
     id: input.id,
     objectKind: input.objectKind,
@@ -248,9 +369,7 @@ async function immutablePut(input: {
     schemaVersion: 1,
     createdAt: input.createdAt,
   };
-  const existing = await input.bucket.head(input.key);
-  if (!existing) {
-    await input.bucket.put(input.key, input.bytes, {
+  const putOptions = {
       onlyIf: { etagDoesNotMatch: "*" },
       httpMetadata: { contentType: input.mediaType },
       customMetadata: {
@@ -259,7 +378,30 @@ async function immutablePut(input: {
         objectKind: input.objectKind,
       },
       sha256: hashed.digest,
-    });
+  } as const;
+  if (input.optimisticCreate) {
+    let created: LegalEvidenceHead | null;
+    try {
+      created = await input.bucket.put(input.key, input.bytes, putOptions);
+    } catch (putError) {
+      try {
+        await readAndVerifyObject(input.bucket, locator);
+        return locator;
+      } catch {
+        throw putError;
+      }
+    }
+    if (created) {
+      if (created.size !== locator.byteCount
+        || created.customMetadata?.sha256 !== locator.sha256
+        || created.customMetadata?.schemaVersion !== "1") {
+        throw new LegalEvidenceError("IMMUTABLE_EVIDENCE_CONFLICT");
+      }
+      return locator;
+    }
+  } else {
+    const existing = await input.bucket.head(input.key);
+    if (!existing) await input.bucket.put(input.key, input.bytes, putOptions);
   }
   try {
     const verified = await readAndVerifyObject(input.bucket, locator);
@@ -279,13 +421,26 @@ async function assertNaturalIdentityAvailability(
   db: D1Database,
   input: z.infer<typeof importSchema>,
 ): Promise<void> {
-  const instrument = await db.prepare(`SELECT id,publisher_instrument_token AS token
+  const instrument = await db.prepare(`SELECT id,publisher_instrument_token AS token,
+      canonical_title AS canonicalTitle,document_type AS documentType,
+      canonical_url AS canonicalUrl,created_at AS createdAt
     FROM legal_instruments WHERE id=? OR publisher_instrument_token=?`).bind(
     input.legalInstrumentId,
     input.publisherInstrumentToken,
-  ).first<{ id: string; token: string }>();
+  ).first<{
+    id: string;
+    token: string;
+    canonicalTitle: string;
+    documentType: string;
+    canonicalUrl: string;
+    createdAt: string;
+  }>();
   const expression = await db.prepare(`SELECT id,legal_instrument_id AS legalInstrumentId,
-      language_tag AS languageTag,script,textual_authority AS textualAuthority
+      language_tag AS languageTag,source_url AS sourceUrl,created_at AS createdAt,
+      script,textual_authority AS textualAuthority,origin,
+      publication_status AS publicationStatus,controlling_on_conflict AS controllingOnConflict,
+      derived_from_expression_id AS derivedFromExpressionId,
+      authority_evidence_json AS authorityEvidenceJson
     FROM legal_official_expressions
     WHERE id=? OR (legal_instrument_id=? AND language_tag=? AND script=? AND textual_authority=?)`).bind(
     input.officialExpressionId,
@@ -297,47 +452,110 @@ async function assertNaturalIdentityAvailability(
     id: string;
     legalInstrumentId: string;
     languageTag: string;
+    sourceUrl: string;
+    createdAt: string;
     script: string;
     textualAuthority: string;
+    origin: string;
+    publicationStatus: string;
+    controllingOnConflict: number;
+    derivedFromExpressionId: string | null;
+    authorityEvidenceJson: string | null;
   }>();
   const revision = await db.prepare(`SELECT id,official_expression_id AS officialExpressionId,
-      publisher_revision_token AS publisherRevisionToken
+      publisher_revision_token AS publisherRevisionToken,raw_locator_id AS rawLocatorId,
+      normalized_locator_id AS normalizedLocatorId,captured_at AS capturedAt,
+      created_at AS createdAt,script,textual_authority AS textualAuthority,
+      authority_evidence_json AS authorityEvidenceJson
     FROM legal_text_revisions
     WHERE id=? OR (official_expression_id=? AND publisher_revision_token=?)`).bind(
     input.textRevisionId,
     input.officialExpressionId,
     input.publisherRevisionToken,
-  ).first<{ id: string; officialExpressionId: string; publisherRevisionToken: string }>();
+  ).first<{
+    id: string;
+    officialExpressionId: string;
+    publisherRevisionToken: string;
+    rawLocatorId: string;
+    normalizedLocatorId: string;
+    capturedAt: string;
+    createdAt: string;
+    script: string;
+    textualAuthority: string;
+    authorityEvidenceJson: string | null;
+  }>();
   const concept = await db.prepare(`SELECT id,legal_instrument_id AS legalInstrumentId,
-      publisher_concept_token AS token FROM legal_provision_concepts
+      publisher_concept_token AS token,created_at AS createdAt FROM legal_provision_concepts
     WHERE id=? OR (legal_instrument_id=? AND publisher_concept_token=?)`).bind(
     input.provisionConceptId,
     input.legalInstrumentId,
     input.publisherProvisionToken,
-  ).first<{ id: string; legalInstrumentId: string; token: string }>();
+  ).first<{ id: string; legalInstrumentId: string; token: string; createdAt: string }>();
   const rendition = await db.prepare(`SELECT id,provision_concept_id AS provisionConceptId,
-      text_revision_id AS textRevisionId FROM legal_provision_renditions
+      text_revision_id AS textRevisionId,locator_id AS locatorId,article_number AS articleNumber,
+      article_title AS articleTitle,sequence AS provisionSequence,source_url AS sourceUrl,
+      status AS renditionStatus,created_at AS createdAt FROM legal_provision_renditions
     WHERE id=? OR (provision_concept_id=? AND text_revision_id=?)`).bind(
     input.provisionRenditionId,
     input.provisionConceptId,
     input.textRevisionId,
-  ).first<{ id: string; provisionConceptId: string; textRevisionId: string }>();
+  ).first<{
+    id: string;
+    provisionConceptId: string;
+    textRevisionId: string;
+    locatorId: string;
+    articleNumber: string;
+    articleTitle: string | null;
+    provisionSequence: number;
+    sourceUrl: string;
+    renditionStatus: string;
+    createdAt: string;
+  }>();
+  const authorityEvidenceJson = input.authorityEvidence
+    ? JSON.stringify(input.authorityEvidence) : null;
+  const sharedCreatedAt = input.cutoffAt ?? input.capturedAt;
   if ((instrument && (instrument.id !== input.legalInstrumentId
-      || instrument.token !== input.publisherInstrumentToken))
+      || instrument.token !== input.publisherInstrumentToken
+      || instrument.canonicalTitle !== (input.canonicalInstrumentTitle ?? input.actTitle)
+      || instrument.documentType !== input.documentType
+      || instrument.canonicalUrl !== (input.canonicalInstrumentUrl ?? input.sourceUrl)
+      || (input.cutoffAt !== undefined && instrument.createdAt !== sharedCreatedAt)))
     || (expression && (expression.id !== input.officialExpressionId
       || expression.legalInstrumentId !== input.legalInstrumentId
       || expression.languageTag !== input.languageTag
+      || expression.sourceUrl !== input.sourceUrl
+      || (input.cutoffAt !== undefined && expression.createdAt !== sharedCreatedAt)
       || expression.script !== input.script
-      || expression.textualAuthority !== input.textualAuthority))
+      || expression.textualAuthority !== input.textualAuthority
+      || expression.origin !== input.origin
+      || expression.publicationStatus !== input.publicationStatus
+      || expression.controllingOnConflict !== (input.controllingOnConflict ? 1 : 0)
+      || expression.derivedFromExpressionId !== input.derivedFromExpressionId
+      || expression.authorityEvidenceJson !== authorityEvidenceJson))
     || (revision && (revision.id !== input.textRevisionId
       || revision.officialExpressionId !== input.officialExpressionId
-      || revision.publisherRevisionToken !== input.publisherRevisionToken))
+      || revision.publisherRevisionToken !== input.publisherRevisionToken
+      || revision.rawLocatorId !== `raw:${input.captureId}`
+      || revision.normalizedLocatorId !== `normalized:${input.textRevisionId}`
+      || revision.capturedAt !== input.capturedAt
+      || revision.createdAt !== input.capturedAt
+      || revision.script !== input.script
+      || revision.textualAuthority !== input.textualAuthority
+      || revision.authorityEvidenceJson !== authorityEvidenceJson))
     || (concept && (concept.id !== input.provisionConceptId
       || concept.legalInstrumentId !== input.legalInstrumentId
-      || concept.token !== input.publisherProvisionToken))
+      || concept.token !== input.publisherProvisionToken
+      || (input.cutoffAt !== undefined && concept.createdAt !== sharedCreatedAt)))
     || (rendition && (rendition.id !== input.provisionRenditionId
       || rendition.provisionConceptId !== input.provisionConceptId
-      || rendition.textRevisionId !== input.textRevisionId))) {
+      || rendition.textRevisionId !== input.textRevisionId
+      || rendition.locatorId !== `provision:${input.provisionRenditionId}`
+      || rendition.articleNumber !== input.articleNumber
+      || rendition.articleTitle !== (input.articleTitle ?? null)
+      || rendition.provisionSequence !== input.provisionSequence
+      || rendition.sourceUrl !== input.sourceUrl
+      || rendition.renditionStatus !== input.renditionStatus
+      || rendition.createdAt !== input.capturedAt))) {
     throw new LegalEvidenceError("LEGAL_EVIDENCE_IDENTITY_CONFLICT");
   }
 }
@@ -359,47 +577,98 @@ function locatorInsert(db: D1Database, locator: Locator): D1PreparedStatement {
   );
 }
 
-export async function importProvisionRendition(
+async function assertPersistedLocators(db: D1Database, expected: Locator[]): Promise<void> {
+  const persisted = await db.prepare(`SELECT id,object_kind AS objectKind,r2_key AS r2Key,
+      media_type AS mediaType,byte_count AS byteCount,sha256,
+      source_normalized_sha256 AS sourceNormalizedSha256,ordinal,
+      schema_version AS schemaVersion,created_at AS createdAt
+    FROM legal_evidence_locators WHERE id IN (?,?,?)`).bind(
+    ...expected.map((locator) => locator.id),
+  ).all<Locator>();
+  const byId = new Map(persisted.results.map((locator) => [locator.id, locator]));
+  const mismatch = expected.some((locator) => {
+    const actual = byId.get(locator.id);
+    return !actual || Object.entries(locator).some(([key, value]) =>
+      actual[key as keyof Locator] !== value);
+  });
+  if (mismatch || persisted.results.length !== expected.length) {
+    throw new LegalEvidenceError("LEGAL_EVIDENCE_IDENTITY_CONFLICT");
+  }
+}
+
+function expectedEligibility(
+  input: z.infer<typeof importSchema>,
+  capability: "current" | "as_of",
+): { status: "eligible" | "ineligible" | "gap"; reasons: string[]; evaluatedAt: string } | null {
+  const provenanceReasons = [
+    ...(input.textualAuthority === "unknown" ? ["TEXTUAL_AUTHORITY_UNKNOWN"] : []),
+    ...(input.publicationStatus !== "official"
+      ? [`PUBLICATION_STATUS_${input.publicationStatus.toUpperCase()}`] : []),
+    ...(input.origin === "unknown" ? ["ORIGIN_UNKNOWN"] : []),
+    ...(input.textualAuthority !== "unknown" && !input.authorityEvidence
+      ? ["AUTHORITY_EVIDENCE_MISSING"] : []),
+  ];
+  if (capability === "current") {
+    if (!input.currentPointer && provenanceReasons.length === 0) return null;
+    const reasons = [
+      ...provenanceReasons,
+      ...(input.renditionStatus !== "active"
+        ? [`RENDITION_STATUS_${input.renditionStatus.toUpperCase()}`] : []),
+    ];
+    return {
+      status: reasons.length > 0 ? "ineligible" : "eligible",
+      reasons,
+      evaluatedAt: input.currentPointer?.recordedAt ?? input.capturedAt,
+    };
+  }
+  if (!input.applicability && !input.temporalGap) return null;
+  const reasons = [
+    ...provenanceReasons,
+    ...(input.renditionStatus === "unknown" ? ["RENDITION_STATUS_UNKNOWN"] : []),
+    ...(input.temporalGap ? [`TEMPORAL_${input.temporalGap.kind.toUpperCase()}`] : []),
+  ];
+  return {
+    status: provenanceReasons.length > 0 || input.renditionStatus === "unknown"
+      ? "ineligible"
+      : input.temporalGap ? "gap" : "eligible",
+    reasons,
+    evaluatedAt: input.applicability?.recordedAt ?? input.temporalGap!.recordedAt,
+  };
+}
+
+async function importProvisionRenditionInternal(
   dependencies: { db: D1Database; bucket: LegalEvidenceBucket },
   untrustedInput: z.input<typeof importSchema>,
+  identityPreflight: boolean,
+  optimisticCreate = false,
 ) {
   const input = importSchema.parse(untrustedInput);
-  await assertNaturalIdentityAvailability(dependencies.db, input);
+  const normalizedBytes = evidenceBytes(input.normalizedRevision);
+  const rawBytes = evidenceBytes(input.rawCapture);
+  const provisionTextBytes = utf8(input.provisionText);
+  if (input.sourceRawSha256 && (await sha256(rawBytes)).hex !== input.sourceRawSha256) {
+    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  }
+  if (input.sourceNormalizedSha256
+    && (await sha256(normalizedBytes)).hex !== input.sourceNormalizedSha256) {
+    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  }
+  if (input.sourceProvisionSha256
+    && (await sha256(provisionTextBytes)).hex !== input.sourceProvisionSha256) {
+    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  }
+  if (identityPreflight) await assertNaturalIdentityAvailability(dependencies.db, input);
   const rawLocator = await immutablePut({
     bucket: dependencies.bucket,
     id: `raw:${input.captureId}`,
     objectKind: "raw_capture",
     key: `corpus/raw/lex/${input.captureId}/source.html`,
     mediaType: "text/html; charset=utf-8",
-    bytes: utf8(input.rawCapture),
+    bytes: rawBytes,
+    expectedSha256: input.sourceRawSha256,
     ordinal: 0,
     createdAt: input.capturedAt,
-  });
-  const normalizedBytes = deterministicJson({
-    schemaVersion: 1,
-    legalInstrumentId: input.legalInstrumentId,
-    publisherInstrumentToken: input.publisherInstrumentToken,
-    officialExpressionId: input.officialExpressionId,
-    textRevisionId: input.textRevisionId,
-    publisherProvisionToken: input.publisherProvisionToken,
-    publisherRevisionToken: input.publisherRevisionToken,
-    languageTag: input.languageTag,
-    script: input.script,
-    textualAuthority: input.textualAuthority,
-    origin: input.origin,
-    publicationStatus: input.publicationStatus,
-    controllingOnConflict: input.controllingOnConflict,
-    derivedFromExpressionId: input.derivedFromExpressionId,
-    authorityEvidence: input.authorityEvidence,
-    actTitle: input.actTitle,
-    documentType: input.documentType,
-    sourceUrl: input.sourceUrl,
-    capturedAt: input.capturedAt,
-    rawCapture: {
-      r2Key: rawLocator.r2Key,
-      byteCount: rawLocator.byteCount,
-      sha256: rawLocator.sha256,
-    },
+    optimisticCreate,
   });
   const normalizedLocator = await immutablePut({
     bucket: dependencies.bucket,
@@ -408,8 +677,10 @@ export async function importProvisionRendition(
     key: `corpus/normalized/${input.textRevisionId}.json`,
     mediaType: "application/json; charset=utf-8",
     bytes: normalizedBytes,
+    expectedSha256: input.sourceNormalizedSha256,
     ordinal: 0,
     createdAt: input.capturedAt,
+    optimisticCreate,
   });
   const provisionBytes = deterministicJson({
     schemaVersion: 1,
@@ -429,6 +700,7 @@ export async function importProvisionRendition(
     articleTitle: input.articleTitle ?? null,
     provisionSequence: input.provisionSequence,
     provisionText: input.provisionText,
+    renditionStatus: input.renditionStatus,
     sourceUrl: input.sourceUrl,
     capturedAt: input.capturedAt,
     sourceNormalizedSha256: normalizedLocator.sha256,
@@ -443,7 +715,11 @@ export async function importProvisionRendition(
     sourceNormalizedSha256: normalizedLocator.sha256,
     ordinal: input.provisionSequence,
     createdAt: input.capturedAt,
+    optimisticCreate,
   });
+  const currentEligibility = expectedEligibility(input, "current");
+  const asOfEligibility = expectedEligibility(input, "as_of");
+  const sharedCreatedAt = input.cutoffAt ?? input.capturedAt;
 
   await dependencies.db.batch([
     locatorInsert(dependencies.db, rawLocator),
@@ -452,15 +728,16 @@ export async function importProvisionRendition(
     dependencies.db.prepare(`INSERT OR IGNORE INTO legal_instruments
       (id,publisher_instrument_token,canonical_title,document_type,canonical_url,created_at)
       VALUES (?,?,?,?,?,?)`).bind(
-      input.legalInstrumentId, input.publisherInstrumentToken, input.actTitle,
-      input.documentType, input.sourceUrl, input.capturedAt,
+      input.legalInstrumentId, input.publisherInstrumentToken,
+      input.canonicalInstrumentTitle ?? input.actTitle,
+      input.documentType, input.canonicalInstrumentUrl ?? input.sourceUrl, sharedCreatedAt,
     ),
     dependencies.db.prepare(`INSERT OR IGNORE INTO legal_official_expressions
       (id,legal_instrument_id,language_tag,source_url,created_at,script,textual_authority,
         origin,publication_status,controlling_on_conflict,derived_from_expression_id,
         authority_evidence_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
       input.officialExpressionId, input.legalInstrumentId, input.languageTag,
-      input.sourceUrl, input.capturedAt, input.script, input.textualAuthority,
+      input.sourceUrl, sharedCreatedAt, input.script, input.textualAuthority,
       input.origin, input.publicationStatus, input.controllingOnConflict ? 1 : 0,
       input.derivedFromExpressionId, input.authorityEvidence
         ? JSON.stringify(input.authorityEvidence) : null,
@@ -477,36 +754,182 @@ export async function importProvisionRendition(
     dependencies.db.prepare(`INSERT OR IGNORE INTO legal_provision_concepts
       (id,legal_instrument_id,publisher_concept_token,created_at) VALUES (?,?,?,?)`).bind(
       input.provisionConceptId, input.legalInstrumentId,
-      input.publisherProvisionToken, input.capturedAt,
+      input.publisherProvisionToken, sharedCreatedAt,
     ),
     dependencies.db.prepare(`INSERT OR IGNORE INTO legal_provision_renditions
       (id,provision_concept_id,text_revision_id,locator_id,article_number,article_title,
         sequence,source_url,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(
       input.provisionRenditionId, input.provisionConceptId, input.textRevisionId,
       provisionLocator.id, input.articleNumber, input.articleTitle ?? null,
-      input.provisionSequence, input.sourceUrl, "active", input.capturedAt,
+      input.provisionSequence, input.sourceUrl, input.renditionStatus, input.capturedAt,
     ),
-    ...(input.textualAuthority === "unknown" ? [
+    ...(input.editorialValidity ? [
+      dependencies.db.prepare(`INSERT OR IGNORE INTO legal_text_revision_validity
+        (text_revision_id,valid_from,valid_to,recorded_at) VALUES (?,?,?,?)`).bind(
+        input.textRevisionId,
+        input.editorialValidity.validFrom,
+        input.editorialValidity.validTo,
+        input.editorialValidity.recordedAt,
+      ),
+    ] : []),
+    ...(input.applicability ? [
+      dependencies.db.prepare(`INSERT INTO legal_applicability_periods
+        (id,provision_rendition_id,valid_from,valid_to,evidence_url,evidence_kind,status,recorded_at)
+        SELECT ?,?,?,?,?,?,?,?
+        WHERE NOT EXISTS (SELECT 1 FROM legal_applicability_periods
+          WHERE provision_rendition_id=?)`).bind(
+        input.applicability.id,
+        input.provisionRenditionId,
+        input.applicability.validFrom,
+        input.applicability.validTo,
+        input.applicability.evidenceUrl,
+        input.applicability.evidenceKind,
+        "verified",
+        input.applicability.recordedAt,
+        input.provisionRenditionId,
+      ),
+    ] : []),
+    ...(input.temporalGap ? [
+      dependencies.db.prepare(`INSERT OR IGNORE INTO legal_temporal_coverage_gaps
+        (id,provision_rendition_id,gap_kind,valid_from,valid_to,evidence_url,reason,status,recorded_at)
+        VALUES (?,?,?,?,?,?,?,?,?)`).bind(
+        input.temporalGap.id,
+        input.provisionRenditionId,
+        input.temporalGap.kind,
+        input.temporalGap.validFrom ?? null,
+        input.temporalGap.validTo ?? null,
+        input.temporalGap.evidenceUrl,
+        input.temporalGap.reason,
+        "open",
+        input.temporalGap.recordedAt,
+      ),
+    ] : []),
+    ...(input.currentPointer ? [
+      dependencies.db.prepare(`INSERT OR IGNORE INTO legal_current_provision_pointers
+        (provision_rendition_id,evidence_url,verified_at,recorded_at) VALUES (?,?,?,?)`).bind(
+        input.provisionRenditionId,
+        input.currentPointer.evidenceUrl,
+        input.currentPointer.verifiedAt,
+        input.currentPointer.recordedAt,
+      ),
+    ] : []),
+    ...(asOfEligibility ? [
+      dependencies.db.prepare(`INSERT OR IGNORE INTO legal_official_eligibility
+        (id,subject_type,subject_id,capability,status,reason_codes_json,evaluated_at)
+        VALUES (?,?,?,?,?,?,?)`).bind(
+        `eligibility:${input.provisionRenditionId}:as_of`, "provision_rendition",
+        input.provisionRenditionId, "as_of", asOfEligibility.status,
+        JSON.stringify(asOfEligibility.reasons), asOfEligibility.evaluatedAt,
+      ),
+    ] : []),
+    ...(currentEligibility ? [
       dependencies.db.prepare(`INSERT OR IGNORE INTO legal_official_eligibility
         (id,subject_type,subject_id,capability,status,reason_codes_json,evaluated_at)
         VALUES (?,?,?,?,?,?,?)`).bind(
         `eligibility:${input.provisionRenditionId}:current`, "provision_rendition",
-        input.provisionRenditionId, "current", "ineligible",
-        '["TEXTUAL_AUTHORITY_UNKNOWN"]', input.capturedAt,
+        input.provisionRenditionId, "current", currentEligibility.status,
+        JSON.stringify(currentEligibility.reasons), currentEligibility.evaluatedAt,
       ),
     ] : []),
   ]);
+  await assertNaturalIdentityAvailability(dependencies.db, input);
+  await assertPersistedLocators(dependencies.db, [rawLocator, normalizedLocator, provisionLocator]);
 
   const persisted = await dependencies.db.prepare(`SELECT locator.r2_key AS r2Key,
       locator.byte_count AS byteCount,locator.sha256 AS sha256,
-      locator.source_normalized_sha256 AS sourceNormalizedSha256
+      locator.source_normalized_sha256 AS sourceNormalizedSha256,
+      rendition.provision_concept_id AS provisionConceptId,
+      rendition.text_revision_id AS textRevisionId,
+      concept.legal_instrument_id AS legalInstrumentId,
+      concept.publisher_concept_token AS publisherProvisionToken,
+      revision.official_expression_id AS officialExpressionId,
+      revision.publisher_revision_token AS publisherRevisionToken,
+      instrument.publisher_instrument_token AS publisherInstrumentToken,
+      rendition.article_number AS articleNumber,rendition.article_title AS articleTitle,
+      rendition.sequence AS provisionSequence,rendition.source_url AS sourceUrl,
+      rendition.status AS renditionStatus,
+      validity.valid_from AS editorialValidFrom,validity.valid_to AS editorialValidTo,
+      validity.recorded_at AS editorialRecordedAt,
+      applicability.id AS applicabilityId,applicability.valid_from AS applicabilityValidFrom,
+      applicability.valid_to AS applicabilityValidTo,
+      applicability.evidence_url AS applicabilityEvidenceUrl,
+      applicability.evidence_kind AS applicabilityEvidenceKind,
+      applicability.recorded_at AS applicabilityRecordedAt,
+      gap.id AS temporalGapId,gap.gap_kind AS temporalGapKind,
+      gap.valid_from AS temporalGapValidFrom,
+      gap.valid_to AS temporalGapValidTo,gap.evidence_url AS temporalGapEvidenceUrl,
+      gap.reason AS temporalGapReason,gap.recorded_at AS temporalGapRecordedAt,
+      pointer.evidence_url AS currentPointerEvidenceUrl,
+      pointer.verified_at AS currentPointerVerifiedAt,
+      pointer.recorded_at AS currentPointerRecordedAt,
+      current_eligibility.status AS currentEligibilityStatus,
+      current_eligibility.reason_codes_json AS currentEligibilityReasons,
+      current_eligibility.evaluated_at AS currentEligibilityEvaluatedAt,
+      as_of_eligibility.status AS asOfEligibilityStatus,
+      as_of_eligibility.reason_codes_json AS asOfEligibilityReasons,
+      as_of_eligibility.evaluated_at AS asOfEligibilityEvaluatedAt
     FROM legal_provision_renditions rendition
     JOIN legal_evidence_locators locator ON locator.id=rendition.locator_id
+    JOIN legal_provision_concepts concept ON concept.id=rendition.provision_concept_id
+    JOIN legal_text_revisions revision ON revision.id=rendition.text_revision_id
+    JOIN legal_instruments instrument ON instrument.id=concept.legal_instrument_id
+    LEFT JOIN legal_text_revision_validity validity ON validity.text_revision_id=revision.id
+    LEFT JOIN legal_applicability_periods applicability
+      ON applicability.provision_rendition_id=rendition.id
+    LEFT JOIN legal_temporal_coverage_gaps gap
+      ON gap.provision_rendition_id=rendition.id AND gap.status='open'
+    LEFT JOIN legal_current_provision_pointers pointer
+      ON pointer.provision_rendition_id=rendition.id
+    LEFT JOIN legal_official_eligibility current_eligibility
+      ON current_eligibility.subject_type='provision_rendition'
+      AND current_eligibility.subject_id=rendition.id
+      AND current_eligibility.capability='current'
+    LEFT JOIN legal_official_eligibility as_of_eligibility
+      ON as_of_eligibility.subject_type='provision_rendition'
+      AND as_of_eligibility.subject_id=rendition.id
+      AND as_of_eligibility.capability='as_of'
     WHERE rendition.id=?`).bind(input.provisionRenditionId).first<{
       r2Key: string;
       byteCount: number;
       sha256: string;
       sourceNormalizedSha256: string;
+      provisionConceptId: string;
+      textRevisionId: string;
+      legalInstrumentId: string;
+      publisherProvisionToken: string;
+      officialExpressionId: string;
+      publisherRevisionToken: string;
+      publisherInstrumentToken: string;
+      articleNumber: string;
+      articleTitle: string | null;
+      provisionSequence: number;
+      sourceUrl: string;
+      renditionStatus: string;
+      editorialValidFrom: string | null;
+      editorialValidTo: string | null;
+      editorialRecordedAt: string | null;
+      applicabilityId: string | null;
+      applicabilityValidFrom: string | null;
+      applicabilityValidTo: string | null;
+      applicabilityEvidenceUrl: string | null;
+      applicabilityEvidenceKind: string | null;
+      applicabilityRecordedAt: string | null;
+      temporalGapId: string | null;
+      temporalGapKind: string | null;
+      temporalGapValidFrom: string | null;
+      temporalGapValidTo: string | null;
+      temporalGapEvidenceUrl: string | null;
+      temporalGapReason: string | null;
+      temporalGapRecordedAt: string | null;
+      currentPointerEvidenceUrl: string | null;
+      currentPointerVerifiedAt: string | null;
+      currentPointerRecordedAt: string | null;
+      currentEligibilityStatus: string | null;
+      currentEligibilityReasons: string | null;
+      currentEligibilityEvaluatedAt: string | null;
+      asOfEligibilityStatus: string | null;
+      asOfEligibilityReasons: string | null;
+      asOfEligibilityEvaluatedAt: string | null;
     }>();
   if (
     !persisted
@@ -514,6 +937,55 @@ export async function importProvisionRendition(
     || persisted.byteCount !== provisionLocator.byteCount
     || persisted.sha256 !== provisionLocator.sha256
     || persisted.sourceNormalizedSha256 !== provisionLocator.sourceNormalizedSha256
+    || persisted.provisionConceptId !== input.provisionConceptId
+    || persisted.textRevisionId !== input.textRevisionId
+    || persisted.legalInstrumentId !== input.legalInstrumentId
+    || persisted.publisherProvisionToken !== input.publisherProvisionToken
+    || persisted.officialExpressionId !== input.officialExpressionId
+    || persisted.publisherRevisionToken !== input.publisherRevisionToken
+    || persisted.publisherInstrumentToken !== input.publisherInstrumentToken
+    || persisted.articleNumber !== input.articleNumber
+    || persisted.articleTitle !== (input.articleTitle ?? null)
+    || persisted.provisionSequence !== input.provisionSequence
+    || persisted.sourceUrl !== input.sourceUrl
+    || persisted.renditionStatus !== input.renditionStatus
+    || (input.editorialValidity && (
+      persisted.editorialValidFrom !== input.editorialValidity.validFrom
+      || persisted.editorialValidTo !== input.editorialValidity.validTo
+      || persisted.editorialRecordedAt !== input.editorialValidity.recordedAt
+    ))
+    || (input.applicability && (
+      persisted.applicabilityId !== input.applicability.id
+      || persisted.applicabilityValidFrom !== input.applicability.validFrom
+      || persisted.applicabilityValidTo !== input.applicability.validTo
+      || persisted.applicabilityEvidenceUrl !== input.applicability.evidenceUrl
+      || persisted.applicabilityEvidenceKind !== input.applicability.evidenceKind
+      || persisted.applicabilityRecordedAt !== input.applicability.recordedAt
+    ))
+    || (input.temporalGap && (
+      persisted.temporalGapId !== input.temporalGap.id
+      || persisted.temporalGapKind !== input.temporalGap.kind
+      || persisted.temporalGapValidFrom !== (input.temporalGap.validFrom ?? null)
+      || persisted.temporalGapValidTo !== (input.temporalGap.validTo ?? null)
+      || persisted.temporalGapEvidenceUrl !== input.temporalGap.evidenceUrl
+      || persisted.temporalGapReason !== input.temporalGap.reason
+      || persisted.temporalGapRecordedAt !== input.temporalGap.recordedAt
+    ))
+    || (input.currentPointer && (
+      persisted.currentPointerEvidenceUrl !== input.currentPointer.evidenceUrl
+      || persisted.currentPointerVerifiedAt !== input.currentPointer.verifiedAt
+      || persisted.currentPointerRecordedAt !== input.currentPointer.recordedAt
+    ))
+    || (currentEligibility && (
+      persisted.currentEligibilityStatus !== currentEligibility.status
+      || persisted.currentEligibilityReasons !== JSON.stringify(currentEligibility.reasons)
+      || persisted.currentEligibilityEvaluatedAt !== currentEligibility.evaluatedAt
+    ))
+    || (asOfEligibility && (
+      persisted.asOfEligibilityStatus !== asOfEligibility.status
+      || persisted.asOfEligibilityReasons !== JSON.stringify(asOfEligibility.reasons)
+      || persisted.asOfEligibilityEvaluatedAt !== asOfEligibility.evaluatedAt
+    ))
   ) throw new LegalEvidenceError("LEGAL_EVIDENCE_IDENTITY_CONFLICT");
 
   return {
@@ -525,6 +997,162 @@ export async function importProvisionRendition(
     rawLocator,
     normalizedLocator,
     provisionLocator,
+  };
+}
+
+export function importProvisionRendition(
+  dependencies: { db: D1Database; bucket: LegalEvidenceBucket },
+  untrustedInput: z.input<typeof importSchema>,
+) {
+  return importProvisionRenditionInternal(dependencies, untrustedInput, true);
+}
+
+function revisionIdentity(input: z.infer<typeof importSchema>): string {
+  return JSON.stringify({
+    legalInstrumentId: input.legalInstrumentId,
+    publisherInstrumentToken: input.publisherInstrumentToken,
+    officialExpressionId: input.officialExpressionId,
+    textRevisionId: input.textRevisionId,
+    captureId: input.captureId,
+    publisherRevisionToken: input.publisherRevisionToken,
+    languageTag: input.languageTag,
+    script: input.script,
+    textualAuthority: input.textualAuthority,
+    origin: input.origin,
+    publicationStatus: input.publicationStatus,
+    controllingOnConflict: input.controllingOnConflict,
+    derivedFromExpressionId: input.derivedFromExpressionId,
+    authorityEvidence: input.authorityEvidence,
+    canonicalInstrumentTitle: input.canonicalInstrumentTitle ?? null,
+    actTitle: input.actTitle,
+    documentType: input.documentType,
+    rawCaptureBytes: evidenceBytes(input.rawCapture).byteLength,
+    normalizedRevisionBytes: evidenceBytes(input.normalizedRevision).byteLength,
+    sourceRawSha256: input.sourceRawSha256 ?? null,
+    sourceNormalizedSha256: input.sourceNormalizedSha256 ?? null,
+    sourceUrl: input.sourceUrl,
+    canonicalInstrumentUrl: input.canonicalInstrumentUrl ?? null,
+    capturedAt: input.capturedAt,
+    migrationRunId: input.migrationRunId ?? null,
+    cutoffAt: input.cutoffAt ?? null,
+    editorialValidity: input.editorialValidity ?? null,
+  });
+}
+
+async function bindCurrentMigrationCutoff(
+  db: D1Database,
+  input: z.infer<typeof currentMigrationImportSchema>,
+): Promise<void> {
+  await db.prepare(`INSERT OR IGNORE INTO legal_migration_cutoffs
+    (scope,migration_run_id,cutoff_at,recorded_at) VALUES ('current',?,?,?)`).bind(
+    input.migrationRunId,
+    input.cutoffAt,
+    input.cutoffAt,
+  ).run();
+  const persisted = await db.prepare(`SELECT migration_run_id AS migrationRunId,
+      cutoff_at AS cutoffAt,recorded_at AS recordedAt
+    FROM legal_migration_cutoffs WHERE scope='current'`).first<{
+      migrationRunId: string;
+      cutoffAt: string;
+      recordedAt: string;
+    }>();
+  if (!persisted
+    || persisted.migrationRunId !== input.migrationRunId
+    || persisted.cutoffAt !== input.cutoffAt
+    || persisted.recordedAt !== input.cutoffAt) {
+    throw new LegalEvidenceError("LEGAL_EVIDENCE_IDENTITY_CONFLICT");
+  }
+}
+
+function memoizeSharedRevisionEvidence(bucket: LegalEvidenceBucket): LegalEvidenceBucket {
+  const cached = new Map<string, Promise<LegalEvidenceObject | null>>();
+  const createChecks = new Map<string, Promise<LegalEvidenceHead | null>>();
+  const shared = (key: string) => key.startsWith("corpus/raw/")
+    || key.startsWith("corpus/normalized/");
+  const getShared = (key: string) => {
+    let pending = cached.get(key);
+    if (!pending) {
+      pending = bucket.get(key).then(async (object) => {
+        if (!object) return null;
+        const value = await object.bytes();
+        const bytes = new Uint8Array(value.byteLength);
+        bytes.set(value);
+        return {
+          key: object.key,
+          size: object.size,
+          customMetadata: object.customMetadata,
+          bytes: async () => {
+            const copy = new Uint8Array(bytes.byteLength);
+            copy.set(bytes);
+            return copy;
+          },
+        };
+      });
+      cached.set(key, pending);
+    }
+    return pending;
+  };
+  return {
+    async head(key) {
+      if (!shared(key) || !cached.has(key)) return bucket.head(key);
+      const object = await getShared(key);
+      return object && {
+        key: object.key,
+        size: object.size,
+        customMetadata: object.customMetadata,
+      };
+    },
+    get(key) {
+      return shared(key) ? getShared(key) : bucket.get(key);
+    },
+    put(key, value, options) {
+      if (!shared(key)) return bucket.put(key, value, options);
+      let pending = createChecks.get(key);
+      if (!pending) {
+        cached.delete(key);
+        pending = bucket.put(key, value, options);
+        createChecks.set(key, pending);
+      }
+      return pending;
+    },
+  };
+}
+
+export async function importProvisionRevision(
+  dependencies: { db: D1Database; bucket: LegalEvidenceBucket },
+  untrustedInputs: unknown[],
+) {
+  const inputs = z.array(currentMigrationImportSchema).min(1).max(48).parse(untrustedInputs);
+  const expectedRevision = revisionIdentity(inputs[0]!);
+  const firstRaw = evidenceBytes(inputs[0]!.rawCapture);
+  const firstNormalized = evidenceBytes(inputs[0]!.normalizedRevision);
+  const sameBytes = (left: Uint8Array, right: Uint8Array) => left === right
+    || (left.byteLength === right.byteLength && left.every((value, index) => value === right[index]));
+  if (inputs.some((input) => revisionIdentity(input) !== expectedRevision
+    || !sameBytes(firstRaw, evidenceBytes(input.rawCapture))
+    || !sameBytes(firstNormalized, evidenceBytes(input.normalizedRevision)))) {
+    throw new LegalEvidenceError("LEGAL_EVIDENCE_IDENTITY_CONFLICT");
+  }
+  await bindCurrentMigrationCutoff(dependencies.db, inputs[0]!);
+  const bucket = memoizeSharedRevisionEvidence(dependencies.bucket);
+  const imported = [await importProvisionRenditionInternal(
+    { db: dependencies.db, bucket },
+    inputs[0]!,
+    true,
+    true,
+  )];
+  for (let offset = 1; offset < inputs.length; offset += 4) {
+    imported.push(...await Promise.all(inputs.slice(offset, offset + 4).map((input) =>
+      importProvisionRenditionInternal({ db: dependencies.db, bucket }, input, false, true))));
+  }
+  return {
+    legalInstrumentId: imported[0]!.legalInstrumentId,
+    officialExpressionId: imported[0]!.officialExpressionId,
+    textRevisionId: imported[0]!.textRevisionId,
+    rawLocator: imported[0]!.rawLocator,
+    normalizedLocator: imported[0]!.normalizedLocator,
+    provisionCount: imported.length,
+    provisionRenditionIds: imported.map((item) => item.provisionRenditionId),
   };
 }
 

@@ -9,14 +9,17 @@ export const LEGAL_TARGET_READINESS_PATH = "/internal/legal-corpus/target/readin
 
 const SERVICE_BINDING_MARKER = "legal-target-storage-v1";
 const environmentSchema = z.enum(["development", "staging", "production"]);
+const evidenceBucketNameSchema = z.string().regex(
+  /^juro-legal-evidence-(?:development|staging|production)(?:-[a-z0-9]+)*$/u,
+);
 const controlRowSchema = z.object({
   environment: environmentSchema,
   migrationState: z.enum(["initialized", "migrating", "ready", "blocked"]),
-  evidenceBucketName: z.string().regex(/^juro-legal-evidence-(?:development|staging|production)$/u),
+  evidenceBucketName: evidenceBucketNameSchema,
 }).strict();
 const bucketControlSchema = z.object({
   environment: environmentSchema,
-  bucketName: z.string().regex(/^juro-legal-evidence-(?:development|staging|production)$/u),
+  bucketName: evidenceBucketNameSchema,
   schemaVersion: z.literal("1"),
 }).strict();
 const readinessSchema = z.object({
@@ -35,9 +38,8 @@ type LegalTargetDatabaseReader = {
 type LegalTargetBucketReader = {
   head(key: string): Promise<{ customMetadata?: Record<string, string> } | null>;
 };
-export type LegalTargetReadinessEnv = Pick<LegalCorpusDevelopmentEnv, "APP_ENV">
-  & Partial<Pick<LegalCorpusDevelopmentEnv, "LEGAL_EVIDENCE_BUCKET_NAME">>
-  & {
+export type LegalTargetReadinessEnv = Pick<LegalCorpusDevelopmentEnv, "APP_ENV"> & {
+    LEGAL_EVIDENCE_BUCKET_NAME?: string;
     LEGAL_DB?: LegalTargetDatabaseReader;
     LEGAL_EVIDENCE_BUCKET?: LegalTargetBucketReader;
   };

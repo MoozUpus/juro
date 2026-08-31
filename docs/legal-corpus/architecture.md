@@ -25,6 +25,30 @@ inert until a separate server-side feature flag and infrastructure are approved.
 | Source UX | Server-owned cards and full-article modal | Type, number, adopting authority, language, live/indexed origin, available official variants and immutable version history are read from the validated corpus packet, never authored by the model |
 | Admin control | Metrics, coverage proof, bounded seed/retry and immutable audit | Isolated `apps/admin` Worker, host-only admin cookie, service binding and fresh source MFA |
 
+## Target storage rollout identity
+
+Dedicated legal D1 and R2 resources use the environment prefix
+`juro-legal-catalog-<environment>` and
+`juro-legal-evidence-<environment>`. A blue-green replacement may append an
+immutable lowercase deployment suffix, for example `-green-20260831`. The D1
+control row, Worker binding, configured bucket name and private R2 control
+object must all name the same exact resource; matching only the environment
+prefix is never sufficient readiness evidence.
+
+An unsuccessful target candidate is retained as recovery evidence and is not
+repaired by rewriting immutable legal rows or objects. A corrected import uses
+a newly provisioned candidate. The current-corpus importer verifies declared
+raw, normalized-revision and provision hashes before target writes, preserves
+source rendition status, binds the candidate to one immutable migration run
+and cutoff before evidence writes, records cutoff-pinned current pointers, and
+stores verified applicability intervals or explicitly classified temporal
+gaps. Checkpointed pages are capped below the Worker D1 query budget and every
+replay revalidates canonical identity, capture provenance, locators, and
+capability-specific eligibility. Unknown textual authority remains an
+ineligibility reason even when temporal provenance is available. Visible
+retrieval stays on the legacy Adapter until a separately sealed Search Release
+and capability-scoped Activation Set pass their gates.
+
 ## Local development against the staging index
 
 Use the dedicated opt-in command from the repository root:

@@ -8,12 +8,17 @@ import {
   LEGAL_TARGET_READINESS_PATH,
   type LegalTargetReadinessEnv,
 } from "../lib/legal-corpus/target-storage";
+import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
 
-function targetEnv(environment: "development" | "staging" | "production" = "staging"):
+function targetEnv(
+  environment: "development" | "staging" | "production" = "staging",
+  suffix = "",
+):
 LegalTargetReadinessEnv {
+  const bucketName = `juro-legal-evidence-${environment}${suffix}`;
   return {
     APP_ENV: environment,
-    LEGAL_EVIDENCE_BUCKET_NAME: `juro-legal-evidence-${environment}`,
+    LEGAL_EVIDENCE_BUCKET_NAME: bucketName,
     LEGAL_DB: {
       prepare() {
         return {
@@ -21,7 +26,7 @@ LegalTargetReadinessEnv {
             return {
               environment,
               migrationState: "initialized",
-              evidenceBucketName: `juro-legal-evidence-${environment}`,
+              evidenceBucketName: bucketName,
             };
           },
         };
@@ -33,7 +38,7 @@ LegalTargetReadinessEnv {
         return {
           customMetadata: {
             environment,
-            bucketName: `juro-legal-evidence-${environment}`,
+            bucketName,
             schemaVersion: "1",
           },
         };
@@ -63,6 +68,56 @@ test("private service-binding readiness proves the isolated legal D1 and R2 stor
     migrationState: "initialized",
   });
 });
+
+test("private readiness accepts an environment-scoped blue-green storage identity", async () => {
+  const result = await createLegalTargetReadinessClient({
+    service: inProcessReadinessService(targetEnv("staging", "-green-20260831")),
+    environment: "staging",
+  }).readiness();
+
+  assert.equal(result.evidenceBucket, "ready");
+  assert.equal(result.environment, "staging");
+});
+
+test("target control persists one exact lowercase blue-green resource identity", () => {
+  const { sqlite } = sqliteD1FixtureFromDirectory(
+    new URL("../legal-drizzle/", import.meta.url),
+  );
+  try {
+    const insert = sqlite.prepare(`INSERT INTO legal_target_control
+      (control_key,environment,migration_state,evidence_bucket_name,schema_version,
+        initialized_at,updated_at) VALUES ('environment','staging','migrating',?,1,?,?)`);
+    insert.run(
+      "juro-legal-evidence-staging-green-20260831",
+      "2026-08-31T10:11:58.807Z",
+      "2026-08-31T10:11:58.807Z",
+    );
+    assert.equal((sqlite.prepare(`SELECT evidence_bucket_name AS bucketName
+      FROM legal_target_control`).get() as { bucketName: string }).bucketName,
+    "juro-legal-evidence-staging-green-20260831");
+  } finally {
+    sqlite.close();
+  }
+});
+
+for (const invalidSuffix of ["-green--20260831", "-green-"]) {
+  test(`target control rejects malformed blue-green suffix ${invalidSuffix}`, () => {
+    const { sqlite } = sqliteD1FixtureFromDirectory(
+      new URL("../legal-drizzle/", import.meta.url),
+    );
+    try {
+      assert.throws(() => sqlite.prepare(`INSERT INTO legal_target_control
+        (control_key,environment,migration_state,evidence_bucket_name,schema_version,
+          initialized_at,updated_at) VALUES ('environment','staging','migrating',?,1,?,?)`).run(
+        `juro-legal-evidence-staging${invalidSuffix}`,
+        "2026-08-31T10:11:58.807Z",
+        "2026-08-31T10:11:58.807Z",
+      ), /constraint/u);
+    } finally {
+      sqlite.close();
+    }
+  });
+}
 
 test("target readiness rejects unbound, cross-environment, and public requests", async () => {
   const env = targetEnv("staging");
