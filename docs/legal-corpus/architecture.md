@@ -1,5 +1,7 @@
 # Legal corpus architecture
 
+> This document records the implemented corpus subsystem and its present rollout controls. The accepted target for legal search is [AI Search target architecture](./target-search-architecture.md); activation remains subject to its staging gates.
+
 ## Scope boundary
 
 `apps/platform/lib/legal-corpus` is a JURO-owned Cloudflare/D1/R2 subsystem.
