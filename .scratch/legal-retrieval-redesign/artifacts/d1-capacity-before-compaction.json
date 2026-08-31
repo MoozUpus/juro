@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "environment": "staging",
-  "databaseId": "bb716a96-b2fb-4823-90d6-6c228fed181a",
-  "databaseName": "juro-staging",
-  "observedAt": "2026-08-30T02:33:07.660Z",
-  "databaseSizeBytes": 9999998976,
-  "source": "wrangler_d1_info"
-}
