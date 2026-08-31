@@ -1030,6 +1030,13 @@
       "when": 1787058901000,
       "tag": "0146_lawyer_profile_services",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1788196800000,
+      "tag": "0147_signed_share_verification_hardening",
+      "breakpoints": true
     }
   ]
 }

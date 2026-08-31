@@ -5,9 +5,10 @@ import test from "node:test";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import PizZip from "pizzip";
 
-import { compareDocuments } from "../lib/document-comparison/diff";
+import { compareDocuments, MAX_FUZZY_SECTION_COMPARISONS } from "../lib/document-comparison/diff";
 import { extractDocument, structureDocument } from "../lib/document-comparison/extract";
 import type { ExtractedDocument } from "../lib/document-comparison/types";
+import { ArchiveInspectionError } from "../lib/document-analysis/archive-inspector";
 import {
   sha256Hex,
   validateUploadBytes,
@@ -180,22 +181,21 @@ test("Builder Markdown snapshot enters the same structured analysis pipeline", a
 });
 
 test("comparison upload and processing preflight DOCX archives with strict expansion bounds", async () => {
-  const [uploadRoute, processRoute] = await Promise.all([
+  const [uploadRoute, processRoute, sharedValidation] = await Promise.all([
     readFile(new URL("../app/api/platform/document-comparisons/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/document-comparisons/[comparisonId]/process/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/document-builder/storage/file-validation.ts", import.meta.url), "utf8"),
   ]);
-  for (const route of [uploadRoute, processRoute]) {
-    assert.match(route, /verifyArchiveBytes/);
-    assert.match(route, /maxUncompressedBytes:\s*25 \* 1024 \* 1024/);
-    assert.match(route, /maxExpansionRatio:\s*40/);
+  for (const source of [sharedValidation, processRoute]) {
+    assert.match(source, /verifyArchiveBytes/);
+    assert.match(source, /maxUncompressedBytes:\s*25 \* 1024 \* 1024/);
+    assert.match(source, /maxExpansionRatio:\s*40/);
   }
-  assert.match(uploadRoute, /await verifyArchiveBytes[\s\S]*await putPrivateObject/);
-  const existingPreflight = uploadRoute.indexOf("await verifyArchiveBytes(bytes, existing.mimeType");
-  const existingLegacyParser = uploadRoute.indexOf("const inspection = validateUploadBytes", existingPreflight);
-  const freshPreflight = uploadRoute.indexOf("await verifyArchiveBytes(bytes, file.type");
-  const freshLegacyParser = uploadRoute.indexOf("const inspection = validateUploadBytes", freshPreflight);
-  assert.ok(existingPreflight >= 0 && existingLegacyParser > existingPreflight);
-  assert.ok(freshPreflight >= 0 && freshLegacyParser > freshPreflight);
+  assert.doesNotMatch(sharedValidation, /PizZip/u);
+  const existingPreflight = uploadRoute.indexOf("const inspection = await validateUploadBytes(");
+  const freshPreflight = uploadRoute.indexOf("const inspection = await validateUploadBytes(file, bytes)");
+  const privateStorage = uploadRoute.indexOf("await putPrivateObject");
+  assert.ok(existingPreflight >= 0 && freshPreflight > existingPreflight && privateStorage > freshPreflight);
 });
 
 test("TXT, passive HTML and JSON enter the same non-executing extraction pipeline", async () => {
@@ -263,8 +263,22 @@ test("OCR-required, corrupt, empty and spoofed uploads fail honestly", async () 
   );
   const spoofedPdf = new File([new TextEncoder().encode("not a pdf")], "contract.pdf", { type: "application/pdf" });
   assert.equal(
-    validateUploadBytes(spoofedPdf, new Uint8Array(await spoofedPdf.arrayBuffer()))?.code,
+    (await validateUploadBytes(spoofedPdf, new Uint8Array(await spoofedPdf.arrayBuffer())))?.code,
     "CONTENT_TYPE_MISMATCH",
+  );
+});
+
+test("shared DOCX validation rejects an archive above the bounded entry limit before legacy parsing", async () => {
+  const zip = new PizZip();
+  zip.file("[Content_Types].xml", "<Types/>");
+  zip.file("_rels/.rels", "<Relationships/>");
+  zip.file("word/document.xml", "<w:document/>");
+  for (let index = 0; index < 500; index += 1) zip.file(`word/media/item-${index}.txt`, "x");
+  const bytes = zip.generate({ type: "uint8array", compression: "DEFLATE" });
+  const file = new File([Uint8Array.from(bytes).buffer], "bounded.docx", { type: docxType });
+  await assert.rejects(
+    () => validateUploadBytes(file, bytes),
+    (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_ENTRY_LIMIT",
   );
 });
 
@@ -280,6 +294,39 @@ test("large structured documents are compared without quadratic output growth", 
   assert.equal(result.changes.length, 140);
   assert.equal(result.summary.changed, 1);
   assert.equal(result.summary.unchanged, 139);
+});
+
+test("fuzzy section matching stops before an attacker-controlled quadratic candidate set", () => {
+  const count = Math.floor(Math.sqrt(MAX_FUZZY_SECTION_COMPARISONS)) + 2;
+  const document = (prefix: string, fileName: string): ExtractedDocument => {
+    const sections = Array.from({ length: count }, (_, index) => {
+      const text = `${prefix} условие ${index} применяется к обязательствам соответствующей стороны по договору`;
+      return {
+        id: `${prefix}-${index}`,
+        index,
+        label: null,
+        heading: null,
+        text,
+        normalizedText: text.toLocaleLowerCase(),
+        semanticText: text.toLocaleLowerCase(),
+      };
+    });
+    return {
+      fileName,
+      mimeType: docxType,
+      sizeBytes: 1,
+      pageCount: null,
+      detectedLanguage: "ru",
+      textQuality: "good",
+      warningCode: null,
+      text: sections.map((section) => section.text).join("\n\n"),
+      sections,
+    };
+  };
+  const result = compareDocuments(document("исходное", "one.docx"), document("переработанное", "two.docx"), "ru");
+  assert.equal(result.summary.removed, count);
+  assert.equal(result.summary.added, count);
+  assert.equal(result.changes.length, count * 2);
 });
 
 test("version hashes are stable and distinguish different source bytes", async () => {

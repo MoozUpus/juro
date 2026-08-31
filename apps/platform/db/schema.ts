@@ -629,6 +629,10 @@ export const standaloneSignedPdfShares = sqliteTable(
     publicToken: text("public_token").notNull(),
     accessCode: text("access_code").notNull(),
     accessCodeHash: text("access_code_hash").notNull(),
+    accessCodeDigits: integer("access_code_digits").notNull().default(4),
+    verificationAttemptCount: integer("verification_attempt_count").notNull().default(0),
+    verificationWindowStartedAt: text("verification_window_started_at"),
+    verificationLockedUntil: text("verification_locked_until"),
     expiresAt: text("expires_at").notNull(),
     deactivatedAt: text("deactivated_at"),
     deletedAt: text("deleted_at"),
@@ -646,7 +650,10 @@ export const signedShareSessions = sqliteTable(
     expiresAt: text("expires_at").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (table) => [index("signed_share_sessions_share_idx").on(table.shareId)],
+  (table) => [
+    index("signed_share_sessions_share_idx").on(table.shareId),
+    index("signed_share_sessions_expiry_idx").on(table.expiresAt),
+  ],
 );
 
 export const consultationRequests = sqliteTable(

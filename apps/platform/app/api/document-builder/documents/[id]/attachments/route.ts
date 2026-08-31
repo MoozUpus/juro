@@ -2,9 +2,11 @@ import { assertSafeWrite, requireApiUser } from "../../../../../../lib/document-
 import { apiError, badRequest, forbidden, jsonResponse, notFound } from "../../../../../../lib/document-builder/auth/responses";
 import { requireOwner } from "../../../../../../lib/document-builder/permissions";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
-import { deletePrivateObject, sanitizeFileName, validateUploadBytes } from "../../../../../../lib/document-builder/storage/files";
+import { deletePrivateObject, MAX_FILE_SIZE, sanitizeFileName, validateUploadBytes } from "../../../../../../lib/document-builder/storage/files";
 import { QuarantinedUploadError, quarantineScanAndStorePrivateObject } from "../../../../../../lib/document-builder/storage/quarantined-upload";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { ArchiveInspectionError } from "../../../../../../lib/document-analysis/archive-inspector";
+import { MULTIPART_OVERHEAD_BYTES, requiredContentLength } from "../../../../../../lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +19,18 @@ export async function POST(request: Request, context: Context): Promise<Response
     const { id } = await context.params;
     const access = await requireOwner(id, user.id);
     if (!access?.workspaceId) return forbidden();
+    const bodyLength = requiredContentLength(request, MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES);
+    if (!bodyLength.ok) {
+      return jsonResponse({
+        error: bodyLength.reason === "too_large" ? "Размер файла превышает 10 МБ." : "Для загрузки требуется точный размер запроса.",
+        code: bodyLength.reason === "too_large" ? "UPLOAD_PAYLOAD_TOO_LARGE" : "CONTENT_LENGTH_REQUIRED",
+      }, { status: bodyLength.reason === "too_large" ? 413 : 411 });
+    }
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return badRequest("Файл не выбран.");
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const inspection = validateUploadBytes(file, bytes);
+    const inspection = await validateUploadBytes(file, bytes);
     if (inspection) return badRequest(inspection.message, inspection.code);
     const fileId = crypto.randomUUID();
     const attachmentId = crypto.randomUUID();
@@ -50,6 +59,9 @@ export async function POST(request: Request, context: Context): Promise<Response
     }
     return jsonResponse({ attachment: { id: attachmentId, fileId, fileName: safeName, mimeType: file.type, sizeBytes: file.size, visibleToCollaborator: visible, createdAt: now } }, { status: 201 });
   } catch (error) {
+    if (error instanceof ArchiveInspectionError) {
+      return badRequest("DOCX не прошёл безопасную проверку структуры и распаковки.", error.code);
+    }
     if (error instanceof QuarantinedUploadError) {
       const status = error.code === "FILE_UNSAFE" ? 422 : 503;
       return jsonResponse({

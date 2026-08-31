@@ -4,7 +4,7 @@ import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import { workspaceEntitlements } from "../../../../../../lib/billing/entitlements";
 import { lawyerAccessGrantSchema, localizedHandoffError } from "../../../../../../lib/platform/lawyer-request";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../../../lib/platform/workspace";
 import { recordLawyerAccessGrantCompletionEvidence } from "../../../../../../worker/dependency-health-evidence";
 
 function response(body: unknown, status = 200) {
@@ -17,7 +17,7 @@ export const POST = withApiErrors(async function POST(request: Request, context:
   const startedAt = Date.now();
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { requestId } = await context.params;
   const parsed = await parseJsonRequest(request, lawyerAccessGrantSchema, 1_024);
   const locale = parsed.ok ? parsed.data.locale : "ru";

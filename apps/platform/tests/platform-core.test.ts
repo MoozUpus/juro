@@ -394,7 +394,8 @@ test("production identity prefers OTP sessions and gates trusted edge headers", 
   const source = await readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
   assert.ok(source.indexOf("const sessionUser = await getSessionUser(request)") < source.indexOf("const requestHeaders = request?.headers ?? await headers()"));
   assert.match(source, /ALLOW_PLATFORM_AUTH_HEADERS/);
-  assert.match(source, /NODE_ENV !== "production"/);
+  assert.match(source, /APP_ENV !== "production"/);
+  assert.doesNotMatch(source, /NODE_ENV !== "production" \|\|/);
   assert.match(source, /authSource: "platform_header"/);
   assert.match(source, /assuranceLevel: "upstream"/);
   assert.match(source, /sessionId: null/);

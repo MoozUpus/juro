@@ -3,22 +3,18 @@ import { isoNow } from "../../../../lib/document-builder/storage/db";
 import {
   deletePrivateObject,
   getPrivateObject,
+  MAX_FILE_SIZE,
   putPrivateObject,
   sanitizeFileName,
   sha256Hex,
   validateUploadBytes,
 } from "../../../../lib/document-builder/storage/files";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
-import { ArchiveInspectionError, verifyArchiveBytes } from "../../../../lib/document-analysis/archive-inspector";
+import { ArchiveInspectionError } from "../../../../lib/document-analysis/archive-inspector";
 import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
+import { MULTIPART_OVERHEAD_BYTES, requiredContentLength } from "../../../../lib/request-body";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const COMPARISON_DOCX_LIMITS = {
-  timeoutMs: 8_000,
-  maxEntries: 500,
-  maxUncompressedBytes: 25 * 1024 * 1024,
-  maxExpansionRatio: 40,
-} as const;
 
 type ExistingFile = {
   id: string;
@@ -67,10 +63,7 @@ async function prepareFile(input: {
       const object = await getPrivateObject(existing.r2Key);
       if (!object) throw new Error("COMPARISON_FILE_ACCESS_DENIED");
       const bytes = new Uint8Array(await object.arrayBuffer());
-      if (existing.mimeType === DOCX_MIME) {
-        await verifyArchiveBytes(bytes, existing.mimeType, COMPARISON_DOCX_LIMITS);
-      }
-      const inspection = validateUploadBytes(
+      const inspection = await validateUploadBytes(
         new File([Uint8Array.from(bytes).buffer], existing.fileName, { type: existing.mimeType }),
         bytes,
       );
@@ -88,10 +81,7 @@ async function prepareFile(input: {
   const file = input.form.get(input.fileField);
   if (!(file instanceof File)) throw new Error(`COMPARISON_${input.version.toLocaleUpperCase()}_FILE_REQUIRED`);
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (file.type === DOCX_MIME) {
-    await verifyArchiveBytes(bytes, file.type, COMPARISON_DOCX_LIMITS);
-  }
-  const inspection = validateUploadBytes(file, bytes);
+  const inspection = await validateUploadBytes(file, bytes);
   if (inspection) throw new Error(`${inspection.code}:${inspection.message}`);
   const id = crypto.randomUUID();
   const fileName = sanitizeFileName(file.name);
@@ -140,6 +130,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
   const workspace = await workspaceForContentEditor(user);
+  const bodyLength = requiredContentLength(request, (2 * MAX_FILE_SIZE) + MULTIPART_OVERHEAD_BYTES);
+  if (!bodyLength.ok) {
+    return response({
+      error: bodyLength.reason === "too_large"
+        ? "Общий размер двух файлов превышает допустимый предел."
+        : "Для загрузки требуется точный размер запроса.",
+      code: bodyLength.reason === "too_large" ? "PAYLOAD_TOO_LARGE" : "CONTENT_LENGTH_REQUIRED",
+    }, bodyLength.reason === "too_large" ? 413 : 411);
+  }
   const form = await request.formData();
   const locale = form.get("locale") === "uz" ? "uz" : "ru";
   if (form.get("consent") !== "true") {

@@ -39,12 +39,12 @@ export function SignedShareAccessClient({ token }: { token: string }) {
       <Image src="/juro-logo-primary.png" alt="JURO" width={125} height={122} unoptimized/>
       <span className="dbt-access-icon"><FileCheck2 size={30}/></span>
       <h1>Подписанный документ</h1>
-      <p>Введите четырёхзначный код доступа, который сообщил владелец файла.</p>
+      <p>Введите код доступа, который сообщил владелец файла.</p>
       <form onSubmit={submit}>
         <label htmlFor="access-code">Код доступа</label>
-        <div className="dbt-code-input"><LockKeyhole size={19}/><input id="access-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="one-time-code" maxLength={4} aria-describedby={error ? "access-error" : undefined}/></div>
+        <div className="dbt-code-input"><LockKeyhole size={19}/><input id="access-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" minLength={4} maxLength={6} aria-describedby={error ? "access-error" : undefined}/></div>
         {error && <p id="access-error" className="dbt-form-error" role="alert">{error}</p>}
-        <button type="submit" disabled={loading || code.length !== 4}>{loading ? "Проверяем…" : "Подтвердить"}<ArrowRight size={18}/></button>
+        <button type="submit" disabled={loading || (code.length !== 4 && code.length !== 6)}>{loading ? "Проверяем…" : "Подтвердить"}<ArrowRight size={18}/></button>
       </form>
     </section>
   </main>;
