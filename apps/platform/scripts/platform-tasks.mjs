@@ -261,6 +261,7 @@ const coreTestFiles = [
   "tests/provider-usage.test.ts",
   "tests/staging-lawyer-handoff-seed.test.ts",
   "tests/system-status.test.ts",
+  "tests/status-metadata.test.ts",
   "tests/ui-theme-resilience.test.ts",
   "tests/user-document-ai-grounding-boundary.test.ts",
   "tests/user-document-vectors.test.ts",
