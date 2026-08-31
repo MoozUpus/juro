@@ -1,8 +1,8 @@
 # JURO Performance Audit
 
-Status: **living evidence report; Worker v188 deployed and production-verified**
+Status: **living evidence report; Worker v189 deployed and production-verified**
 
-Evidence cutoff: **2026-08-31 06:37 UZT (2026-08-31 01:37 UTC)**
+Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
 
 Scope: Chrome-only lab measurements for the public RU landing page and the public platform login boundary, production artifact budgets, and the truthfulness of published dependency latency. Legislation database/corpus ingestion, Lex.uz/Advice.uz, vectors, and staging-capacity remediation are excluded by owner instruction.
 
@@ -13,6 +13,7 @@ Scope: Chrome-only lab measurements for the public RU landing page and the publi
 - `https://app.juro.uz/ru/auth/login` recorded **LCP 1,387 ms**, **TTFB 128 ms**, and **CLS 0.0001** under the same mobile conditions; Accessibility scored **100**.
 - The platform login Best Practices score was **92** because the strict application CSP blocks Cloudflare's injected Web Analytics beacon. SEO scored **66** because the private auth route is deliberately protected by both meta and response-header `noindex`; that SEO result is expected and must not be “fixed” by making private application pages indexable.
 - Before v188, the public production status API published D1 `latencyMs: 51,446` with `evidenceKind: scheduled_job`. Source inspection proved that v187 timed the entire five-minute cron workload and mislabelled it as database latency. Worker v188 now uses a dedicated constant `SELECT 1` probe; the first accepted production record reported `35 ms`, `operational`, and `synthetic_probe`.
+- Worker v189 makes status-page favicon metadata same-origin on every production status route while preserving the existing `img-src 'self' data: blob:` policy. Chrome reported no console errors or warnings on the five checked status routes.
 
 This audit does not claim complete platform performance coverage. Authenticated role journeys, field data, INP, long-task interaction profiles, and every target viewport remain open.
 
@@ -93,9 +94,9 @@ No migration, DNS change, Sites change, legal-corpus action, or authentication c
 
 | Gate | Result |
 | --- | --- |
-| Focused dependency/scheduler tests | 61/61 PASS; subsequent changed-file rerun 50/50 PASS |
+| Focused status-metadata tests | 4/4 PASS |
 | Rendered routes | 33/33 PASS |
-| Core tests | 1,138/1,138 PASS |
+| Core tests | 1,142/1,142 PASS |
 | Worker/runtime and migrations | 217/217 PASS |
 | TypeScript | PASS |
 | Lint | PASS, 0 warnings after cleanup |
@@ -103,12 +104,12 @@ No migration, DNS change, Sites change, legal-corpus action, or authentication c
 | Cloudflare development/staging/production matrix | PASS |
 | Production artifact and size budgets | PASS |
 | Licence policy | PASS, 802 locked packages |
-| Security diff scan | Complete, 4/4 production files, 0 candidates, 0 findings |
-| Pull request | PR #93, exact-head CI `33347354764` PASS |
-| Merge and post-merge CI | Merge `f14c3d9bd6b0645f3d9ef5da3bca7ab412138aae`; CI `33347774965` PASS |
-| Production deployment | Workflow `33347775254` PASS; Worker v188 ID `57387083-9f7f-4cd8-a9f2-84414f2604d6` at 100% traffic |
+| Security diff scan | Scan `97f3ebca-264a-4d1d-aff6-2eec9448ec0c`, 0 reportable findings; its functional/CSP coverage gaps were corrected before merge |
+| Pull request | PR #95, exact-head CI `33352197361` PASS |
+| Merge and post-merge CI | Merge `d133a470a49166875d9112b938ae3f7d765ee170`; CI `33404886188` PASS |
+| Production deployment | Workflow `33404885913` PASS; Worker v189 ID `102dcb2d-f79f-4172-9a3a-19d55d51f6ed` at 100% traffic |
 
-Artifact sizes remain within the existing release budgets: client CSS 564.7 KiB, initial browser JavaScript 294.1 KiB, largest lazy-route increment 212.1 KiB, fonts 453.6 KiB, images 564.4 KiB, and Worker entry 3,575.4 KiB. These are raw build artifact sizes, not transfer sizes or Core Web Vitals.
+Artifact sizes remain within the existing release budgets: client CSS 564.7 KiB, initial browser JavaScript 294.1 KiB, largest lazy-route increment 212.1 KiB, fonts 453.6 KiB, images 564.4 KiB, and Worker entry 3,576.8 KiB. These are raw build artifact sizes, not transfer sizes or Core Web Vitals.
 
 ## Production acceptance
 
@@ -120,6 +121,6 @@ The five-minute production schedule generated a fresh public status snapshot at 
 4. overall status remains truthfully `degraded` because OpenAI, Anthropic, and document analysis still report public `PROVIDER_UNAVAILABLE`;
 5. Chrome renders the same component state and exposes the D1 evidence in the expanded technical checks.
 
-Chrome also logged one CSP error because `status.juro.uz` requests `https://app.juro.uz/favicon.png` while `img-src` permits only self/data/blob. This does not affect D1 evidence or release routing, but it is a separate P2 cleanup item; the audit therefore does not claim a completely clean status-page console.
+Worker v189 separately closed the status favicon CSP defect. Chrome rendered `https://status.juro.uz/`, `/status`, `/ru/status`, `/uz/status`, and `https://app.juro.uz/ru/status` with no console errors or warnings. Raw production responses returned absolute same-origin `favicon.png` and `apple-touch-icon.png` links on both hosts; all four image assets returned `200` with `image/png`. Every checked page retained the existing CSP, including `img-src 'self' data: blob:`. The Chrome integration injects a local data-URL badge over ordinary favicon links, so raw HTML was used to verify the server-authored favicon URLs while Chrome verified rendering and console behavior.
 
 The full execution goal remains active after this increment.
