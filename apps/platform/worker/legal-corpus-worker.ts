@@ -15,7 +15,11 @@ import {
 } from "../lib/legal-corpus/lex-core-code-discovery";
 import { featureEnabled } from "../lib/legal-corpus/trust";
 import { runNextLegalCorpusQdrantBackfillBatch } from "../lib/legal-corpus/qdrant-indexing";
-import { QdrantLegalCorpusClient, type QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
+import {
+  QdrantCorpusError,
+  QdrantLegalCorpusClient,
+  type QdrantCorpusEnv,
+} from "../lib/legal-corpus/qdrant";
 import { createLegalCorpusQdrantSnapshot } from "../lib/legal-corpus/qdrant-snapshots";
 import { createPacedLexFetch } from "../lib/legal-corpus/lex-request-pacer";
 import { scheduleLegalCorpusMaintenance } from "../lib/legal-corpus/maintenance";
@@ -171,25 +175,46 @@ async function versionedSearchIndexOwnsDenseWrites(db: D1Database): Promise<bool
   }
 }
 
-async function keepActiveLegalSearchIndexAwake(env: LegalCorpusWorkerEnv): Promise<boolean> {
+type ActiveLegalSearchIndexHealth = {
+  status: "not_configured" | "healthy" | "unavailable";
+  errorCode: string | null;
+};
+
+async function keepActiveLegalSearchIndexAwake(
+  env: LegalCorpusWorkerEnv,
+): Promise<ActiveLegalSearchIndexHealth> {
   const pinnedManifestId = env.LEGAL_CORPUS_INDEX_VERSION?.trim();
   const active = pinnedManifestId
     ? await resolveLegalSearchIndexManifest(env.DB, env.APP_ENV, pinnedManifestId)
     : await resolveActiveLegalSearchIndex(env.DB, env.APP_ENV);
-  if (!active) return false;
-  const client = new QdrantLegalCorpusClient({
-    ...env,
-    QDRANT_COLLECTION: active.qdrantCollection,
-  });
-  await client.assertCompatible();
-  // A schema-compatible collection can still be a fresh empty disk after a
-  // Container stop. The scheduled path is allowed to pay for an exact count;
-  // interactive chat is not. Keep the recovery condition operationally
-  // visible instead of reporting a misleading successful keepalive.
-  if (await client.countPoints(false) !== active.densePointCount) {
-    throw new TypeError("LEGAL_SEARCH_BUILD_COUNT_MISMATCH");
+  if (!active) return { status: "not_configured", errorCode: null };
+  try {
+    const client = new QdrantLegalCorpusClient({
+      ...env,
+      QDRANT_COLLECTION: active.qdrantCollection,
+    });
+    await client.assertCompatible();
+    // A schema-compatible collection can still be a fresh empty disk after a
+    // Container stop. The scheduled path is allowed to pay for an exact count;
+    // interactive chat is not. Keep the recovery condition operationally
+    // visible instead of reporting a misleading successful keepalive.
+    if (await client.countPoints(false) !== active.densePointCount) {
+      throw new TypeError("LEGAL_SEARCH_BUILD_COUNT_MISMATCH");
+    }
+    return { status: "healthy", errorCode: null };
+  } catch (error) {
+    const errorCode = error instanceof QdrantCorpusError
+      ? error.code
+      : error instanceof TypeError && error.message === "LEGAL_SEARCH_BUILD_COUNT_MISMATCH"
+        ? error.message
+        : null;
+    if (!errorCode) throw error;
+    // A pinned pre-activation candidate is an independently recoverable
+    // projection of the frozen D1 build. Preserve its degraded signal without
+    // starving source acquisition, whose durable queue is required to reach a
+    // later freeze and recovery boundary.
+    return { status: "unavailable", errorCode };
   }
-  return true;
 }
 
 export function legalCorpusActionableRunErrorCode(input: {
@@ -392,9 +417,10 @@ export async function handleLegalCorpusScheduled(
     // Qdrant's Cloudflare Container filesystem is ephemeral. Touch the active
     // finalized collection on every four-minute staging process tick so the
     // singleton cannot scale to zero between user requests. If it was lost,
-    // fail the scheduled run visibly; the frozen manifest can be reconciled
-    // without mutating its identity.
-    const activeSearchIndexAwake = await keepActiveLegalSearchIndexAwake(env);
+    // report the degraded projection while allowing source acquisition to
+    // continue; the frozen manifest can be reconciled without mutating its
+    // identity.
+    const activeSearchIndexHealth = await keepActiveLegalSearchIndexAwake(env);
 
     // The process schedule must be self-starting. Requiring a staff member to
     // press the admin seed button would turn a resumable automatic corpus into
@@ -529,7 +555,8 @@ export async function handleLegalCorpusScheduled(
       qdrantBackfillBatches: qdrantBackfills.filter((result) => result.status === "indexed").length,
       qdrantBackfillChunks: qdrantBackfills.reduce((sum, result) => sum + result.chunkCount, 0),
       qdrantSnapshotStatus: qdrantSnapshot?.status ?? "not_attempted",
-      activeSearchIndexAwake,
+      activeSearchIndexAwake: activeSearchIndexHealth.status === "healthy",
+      activeSearchIndexErrorCode: activeSearchIndexHealth.errorCode,
       titleRepairsDocuments: titleRepairs.documents,
       titleRepairsVariants: titleRepairs.variants,
       resolvedSourceConditionCount,

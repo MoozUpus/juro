@@ -272,6 +272,92 @@ test("process schedule self-seeds a fresh corpus and begins the code-first phase
   assert.equal(scheduled.noRetryCalls(), 1);
 });
 
+test("an unavailable pinned Qdrant candidate does not starve source ingestion", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON, Date.now());
+  const now = "2026-08-30T00:00:00.000Z";
+  sqlite.prepare(`INSERT INTO legal_corpus_search_index_manifests (
+    id,environment,qdrant_collection,sparse_schema_version,embedding_model,
+    embedding_schema_version,reranker_model,reranker_version,variant_count,
+    chunk_count,dense_point_count,corpus_cutoff_at,manifest_sha256,created_at
+  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    "staging-candidate-v1", "staging", "staging_candidate_v1", "sparse-v1",
+    "text-embedding-3-large", "dense-v1", "in-process", "reranker-v1",
+    1, 1, 1, now, "a".repeat(64), now,
+  );
+  let qdrantCalls = 0;
+  const processLogs: Record<string, unknown>[] = [];
+  const originalFetch = globalThis.fetch;
+  const originalConsoleLog = console.log;
+  console.log = (message?: unknown, ...optionalParams: unknown[]) => {
+    if (typeof message === "string") {
+      try {
+        const entry = JSON.parse(message) as Record<string, unknown>;
+        if (entry.event === "legal_corpus.process_completed") processLogs.push(entry);
+      } catch {
+        // Non-JSON output is unrelated to the Worker telemetry boundary.
+      }
+    }
+    originalConsoleLog(message, ...optionalParams);
+  };
+  globalThis.fetch = async (input) => {
+    if (String(input) === "https://lex.uz/robots.txt") {
+      return new Response("User-agent: *\nAllow: /\nCrawl-delay: 0\n", {
+        headers: { "content-type": "text/plain" },
+      });
+    }
+    return new Response("<html><body><p>No documents in this bounded fixture.</p></body></html>", {
+      headers: { "content-type": "text/html" },
+    });
+  };
+  try {
+    await handleLegalCorpusScheduled(scheduled.value, {
+      APP_ENV: "staging",
+      LEGAL_CORPUS_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+      LEGAL_CORPUS_DENSE_ENABLED: "true",
+      LEGAL_CORPUS_INDEX_VERSION: "staging-candidate-v1",
+      QDRANT_URL: "https://qdrant.internal",
+      QDRANT_API_KEY: "test-key",
+      QDRANT_COLLECTION: "staging_candidate_v1",
+      QDRANT_SERVICE: {
+        async fetch() {
+          qdrantCalls += 1;
+          return Response.json({ error: "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" }, { status: 503 });
+        },
+      } as unknown as Fetcher,
+      DB: d1,
+      BUCKET: {} as R2Bucket,
+    });
+
+    const run = sqlite.prepare(`SELECT status,error_code AS errorCode
+      FROM scheduled_runs WHERE schedule_name='legal-corpus-worker'`).get() as {
+        status: string;
+        errorCode: string | null;
+      };
+    const checkpointCount = Number((sqlite.prepare(
+      "SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints",
+    ).get() as { count: number }).count);
+    const codeSeedCount = Number((sqlite.prepare(
+      "SELECT count(*) AS count FROM legal_corpus_ingestion_jobs WHERE canonical_document_id IN ('lexuz:104723','lexuz:111189','lexuz:4674902','lexuz:6257291')",
+    ).get() as { count: number }).count);
+    assert.equal(qdrantCalls, 1);
+    assert.equal(run.status, "completed");
+    assert.equal(run.errorCode, "LEGAL_SOURCE_PRIMARY_CONTENT_MISSING");
+    assert.equal(checkpointCount, 44);
+    assert.equal(codeSeedCount, 4);
+    const processLog = processLogs.at(-1);
+    assert.equal(processLog?.activeSearchIndexAwake, false);
+    assert.equal(processLog?.activeSearchIndexErrorCode, "QDRANT_REQUEST_FAILED");
+    assert.equal(processLog?.ingestionClaimed, 5);
+    assert.equal(scheduled.noRetryCalls(), 1);
+  } finally {
+    console.log = originalConsoleLog;
+    globalThis.fetch = originalFetch;
+    sqlite.close();
+  }
+});
+
 test("frozen corpus keeps resumable dense backfill alive without restarting Lex ingestion", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON, Date.UTC(2026, 7, 15, 19, 15));
