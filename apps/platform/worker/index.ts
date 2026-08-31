@@ -30,6 +30,7 @@ import {
 } from "./legal-corpus-private-services";
 import { lawyerHostTarget } from "./lawyer-host-router";
 import { INTERNAL_REQUEST_PATH_HEADER } from "../lib/platform/routing";
+import { STATUS_ORIGIN_HEADER } from "../lib/operations/status-metadata";
 
 export { MalwareScannerContainer, LegalCorpusQdrantContainer };
 
@@ -198,6 +199,8 @@ const worker = {
     if (internalAdminResponse) return withSecurityHeaders(internalAdminResponse, url);
 
     const appHeaders = new Headers(routedRequest.headers);
+    appHeaders.delete(STATUS_ORIGIN_HEADER);
+    if (isStatusHost) appHeaders.set(STATUS_ORIGIN_HEADER, url.origin);
     appHeaders.set(
       INTERNAL_REQUEST_PATH_HEADER,
       `${routedUrl.pathname}${routedUrl.search}`,
