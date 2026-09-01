@@ -500,7 +500,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.deepEqual(
       config.analytics_engine_datasets.map(({ binding }) => binding),
-      ["PLATFORM_ANALYTICS"],
+      ["PLATFORM_ANALYTICS", "PRODUCT_ANALYTICS"],
     );
     assert.deepEqual(config.images, { binding: "IMAGES" });
 

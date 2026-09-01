@@ -64,9 +64,10 @@ test("AI feedback does not reveal another workspace answer or accept invalid fee
   } finally { sqlite.close(); }
 });
 
-test("AI feedback route requires a safe write, authenticated tenant scope and never sends content to analytics", () => {
+test("AI feedback route requires a safe write, authenticated tenant scope and emits only the allowlisted product event", () => {
   const route = source("app/api/platform/ai/feedback/route.ts");
   const service = source("lib/ai/feedback.ts");
+  const analytics = source("lib/platform/analytics.ts");
   const client = source("app/_platform/AiLawyerClient.tsx");
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.match(route, /requireApiUser\(\)/);
@@ -75,6 +76,11 @@ test("AI feedback route requires a safe write, authenticated tenant scope and ne
   assert.match(service, /conversation\.workspace_id=\?\s+AND conversation\.owner_user_id=\?/);
   assert.match(service, /ai_feedback_saved/);
   assert.doesNotMatch(service, /track[A-Z]|analytics/);
+  assert.match(route, /trackProductEvent/);
+  assert.match(route, /event: "feedback_submitted"/);
+  assert.match(route, /if \(!result\.replay\)/);
+  assert.match(analytics, /productEventSchema/);
+  assert.doesNotMatch(analytics, /userId|workspaceId|assistantMessageId|comment/);
   assert.match(client, /\/api\/platform\/ai\/feedback/);
   assert.match(client, /assistantMessageId: answer\.messageId/);
 });

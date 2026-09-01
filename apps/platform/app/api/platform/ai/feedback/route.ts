@@ -3,6 +3,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../l
 import { isoNow } from "../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
 import { AiFeedbackError, aiFeedbackInputSchema, listAiFeedback, saveAiFeedback } from "../../../../../lib/ai/feedback";
+import { trackProductEvent } from "../../../../../lib/platform/analytics";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -34,7 +35,18 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const parsed = await parseJsonRequest(request, aiFeedbackInputSchema, 4_096);
   if (!parsed.ok) return response({ code: "AI_FEEDBACK_INVALID", error: error("uz") }, parsed.error === "payload_too_large" ? 413 : 400);
   try {
-    return response(await saveAiFeedback({ db: requireD1(), workspaceId: workspace.id, userId: user.id, now: isoNow(), ...parsed.data }), 201);
+    const result = await saveAiFeedback({ db: requireD1(), workspaceId: workspace.id, userId: user.id, now: isoNow(), ...parsed.data });
+    if (!result.replay) {
+      trackProductEvent({
+        event: "feedback_submitted",
+        surface: "platform",
+        locale: "unknown",
+        accountType: workspace.type,
+        outcome: "completed",
+        reason: result.feedbackType,
+      });
+    }
+    return response(result, 201);
   } catch (value) {
     if (value instanceof AiFeedbackError) return response({ code: value.code, error: error("uz") }, 404);
     throw value;

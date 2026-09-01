@@ -133,6 +133,10 @@
     {
       "binding": "PLATFORM_ANALYTICS",
       "dataset": "juro-platform-development"
+    },
+    {
+      "binding": "PRODUCT_ANALYTICS",
+      "dataset": "juro-product-events-development"
     }
   ],
   "images": {
@@ -483,6 +487,10 @@
         {
           "binding": "PLATFORM_ANALYTICS",
           "dataset": "juro-platform-staging"
+        },
+        {
+          "binding": "PRODUCT_ANALYTICS",
+          "dataset": "juro-product-events-staging"
         }
       ],
       "images": {
@@ -823,6 +831,10 @@
         {
           "binding": "PLATFORM_ANALYTICS",
           "dataset": "juro-platform-production"
+        },
+        {
+          "binding": "PRODUCT_ANALYTICS",
+          "dataset": "juro-product-events-production"
         }
       ],
       "images": {
