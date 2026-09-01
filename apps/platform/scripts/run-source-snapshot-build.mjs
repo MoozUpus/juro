@@ -5,7 +5,7 @@ const root = `${origin}/internal/legal-corpus/source-snapshot-build`;
 const buildId = "build:staging:current:source-snapshot-v1";
 const lanes = [..."0123456789abcdef"].flatMap((first) =>
   [..."0123456789abcdef"].map((second) => `${first}${second}`));
-const laneConcurrency = 64;
+const laneConcurrency = 32;
 
 async function call(action, body = {}, attempt = 0) {
   try {
@@ -13,6 +13,7 @@ async function call(action, body = {}, attempt = 0) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ buildId, ...body }),
+      signal: AbortSignal.timeout(120_000),
     });
     const responseText = await response.text();
     let packet;
