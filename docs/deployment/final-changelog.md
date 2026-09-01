@@ -2,9 +2,20 @@
 
 Status: **living changelog; the full execution goal remains active**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-01 08:49 UZT (2026-09-01 03:49 UTC)**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
+
+## Platform Worker v99
+
+- Published commit `7935d560b29705f1886fa34f7bb61eb1b3af2c11` from Draft PR #101.
+- Deployed Worker version ID `0b35483c-9bf4-4a21-ba45-dadbde198f83` at 100% traffic in deployment `6c3c5410-c16a-46dd-ae78-6ee580baf641`.
+- Restricted decrypted pending invitation email data to workspace owners/admins and excluded accepted, revoked, and expired invitations.
+- Added actual-byte limits for public structured API requests, including missing/chunked and understated `Content-Length`, while preserving explicit binary/multipart and protected internal upload controls.
+- Passed 91 focused checks, 1,161 platform tests, 217 Cloudflare tests, 33 Worker smoke tests, lint, type-check, artifact/config/dependency checks, and PR CI `33466544141`.
+- Verified live `401` for an ordinary small unauthorized JSON request and `413 PAYLOAD_TOO_LARGE` above 1 MiB.
+- Retained immediate prior Worker version `b1b242f0-9033-40e3-bdf2-d9aee9ef5b48` as rollback.
+- After the owner funded both providers, repeated production records show OpenAI, Anthropic, and routed document analysis operational; the checked public status is 8/8 operational with no active incident.
 
 ## Platform Worker v189
 
@@ -50,18 +61,18 @@ This file records verified production increments. It must not be read as a claim
 
 ## Latest validation summary
 
-- 4/4 focused status-metadata tests passed.
-- 1,142/1,142 platform core tests passed.
+- 91/91 focused v99 security/platform tests passed.
+- 1,161/1,161 platform core tests passed.
 - 217/217 Worker/runtime tests passed.
+- 33/33 Worker smoke tests passed.
 - Lint, type-check, Cloudflare matrix, generated types, production artifact validation, dependency audits, and licence policy passed.
-- PR, post-merge CI, and production deployment workflows passed.
-- The security diff scan reported zero reportable findings and exposed functional/CSP coverage gaps in the initial patch; those gaps were corrected before merge and verified by focused tests plus live Chrome/HTTP checks.
-- PR #95 exact-head CI `33352197361`, post-merge CI `33404886188`, and production workflow `33404885913` passed.
-- Production `/api/status` returns HTTP `200`, remains truthfully `degraded`, reports 6/8 components operational, reports no active incidents, and publishes direct D1 evidence at 192 ms in the checked snapshot.
+- Draft PR #101 exact-head CI `33466544141` and controlled production deployment passed.
+- The v99 security scan found two scoped issues; both were corrected, independently reviewed, retested, and deployed.
+- Production `/api/status` returns HTTP `200`, reports 8/8 components operational and no active incidents in the checked snapshot; repeated D1 records support provider recovery.
 
 ## Current limitations
 
-- OpenAI and Anthropic public production probes still report `PROVIDER_UNAVAILABLE`; AI and document analysis remain degraded until fresh successful probes exist. The owner-reported Anthropic top-up had not yet produced a successful probe at the evidence cutoff.
+- OpenAI, Anthropic, and routed document analysis are operational in repeated isolated probes; authenticated RU/UZ Legal Answer quality and a deliberate live fallback journey remain unproven.
 - Authenticated role QA remains incomplete for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin.
 - Staging scheduler persistence remains blocked by the excluded staging D1 capacity issue.
 - Legacy origin ownership/TLS risk and the full manual accessibility, responsive, performance, and E2E matrices remain open.
