@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-01T23:29:12.767Z",
+  "applicationCommit": "87795b713fe4453042bd95b1fc28d31fd5d8f9e6",
+  "databaseName": "juro-staging",
+  "databaseId": "bb716a96-b2fb-4823-90d6-6c228fed181a",
+  "readOnly": true,
+  "statusByJob": {
+    "completed": 11259,
+    "queued": 43539,
+    "dead_letter": 1
+  },
+  "failureLedgerByRetryState": {
+    "retrying": 102,
+    "technically_unavailable": 269,
+    "terminal": 1
+  },
+  "deadLetterJob": {
+    "id": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "jobType": "fetch",
+    "provider": "lex_uz",
+    "status": "dead_letter",
+    "canonicalDocumentId": "lexuz:8411573",
+    "sourceUrl": "https://lex.uz/en/docs/8411573",
+    "language": "en",
+    "attemptCount": 5,
+    "maxAttempts": 5,
+    "lastErrorCode": "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
+    "correlationId": "lex-catalog:president:en",
+    "createdAt": "2026-08-18T18:17:23.417Z",
+    "updatedAt": "2026-08-29T21:22:47.872Z"
+  },
+  "terminalFailure": {
+    "id": "e9a79ddf-f615-406c-be9c-c795d42a48f6",
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "errorCode": "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
+    "retryableAtFirst": true,
+    "retryCount": 5,
+    "retryState": "terminal",
+    "attemptedAt": "2026-08-29T21:22:47.872Z"
+  },
+  "scheduledLocks": [
+    {
+      "name": "legal-source-crawl:staging:lex.uz",
+      "holderId": "97d3f811-6b00-4bc3-8dcb-1f0104254519",
+      "acquiredAt": "2026-08-13T12:50:40.126Z",
+      "expiresAt": "2026-08-13T12:51:00.126Z"
+    },
+    {
+      "name": "legal-source-crawl:staging:advice.uz",
+      "holderId": "2536436a-2f5c-4bc4-a760-5a57889ce4e5",
+      "acquiredAt": "2026-08-05T19:09:18.834Z",
+      "expiresAt": "2026-08-05T19:09:19.834Z"
+    }
+  ],
+  "latestLegalCorpusRun": {
+    "id": "cd6c2d22-d023-492c-b17e-99b193f8db96",
+    "status": "failed",
+    "errorCode": "LEGAL_CORPUS_SPARSE_BACKFILL_FAILED",
+    "startedAt": "2026-09-01T16:28:58.117Z",
+    "finishedAt": "2026-09-01T16:32:32.558Z"
+  },
+  "databaseSizeBytes": 9999998976,
+  "queryMetadata": {
+    "rowsWritten": 0,
+    "changedDatabase": false,
+    "source": "wrangler_d1_execute_remote_read_only"
+  },
+  "interpretation": {
+    "terminalOrDeadLetterJobs": 1,
+    "historical": true,
+    "releaseGateClosed": true,
+    "reason": "The only dead-letter job is a historical Lex language-family conflict recorded after five attempts. The guard intentionally fails closed when aliases link one fetched language family to multiple document IDs. No original source payload is retained for a safe deterministic repair, and no retry, alias rewrite, lock cleanup, or job-status mutation was performed. The two lock rows are expired historical rows but remain preserved for auditability."
+  },
+  "scope": "Staging read-only legacy failure recheck only; not a legal-data repair, corpus snapshot, federated release approval, or production action."
+}
