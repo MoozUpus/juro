@@ -32,6 +32,17 @@ export const candidateShardIdSchema = legalIdentifierSchema.brand<"CandidateShar
 export const candidateConfigurationIdSchema = legalIdentifierSchema.brand<"CandidateConfigurationId">();
 export const providerProjectIdSchema = legalIdentifierSchema.brand<"ProviderProjectId">();
 
+export function serializeLegalEnvironmentControlObject(input: {
+  environment: z.infer<typeof legalEnvironmentSchema>;
+  bucketName: string;
+}): string {
+  return `${JSON.stringify({
+    environment: input.environment,
+    bucketName: input.bucketName,
+    schemaVersion: 1,
+  })}\n`;
+}
+
 export type LegalInstrumentId = z.infer<typeof legalInstrumentIdSchema>;
 export type OfficialExpressionId = z.infer<typeof officialExpressionIdSchema>;
 export type TextRevisionId = z.infer<typeof textRevisionIdSchema>;

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -8,6 +9,7 @@ import {
   LEGAL_TARGET_READINESS_PATH,
   type LegalTargetReadinessEnv,
 } from "../lib/legal-corpus/target-storage";
+import { serializeLegalEnvironmentControlObject } from "../lib/legal-corpus/target-domain-schemas";
 import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
 
 function targetEnv(
@@ -16,6 +18,12 @@ function targetEnv(
 ):
 LegalTargetReadinessEnv {
   const bucketName = `juro-legal-evidence-${environment}${suffix}`;
+  const bucketControlSha256 = createHash("sha256").update(
+    serializeLegalEnvironmentControlObject({
+    environment,
+    bucketName,
+    }),
+  ).digest("hex");
   const aiSearchNamespace = {
     get() { throw new Error("not used by readiness"); },
     async list() {
@@ -66,6 +74,7 @@ LegalTargetReadinessEnv {
             environment,
             bucketName,
             schemaVersion: "1",
+            sha256: bucketControlSha256,
           },
         };
       },
@@ -107,6 +116,55 @@ test("private readiness accepts an environment-scoped blue-green storage identit
 
   assert.equal(result.evidenceBucket, "ready");
   assert.equal(result.environment, "staging");
+});
+
+test("R2 control serialization stays pinned to the immutable green2 evidence", () => {
+  const body = serializeLegalEnvironmentControlObject({
+    environment: "staging",
+    bucketName: "juro-legal-evidence-staging-green2-20260831",
+  });
+  assert.equal(
+    body,
+    "{\"environment\":\"staging\",\"bucketName\":\"juro-legal-evidence-staging-green2-20260831\",\"schemaVersion\":1}\n",
+  );
+  assert.equal(
+    createHash("sha256").update(body).digest("hex"),
+    "39dbc0ee45fdaedb394bd53607e46207d38490f22a3b1600116f5c7ef823452e",
+  );
+});
+
+test("target readiness rejects malformed R2 control integrity metadata", async () => {
+  const env = targetEnv("staging");
+  env.LEGAL_EVIDENCE_BUCKET = {
+    async head() {
+      return {
+        customMetadata: {
+          environment: "staging",
+          bucketName: "juro-legal-evidence-staging",
+          schemaVersion: "1",
+          sha256: "not-a-sha256",
+        },
+      };
+    },
+  };
+  await assertReadinessFailure(env, "LEGAL_TARGET_STORAGE_EVIDENCE_INVALID");
+});
+
+test("target readiness rejects a well-formed but incorrect R2 control hash", async () => {
+  const env = targetEnv("staging");
+  env.LEGAL_EVIDENCE_BUCKET = {
+    async head() {
+      return {
+        customMetadata: {
+          environment: "staging",
+          bucketName: "juro-legal-evidence-staging",
+          schemaVersion: "1",
+          sha256: "0".repeat(64),
+        },
+      };
+    },
+  };
+  await assertReadinessFailure(env, "LEGAL_TARGET_STORAGE_EVIDENCE_INVALID");
 });
 
 test("target control persists one exact lowercase blue-green resource identity", () => {

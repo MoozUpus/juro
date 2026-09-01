@@ -4,6 +4,10 @@ import {
   acceptsPrivateServiceRequest,
   privateServiceJson,
 } from "./private-service-boundary";
+import {
+  serializeLegalEnvironmentControlObject,
+  sha256Schema,
+} from "./target-domain-schemas";
 
 export const LEGAL_TARGET_READINESS_PATH = "/internal/legal-corpus/target/readiness";
 
@@ -28,6 +32,7 @@ const bucketControlSchema = z.object({
   environment: environmentSchema,
   bucketName: evidenceBucketNameSchema,
   schemaVersion: z.literal("1"),
+  sha256: sha256Schema,
 }).strict();
 const readinessSchema = z.object({
   environment: environmentSchema,
@@ -61,6 +66,19 @@ const infrastructureConfigurationSchema = z.object({
 }).strict();
 
 export type LegalTargetReadiness = z.infer<typeof readinessSchema>;
+
+async function expectedBucketControlSha256(
+  control: z.infer<typeof bucketControlSchema>,
+): Promise<string> {
+  const body = serializeLegalEnvironmentControlObject({
+    environment: control.environment,
+    bucketName: control.bucketName,
+  });
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
+  return [...new Uint8Array(digest)]
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 type LegalTargetDatabaseReader = {
   prepare(query: string): {
     first(): Promise<unknown>;
@@ -161,6 +179,9 @@ export async function handleLegalTargetReadinessRequest(
     const control = controlRowSchema.safeParse(rawControl);
     const bucketControl = bucketControlSchema.safeParse(bucketObject?.customMetadata ?? null);
     if (!control.success || !bucketControl.success) {
+      throw new TypeError("LEGAL_TARGET_STORAGE_EVIDENCE_INVALID");
+    }
+    if (bucketControl.data.sha256 !== await expectedBucketControlSha256(bucketControl.data)) {
       throw new TypeError("LEGAL_TARGET_STORAGE_EVIDENCE_INVALID");
     }
     if (
