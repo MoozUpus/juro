@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "recordedAt": "2026-09-01T22:31:40.193Z",
+  "databaseName": "juro-staging",
+  "databaseId": "bb716a96-b2fb-4823-90d6-6c228fed181a",
+  "readOnlySource": true,
+  "export": {
+    "format": "wrangler d1 export SQL",
+    "inputBytes": 14734586036,
+    "sha256": "44a5cb6fd8f985a0d0c6cd97cdbe7fbe2a1dfcfd521dda353f17ff88554770a6",
+    "temporaryPath": "D:\\JuroLegalCorpusTemp\\juro-staging-legacy.sql"
+  },
+  "restore": {
+    "outputBytes": 8908783616,
+    "temporaryPath": "D:\\JuroLegalCorpusTemp\\juro-staging-legacy.restore.sqlite",
+    "statementCount": 67317318,
+    "tableCount": 269,
+    "indexCount": 581,
+    "triggerCount": 368,
+    "migrationCount": 147,
+    "quickCheck": "ok",
+    "foreignKeyViolations": 0
+  },
+  "verificationCommand": "node scripts/verify-d1-full-export-restore.mjs --input D:\\JuroLegalCorpusTemp\\juro-staging-legacy.sql --output D:\\JuroLegalCorpusTemp\\juro-staging-legacy.restore.sqlite",
+  "cleanup": {
+    "temporaryPlaintextRemovedAfterVerification": false,
+    "cleanupPending": true,
+    "cleanupNote": "Execution policy blocked destructive deletion of the two explicit temporary files; no deletion was attempted through an alternate mechanism.",
+    "remoteDataMutated": false
+  },
+  "scope": "This closes isolated legacy juro-staging D1 export/restore integrity only; it is not a federated snapshot, corpus deduplication proof, indexed evaluation, or release approval."
+}
