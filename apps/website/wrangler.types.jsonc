@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "juro-legaltech-types",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./public"
+  },
+  "images": {
+    "binding": "IMAGES"
+  },
+  "analytics_engine_datasets": [
+    {
+      "binding": "PRODUCT_ANALYTICS",
+      "dataset": "juro-product-events-development"
+    }
+  ]
+}

@@ -45,7 +45,6 @@ jobs:
         run: npm ci
 
       - name: Verify generated Cloudflare types
-        if: matrix.app == 'apps/platform'
         run: npm run cf:types:check
 
       - name: Lint

@@ -11,6 +11,7 @@ import footerRailStyles from "./footer-rail.module.css";
 import headerTouchStyles from "./header-touch-targets.module.css";
 import styles from "./site-chrome.module.css";
 import { PublicThemeSwitcher } from "./ThemeSwitcher";
+import { openAnalyticsConsentSettings } from "../../../lib/analytics";
 
 type Locale = PublicLanguage;
 
@@ -45,6 +46,7 @@ const copy = {
     contacts: "Контакты",
     address: "Ташкент, Узбекистан",
     note: "AI помогает подготовить работу, но не заменяет обязательную профессиональную помощь.",
+    cookieSettings: "Настройки cookies",
   },
   uz: {
     nav: "Asosiy navigatsiya",
@@ -76,9 +78,10 @@ const copy = {
     contacts: "Aloqa",
     address: "Toshkent, O‘zbekiston",
     note: "AI ishni tayyorlashga yordam beradi, ammo majburiy professional yordamni almashtirmaydi.",
+    cookieSettings: "Cookie sozlamalari",
   },
   en: {
-    nav: "Main navigation", product: "Product", people: "Who it is for", trust: "Trust", resources: "Resources", lawyers: "Professionals", video: "Video", legal: "Legal Centre", signIn: "Sign in", start: "Start with JURO", open: "Open menu", close: "Close menu", skip: "Skip to main content", productLabel: "Product", companyLabel: "JURO", legalLabel: "Legal information", description: "A legal situation becomes a verifiable plan, a document and a clear next step.", ai: "AI legal assistant", document: "Document review", plan: "Action plan", business: "For business", knowledge: "Knowledge base", privacy: "Privacy", terms: "Terms of use", data: "Personal data", aiRules: "AI rules", contacts: "Contact", address: "Tashkent, Uzbekistan", note: "AI helps prepare legal work, but does not replace required professional advice.",
+    nav: "Main navigation", product: "Product", people: "Who it is for", trust: "Trust", resources: "Resources", lawyers: "Professionals", video: "Video", legal: "Legal Centre", signIn: "Sign in", start: "Start with JURO", open: "Open menu", close: "Close menu", skip: "Skip to main content", productLabel: "Product", companyLabel: "JURO", legalLabel: "Legal information", description: "A legal situation becomes a verifiable plan, a document and a clear next step.", ai: "AI legal assistant", document: "Document review", plan: "Action plan", business: "For business", knowledge: "Knowledge base", privacy: "Privacy", terms: "Terms of use", data: "Personal data", aiRules: "AI rules", contacts: "Contact", address: "Tashkent, Uzbekistan", note: "AI helps prepare legal work, but does not replace required professional advice.", cookieSettings: "Cookie settings",
   },
 } as const;
 
@@ -223,7 +226,7 @@ export function SiteFooter({ locale }: { locale: Locale }) {
         <a href="tel:+998974022292"><Phone aria-hidden="true" size={16} />+998974022292</a>
         <a href="mailto:admin@juro.uz"><Mail aria-hidden="true" size={16} />admin@juro.uz</a>
       </address>
-      <div className={`${styles.footerBottom} ${footerContactStyles.bottom} ${footerRailStyles.bottom}`}><span>© {year} JURO</span><p>{t.note}</p><span className={styles.footerLanguages}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={`/${target}`} key={target}>{languageLabels[target]}</Link>)}</span></div>
+      <div className={`${styles.footerBottom} ${footerContactStyles.bottom} ${footerRailStyles.bottom}`}><span>© {year} JURO</span><p>{t.note}</p><button className={styles.cookieSettings} onClick={openAnalyticsConsentSettings} type="button">{t.cookieSettings}</button><span className={styles.footerLanguages}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={`/${target}`} key={target}>{languageLabels[target]}</Link>)}</span></div>
     </footer>
   );
 }

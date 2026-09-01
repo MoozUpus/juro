@@ -59,6 +59,12 @@ config.assets = {
   binding: "ASSETS",
 };
 config.images = { binding: "IMAGES" };
+config.analytics_engine_datasets = [
+  {
+    binding: "PRODUCT_ANALYTICS",
+    dataset: "juro-product-events-production",
+  },
+];
 
 await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 

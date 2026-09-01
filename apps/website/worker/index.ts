@@ -2,24 +2,51 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 
-interface Env {
-  ASSETS: Fetcher;
-  DB: D1Database;
-  IMAGES: {
-    input(stream: ReadableStream): {
-      transform(options: Record<string, unknown>): {
-        output(options: { format: string; quality: number }): Promise<{ response(): Response }>;
-      };
-    };
-  };
-}
-
-interface ExecutionContext {
-  waitUntil(promise: Promise<unknown>): void;
-  passThroughOnException(): void;
-}
-
 const SITES_SERVICE_HOST_SUFFIX = ".chatgpt.site";
+const PRODUCT_EVENT_PATH = "/_juro/product-event";
+const MAX_PRODUCT_EVENT_BYTES = 512;
+const PUBLIC_PRODUCT_EVENTS = new Set([
+  "landing_view",
+  "start_scenario",
+  "source_opened",
+  "lawyer_viewed",
+]);
+const PUBLIC_PRODUCT_LOCALES = new Set(["ru", "uz", "en"]);
+const PUBLIC_PRODUCT_ACCOUNT_TYPES = new Set([
+  "individual",
+  "business",
+  "entrepreneur",
+  "lawyer",
+  "guest",
+]);
+
+type PublicProductEvent = {
+  event: string;
+  locale: string;
+  accountType: string;
+};
+
+type ImagesOutputFormat =
+  | "image/jpeg"
+  | "image/png"
+  | "image/gif"
+  | "image/webp"
+  | "image/avif"
+  | "rgb"
+  | "rgba";
+const IMAGES_OUTPUT_FORMATS = new Set<ImagesOutputFormat>([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "rgb",
+  "rgba",
+]);
+
+function isImagesOutputFormat(value: string): value is ImagesOutputFormat {
+  return IMAGES_OUTPUT_FORMATS.has(value as ImagesOutputFormat);
+}
 
 export function isSitesServiceHost(hostname: string): boolean {
   return hostname.toLowerCase().endsWith(SITES_SERVICE_HOST_SUFFIX);
@@ -50,6 +77,115 @@ export function withSecurityHeaders(response: Response, requestUrl: URL): Respon
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
+function analyticsResponse(requestUrl: URL, status: number, error?: string): Response {
+  const response = error
+    ? Response.json({ error }, { status, headers: { "Cache-Control": "no-store" } })
+    : new Response(null, { status, headers: { "Cache-Control": "no-store" } });
+  return withSecurityHeaders(response, requestUrl);
+}
+
+function hasAnalyticsConsent(request: Request): boolean {
+  if (request.headers.get("x-juro-analytics-consent") !== "analytics") return false;
+  return /(?:^|;\s*)juro_consent=analytics(?:;|$)/.test(request.headers.get("cookie") ?? "");
+}
+
+async function readBoundedJson(request: Request): Promise<unknown> {
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_PRODUCT_EVENT_BYTES) {
+    throw new RangeError("payload_too_large");
+  }
+  if (!request.body) throw new SyntaxError("invalid_json");
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_PRODUCT_EVENT_BYTES) {
+      try {
+        await reader.cancel("payload_too_large");
+      } catch {
+        // The bounded response is authoritative even if the stream cannot be cancelled.
+      }
+      throw new RangeError("payload_too_large");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+}
+
+function parsePublicProductEvent(value: unknown): PublicProductEvent | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  if (keys.length !== 3 || keys.join(",") !== "accountType,event,locale") return null;
+  if (
+    typeof record.event !== "string" ||
+    typeof record.locale !== "string" ||
+    typeof record.accountType !== "string" ||
+    !PUBLIC_PRODUCT_EVENTS.has(record.event) ||
+    !PUBLIC_PRODUCT_LOCALES.has(record.locale) ||
+    !PUBLIC_PRODUCT_ACCOUNT_TYPES.has(record.accountType)
+  ) return null;
+  return { event: record.event, locale: record.locale, accountType: record.accountType };
+}
+
+async function handleProductEvent(request: Request, env: WebsiteEnv, requestUrl: URL): Promise<Response> {
+  if (request.method !== "POST") {
+    const response = analyticsResponse(requestUrl, 405, "method_not_allowed");
+    response.headers.set("Allow", "POST");
+    return response;
+  }
+  const origin = request.headers.get("origin");
+  if (origin !== requestUrl.origin) return analyticsResponse(requestUrl, 403, "forbidden");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin") return analyticsResponse(requestUrl, 403, "forbidden");
+  if (!hasAnalyticsConsent(request)) return analyticsResponse(requestUrl, 403, "consent_required");
+  if (!(request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) {
+    return analyticsResponse(requestUrl, 415, "unsupported_media_type");
+  }
+
+  let raw: unknown;
+  try {
+    raw = await readBoundedJson(request);
+  } catch (error) {
+    return analyticsResponse(
+      requestUrl,
+      error instanceof RangeError ? 413 : 400,
+      error instanceof RangeError ? "payload_too_large" : "invalid_json",
+    );
+  }
+  const event = parsePublicProductEvent(raw);
+  if (!event) return analyticsResponse(requestUrl, 400, "invalid_event");
+  if (!env.PRODUCT_ANALYTICS) return analyticsResponse(requestUrl, 503, "analytics_unavailable");
+
+  try {
+    env.PRODUCT_ANALYTICS.writeDataPoint({
+      blobs: [
+        "product_event_v1",
+        event.event,
+        "website",
+        event.locale,
+        event.accountType,
+        event.event === "start_scenario" ? "started" : "completed",
+        "none",
+      ],
+      doubles: [1, 0],
+    });
+  } catch {
+    return analyticsResponse(requestUrl, 503, "analytics_unavailable");
+  }
+  return analyticsResponse(requestUrl, 204);
+}
+
 // Image security config. SVG sources with .svg extension auto-skip the
 // optimization endpoint on the client side (served directly, no proxy).
 // To route SVGs through the optimizer (with security headers), set
@@ -57,14 +193,19 @@ export function withSecurityHeaders(response: Response, requestUrl: URL): Respon
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 const worker = {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: WebsiteEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === PRODUCT_EVENT_PATH) {
+      return handleProductEvent(request, env, url);
+    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       const optimized = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
         transformImage: async (body, { width, format, quality }) => {
+          if (!isImagesOutputFormat(format)) throw new Error("Unsupported image output format");
           const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
           return result.response();
         },

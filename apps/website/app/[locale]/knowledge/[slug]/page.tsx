@@ -104,7 +104,7 @@ export default async function KnowledgeArticlePage({ params }: Props) {
           <aside className={styles.sources}>
             <b>{labels.sources}</b>
             <p>{labels.sourceNote}</p>
-            {article.sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}>{source.title}</a>)}
+            {article.sources.map((source) => <a href={source.url} data-juro-product-event="source_opened" target="_blank" rel="noreferrer" key={source.url}>{source.title}</a>)}
           </aside>
           <aside className={styles.disclaimer}>{article.disclaimer}</aside>
           <a className={styles.nextStep} href={`https://app.juro.uz/${platformLocale}/individual${article.relatedTool.path}`}>{article.relatedTool.label}</a>

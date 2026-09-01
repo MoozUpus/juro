@@ -21,6 +21,21 @@ const motionDirector = fs.readFileSync("app/components/public/JuroMotionDirector
 const rootLayout = fs.readFileSync("app/layout.tsx", "utf8");
 const chromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0 Safari/537.36";
 
+function productEventRequest(body, headers = {}) {
+  return new Request("https://juro.uz/_juro/product-event", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie: "juro_consent=analytics",
+      origin: "https://juro.uz",
+      "sec-fetch-site": "same-origin",
+      "x-juro-analytics-consent": "analytics",
+      ...headers,
+    },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+
 function relativeLuminance(hex) {
   const channels = hex.match(/[a-f\d]{2}/gi).map((channel) => Number.parseInt(channel, 16) / 255);
   const [red, green, blue] = channels.map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
@@ -129,6 +144,77 @@ test("Sites service hosts are noindex while the canonical custom domain stays in
 
   assert.equal(directResponse.headers.get("x-robots-tag"), "noindex, nofollow, noarchive");
   assert.equal(canonicalResponse.headers.get("x-robots-tag"), null);
+});
+
+test("accepts only consented, same-origin, content-free public product events", async () => {
+  const worker = await createWorker();
+  const points = [];
+  const analyticsRuntime = {
+    ...runtime,
+    PRODUCT_ANALYTICS: { writeDataPoint(value) { points.push(value); } },
+  };
+  const response = await worker.fetch(
+    productEventRequest({ event: "source_opened", locale: "ru", accountType: "guest" }),
+    analyticsRuntime,
+    context,
+  );
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(points, [{
+    blobs: ["product_event_v1", "source_opened", "website", "ru", "guest", "completed", "none"],
+    doubles: [1, 0],
+  }]);
+
+  const noConsent = await worker.fetch(
+    productEventRequest(
+      { event: "landing_view", locale: "uz", accountType: "guest" },
+      { cookie: "juro_consent=essential" },
+    ),
+    analyticsRuntime,
+    context,
+  );
+  assert.equal(noConsent.status, 403);
+
+  const crossOrigin = await worker.fetch(
+    productEventRequest(
+      { event: "landing_view", locale: "en", accountType: "guest" },
+      { origin: "https://example.com", "sec-fetch-site": "cross-site" },
+    ),
+    analyticsRuntime,
+    context,
+  );
+  assert.equal(crossOrigin.status, 403);
+
+  const sensitiveExtraField = await worker.fetch(
+    productEventRequest({
+      event: "lawyer_viewed",
+      locale: "ru",
+      accountType: "guest",
+      lawyerId: "must-not-be-collected",
+    }),
+    analyticsRuntime,
+    context,
+  );
+  assert.equal(sensitiveExtraField.status, 400);
+  assert.equal(points.length, 1);
+});
+
+test("bounds public analytics request bodies before parsing", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(
+    productEventRequest("{" + "x".repeat(700) + "}"),
+    { ...runtime, PRODUCT_ANALYTICS: { writeDataPoint() { throw new Error("must not write"); } } },
+    context,
+  );
+  assert.equal(response.status, 413);
+});
+
+test("production website deployment binds the shared product analytics dataset", () => {
+  const deployScript = fs.readFileSync("scripts/deploy-production.mjs", "utf8");
+  const viteConfig = fs.readFileSync("vite.config.ts", "utf8");
+  assert.match(deployScript, /analytics_engine_datasets/);
+  assert.match(deployScript, /juro-product-events-production/);
+  assert.match(viteConfig, /juro-product-events-development/);
 });
 
 test("serves the public manifest from a same-origin route", async () => {

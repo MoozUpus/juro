@@ -30,7 +30,26 @@ test("public copy avoids unresolved commercial and legal claims", () => {
 test("public surface does not accept sensitive legal text or files", () => {
   const homepage = fs.readFileSync("app/components/public/JuroHomepage.tsx", "utf8");
   const analytics = fs.readFileSync("lib/analytics.ts", "utf8");
+  const analyticsUi = fs.readFileSync("app/components/public/PublicAnalytics.tsx", "utf8");
+  const worker = fs.readFileSync("worker/index.ts", "utf8");
   assert.doesNotMatch(homepage, /type="file"|<textarea|FormData/);
-  assert.match(analytics, /text\|content\|document\|email\|phone\|name\|otp/);
   assert.match(analytics, /juro-cookie-consent/);
+  assert.match(analytics, /JSON\.stringify\(\{ event, \.\.\.payload \}\)/);
+  assert.match(worker, /keys\.join\(","\) !== "accountType,event,locale"/);
+  assert.doesNotMatch(worker, /cf-connecting-ip|user-agent|referer/i);
+  for (const event of ["landing_view", "start_scenario", "source_opened", "lawyer_viewed"]) {
+    assert.match(analytics + analyticsUi, new RegExp(event));
+  }
+});
+
+test("public analytics remains optional, first-party and reconfigurable", () => {
+  const analytics = fs.readFileSync("lib/analytics.ts", "utf8");
+  const analyticsUi = fs.readFileSync("app/components/public/PublicAnalytics.tsx", "utf8");
+  const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
+  assert.match(analytics, /juro_consent/);
+  assert.match(analytics, /Domain=\.juro\.uz; Secure/);
+  assert.match(analytics, /readAnalyticsConsent\(\) !== "analytics"/);
+  assert.match(analyticsUi, /"essential"/);
+  assert.match(analyticsUi, /"analytics"/);
+  assert.match(chrome, /openAnalyticsConsentSettings/);
 });

@@ -48,7 +48,7 @@ export function SafeMarkdown({
         a: ({ href, children: label }) => {
           const hrefValue = safeLink(href, allowlist);
           return hrefValue
-            ? <a href={hrefValue} target="_blank" rel="noopener noreferrer">{label}</a>
+            ? <a href={hrefValue} data-juro-product-event={allowedLinks ? "source_opened" : undefined} target="_blank" rel="noopener noreferrer">{label}</a>
             : <span>{label as ReactNode}</span>;
         },
         h1: ({ children: value }) => <h2>{value}</h2>,

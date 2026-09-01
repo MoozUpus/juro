@@ -15,6 +15,8 @@
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "type-check": "bash scripts/sites-env.sh -- tsc --noEmit",
+    "cf:types": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --include-runtime false --env-interface WebsiteEnv",
+    "cf:types:check": "npm run cf:types -- --check",
     "license:check": "node ../../scripts/check-dependency-licenses.mjs .",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },
