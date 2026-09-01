@@ -5,6 +5,7 @@ import {
   saveAiActionPlanInputSchema,
   saveAiActionPlanToCase,
 } from "../../../../../lib/ai/action-plan-save";
+import { trackProductEvent } from "../../../../../lib/platform/analytics";
 import { workspaceForContentEditor } from "../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -34,6 +35,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
       assistantMessageId: parsed.data.assistantMessageId,
       targetCaseId: parsed.data.targetCaseId,
     });
+    if (!result.replay) {
+      trackProductEvent({
+        event: "plan_created",
+        surface: "platform",
+        locale: parsed.data.locale,
+        accountType: workspace.type,
+        outcome: "completed",
+      });
+    }
     return response(result, result.replay ? 200 : 201);
   } catch (error) {
     if (!(error instanceof AiActionPlanSaveError)) throw error;

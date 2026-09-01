@@ -9,6 +9,7 @@ import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { comparisonForUser } from "../../../../lib/document-comparison/storage";
 import { consultationBookingSchema } from "../../../../lib/platform/consultation";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -167,5 +168,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
     throw error;
   }
 
+  trackProductEvent({
+    event: "consultation_scheduled",
+    surface: "platform",
+    locale: parsed.data.locale,
+    accountType: workspace.type,
+    outcome: "completed",
+  });
   return response({ ok: true, bookingId, status: "request_created" }, 201);
 });

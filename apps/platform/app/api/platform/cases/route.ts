@@ -3,6 +3,7 @@ import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
 import { parseJsonRequest } from "../../../../lib/auth/input";
 import { caseCreateInputSchema, caseScenarioMatchesAccount, caseScenarioSteps } from "../../../../lib/platform/case-create";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
 
 function response(body: unknown, status=200){return Response.json(body,{status,headers:{"cache-control":"private, no-store"}});}
@@ -42,5 +43,7 @@ export const POST = withApiErrors(async function POST(request:Request){
     db.prepare("INSERT INTO action_plan_versions (id,plan_id,version,created_by_user_id,reason,snapshot_json,created_at) VALUES (?,?,1,?,'plan_created',?,?)")
       .bind(crypto.randomUUID(),planId,user.id,initialSnapshot,now),    db.prepare("INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'case_created',?,?)").bind(crypto.randomUUID(),caseId,user.id,JSON.stringify({legalArea}),now),
   ]);
+  trackProductEvent({ event:"case_created",surface:"platform",locale,accountType,outcome:"completed" });
+  trackProductEvent({ event:"plan_created",surface:"platform",locale,accountType,outcome:"completed" });
   return response({ok:true,caseId,planId},201);
 });

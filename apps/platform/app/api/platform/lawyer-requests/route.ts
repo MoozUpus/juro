@@ -4,6 +4,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { lawyerRequestSchema, localizedHandoffError } from "../../../../lib/platform/lawyer-request";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
 import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../lib/operations/operational-feature-flags";
 
@@ -108,5 +109,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
     }), now),
   ]);
 
+  trackProductEvent({
+    event: "lawyer_request_created",
+    surface: "platform",
+    locale,
+    accountType: workspace.type,
+    outcome: "completed",
+    reason: lawyer ? "direct" : "marketplace",
+  });
   return response({ ok: true, requestId, status, conflictCheckRequired: Boolean(lawyer) }, 201);
 });

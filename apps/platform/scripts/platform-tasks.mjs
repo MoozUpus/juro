@@ -122,6 +122,7 @@ const coreTestFiles = [
   "tests/lawyer-document-verification-boundary.test.ts",
   "tests/lawyer-phone-contact.test.ts",
   "tests/lawyer-workspace-operations.test.ts",
+  "tests/product-analytics.test.ts",
   "tests/ai-feedback.test.ts",
   "tests/ai-quality-review.test.ts",
   "tests/url-import.test.ts",

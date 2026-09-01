@@ -8,6 +8,7 @@ export interface BuilderRuntimeEnv {
   BUCKET?: R2Bucket;
   QUARANTINE_BUCKET?: R2Bucket;
   PLATFORM_ANALYTICS?: AnalyticsEngineDataset;
+  PRODUCT_ANALYTICS?: AnalyticsEngineDataset;
   LEX_UZ_INDEX?: VectorizeIndex;
   ADVICE_UZ_INDEX?: VectorizeIndex;
   USER_DOCUMENTS_INDEX?: VectorizeIndex;
