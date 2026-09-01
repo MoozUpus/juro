@@ -19,6 +19,8 @@ const RECONCILIATION_PAGE_SIZE = 1_000;
 const inputSchema = z.object({
   buildId: z.literal(BUILD_ID).default(BUILD_ID),
   injectPartialFailure: z.boolean().optional(),
+  lane: z.enum(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    "a", "b", "c", "d", "e", "f"]).optional(),
 }).strict();
 
 const provisionObjectSchema = z.object({
@@ -306,7 +308,11 @@ async function immutablePut(
   }
 }
 
-async function advanceBuild(env: SourceSnapshotBuildEnv, injectPartialFailure: boolean) {
+async function advanceBuild(
+  env: SourceSnapshotBuildEnv,
+  injectPartialFailure: boolean,
+  lane?: string,
+) {
   const { db, bucket } = await requireTarget(env);
   const build = await db.prepare(`SELECT status,phase,processed_count AS processedCount
     FROM legal_source_snapshot_builds WHERE id=?`).bind(BUILD_ID)
@@ -332,13 +338,19 @@ async function advanceBuild(env: SourceSnapshotBuildEnv, injectPartialFailure: b
     JOIN legal_instruments instrument ON instrument.id=document.legacy_instrument_id
     JOIN legal_evidence_locators locator ON locator.id=provision.provision_locator_id
     LEFT JOIN legal_canonical_chunks chunk ON chunk.snapshot_provision_id=provision.id
-    WHERE chunk.id IS NULL ORDER BY provision.id LIMIT ?`).bind(PROJECTION_BATCH_SIZE).all<ProjectionRow>();
-  if (rows.results.length === 0) {
+    WHERE chunk.id IS NULL ${lane ? "AND substr(provision.id,20,1)=?" : ""}
+    ORDER BY provision.id LIMIT ?`);
+  const packet = lane
+    ? await rows.bind(lane, PROJECTION_BATCH_SIZE).all<ProjectionRow>()
+    : await rows.bind(PROJECTION_BATCH_SIZE).all<ProjectionRow>();
+  if (packet.results.length === 0) {
+    if (lane) return { status: "building", phase: "projections", lane, laneComplete: true,
+      processedCount: build.processedCount };
     await db.prepare(`UPDATE legal_source_snapshot_builds SET phase='reconciliation',cursor=NULL,
       updated_at=? WHERE id=?`).bind(new Date().toISOString(), BUILD_ID).run();
     return { status: "building", phase: "reconciliation", processedCount: build.processedCount };
   }
-  const projected = await Promise.all(rows.results.map(async (row) => {
+  const projected = await Promise.all(packet.results.map(async (row) => {
     const sourceBytes = await verifiedObject(bucket, row.provisionKey, row.provisionBytes, row.provisionSha256);
     const source = provisionObjectSchema.parse(JSON.parse(new TextDecoder().decode(sourceBytes)) as unknown);
     if (source.provisionRenditionId !== row.legacyProvisionRenditionId
@@ -398,7 +410,7 @@ async function advanceBuild(env: SourceSnapshotBuildEnv, injectPartialFailure: b
       updated_at=? WHERE id=?`).bind(projected.at(-1)!.row.snapshotProvisionId, projected.length, now, BUILD_ID),
   ]);
   return { status: "building", phase: "projections",
-    processedCount: build.processedCount + projected.length, batchCount: projected.length };
+    processedCount: build.processedCount + projected.length, batchCount: projected.length, lane };
 }
 
 type InventoryKind = {
@@ -703,7 +715,7 @@ export async function handleSourceSnapshotBuildRequest(
     const path = new URL(request.url).pathname;
     if (path === START_PATH) return response({ result: await startBuild(env) });
     if (path === ADVANCE_PATH) {
-      return response({ result: await advanceBuild(env, input.injectPartialFailure === true) });
+      return response({ result: await advanceBuild(env, input.injectPartialFailure === true, input.lane) });
     }
     if (path === RECONCILE_PATH) return response({ result: await reconcileBuild(env) });
     if (path === FINALIZE_PATH) return response({ result: await finalizeBuild(env) });
