@@ -116,6 +116,10 @@ type ProjectionRow = {
   rawSha256: string;
   normalizedLocatorId: string;
   normalizedSha256: string;
+  existingChunkId: string | null;
+  existingChunkKey: string | null;
+  existingChunkBytes: number | null;
+  existingChunkSha256: string | null;
 };
 
 function response(body: unknown, status = 200): Response {
@@ -188,7 +192,17 @@ async function startBuild(env: SourceSnapshotBuildEnv) {
   const { db } = await requireTarget(env);
   const existing = await db.prepare(`SELECT id,status,phase FROM legal_source_snapshot_builds WHERE id=?`)
     .bind(BUILD_ID).first<{ id: string; status: string; phase: string }>();
-  if (existing) return { status: existing.status, phase: existing.phase, resumed: true };
+  if (existing) {
+    const eligibility = await db.prepare(`SELECT count(*) AS count FROM legal_retrieval_eligibility
+      WHERE build_id=? AND capability='current'`).bind(BUILD_ID).first<{ count: number }>();
+    if (existing.status === "building" && existing.phase === "reconciliation"
+      && Number(eligibility?.count ?? 0) < 165_852) {
+      await db.prepare(`UPDATE legal_source_snapshot_builds SET phase='projections',cursor=NULL,
+        updated_at=? WHERE id=?`).bind(new Date().toISOString(), BUILD_ID).run();
+      return { status: "building", phase: "projections", resumed: true };
+    }
+    return { status: existing.status, phase: existing.phase, resumed: true };
+  }
   const documentsWithoutSnapshots = await db.prepare(`SELECT id,publisher,publisher_document_token AS token,
       language_tag AS languageTag,source_url AS sourceUrl FROM legal_source_documents
     WHERE legacy_expression_id IS NULL ORDER BY id`).all<{
@@ -296,21 +310,6 @@ async function projectVerifiedRow(bucket: SourceSnapshotBucket, row: ProjectionR
     sourcePositionToken: row.sourcePositionToken, normalizedTextSha256,
     provisionLocatorId: row.provisionLocatorId, provisionObjectSha256: row.provisionSha256,
   });
-  const canonicalChunkIdValue = legacyProjectionChunkId(row.legacyProvisionRenditionId);
-  const shardId = await sourceSnapshotShardId(canonicalChunkIdValue, 1);
-  const key = sourceSnapshotChunkKey(RELEASE_ID, shardId, canonicalChunkIdValue);
-  const artifact = serializeNeutralSourceSnapshotChunk({
-    sourceDocumentId: row.sourceDocumentId, sourceSnapshotId: row.sourceSnapshotId,
-    snapshotProvisionId: row.snapshotProvisionId, canonicalChunkId: canonicalChunkIdValue,
-    publisher: "lex.uz", publisherDocumentToken: row.publisherDocumentToken,
-    publisherRevisionToken: row.publisherRevisionToken, languageTag: row.languageTag,
-    sourceUrl: row.sourceUrl, capturedAt: row.capturedAt, documentType: row.documentType,
-    articleNumber: row.articleNumber, articleTitle: row.articleTitle, sequence: row.sequence,
-    provisionText: source.provisionText, sourceProvisionSha256: row.provisionSha256,
-    sourceNormalizedSha256: row.sourceNormalizedSha256,
-  });
-  const artifactSha256 = await sha256(artifact);
-  await verifiedObject(bucket, key, artifact.byteLength, artifactSha256);
   const officialSourceVerified = [row.documentSourceUrl, row.sourceUrl].every((value) => {
     const parsed = new URL(value);
     return parsed.protocol === "https:" && ["lex.uz", "www.lex.uz"].includes(parsed.hostname);
@@ -323,7 +322,33 @@ async function projectVerifiedRow(bucket: SourceSnapshotBucket, row: ProjectionR
     row.quarantineId !== null ? "QUARANTINED" : null,
     row.aliasId !== null ? "CANONICALIZATION_CONFLICT" : null,
   ].filter((reason): reason is string => reason !== null);
-  return { row, canonicalChunkId: canonicalChunkIdValue, key, byteCount: artifact.byteLength,
+  const canonicalChunkIdValue = legacyProjectionChunkId(row.legacyProvisionRenditionId);
+  const shardId = await sourceSnapshotShardId(canonicalChunkIdValue, 1);
+  const key = sourceSnapshotChunkKey(RELEASE_ID, shardId, canonicalChunkIdValue);
+  let byteCount: number | null = null;
+  let artifactSha256: string | null = null;
+  if (reasonCodes.length === 0) {
+    const artifact = serializeNeutralSourceSnapshotChunk({
+      sourceDocumentId: row.sourceDocumentId, sourceSnapshotId: row.sourceSnapshotId,
+      snapshotProvisionId: row.snapshotProvisionId, canonicalChunkId: canonicalChunkIdValue,
+      publisher: "lex.uz", publisherDocumentToken: row.publisherDocumentToken,
+      publisherRevisionToken: row.publisherRevisionToken, languageTag: row.languageTag,
+      sourceUrl: row.sourceUrl, capturedAt: row.capturedAt, documentType: row.documentType,
+      articleNumber: row.articleNumber, articleTitle: row.articleTitle, sequence: row.sequence,
+      provisionText: source.provisionText, sourceProvisionSha256: row.provisionSha256,
+      sourceNormalizedSha256: row.sourceNormalizedSha256,
+    });
+    byteCount = artifact.byteLength;
+    artifactSha256 = await sha256(artifact);
+    if (row.existingChunkId !== canonicalChunkIdValue || row.existingChunkKey !== key
+      || row.existingChunkBytes !== byteCount || row.existingChunkSha256 !== artifactSha256) {
+      throw new Error("SOURCE_SNAPSHOT_PROJECTION_MISMATCH");
+    }
+    await verifiedObject(bucket, key, byteCount, artifactSha256);
+  } else if (row.existingChunkId !== null) {
+    throw new Error("SOURCE_SNAPSHOT_INELIGIBLE_PROJECTION_PRESENT");
+  }
+  return { row, canonicalChunkId: canonicalChunkIdValue, key, byteCount,
     sha256: artifactSha256, sourceDocumentIdentity, sourceSnapshotIdentity,
     snapshotProvisionIdentity, normalizedTextSha256, officialSourceVerified, reasonCodes };
 }
@@ -355,7 +380,9 @@ async function advanceBuild(
       provision.privacy_class AS privacyClass,pointer.provision_rendition_id AS currentPointerId,
       quarantine.id AS quarantineId,alias.id AS aliasId,snapshot.raw_locator_id AS rawLocatorId,
       raw.sha256 AS rawSha256,snapshot.normalized_locator_id AS normalizedLocatorId,
-      normalized.sha256 AS normalizedSha256
+      normalized.sha256 AS normalizedSha256,chunk.id AS existingChunkId,
+      chunk.r2_key AS existingChunkKey,chunk.byte_count AS existingChunkBytes,
+      chunk.sha256 AS existingChunkSha256
     FROM legal_snapshot_provisions provision
     JOIN legal_source_snapshots snapshot ON snapshot.id=provision.source_snapshot_id
     JOIN legal_source_documents document ON document.id=snapshot.source_document_id
@@ -364,7 +391,7 @@ async function advanceBuild(
     JOIN legal_evidence_locators locator ON locator.id=provision.provision_locator_id
     JOIN legal_evidence_locators raw ON raw.id=snapshot.raw_locator_id
     JOIN legal_evidence_locators normalized ON normalized.id=snapshot.normalized_locator_id
-    JOIN legal_canonical_chunks chunk ON chunk.snapshot_provision_id=provision.id AND chunk.ordinal=0
+    LEFT JOIN legal_canonical_chunks chunk ON chunk.snapshot_provision_id=provision.id AND chunk.ordinal=0
     LEFT JOIN legal_retrieval_eligibility eligibility ON eligibility.snapshot_provision_id=provision.id
       AND eligibility.capability='current' AND eligibility.build_id=?
     LEFT JOIN legal_current_provision_pointers pointer
@@ -869,7 +896,9 @@ async function replayBuild(env: SourceSnapshotBuildEnv, runId: "baseline" | "rep
       provision.privacy_class AS privacyClass,pointer.provision_rendition_id AS currentPointerId,
       quarantine.id AS quarantineId,alias.id AS aliasId,snapshot.raw_locator_id AS rawLocatorId,
       raw.sha256 AS rawSha256,snapshot.normalized_locator_id AS normalizedLocatorId,
-      normalized.sha256 AS normalizedSha256,chunk.id AS expectedChunkId,
+      normalized.sha256 AS normalizedSha256,chunk.id AS existingChunkId,
+      chunk.r2_key AS existingChunkKey,chunk.byte_count AS existingChunkBytes,
+      chunk.sha256 AS existingChunkSha256,chunk.id AS expectedChunkId,
       chunk.r2_key AS expectedChunkKey,chunk.byte_count AS expectedChunkBytes,
       chunk.sha256 AS expectedChunkSha256,posting.posting_inventory_sha256 AS expectedPostingSha256,
       dense.embedding_model AS expectedEmbeddingModel,dense.dimensions AS expectedDimensions,
