@@ -397,6 +397,8 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /backfillCompressedSparseIndexBatch/u);
   assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /pinnedManifestId[\s\S]*resolveLegalSearchIndexManifest/u);
+  assert.match(corpusWorker, /handleSourceSnapshotBuildRequest/u);
+  assert.match(corpusWorker, /isSourceSnapshotBuildPath/u);
   assert.match(corpusWorker, /pacingAlreadyApplied: true/u);
   assert.match(corpusWorker, /persistentRobotsPolicy: pacerStats\.persistentRobotsCacheHits > 0/u);
   assert.match(corpusWorker, /scheduled_locks/u);

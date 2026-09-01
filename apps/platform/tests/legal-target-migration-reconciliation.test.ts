@@ -336,8 +336,10 @@ test("source projections and provenance are reconciled independently from a clea
       item.startsWith("source_release:")), true);
     assert.equal(report.reconciliation.missingProvenance.some((item) =>
       item.includes("missing-capture")), true);
-    for (const prefix of ["authority_evidence_revision", "applicability_evidence_rendition",
-      "provenance_record_rendition", "audit_relationship_chunk"]) {
+    assert.equal(report.reconciliation.missingProvenance.some((item) =>
+      item.startsWith("authority_evidence_revision")), false);
+    for (const prefix of ["applicability_evidence_rendition", "provenance_record_rendition",
+      "audit_relationship_chunk"]) {
       assert.equal(report.reconciliation.missingProvenance.some((item) =>
         item.startsWith(prefix)), true, prefix);
     }
@@ -410,7 +412,7 @@ test("every rendition requires a versioned attested semantic fingerprint", async
   }
 });
 
-test("projection preparation excludes chunks whose textual authority is unknown", async () => {
+test("projection preparation keeps technically eligible current chunks whose textual authority is unknown", async () => {
   const inventory = representativeInventory();
   inventory.normalizedRevisions[4] = {
     ...inventory.normalizedRevisions[4]!,
@@ -426,9 +428,9 @@ test("projection preparation excludes chunks whose textual authority is unknown"
   };
 
   const prepared = await prepareCorpusMigrationProjections(inventory);
-  assert.equal(prepared.releaseItems.length, 3);
-  assert.equal(prepared.sparsePostings.length, 3);
-  assert.equal(prepared.denseCandidates.length, 3);
+  assert.equal(prepared.releaseItems.length, 4);
+  assert.equal(prepared.sparsePostings.length, 4);
+  assert.equal(prepared.denseCandidates.length, 4);
 });
 
 test("projection preparation excludes chunks whose authority evidence hash is invalid", async () => {

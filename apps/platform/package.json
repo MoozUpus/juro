@@ -20,6 +20,7 @@
     "validate:legal-corpus:release": "tsx scripts/validate-legal-corpus-release.ts",
     "manage:legal-search-index": "node scripts/manage-legal-search-index.mjs",
     "build:legal-search-index": "node scripts/run-legal-search-index-build.mjs",
+    "build:source-snapshot-release": "node scripts/run-source-snapshot-build.mjs",
     "reconcile:legal-search-index": "node scripts/reconcile-legal-search-index-build.mjs",
     "dev:legal-search-build-proxy": "wrangler dev --config wrangler.legal-search-build-proxy.jsonc --port 8787",
     "compact:legal-provision-quotes": "node scripts/compact-duplicate-provision-quotes.mjs",

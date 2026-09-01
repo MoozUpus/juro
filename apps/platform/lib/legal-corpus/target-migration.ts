@@ -497,10 +497,8 @@ async function canonicalize(input: Inventory): Promise<Canonicalized> {
         missingProvenance.push(`capture_to_revision:${captureId}->${row.textRevisionId}`);
       }
     }
-    if (!(authorityEvidenceByRevision.get(row.textRevisionId) ?? [])
-      .some((evidence) => isAuthorityEvidenceValidForRevision(row, evidence))) {
-      missingProvenance.push(`authority_evidence_revision:${row.officialExpressionId}->${row.textRevisionId}`);
-    }
+    // Textual-authority evidence remains optional audit enrichment. Its
+    // absence is not missing Source Snapshot provenance for current search.
   }
   for (const row of input.authorityEvidenceRecords) {
     const revision = revisionByInputId.get(row.textRevisionId);
@@ -713,19 +711,16 @@ async function canonicalize(input: Inventory): Promise<Canonicalized> {
   }
   const chunks = [...chunkNatural.values()].map(({ canonical }) => canonical)
     .sort((left, right) => left.id.localeCompare(right.id));
-  const authoritySupportedRevisionIds = new Set(input.normalizedRevisions
+  const nonContradictoryRevisionIds = new Set(input.normalizedRevisions
     .filter((revision) => {
       const evidence = authorityEvidenceByRevision.get(revision.textRevisionId) ?? [];
-      return revision.textualAuthority !== "unknown" && evidence.length > 0
-        && evidence.every((row) => isAuthorityEvidenceValidForRevision(revision, row));
+      return evidence.every((row) => isAuthorityEvidenceValidForRevision(revision, row));
     })
     .map((revision) => revision.textRevisionId));
   const projectionSupportedRenditionIds = new Set(input.provisionRenditions
     .filter((rendition) => {
       const revision = revisionByIdentity.get(rendition.textRevisionId);
-      return rendition.textualAuthority !== "unknown"
-        && revision?.textualAuthority === rendition.textualAuthority
-        && authoritySupportedRevisionIds.has(rendition.textRevisionId);
+      return Boolean(revision) && nonContradictoryRevisionIds.has(rendition.textRevisionId);
     })
     .map((rendition) => rendition.provisionRenditionId));
   const projectionEligibleChunkIds = new Set(input.chunks
