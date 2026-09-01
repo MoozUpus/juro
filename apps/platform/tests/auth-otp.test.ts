@@ -645,7 +645,7 @@ test("session persistence inputs default safely and reject malformed values", as
   }
 });
 
-test("concurrent wrong OTP requests cannot overshoot the attempt budget", async () => {
+test("concurrent wrong OTP requests cannot overshoot one challenge and cannot lock replacement issuance", async () => {
   const { sqlite, d1 } = databaseFixture();
   try {
     const challenge = await insertChallenge(sqlite);
@@ -692,20 +692,22 @@ test("concurrent wrong OTP requests cannot overshoot the attempt budget", async 
         hourlySince: "2026-07-26T11:05:00.000Z",
       }),
     );
-    assert.equal(blockedReservation.status, "blocked");
-    if (blockedReservation.status === "blocked") {
-      assert.equal(
-        blockedReservation.verificationLockedUntil,
-        "2026-07-26T12:15:00.000Z",
-      );
-    }
+    assert.equal(blockedReservation.status, "reserved");
     assert.equal(
       (
         sqlite.prepare(
           "SELECT count(*) AS total FROM auth_otp_challenges",
         ).get() as { total: number }
       ).total,
-      1,
+      2,
+    );
+    assert.equal(
+      (
+        sqlite.prepare(
+          "SELECT invalidated_at AS invalidatedAt FROM auth_otp_challenges WHERE id=?",
+        ).get(challenge.id) as { invalidatedAt: string | null }
+      ).invalidatedAt,
+      "2026-07-26T12:05:00.000Z",
     );
   } finally {
     sqlite.close();
@@ -764,28 +766,45 @@ test("expired, replaced, used, and mismatched OTP states remain distinct", async
   }
 });
 
-test("keyed OTP verification rejects divergent retained SHA evidence", async () => {
-  for (const column of ["email_hash", "code_hash"] as const) {
-    const { sqlite, d1 } = databaseFixture();
-    try {
-      const challenge = await insertChallenge(sqlite);
-      sqlite.prepare(
-        `UPDATE auth_otp_challenges SET ${column}='divergent' WHERE id=?`,
-      ).run(challenge.id);
-      await assert.rejects(
-        consumeOtpChallenge(d1, {
-          identityContext: dualContext,
-          challengeId: challenge.id,
-          email: challenge.email,
-          purpose: challenge.purpose,
-          code: challenge.code,
-          now: "2026-07-26T12:00:00.000Z",
-        }),
-        (error: unknown) => error instanceof IdentityProtectionError
-          && error.code === "IDENTITY_VALUE_DIVERGED",
-      );
-    } finally {
-      sqlite.close();
-    }
+test("keyed OTP verification keeps identity divergence checks but never depends on retained code SHA", async () => {
+  const identityFixture = databaseFixture();
+  try {
+    const challenge = await insertChallenge(identityFixture.sqlite);
+    identityFixture.sqlite.prepare(
+      "UPDATE auth_otp_challenges SET email_hash='divergent' WHERE id=?",
+    ).run(challenge.id);
+    await assert.rejects(
+      consumeOtpChallenge(identityFixture.d1, {
+        identityContext: dualContext,
+        challengeId: challenge.id,
+        email: challenge.email,
+        purpose: challenge.purpose,
+        code: challenge.code,
+        now: "2026-07-26T12:00:00.000Z",
+      }),
+      (error: unknown) => error instanceof IdentityProtectionError
+        && error.code === "IDENTITY_VALUE_DIVERGED",
+    );
+  } finally {
+    identityFixture.sqlite.close();
+  }
+
+  const codeFixture = databaseFixture();
+  try {
+    const challenge = await insertChallenge(codeFixture.sqlite);
+    codeFixture.sqlite.prepare(
+      "UPDATE auth_otp_challenges SET code_hash='no-offline-verifier' WHERE id=?",
+    ).run(challenge.id);
+    const result = await consumeOtpChallenge(codeFixture.d1, {
+      identityContext: dualContext,
+      challengeId: challenge.id,
+      email: challenge.email,
+      purpose: challenge.purpose,
+      code: challenge.code,
+      now: "2026-07-26T12:00:00.000Z",
+    });
+    assert.equal(result.status, "verified");
+  } finally {
+    codeFixture.sqlite.close();
   }
 });

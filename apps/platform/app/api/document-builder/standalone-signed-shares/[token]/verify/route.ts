@@ -2,12 +2,12 @@ import { z } from "zod";
 import { parseJsonRequest } from "../../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../../lib/document-builder/auth/api";
 import { apiError, badRequest, jsonResponse } from "../../../../../../lib/document-builder/auth/responses";
-import { addHours, randomToken, sha256 } from "../../../../../../lib/document-builder/share-links/crypto";
+import { accessCodeMatches, addHours, randomToken, sha256 } from "../../../../../../lib/document-builder/share-links/crypto";
 import {
   reserveSignedShareAttempt,
   signedShareRetryAfterSeconds,
 } from "../../../../../../lib/document-builder/share-links/verification-attempts";
-import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ token: string }> };
@@ -53,7 +53,12 @@ export async function POST(request: Request, context: Context): Promise<Response
     if (share.deactivatedAt || share.archivedAt) return jsonResponse({ error: "Доступ запрещён", code: "ACCESS_DENIED" }, { status: 403 });
     const reservation = await reserveSignedShareAttempt(db, share.id, nowDate);
     if (!reservation) return lockedResponse(signedShareRetryAfterSeconds(nowDate, null));
-    const codeMatches = code.length === share.accessCodeDigits && await sha256(code) === share.accessCodeHash;
+    const codeMatches = code.length === share.accessCodeDigits
+      && await accessCodeMatches(
+        runtimeEnv().IDENTITY_KEYRING,
+        code,
+        share.accessCodeHash,
+      );
     if (!codeMatches) {
       if (reservation.lockedUntil) {
         return lockedResponse(signedShareRetryAfterSeconds(nowDate, reservation.lockedUntil));

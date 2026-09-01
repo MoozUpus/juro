@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   DEFAULT_PUBLIC_API_BODY_LIMIT_BYTES,
   DOCUMENT_BUILDER_API_BODY_LIMIT_BYTES,
+  LAWYER_PROFILE_PHOTO_BODY_LIMIT_BYTES,
   publicApiRequestBodyLimit,
   requestWithBoundedBody,
   requiredContentLength,
@@ -31,6 +32,7 @@ test("public API body policy protects JSON routes without buffering streaming up
   assert.equal(publicApiRequestBodyLimit("/api/platform/team", "POST"), DEFAULT_PUBLIC_API_BODY_LIMIT_BYTES);
   assert.equal(publicApiRequestBodyLimit("/api/document-builder/configured-documents/1", "PATCH"), DOCUMENT_BUILDER_API_BODY_LIMIT_BYTES);
   assert.equal(publicApiRequestBodyLimit("/api/platform/voice/recordings/1", "PATCH"), DEFAULT_PUBLIC_API_BODY_LIMIT_BYTES);
+  assert.equal(publicApiRequestBodyLimit("/api/platform/lawyer-profile/photo", "POST"), LAWYER_PROFILE_PHOTO_BODY_LIMIT_BYTES);
   assert.equal(publicApiRequestBodyLimit("/api/platform/voice/recordings/1", "PUT"), null);
   assert.equal(publicApiRequestBodyLimit("/api/platform/document-analysis/uploads/1", "PUT"), null);
   assert.equal(publicApiRequestBodyLimit("/api/document-builder/documents/1/attachments", "POST"), null);

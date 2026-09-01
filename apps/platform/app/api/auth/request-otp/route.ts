@@ -1,5 +1,5 @@
 import { normalizeEmail, randomOtp, randomToken } from "../../../../lib/auth/crypto";
-import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
+import { runtimeOtpProtection } from "../../../../lib/auth/identity-runtime";
 import {
   parseJsonRequest,
   requestOtpInputSchema,
@@ -75,7 +75,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const now = new Date(nowMs).toISOString();
   const expiresAt = new Date(nowMs + 10 * 60 * 1000).toISOString();
   const reservation = await reserveOtpChallenge(db, {
-    identityContext: runtimeIdentityProtection(),
+    identityContext: runtimeOtpProtection(),
     id,
     email,
     requestIp: connectingIp,

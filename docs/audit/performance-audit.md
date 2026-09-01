@@ -121,6 +121,8 @@ The five-minute production schedule generated a fresh public status snapshot at 
 4. overall status remains truthfully `degraded` because OpenAI, Anthropic, and document analysis still report public `PROVIDER_UNAVAILABLE`;
 5. Chrome renders the same component state and exposes the D1 evidence in the expanded technical checks.
 
+A later recovery checkpoint at `2026-09-01T15:33:22.376Z` returned HTTP `200`, overall `operational`, and 8/8 operational components. The direct D1 probe remained `operational` at `35 ms`; OpenAI and Anthropic were both fresh and operational at `4,506 ms` and `7,047 ms`. This supersedes the earlier provider-degraded state as the latest point-in-time snapshot, while the prior measurements remain valid historical evidence and sustained provider availability remains unproven.
+
 Worker v189 separately closed the status favicon CSP defect. Chrome rendered `https://status.juro.uz/`, `/status`, `/ru/status`, `/uz/status`, and `https://app.juro.uz/ru/status` with no console errors or warnings. Raw production responses returned absolute same-origin `favicon.png` and `apple-touch-icon.png` links on both hosts; all four image assets returned `200` with `image/png`. Every checked page retained the existing CSP, including `img-src 'self' data: blob:`. The Chrome integration injects a local data-URL badge over ordinary favicon links, so raw HTML was used to verify the server-authored favicon URLs while Chrome verified rendering and console behavior.
 
 The full execution goal remains active after this increment.

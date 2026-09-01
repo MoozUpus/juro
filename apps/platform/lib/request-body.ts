@@ -6,6 +6,7 @@ export const MULTIPART_OVERHEAD_BYTES = 512 * 1024;
 
 export const DEFAULT_PUBLIC_API_BODY_LIMIT_BYTES = 1024 * 1024;
 export const DOCUMENT_BUILDER_API_BODY_LIMIT_BYTES = 8 * 1024 * 1024;
+export const LAWYER_PROFILE_PHOTO_BODY_LIMIT_BYTES = 2 * 1024 * 1024;
 
 export type BoundedRequestBody =
   | { ok: true; request: Request }
@@ -46,10 +47,16 @@ export function publicApiRequestBodyLimit(
     return null;
   }
 
+  if (
+    normalizedMethod === "POST"
+    && pathname === "/api/platform/lawyer-profile/photo"
+  ) {
+    return LAWYER_PROFILE_PHOTO_BODY_LIMIT_BYTES;
+  }
+
   const isStreamingUpload =
     (normalizedMethod === "POST" && /^\/api\/document-builder\/documents\/[^/]+\/(?:attachments|signed-file)$/u.test(pathname))
     || (normalizedMethod === "POST" && pathname === "/api/platform/document-comparisons")
-    || (normalizedMethod === "POST" && pathname === "/api/platform/lawyer-profile/photo")
     || (normalizedMethod === "PUT" && /^\/api\/platform\/document-analysis\/uploads\/[^/]+$/u.test(pathname))
     || (normalizedMethod === "PUT" && /^\/api\/platform\/voice\/recordings\/[^/]+$/u.test(pathname));
   if (isStreamingUpload) return null;

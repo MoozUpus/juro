@@ -2,9 +2,23 @@
 
 Status: **living changelog; the full execution goal remains active**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-01**
 
-This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
+This file records verified production increments and separately labelled release candidates. It must not be read as a claim that every item in the execution brief is complete.
+
+## v113 security and evidence candidate — not deployed
+
+- Added the canonical full-platform, completion, UX/UI, mobile, accessibility, security, design-system, component, AI, and source-boundary evidence documents required by the execution brief.
+- Kept legislation-database, local-corpus, Advice.uz ingestion, vector, embedding, and staging-capacity work explicitly excluded rather than counting it as delivered.
+- Changed new login OTP evidence to a key-versioned, domain-separated HMAC without a usable retained raw SHA verifier; legacy rows retain only their bounded ten-minute compatibility window.
+- Removed the email-wide OTP replacement lock while preserving resend cooldowns and issuance budgets.
+- Applied the common streaming request limiter at exactly 2 MiB to lawyer profile-photo uploads.
+- Changed new signed-PDF access codes to a key-versioned, domain-separated HMAC with constant-time verification; legacy rows retain only their existing maximum 24-hour share lifetime.
+- Preserved mixed-case key-version compatibility between the shared keyring parser and the signed-share verifier envelope.
+- Passed 26/26 focused remediation tests, 1,181/1,181 platform tests, 217/217 Worker/runtime tests, 49/49 website tests, type-check, lint, the full Cloudflare environment matrix, generated-types consistency, production artifact validation, and emitted-size budgets.
+- Retained the Standard security scan as partial evidence: one high and three medium findings at base revision `beae3e05d7552b999c0fb7bcba14ee615c04906a`, with 68/1,594 scoped files fully reviewed.
+- Made exact-head CI and a sealed exact-head diff scan mandatory per-head Draft PR evidence; neither receipt is treated as production verification.
+- Performed no database migration, production or staging deployment, DNS change, binding change, secret change, provider billing mutation, or legislation/corpus operation. Chrome candidate QA remains not applicable until the exact server revision is deployed.
 
 ## Platform Worker v189
 
@@ -57,11 +71,11 @@ This file records verified production increments. It must not be read as a claim
 - PR, post-merge CI, and production deployment workflows passed.
 - The security diff scan reported zero reportable findings and exposed functional/CSP coverage gaps in the initial patch; those gaps were corrected before merge and verified by focused tests plus live Chrome/HTTP checks.
 - PR #95 exact-head CI `33352197361`, post-merge CI `33404886188`, and production workflow `33404885913` passed.
-- Production `/api/status` returns HTTP `200`, remains truthfully `degraded`, reports 6/8 components operational, reports no active incidents, and publishes direct D1 evidence at 192 ms in the checked snapshot.
+- Production `/api/status` returned HTTP `200`, `operational`, 8/8 components operational, and no active incidents at `2026-09-01T15:33:22.376Z`; D1 reported `35 ms`, and fresh OpenAI and Anthropic probes were operational. The earlier 6/8 degraded snapshot remains historical evidence.
 
 ## Current limitations
 
-- OpenAI and Anthropic public production probes still report `PROVIDER_UNAVAILABLE`; AI and document analysis remain degraded until fresh successful probes exist. The owner-reported Anthropic top-up had not yet produced a successful probe at the evidence cutoff.
+- OpenAI and Anthropic public production probes recovered after the reported funding changes. This is point-in-time health evidence only; authenticated answer quality, completed document analysis, and sustained provider availability remain open.
 - Authenticated role QA remains incomplete for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin.
 - Staging scheduler persistence remains blocked by the excluded staging D1 capacity issue.
 - Legacy origin ownership/TLS risk and the full manual accessibility, responsive, performance, and E2E matrices remain open.
