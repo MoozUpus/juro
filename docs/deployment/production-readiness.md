@@ -4,11 +4,21 @@ Assessment: **NOT READY for the full execution brief**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Production is reachable and v101 is deployed from merge `840f1144f3ba8562a7866cd4bda99525be392758`. Website Worker `d6ff54c8-0bbc-4921-a54e-581027689a41`, platform Worker `9c434c4e-52af-41cd-b680-eb0730b87e37`, and admin Worker `53f0aef3-951c-40eb-8dc6-e4a5e3513dc9` were the active versions at the retained verification checkpoint. The public status was operational with 8/8 components and 0 active incidents at `2026-09-01T19:14:20Z`; this is point-in-time evidence, not a claim of sustained provider health. The undeployed v114 mainline candidate further stabilizes initial public-page layout work and the shared auth/Turnstile boundary. The full execution brief remains incomplete because authenticated role journeys and other Definition-of-Done gates are still open.
+Production is reachable and v115 is deployed from merge `cd3ee161bb4a54c7bdc71b89c39a402f3ad35c4d`. Website Worker `fad80c80-ee92-44bb-93a3-e250ee314891`, platform Worker `ca427ea9-97cb-45fe-84dc-b468e8bd8995`, and public Sites v96 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-01T22:10:42.083Z` was operational with 8/8 components and 0 active incidents; this is point-in-time evidence, not a claim of sustained provider health. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, and other Definition-of-Done gates are still open.
 
-The older v189/v95 tables and health narrative below are retained as historical evidence and do not supersede the current v101 checkpoint.
+## Current v115 release state
 
-## Current release state
+| Surface | Current state | Evidence | Rollback point |
+| --- | --- | --- | --- |
+| GitHub main | merge `cd3ee161bb4a54c7bdc71b89c39a402f3ad35c4d` from PR #118 | exact-head CI, complete 0-finding security diff scan, post-merge CI, production deploys, and Chrome QA passed | Revert or redeploy the immediately preceding validated main revision if a regression is proven |
+| Public Sites | v96, source `489c56d029f164c030127f7465d528f8f1bdf396`, deployment `appgdep_6a974c2c182481919de7a0a165025b29` | RU/UZ/EN and `/ru#start` 200; sitemap 78/78; discoverable apex links 120/120; indexing split preserved | Saved v95, source `855ba2161b716daabb96ac469456c101e5d3bb2c`; v94 remains available |
+| Website Worker | version `fad80c80-ee92-44bb-93a3-e250ee314891`, 100% traffic | deployment workflow passed and exact built asset was observed on `www.juro.uz` | v114 version `5f04e052-c2ef-4af7-820a-b29819bcdef9` |
+| Platform Worker | version `ca427ea9-97cb-45fe-84dc-b468e8bd8995`, 100% traffic | mobile lawyer login verified with 0 px² heading/control overlap, visible Turnstile, disabled pre-verification submit, and zero overflow | v114 version `cef2e39c-4f56-4743-9287-b036192f1771` |
+| Production health | operational, 8/8 components, no active incidents at the retained snapshot | `/api/status` generated `2026-09-01T22:10:42.083Z` | Health evidence is observational; it has no deployment rollback |
+
+The older v101/v189/v95 tables and health narrative below are retained as historical evidence and do not supersede the current v115 checkpoint.
+
+## Retained historical release state
 
 | Surface | Current state | Evidence | Rollback point |
 | --- | --- | --- | --- |
@@ -95,20 +105,19 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 
 | Priority | Gap | Evidence | Required action |
 | --- | --- | --- | --- |
-| P1 | OpenAI synthetic probe is degraded | Public v189 status reports `PROVIDER_UNAVAILABLE`; production status is 6/8 operational | Refill or correct billing for the OpenAI project used by the production API key, then observe a fresh successful isolated probe before claiming full health |
-| P1 | Anthropic synthetic probe is degraded after the reported top-up | Public v189 status still reports `PROVIDER_UNAVAILABLE` at `2026-08-31T14:56:02.962Z` | Confirm that funding is applied to the organization/workspace tied to the production key, then require a fresh successful isolated probe before changing the health claim |
-| P1 | Staging health is degraded/stale after a newer deployment | Active cron delivery fails in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`; D1 reports 9,999,998,976 bytes | Resolve staging D1 capacity in the separately scoped legislation/corpus work, then verify fresh scheduler writes and 8/8 component health |
+| P2 | Sustained AI-provider health is not yet proven | The current snapshot reports successful OpenAI and Anthropic probes, but one point-in-time result is not a service-level history | Continue normal monitoring and keep public health claims bounded to observed evidence |
+| Excluded | Staging health/capacity | The retained historical staging evidence is stale/degraded and the owner explicitly excluded legislation database/corpus/capacity remediation | No action in this goal; do not use this row to block the permitted non-corpus work |
 | P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
-| P1 | Authenticated role matrix incomplete | Only anonymous boundary checks are current | Chrome QA for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin with no fabricated session |
-| P2 | Production v189 behavior is not deployed or authenticated on staging | Main is normalized and the canonical host is Access-protected; staging Worker remains on its prior version | Deploy staging only in a safe non-legislation increment, then complete post-Access Client/Lawyer route QA with real authorized sessions |
+| P1 | Authenticated role matrix incomplete | Authenticated individual read-only coverage exists; Business, Lawyer, Pending Lawyer, Staff/Admin, and state-changing flows remain open | Chrome QA with real authorized sessions and no fabricated identity |
+| P2 | Production v115 behavior is not authenticated on staging | Main is normalized and the canonical staging host is Access-protected; staging release remains separate | Complete post-Access Client/Lawyer route QA only in a safe, non-corpus staging increment |
 
 ## Rollback protocol
 
 ### Sites
 
-1. Keep saved v94 as the rollback while v95 is live.
+1. Keep saved v95 as the immediate rollback while v96 is live; retain v94 as a secondary older recovery point.
 2. Preserve the verified split: `juro.uz` remains indexable and the provider hostname carries the noindex response header.
-3. If the custom domain, public routes, or indexing split regresses, redeploy saved v94 immediately and recrawl both hosts.
+3. If the custom domain, public routes, accessibility fixes, or indexing split regresses, redeploy saved v95 immediately and recrawl both hosts.
 
 ### Platform Worker
 
@@ -116,7 +125,7 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 2. Run CI and artifact checks against the exact deploy commit.
 3. Apply D1 migration only when a separately reviewed change requires it, and verify schema plus a restorable backup before any ledger reconciliation.
 4. Deploy with the explicit production environment, then verify public/private boundaries, logs, status evidence freshness, error rate, and provider probes.
-5. For v189, roll back to Worker v188 version `57387083-9f7f-4cd8-a9f2-84414f2604d6` if a verified regression appears.
+5. For v115, roll the website Worker back to `5f04e052-c2ef-4af7-820a-b29819bcdef9` or the platform Worker back to `cef2e39c-4f56-4743-9287-b036192f1771` if the corresponding verified regression appears.
 
 ### DNS
 

@@ -4,9 +4,9 @@ Status: **living evidence report, not full Definition of Done**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope in this report: deployed v114 production evidence plus the undeployed v115 mobile accessibility candidate. Older v101/v189/v95 evidence below is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v115 mobile accessibility evidence, including public Sites v96 and Worker production verification. Older v114/v101/v189/v95 evidence below is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
 
-## v115 mobile accessibility candidate validation
+## v115 mobile accessibility release validation
 
 | Area | Evidence | Result |
 | --- | --- | --- |
@@ -18,7 +18,15 @@ Scope in this report: deployed v114 production evidence plus the undeployed v115
 | Platform artifact budgets | CSS 564.9 KiB; initial JS 294.1 KiB; largest lazy increment 212.1 KiB; fonts 453.6 KiB; images 564.4 KiB; Worker 3,640.6 KiB | PASS |
 | Public mobile Chrome | theme controls 44 × 44 at 390 × 844; zero horizontal overflow | PASS |
 | Mobile auth Chrome | theme/form-heading overlap 0 px² at 390 × 844; zero horizontal overflow | PASS |
-| Exact-head CI/security and deployment | required after commit and push | PENDING |
+| Exact-head CI/security | CI `33562290115`; complete 0-finding scan `a255ec0b-c48d-46f7-bf95-119d6f6b389e` | PASS |
+| Post-merge CI | workflow `33562912368` on merge `cd3ee161bb4a54c7bdc71b89c39a402f3ad35c4d` | PASS |
+| Worker deployment | platform `ca427ea9-97cb-45fe-84dc-b468e8bd8995`; website `fad80c80-ee92-44bb-93a3-e250ee314891`; 100% traffic | PASS |
+| Public Sites deployment | v96, source `489c56d029f164c030127f7465d528f8f1bdf396`, deployment `appgdep_6a974c2c182481919de7a0a165025b29` | PASS |
+| Live route/link checks | RU/UZ/EN and `/ru#start` 200; sitemap 78/78; unique discoverable apex links 120/120 | PASS |
+| Production public Chrome | 390 × 844; theme controls 44 × 44; 21/21 reveals; zero overflow; RU/UZ/EN canonical/indexing checks | PASS |
+| Production lawyer auth Chrome | login heading/theme overlap 0 px²; Turnstile visible; submit disabled before verification; zero overflow | PASS |
+| Production Lighthouse/trace | repeated mobile Lighthouse 100/100/100/100; warm LCP 776 ms; CLS 0.00 | PASS AS LAB EVIDENCE |
+| Production status | snapshot `2026-09-01T22:10:42.083Z`; operational; 8/8 components; 0 active incidents | PASS AS POINT-IN-TIME EVIDENCE |
 
 ## v114 production release validation
 
