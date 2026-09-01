@@ -31,6 +31,10 @@ import {
 import { lawyerHostTarget } from "./lawyer-host-router";
 import { INTERNAL_REQUEST_PATH_HEADER } from "../lib/platform/routing";
 import { STATUS_ORIGIN_HEADER } from "../lib/operations/status-metadata";
+import {
+  publicApiRequestBodyLimit,
+  requestWithBoundedBody,
+} from "../lib/request-body";
 
 export { MalwareScannerContainer, LegalCorpusQdrantContainer };
 
@@ -197,6 +201,24 @@ const worker = {
 
     const internalAdminResponse = await handleInternalAdminRequest(routedRequest, env);
     if (internalAdminResponse) return withSecurityHeaders(internalAdminResponse, url);
+
+    const bodyLimit = publicApiRequestBodyLimit(routedUrl.pathname, routedRequest.method);
+    if (bodyLimit !== null) {
+      const boundedRequest = await requestWithBoundedBody(routedRequest, bodyLimit);
+      if (!boundedRequest.ok) {
+        return withSecurityHeaders(Response.json(
+          { code: "PAYLOAD_TOO_LARGE" },
+          {
+            status: 413,
+            headers: {
+              "cache-control": "private, no-store, max-age=0",
+              pragma: "no-cache",
+            },
+          },
+        ), url);
+      }
+      routedRequest = boundedRequest.request;
+    }
 
     const appHeaders = new Headers(routedRequest.headers);
     appHeaders.delete(STATUS_ORIGIN_HEADER);

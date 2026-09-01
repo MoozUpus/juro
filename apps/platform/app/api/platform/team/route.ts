@@ -13,7 +13,7 @@ import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
-import { isWorkspaceRole, requireTeamManager } from "../../../../lib/platform/permissions";
+import { canManageTeam, isWorkspaceRole, requireTeamManager } from "../../../../lib/platform/permissions";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -45,7 +45,7 @@ export const GET = withApiErrors(async function GET() {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const db = requireD1();
-  const [workspaceRow, members, invitations] = await db.batch([
+  const [workspaceRow, members] = await db.batch([
     db.prepare("SELECT id,name,full_name AS fullName,short_name AS shortName,type,locale FROM workspaces WHERE id=? LIMIT 1").bind(workspace.id),
     db.prepare(
       `SELECT m.id,m.user_id AS userId,m.role,m.status,m.joined_at AS joinedAt,
@@ -55,7 +55,9 @@ export const GET = withApiErrors(async function GET() {
        ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
         u.full_name,m.joined_at`,
     ).bind(workspace.id),
-    db.prepare(
+  ]);
+  const invitations = canManageTeam(workspace.role)
+    ? await db.prepare(
       `SELECT id,workspace_id AS workspaceId,email,
         email_ciphertext AS emailCiphertext,email_iv AS emailIv,
         email_key_version AS emailKeyVersion,
@@ -64,9 +66,10 @@ export const GET = withApiErrors(async function GET() {
         role,expires_at AS expiresAt,created_at AS createdAt
        FROM workspace_invitations
        WHERE workspace_id=? AND accepted_at IS NULL AND revoked_at IS NULL
+        AND expires_at>?
        ORDER BY created_at DESC`,
-    ).bind(workspace.id),
-  ]);
+    ).bind(workspace.id, isoNow()).all<WorkspaceInvitationRow>()
+    : null;
   const identityContext = runtimeIdentityProtection();
   const resolvedMembers = await Promise.all(
     (members.results as Array<UserIdentityRow & {
@@ -92,7 +95,7 @@ export const GET = withApiErrors(async function GET() {
     }),
   );
   const resolvedInvitations = await Promise.all(
-    (invitations.results as WorkspaceInvitationRow[]).map(
+    (invitations?.results ?? []).map(
       async invitation => {
         const identity = await resolveEncryptedIdentityEvidence(
           identityContext,

@@ -57,7 +57,7 @@ test("profile, development authentication, and production configuration preserve
   assert.match(adminConfig, /"keep_vars": false/u);
   assert.match(
     platformConfig,
-    /"migrations_pattern": "\.\/drizzle\/\{0121,012\[4-9\],013\[0-9\],014\[0-8\]\}_\*\.sql"/u,
+    /"migrations_pattern": "\.\/drizzle\/\{0121,012\[4-9\],013\[0-9\],014\[0-9\]\}_\*\.sql"/u,
   );
 });
 
@@ -94,4 +94,24 @@ test("voice upload requires an exact declared length before streaming to quarant
   assert.ok(bound >= 0 && put > bound);
   assert.match(route, /!contentLength\.ok/u);
   assert.match(route, /contentLength\.bytes !== state\.recording\.sizeBytes/u);
+});
+
+test("team reads disclose active invitations only to team managers", async () => {
+  const route = await source("app/api/platform/team/route.ts");
+  assert.match(route, /canManageTeam\(workspace\.role\)[\s\S]*workspace_invitations/u);
+  assert.match(route, /accepted_at IS NULL AND revoked_at IS NULL[\s\S]*expires_at>\?/u);
+  assert.match(route, /: null;[\s\S]*invitations\?\.results \?\? \[\]/u);
+  assert.match(route, /members:\s*resolvedMembers/u);
+});
+
+test("worker bounds actual API request bytes before application parsing", async () => {
+  const worker = await source("worker/index.ts");
+  const policy = worker.indexOf("publicApiRequestBodyLimit(");
+  const boundedRead = worker.indexOf("requestWithBoundedBody(");
+  const internalAdmin = worker.indexOf("handleInternalAdminRequest(routedRequest");
+  const framework = worker.indexOf("handler.fetch(");
+  assert.ok(policy >= 0 && boundedRead > policy);
+  assert.ok(internalAdmin >= 0 && policy > internalAdmin && framework > boundedRead);
+  assert.match(worker, /status:\s*413/u);
+  assert.match(worker, /code:\s*"PAYLOAD_TOO_LARGE"/u);
 });
