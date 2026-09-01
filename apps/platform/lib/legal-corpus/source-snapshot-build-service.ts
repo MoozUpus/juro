@@ -387,27 +387,39 @@ async function advanceBuild(
   const projected = await Promise.all(packet.results.map((row) => projectVerifiedRow(bucket, row)));
   if (injectPartialFailure) throw new Error("SOURCE_SNAPSHOT_INJECTED_PARTIAL_FAILURE");
   const now = new Date().toISOString();
+  const identityRows = {
+    sourceDocuments: projected.map((item) => [
+      "source_document", item.row.sourceDocumentId, item.sourceDocumentIdentity,
+      stable({ publisher: "lex.uz", publisherDocumentToken: item.row.publisherDocumentToken,
+        languageTag: item.row.documentLanguageTag, sourceUrl: item.row.documentSourceUrl }), CUTOFF,
+    ]),
+    sourceSnapshots: projected.map((item) => [
+      "source_snapshot", item.row.sourceSnapshotId, item.sourceSnapshotIdentity,
+      stable({ sourceDocumentCanonicalIdentity: item.sourceDocumentIdentity,
+        publisherRevisionToken: item.row.publisherRevisionToken, languageTag: item.row.languageTag,
+        captureId: item.row.captureId, rawLocatorId: item.row.rawLocatorId,
+        rawSha256: item.row.rawSha256, normalizedLocatorId: item.row.normalizedLocatorId,
+        normalizedSha256: item.row.normalizedSha256 }), CUTOFF,
+    ]),
+    snapshotProvisions: projected.map((item) => [
+      "snapshot_provision", item.row.snapshotProvisionId, item.snapshotProvisionIdentity,
+      stable({ sourceSnapshotCanonicalIdentity: item.sourceSnapshotIdentity,
+        sourcePositionToken: item.row.sourcePositionToken,
+        normalizedTextSha256: item.normalizedTextSha256,
+        provisionLocatorId: item.row.provisionLocatorId,
+        provisionObjectSha256: item.row.provisionSha256 }), CUTOFF,
+    ]),
+  };
   await db.batch([
     db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_stable_identities
-      (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at) VALUES ${values(
-        projected.flatMap((item) => [
-          ["source_document", item.row.sourceDocumentId, item.sourceDocumentIdentity,
-            stable({ publisher: "lex.uz", publisherDocumentToken: item.row.publisherDocumentToken,
-              languageTag: item.row.documentLanguageTag, sourceUrl: item.row.documentSourceUrl }), CUTOFF],
-          ["source_snapshot", item.row.sourceSnapshotId, item.sourceSnapshotIdentity,
-            stable({ sourceDocumentCanonicalIdentity: item.sourceDocumentIdentity,
-              publisherRevisionToken: item.row.publisherRevisionToken, languageTag: item.row.languageTag,
-              captureId: item.row.captureId, rawLocatorId: item.row.rawLocatorId,
-              rawSha256: item.row.rawSha256, normalizedLocatorId: item.row.normalizedLocatorId,
-              normalizedSha256: item.row.normalizedSha256 }), CUTOFF],
-          ["snapshot_provision", item.row.snapshotProvisionId, item.snapshotProvisionIdentity,
-            stable({ sourceSnapshotCanonicalIdentity: item.sourceSnapshotIdentity,
-              sourcePositionToken: item.row.sourcePositionToken,
-              normalizedTextSha256: item.normalizedTextSha256,
-              provisionLocatorId: item.row.provisionLocatorId,
-              provisionObjectSha256: item.row.provisionSha256 }), CUTOFF],
-        ]),
-      )}`),
+      (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at)
+      VALUES ${values(identityRows.sourceDocuments)}`),
+    db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_stable_identities
+      (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at)
+      VALUES ${values(identityRows.sourceSnapshots)}`),
+    db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_stable_identities
+      (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at)
+      VALUES ${values(identityRows.snapshotProvisions)}`),
     db.prepare(`INSERT INTO legal_source_snapshot_integrity_attestations
       (build_id,snapshot_provision_id,source_object_r2_key,source_object_byte_count,
        source_object_sha256,normalized_text_sha256,verified_at) VALUES ${values(projected.map((item) => [
