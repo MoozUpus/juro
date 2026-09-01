@@ -62,6 +62,11 @@ import {
 } from "../../../../lib/billing/entitlements";
 import { workspaceForUser, workspaceForUserById } from "../../../../lib/platform/workspace";
 import { isWorkspaceId } from "../../../../lib/platform/routing";
+import { trackProductEvent, type ProductEventInput } from "../../../../lib/platform/analytics";
+import {
+  productAccountMilestoneCreated,
+  productAccountMilestoneStatement,
+} from "../../../../lib/platform/product-account-milestone";
 import {
   listUserMemories,
   memoryKeyring,
@@ -404,6 +409,7 @@ async function executePostWithinBudget(
       db,
       workspaceId: workspace.id,
       userId: user.id,
+      accountType: workspace.type,
       caseId: body?.caseId || null,
       conversationId,
       existingConversation,
@@ -1344,19 +1350,33 @@ async function executePostWithinBudget(
       sourceMessageId: branchInput.forkedFromMessageId,
     }), now),
   ];
+  const firstQuestionMilestoneIndex = statements.length;
   const persistenceStage = budget.beginStage("persistence");
+  let firstQuestionCreated = false;
   try {
-    await db.batch([...statements, ...completeAiRunStatements({
-      db, runId: reservation.runId, ledgerId: reservation.ledgerId,
-      workspaceId: workspace.id, userId: user.id, idempotencyKey,
-      conversationId, requestMessageId: userMessageId, responseMessageId: assistantMessageId,
-      providerResponseId: aiResult.providerResponseId, model: aiResult.model,
-      provider: aiResult.provider,
-      fallbackFromProvider: aiResult.fallbackFromProvider,
-      inputTokens: aiResult.usage.inputTokens, outputTokens: aiResult.usage.outputTokens,
-      cachedInputTokens: aiResult.usage.cachedInputTokens, attempts: aiResult.attempts,
-      latencyMs: aiResult.latencyMs, chargeable: result.responseKind === "answer",
-    })]);
+    const persistenceResults = await db.batch([
+      ...statements,
+      productAccountMilestoneStatement({
+        db,
+        userId: user.id,
+        eventName: "first_question_sent",
+        completedAt: now,
+      }),
+      ...completeAiRunStatements({
+        db, runId: reservation.runId, ledgerId: reservation.ledgerId,
+        workspaceId: workspace.id, userId: user.id, idempotencyKey,
+        conversationId, requestMessageId: userMessageId, responseMessageId: assistantMessageId,
+        providerResponseId: aiResult.providerResponseId, model: aiResult.model,
+        provider: aiResult.provider,
+        fallbackFromProvider: aiResult.fallbackFromProvider,
+        inputTokens: aiResult.usage.inputTokens, outputTokens: aiResult.usage.outputTokens,
+        cachedInputTokens: aiResult.usage.cachedInputTokens, attempts: aiResult.attempts,
+        latencyMs: aiResult.latencyMs, chargeable: result.responseKind === "answer",
+      }),
+    ]);
+    firstQuestionCreated = productAccountMilestoneCreated(
+      persistenceResults[firstQuestionMilestoneIndex],
+    );
     persistenceStage.complete();
   } catch (error) {
     persistenceStage.fail();
@@ -1378,6 +1398,16 @@ async function executePostWithinBudget(
       outcome: aiSloFailureOutcome("PERSISTENCE_FAILED", budget),
     });
     throw error;
+  }
+
+  if (firstQuestionCreated) {
+    trackProductEvent({
+      event: "first_question_sent",
+      surface: "platform",
+      locale,
+      accountType: workspace.type,
+      outcome: "completed",
+    });
   }
 
   await recordLegalChatSlo({
@@ -1644,6 +1674,7 @@ async function completeNonChargeableIntent(input: {
   db: D1Database;
   workspaceId: string;
   userId: string;
+  accountType: ProductEventInput["accountType"];
   caseId: string | null;
   conversationId: string;
   existingConversation: boolean;
@@ -1726,7 +1757,25 @@ async function completeNonChargeableIntent(input: {
     ).bind(crypto.randomUUID(), input.workspaceId, input.userId, input.conversationId, JSON.stringify({ intent: input.intent, charged: false, lexRetrieval: false }), now),
   ];
   try {
-    await input.db.batch(statements);
+    const firstQuestionMilestoneIndex = statements.length;
+    const results = await input.db.batch([
+      ...statements,
+      productAccountMilestoneStatement({
+        db: input.db,
+        userId: input.userId,
+        eventName: "first_question_sent",
+        completedAt: now,
+      }),
+    ]);
+    if (productAccountMilestoneCreated(results[firstQuestionMilestoneIndex])) {
+      trackProductEvent({
+        event: "first_question_sent",
+        surface: "platform",
+        locale: input.locale,
+        accountType: input.accountType,
+        outcome: "completed",
+      });
+    }
   } catch (error) {
     if (error instanceof Error && /UNIQUE constraint/i.test(error.message)) {
       const replay = await loadConversationResult(
