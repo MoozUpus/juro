@@ -4,7 +4,24 @@ Status: **living evidence report, not full Definition of Done**
 
 Evidence cutoff: **2026-09-01**
 
-Scope in this report: the undeployed v113 candidate plus the latest retained production evidence for platform Worker v189 and public Sites v95. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: the undeployed stacked v113 and v114 candidates plus the latest retained production evidence for platform Worker v189 and public Sites v95. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## v114 performance candidate validation
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Auth layout regression | 7 focused Turnstile/auth CSS tests | PASS |
+| Public landing regression | 19 focused source tests; 50/50 complete website tests | PASS |
+| TypeScript and lint | website and platform type-check; website and platform lint | PASS |
+| Production builds | website build; platform build and artifact validation | PASS |
+| Platform artifact budgets | CSS 570.4 KiB, initial JS 294.4 KiB, largest lazy increment 212.1 KiB, fonts 453.6 KiB, images 564.4 KiB, Worker entry 3,680.2 KiB | PASS |
+| Full platform aggregate test command | reached its 300,000 ms wrapper limit while `legal-corpus-catalog-discovery.test.ts` was still running | TIMEOUT IN EXCLUDED CORPUS SCOPE |
+| Chrome public candidate | local production build: LCP 1,317 ms, CLS 0.00, no top-level JURO function identified as causing forced reflow | PASS AS LOCAL LAB EVIDENCE |
+| Chrome auth candidate | exact v114 CSS injected before production first paint: cold CLS 0.0661 versus production traces at 0.28 app / 0.26 lawyer | PASS AS SIMULATION ONLY |
+| Exact-head CI and security | required after the v114 commit | PENDING |
+| Deployment and post-deploy Chrome QA | no v114 deployment | NOT RUN |
+
+The aggregate platform command is not reported as green: it terminated at its five-minute runner limit in `legal-corpus-catalog-discovery.test.ts` after other tests had passed. That file belongs to the owner-excluded corpus scope, so v114 did not change or operate the corpus. Exact GitHub CI on the committed head remains mandatory. The local and injected Chrome results are diagnostic evidence only and do not establish production Core Web Vitals.
 
 ## v113 candidate validation
 
@@ -18,8 +35,8 @@ Scope in this report: the undeployed v113 candidate plus the latest retained pro
 | Lint | repository lint | PASS |
 | Cloudflare configuration | full development/staging/production matrix and generated-types check | PASS |
 | Production artifact | production artifact validation and emitted-size budgets | PASS |
-| Pull request CI | exact Draft PR #115 head; the per-head result is retained in GitHub rather than frozen into this commit | REQUIRED PER HEAD |
-| Security diff scan | exact Draft PR #115 head; sealed scan receipt retained with PR evidence | REQUIRED PER HEAD |
+| Pull request CI | exact Draft PR #115 head, run `33526782010`; website and platform jobs | PASS |
+| Security diff scan | exact head `729f2e231dc49fb36f626e2fd6eb7c19cf3c0c1c`, scan `4ad0e326-65ee-4eb8-bed2-f1f96d7cafba` | PASS, 0 FINDINGS |
 | Deployment and browser QA | no v113 deployment; server-side candidate cannot be verified through production Chrome | NOT RUN |
 
 The full platform suite initially stopped on one stale source-string assertion after the authentication runtime helper was renamed. The assertion was updated, its 78/78 focused file passed, and the complete platform suite was rerun to 1,180/1,180. The key-version compatibility closure then added one regression test, and the current exact worktree passed 1,181/1,181. The first generated-types check reported an out-of-date file; the standard generator produced the same Git blob, and a clean sequential recheck passed. Neither event is hidden as an uninterrupted green run.
@@ -100,6 +117,6 @@ These are build-budget measurements, not field Core Web Vitals.
 - visual regression across every required viewport;
 - field performance baselines and before/after Core Web Vitals for every production route;
 - staging reliability, because the excluded staging D1 capacity blocker prevents fresh scheduler persistence;
-- provider recovery, because both public production probes still report `PROVIDER_UNAVAILABLE`; the reported Anthropic top-up has not yet produced a successful probe.
+- sustained provider recovery, because the latest public checkpoint recovered to 8/8 with fresh successful OpenAI and Anthropic probes but one point-in-time result does not prove continued availability or authenticated answer quality.
 
 The overall execution goal must remain active until these and the other Definition-of-Done gates are proven.

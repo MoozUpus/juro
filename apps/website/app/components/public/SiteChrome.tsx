@@ -101,9 +101,14 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
 
   useEffect(() => {
     const update = () => setScrolled(window.scrollY > 18);
-    update();
+    let frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(update);
+    });
     window.addEventListener("scroll", update, { passive: true });
-    return () => window.removeEventListener("scroll", update);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", update);
+    };
   }, []);
 
   useEffect(() => {

@@ -74,12 +74,14 @@ test("scroll storytelling batches every layout read before DOM mutations", () =>
   );
   const lastLayoutRead = updateScrollStory.lastIndexOf("getBoundingClientRect");
   const firstMutation = Math.min(
-    ...["root.style.setProperty", "root.dataset.footerVisible =", "node.dataset.revealState ="]
+    ...["root.dataset.motionReady =", "root.style.setProperty", "root.dataset.footerVisible =", "node.dataset.revealState ="]
       .map((needle) => updateScrollStory.indexOf(needle))
       .filter((index) => index >= 0),
   );
   assert.ok(lastLayoutRead >= 0);
   assert.ok(firstMutation > lastLayoutRead, { firstMutation, lastLayoutRead });
+  assert.match(updateScrollStory, /const revealsToShow[\s\S]*?root\.dataset\.motionReady = "true"/);
+  assert.doesNotMatch(motionDirector, /const initiallyVisible/);
 });
 
 test("renders the production landing with localized canonical metadata and real actions", async () => {

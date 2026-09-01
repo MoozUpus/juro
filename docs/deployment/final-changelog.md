@@ -6,6 +6,17 @@ Evidence cutoff: **2026-09-01**
 
 This file records verified production increments and separately labelled release candidates. It must not be read as a claim that every item in the execution brief is complete.
 
+## v114 performance candidate — not deployed
+
+- Stabilized the mobile auth page with content-sized grid rows instead of redistributing viewport free space as the form grows.
+- Reserved the full nested Cloudflare Turnstile boundary so delayed challenge insertion no longer creates the original large shift.
+- Deferred the first public landing-page and site-header geometry reads until after one painted frame, keeping initial DOM writes out of the same layout cycle.
+- Production Chrome baselines recorded public LCP 1,667 ms / CLS 0.00 with 759 ms of JURO-attributed forced reflow, app-login CLS 0.28, and lawyer-login CLS 0.26 under mobile Fast 4G and 4x CPU throttling.
+- A local v114 production build retained CLS 0.00 and no longer attributed forced reflow to a top-level JURO function; a cold pre-paint production CSS simulation reduced app-login CLS to 0.0661. These are candidate lab results, not deployed or field evidence.
+- Passed 7 focused auth-layout tests, 19 focused website source tests, 50/50 complete website tests, website/platform type-check and lint, both production builds, and platform artifact budgets.
+- Did not claim the full platform aggregate suite as passed: its five-minute wrapper expired while the separately excluded legal-corpus catalog discovery test was running.
+- Performed no deployment, database migration, DNS, binding, secret, provider-billing, or legislation/corpus operation. Exact-head CI, security review, stacked-chain review, and post-deploy Chrome QA remain required.
+
 ## v113 security and evidence candidate — not deployed
 
 - Added the canonical full-platform, completion, UX/UI, mobile, accessibility, security, design-system, component, AI, and source-boundary evidence documents required by the execution brief.

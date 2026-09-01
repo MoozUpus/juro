@@ -357,8 +357,12 @@
   margin: 14px 0;
 }
 
-.auth-turnstile > div:first-child {
-  width: 100%;
+.auth-turnstile > div:first-child,
+.auth-turnstile > div:first-child > div,
+.auth-turnstile > div:first-child > div > div {
+  box-sizing: border-box;
+  width: 100% !important;
+  min-height: 72px !important;
 }
 
 .auth-turnstile-status {
@@ -439,7 +443,11 @@
 }
 
 @media (max-width: 840px) {
-  .auth-page { grid-template-columns: 1fr; }
+  .auth-page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    align-content: start;
+  }
   .auth-brand { min-height: 300px; padding: 28px; }
   .auth-brand h1 { font-size: 42px; }
   .auth-brand p { font-size: 16px; }

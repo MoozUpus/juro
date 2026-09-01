@@ -63,6 +63,18 @@ test("production interactions have complete keyboard and reduced-motion contract
   assert.doesNotMatch(homepageStyles + motionStyles + editorialStyles + decisionStyles + laptopStyles + chromeStyles, /ease-in(?:\s|;|,|\))/);
 });
 
+test("initial scroll geometry waits until the hydrated page has painted", () => {
+  assert.match(
+    motionDirector,
+    /scrollFrame = requestAnimationFrame\(\(\) => \{\s*scrollFrame = requestAnimationFrame\(updateScrollStory\);/,
+  );
+  assert.doesNotMatch(motionDirector, /\n\s*updateScrollStory\(\);/);
+  assert.match(
+    chrome,
+    /let frame = window\.requestAnimationFrame\(\(\) => \{\s*frame = window\.requestAnimationFrame\(update\);/,
+  );
+});
+
 test("document review opens on the first clause and changes only by direct selection", () => {
   assert.match(homepage, /const \[clause, setClause\] = useState\(0\)/);
   assert.match(homepage, /const selectClause = \(index: number\) => \{\s*setClause\(index\);\s*\}/);

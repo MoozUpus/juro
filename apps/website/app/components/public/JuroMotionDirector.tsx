@@ -30,12 +30,6 @@ export function JuroMotionDirector() {
       return;
     }
 
-    const initiallyVisible = reveals.filter(
-      (node) => node.getBoundingClientRect().top < window.innerHeight * .96,
-    );
-    initiallyVisible.forEach((node) => { node.dataset.revealState = "visible"; });
-    root.dataset.motionReady = "true";
-
     const revealObserver = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -133,6 +127,7 @@ export function JuroMotionDirector() {
 
       // Commit state only after every layout read above, preventing read/write
       // interleaving from forcing repeated synchronous reflows.
+      root.dataset.motionReady = "true";
       root.style.setProperty("--page-progress", String(clamp(window.scrollY / pageRange)));
       root.style.setProperty("--hero-scroll", String(clamp(window.scrollY / (viewport * 0.9))));
       root.dataset.footerVisible = footerVisible ? "true" : "false";
@@ -182,7 +177,12 @@ export function JuroMotionDirector() {
       if (scrollFrame) return;
       scrollFrame = requestAnimationFrame(updateScrollStory);
     };
-    updateScrollStory();
+    // Hydration and stylesheet activation still leave layout dirty inside the
+    // mounting task. Waiting through one paint keeps the first geometry pass
+    // from forcing a synchronous layout on slower devices.
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = requestAnimationFrame(updateScrollStory);
+    });
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll, { passive: true });
 

@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 import {
   turnstileClientFailure,
   turnstileClientRetryMode,
 } from "../lib/auth/turnstile-client";
 import { validateAuthTurnstile, validateTurnstile } from "../lib/auth/turnstile";
+
+const authStyles = fs.readFileSync("app/_auth/auth.css", "utf8");
+
+test("Turnstile reserves its challenge height before the provider renders", () => {
+  assert.match(
+    authStyles,
+    /\.auth-turnstile\s*>\s*div:first-child,[\s\S]*?min-height:\s*72px\s*!important;/,
+  );
+  assert.match(
+    authStyles,
+    /@media\s*\(max-width:\s*840px\)[\s\S]*?\.auth-page\s*\{[^}]*grid-template-rows:\s*auto auto;[^}]*align-content:\s*start;/,
+  );
+});
 
 test("Turnstile client failures are bounded and distinguish configuration errors", () => {
   assert.equal(turnstileClientRetryMode, "never");
