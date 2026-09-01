@@ -51,6 +51,7 @@ import {
 import { ensureDefaultWorkspace } from "../../../../lib/platform/workspace";
 import { isPersonalAccountType } from "../../../../lib/platform/routing";
 import { lawyerLandingDestination } from "../../../../lib/platform/lawyer-entry-routing";
+import { trackProductEvent } from "../../../../lib/platform/analytics";
 
 function json(body: unknown, status = 200, cookies?: string | string[]) {
   const headers = new Headers({ "content-type": "application/json", "cache-control": "private, no-store", pragma: "no-cache" });
@@ -236,6 +237,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
       otpChallengeId: body.challengeId,
       acceptedMarketing: Boolean(body.marketing),
       acceptedAt: now,
+    });
+    trackProductEvent({
+      event: "signup_completed",
+      surface: "platform",
+      locale,
+      accountType,
+      outcome: "completed",
     });
   }
   const requestHostname = new URL(request.url).hostname;

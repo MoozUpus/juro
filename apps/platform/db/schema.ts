@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -1852,6 +1853,16 @@ export const conversationMessages = sqliteTable("conversation_messages", {
   structuredJson: text("structured_json"),
   createdAt: text("created_at").notNull(),
 }, (table) => [index("conversation_messages_conversation_idx").on(table.conversationId, table.createdAt)]);
+
+export const productAccountMilestones = sqliteTable("product_account_milestones", {
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  eventName: text("event_name").notNull(),
+  firstCompletedAt: text("first_completed_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.eventName] }),
+  check("product_account_milestones_event_check", sql`${table.eventName} IN ('first_question_sent','clarification_completed','document_analyzed')`),
+  index("product_account_milestones_event_idx").on(table.eventName, table.firstCompletedAt),
+]);
 
 export const aiDocumentPrefillHandoffs = sqliteTable("ai_document_prefill_handoffs", {
   id: text("id").primaryKey(),

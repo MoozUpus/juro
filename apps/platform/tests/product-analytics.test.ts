@@ -7,6 +7,11 @@ import {
   productEventSchema,
   writeProductEvent,
 } from "../lib/platform/analytics";
+import {
+  productAccountMilestoneCreated,
+  productAccountMilestoneStatement,
+} from "../lib/platform/product-account-milestone";
+import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 function source(relativePath: string): string {
   return readFileSync(new URL("../" + relativePath, import.meta.url), "utf8");
@@ -117,6 +122,8 @@ test("the event catalog covers the execution brief and durable routes emit only 
     ["app/api/platform/document-analysis/uploads/[analysisId]/finalize/route.ts", "document_uploaded"],
     ["app/api/platform/document-comparisons/[comparisonId]/process/route.ts", "document_compared"],
     ["app/api/platform/ai/feedback/route.ts", "feedback_submitted"],
+    ["app/api/auth/verify-otp/route.ts", "signup_completed"],
+    ["app/api/platform/ai/route.ts", "first_question_sent"],
   ] as const;
   for (const [path, event] of routes) {
     const route = source(path);
@@ -143,4 +150,53 @@ test("replayable milestones emit only after a newly completed durable transition
   const grant = source("app/api/platform/lawyer-requests/[requestId]/access-grant/route.ts");
   assert.ok(grant.lastIndexOf("trackProductEvent") > grant.indexOf("Number(results[0]?.meta.changes ?? 0) !== 1"));
   assert.match(grant, /accountType: workspace\.type/);
+
+  const signup = source("app/api/auth/verify-otp/route.ts");
+  assert.ok(signup.lastIndexOf("trackProductEvent") > signup.indexOf("await recordRegistrationAcceptances"));
+  assert.match(signup, /purpose === "register"/);
+
+  const ai = source("app/api/platform/ai/route.ts");
+  assert.match(ai, /productAccountMilestoneStatement/);
+  assert.match(ai, /eventName: "first_question_sent"/);
+  assert.match(ai, /productAccountMilestoneCreated/);
+  assert.ok(ai.lastIndexOf('event: "first_question_sent"') > ai.indexOf("await db.batch"));
+  assert.ok(ai.lastIndexOf('event: "first_question_sent"') > ai.indexOf("await input.db.batch"));
+});
+
+test("the first-question account milestone stays in D1 and is concurrency-safe", () => {
+  const migration = source("drizzle/0150_product_account_milestones.sql");
+  const milestone = source("lib/platform/product-account-milestone.ts");
+  const analytics = source("lib/platform/analytics.ts");
+
+  assert.match(migration, /PRIMARY KEY\(`user_id`,\s*`event_name`\)/);
+  assert.match(migration, /ON DELETE cascade/);
+  assert.match(milestone, /INSERT OR IGNORE INTO product_account_milestones/);
+  assert.match(milestone, /Number\(result\?\.meta\.changes \?\? 0\) === 1/);
+  assert.doesNotMatch(analytics, /userId|workspaceId|conversationId|messageId/);
+});
+
+test("the D1 account milestone elects exactly one first-question winner", async () => {
+  const { d1 } = sqliteD1Fixture();
+  const now = "2026-09-01T00:00:00.000Z";
+  await d1.prepare(
+    `INSERT INTO user_profiles (
+       id,email,locale,account_type,created_at,updated_at
+     ) VALUES (?,?,?,?,?,?)`,
+  ).bind("user_analytics", "analytics@example.test", "ru", "individual", now, now).run();
+
+  const first = await d1.batch([productAccountMilestoneStatement({
+    db: d1,
+    userId: "user_analytics",
+    eventName: "first_question_sent",
+    completedAt: now,
+  })]);
+  const replay = await d1.batch([productAccountMilestoneStatement({
+    db: d1,
+    userId: "user_analytics",
+    eventName: "first_question_sent",
+    completedAt: "2026-09-01T00:00:01.000Z",
+  })]);
+
+  assert.equal(productAccountMilestoneCreated(first[0]), true);
+  assert.equal(productAccountMilestoneCreated(replay[0]), false);
 });
