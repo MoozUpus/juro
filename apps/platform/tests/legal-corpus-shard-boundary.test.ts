@@ -16,7 +16,7 @@ function config(file: string): WranglerConfig {
   return JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8")) as WranglerConfig;
 }
 
-test("staging corpus shard is isolated with auto-ingest disabled and approved queue drain enabled", () => {
+test("staging corpus shard is isolated with auto-ingest and queue processing disabled", () => {
   const shard = config("wrangler.legal-corpus-shard.jsonc");
   assert.equal(shard.main, "./worker/legal-corpus-worker.ts");
   assert.equal(shard.name, "juro-legal-corpus-shard-development");
@@ -31,7 +31,7 @@ test("staging corpus shard is isolated with auto-ingest disabled and approved qu
   }]);
   assert.equal(staging.vars?.LEGAL_CORPUS_ENABLED, "true");
   assert.equal(staging.vars?.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
-  assert.equal(staging.vars?.LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED, "true");
+  assert.equal(staging.vars?.LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED, "false");
   assert.equal(staging.vars?.LEGAL_CORPUS_DENSE_ENABLED, "true");
   assert.equal(staging.vars?.LEGAL_CORPUS_STAGING_INGESTION_JOBS_PER_RUN, "20");
   assert.equal(staging.vars?.QDRANT_COLLECTION, "juro_legal_staging_shard_3");
