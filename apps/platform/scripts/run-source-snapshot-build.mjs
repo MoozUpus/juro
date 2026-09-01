@@ -7,19 +7,35 @@ const lanes = [..."0123456789abcdef"].flatMap((first) =>
   [..."0123456789abcdef"].map((second) => `${first}${second}`));
 const laneConcurrency = 64;
 
-async function call(action, body = {}) {
-  const response = await fetch(`${root}/${action}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ buildId, ...body }),
-  });
-  const packet = await response.json();
-  if (!response.ok) {
-    const error = new Error(packet?.code ?? `SOURCE_SNAPSHOT_HTTP_${response.status}`);
-    error.status = response.status;
+async function call(action, body = {}, attempt = 0) {
+  try {
+    const response = await fetch(`${root}/${action}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ buildId, ...body }),
+    });
+    const responseText = await response.text();
+    let packet;
+    try { packet = JSON.parse(responseText); } catch { packet = null; }
+    if (!response.ok) {
+      if (packet?.code !== "SOURCE_SNAPSHOT_INJECTED_PARTIAL_FAILURE"
+        && response.status >= 500 && attempt < 5) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * (2 ** attempt)));
+        return call(action, body, attempt + 1);
+      }
+      const error = new Error(packet?.code ?? `SOURCE_SNAPSHOT_HTTP_${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    if (!packet) throw new Error("SOURCE_SNAPSHOT_INVALID_RESPONSE");
+    return packet.result;
+  } catch (error) {
+    if (!(error instanceof Error && "status" in error) && attempt < 5) {
+      await new Promise((resolve) => setTimeout(resolve, 250 * (2 ** attempt)));
+      return call(action, body, attempt + 1);
+    }
     throw error;
   }
-  return packet.result;
 }
 
 function identity(result) {
