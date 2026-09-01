@@ -10,6 +10,7 @@ import {
 import {
   productAccountMilestoneCreated,
   productAccountMilestoneStatement,
+  productClarificationCompletedStatement,
 } from "../lib/platform/product-account-milestone";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -124,6 +125,7 @@ test("the event catalog covers the execution brief and durable routes emit only 
     ["app/api/platform/ai/feedback/route.ts", "feedback_submitted"],
     ["app/api/auth/verify-otp/route.ts", "signup_completed"],
     ["app/api/platform/ai/route.ts", "first_question_sent"],
+    ["app/api/platform/ai/route.ts", "clarification_completed"],
   ] as const;
   for (const [path, event] of routes) {
     const route = source(path);
@@ -159,7 +161,11 @@ test("replayable milestones emit only after a newly completed durable transition
   assert.match(ai, /productAccountMilestoneStatement/);
   assert.match(ai, /eventName: "first_question_sent"/);
   assert.match(ai, /productAccountMilestoneCreated/);
+  assert.match(ai, /productClarificationCompletedStatement/);
+  assert.match(ai, /result\.responseKind === "answer"/);
+  assert.match(ai, /branchInput\.operation === "follow_up"/);
   assert.ok(ai.lastIndexOf('event: "first_question_sent"') > ai.indexOf("await db.batch"));
+  assert.ok(ai.lastIndexOf('event: "clarification_completed"') > ai.indexOf("await db.batch"));
   assert.ok(ai.lastIndexOf('event: "first_question_sent"') > ai.indexOf("await input.db.batch"));
 
   const analysis = source("lib/document-analysis/processor.ts");
@@ -208,4 +214,120 @@ test("the D1 account milestone elects exactly one first-question winner", async 
 
   assert.equal(productAccountMilestoneCreated(first[0]), true);
   assert.equal(productAccountMilestoneCreated(replay[0]), false);
+});
+
+test("the D1 clarification milestone requires a durable clarification parent and elects one account winner", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const now = "2026-09-01T00:00:00.000Z";
+  sqlite.prepare(
+    "INSERT INTO user_profiles (id,email,locale,account_type,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+  ).run("user_clarification", "clarification@example.test", "ru", "individual", now, now);
+  sqlite.prepare(
+    "INSERT INTO workspaces (id,type,name,locale,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+  ).run("workspace_clarification", "individual", "Clarification", "ru", now, now);
+  sqlite.prepare(
+    "INSERT INTO conversations (id,workspace_id,owner_user_id,title,locale,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+  ).run("conversation_clarification", "workspace_clarification", "user_clarification", "Question", "ru", "active", now, now);
+  sqlite.prepare(
+    "INSERT INTO conversation_messages (id,conversation_id,author_type,content,created_at) VALUES (?,?,?,?,?)",
+  ).run("request_clarification", "conversation_clarification", "user", "Question", now);
+  sqlite.prepare(
+    "INSERT INTO conversation_messages (id,conversation_id,author_type,content,created_at) VALUES (?,?,?,?,?)",
+  ).run("request_answer", "conversation_clarification", "user", "Other question", now);
+  sqlite.prepare(
+    "INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at) VALUES (?,?,?,?,?,?)",
+  ).run(
+    "response_clarification",
+    "conversation_clarification",
+    "assistant",
+    "More facts are required.",
+    JSON.stringify({ responseKind: "clarification_required" }),
+    now,
+  );
+  sqlite.prepare(
+    "INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at) VALUES (?,?,?,?,?,?)",
+  ).run(
+    "response_answer",
+    "conversation_clarification",
+    "assistant",
+    "A completed Legal Answer.",
+    JSON.stringify({ responseKind: "answer" }),
+    now,
+  );
+  sqlite.prepare(
+    `INSERT INTO message_branches (
+       id,conversation_id,workspace_id,owner_user_id,parent_branch_id,
+       forked_from_message_id,request_message_id,response_message_id,operation,created_at
+     ) VALUES (?,?,?,?,NULL,NULL,?,?,?,?)`,
+  ).run(
+    "branch_clarification",
+    "conversation_clarification",
+    "workspace_clarification",
+    "user_clarification",
+    "request_clarification",
+    "response_clarification",
+    "new",
+    now,
+  );
+  sqlite.prepare(
+    `INSERT INTO message_branches (
+       id,conversation_id,workspace_id,owner_user_id,parent_branch_id,
+       forked_from_message_id,request_message_id,response_message_id,operation,created_at
+     ) VALUES (?,?,?,?,NULL,NULL,?,?,?,?)`,
+  ).run(
+    "branch_answer",
+    "conversation_clarification",
+    "workspace_clarification",
+    "user_clarification",
+    "request_answer",
+    "response_answer",
+    "new",
+    now,
+  );
+
+  const notClarification = await d1.batch([productClarificationCompletedStatement({
+    db: d1,
+    userId: "user_clarification",
+    workspaceId: "workspace_clarification",
+    conversationId: "conversation_clarification",
+    parentBranchId: "branch_answer",
+    completedAt: "2026-09-01T00:00:30.000Z",
+  })]);
+  const first = await d1.batch([productClarificationCompletedStatement({
+    db: d1,
+    userId: "user_clarification",
+    workspaceId: "workspace_clarification",
+    conversationId: "conversation_clarification",
+    parentBranchId: "branch_clarification",
+    completedAt: "2026-09-01T00:01:00.000Z",
+  })]);
+  const replay = await d1.batch([productClarificationCompletedStatement({
+    db: d1,
+    userId: "user_clarification",
+    workspaceId: "workspace_clarification",
+    conversationId: "conversation_clarification",
+    parentBranchId: "branch_clarification",
+    completedAt: "2026-09-01T00:02:00.000Z",
+  })]);
+  const unrelated = await d1.batch([productClarificationCompletedStatement({
+    db: d1,
+    userId: "user_clarification",
+    workspaceId: "workspace_clarification",
+    conversationId: "conversation_clarification",
+    parentBranchId: "missing_branch",
+    completedAt: "2026-09-01T00:03:00.000Z",
+  })]);
+
+  assert.equal(productAccountMilestoneCreated(notClarification[0]), false);
+  assert.equal(productAccountMilestoneCreated(first[0]), true);
+  assert.equal(productAccountMilestoneCreated(replay[0]), false);
+  assert.equal(productAccountMilestoneCreated(unrelated[0]), false);
+  const stored = sqlite.prepare(
+    "SELECT event_name,first_completed_at FROM product_account_milestones WHERE user_id=?",
+  ).get("user_clarification") as {
+    event_name: string;
+    first_completed_at: string;
+  };
+  assert.equal(stored.event_name, "clarification_completed");
+  assert.equal(stored.first_completed_at, "2026-09-01T00:01:00.000Z");
 });
