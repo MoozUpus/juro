@@ -4,19 +4,19 @@ Assessment: **NOT READY for the full execution brief**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Production is reachable and v115 is deployed from merge `cd3ee161bb4a54c7bdc71b89c39a402f3ad35c4d`. Website Worker `fad80c80-ee92-44bb-93a3-e250ee314891`, platform Worker `ca427ea9-97cb-45fe-84dc-b468e8bd8995`, and public Sites v96 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-01T22:10:42.083Z` was operational with 8/8 components and 0 active incidents; this is point-in-time evidence, not a claim of sustained provider health. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, and other Definition-of-Done gates are still open.
+Production is reachable and v116 is deployed from merge `3575ed3aff26904ac2d166c0c2be38f1b94b9755`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker v202 `a88dbd8d-b368-4ff8-911c-0c817df7d9a7`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-01T23:18:39.567Z` was operational with 8/8 components and 0 active incidents; this is point-in-time evidence, not a claim of sustained provider health. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, and other Definition-of-Done gates are still open.
 
-## Current v115 release state
+## Current v116 release state
 
 | Surface | Current state | Evidence | Rollback point |
 | --- | --- | --- | --- |
-| GitHub main | merge `cd3ee161bb4a54c7bdc71b89c39a402f3ad35c4d` from PR #118 | exact-head CI, complete 0-finding security diff scan, post-merge CI, production deploys, and Chrome QA passed | Revert or redeploy the immediately preceding validated main revision if a regression is proven |
-| Public Sites | v96, source `489c56d029f164c030127f7465d528f8f1bdf396`, deployment `appgdep_6a974c2c182481919de7a0a165025b29` | RU/UZ/EN and `/ru#start` 200; sitemap 78/78; discoverable apex links 120/120; indexing split preserved | Saved v95, source `855ba2161b716daabb96ac469456c101e5d3bb2c`; v94 remains available |
-| Website Worker | version `fad80c80-ee92-44bb-93a3-e250ee314891`, 100% traffic | deployment workflow passed and exact built asset was observed on `www.juro.uz` | v114 version `5f04e052-c2ef-4af7-820a-b29819bcdef9` |
-| Platform Worker | version `ca427ea9-97cb-45fe-84dc-b468e8bd8995`, 100% traffic | mobile lawyer login verified with 0 px² heading/control overlap, visible Turnstile, disabled pre-verification submit, and zero overflow | v114 version `cef2e39c-4f56-4743-9287-b036192f1771` |
-| Production health | operational, 8/8 components, no active incidents at the retained snapshot | `/api/status` generated `2026-09-01T22:10:42.083Z` | Health evidence is observational; it has no deployment rollback |
+| GitHub main | merge `3575ed3aff26904ac2d166c0c2be38f1b94b9755` from PR #120 | exact-head CI `33568387883`, complete 0-finding security diff scan, post-merge CI `33569063853`, production deploys, and Chrome QA passed | Revert or redeploy the immediately preceding validated main revision if a regression is proven |
+| Public Sites | v97, source `77691d0c2f4d7eaeff759ff3f08eded893d2f835`, deployment `appgdep_6a975c1651d0819194779c579abd961b` | RU/UZ/EN 200; sitemap 78/78; discoverable apex links 120/120; indexing split preserved | Saved v96, source `489c56d029f164c030127f7465d528f8f1bdf396`; v95 remains available |
+| Website Worker | v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, 100% traffic | visible RU/UZ/EN targets are 44 × 44 CSS px wherever rendered; routes and indexing passed | v11 `fad80c80-ee92-44bb-93a3-e250ee314891` |
+| Platform Worker | v202 `a88dbd8d-b368-4ff8-911c-0c817df7d9a7`, 100% traffic | lawyer login verified at four viewports with 0 px² heading/control overlap, visible Turnstile, protected submit, and zero overflow | v200 `ca427ea9-97cb-45fe-84dc-b468e8bd8995` |
+| Production health | operational, 8/8 components, no active incidents at the retained snapshot | `/api/status` generated `2026-09-01T23:18:39.567Z` | Health evidence is observational; it has no deployment rollback |
 
-The older v101/v189/v95 tables and health narrative below are retained as historical evidence and do not supersede the current v115 checkpoint.
+The older v115/v101/v189/v95 tables and health narrative below are retained as historical evidence and do not supersede the current v116 checkpoint.
 
 ## Retained historical release state
 
@@ -109,15 +109,15 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 | Excluded | Staging health/capacity | The retained historical staging evidence is stale/degraded and the owner explicitly excluded legislation database/corpus/capacity remediation | No action in this goal; do not use this row to block the permitted non-corpus work |
 | P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
 | P1 | Authenticated role matrix incomplete | Authenticated individual read-only coverage exists; Business, Lawyer, Pending Lawyer, Staff/Admin, and state-changing flows remain open | Chrome QA with real authorized sessions and no fabricated identity |
-| P2 | Production v115 behavior is not authenticated on staging | Main is normalized and the canonical staging host is Access-protected; staging release remains separate | Complete post-Access Client/Lawyer route QA only in a safe, non-corpus staging increment |
+| P2 | Production v116 behavior is not authenticated on staging | Main is normalized and the canonical staging host is Access-protected; staging release remains separate | Complete post-Access Client/Lawyer route QA only in a safe, non-corpus staging increment |
 
 ## Rollback protocol
 
 ### Sites
 
-1. Keep saved v95 as the immediate rollback while v96 is live; retain v94 as a secondary older recovery point.
+1. Keep saved v96 as the immediate rollback while v97 is live; retain v95 as a secondary older recovery point.
 2. Preserve the verified split: `juro.uz` remains indexable and the provider hostname carries the noindex response header.
-3. If the custom domain, public routes, accessibility fixes, or indexing split regresses, redeploy saved v95 immediately and recrawl both hosts.
+3. If the custom domain, public routes, accessibility fixes, or indexing split regresses, redeploy saved v96 immediately and recrawl both hosts.
 
 ### Platform Worker
 
@@ -125,7 +125,7 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 2. Run CI and artifact checks against the exact deploy commit.
 3. Apply D1 migration only when a separately reviewed change requires it, and verify schema plus a restorable backup before any ledger reconciliation.
 4. Deploy with the explicit production environment, then verify public/private boundaries, logs, status evidence freshness, error rate, and provider probes.
-5. For v115, roll the website Worker back to `5f04e052-c2ef-4af7-820a-b29819bcdef9` or the platform Worker back to `cef2e39c-4f56-4743-9287-b036192f1771` if the corresponding verified regression appears.
+5. For v116, roll the website Worker back to v11 `fad80c80-ee92-44bb-93a3-e250ee314891` or the platform Worker back to v200 `ca427ea9-97cb-45fe-84dc-b468e8bd8995` if the corresponding verified regression appears.
 
 ### DNS
 

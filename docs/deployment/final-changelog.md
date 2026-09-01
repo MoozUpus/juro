@@ -6,6 +6,20 @@ Evidence cutoff: **2026-09-02 UZT**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
 
+## v116 responsive auth and locale-target release
+
+- Reserves a protected top row for auth theme and locale controls at every viewport, resolving the production heading overlap observed at 768 × 1024 and 1024 × 768.
+- Gives every visible public RU/UZ/EN header link a minimum 44 × 44 CSS px target, including tablet and desktop widths.
+- Passed focused platform tests 8/8, focused website tests 20/20, lint, type-check, production builds, exact-head CI `33568387883`, post-merge CI `33569063853`, and complete 0-finding security scan `1084b6c7-7516-4b17-b1fb-bda7b183ae2e`.
+- Merged PR #120 as `3575ed3aff26904ac2d166c0c2be38f1b94b9755`.
+- Activated platform Worker v202 `a88dbd8d-b368-4ff8-911c-0c817df7d9a7` and website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e` at 100% traffic.
+- Published Sites v97 from source `77691d0c2f4d7eaeff759ff3f08eded893d2f835` through deployment `appgdep_6a975c1651d0819194779c579abd961b`; v96 remains the immediate rollback.
+- Production Chrome proved zero auth heading/control overlap and zero horizontal overflow at 390, 768, 1024, and 1440 px. Public locale targets are 44 × 44 wherever visible; public and lawyer-auth consoles were clean.
+- The authenticated Individual dashboard was reachable and responsive. Business correctly redirected this Individual account to its permitted dashboard, lawyer access required explicit reauthentication, and Admin required a protected admin session. These checks prove boundary enforcement, not completed role journeys.
+- RU, UZ, EN, `robots.txt`, and the 78-URL sitemap returned `200`; the provider hostname remains `noindex, nofollow, noarchive` while `juro.uz` remains indexable.
+- The status snapshot generated at `2026-09-01T23:18:39.567Z` was operational with 8/8 components and no active incidents. This is point-in-time evidence only.
+- Performed no migration, database write, legal-corpus, vector, embedding, staging-capacity, DNS, secret, payment, or auth-policy operation.
+
 ## v115 mobile accessibility release
 
 - Moves the mobile auth form heading below the fixed theme/language controls, eliminating the overlap observed on the live lawyer login at 390 × 844.

@@ -4,7 +4,26 @@ Status: **living evidence report, not full Definition of Done**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope in this report: deployed v115 mobile accessibility evidence, including public Sites v96 and Worker production verification. Older v114/v101/v189/v95 evidence below is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v116 responsive accessibility evidence, including public Sites v97, Worker production verification, and a read-only authenticated Individual boundary check. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## v116 responsive auth and locale-target validation
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Platform focused regression | auth/Turnstile CSS suite | 8/8 PASS |
+| Website focused regression | homepage production suite | 20/20 PASS |
+| Static and build gates | website/platform lint, type-check, production build and artifact validation | PASS |
+| Exact-head CI/security | CI `33568387883`; complete 0-finding scan `1084b6c7-7516-4b17-b1fb-bda7b183ae2e` | PASS |
+| Post-merge CI | `33569063853` on `3575ed3aff26904ac2d166c0c2be38f1b94b9755` | PASS |
+| Worker deployment | platform v202 `a88dbd8d-b368-4ff8-911c-0c817df7d9a7`; website v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`; 100% traffic | PASS |
+| Sites deployment | v97, source `77691d0c2f4d7eaeff759ff3f08eded893d2f835`, deployment `appgdep_6a975c1651d0819194779c579abd961b` | PASS |
+| Public Chrome matrix | 390/768/1024/1440 px; overflow 0; one main and visible H1; visible locale links 44 × 44 | PASS |
+| Lawyer auth Chrome matrix | same four viewports; heading/theme overlap 0 px²; heading/language overlap 0 px²; Turnstile visible | PASS |
+| Authenticated Individual shell | same four viewports; overflow 0; one main/H1; sampled visible controls at least 44 px | PASS FOR READ-ONLY SHELL |
+| Role enforcement | Business redirected to allowed Individual dashboard; Lawyer required reauthentication; Admin required protected admin session | PASS FOR BOUNDARIES; ROLE JOURNEYS OPEN |
+| Live routes and indexing | RU/UZ/EN, robots and sitemap 200; 78 sitemap URLs; provider host noindex split preserved | PASS |
+| Live console | checked public and lawyer-auth pages | 0 errors, 0 warnings |
+| Production status | `2026-09-01T23:18:39.567Z`; operational; 8/8; 0 active incidents | PASS AS POINT-IN-TIME EVIDENCE |
 
 ## v115 mobile accessibility release validation
 

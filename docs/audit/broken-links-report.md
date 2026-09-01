@@ -1,8 +1,8 @@
 # JURO Broken Links Report
 
-Evidence cutoff: **2026-09-02 03:12 UZT**
+Evidence cutoff: **2026-09-02 04:19 UZT**
 
-Live site: `https://juro.uz` Sites v96
+Live site: `https://juro.uz` Sites v97
 
 ## Result
 
@@ -18,9 +18,9 @@ The live crawl fetched every sitemap URL, resolved relative links, removed fragm
 
 | URL / host | Evidence | Impact | Status / action |
 | --- | --- | --- | --- |
-| `https://lawyer.juro.uz/ru/individual/dashboard` | Platform Worker v115 preserves the dedicated lawyer login boundary; the production mobile login renders without heading/control overlap or overflow | The reported cross-persona “Not Found” remains removed without exposing unrelated individual routes | `VERIFIED` for the anonymous boundary; authenticated Lawyer journey remains a separate evidence gate |
-| `https://app.juro.uz/ru/individual/document-analysis` | Platform Worker v115 preserves the protected boundary; the current status snapshot reports document analysis operational | Canonical protected route remains deployed without a public-data claim | `VERIFIED` for the boundary and retained individual read-only coverage; authenticated upload and completed-result flow remain separate evidence gates |
-| `https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/` | v96 returns `200`, canonical to `juro.uz/ru`, and `X-Robots-Tag: noindex, nofollow, noarchive` on the localized route, `robots.txt`, and `sitemap.xml` | Duplicate provider-host copy remains reachable but is explicitly excluded from indexing | `VERIFIED`; `juro.uz` remains indexable and saved v95 is the immediate rollback |
+| `https://lawyer.juro.uz/ru/individual/dashboard` | Platform Worker v202 preserves the dedicated lawyer login boundary; the production login renders at four viewports without heading/control overlap or overflow | The reported cross-persona “Not Found” remains removed without exposing unrelated individual routes | `VERIFIED` for the anonymous boundary; authenticated Lawyer journey remains a separate evidence gate |
+| `https://app.juro.uz/ru/individual/document-analysis` | Platform Worker v202 preserves the protected boundary; the current status snapshot reports document analysis operational | Canonical protected route remains deployed without a public-data claim | `VERIFIED` for the boundary and retained Individual read-only coverage; authenticated upload and completed-result flow remain separate evidence gates |
+| `https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/` | v97 returns `200`, canonical to `juro.uz/ru`, and `X-Robots-Tag: noindex, nofollow, noarchive` on the localized route, `robots.txt`, and `sitemap.xml` | Duplicate provider-host copy remains reachable but is explicitly excluded from indexing | `VERIFIED`; `juro.uz` remains indexable and saved v96 is the immediate rollback |
 | `https://api.juro.uz/` | DNS does not resolve | Stale docs/links would fail | `DEPRECATED`; remove current-state references unless provisioned |
 | `https://staging.app.juro.uz/ru/lawyer/auth` | `302` to Cloudflare Access with `Cache-Control: no-store` | Canonical staging lawyer path remains protected before application execution | `VERIFIED` for the anonymous Access boundary; authenticated runtime QA remains open |
 | `https://app.staging.juro.uz/` | DNS does not resolve; PR #80 makes the platform routing helper return no lawyer origin | The wrong spelling can no longer be selected as a platform lawyer destination | `RESOLVED IN CODE`; keep rejected and use `staging.app.juro.uz` |

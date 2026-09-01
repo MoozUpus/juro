@@ -4,10 +4,14 @@ Status: **living evidence report, not a WCAG certification**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope: Chrome-only public landing and authentication-boundary checks for the v101 production release and undeployed v114 candidate. Legislation database/corpus work, non-Chrome browsers, and physical devices are excluded.
+Scope: Chrome-only public, authentication-boundary, and authenticated Individual checks through the deployed v116 release. Legislation database/corpus work, non-Chrome browsers, and physical devices are excluded.
 
 ## Verified evidence
 
+- Production v116 Chrome checks covered 390 × 844, 768 × 1024, 1024 × 768, and 1440 × 900 on the public site and lawyer-login boundary. Every checked page had zero horizontal overflow.
+- Visible public RU/UZ/EN header links measure 44 × 44 CSS px at 768 px and wider; the current locale remains 44 × 44 on mobile while alternate locales are intentionally hidden below 620 px.
+- The v116 lawyer-login heading has 0 px² overlap with both theme and language controls at all four checked viewports. Turnstile remained visible and the submit action stayed protected until verification completed.
+- The authenticated Individual dashboard retained one visible H1, one main landmark, zero horizontal overflow, and 44 px or larger sampled controls at 390, 768, 1024, and 1440 px.
 - Production v101 desktop Lighthouse scored Accessibility **100** on `https://juro.uz/ru`.
 - The v114 local public page retained 21/21 visible reveal sections in RU, UZ, and EN at 1440 × 900 and in RU at 390 × 844.
 - The checked desktop and mobile pages had zero document-level horizontal overflow and no console errors or warnings.
@@ -19,7 +23,7 @@ Scope: Chrome-only public landing and authentication-boundary checks for the v10
 ## Open manual gates
 
 - Complete keyboard traversal, error recovery, 200%/400% zoom, forced-colors, text-spacing, and Russian/Uzbek screen-reader passes.
-- Verify the real Turnstile challenge and authenticated role journeys on the exact deployed v114 revision.
-- Repeat the responsive matrix at every target viewport required by the execution brief.
+- Complete authenticated Business, Lawyer, Pending Lawyer, and Staff/Admin journeys with accounts that actually hold those roles. Current production correctly redirects the Individual account away from Business, requires explicit lawyer reauthentication, and rejects the Individual session at the Admin boundary.
+- Repeat the full execution-brief viewport matrix on authenticated feature pages, including dense tables, dialogs, uploads, and error states.
 
 Automated tests, an accessibility-tree snapshot, and Lighthouse 100 do not prove full WCAG conformance.
