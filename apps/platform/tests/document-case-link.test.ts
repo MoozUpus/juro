@@ -143,7 +143,8 @@ test("document case-link route and list UI enforce server tenant scope and acces
   ]);
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.match(route, /requireApiUser\(\)/);
-  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /workspaceForContentEditor\(user\)/);
+  assert.doesNotMatch(route, /workspaceForUser\(user\)/);
   assert.match(route, /documentCaseLinkInputSchema\.safeParse/);
   assert.match(route, /request\.headers\.get\("idempotency-key"\)/);
   assert.doesNotMatch(route, /workspaceId:\s*parsed\.data|ownerUserId:\s*parsed\.data/);

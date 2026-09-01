@@ -107,6 +107,37 @@ export type JsonRequestError =
   | "invalid_input"
   | "payload_too_large";
 
+export async function readBoundedRequestBody(
+  request: Request,
+  maxBytes: number,
+): Promise<{ ok: true; text: string } | { ok: false }> {
+  if (!request.body) return { ok: true, text: "" };
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    totalBytes += chunk.value.byteLength;
+    if (totalBytes > maxBytes) {
+      try {
+        await reader.cancel("payload_too_large");
+      } catch {
+        // The size decision remains authoritative even if transport cleanup fails.
+      }
+      return { ok: false };
+    }
+    chunks.push(chunk.value);
+  }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, text: new TextDecoder().decode(bytes) };
+}
+
 export async function parseJsonRequest<T>(
   request: Request,
   schema: z.ZodType<T>,
@@ -119,17 +150,24 @@ export async function parseJsonRequest<T>(
   if (!contentType.toLocaleLowerCase().startsWith("application/json")) {
     return { ok: false, error: "invalid_content_type" };
   }
-  const declaredLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+  const declaredLengthHeader = request.headers.get("content-length");
+  const declaredLength = declaredLengthHeader === null
+    ? null
+    : Number(declaredLengthHeader);
+  if (
+    declaredLength !== null
+    && Number.isFinite(declaredLength)
+    && declaredLength > maxBytes
+  ) {
     return { ok: false, error: "payload_too_large" };
   }
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+  const body = await readBoundedRequestBody(request, maxBytes);
+  if (!body.ok) {
     return { ok: false, error: "payload_too_large" };
   }
   let raw: unknown;
   try {
-    raw = JSON.parse(text);
+    raw = JSON.parse(body.text);
   } catch {
     return { ok: false, error: "invalid_json" };
   }

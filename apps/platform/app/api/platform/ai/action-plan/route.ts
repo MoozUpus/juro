@@ -5,7 +5,7 @@ import {
   saveAiActionPlanInputSchema,
   saveAiActionPlanToCase,
 } from "../../../../../lib/ai/action-plan-save";
-import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
@@ -23,7 +23,7 @@ function localizedError(locale: "ru" | "uz", code: string): string {
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const parsed = saveAiActionPlanInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return response({ code: "INVALID_AI_ACTION_PLAN_REQUEST", error: localizedError("uz", "INVALID_AI_ACTION_PLAN_REQUEST") }, 400);
   try {

@@ -3,22 +3,19 @@ import { isoNow } from "../../../../lib/document-builder/storage/db";
 import {
   deletePrivateObject,
   getPrivateObject,
-  putPrivateObject,
+  MAX_FILE_SIZE,
   sanitizeFileName,
   sha256Hex,
   validateUploadBytes,
 } from "../../../../lib/document-builder/storage/files";
+import {
+  QuarantinedUploadError,
+  quarantineScanAndStorePrivateObject,
+} from "../../../../lib/document-builder/storage/quarantined-upload";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
-import { ArchiveInspectionError, verifyArchiveBytes } from "../../../../lib/document-analysis/archive-inspector";
+import { ArchiveInspectionError } from "../../../../lib/document-analysis/archive-inspector";
 import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
-
-const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const COMPARISON_DOCX_LIMITS = {
-  timeoutMs: 8_000,
-  maxEntries: 500,
-  maxUncompressedBytes: 25 * 1024 * 1024,
-  maxExpansionRatio: 40,
-} as const;
+import { MULTIPART_OVERHEAD_BYTES, requiredContentLength } from "../../../../lib/request-body";
 
 type ExistingFile = {
   id: string;
@@ -29,9 +26,11 @@ type ExistingFile = {
   sha256: string | null;
 };
 
-type PreparedFile = ExistingFile & {
+type PreparedFile = Omit<ExistingFile, "sha256"> & {
+  sha256: string;
   created: boolean;
   bytes: Uint8Array | null;
+  sourceFileId: string | null;
 };
 
 function response(body: unknown, status = 200) {
@@ -63,35 +62,40 @@ async function prepareFile(input: {
     if (!["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(existing.mimeType)) {
       throw new Error("UNSUPPORTED_FILE");
     }
-    if (!existing.sha256 || existing.mimeType === DOCX_MIME) {
-      const object = await getPrivateObject(existing.r2Key);
-      if (!object) throw new Error("COMPARISON_FILE_ACCESS_DENIED");
-      const bytes = new Uint8Array(await object.arrayBuffer());
-      if (existing.mimeType === DOCX_MIME) {
-        await verifyArchiveBytes(bytes, existing.mimeType, COMPARISON_DOCX_LIMITS);
-      }
-      const inspection = validateUploadBytes(
-        new File([Uint8Array.from(bytes).buffer], existing.fileName, { type: existing.mimeType }),
-        bytes,
-      );
-      if (inspection) throw new Error(`${inspection.code}:${inspection.message}`);
-      if (!existing.sha256) {
-        existing.sha256 = await sha256Hex(bytes);
-        await db.prepare(
-          "UPDATE document_files SET sha256=?,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
-        ).bind(existing.sha256, isoNow(), existing.id, input.workspaceId, input.userId).run();
-      }
+    const object = await getPrivateObject(existing.r2Key);
+    if (!object) throw new Error("COMPARISON_FILE_ACCESS_DENIED");
+    const bytes = new Uint8Array(await object.arrayBuffer());
+    const inspection = await validateUploadBytes(
+      new File([Uint8Array.from(bytes).buffer], existing.fileName, { type: existing.mimeType }),
+      bytes,
+    );
+    if (inspection) throw new Error(`${inspection.code}:${inspection.message}`);
+    const sha256 = await sha256Hex(bytes);
+    if (!existing.sha256) {
+      await db.prepare(
+        "UPDATE document_files SET sha256=?,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
+      ).bind(sha256, isoNow(), existing.id, input.workspaceId, input.userId).run();
     }
-    return { ...existing, created: false, bytes: null };
+    const id = crypto.randomUUID();
+    const fileName = sanitizeFileName(existing.fileName);
+    const extension = fileName.split(".").pop()?.toLocaleLowerCase() || "bin";
+    return {
+      ...existing,
+      id,
+      r2Key: `workspaces/${input.workspaceId}/comparisons/${input.comparisonId}/version-${input.version}-${id}.${extension}`,
+      fileName,
+      sizeBytes: bytes.byteLength,
+      sha256,
+      created: true,
+      bytes,
+      sourceFileId: existing.id,
+    };
   }
 
   const file = input.form.get(input.fileField);
   if (!(file instanceof File)) throw new Error(`COMPARISON_${input.version.toLocaleUpperCase()}_FILE_REQUIRED`);
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (file.type === DOCX_MIME) {
-    await verifyArchiveBytes(bytes, file.type, COMPARISON_DOCX_LIMITS);
-  }
-  const inspection = validateUploadBytes(file, bytes);
+  const inspection = await validateUploadBytes(file, bytes);
   if (inspection) throw new Error(`${inspection.code}:${inspection.message}`);
   const id = crypto.randomUUID();
   const fileName = sanitizeFileName(file.name);
@@ -106,6 +110,7 @@ async function prepareFile(input: {
     sha256: await sha256Hex(bytes),
     created: true,
     bytes,
+    sourceFileId: null,
   };
 }
 
@@ -140,6 +145,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
   const workspace = await workspaceForContentEditor(user);
+  const bodyLength = requiredContentLength(request, (2 * MAX_FILE_SIZE) + MULTIPART_OVERHEAD_BYTES);
+  if (!bodyLength.ok) {
+    return response({
+      error: bodyLength.reason === "too_large"
+        ? "Общий размер двух файлов превышает допустимый предел."
+        : "Для загрузки требуется точный размер запроса.",
+      code: bodyLength.reason === "too_large" ? "PAYLOAD_TOO_LARGE" : "CONTENT_LENGTH_REQUIRED",
+    }, bodyLength.reason === "too_large" ? 413 : 411);
+  }
   const form = await request.formData();
   const locale = form.get("locale") === "uz" ? "uz" : "ru";
   if (form.get("consent") !== "true") {
@@ -163,7 +177,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
       comparisonId, version: "two", workspaceId: workspace.id, userId: user.id,
     });
     prepared.push(versionTwo);
-    if (versionOne.id === versionTwo.id) {
+    if (
+      versionOne.id === versionTwo.id
+      || (
+        versionOne.sourceFileId
+        && versionOne.sourceFileId === versionTwo.sourceFileId
+      )
+    ) {
       return response({
         error: locale === "ru" ? "Выберите два независимых файла или версии." : "Ikki mustaqil fayl yoki versiyani tanlang.",
         code: "SAME_FILE_REFERENCE",
@@ -172,12 +192,18 @@ export const POST = withApiErrors(async function POST(request: Request) {
 
     for (const file of prepared) {
       if (file.created && file.bytes) {
-        await putPrivateObject(file.r2Key, file.bytes, file.mimeType, {
-          workspaceId: workspace.id,
-          ownerUserId: user.id,
-          comparisonId,
-          sha256: file.sha256 || "",
+        const evidence = await quarantineScanAndStorePrivateObject({
+          key: file.r2Key,
+          bytes: file.bytes,
+          mimeType: file.mimeType,
+          metadata: {
+            workspaceId: workspace.id,
+            ownerUserId: user.id,
+            comparisonId,
+            kind: "comparison_version",
+          },
         });
+        file.sha256 = evidence.sha256;
       }
     }
 
@@ -242,6 +268,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
           : "DOCX tuzilma va ochish xavfsizligi tekshiruvidan o‘tmadi.",
         code: error.code,
       }, 400);
+    }
+    if (error instanceof QuarantinedUploadError) {
+      const unsafe = error.code === "FILE_UNSAFE";
+      return response({
+        code: error.code,
+        error: unsafe
+          ? (locale === "ru" ? "Файл не прошёл проверку безопасности." : "Fayl xavfsizlik tekshiruvidan o‘tmadi.")
+          : (locale === "ru" ? "Проверка безопасности файла временно недоступна." : "Fayl xavfsizligini tekshirish vaqtincha mavjud emas."),
+      }, unsafe ? 422 : 503);
     }
     const message = error instanceof Error ? error.message : String(error);
     const [code, detail] = message.includes(":") ? message.split(/:(.*)/s, 2) : [message, ""];

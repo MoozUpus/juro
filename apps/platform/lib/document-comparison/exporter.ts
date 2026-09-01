@@ -2,7 +2,9 @@ import { generateDocx } from "../document-builder/generation/docx";
 import { generatePdf } from "../document-builder/generation/pdf";
 import { AnalysisExportError } from "../document-analysis/exporter";
 import { comparisonReportParagraphs } from "./report";
+import { assertComparisonSourceFilesClean } from "./scan-evidence";
 import { comparisonChanges, parsedSummary, verifiedSourcesForChanges } from "./storage";
+import { ComparisonProcessingError } from "./types";
 
 export type ComparisonExportFormat = "pdf" | "docx";
 
@@ -128,6 +130,19 @@ export async function executeComparisonExportJob(
 ): Promise<{ status: "completed" | "already_completed"; exportId: string }> {
   const row = await sourceRow(env.DB, exportId, workspaceId);
   if (!row) throw new AnalysisExportError("ANALYSIS_EXPORT_NOT_FOUND", false, 404);
+  try {
+    await assertComparisonSourceFilesClean(env.DB, {
+      versionOneFileId: row.versionOneFileId,
+      versionTwoFileId: row.versionTwoFileId,
+      workspaceId: row.workspaceId,
+      ownerUserId: row.ownerUserId,
+    }, env.BUCKET);
+  } catch (error) {
+    if (error instanceof ComparisonProcessingError) {
+      throw new AnalysisExportError("ANALYSIS_EXPORT_INVALID_SOURCE", false, 422);
+    }
+    throw error;
+  }
   if (row.status === "completed") {
     await verifyCompleted(env.BUCKET, row);
     return { status: "already_completed", exportId };

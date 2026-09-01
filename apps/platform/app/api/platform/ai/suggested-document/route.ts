@@ -49,7 +49,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     const idempotency = aiSuggestedDocumentIdempotencyKeySchema.safeParse(request.headers.get("idempotency-key"));
     if (!idempotency.success) return response({ code: "AI_SUGGESTED_DOCUMENT_INVALID", error: localizedError(parsed.data.locale, "AI_SUGGESTED_DOCUMENT_INVALID") }, 400);
     const result = await createAiSuggestedDocumentDraft({
-      db, workspaceId: workspace.id, user,
+      db, workspaceId: workspace.id, workspaceRole: workspace.role, user,
       assistantMessageId: parsed.data.assistantMessageId,
       locale: parsed.data.locale,
       fields: parsed.data.fields,

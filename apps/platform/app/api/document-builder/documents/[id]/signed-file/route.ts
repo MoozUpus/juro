@@ -3,9 +3,10 @@ import { apiError, badRequest, forbidden, jsonResponse } from "../../../../../..
 import { createDocumentVersion } from "../../../../../../lib/document-builder/document-versions";
 import { requireOwner } from "../../../../../../lib/document-builder/permissions";
 import { addActivity, isoNow } from "../../../../../../lib/document-builder/storage/db";
-import { sanitizeFileName, validateUpload, validateUploadBytes } from "../../../../../../lib/document-builder/storage/files";
+import { MAX_FILE_SIZE, sanitizeFileName, validateUpload, validateUploadBytes } from "../../../../../../lib/document-builder/storage/files";
 import { QuarantinedUploadError, quarantineScanAndStorePrivateObject } from "../../../../../../lib/document-builder/storage/quarantined-upload";
 import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
+import { MULTIPART_OVERHEAD_BYTES, requiredContentLength } from "../../../../../../lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +20,20 @@ export async function POST(request: Request, context: Context): Promise<Response
     const access = await requireOwner(id, user.id);
     if (!access?.workspaceId) return forbidden();
     if (access.document.signedFileId) return jsonResponse({ error: "Подписанный PDF уже загружен и не может быть заменён.", code: "SIGNED_FILE_EXISTS" }, { status: 409 });
+    const bodyLength = requiredContentLength(request, MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES);
+    if (!bodyLength.ok) {
+      return jsonResponse({
+        error: bodyLength.reason === "too_large" ? "Размер PDF превышает 10 МБ." : "Для загрузки требуется точный размер запроса.",
+        code: bodyLength.reason === "too_large" ? "UPLOAD_PAYLOAD_TOO_LARGE" : "CONTENT_LENGTH_REQUIRED",
+      }, { status: bodyLength.reason === "too_large" ? 413 : 411 });
+    }
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return badRequest("PDF-файл не выбран.");
     const validationError = validateUpload(file, true);
     if (validationError) return badRequest(validationError, "INVALID_SIGNED_FILE");
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const inspection = validateUploadBytes(file, bytes);
+    const inspection = await validateUploadBytes(file, bytes);
     if (inspection) return badRequest(inspection.message, inspection.code);
     const db = requireD1();
     const bucket = requireR2();

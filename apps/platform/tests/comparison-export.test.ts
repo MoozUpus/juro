@@ -15,7 +15,7 @@ import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 const now = "2026-08-04T00:00:00.000Z";
 
 class FakeR2Bucket {
-  readonly objects = new Map<string, { bytes: Uint8Array; sha256: string }>();
+  readonly objects = new Map<string, { bytes: Uint8Array; sha256: string; customMetadata?: Record<string, string> }>();
   async head(key: string) { const value = this.objects.get(key); return value ? this.metadata(key, value) : null; }
   async get(key: string) {
     const value = this.objects.get(key);
@@ -27,20 +27,20 @@ class FakeR2Bucket {
       async json<T>() { return JSON.parse(new TextDecoder().decode(bytes)) as T; },
       async blob() { return new Blob([bytes]); } };
   }
-  async put(key: string, value: unknown, options?: { onlyIf?: Headers; sha256?: string }) {
+  async put(key: string, value: unknown, options?: { onlyIf?: Headers; sha256?: string; customMetadata?: Record<string, string> }) {
     if (options?.onlyIf?.get("if-none-match") === "*" && this.objects.has(key)) return null;
     assert.ok(value instanceof Uint8Array);
     const bytes = value.slice();
     const sha256 = await sha256Hex(bytes);
     assert.equal(options?.sha256, sha256);
-    const stored = { bytes, sha256 };
+    const stored = { bytes, sha256, customMetadata: options?.customMetadata };
     this.objects.set(key, stored);
     return this.metadata(key, stored);
   }
   async delete(key: string) { this.objects.delete(key); }
-  private metadata(key: string, value: { bytes: Uint8Array; sha256: string }) {
+  private metadata(key: string, value: { bytes: Uint8Array; sha256: string; customMetadata?: Record<string, string> }) {
     return { key, version: "synthetic", size: value.bytes.byteLength, etag: value.sha256, httpEtag: `"${value.sha256}"`,
-      uploaded: new Date(now), httpMetadata: {}, customMetadata: {}, range: undefined,
+      uploaded: new Date(now), httpMetadata: {}, customMetadata: value.customMetadata ?? {}, range: undefined,
       checksums: { sha256: hexArrayBuffer(value.sha256) }, storageClass: "Standard", ssecKeyMd5: undefined, writeHttpMetadata() {} };
   }
 }
@@ -63,6 +63,8 @@ for (const format of ["pdf", "docx"] as const) {
     const bucket = new FakeR2Bucket();
     try {
       seed(sqlite);
+      bucket.objects.set("safe/one", cleanSourceObject("1".repeat(64)));
+      bucket.objects.set("safe/two", cleanSourceObject("2".repeat(64)));
       const input = { db: d1, comparisonId: "comparison-a", workspaceId: "workspace-a", userId: "user-a", format, idempotencyKey: `comparison-${format}-export-0001` };
       const requested = await requestComparisonExport(input);
       assert.equal(requested.replay, false);
@@ -98,7 +100,7 @@ for (const format of ["pdf", "docx"] as const) {
         { DB: d1, BUCKET: bucket as unknown as R2Bucket },
         { exportId: record.id, workspaceId: "workspace-a", userId: "user-a" },
       ), { status: "deleted", exportId: record.id });
-      assert.equal(bucket.objects.size, 0);
+      assert.equal(bucket.objects.size, 2);
       assert.deepEqual(await deleteComparisonExport(
         { DB: d1, BUCKET: bucket as unknown as R2Bucket },
         { exportId: record.id, workspaceId: "workspace-a", userId: "user-a" },
@@ -162,4 +164,20 @@ async function sha256Hex(value: Uint8Array): Promise<string> {
 
 function hexArrayBuffer(value: string): ArrayBuffer {
   return Uint8Array.from(value.match(/../g)!.map((byte) => Number.parseInt(byte, 16))).buffer;
+}
+
+function cleanSourceObject(sha256: string) {
+  return {
+    bytes: new Uint8Array(1200),
+    sha256,
+    customMetadata: {
+      sha256,
+      scanStatus: "clean",
+      scanId: "scan-test",
+      scanProvider: "clamav",
+      scanEngine: "clamav",
+      scanEngineVersion: "1.4.3",
+      scanSignatureVersion: "synthetic",
+    },
+  };
 }

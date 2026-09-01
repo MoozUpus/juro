@@ -64,5 +64,6 @@ function message(code: string) {
   if (code === "ANALYSIS_EXPORT_FORMAT_INVALID") return "Проверьте формат, вариант и идентификатор исправленной версии.";
   if (code === "ANALYSIS_EXPORT_NOT_READY") return "Экспорт доступен только после завершения анализа.";
   if (code === "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT") return "Idempotency-Key некорректен или уже относится к другому экспорту.";
+  if (code === "ANALYSIS_EXPORT_CAPACITY_UNAVAILABLE") return "Для одного анализа доступно не больше 20 операций экспорта.";
   return "Экспорт не удалось создать.";
 }

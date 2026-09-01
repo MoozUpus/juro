@@ -11,7 +11,10 @@ import {
 } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { pruneUnusedVinextFontArtifacts } from "./prune-unused-vinext-font-artifacts.mjs";
+import {
+  normalizeVinextFontArtifactReferences,
+  pruneUnusedVinextFontArtifacts,
+} from "./prune-unused-vinext-font-artifacts.mjs";
 
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const runtimeRoot = resolve(
@@ -93,6 +96,7 @@ const installInheritedEnvironmentKeys = new Set([
 
 const coreTestFiles = [
   "tests/document-builder.test.ts",
+  "tests/signed-share-security.test.ts",
   "tests/pinfl-validation.test.ts",
   "tests/document-comparison.test.ts",
   "tests/comparison-export.test.ts",
@@ -865,6 +869,15 @@ async function build(environment) {
       "SITES_BUILD_KILL_AFTER",
     ),
   });
+  const normalizedFontReferences = await normalizeVinextFontArtifactReferences({
+    artifactRoot: resolve(projectRoot, "dist"),
+    fontCacheRoot: resolve(projectRoot, ".vinext", "fonts"),
+  });
+  if (normalizedFontReferences.rewrittenFiles.length > 0) {
+    console.log(
+      `Normalized Vinext font references: ${normalizedFontReferences.rewrittenFiles.join(", ")}`,
+    );
+  }
   const fontPrune = await pruneUnusedVinextFontArtifacts({
     artifactRoot: resolve(projectRoot, "dist"),
   });

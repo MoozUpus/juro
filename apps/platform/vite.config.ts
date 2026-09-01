@@ -51,7 +51,7 @@ export default defineConfig(async ({ command }) => {
       exclude: ["lucide-react"],
     },
     server: {
-      host: "0.0.0.0",
+      host: "127.0.0.1",
       allowedHosts: ["terminal.local"],
       ...(isCodexSeatbeltSandbox
         ? { watch: { useFsEvents: false, usePolling: true } }

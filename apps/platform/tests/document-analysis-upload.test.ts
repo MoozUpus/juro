@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
   documentAnalysisUploadForUser,
   DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT,
+  DOCUMENT_ANALYSIS_MAX_TOTAL_BYTES,
   hashUploadIntent,
   initializeDocumentAnalysisUpload,
   parseDocumentAnalysisUploadIntent,
@@ -124,7 +126,140 @@ test("upload initialization is tenant-scoped, idempotent, and binds the request 
   assert.equal("fileName" in JSON.parse(event.metadataJson), false);
 });
 
-function uploadDatabase() {
+test("document analysis allocation quota blocks a 21st active analysis while replay stays allocation-free", async () => {
+  const sqlite = uploadDatabase();
+  const db = sqliteD1(sqlite);
+  const allocations: Array<Awaited<ReturnType<typeof initializeDocumentAnalysisUpload>>> = [];
+  for (let index = 0; index < 20; index += 1) {
+    const nextIntent = parseDocumentAnalysisUploadIntent({
+      ...intent,
+      fileName: `contract-${index}.pdf`,
+      sha256: index.toString(16).padStart(64, "0"),
+    });
+    allocations.push(await initializeDocumentAnalysisUpload({
+      db,
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      idempotencyKey: `upload-quota-key-${index.toString().padStart(3, "0")}`,
+      requestHash: await hashUploadIntent(nextIntent),
+      intent: nextIntent,
+    }));
+  }
+  const lastIntent = parseDocumentAnalysisUploadIntent({
+    ...intent,
+    fileName: "contract-19.pdf",
+    sha256: (19).toString(16).padStart(64, "0"),
+  });
+  const replay = await initializeDocumentAnalysisUpload({
+    db,
+    workspaceId: "workspace-a",
+    userId: "user-a",
+    idempotencyKey: "upload-quota-key-019",
+    requestHash: await hashUploadIntent(lastIntent),
+    intent: lastIntent,
+  });
+  assert.equal(replay.replay, true);
+  assert.equal(replay.record.analysisId, allocations.at(-1)?.record.analysisId);
+
+  const blockedIntent = parseDocumentAnalysisUploadIntent({
+    ...intent,
+    fileName: "contract-blocked.pdf",
+    sha256: "f".repeat(64),
+  });
+  await assert.rejects(
+    initializeDocumentAnalysisUpload({
+      db,
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      idempotencyKey: "upload-quota-key-blocked",
+      requestHash: await hashUploadIntent(blockedIntent),
+      intent: blockedIntent,
+    }),
+    (error: unknown) => error instanceof Error
+      && "code" in error
+      && error.code === "DOCUMENT_ANALYSIS_CAPACITY_UNAVAILABLE"
+      && "status" in error
+      && error.status === 429,
+  );
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM document_analyses").get() as { count: number }).count, 20);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM document_files").get() as { count: number }).count, 20);
+  assert.equal((sqlite.prepare("SELECT count(*) AS count FROM idempotency_keys").get() as { count: number }).count, 20);
+});
+
+test("migration trigger independently enforces the aggregate byte ceiling", () => {
+  const migration = readFileSync(new URL("../drizzle/0148_document_analysis_resource_guardrails.sql", import.meta.url), "utf8");
+  assert.match(migration, new RegExp(String(DOCUMENT_ANALYSIS_MAX_TOTAL_BYTES)));
+  const sqlite = uploadDatabase();
+  const now = "2026-09-01T00:00:00.000Z";
+  sqlite.prepare(`INSERT INTO document_files
+    (id,workspace_id,document_id,owner_user_id,kind,r2_key,file_name,mime_type,size_bytes,sha256,archived_at,created_at,updated_at)
+    VALUES ('oversized-file','workspace-a',NULL,'user-a','analysis_upload_pending','quarantine-v2/workspace-a/oversized','large.pdf','application/pdf',1073741825,?,NULL,?,?)`)
+    .run("f".repeat(64), now, now);
+  assert.throws(() => sqlite.prepare(`INSERT INTO document_analyses
+    (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,resource_scope,abandoned_after,created_at,updated_at)
+    VALUES ('oversized-analysis','workspace-a','user-a','oversized-file','initiated','{}',NULL,'2026-07-30','interactive_analysis','2026-09-02T00:00:00.000Z',?,?)`)
+    .run(now, now), /DOCUMENT_ANALYSIS_BYTE_QUOTA_EXCEEDED/);
+});
+
+test("migration caps derivative exports and fences references after deletion starts", async () => {
+  const sqlite = uploadDatabase();
+  const db = sqliteD1(sqlite);
+  const created = await initializeDocumentAnalysisUpload({
+    db,
+    workspaceId: "workspace-a",
+    userId: "user-a",
+    idempotencyKey: "upload-export-guard-key",
+    requestHash: await hashUploadIntent(intent),
+    intent,
+  });
+  sqlite.prepare("UPDATE document_analyses SET status='completed' WHERE id=?")
+    .run(created.record.analysisId);
+  for (let index = 0; index < 20; index += 1) {
+    sqlite.prepare("INSERT INTO analysis_exports(id,analysis_id,idempotency_key) VALUES (?,?,?)")
+      .run(`export-${index}`, created.record.analysisId, `export-key-${index}`);
+  }
+  assert.throws(
+    () => sqlite.prepare("INSERT INTO analysis_report_exports(id,analysis_id,idempotency_key) VALUES (?,?,?)")
+      .run("export-blocked", created.record.analysisId, "export-key-blocked"),
+    /ANALYSIS_EXPORT_CAPACITY_EXCEEDED/,
+  );
+
+  sqlite.prepare("UPDATE document_analyses SET deletion_requested_at=?,status='deletion_pending' WHERE id=?")
+    .run("2026-09-01T00:00:00.000Z", created.record.analysisId);
+  sqlite.prepare("INSERT INTO user_document_index_jobs(id,analysis_id,status) VALUES (?,?,?)")
+    .run("index-job-after-delete", created.record.analysisId, "queued");
+  assert.throws(
+    () => sqlite.prepare("INSERT INTO document_comparisons(version_one_file_id,version_two_file_id) VALUES (?,?)")
+      .run(created.record.fileId, "unrelated-file"),
+    /DOCUMENT_ANALYSIS_DELETION_PENDING/,
+  );
+  assert.throws(
+    () => sqlite.prepare("UPDATE user_document_index_jobs SET status='processing' WHERE id=?")
+      .run("index-job-after-delete"),
+    /DOCUMENT_ANALYSIS_DELETION_PENDING/,
+  );
+});
+
+test("migration backfills legacy export keys into the durable cross-format registry", () => {
+  const sqlite = uploadDatabase({ legacyExport: true });
+  try {
+    assert.deepEqual({ ...sqlite.prepare(`SELECT analysis_id AS analysisId,export_kind AS exportKind
+      FROM analysis_export_idempotency_registry WHERE idempotency_key='legacy-export-key'`).get() }, {
+      analysisId: "legacy-analysis",
+      exportKind: "json",
+    });
+    sqlite.prepare("DELETE FROM analysis_exports WHERE id='legacy-export'").run();
+    assert.throws(
+      () => sqlite.prepare("INSERT INTO analysis_report_exports(id,analysis_id,idempotency_key) VALUES (?,?,?)")
+        .run("legacy-report-reuse", "legacy-analysis", "legacy-export-key"),
+      /ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT/,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+function uploadDatabase(options: { legacyExport?: boolean } = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`
     PRAGMA foreign_keys=ON;
@@ -135,9 +270,33 @@ function uploadDatabase() {
     CREATE TABLE idempotency_keys (key TEXT PRIMARY KEY,scope TEXT NOT NULL,request_hash TEXT NOT NULL,status TEXT NOT NULL,result_ref TEXT,expires_at TEXT NOT NULL,completed_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
     CREATE TABLE document_files (id TEXT PRIMARY KEY,workspace_id TEXT,document_id TEXT,owner_user_id TEXT NOT NULL,kind TEXT NOT NULL,r2_key TEXT NOT NULL UNIQUE,file_name TEXT NOT NULL,mime_type TEXT NOT NULL,size_bytes INTEGER NOT NULL,sha256 TEXT,archived_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(workspace_id) REFERENCES workspaces(id),FOREIGN KEY(owner_user_id) REFERENCES user_profiles(id));
     CREATE TABLE document_analyses (id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,owner_user_id TEXT NOT NULL,uploaded_file_id TEXT NOT NULL UNIQUE,case_id TEXT,case_link_revision INTEGER NOT NULL DEFAULT 0,case_linked_by_user_id TEXT,status TEXT NOT NULL,summary_json TEXT,result_sha256 TEXT,error_code TEXT,consent_version TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(workspace_id) REFERENCES workspaces(id),FOREIGN KEY(owner_user_id) REFERENCES user_profiles(id),FOREIGN KEY(uploaded_file_id) REFERENCES document_files(id));
+    CREATE TABLE builder_document_analysis_handoffs (analysis_id TEXT);
+    CREATE TABLE legal_corpus_owner_upload_requests (analysis_id TEXT,file_id TEXT);
+    CREATE TABLE document_comparisons (version_one_file_id TEXT,version_two_file_id TEXT);
+    CREATE TABLE analysis_exports (id TEXT PRIMARY KEY,analysis_id TEXT NOT NULL,idempotency_key TEXT NOT NULL UNIQUE);
+    CREATE TABLE analysis_report_exports (id TEXT PRIMARY KEY,analysis_id TEXT NOT NULL,idempotency_key TEXT NOT NULL UNIQUE);
+    CREATE TABLE user_document_index_jobs (id TEXT PRIMARY KEY,analysis_id TEXT NOT NULL,status TEXT NOT NULL);
     CREATE TABLE consents (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,workspace_id TEXT,type TEXT NOT NULL,version TEXT NOT NULL,scope_json TEXT NOT NULL,granted_at TEXT NOT NULL);
     CREATE TABLE workspace_audit_events (id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,actor_user_id TEXT,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,action TEXT NOT NULL,metadata_json TEXT NOT NULL,created_at TEXT NOT NULL);
   `);
+  if (options.legacyExport) {
+    sqlite.exec(`
+      INSERT INTO document_files
+        (id,workspace_id,document_id,owner_user_id,kind,r2_key,file_name,mime_type,size_bytes,sha256,archived_at,created_at,updated_at)
+      VALUES
+        ('legacy-file','workspace-a',NULL,'user-a','analysis_upload','safe/workspace-a/legacy-file','legacy.pdf','application/pdf',1024,NULL,NULL,'2026-08-31T00:00:00.000Z','2026-08-31T00:00:00.000Z');
+      INSERT INTO document_analyses
+        (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,result_sha256,error_code,consent_version,created_at,updated_at)
+      VALUES
+        ('legacy-analysis','workspace-a','user-a','legacy-file','completed','{}',NULL,NULL,'2026-07-30','2026-08-31T00:00:00.000Z','2026-08-31T00:00:00.000Z');
+      INSERT INTO analysis_exports(id,analysis_id,idempotency_key)
+      VALUES ('legacy-export','legacy-analysis','legacy-export-key');
+    `);
+  }
+  const migration = readFileSync(new URL("../drizzle/0148_document_analysis_resource_guardrails.sql", import.meta.url), "utf8");
+  for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
+    sqlite.exec(statement);
+  }
   return sqlite;
 }
 

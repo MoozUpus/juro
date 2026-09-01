@@ -4,7 +4,7 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-07-26",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "keep_vars": true,
+  "keep_vars": false,
   "assets": {
     "binding": "ASSETS"
   },
@@ -581,7 +581,7 @@
           "database_name": "juro-production",
           "database_id": "4cce509b-0e02-4ca9-a3ba-a5ce1327aeda",
           "migrations_dir": "./drizzle",
-          "migrations_pattern": "./drizzle/{0121,012[4-9],013[0-9],014[0-6]}_*.sql"
+          "migrations_pattern": "./drizzle/{0121,012[4-9],013[0-9],014[0-9]}_*.sql"
         }
       ],
       "migrations": [

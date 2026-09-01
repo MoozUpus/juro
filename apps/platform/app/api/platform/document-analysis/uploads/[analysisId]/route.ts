@@ -70,9 +70,20 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
     }
     if (!request.body) return response({ code: "EMPTY_FILE", error: "Файл пуст." }, 400);
 
+    const leaseStartedAt = new Date().toISOString();
+    const claimed = await db.prepare(
+      `UPDATE document_analyses SET status='uploading',error_code=NULL,updated_at=?
+       WHERE id=? AND workspace_id=? AND owner_user_id=?
+         AND deletion_requested_at IS NULL AND status IN ('initiated','upload_failed')`,
+    ).bind(leaseStartedAt, analysisId, workspace.id, user.id).run();
+    if (Number(claimed.meta?.changes ?? 0) !== 1) {
+      return response({ code: "UPLOAD_STATE_CONFLICT", error: "Загрузка уже выполняется или анализ удаляется." }, 409);
+    }
+
     let stored: R2Object | null;
+    const quarantine = requireQuarantineR2();
     try {
-      stored = await requireQuarantineR2().put(record.r2Key, request.body, {
+      stored = await quarantine.put(record.r2Key, request.body, {
         onlyIf: new Headers({ "if-none-match": "*" }),
         sha256: record.sha256,
         httpMetadata: { contentType: record.mimeType, cacheControl: "private, no-store" },
@@ -85,35 +96,62 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
         },
       });
     } catch {
+      await quarantine.delete(record.r2Key).catch(() => undefined);
       await db.prepare(
-        "UPDATE document_analyses SET status='upload_failed',error_code='UPLOAD_INTEGRITY_FAILED',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
+        "UPDATE document_analyses SET status='upload_failed',error_code='UPLOAD_INTEGRITY_FAILED',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND status='uploading'",
       ).bind(new Date().toISOString(), analysisId, workspace.id, user.id).run();
       return response({ code: "UPLOAD_INTEGRITY_FAILED", error: "R2 отклонил файл: проверьте размер и SHA-256." }, 422);
     }
     if (!stored) {
-      stored = await requireQuarantineR2().head(record.r2Key);
+      stored = await quarantine.head(record.r2Key);
     }
     if (!stored || stored.size !== record.sizeBytes || arrayBufferHex(stored.checksums.sha256) !== record.sha256) {
-      await requireQuarantineR2().delete(record.r2Key);
+      await quarantine.delete(record.r2Key);
       await db.prepare(
-        "UPDATE document_analyses SET status='upload_failed',error_code='UPLOAD_INTEGRITY_FAILED',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
+        "UPDATE document_analyses SET status='upload_failed',error_code='UPLOAD_INTEGRITY_FAILED',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND status='uploading'",
       ).bind(new Date().toISOString(), analysisId, workspace.id, user.id).run();
       return response({ code: "UPLOAD_INTEGRITY_FAILED", error: "Размер или SHA-256 сохранённого объекта не совпадает." }, 422);
     }
     const now = new Date().toISOString();
-    await db.batch([
+    const finalized = await db.batch([
       db.prepare(
-        "UPDATE document_files SET kind='analysis_uploaded',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND kind='analysis_upload_pending'",
-      ).bind(now, record.fileId, workspace.id, user.id),
-      db.prepare(
-        "UPDATE document_analyses SET status='uploaded',error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND status IN ('initiated','upload_failed')",
+        "UPDATE document_analyses SET status='uploaded',error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND deletion_requested_at IS NULL AND status='uploading'",
       ).bind(now, analysisId, workspace.id, user.id),
+      db.prepare(
+        `UPDATE document_files SET kind='analysis_uploaded',updated_at=?
+         WHERE id=? AND workspace_id=? AND owner_user_id=? AND kind='analysis_upload_pending'
+           AND EXISTS (
+             SELECT 1 FROM document_analyses analysis
+             WHERE analysis.id=? AND analysis.uploaded_file_id=document_files.id
+               AND analysis.workspace_id=document_files.workspace_id
+               AND analysis.owner_user_id=document_files.owner_user_id
+               AND analysis.status='uploaded' AND analysis.deletion_requested_at IS NULL
+           )`,
+      ).bind(now, record.fileId, workspace.id, user.id, analysisId),
       db.prepare(
         `INSERT INTO workspace_audit_events
          (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
-         VALUES (?,?,?,'document_analysis',?,'upload_completed',?,?)`,
-      ).bind(crypto.randomUUID(), workspace.id, user.id, analysisId, JSON.stringify({ sizeBytes: stored.size, sha256Verified: true }), now),
+         SELECT ?,?,?, 'document_analysis',?,'upload_completed',?,?
+         FROM document_analyses analysis
+         WHERE analysis.id=? AND analysis.workspace_id=? AND analysis.owner_user_id=?
+           AND analysis.status='uploaded' AND analysis.deletion_requested_at IS NULL`,
+      ).bind(
+        crypto.randomUUID(), workspace.id, user.id, analysisId,
+        JSON.stringify({ sizeBytes: stored.size, sha256Verified: true }), now,
+        analysisId, workspace.id, user.id,
+      ),
     ]);
+    if (
+      Number(finalized[0]?.meta?.changes ?? 0) !== 1
+      || Number(finalized[1]?.meta?.changes ?? 0) !== 1
+    ) {
+      await quarantine.delete(record.r2Key).catch(() => undefined);
+      await db.prepare(
+        `UPDATE document_analyses SET status='upload_failed',error_code='UPLOAD_STATE_CONFLICT',updated_at=?
+         WHERE id=? AND workspace_id=? AND owner_user_id=? AND status='uploaded'`,
+      ).bind(new Date().toISOString(), analysisId, workspace.id, user.id).run().catch(() => undefined);
+      return response({ code: "UPLOAD_STATE_CONFLICT", error: "Загрузка не была зафиксирована. Повторите запрос." }, 409);
+    }
     return response({ analysis: { ...publicRecord(record), status: "uploaded", errorCode: null } });
   } catch (error) {
     if (error instanceof OperationalFeatureError) {

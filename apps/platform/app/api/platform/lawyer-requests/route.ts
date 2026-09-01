@@ -4,7 +4,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { lawyerRequestSchema, localizedHandoffError } from "../../../../lib/platform/lawyer-request";
-import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
 import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../lib/operations/operational-feature-flags";
 
 function response(body: unknown, status = 200) {
@@ -40,7 +40,7 @@ export const GET = withApiErrors(async function GET() {
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const parsed = await parseJsonRequest(request, lawyerRequestSchema, 4_096);
   const locale = parsed.ok ? parsed.data.locale : "ru";
   if (!parsed.ok) {

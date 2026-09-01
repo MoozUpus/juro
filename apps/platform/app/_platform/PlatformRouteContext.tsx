@@ -3,17 +3,22 @@
 import { createContext, useContext } from "react";
 
 const PlatformBasePathContext = createContext<string | null>(null);
+const PlatformWorkspaceIdContext = createContext<string | null>(null);
 
 export function PlatformRouteProvider({
   basePath,
+  workspaceId,
   children,
 }: {
   basePath: string;
+  workspaceId: string;
   children: React.ReactNode;
 }) {
   return (
     <PlatformBasePathContext.Provider value={basePath}>
-      {children}
+      <PlatformWorkspaceIdContext.Provider value={workspaceId}>
+        {children}
+      </PlatformWorkspaceIdContext.Provider>
     </PlatformBasePathContext.Provider>
   );
 }
@@ -21,5 +26,11 @@ export function PlatformRouteProvider({
 export function usePlatformBasePath(): string {
   const value = useContext(PlatformBasePathContext);
   if (!value) throw new Error("PLATFORM_ROUTE_CONTEXT_REQUIRED");
+  return value;
+}
+
+export function usePlatformWorkspaceId(): string {
+  const value = useContext(PlatformWorkspaceIdContext);
+  if (!value) throw new Error("PLATFORM_WORKSPACE_CONTEXT_REQUIRED");
   return value;
 }

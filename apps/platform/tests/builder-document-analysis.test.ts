@@ -167,6 +167,57 @@ test("R2 failure is fail-closed and retryable with the same request key", async 
   } finally { sqlite.close(); }
 });
 
+test("builder analysis cannot bypass the shared 20-analysis allocation quota", async () => {
+  const { sqlite, d1 } = seed();
+  const bucket = new FakeR2Bucket();
+  try {
+    let lastKey = "";
+    let lastResult: Awaited<ReturnType<typeof startBuilderDocumentAnalysis>> | null = null;
+    for (let index = 0; index < 20; index += 1) {
+      lastKey = `builder-analysis-quota-${index.toString().padStart(4, "0")}`;
+      lastResult = await startBuilderDocumentAnalysis({
+        db: d1,
+        bucket: bucket as unknown as R2Bucket,
+        workspaceId: "workspace-a",
+        userId: "user-a",
+        documentId: "document-a",
+        mode: "quick",
+        locale: "ru",
+        idempotencyKey: lastKey,
+      });
+    }
+    const replay = await startBuilderDocumentAnalysis({
+      db: d1,
+      bucket: bucket as unknown as R2Bucket,
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      documentId: "document-a",
+      mode: "quick",
+      locale: "ru",
+      idempotencyKey: lastKey,
+    });
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.analysisId, lastResult?.analysisId);
+    await assert.rejects(
+      startBuilderDocumentAnalysis({
+        db: d1,
+        bucket: bucket as unknown as R2Bucket,
+        workspaceId: "workspace-a",
+        userId: "user-a",
+        documentId: "document-a",
+        mode: "quick",
+        locale: "ru",
+        idempotencyKey: "builder-analysis-quota-blocked",
+      }),
+      (error: unknown) => error instanceof BuilderAnalysisError
+        && error.code === "BUILDER_ANALYSIS_CAPACITY_UNAVAILABLE"
+        && error.status === 429,
+    );
+    assert.equal((sqlite.prepare("SELECT count(*) AS total FROM document_analyses").get() as { total: number }).total, 20);
+    assert.equal(bucket.objects.size, 20);
+  } finally { sqlite.close(); }
+});
+
 test("corrected Claude analysis version returns to its unchanged Builder revision as an immutable checkpoint", async () => {
   const documentId = "00000000-0000-4000-8000-000000000095";
   const { sqlite, d1 } = seed(documentId);

@@ -629,6 +629,10 @@ export const standaloneSignedPdfShares = sqliteTable(
     publicToken: text("public_token").notNull(),
     accessCode: text("access_code").notNull(),
     accessCodeHash: text("access_code_hash").notNull(),
+    accessCodeDigits: integer("access_code_digits").notNull().default(4),
+    verificationAttemptCount: integer("verification_attempt_count").notNull().default(0),
+    verificationWindowStartedAt: text("verification_window_started_at"),
+    verificationLockedUntil: text("verification_locked_until"),
     expiresAt: text("expires_at").notNull(),
     deactivatedAt: text("deactivated_at"),
     deletedAt: text("deleted_at"),
@@ -646,7 +650,10 @@ export const signedShareSessions = sqliteTable(
     expiresAt: text("expires_at").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (table) => [index("signed_share_sessions_share_idx").on(table.shareId)],
+  (table) => [
+    index("signed_share_sessions_share_idx").on(table.shareId),
+    index("signed_share_sessions_expiry_idx").on(table.expiresAt),
+  ],
 );
 
 export const consultationRequests = sqliteTable(
@@ -1864,6 +1871,26 @@ export const aiDocumentPrefillHandoffs = sqliteTable("ai_document_prefill_handof
   uniqueIndex("ai_document_prefill_handoffs_request_uidx").on(table.workspaceId, table.userId, table.idempotencyKeySha256),
   uniqueIndex("ai_document_prefill_handoffs_document_uidx").on(table.documentId),
   index("ai_document_prefill_handoffs_source_idx").on(table.assistantMessageId, table.createdAt),
+]);
+
+export const aiQuestionIntakes = sqliteTable("ai_question_intakes", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  questionCiphertext: text("question_ciphertext"),
+  questionIv: text("question_iv"),
+  questionKeyVersion: text("question_key_version"),
+  expiresAt: text("expires_at").notNull(),
+  consumedAt: text("consumed_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  check("ai_question_intakes_hash_check", sql`length(${table.tokenHash}) = 64`),
+  check("ai_question_intakes_expiry_check", sql`${table.expiresAt} > ${table.createdAt}`),
+  check("ai_question_intakes_payload_check", sql`(${table.consumedAt} IS NULL AND ${table.questionCiphertext} IS NOT NULL AND ${table.questionIv} IS NOT NULL AND ${table.questionKeyVersion} IS NOT NULL) OR (${table.consumedAt} IS NOT NULL AND ${table.questionCiphertext} IS NULL AND ${table.questionIv} IS NULL AND ${table.questionKeyVersion} IS NULL)`),
+  uniqueIndex("ai_question_intakes_token_uidx").on(table.tokenHash),
+  index("ai_question_intakes_expiry_idx").on(table.expiresAt, table.consumedAt),
+  index("ai_question_intakes_owner_idx").on(table.workspaceId, table.userId, table.createdAt),
 ]);
 
 export const messageBranches = sqliteTable("message_branches", {
@@ -3140,11 +3167,23 @@ export const documentAnalyses = sqliteTable("document_analyses", {
   resultSha256: text("result_sha256"),
   errorCode: text("error_code"),
   consentVersion: text("consent_version").notNull(),
+  resourceScope: text("resource_scope"),
+  abandonedAfter: text("abandoned_after"),
+  deletionRequestedAt: text("deletion_requested_at"),
+  deletionReason: text("deletion_reason"),
+  purgeAttemptCount: integer("purge_attempt_count").notNull().default(0),
+  lastPurgeError: text("last_purge_error"),
   ...timestamps,
 }, (table) => [
   index("document_analyses_workspace_idx").on(table.workspaceId, table.createdAt),
   index("document_analyses_case_idx").on(table.workspaceId, table.caseId, table.updatedAt),
+  index("document_analyses_resource_quota_idx").on(table.workspaceId, table.ownerUserId, table.resourceScope, table.deletionRequestedAt),
+  index("document_analyses_abandoned_idx").on(table.resourceScope, table.deletionRequestedAt, table.abandonedAfter, table.updatedAt, table.id),
+  index("document_analyses_purge_retry_idx").on(table.deletionRequestedAt, table.updatedAt, table.id),
   uniqueIndex("document_analyses_file_uidx").on(table.uploadedFileId),
+  check("document_analyses_resource_scope_check", sql`${table.resourceScope} IS NULL OR ${table.resourceScope} = 'interactive_analysis'`),
+  check("document_analyses_deletion_reason_check", sql`${table.deletionReason} IS NULL OR ${table.deletionReason} IN ('owner_request','abandoned_upload')`),
+  check("document_analyses_purge_attempt_check", sql`${table.purgeAttemptCount} >= 0`),
 ]);
 
 export const builderDocumentAnalysisHandoffs = sqliteTable("builder_document_analysis_handoffs", {
@@ -3459,6 +3498,16 @@ export const analysisReportExports = sqliteTable("analysis_report_exports", {
       AND ${table.errorCode} IS NULL)
     OR (${table.status} <> 'completed' AND ${table.completedAt} IS NULL)
   `),
+]);
+
+export const analysisExportIdempotencyRegistry = sqliteTable("analysis_export_idempotency_registry", {
+  idempotencyKey: text("idempotency_key").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  exportKind: text("export_kind").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("analysis_export_idempotency_registry_analysis_idx").on(table.analysisId, table.createdAt),
+  check("analysis_export_idempotency_registry_kind_check", sql`${table.exportKind} IN ('json','report')`),
 ]);
 
 export const documentComparisons = sqliteTable("document_comparisons", {

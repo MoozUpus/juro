@@ -122,7 +122,9 @@ function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId, public
       setAnalyses(nextAnalyses);
       setCases(nextCases);
       setUploadCaseId(current => current || (initialCaseId && nextCases.some(item => item.id === initialCaseId) ? initialCaseId : ""));
-      setSelected(current => current ? nextAnalyses.find(item => item.id === current.id) ?? current : (nextAnalyses.find(item => item.id === initialAnalysisId) ?? nextAnalyses[0] ?? null));
+      setSelected(current => current
+        ? nextAnalyses.find(item => item.id === current.id) ?? nextAnalyses[0] ?? null
+        : (nextAnalyses.find(item => item.id === initialAnalysisId) ?? nextAnalyses[0] ?? null));
     } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
     finally { setLoading(false); }
   }, [initialAnalysisId, initialCaseId, ru]);
@@ -231,6 +233,8 @@ function AnalysisView({ analysis, cases, ru, onChanged }: { analysis: Analysis; 
   const [caseId, setCaseId] = useState(analysis.caseId ?? "");
   const [caseBusy, setCaseBusy] = useState(false);
   const [caseMessage, setCaseMessage] = useState("");
+  const [deletingAnalysis, setDeletingAnalysis] = useState(false);
+  const [analysisDeleteError, setAnalysisDeleteError] = useState("");
   useEffect(() => { setCaseId(analysis.caseId ?? ""); setCaseMessage(""); }, [analysis.id, analysis.caseId]);
   const formats: AnalysisExportFormat[] = ["json", "pdf", "docx"];
   const exportsByFormat = new Map<AnalysisExportFormat, AnalysisExport>();
@@ -289,10 +293,31 @@ function AnalysisView({ analysis, cases, ru, onChanged }: { analysis: Analysis; 
     } catch (value) { setCaseMessage(value instanceof Error ? value.message : String(value)); }
     finally { setCaseBusy(false); }
   }
+  async function removeAnalysis() {
+    if (!window.confirm(ru
+      ? "Удалить анализ, исходный файл, результаты и экспорты без возможности восстановления?"
+      : "Tahlil, asl fayl, natijalar va eksportlar tiklash imkoniyatisiz o‘chirilsinmi?")) return;
+    setDeletingAnalysis(true);
+    setAnalysisDeleteError("");
+    try {
+      const response = await fetch(`/api/platform/document-analysis/${encodeURIComponent(analysis.id)}`, {
+        method: "DELETE",
+        headers: { "x-juro-csrf": "1" },
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || (ru ? "Анализ не удалён." : "Tahlil o‘chirilmadi."));
+      await onChanged();
+    } catch (value) {
+      setAnalysisDeleteError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setDeletingAnalysis(false);
+    }
+  }
   return <article className="review-result">
-    <div className="review-result-head"><div><small>{statusLabel(analysis.status, ru, retryExhausted)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div><div className="review-result-actions" aria-live="polite">{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}{canOpen && formats.map(format => { const record = exportsByFormat.get(format); const pending = ["queued", "processing", "retrying"].includes(record?.status ?? ""); const failed = record?.status === "failed"; const busy = exportingFormat === format || pending; return <span className="review-export-action" key={format}>{record?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(record.id)}/file`}><Download />{format.toUpperCase()}</a> : <button type="button" disabled={busy || deletingExportId !== null} aria-busy={busy} onClick={() => void requestExport(format)}>{busy ? <LoaderCircle className="spin" /> : failed ? <RefreshCw /> : <Download />}{busy ? (ru ? `${format.toUpperCase()} готовится` : `${format.toUpperCase()} tayyorlanmoqda`) : failed ? (ru ? `Повторить ${format.toUpperCase()}` : `${format.toUpperCase()}ni takrorlash`) : (ru ? `Экспорт ${format.toUpperCase()}` : `${format.toUpperCase()} eksport`)}</button>}{record && ["completed", "failed"].includes(record.status) && <button type="button" aria-label={ru ? `Удалить ${format.toUpperCase()}` : `${format.toUpperCase()}ni o‘chirish`} disabled={deletingExportId !== null || exportingFormat !== null} aria-busy={deletingExportId === record.id} onClick={() => void removeExport(record)}>{deletingExportId === record.id ? <LoaderCircle className="spin" /> : <Trash2 />}</button>}</span>; })}</div></div>
+    <div className="review-result-head"><div><small>{statusLabel(analysis.status, ru, retryExhausted)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div><div className="review-result-actions" aria-live="polite">{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}{canOpen && formats.map(format => { const record = exportsByFormat.get(format); const pending = ["queued", "processing", "retrying"].includes(record?.status ?? ""); const failed = record?.status === "failed"; const busy = exportingFormat === format || pending; return <span className="review-export-action" key={format}>{record?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(record.id)}/file`}><Download />{format.toUpperCase()}</a> : <button type="button" disabled={busy || deletingExportId !== null} aria-busy={busy} onClick={() => void requestExport(format)}>{busy ? <LoaderCircle className="spin" /> : failed ? <RefreshCw /> : <Download />}{busy ? (ru ? `${format.toUpperCase()} готовится` : `${format.toUpperCase()} tayyorlanmoqda`) : failed ? (ru ? `Повторить ${format.toUpperCase()}` : `${format.toUpperCase()}ni takrorlash`) : (ru ? `Экспорт ${format.toUpperCase()}` : `${format.toUpperCase()} eksport`)}</button>}{record && ["completed", "failed"].includes(record.status) && <button type="button" aria-label={ru ? `Удалить ${format.toUpperCase()}` : `${format.toUpperCase()}ni o‘chirish`} disabled={deletingExportId !== null || exportingFormat !== null} aria-busy={deletingExportId === record.id} onClick={() => void removeExport(record)}>{deletingExportId === record.id ? <LoaderCircle className="spin" /> : <Trash2 />}</button>}</span>; })}<button type="button" className="danger" disabled={deletingAnalysis || deletingExportId !== null || exportingFormat !== null} aria-busy={deletingAnalysis} onClick={() => void removeAnalysis()}>{deletingAnalysis ? <LoaderCircle className="spin" /> : <Trash2 />}{ru ? "Удалить анализ" : "Tahlilni o‘chirish"}</button></div></div>
     <div className="review-case-link"><label><span>{ru ? "Дело" : "Ish"}</span><select value={caseId} onChange={event => { setCaseId(event.target.value); setCaseMessage(""); }} disabled={caseBusy}><option value="">{ru ? "Без дела" : "Ishsiz"}</option>{cases.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label><button type="button" disabled={caseBusy || caseId === (analysis.caseId ?? "")} aria-busy={caseBusy} onClick={() => void saveCaseLink()}>{caseBusy ? <LoaderCircle className="spin" /> : <FileText />}{ru ? "Сохранить привязку" : "Bog‘lanishni saqlash"}</button><span role="status" aria-live="polite">{caseMessage}</span></div>
     {exportError && <p className="review-message error" role="alert"><CircleAlert />{exportError}</p>}
+    {analysisDeleteError && <p className="review-message error" role="alert"><CircleAlert />{analysisDeleteError}</p>}
     {exportNotice && <p className="review-message success" role="status"><ShieldCheck />{exportNotice}</p>}
     {analysis.status !== "completed" ? <div className="review-awaiting" aria-live="polite"><AlertTriangle /><div><h3>{state.heading}</h3><p>{state.message}</p></div></div> : <><section><h3>{ru ? "Краткое резюме" : "Qisqa xulosa"}</h3><p>{summary?.summary}</p></section>{summary?.extraction?.packageContext?.members.length ? <PackageContextView context={summary.extraction.packageContext} ru={ru} /> : null}<div className="review-summary-grid"><ListBlock title={ru ? "Стороны" : "Tomonlar"} items={summary?.parties} /><ListBlock title={ru ? "Даты" : "Sanalar"} items={summary?.dates} /><ListBlock title={ru ? "Обязательства" : "Majburiyatlar"} items={summary?.obligations} /><ListBlock title={ru ? "Платежи" : "To‘lovlar"} items={summary?.payments} /></div><section><h3>{ru ? "Риски" : "Xavflar"}</h3>{analysis.risks?.length ? <div className="review-risks">{analysis.risks.map((risk, index) => <article key={risk.id || `${risk.title}-${index}`} data-level={risk.level}><span>{riskLabel(risk.level, ru)}</span><h4>{risk.title}</h4><p>{risk.description}</p>{risk.excerpt && <blockquote>{risk.excerpt}</blockquote>}{risk.confidencePercent !== null && <small>{ru ? "Уверенность" : "Ishonch"}: {risk.confidencePercent}%</small>}</article>)}</div> : <p>{ru ? "Структурированные риски не найдены." : "Tuzilgan xavflar topilmadi."}</p>}</section><div className="review-summary-grid"><ListBlock title={ru ? "Не хватает" : "Yetishmaydi"} items={summary?.missingItems} /><ListBlock title={ru ? "Вопросы пользователю" : "Foydalanuvchiga savollar"} items={summary?.questions} /></div><p className="review-disclaimer"><CheckCircle2 />{summary?.disclaimer || (ru ? "Автоматический анализ не заменяет проверку юриста." : "Avtomatik tahlil yurist tekshiruvini almashtirmaydi.")}</p></>}
     {analysis.status === "completed" && analysis.risks?.some((risk) => risk.proposedWording) ? <RevisionPanel analysisId={analysis.id} exports={analysis.exports ?? []} ru={ru} onAnalysisChanged={onChanged} /> : null}
