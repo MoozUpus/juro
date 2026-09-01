@@ -63,6 +63,21 @@ test("production interactions have complete keyboard and reduced-motion contract
   assert.doesNotMatch(homepageStyles + motionStyles + editorialStyles + decisionStyles + laptopStyles + chromeStyles, /ease-in(?:\s|;|,|\))/);
 });
 
+test("initial scroll geometry waits until paint and public chrome avoids synchronous scroll reads", () => {
+  assert.match(
+    motionDirector,
+    /scrollFrame = requestAnimationFrame\(\(\) => \{[\s\S]*?scrollFrame = requestAnimationFrame\(\(\) => \{[\s\S]*?refreshGeometry\(\);[\s\S]*?updateScrollStory\(\);/,
+  );
+  assert.doesNotMatch(
+    motionDirector,
+    /\n\s*refreshGeometry\(\);\s*\n\s*root\.dataset\.motionReady = "true";/,
+  );
+  assert.match(chrome, /new IntersectionObserver\([\s\S]*?rootMargin: "18px 0px 0px"/);
+  assert.match(chrome, /observer\.observe\(sentinel\)/);
+  assert.doesNotMatch(chrome, /window\.scrollY/);
+  assert.match(chrome, /style=\{\{[^}]*position: "absolute"[^}]*top: 0/);
+});
+
 test("document review opens on the first clause and changes only by direct selection", () => {
   assert.match(homepage, /const \[clause, setClause\] = useState\(0\)/);
   assert.match(homepage, /const selectClause = \(index: number\) => \{\s*setClause\(index\);\s*\}/);

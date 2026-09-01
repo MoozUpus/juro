@@ -1,13 +1,17 @@
 # JURO Performance Audit
 
-Status: **living evidence report; Worker v189 deployed and production-verified**
+Status: **living evidence report; v101 deployed and production-verified; v114 measured locally and not deployed**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-02 UZT**
 
 Scope: Chrome-only lab measurements for the public RU landing page and the public platform login boundary, production artifact budgets, and the truthfulness of published dependency latency. Legislation database/corpus ingestion, Lex.uz/Advice.uz, vectors, and staging-capacity remediation are excluded by owner instruction.
 
 ## Executive result
 
+- Production v101 is live from merge `840f1144f3ba8562a7866cd4bda99525be392758`: website Worker `d6ff54c8-0bbc-4921-a54e-581027689a41` and platform Worker `9c434c4e-52af-41cd-b680-eb0730b87e37`.
+- Production v101 Chrome QA recorded warm LCP **519 ms**, CLS **0.01**, and cold LCP **2,717 ms** with TTFB **1,769 ms**. Desktop Lighthouse scored Accessibility, Best Practices, SEO, and Agentic Browsing at **100/100/100/100**. These are lab results, not field Core Web Vitals.
+- The undeployed mainline v114 build recorded local LCP **1,334 ms**, TTFB **472 ms**, render delay **862 ms**, and CLS **0.00**. Chrome no longer attributed forced reflow to a top-level JURO function after the site header moved from a synchronous `scrollY` read to an observer sentinel; **83 ms** of unattributed layout work remained and Chrome estimated no metric savings.
+- Local v114 Chrome checks exposed all **21/21** reveal sections in RU, UZ, and EN at 1440 × 900 and in RU at 390 × 844, with zero document-level horizontal overflow and no console errors or warnings. Direct navigation to `/ru#start` also exposed 21/21.
 - `https://juro.uz/ru` passed mobile Lighthouse Accessibility, Best Practices, SEO, and Agentic Browsing at **100/100/100/100**.
 - The repeat public-page trace on Fast 4G with 4x CPU throttling recorded **LCP 2,021 ms**, **TTFB 144 ms**, and **CLS 0.00**. The first cold trace recorded LCP 3,358 ms and TTFB 1,974 ms, so the result is variable and not field Core Web Vitals.
 - `https://app.juro.uz/ru/auth/login` recorded **LCP 1,387 ms**, **TTFB 128 ms**, and **CLS 0.0001** under the same mobile conditions; Accessibility scored **100**.
@@ -17,9 +21,28 @@ Scope: Chrome-only lab measurements for the public RU landing page and the publi
 
 This audit does not claim complete platform performance coverage. Authenticated role journeys, field data, INP, long-task interaction profiles, and every target viewport remain open.
 
+## v114 mainline candidate — initial-paint and auth stability
+
+Status: **validated locally; not deployed**
+
+The public motion director waits through two animation frames before its first geometry measurement, then publishes `data-motion-ready` only after all layout reads are complete. Scroll-time updates keep using cached geometry. The public header now derives its scrolled state from an `IntersectionObserver` sentinel instead of reading `window.scrollY` during a scroll callback.
+
+The shared auth layout uses content-sized mobile rows and reserves at least 72 CSS px throughout the nested Turnstile container. This contract prevents the page grid and challenge boundary from starting at zero height. The local auth route could not render a real Turnstile challenge because provider configuration is intentionally absent, so post-deploy Chrome verification remains mandatory.
+
+| Candidate evidence | Result |
+| --- | --- |
+| Local public trace, 1440 × 900, no throttling | LCP 1,334 ms; TTFB 472 ms; render delay 862 ms; CLS 0.00 |
+| Forced-reflow attribution | no top-level function identified; 83 ms unattributed; estimated savings none |
+| Public reveal and overflow matrix | RU/UZ/EN desktop and RU mobile: 21/21 visible; zero overflow |
+| Direct anchor navigation | `/ru#start`: 21/21 visible; header scrolled state active |
+| Local auth layout | 1440 × 900 and 390 × 844: zero overflow; mobile interactive targets sampled at 44 CSS px or larger |
+| Console | no errors or warnings on the checked public locales or local auth route |
+
+The localhost TTFB and LCP are not a direct comparison with production. The useful before/after evidence is attribution: the preceding local trace named a 46 ms `SiteChrome` forced reflow; the observer version removed that JURO function from the insight. Exact deployed-revision traces are required before claiming a production improvement.
+
 ## v101 candidate — cached public motion geometry
 
-Status: **validated locally; not deployed; fresh Chrome trace pending explicit browser permission**
+Status: **deployed and production-verified on 2026-09-01**
 
 The public homepage motion director no longer performs element-geometry or document-height reads inside the animation frame scheduled by scrolling. Page-relative chapter, story, document, continuity, handoff, hero, and page-range geometry is measured outside the hot path and refreshed only after root-size, viewport, or web-font layout changes. Reveal and footer visibility are delegated to `IntersectionObserver`.
 
@@ -34,7 +57,7 @@ Evidence collected on 2026-09-01:
 - emitted client JavaScript: 629,593 raw bytes across 15 files versus 628,879 on v99, an increase of 714 bytes (0.11%);
 - cinematic landing chunk: 94,502 raw bytes versus 93,782 on v99, an increase of 720 bytes (0.77%).
 
-The change is expected to reduce synchronous layout work during scrolling, but source inspection and green tests do not prove a user-visible performance gain. A cold/repeat Chrome DevTools trace, network analysis, Lighthouse audit, accessibility snapshot, and responsive interaction check remain release gates before production deployment or any updated Core Web Vitals claim.
+Production verification completed after merge: RU/UZ/EN and `/ru#start` exposed 21/21 reveal sections, 1440 × 900 and 390 × 844 had no horizontal overflow, the console remained clean, and the warm/cold/Lighthouse results are recorded in the executive summary. That evidence proves the checked lab scenarios only; it does not establish field Core Web Vitals or every authenticated route.
 
 ## Chrome test method
 

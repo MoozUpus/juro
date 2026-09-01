@@ -2,9 +2,27 @@
 
 Status: **living changelog; the full execution goal remains active**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-02 UZT**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
+
+## v114 mainline performance candidate — not deployed
+
+- Based directly on current `origin/main` rather than the superseded stacked v102-v113 chain.
+- Defers initial public-page geometry measurement through two animation frames and publishes motion readiness only after layout reads complete.
+- Replaces the site-header `scrollY` callback with an observer sentinel, removing the named 46 ms `SiteChrome` forced-reflow source from the repeat local trace.
+- Uses content-sized mobile auth rows and reserves at least 72 CSS px through the nested Turnstile boundary.
+- Passed 7/7 focused auth tests, 46/46 website tests, website/platform type-check and lint, website and platform production builds, platform artifact budgets, and local Chrome responsive/reveal/console checks.
+- Local Chrome recorded LCP 1,334 ms, CLS 0.00, no top-level JURO forced-reflow function, and 83 ms of unattributed layout work with no estimated savings. This is local lab evidence, not a production or field claim.
+- Performed no deployment, migration, DNS, binding, secret, provider-billing, or legislation/corpus operation. Exact-head CI, exact-head security review, and post-deploy Chrome QA remain required.
+
+## v101 production release
+
+- Merged PR #103 as `840f1144f3ba8562a7866cd4bda99525be392758` after exact-head CI and a 0-finding security diff scan.
+- Activated website Worker `d6ff54c8-0bbc-4921-a54e-581027689a41` and platform Worker `9c434c4e-52af-41cd-b680-eb0730b87e37`.
+- Verified 21/21 reveal sections across RU/UZ/EN and direct `/ru#start`, no horizontal overflow at 1440 × 900 and 390 × 844, and no console errors or warnings.
+- Recorded warm LCP 519 ms / CLS 0.01 and cold LCP 2,717 ms / TTFB 1,769 ms; desktop Lighthouse scored Accessibility, Best Practices, SEO, and Agentic Browsing at 100 each.
+- Retained truthful point-in-time production status evidence: operational, 8/8 components, 0 active incidents. Sustained provider health and authenticated role journeys remain separate gates.
 
 ## Platform Worker v189
 
