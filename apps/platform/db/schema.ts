@@ -1873,6 +1873,26 @@ export const aiDocumentPrefillHandoffs = sqliteTable("ai_document_prefill_handof
   index("ai_document_prefill_handoffs_source_idx").on(table.assistantMessageId, table.createdAt),
 ]);
 
+export const aiQuestionIntakes = sqliteTable("ai_question_intakes", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  questionCiphertext: text("question_ciphertext"),
+  questionIv: text("question_iv"),
+  questionKeyVersion: text("question_key_version"),
+  expiresAt: text("expires_at").notNull(),
+  consumedAt: text("consumed_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  check("ai_question_intakes_hash_check", sql`length(${table.tokenHash}) = 64`),
+  check("ai_question_intakes_expiry_check", sql`${table.expiresAt} > ${table.createdAt}`),
+  check("ai_question_intakes_payload_check", sql`(${table.consumedAt} IS NULL AND ${table.questionCiphertext} IS NOT NULL AND ${table.questionIv} IS NOT NULL AND ${table.questionKeyVersion} IS NOT NULL) OR (${table.consumedAt} IS NOT NULL AND ${table.questionCiphertext} IS NULL AND ${table.questionIv} IS NULL AND ${table.questionKeyVersion} IS NULL)`),
+  uniqueIndex("ai_question_intakes_token_uidx").on(table.tokenHash),
+  index("ai_question_intakes_expiry_idx").on(table.expiresAt, table.consumedAt),
+  index("ai_question_intakes_owner_idx").on(table.workspaceId, table.userId, table.createdAt),
+]);
+
 export const messageBranches = sqliteTable("message_branches", {
   id: text("id").primaryKey(),
   conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),

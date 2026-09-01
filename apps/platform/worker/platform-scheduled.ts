@@ -9,6 +9,7 @@ import { runDirectLegalSourceHealthCheck } from "../lib/legal/direct-source-heal
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
+import { purgeExpiredQuestionIntakes } from "../lib/ai/question-intake";
 import { purgeExpiredDocumentAnalysisUploads } from "../lib/document-analysis/resource-retention";
 import { reconcileAnalysisVersionObjectWrites } from "../lib/document-analysis/version-object-write";
 import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/document-version-object-write";
@@ -621,6 +622,11 @@ export async function handleScheduled(
       db: env.DB,
       now,
     });
+    failureCode = "AI_QUESTION_INTAKE_RETENTION_CLEANUP_FAILED";
+    const questionIntakeRetention = await purgeExpiredQuestionIntakes({
+      db: env.DB,
+      now,
+    });
     failureCode = "VOICE_RETENTION_CLEANUP_FAILED";
     const voiceRetention = await purgeExpiredVoiceRecordings({
       db: env.DB,
@@ -697,6 +703,8 @@ export async function handleScheduled(
       guestAiRetentionEligible: guestAiRetention.eligible,
       guestAiRetentionPurged: guestAiRetention.purged,
       guestAiReservationsReleased: guestAiRetention.reservationsReleased,
+      questionIntakeRetentionEligible: questionIntakeRetention.eligible,
+      questionIntakeRetentionPurged: questionIntakeRetention.purged,
       voiceRetentionEligible: voiceRetention.eligible,
       voiceRetentionPurged: voiceRetention.purged,
       documentAnalysisRetentionEligible: documentAnalysisRetention.eligible,

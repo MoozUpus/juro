@@ -1162,7 +1162,9 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shellComponent, /"Все инструменты"/);
   assert.match(shellComponent, /href=\{`\$\{base\}\/profile`\}/);
   assert.match(shellComponent, /useSearchParams/);
-  assert.match(shellComponent, /const query = searchParams\.toString\(\)/);
+  assert.match(shellComponent, /const nextParams = new URLSearchParams\(searchParams\.toString\(\)\)/);
+  assert.match(shellComponent, /nextParams\.delete\("prompt"\)/);
+  assert.doesNotMatch(shellComponent, /nextParams\.delete\("intake"\)/);
   assert.match(shellComponent, /router\.push\(query \? `\$\{nextPath\}\?\$\{query\}` : nextPath\)/);
   assert.match(shellComponent, /window\.matchMedia\("\(max-width: 900px\)"\)/);
   assert.match(shell, /min-width:801px\) and \(max-width:900px/);
@@ -1174,7 +1176,7 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shell, /platform-account select\{width:100%;min-height:44px/);
   const aiClient = await readFile(new URL("../app/_platform/AiLawyerClient.tsx", import.meta.url), "utf8");
   assert.match(aiClient, /href=\{aiLocation\(new URLSearchParams\(\{ conversationId: item\.id \}\)\)\}/);
-  assert.match(aiClient, /router\.replace\(aiLocation\(nextParams\), \{ scroll: false \}\)/);
+  assert.match(aiClient, /router\.replace\(aiLocation\(nextParams, !intakeFinalized\), \{ scroll: false \}\)/);
   assert.doesNotMatch(shellComponent, /MoreHorizontal/);
   assert.match(dashboard, /max-width:\s*820px/);
   assert.match(dashboard, /max-width:\s*460px/);

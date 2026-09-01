@@ -1,16 +1,28 @@
 import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { documentVisibilityScope } from "../../../../lib/document-builder/permissions/document-visibility";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
-import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { workspaceForUser, workspaceForUserById } from "../../../../lib/platform/workspace";
+import { isWorkspaceId } from "../../../../lib/platform/routing";
 
 function response(body: unknown) {
   return Response.json(body, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }
 
-export const GET = withApiErrors(async function GET() {
-  const user = await requireApiUser();
+export const GET = withApiErrors(async function GET(request: Request) {
+  const user = await requireApiUser(request);
   const db = requireD1();
-  const workspace = await workspaceForUser(user);
+  const requestedWorkspaceId = request.headers.get("x-juro-workspace-id");
+  const workspace = requestedWorkspaceId
+    ? (isWorkspaceId(requestedWorkspaceId)
+      ? await workspaceForUserById(user.id, requestedWorkspaceId)
+      : null)
+    : await workspaceForUser(user);
+  if (!workspace) {
+    return Response.json(
+      { code: "WORKSPACE_UNAVAILABLE" },
+      { status: 404, headers: { "cache-control": "private, no-store", pragma: "no-cache" } },
+    );
+  }
   const documentVisibility = documentVisibilityScope(user.id, workspace.id);
   const [counts, cases, documents, deadlines, consultations, notifications, analyses, comparisons] = await db.batch([
     db.prepare(
