@@ -19,4 +19,5 @@ The public homepage batches layout reads before writes, but it still performs th
 
 - 2026-09-01: Claimed after production provider recovery was verified and static performance triage selected the public scroll path as the next non-legislation goal item.
 - 2026-09-01: The first full suite exposed two source-contract assertions tied to the previous live-rectangle formulas. They were updated to assert the equivalent cached page-relative formulas; no product behavior was relaxed.
-- 2026-09-01: Type-check, lint, production build/artifact validation, and all 45 website tests pass. Raw client JavaScript increased by 684 bytes (0.11%) while CSS stayed unchanged. The ticket remains claimed until the required Chrome trace and interaction check are allowed and complete.
+- 2026-09-01: Type-check, lint, production build/artifact validation, and all 45 website tests pass. Final raw client JavaScript increased by 714 bytes (0.11%) while CSS stayed unchanged. The ticket remains claimed until the required Chrome trace and interaction check are allowed and complete.
+- 2026-09-01: Post-validation review bounded zero-size hero geometry and prevents the web-font promise from scheduling measurement after effect cleanup.

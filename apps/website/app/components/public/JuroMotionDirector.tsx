@@ -107,10 +107,10 @@ export function JuroMotionDirector() {
         handoff: pageBox(handoff, scrollY),
         hero: heroRect
           ? {
-            height: heroRect.height,
+            height: Math.max(1, heroRect.height),
             left: heroRect.left + scrollX,
             top: heroRect.top + scrollY,
-            width: heroRect.width,
+            width: Math.max(1, heroRect.width),
           }
           : null,
         pageRange: Math.max(1, document.documentElement.scrollHeight - viewport),
@@ -253,7 +253,7 @@ export function JuroMotionDirector() {
       scrollFrame = requestAnimationFrame(updateScrollStory);
     };
     const scheduleMeasure = () => {
-      if (measureFrame) return;
+      if (disposed || measureFrame) return;
       measureFrame = requestAnimationFrame(() => {
         if (disposed) return;
         refreshGeometry();

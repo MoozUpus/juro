@@ -31,8 +31,8 @@ Evidence collected on 2026-09-01:
 - website suite: 45/45 PASS after updating two source-contract assertions to the equivalent cached formulas;
 - regression assertion: `updateScrollStory` contains neither `getBoundingClientRect` nor `scrollHeight`;
 - emitted client CSS: unchanged at 126,320 raw bytes across eight files;
-- emitted client JavaScript: 629,563 raw bytes across 15 files versus 628,879 on v99, an increase of 684 bytes (0.11%);
-- cinematic landing chunk: 94,472 raw bytes versus 93,782 on v99, an increase of 690 bytes (0.74%).
+- emitted client JavaScript: 629,593 raw bytes across 15 files versus 628,879 on v99, an increase of 714 bytes (0.11%);
+- cinematic landing chunk: 94,502 raw bytes versus 93,782 on v99, an increase of 720 bytes (0.77%).
 
 The change is expected to reduce synchronous layout work during scrolling, but source inspection and green tests do not prove a user-visible performance gain. A cold/repeat Chrome DevTools trace, network analysis, Lighthouse audit, accessibility snapshot, and responsive interaction check remain release gates before production deployment or any updated Core Web Vitals claim.
 
