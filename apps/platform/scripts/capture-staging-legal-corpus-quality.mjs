@@ -56,7 +56,10 @@ function executeReadOnly(sql) {
 
 const boundarySql = `WITH latest AS (
   SELECT id,cron,status,error_code,scheduled_for,started_at,finished_at
-  FROM scheduled_runs ORDER BY started_at DESC LIMIT 1
+  FROM scheduled_runs
+  WHERE schedule_name='legal-corpus-worker'
+  -- scheduled_runs is append-only; rowid avoids a full-table sort on a near-capacity D1.
+  ORDER BY rowid DESC LIMIT 1
 )
 SELECT (SELECT COUNT(*) FROM scheduled_locks) AS lock_count,
   id,cron,status,error_code,scheduled_for,started_at,finished_at,
