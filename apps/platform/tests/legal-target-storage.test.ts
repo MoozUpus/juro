@@ -16,9 +16,35 @@ function targetEnv(
 ):
 LegalTargetReadinessEnv {
   const bucketName = `juro-legal-evidence-${environment}${suffix}`;
+  const aiSearchNamespace = {
+    get() { throw new Error("not used by readiness"); },
+    async list() {
+      return { result: [], result_info: { count: 0, page: 1, per_page: 100, total_count: 0 } };
+    },
+    async create() { throw new Error("not used by readiness"); },
+    async delete() { throw new Error("not used by readiness"); },
+    async search() { throw new Error("not used by readiness"); },
+    async chatCompletions() { throw new Error("not used by readiness"); },
+  } satisfies AiSearchNamespace;
   return {
     APP_ENV: environment,
     LEGAL_EVIDENCE_BUCKET_NAME: bucketName,
+    LEGAL_AI_SEARCH_NAMESPACE_NAME: `juro-legal-${environment}`,
+    LEGAL_AI_SEARCH_CONFIGURATION_ID: `ai-search-${environment}-v1`,
+    LEGAL_AI_GATEWAY_ID: `juro-ai-search-${environment}`,
+    LEGAL_AI_PROVIDER_PROJECT_ID: `juro-openai-${environment}`,
+    LEGAL_AI_SEARCH_EMBEDDING_MODEL: "openai/text-embedding-3-large",
+    LEGAL_AI_SEARCH_DIMENSIONS: "1536",
+    LEGAL_AI_SEARCH_KEYWORD_TOKENIZER: "porter",
+    LEGAL_AI_SEARCH_METADATA_SCHEMA: "language:text,document_type:text,valid_from:datetime,valid_to:datetime",
+    LEGAL_AI_SEARCH_SOURCE_PREFIX: "search-releases/",
+    LEGAL_AI_SEARCH_MAX_RESULTS: "50",
+    LEGAL_AI_SEARCH_MAX_INSTANCES_PER_QUERY: "10",
+    LEGAL_AI_SEARCH_PAUSED: "true",
+    LEGAL_AI_SEARCH_GATEWAY_PAYLOAD_LOGGING: "false",
+    LEGAL_AI_SEARCH_GATEWAY_CACHE: "false",
+    LEGAL_AI_SEARCH_SIMILARITY_CACHE: "false",
+    LEGAL_AI_SEARCH_NAMESPACE: aiSearchNamespace,
     LEGAL_DB: {
       prepare() {
         return {
@@ -66,6 +92,10 @@ test("private service-binding readiness proves the isolated legal D1 and R2 stor
     database: "ready",
     evidenceBucket: "ready",
     migrationState: "initialized",
+    aiSearchNamespace: "ready",
+    aiSearchInstanceCount: 0,
+    declaredConfigurationIdentity: "ai-search-staging-v1",
+    controlPlaneAttestation: "required",
   });
 });
 
@@ -150,6 +180,29 @@ test("target readiness rejects unbound, cross-environment, and public requests",
   assert.equal(publicRequest.status, 404);
 });
 
+test("target readiness reports declared configuration drift without leaking payloads", async () => {
+  const env = targetEnv("staging");
+  Reflect.set(env, "LEGAL_AI_SEARCH_GATEWAY_CACHE", "true");
+  const errors: string[] = [];
+  const originalError = console.error;
+  console.error = (message?: unknown) => errors.push(String(message));
+  try {
+    await assert.rejects(() => createLegalTargetReadinessClient({
+      service: inProcessReadinessService(env),
+      environment: "staging",
+    }).readiness(), /LEGAL_TARGET_CONFIGURATION_DRIFT/u);
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(errors.length, 1);
+  assert.deepEqual(JSON.parse(errors[0]!) as unknown, {
+    service: "legal-corpus-worker",
+    event: "legal_target.readiness_unavailable",
+    environment: "staging",
+    errorCode: "LEGAL_TARGET_CONFIGURATION_DRIFT",
+  });
+});
+
 test("the first legal-D1 migration is control-only and body-free", () => {
   const migration = readFileSync(
     new URL("../legal-drizzle/0001_target_control.sql", import.meta.url),
@@ -162,22 +215,58 @@ test("the first legal-D1 migration is control-only and body-free", () => {
 });
 
 test("every environment declares a route-free, isolated target storage and binding identity", () => {
-  const corpusConfig = readFileSync(
+  const corpusConfigText = readFileSync(
     new URL("../wrangler.legal-corpus.jsonc", import.meta.url),
     "utf8",
   );
+  const corpusConfig = JSON.parse(corpusConfigText) as {
+    vars: Record<string, string>;
+    ai_search_namespaces: Array<{ binding: string; namespace: string }>;
+    env: Record<"staging" | "production", {
+      vars: Record<string, string>;
+      ai_search_namespaces: Array<{ binding: string; namespace: string }>;
+    }>;
+  };
   const platformConfig = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
   for (const environment of ["development", "staging", "production"] as const) {
-    assert.match(corpusConfig, new RegExp(`juro-legal-catalog-${environment}`, "u"));
-    assert.match(corpusConfig, new RegExp(`juro-legal-evidence-${environment}`, "u"));
+    assert.match(corpusConfigText, new RegExp(`juro-legal-catalog-${environment}`, "u"));
+    assert.match(corpusConfigText, new RegExp(`juro-legal-evidence-${environment}`, "u"));
   }
   assert.match(platformConfig, /juro-legal-corpus-development/u);
   assert.match(platformConfig, /juro-legal-corpus-staging/u);
   assert.match(platformConfig, /"service": "juro-legal-corpus"/u);
-  assert.match(corpusConfig, /"binding": "LEGAL_DB"/u);
-  assert.match(corpusConfig, /"binding": "LEGAL_EVIDENCE_BUCKET"/u);
+  assert.match(corpusConfigText, /"binding": "LEGAL_DB"/u);
+  assert.match(corpusConfigText, /"binding": "LEGAL_EVIDENCE_BUCKET"/u);
+  const environmentConfigs = {
+    development: corpusConfig,
+    staging: corpusConfig.env.staging,
+    production: corpusConfig.env.production,
+  };
+  for (const [environment, config] of Object.entries(environmentConfigs)) {
+    assert.deepEqual(config.ai_search_namespaces, [{
+      binding: "LEGAL_AI_SEARCH_NAMESPACE",
+      namespace: `juro-legal-${environment}`,
+    }]);
+    assert.equal(config.vars.LEGAL_AI_SEARCH_NAMESPACE_NAME, `juro-legal-${environment}`);
+    assert.equal(config.vars.LEGAL_AI_GATEWAY_ID, `juro-ai-search-${environment}`);
+    assert.equal(config.vars.LEGAL_AI_PROVIDER_PROJECT_ID, `juro-openai-${environment}`);
+    assert.equal(config.vars.LEGAL_AI_SEARCH_GATEWAY_PAYLOAD_LOGGING, "false");
+    assert.equal(config.vars.LEGAL_AI_SEARCH_GATEWAY_CACHE, "false");
+    assert.equal(config.vars.LEGAL_AI_SEARCH_SIMILARITY_CACHE, "false");
+    assert.equal(config.vars.LEGAL_AI_SEARCH_EMBEDDING_MODEL, "openai/text-embedding-3-large");
+    assert.equal(config.vars.LEGAL_AI_SEARCH_DIMENSIONS, "1536");
+    assert.equal(config.vars.LEGAL_AI_SEARCH_KEYWORD_TOKENIZER, "porter");
+    assert.equal(config.vars.LEGAL_AI_SEARCH_PAUSED, "true");
+  }
+  for (const key of [
+    "LEGAL_AI_SEARCH_NAMESPACE_NAME",
+    "LEGAL_AI_GATEWAY_ID",
+    "LEGAL_AI_PROVIDER_PROJECT_ID",
+  ]) {
+    assert.equal(new Set(Object.values(environmentConfigs).map((config) => config.vars[key])).size, 3);
+  }
   assert.match(platformConfig, /"binding": "LEGAL_CORPUS_READ_SERVICE"/u);
-  assert.match(corpusConfig, /"workers_dev": false/u);
-  assert.match(corpusConfig, /"preview_urls": false/u);
-  assert.doesNotMatch(corpusConfig, /"routes"\s*:\s*\[[^\]]+\]/u);
+  assert.match(corpusConfigText, /"workers_dev": false/u);
+  assert.match(corpusConfigText, /"preview_urls": false/u);
+  assert.doesNotMatch(corpusConfigText, /"routes"\s*:\s*\[[^\]]+\]/u);
 });

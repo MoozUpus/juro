@@ -18,7 +18,22 @@
     "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
     "LEGAL_CORPUS_DENSE_ENABLED": "false",
     "LEGAL_CORPUS_SHADOW_MODE": "false",
-    "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-development"
+    "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-development",
+    "LEGAL_AI_SEARCH_NAMESPACE_NAME": "juro-legal-development",
+    "LEGAL_AI_SEARCH_CONFIGURATION_ID": "ai-search-development-v1",
+    "LEGAL_AI_GATEWAY_ID": "juro-ai-search-development",
+    "LEGAL_AI_PROVIDER_PROJECT_ID": "juro-openai-development",
+    "LEGAL_AI_SEARCH_EMBEDDING_MODEL": "openai/text-embedding-3-large",
+    "LEGAL_AI_SEARCH_DIMENSIONS": "1536",
+    "LEGAL_AI_SEARCH_KEYWORD_TOKENIZER": "porter",
+    "LEGAL_AI_SEARCH_METADATA_SCHEMA": "language:text,document_type:text,valid_from:datetime,valid_to:datetime",
+    "LEGAL_AI_SEARCH_SOURCE_PREFIX": "search-releases/",
+    "LEGAL_AI_SEARCH_MAX_RESULTS": "50",
+    "LEGAL_AI_SEARCH_MAX_INSTANCES_PER_QUERY": "10",
+    "LEGAL_AI_SEARCH_PAUSED": "true",
+    "LEGAL_AI_SEARCH_GATEWAY_PAYLOAD_LOGGING": "false",
+    "LEGAL_AI_SEARCH_GATEWAY_CACHE": "false",
+    "LEGAL_AI_SEARCH_SIMILARITY_CACHE": "false"
   },
   "triggers": {
     "crons": ["*/5 * * * *", "5 19 * * *"]
@@ -50,6 +65,12 @@
       "bucket_name": "juro-legal-evidence-development"
     }
   ],
+  "ai_search_namespaces": [
+    {
+      "binding": "LEGAL_AI_SEARCH_NAMESPACE",
+      "namespace": "juro-legal-development"
+    }
+  ],
   "observability": {
     "enabled": true,
     "logs": {
@@ -79,6 +100,21 @@
         "LEGAL_CORPUS_DENSE_ENABLED": "true",
         "LEGAL_CORPUS_SHADOW_MODE": "true",
         "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-staging-green2-20260831",
+        "LEGAL_AI_SEARCH_NAMESPACE_NAME": "juro-legal-staging",
+        "LEGAL_AI_SEARCH_CONFIGURATION_ID": "ai-search-staging-v1",
+        "LEGAL_AI_GATEWAY_ID": "juro-ai-search-staging",
+        "LEGAL_AI_PROVIDER_PROJECT_ID": "juro-openai-staging",
+        "LEGAL_AI_SEARCH_EMBEDDING_MODEL": "openai/text-embedding-3-large",
+        "LEGAL_AI_SEARCH_DIMENSIONS": "1536",
+        "LEGAL_AI_SEARCH_KEYWORD_TOKENIZER": "porter",
+        "LEGAL_AI_SEARCH_METADATA_SCHEMA": "language:text,document_type:text,valid_from:datetime,valid_to:datetime",
+        "LEGAL_AI_SEARCH_SOURCE_PREFIX": "search-releases/",
+        "LEGAL_AI_SEARCH_MAX_RESULTS": "50",
+        "LEGAL_AI_SEARCH_MAX_INSTANCES_PER_QUERY": "10",
+        "LEGAL_AI_SEARCH_PAUSED": "true",
+        "LEGAL_AI_SEARCH_GATEWAY_PAYLOAD_LOGGING": "false",
+        "LEGAL_AI_SEARCH_GATEWAY_CACHE": "false",
+        "LEGAL_AI_SEARCH_SIMILARITY_CACHE": "false",
         "QDRANT_URL": "https://qdrant.internal",
         "QDRANT_COLLECTION": "juro_legal_staging_provision_v1",
         "LEGAL_CORPUS_INDEX_VERSION": "staging-20260830-provision-v1",
@@ -115,6 +151,12 @@
           "bucket_name": "juro-legal-evidence-staging-green2-20260831"
         }
       ],
+      "ai_search_namespaces": [
+        {
+          "binding": "LEGAL_AI_SEARCH_NAMESPACE",
+          "namespace": "juro-legal-staging"
+        }
+      ],
       "services": [
         {
           "binding": "QDRANT_SERVICE",
@@ -141,7 +183,22 @@
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
         "LEGAL_CORPUS_DENSE_ENABLED": "false",
         "LEGAL_CORPUS_SHADOW_MODE": "false",
-        "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-production"
+        "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-production",
+        "LEGAL_AI_SEARCH_NAMESPACE_NAME": "juro-legal-production",
+        "LEGAL_AI_SEARCH_CONFIGURATION_ID": "ai-search-production-v1",
+        "LEGAL_AI_GATEWAY_ID": "juro-ai-search-production",
+        "LEGAL_AI_PROVIDER_PROJECT_ID": "juro-openai-production",
+        "LEGAL_AI_SEARCH_EMBEDDING_MODEL": "openai/text-embedding-3-large",
+        "LEGAL_AI_SEARCH_DIMENSIONS": "1536",
+        "LEGAL_AI_SEARCH_KEYWORD_TOKENIZER": "porter",
+        "LEGAL_AI_SEARCH_METADATA_SCHEMA": "language:text,document_type:text,valid_from:datetime,valid_to:datetime",
+        "LEGAL_AI_SEARCH_SOURCE_PREFIX": "search-releases/",
+        "LEGAL_AI_SEARCH_MAX_RESULTS": "50",
+        "LEGAL_AI_SEARCH_MAX_INSTANCES_PER_QUERY": "10",
+        "LEGAL_AI_SEARCH_PAUSED": "true",
+        "LEGAL_AI_SEARCH_GATEWAY_PAYLOAD_LOGGING": "false",
+        "LEGAL_AI_SEARCH_GATEWAY_CACHE": "false",
+        "LEGAL_AI_SEARCH_SIMILARITY_CACHE": "false"
       },
       "triggers": {
         "crons": ["*/5 * * * *", "5 19 * * *"]
@@ -172,6 +229,12 @@
         {
           "binding": "LEGAL_EVIDENCE_BUCKET",
           "bucket_name": "juro-legal-evidence-production"
+        }
+      ],
+      "ai_search_namespaces": [
+        {
+          "binding": "LEGAL_AI_SEARCH_NAMESPACE",
+          "namespace": "juro-legal-production"
         }
       ]
     }
