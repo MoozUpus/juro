@@ -20,7 +20,8 @@ async function call(action, body = {}, attempt = 0) {
     try { packet = JSON.parse(responseText); } catch { packet = null; }
     if (!response.ok) {
       if (packet?.code !== "SOURCE_SNAPSHOT_INJECTED_PARTIAL_FAILURE"
-        && response.status >= 500 && attempt < 5) {
+        && (response.status >= 500 || packet?.code === "SOURCE_SNAPSHOT_BUILD_FAILED")
+        && attempt < 5) {
         await new Promise((resolve) => setTimeout(resolve, 250 * (2 ** attempt)));
         return call(action, body, attempt + 1);
       }
