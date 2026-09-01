@@ -26,7 +26,7 @@ const SNAPSHOT_ID = "snapshot:staging:current:source-snapshot-v1";
 const BUILD_ID = "build:staging:current:source-snapshot-qualification-v2";
 const CUTOFF = "2026-08-31T06:26:27.2253695Z";
 const CONFIGURATION_ID = "ai-search-staging-v1";
-const PROJECTION_BATCH_SIZE = 64;
+const PROJECTION_BATCH_SIZE = 128;
 const RECONCILIATION_PAGE_SIZE = 5_000;
 const R2_RECONCILIATION_PAGE_SIZE = 250;
 
