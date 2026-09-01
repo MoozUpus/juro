@@ -63,6 +63,8 @@ test("scroll storytelling keeps layout reads out of the hot scroll path", () => 
   );
   assert.doesNotMatch(updateScrollStory, /getBoundingClientRect|scrollHeight/);
   assert.match(refreshGeometry, /getBoundingClientRect/);
+  assert.match(refreshGeometry, /revealTops: reveals\.map/);
+  assert.match(updateScrollStory, /const revealsToShow[\s\S]*?geometry\.revealTops[\s\S]*?node\.dataset\.revealState = "visible"/);
   assert.match(motionDirector, /new ResizeObserver\(scheduleMeasure\)/);
   assert.match(motionDirector, /new IntersectionObserver\([\s\S]*?rootMargin: "0px 0px -8% 0px"/);
 });

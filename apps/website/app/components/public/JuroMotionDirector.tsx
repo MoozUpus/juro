@@ -17,6 +17,7 @@ type MotionGeometry = {
   handoff: PageBox | null;
   hero: (PageBox & { left: number; width: number }) | null;
   pageRange: number;
+  revealTops: number[];
   storySection: PageBox | null;
   storyStepCenters: number[];
   viewport: number;
@@ -29,6 +30,7 @@ const emptyGeometry = (): MotionGeometry => ({
   handoff: null,
   hero: null,
   pageRange: 1,
+  revealTops: [],
   storySection: null,
   storyStepCenters: [],
   viewport: 1,
@@ -114,6 +116,7 @@ export function JuroMotionDirector() {
           }
           : null,
         pageRange: Math.max(1, document.documentElement.scrollHeight - viewport),
+        revealTops: reveals.map((node) => node.getBoundingClientRect().top + scrollY),
         storySection: pageBox(storySection, scrollY),
         storyStepCenters: railRect
           ? storySteps.map((step) => {
@@ -147,6 +150,10 @@ export function JuroMotionDirector() {
       scrollFrame = 0;
       const { viewport } = geometry;
       const scrollY = window.scrollY;
+      const revealsToShow = reveals.filter(
+        (node, index) => node.dataset.revealState !== "visible"
+          && (geometry.revealTops[index] ?? Number.POSITIVE_INFINITY) - scrollY < viewport * .96,
+      );
       let activeChapter = 0;
       if (chapters.length && chapterLinks.length) {
         geometry.chapterTops.forEach((top, index) => {
@@ -210,6 +217,10 @@ export function JuroMotionDirector() {
 
       root.style.setProperty("--page-progress", String(clamp(scrollY / geometry.pageRange)));
       root.style.setProperty("--hero-scroll", String(clamp(scrollY / (viewport * 0.9))));
+      revealsToShow.forEach((node) => {
+        node.dataset.revealState = "visible";
+        revealObserver.unobserve(node);
+      });
       if (chapters.length && chapterLinks.length) {
         chapterLinks.forEach((link, index) => {
           const active = index === activeChapter;
