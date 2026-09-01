@@ -4,7 +4,7 @@ Assessment: **NOT READY for the full execution brief**
 
 Evidence cutoff: **2026-09-01**
 
-Production is reachable, Worker v189 is serving the platform, and Sites v95 is live on the public website. v189 keeps status-page icons same-origin across the status and app hosts without weakening CSP; it retains the direct D1 probe and provider/document-analysis safeguards from v188. Sites v95 preserves the noindex boundary on the provider-owned hostname without removing indexing from `juro.uz`. The latest public status truthfully reports 6/8 components operational, with AI and document analysis degraded. That is still narrower than the requested Definition of Done: provider recovery, authenticated role journeys, staging reliability, legacy DNS ownership, and complete Chrome QA remain open.
+Production is reachable, Worker v189 is serving the platform, and Sites v95 is live on the public website. v189 keeps status-page icons same-origin across the status and app hosts without weakening CSP; it retains the direct D1 probe and provider/document-analysis safeguards from v188. Sites v95 preserves the noindex boundary on the provider-owned hostname without removing indexing from `juro.uz`. At `2026-09-01T15:33:22.376Z`, the public status API reported `operational`, 8/8 components operational, and no active incidents after fresh successful OpenAI and Anthropic probes. This is a point-in-time recovery checkpoint, not proof of sustained provider availability. The result is still narrower than the requested Definition of Done: authenticated role journeys, staging reliability, legacy DNS ownership, complete Chrome QA, and sustained provider evidence remain open.
 
 The v113 branch is an undeployed stacked candidate. It remediates four findings from a partial base-revision security scan and supplies the missing canonical audit package. Local validation passed 26/26 focused security tests, 1,181/1,181 platform tests, 217/217 Worker/runtime tests, 49/49 website tests, type-check, lint, the Cloudflare environment matrix, generated-types consistency, production artifact validation, and emitted-size budgets. These results do not change the live v189 production state and do not authorize a v113 production cutover before its parent Draft PR chain is reviewed.
 
@@ -23,7 +23,16 @@ Platform Worker v189 was built from merge commit `d133a470a49166875d9112b938ae3f
 
 ## Live health
 
-Production `/api/status` generated at `2026-08-31T15:07:12.161Z` after the v189 cutover:
+Fresh production `/api/status` recovery checkpoint at `2026-09-01T15:33:22.376Z`:
+
+- HTTP `200`, overall `operational`, **8/8 operational**, and **0 active incidents**;
+- OpenAI: `operational`, checked at `2026-09-01T15:27:22.684Z`, latency `4,506 ms`, no safe error code;
+- Anthropic: `operational`, checked at `2026-09-01T15:27:29.818Z`, latency `7,047 ms`, no safe error code;
+- document analysis: `operational`, checked at `2026-09-01T15:12:34.905Z`, latency `4,751 ms`;
+- D1: `operational`, checked at `2026-09-01T15:31:47.271Z`, latency `35 ms`;
+- Chrome rendered the status page as operational and logged no console errors or warnings. The Chrome client blocked direct JSON navigation locally, so the API payload and headers were verified through a separate read-only HTTPS request.
+
+The preceding post-v189 snapshot at `2026-08-31T15:07:12.161Z` is retained as historical failure evidence:
 
 - overall: `degraded`;
 - components: **6/8 operational**;
@@ -36,7 +45,7 @@ Production `/api/status` generated at `2026-08-31T15:07:12.161Z` after the v189 
 - AI and document analysis are degraded; the other six components remain operational;
 - Chrome showed the same degraded overall state on all checked status routes and logged no console errors or warnings. Raw response HTML confirmed same-origin status/app icon URLs, all four icon assets returned `200 image/png`, and every checked response preserved `img-src 'self' data: blob:`.
 
-The degraded label is the correct current release evidence. v189 retains v188's direct D1 latency measurement and the existing cooldown/fallback behavior. The owner reported an Anthropic account top-up, but the first checked post-release probe still reports `PROVIDER_UNAVAILABLE`; fresh successful evidence is required before either AI component can be marked operational.
+The degraded label was correct for that earlier snapshot. The later recovery checkpoint proves that the reported OpenAI and Anthropic funding changes reached the production-key workspaces strongly enough for fresh isolated probes to succeed. It does not close authenticated answer-quality, document-analysis completion, or sustained-availability gates.
 
 Staging `/api/status` at `2026-08-29T19:08:53Z`:
 
@@ -91,8 +100,7 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 
 | Priority | Gap | Evidence | Required action |
 | --- | --- | --- | --- |
-| P1 | OpenAI synthetic probe is degraded | Public v189 status reports `PROVIDER_UNAVAILABLE`; production status is 6/8 operational | Refill or correct billing for the OpenAI project used by the production API key, then observe a fresh successful isolated probe before claiming full health |
-| P1 | Anthropic synthetic probe is degraded after the reported top-up | Public v189 status still reports `PROVIDER_UNAVAILABLE` at `2026-08-31T14:56:02.962Z` | Confirm that funding is applied to the organization/workspace tied to the production key, then require a fresh successful isolated probe before changing the health claim |
+| P1 | Provider recovery is point-in-time only | Public v189 status recovered to 8/8 at `2026-09-01T15:33:22.376Z`; OpenAI and Anthropic probes were fresh and operational, but no authenticated answer-quality or completed document-analysis journey was run | Require sustained successful probes plus authorized authenticated AI and document-analysis journeys before treating provider health as a full release gate |
 | P1 | Staging health is degraded/stale after a newer deployment | Active cron delivery fails in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`; D1 reports 9,999,998,976 bytes | Resolve staging D1 capacity in the separately scoped legislation/corpus work, then verify fresh scheduler writes and 8/8 component health |
 | P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
 | P1 | Authenticated role matrix incomplete | Only anonymous boundary checks are current | Chrome QA for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin with no fabricated session |

@@ -57,15 +57,16 @@ The scan identified release-blocking functional and CSP coverage gaps in the ini
 
 - Active Worker: v189, ID `102dcb2d-f79f-4172-9a3a-19d55d51f6ed`, 100% traffic.
 - Rollback: v188, ID `57387083-9f7f-4cd8-a9f2-84414f2604d6`.
-- Public `/api/status` generated at `2026-08-31T15:07:12.161Z`: HTTP `200`, overall `degraded`, 6/8 components operational, 0 active incidents.
-- Fresh D1 evidence: `operational`, `192 ms`, `evidenceKind: synthetic_probe`, checked at `2026-08-31T15:05:19.870Z`.
-- Public provider codes are redacted to `PROVIDER_UNAVAILABLE`.
+- Public `/api/status` generated at `2026-09-01T15:33:22.376Z`: HTTP `200`, overall `operational`, 8/8 components operational, 0 active incidents.
+- Fresh D1 evidence: `operational`, `35 ms`, `evidenceKind: synthetic_probe`, checked at `2026-09-01T15:31:47.271Z`.
+- Fresh OpenAI and Anthropic evidence: both `operational`, checked at `2026-09-01T15:27:22.684Z` and `2026-09-01T15:27:29.818Z`; this supersedes the earlier 6/8 provider-degraded snapshot without deleting it as historical evidence.
+- When provider failures occur, the public status surface redacts provider-specific causes to `PROVIDER_UNAVAILABLE`; the successful recovery snapshot exposes no provider error code.
 - Earlier read-only D1 evidence recorded `PROVIDER_CREDIT_BALANCE_LOW` for OpenAI and Anthropic; that pre-top-up detail is retained as historical evidence, not asserted as the current Anthropic account state.
 - Provider failure intervals after v187 were 10.36–15.82 minutes rather than the pre-release 3–6 minute cadence.
 - Document-analysis evidence advanced after 26.2 minutes and recorded the routed provider failure instead of repeating every scheduler cycle.
 - Chrome rendered the status root, unlocalized status route, RU and UZ localized status routes, and the app-host RU status route with no console errors or warnings. Raw response HTML confirmed that status-host icons resolve to `status.juro.uz` and app-host icons remain on `app.juro.uz`; the existing CSP was unchanged.
 
-The Worker is deployed correctly, but AI and document analysis remain degraded until provider funding/workspace alignment yields fresh successful probes.
+The Worker is deployed correctly and provider probes recovered in the latest point-in-time snapshot. Authenticated AI answer-quality, completed document-analysis, and sustained provider-health evidence remain open.
 
 ## Public Sites v95 verification
 
