@@ -69,6 +69,7 @@ import {
   productAccountMilestoneStatement,
   productClarificationCompletedStatement,
 } from "../../../../lib/platform/product-account-milestone";
+import { productValueActivationStatement } from "../../../../lib/platform/product-value-activation";
 import {
   listUserMemories,
   memoryKeyring,
@@ -1388,9 +1389,24 @@ async function executePostWithinBudget(
       completedAt: now,
     }));
   }
+  const valueActivationEligible = result.responseKind === "answer";
+  const valueActivationIndex = valueActivationEligible
+    ? firstQuestionMilestoneIndex + milestoneStatements.length
+    : -1;
+  if (valueActivationEligible) {
+    milestoneStatements.push(productValueActivationStatement({
+      db,
+      userId: user.id,
+      workspaceId: workspace.id,
+      aiRunId: reservation.runId,
+      responseMessageId: assistantMessageId,
+      completedAt: now,
+    }));
+  }
   const persistenceStage = budget.beginStage("persistence");
   let firstQuestionCreated = false;
   let clarificationCompleted = false;
+  let valueActivationCreated = false;
   try {
     const persistenceResults = await db.batch([
       ...statements,
@@ -1413,6 +1429,10 @@ async function executePostWithinBudget(
     clarificationCompleted = clarificationMilestoneIndex >= 0
       && productAccountMilestoneCreated(
         persistenceResults[clarificationMilestoneIndex],
+      );
+    valueActivationCreated = valueActivationIndex >= 0
+      && productAccountMilestoneCreated(
+        persistenceResults[valueActivationIndex],
       );
     persistenceStage.complete();
   } catch (error) {
@@ -1450,6 +1470,15 @@ async function executePostWithinBudget(
   if (clarificationCompleted) {
     trackProductEvent({
       event: "clarification_completed",
+      surface: "platform",
+      locale,
+      accountType: workspace.type,
+      outcome: "completed",
+    });
+  }
+  if (valueActivationCreated) {
+    trackProductEvent({
+      event: "first_legal_answer_completed",
       surface: "platform",
       locale,
       accountType: workspace.type,

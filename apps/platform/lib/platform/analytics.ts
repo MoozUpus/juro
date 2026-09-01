@@ -13,6 +13,7 @@ export const productEventNameSchema = z.enum([
   "signup_started",
   "signup_completed",
   "first_question_sent",
+  "first_legal_answer_completed",
   "clarification_completed",
   "source_opened",
   "plan_created",
