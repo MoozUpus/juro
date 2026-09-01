@@ -295,7 +295,11 @@ test("source projections and provenance are reconciled independently from a clea
   try {
     const sourceDefect = await withPreparedTarget(representativeInventory());
     sourceDefect.runId = "reconciliation-source-defect-v1";
-    const missingChunkId = sourceDefect.sparsePostings[0]!.chunkId;
+    const bOnly = representativeInventory();
+    bOnly.chunks = bOnly.chunks.filter((row) => row.chunkId === "chunk-b");
+    const bChunkId = (await prepareCorpusMigrationProjections(bOnly)).sparsePostings[0]!.chunkId;
+    const missingChunkId = sourceDefect.sparsePostings.find((row) =>
+      row.chunkId !== bChunkId)!.chunkId;
     sourceDefect.sparsePostings = sourceDefect.sparsePostings.filter((row) =>
       row.chunkId !== missingChunkId);
     sourceDefect.sparsePostings.push({
@@ -303,9 +307,12 @@ test("source projections and provenance are reconciled independently from a clea
       chunkId: "orphan-chunk",
       termHash: hash("9"),
     });
-    sourceDefect.releaseItems[0] = {
-      ...sourceDefect.releaseItems[0]!,
-      shardId: sourceDefect.releaseItems[0]!.shardId === "00" ? "01" : "00",
+    const wrongShardIndex = sourceDefect.releaseItems.findIndex((row) =>
+      row.chunkId !== bChunkId);
+    const wrongShardItem = sourceDefect.releaseItems[wrongShardIndex]!;
+    sourceDefect.releaseItems[wrongShardIndex] = {
+      ...wrongShardItem,
+      shardId: wrongShardItem.shardId === "00" ? "01" : "00",
     };
     sourceDefect.normalizedRevisions[0] = {
       ...sourceDefect.normalizedRevisions[0]!,
@@ -401,6 +408,55 @@ test("every rendition requires a versioned attested semantic fingerprint", async
   } finally {
     sqlite.close();
   }
+});
+
+test("projection preparation excludes chunks whose textual authority is unknown", async () => {
+  const inventory = representativeInventory();
+  inventory.normalizedRevisions[4] = {
+    ...inventory.normalizedRevisions[4]!,
+    textualAuthority: "unknown",
+  };
+  inventory.provisionRenditions[4] = {
+    ...inventory.provisionRenditions[4]!,
+    textualAuthority: "unknown",
+  };
+  inventory.authorityEvidenceRecords[4] = {
+    ...inventory.authorityEvidenceRecords[4]!,
+    textualAuthority: "unknown",
+  };
+
+  const prepared = await prepareCorpusMigrationProjections(inventory);
+  assert.equal(prepared.releaseItems.length, 3);
+  assert.equal(prepared.sparsePostings.length, 3);
+  assert.equal(prepared.denseCandidates.length, 3);
+});
+
+test("projection preparation excludes chunks whose authority evidence hash is invalid", async () => {
+  const inventory = representativeInventory();
+  inventory.authorityEvidenceRecords[4] = {
+    ...inventory.authorityEvidenceRecords[4]!,
+    sha256: hash("9"),
+  };
+
+  const prepared = await prepareCorpusMigrationProjections(inventory);
+  assert.equal(prepared.releaseItems.length, 3);
+  assert.equal(prepared.sparsePostings.length, 3);
+  assert.equal(prepared.denseCandidates.length, 3);
+});
+
+test("projection preparation excludes chunks whose authority evidence is contradictory", async () => {
+  const inventory = representativeInventory();
+  inventory.authorityEvidenceRecords.push({
+    ...inventory.authorityEvidenceRecords[4]!,
+    sourceId: "authority-b-conflict",
+    authorityEvidenceId: "authority-b-conflict",
+    textualAuthority: "official_translation",
+  });
+
+  const prepared = await prepareCorpusMigrationProjections(inventory);
+  assert.equal(prepared.releaseItems.length, 3);
+  assert.equal(prepared.sparsePostings.length, 3);
+  assert.equal(prepared.denseCandidates.length, 3);
 });
 
 test("adding exact retry aliases cannot change canonical legal metadata hashes", async () => {

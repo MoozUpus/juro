@@ -264,6 +264,7 @@ type Canonicalized = {
   renditionBySourceId: Map<string, ProvisionRenditionId>;
   chunkBySourceId: Map<string, CanonicalChunkId>;
   chunks: CanonicalChunk[];
+  projectionEligibleChunkIds: Set<CanonicalChunkId>;
   sourceCounts: Record<string, number>;
   canonicalCounts: Record<string, number>;
   exactDuplicatesAliased: Record<string, number>;
@@ -473,6 +474,18 @@ async function canonicalize(input: Inventory): Promise<Canonicalized> {
       missingProvenance.push(`authority_evidence_capture:${row.authorityEvidenceId}->${row.captureId}`);
     }
   }
+  const isAuthorityEvidenceValidForRevision = (
+    revision: Inventory["normalizedRevisions"][number],
+    evidence: Inventory["authorityEvidenceRecords"][number],
+  ): boolean => {
+    const capture = captureById.get(evidence.captureId);
+    return evidence.officialExpressionId === revision.officialExpressionId
+      && revision.captureIds.includes(evidence.captureId)
+      && evidence.textualAuthority === revision.textualAuthority
+      && capture?.sha256 === evidence.sha256
+      && instrumentTokenBySourceIdentity.get(capture.legalInstrumentId)
+        === revision.publisherInstrumentToken;
+  };
   for (const row of input.normalizedRevisions) {
     if (!knownInstrumentTokens.has(row.publisherInstrumentToken)) {
       initialMetadataMismatches.push(`normalized_revision_missing_instrument:${row.textRevisionId}`);
@@ -485,9 +498,7 @@ async function canonicalize(input: Inventory): Promise<Canonicalized> {
       }
     }
     if (!(authorityEvidenceByRevision.get(row.textRevisionId) ?? [])
-      .some((evidence) => evidence.officialExpressionId === row.officialExpressionId
-        && row.captureIds.includes(evidence.captureId)
-        && evidence.textualAuthority === row.textualAuthority)) {
+      .some((evidence) => isAuthorityEvidenceValidForRevision(row, evidence))) {
       missingProvenance.push(`authority_evidence_revision:${row.officialExpressionId}->${row.textRevisionId}`);
     }
   }
@@ -702,6 +713,28 @@ async function canonicalize(input: Inventory): Promise<Canonicalized> {
   }
   const chunks = [...chunkNatural.values()].map(({ canonical }) => canonical)
     .sort((left, right) => left.id.localeCompare(right.id));
+  const authoritySupportedRevisionIds = new Set(input.normalizedRevisions
+    .filter((revision) => {
+      const evidence = authorityEvidenceByRevision.get(revision.textRevisionId) ?? [];
+      return revision.textualAuthority !== "unknown" && evidence.length > 0
+        && evidence.every((row) => isAuthorityEvidenceValidForRevision(revision, row));
+    })
+    .map((revision) => revision.textRevisionId));
+  const projectionSupportedRenditionIds = new Set(input.provisionRenditions
+    .filter((rendition) => {
+      const revision = revisionByIdentity.get(rendition.textRevisionId);
+      return rendition.textualAuthority !== "unknown"
+        && revision?.textualAuthority === rendition.textualAuthority
+        && authoritySupportedRevisionIds.has(rendition.textRevisionId);
+    })
+    .map((rendition) => rendition.provisionRenditionId));
+  const projectionEligibleChunkIds = new Set(input.chunks
+    .filter((chunk) => chunk.capabilities.includes(input.capability)
+      && projectionSupportedRenditionIds.has(chunk.provisionRenditionId))
+    .flatMap((chunk) => {
+      const canonicalId = chunkBySourceId.get(chunk.chunkId);
+      return canonicalId ? [canonicalId] : [];
+    }));
 
   const fingerprints = new Map<string, Set<string>>();
   for (const [canonical, fingerprint] of renditionFingerprint) {
@@ -792,6 +825,7 @@ async function canonicalize(input: Inventory): Promise<Canonicalized> {
     renditionBySourceId,
     chunkBySourceId,
     chunks,
+    projectionEligibleChunkIds,
     sourceCounts: {
       sourceDocuments: input.sourceDocuments.length,
       rawCaptures: input.rawCaptures.length,
@@ -816,9 +850,9 @@ async function canonicalize(input: Inventory): Promise<Canonicalized> {
       provisionConcepts: new Set(conceptBySourceId.values()).size,
       provisionRenditions: canonicalRenditions,
       chunks: chunks.length,
-      sparsePostings: chunks.filter((chunk) => chunk.capabilities.includes(input.capability)).length,
-      denseCandidates: chunks.filter((chunk) => chunk.capabilities.includes(input.capability)).length,
-      releaseItems: chunks.filter((chunk) => chunk.capabilities.includes(input.capability)).length,
+      sparsePostings: projectionEligibleChunkIds.size,
+      denseCandidates: projectionEligibleChunkIds.size,
+      releaseItems: projectionEligibleChunkIds.size,
       lineageEdges: input.lineageEdges.length,
       authorityEvidenceRecords: new Set(input.authorityEvidenceRecords
         .map((row) => row.authorityEvidenceId)).size,
@@ -1059,7 +1093,8 @@ async function expectedProjections(input: Inventory, canonical: Canonicalized): 
       })),
     });
   }
-  const eligible = canonical.chunks.filter((chunk) => chunk.capabilities.includes(input.capability));
+  const eligible = canonical.chunks.filter((chunk) =>
+    canonical.projectionEligibleChunkIds.has(chunk.id));
   const rows = await Promise.all(eligible.map(async (chunk) => {
     const bucket = Number.parseInt((await digest(chunk.id)).slice(0, 8), 16) % input.shardCount;
     const shardId = String(bucket).padStart(2, "0");
