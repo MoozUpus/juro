@@ -1,4 +1,5 @@
 import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
+import { documentVisibilityScope } from "../../../../lib/document-builder/permissions/document-visibility";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { filterVerifiedLexSources } from "../../../../lib/legal/source-trust";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
@@ -34,6 +35,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
   if (query.length < 2) return response({ query, results: [] });
   const like = likeValue(query);
   const db = requireD1();
+  const documentVisibility = documentVisibilityScope(user.id, workspace.id);
   const [tasksAvailable, lawyersAvailable] = await Promise.all([
     hasTable(db, "tasks"),
     hasTable(db, "lawyer_profiles"),
@@ -46,10 +48,10 @@ export const GET = withApiErrors(async function GET(request: Request) {
        ORDER BY updated_at DESC LIMIT 6`,
     ).bind(workspace.id, like, like),
     db.prepare(
-      `SELECT id,title,category AS subtitle,updated_at AS updatedAt
-       FROM documents WHERE workspace_id=? AND archived_at IS NULL
-         AND title LIKE ? ESCAPE '\\' ORDER BY updated_at DESC LIMIT 6`,
-    ).bind(workspace.id, like),
+      `SELECT d.id,d.title,d.category AS subtitle,d.updated_at AS updatedAt
+       FROM documents d WHERE ${documentVisibility.sql} AND d.archived_at IS NULL
+         AND d.title LIKE ? ESCAPE '\\' ORDER BY d.updated_at DESC LIMIT 6`,
+    ).bind(...documentVisibility.bindings, like),
     db.prepare(
       `SELECT id,title,'AI' AS subtitle,updated_at AS updatedAt
        FROM conversations WHERE workspace_id=? AND owner_user_id=? AND status='active'

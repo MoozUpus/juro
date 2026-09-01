@@ -5,7 +5,7 @@ import {
   documentCaseLinkInputSchema,
 } from "../../../../../../lib/document-builder/document-case-link";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../../lib/platform/workspace";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -16,7 +16,7 @@ function response(body: unknown, status = 200) {
 export const PUT = withApiErrors(async function PUT(request: Request, context: Context) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { id } = await context.params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
     return response({ code: "DOCUMENT_UNAVAILABLE", error: "Документ недоступен." }, 404);

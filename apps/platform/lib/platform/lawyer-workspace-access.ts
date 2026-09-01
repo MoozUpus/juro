@@ -103,7 +103,7 @@ export async function lawyerMessageAttachmentRecipientRole(
        AND g.lawyer_user_id=p.user_id AND g.revoked_at IS NULL
        AND (g.expires_at IS NULL OR g.expires_at>?)
      WHERE a.document_id=? AND a.recipient_user_id=?
-     ORDER BY a.created_at DESC LIMIT 1`,
+     ORDER BY a.created_at DESC,a.id DESC LIMIT 1`,
   ).bind(
     input.now ?? new Date().toISOString(),
     input.documentId,

@@ -1,6 +1,7 @@
 import { finalizeSandboxPayment } from "../../../../../lib/billing/payment-finalization";
 import { paymentFoundationStatus } from "../../../../../lib/billing/foundation";
 import { parseSandboxPaymentEvent, verifySandboxWebhook } from "../../../../../lib/billing/sandbox-provider";
+import { readBoundedRequestBody } from "../../../../../lib/auth/input";
 import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 
 function response(body: unknown, status = 200) {
@@ -13,12 +14,16 @@ export async function POST(request: Request) {
   if (!availability.enabled || !availability.sandboxEnabled) return response({ code: "SANDBOX_WEBHOOK_DISABLED" }, 404);
   const secret = env.PAYMENT_SANDBOX_WEBHOOK_SECRET;
   if (!secret || secret.length < 32) return response({ code: "SANDBOX_WEBHOOK_UNAVAILABLE" }, 503);
-  const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > 8_192) return response({ code: "PAYLOAD_TOO_LARGE" }, 413);
+  const contentLengthHeader = request.headers.get("content-length");
+  const contentLength = contentLengthHeader === null ? null : Number(contentLengthHeader);
+  if (contentLength !== null && Number.isFinite(contentLength) && contentLength > 8_192) {
+    return response({ code: "PAYLOAD_TOO_LARGE" }, 413);
+  }
   const timestamp = request.headers.get("x-juro-payment-timestamp") ?? "";
   const signature = request.headers.get("x-juro-payment-signature") ?? "";
-  const rawBody = await request.text();
-  if (new TextEncoder().encode(rawBody).byteLength > 8_192) return response({ code: "PAYLOAD_TOO_LARGE" }, 413);
+  const body = await readBoundedRequestBody(request, 8_192);
+  if (!body.ok) return response({ code: "PAYLOAD_TOO_LARGE" }, 413);
+  const rawBody = body.text;
   if (!await verifySandboxWebhook(secret, timestamp, rawBody, signature)) {
     return response({ code: "INVALID_WEBHOOK_SIGNATURE" }, 401);
   }

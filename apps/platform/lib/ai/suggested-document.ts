@@ -4,6 +4,7 @@ import type { DocumentDefinition, QuestionnaireField } from "../document-builder
 import { createQuestionnaireAnswers, localize, setAnswer } from "../document-builder/registry/engine";
 import { createConfiguredDocument } from "../document-builder/storage/configured-documents";
 import type { UserProfile } from "../document-builder/types";
+import { requireWorkspaceContentEditor } from "../platform/permissions";
 import { parseLegalChatResponse } from "./legal-chat-schema";
 
 export const resolveAiSuggestedDocumentInputSchema = z.object({
@@ -249,6 +250,7 @@ function replay(existing: ExistingHandoff | null, expected: Omit<ExistingHandoff
 export async function createAiSuggestedDocumentDraft(input: {
   db: D1Database;
   workspaceId: string;
+  workspaceRole: string;
   user: UserProfile;
   assistantMessageId: string;
   locale: "ru" | "uz";
@@ -257,6 +259,7 @@ export async function createAiSuggestedDocumentDraft(input: {
   idempotencyKey: string;
 }): Promise<{ documentId: string; replayed: boolean }> {
   const preview = await previewAiSuggestedDocument(input);
+  if (preview.caseId) requireWorkspaceContentEditor(input.workspaceRole);
   const allowed = new Map(preview.candidates.map((item) => [item.fieldId, item]));
   const selected = aiSuggestedDocumentSelectionSchema.parse(input.fields)
     .map((item) => ({ fieldId: item.fieldId, value: item.value.trim() }))

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { z } from "zod";
 import { prepareAuthOtpChallengeEvidence } from "../lib/auth/challenge-evidence";
 import { sha256 } from "../lib/auth/crypto";
 import {
@@ -515,6 +516,80 @@ test("OTP JSON contracts reject type confusion, extra keys, and large bodies", a
     verifyOtpInputSchema,
   );
   assert.deepEqual(oversized, { ok: false, error: "payload_too_large" });
+});
+
+test("bounded JSON parsing accepts chunked input and cancels before oversized bodies are consumed", async () => {
+  const schema = z.object({ value: z.string() }).strict();
+  const body = JSON.stringify({ value: "ўзбек" });
+  const encoded = new TextEncoder().encode(body);
+  const chunked = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoded.slice(0, 5));
+      controller.enqueue(encoded.slice(5, 11));
+      controller.enqueue(encoded.slice(11));
+      controller.close();
+    },
+  });
+  const exact = await parseJsonRequest(
+    new Request("https://app.juro.uz/api/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: chunked,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" }),
+    schema,
+    encoded.byteLength,
+  );
+  assert.deepEqual(exact, { ok: true, data: { value: "ўзбек" } });
+
+  let pulls = 0;
+  let cancelled = false;
+  const oversizedStream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(new Uint8Array(64));
+      if (pulls >= 20) controller.close();
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const oversized = await parseJsonRequest(
+    new Request("https://app.juro.uz/api/test", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": "1",
+      },
+      body: oversizedStream,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" }),
+    schema,
+    128,
+  );
+  assert.deepEqual(oversized, { ok: false, error: "payload_too_large" });
+  assert.equal(cancelled, true);
+  assert.ok(pulls < 20, "the parser must stop consuming the stream after the cap");
+
+  const declaredOversize = await parseJsonRequest(
+    new Request("https://app.juro.uz/api/test", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": "1024",
+      },
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new Uint8Array([123, 125]));
+          controller.close();
+        },
+      }),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" }),
+    schema,
+    128,
+  );
+  assert.deepEqual(declaredOversize, { ok: false, error: "payload_too_large" });
 });
 
 test("session persistence inputs default safely and reject malformed values", async () => {

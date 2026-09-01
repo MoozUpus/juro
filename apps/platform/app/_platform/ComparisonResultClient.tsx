@@ -949,6 +949,7 @@ function errorLabel(code: string | null, locale: PlatformLocale) {
   const ru = locale === "ru";
   const labels: Record<string, { ru: string; uz: string }> = {
     CORRUPT_FILE: { ru: "Файл повреждён или был удалён во время обработки.", uz: "Fayl shikastlangan yoki qayta ishlash vaqtida o‘chirilgan." },
+    FILE_SCAN_REQUIRED: { ru: "Файл нужно повторно загрузить для проверки безопасности.", uz: "Xavfsizlik tekshiruvi uchun faylni qayta yuklang." },
     PASSWORD_PROTECTED: { ru: "PDF защищён паролем. Снимите защиту и замените версию.", uz: "PDF parol bilan himoyalangan. Himoyani olib tashlab, versiyani almashtiring." },
     NO_READABLE_TEXT: { ru: "В документе нет читаемого текста.", uz: "Hujjatda o‘qiladigan matn yo‘q." },
     OCR_REQUIRED: { ru: "Это скан. Для сравнения требуется подключённый OCR.", uz: "Bu skan. Taqqoslash uchun OCR ulanishi kerak." },

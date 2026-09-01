@@ -180,11 +180,12 @@ test("Builder Markdown snapshot enters the same structured analysis pipeline", a
   assert.equal(result.detectedLanguage, "ru");
 });
 
-test("comparison upload and processing preflight DOCX archives with strict expansion bounds", async () => {
-  const [uploadRoute, processRoute, sharedValidation] = await Promise.all([
+test("comparison upload quarantines every input and processing requires clean scan evidence", async () => {
+  const [uploadRoute, processRoute, sharedValidation, scanEvidence] = await Promise.all([
     readFile(new URL("../app/api/platform/document-comparisons/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/document-comparisons/[comparisonId]/process/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/document-builder/storage/file-validation.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/document-comparison/scan-evidence.ts", import.meta.url), "utf8"),
   ]);
   for (const source of [sharedValidation, processRoute]) {
     assert.match(source, /verifyArchiveBytes/);
@@ -194,8 +195,21 @@ test("comparison upload and processing preflight DOCX archives with strict expan
   assert.doesNotMatch(sharedValidation, /PizZip/u);
   const existingPreflight = uploadRoute.indexOf("const inspection = await validateUploadBytes(");
   const freshPreflight = uploadRoute.indexOf("const inspection = await validateUploadBytes(file, bytes)");
-  const privateStorage = uploadRoute.indexOf("await putPrivateObject");
-  assert.ok(existingPreflight >= 0 && freshPreflight > existingPreflight && privateStorage > freshPreflight);
+  const quarantine = uploadRoute.indexOf("await quarantineScanAndStorePrivateObject");
+  const fileInsert = uploadRoute.indexOf("INSERT INTO document_files");
+  assert.ok(existingPreflight >= 0 && freshPreflight > existingPreflight);
+  assert.ok(quarantine > freshPreflight && fileInsert > quarantine);
+  assert.doesNotMatch(uploadRoute, /\bputPrivateObject\b/u);
+  assert.match(uploadRoute, /sourceFileId: existing\.id/);
+  assert.match(uploadRoute, /FILE_UNSAFE/);
+  const scanGate = processRoute.indexOf("assertComparisonSourceFilesClean(db");
+  const completedReplay = processRoute.indexOf('comparison.status === "completed"');
+  const cachedExtraction = processRoute.indexOf("loadExtractedDocument(comparison.versionOneJsonKey)");
+  const rawExtraction = processRoute.indexOf("extractDocument(firstFile)");
+  assert.ok(scanGate >= 0 && completedReplay > scanGate && cachedExtraction > completedReplay && rawExtraction > cachedExtraction);
+  assert.match(scanEvidence, /metadata\.scanStatus === "clean"/);
+  assert.match(scanEvidence, /metadata\.scanSignatureVersion/);
+  assert.match(scanEvidence, /FILE_SCAN_REQUIRED/);
 });
 
 test("TXT, passive HTML and JSON enter the same non-executing extraction pipeline", async () => {

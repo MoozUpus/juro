@@ -8,6 +8,9 @@ const client = readFileSync(new URL("../app/_guest/GuestAiClient.tsx", import.me
 
 test("guest AI route is server-only, same-origin protected, provider-backed, and source bounded", () => {
   assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /parseJsonRequest\(request, requestSchema, 8_192\)/);
+  assert.doesNotMatch(route, /requestSchema\.safeParse\(await request\.json/);
+  assert.match(route, /GUEST_AI_PAYLOAD_TOO_LARGE/);
   assert.match(route, /validateTurnstile/);
   assert.match(route, /guestAiTurnstileAction/);
   assert.match(route, /retrieveCorpusAwareLegalSources/);

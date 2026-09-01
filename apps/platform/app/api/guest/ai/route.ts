@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ApiAuthError, assertSafeWrite } from "../../../../lib/auth/safe-write";
+import { parseJsonRequest } from "../../../../lib/auth/input";
 import {
   guestAiTurnstileAction,
   validateTurnstile,
@@ -395,12 +396,16 @@ export async function POST(request: Request): Promise<Response> {
   let telemetry: GuestAiSloContext | null = null;
   try {
     assertSafeWrite(request);
-    const parsed = requestSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) {
+    const parsed = await parseJsonRequest(request, requestSchema, 8_192);
+    if (!parsed.ok) {
       return json({
-        code: "INVALID_GUEST_AI_REQUEST",
-        error: "Введите вопрос длиной от 5 до 4 000 символов.",
-      }, 400);
+        code: parsed.error === "payload_too_large"
+          ? "GUEST_AI_PAYLOAD_TOO_LARGE"
+          : "INVALID_GUEST_AI_REQUEST",
+        error: parsed.error === "payload_too_large"
+          ? "Размер запроса превышает допустимый предел."
+          : "Введите вопрос длиной от 5 до 4 000 символов.",
+      }, parsed.error === "payload_too_large" ? 413 : 400);
     }
     locale = parsed.data.locale;
     const applicableAt = parsed.data.legalContextDate

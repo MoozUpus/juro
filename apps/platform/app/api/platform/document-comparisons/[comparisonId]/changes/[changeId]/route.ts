@@ -5,6 +5,9 @@ import {
   ComparisonDecisionError,
   decideComparisonChange,
 } from "../../../../../../../lib/document-comparison/review-decision";
+import { assertComparisonSourceFilesClean } from "../../../../../../../lib/document-comparison/scan-evidence";
+import { comparisonForUser } from "../../../../../../../lib/document-comparison/storage";
+import { ComparisonProcessingError } from "../../../../../../../lib/document-comparison/types";
 import { workspaceForContentEditor } from "../../../../../../../lib/platform/workspace";
 
 const decisionSchema = z.object({
@@ -25,6 +28,24 @@ export const PATCH = withApiErrors(async function PATCH(
   const user = await requireApiUser();
   const workspace = await workspaceForContentEditor(user);
   const { comparisonId, changeId } = await context.params;
+  const db = requireD1();
+  const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
+  if (!comparison) {
+    return response({ code: "COMPARISON_CHANGE_NOT_FOUND", error: "Изменение не найдено." }, 404);
+  }
+  try {
+    await assertComparisonSourceFilesClean(db, {
+      versionOneFileId: comparison.versionOneFileId,
+      versionTwoFileId: comparison.versionTwoFileId,
+      workspaceId: workspace.id,
+      ownerUserId: user.id,
+    });
+  } catch (error) {
+    if (error instanceof ComparisonProcessingError) {
+      return response({ code: error.code, error: error.message }, 422);
+    }
+    throw error;
+  }
   const parsed = decisionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return response({
@@ -33,7 +54,7 @@ export const PATCH = withApiErrors(async function PATCH(
     }, 400);
   }
   try {
-    return response(await decideComparisonChange(requireD1(), {
+    return response(await decideComparisonChange(db, {
       comparisonId,
       changeId,
       workspaceId: workspace.id,

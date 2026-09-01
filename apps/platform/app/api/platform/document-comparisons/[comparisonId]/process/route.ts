@@ -6,6 +6,11 @@ import { requireD1 } from "../../../../../../lib/document-builder/storage/runtim
 import { compareDocuments, summarizeChanges } from "../../../../../../lib/document-comparison/diff";
 import { extractDocument } from "../../../../../../lib/document-comparison/extract";
 import { enrichComparisonChanges, type ComparisonLegalSource } from "../../../../../../lib/document-comparison/legal-analysis";
+import {
+  assertComparisonFileScanEvidence,
+  assertComparisonSourceFilesClean,
+  type ComparisonFileRecord,
+} from "../../../../../../lib/document-comparison/scan-evidence";
 import { filterVerifiedLexSources } from "../../../../../../lib/legal/source-trust";
 import {
   comparisonForUser,
@@ -28,19 +33,10 @@ async function updateStage(db: D1Database, comparisonId: string, workspaceId: st
   ).bind(stage, isoNow(), comparisonId, workspaceId).run();
 }
 
-async function fileBytes(db: D1Database, fileId: string, workspaceId: string, ownerUserId: string) {
-  const file = await db.prepare(
-    `SELECT r2_key AS r2Key,file_name AS fileName,mime_type AS mimeType,size_bytes AS sizeBytes
-     FROM document_files WHERE id=? AND workspace_id=? AND owner_user_id=? AND archived_at IS NULL LIMIT 1`,
-  ).bind(fileId, workspaceId, ownerUserId).first<{
-    r2Key: string;
-    fileName: string;
-    mimeType: string;
-    sizeBytes: number;
-  }>();
-  if (!file) throw new ComparisonProcessingError("CORRUPT_FILE", "Одна из версий была удалена или недоступна.");
+async function fileBytes(file: ComparisonFileRecord) {
   const object = await getPrivateObject(file.r2Key);
   if (!object) throw new ComparisonProcessingError("CORRUPT_FILE", "Одна из версий отсутствует в приватном хранилище.");
+  assertComparisonFileScanEvidence(file, object);
   const bytes = new Uint8Array(await object.arrayBuffer());
   if (file.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     try {
@@ -93,6 +89,25 @@ export const POST = withApiErrors(async function POST(
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
   if (!comparison) return response({ error: "Сравнение не найдено." }, 404);
+  let sourceFiles: [ComparisonFileRecord, ComparisonFileRecord];
+  try {
+    sourceFiles = await assertComparisonSourceFilesClean(db, {
+      versionOneFileId: comparison.versionOneFileId,
+      versionTwoFileId: comparison.versionTwoFileId,
+      workspaceId: workspace.id,
+      ownerUserId: user.id,
+    });
+  } catch (error) {
+    const code = error instanceof ComparisonProcessingError ? error.code : "COMPARISON_PROCESSING_FAILED";
+    await db.prepare(
+      "UPDATE document_comparisons SET status='failed',error_code=?,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
+    ).bind(code, isoNow(), comparisonId, workspace.id, user.id).run();
+    return response({
+      error: error instanceof ComparisonProcessingError ? error.message : "Сравнение недоступно.",
+      code,
+      comparison: { id: comparisonId, status: "failed", stage: comparison.stage },
+    }, 422);
+  }
   if (comparison.status === "completed") return response({ comparison: { id: comparisonId, status: comparison.status, stage: comparison.stage } });
   const staleBefore = new Date(Date.now() - 2 * 60_000).toISOString();
   const lock = await db.prepare(
@@ -103,10 +118,11 @@ export const POST = withApiErrors(async function POST(
   if (!lock.meta.changes) return response({ error: "Сравнение уже обрабатывается." }, 409);
 
   try {
+    const [versionOneFile, versionTwoFile] = sourceFiles;
     let versionOne = await loadExtractedDocument(comparison.versionOneJsonKey);
     if (!versionOne) {
       await updateStage(db, comparisonId, workspace.id, "extracting_version_one");
-      const firstFile = await fileBytes(db, comparison.versionOneFileId, workspace.id, user.id);
+      const firstFile = await fileBytes(versionOneFile);
       versionOne = await extractDocument(firstFile);
       const versionOneJsonKey = `workspaces/${workspace.id}/comparisons/${comparisonId}/version-one.json`;
       await putPrivateObject(versionOneJsonKey, new TextEncoder().encode(JSON.stringify(versionOne)), "application/json", {
@@ -120,7 +136,7 @@ export const POST = withApiErrors(async function POST(
     let versionTwo = await loadExtractedDocument(comparison.versionTwoJsonKey);
     if (!versionTwo) {
       await updateStage(db, comparisonId, workspace.id, "extracting_version_two");
-      const secondFile = await fileBytes(db, comparison.versionTwoFileId, workspace.id, user.id);
+      const secondFile = await fileBytes(versionTwoFile);
       versionTwo = await extractDocument(secondFile);
       const versionTwoJsonKey = `workspaces/${workspace.id}/comparisons/${comparisonId}/version-two.json`;
       await putPrivateObject(versionTwoJsonKey, new TextEncoder().encode(JSON.stringify(versionTwo)), "application/json", {

@@ -2,6 +2,13 @@ import { requireApiUser, withApiErrors } from "../../../../../../../lib/document
 import { getPrivateObject } from "../../../../../../../lib/document-builder/storage/files";
 import { requireD1 } from "../../../../../../../lib/document-builder/storage/runtime";
 import { comparisonForUser } from "../../../../../../../lib/document-comparison/storage";
+import {
+  assertComparisonFileScanEvidence,
+  assertStoredComparisonFileIsClean,
+  comparisonFileForOwner,
+  type ComparisonFileRecord,
+} from "../../../../../../../lib/document-comparison/scan-evidence";
+import { ComparisonProcessingError } from "../../../../../../../lib/document-comparison/types";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
 
 export const GET = withApiErrors(async function GET(
@@ -18,18 +25,32 @@ export const GET = withApiErrors(async function GET(
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
   if (!comparison) return Response.json({ error: "Сравнение не найдено." }, { status: 404 });
   const fileId = version === "one" ? comparison.versionOneFileId : comparison.versionTwoFileId;
-  const file = await db.prepare(
-    `SELECT r2_key AS r2Key,file_name AS fileName,mime_type AS mimeType
-     FROM document_files
-     WHERE id=? AND workspace_id=? AND owner_user_id=? AND archived_at IS NULL LIMIT 1`,
-  ).bind(fileId, workspace.id, user.id).first<{
-    r2Key: string;
-    fileName: string;
-    mimeType: string;
-  }>();
-  if (!file) return Response.json({ error: "Файл не найден." }, { status: 404 });
+  let file: ComparisonFileRecord;
+  try {
+    file = await comparisonFileForOwner(db, fileId, workspace.id, user.id);
+    await assertStoredComparisonFileIsClean(file);
+  } catch (error) {
+    if (error instanceof ComparisonProcessingError) {
+      return Response.json({ code: error.code, error: error.message }, {
+        status: 422,
+        headers: { "cache-control": "private, no-store" },
+      });
+    }
+    throw error;
+  }
   const object = await getPrivateObject(file.r2Key);
   if (!object) return Response.json({ error: "Файл недоступен." }, { status: 404 });
+  try {
+    assertComparisonFileScanEvidence(file, object);
+  } catch (error) {
+    if (error instanceof ComparisonProcessingError) {
+      return Response.json({ code: error.code, error: error.message }, {
+        status: 422,
+        headers: { "cache-control": "private, no-store" },
+      });
+    }
+    throw error;
+  }
   return new Response(object.body, {
     headers: {
       "content-type": file.mimeType,
