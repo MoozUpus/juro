@@ -2,7 +2,7 @@
 
 Status: **active runbook, not a completion certificate**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-01 08:49 UZT (2026-09-01 03:49 UTC)**
 
 This runbook covers the currently verified public Sites and platform Worker releases. It intentionally excludes legislation-database, legal-corpus, Lex.uz, Advice.uz, vector, and staging-capacity operations.
 
@@ -11,7 +11,7 @@ This runbook covers the currently verified public Sites and platform Worker rele
 | Surface | Live release | Rollback release | Rollback trigger |
 | --- | --- | --- | --- |
 | Public website | Sites v95, source `855ba2161b716daabb96ac469456c101e5d3bb2c` | Saved Sites v94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d` | Custom-domain outage, broken RU/UZ/EN entry route, sitemap regression, or incorrect indexing split |
-| Platform Worker | v189, version ID `102dcb2d-f79f-4172-9a3a-19d55d51f6ed` | v188, version ID `57387083-9f7f-4cd8-a9f2-84414f2604d6` | Verified platform regression, private-boundary failure, wrong status-host metadata, CSP regression, or new critical error rate |
+| Platform Worker | v99, version ID `0b35483c-9bf4-4a21-ba45-dadbde198f83` | v98, version ID `b1b242f0-9033-40e3-bdf2-d9aee9ef5b48` | Authorization regression, public body-limit regression, private upload failure, platform outage, or new critical error rate |
 
 ## Public Sites rollback
 
@@ -32,9 +32,9 @@ The v95 acceptance contract is:
 
 ## Platform Worker rollback
 
-1. Confirm the fault against the current v189 version and capture only bounded, non-sensitive diagnostics.
-2. Prefer the Cloudflare version rollback to v188; do not rebuild an unrelated Git state.
-3. Do not apply or alter a D1 migration during this rollback. v189 introduced no migration.
+1. Confirm the fault against the current v99 version and capture only bounded, non-sensitive diagnostics.
+2. Prefer the Cloudflare version rollback to v98; do not rebuild an unrelated Git state.
+3. Do not apply or alter a D1 migration during this rollback. v99 introduced no migration.
 4. Verify public status, authentication redirects, private API `401` boundaries, lawyer-host routing, and the document-analysis route boundary.
 5. Verify D1 evidence is a direct `synthetic_probe` with plausible latency, then verify provider-probe evidence freshness and ensure failed probes are not writing every five minutes.
 6. Run Chrome smoke on the status root, unlocalized/localized status routes, and app-host status route; confirm same-origin icons, unchanged CSP, and a clean console.
@@ -51,4 +51,4 @@ The v95 acceptance contract is:
 
 ## Data safety
 
-Neither the Sites nor v189 Worker rollback requires a database mutation. Do not delete user data, alter secrets, change DNS, or touch the excluded legislation/corpus systems as part of these rollback paths.
+Neither the Sites nor v99 Worker rollback requires a database mutation. Do not delete user data, alter secrets, change DNS, or touch the excluded legislation/corpus systems as part of these rollback paths.

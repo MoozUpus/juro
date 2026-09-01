@@ -2,50 +2,58 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-01 09:58 UZT (2026-09-01 04:58 UTC)**
 
-Scope in this report: platform Worker v189 and public Sites v95. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: platform Worker v99 and public Sites v95. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
 
 ## Automated release checks
 
 | Area | Evidence | Result |
 | --- | --- | --- |
-| Status metadata regressions | 4 focused tests | PASS |
-| Platform core application | 1,142 tests | PASS |
+| v99 focused security/platform checks | 91 tests | PASS |
+| Platform core application | 1,161 tests | PASS |
 | Worker/runtime and infrastructure | 217 tests | PASS |
+| Worker smoke | 33 tests | PASS |
 | TypeScript | `type-check` | PASS |
 | Lint | repository lint | PASS |
 | Cloudflare configuration | environment matrix validation and generated types check | PASS |
 | Production artifact | production artifact validation and budget checks | PASS |
 | Dependency and licence policy | production dependency audit, website toolchain audit, licence enforcement | PASS |
-| Pull request CI | PR #95 workflow `33352197361` | PASS |
-| Post-merge CI | workflow `33404886188` on merge `d133a470a49166875d9112b938ae3f7d765ee170` | PASS |
-| Production deployment | workflow `33404885913` | PASS |
+| Pull request CI | Draft PR #101 workflow `33466544141` | PASS |
+| Production deployment | controlled deployment `6c3c5410-c16a-46dd-ae78-6ee580baf641` | PASS |
 
 During the earlier v187 validation, one initial parallel local run hit a Windows build-directory collision. The suites were rerun sequentially and passed in full; this was not treated as a product failure or hidden as a green parallel run.
 
 ## Security review
 
-- Security diff scan ID: `97f3ebca-264a-4d1d-aff6-2eec9448ec0c`.
-- Findings: 0 reportable security findings.
-- Coverage: partial for the initial patch because it did not yet cover every status route/host or live edge behavior.
-- Scan usage: 5,883,477 total tokens; 5,850,397 input tokens; 5,589,504 cached input tokens; 33,080 output tokens; 10,553 reasoning tokens.
+- Security scan ID: `3f683f24-c93d-469c-934e-4826a9122674`.
+- Findings: 2 medium-severity, high-confidence findings; both fixed before production deployment.
+- Fixed boundaries: pending invitation PII authorization/expiry and unbounded public JSON request bodies.
 
-The scan identified release-blocking functional and CSP coverage gaps in the initial status-metadata patch even though it found no reportable vulnerability. Before merge, the implementation was changed to use a Worker-owned origin header, validate the allowed status hosts, cover both localized and root status routes, and preserve the existing CSP. Focused tests and live Chrome/HTTP verification cover the final release behavior; the scan is not evidence for the entire historical repository.
+Independent post-patch review found a dispatch-order regression in the first request-body patch that would have placed the public 1 MiB gate before the protected internal 20 MiB upload. The order was corrected before release, the full suites were rerun, and the reviewer reported no remaining evidence-backed finding. The scan remains scoped evidence, not a clean bill of health for the historical repository.
 
 ## Production Worker verification
 
-- Active Worker: v189, ID `102dcb2d-f79f-4172-9a3a-19d55d51f6ed`, 100% traffic.
-- Rollback: v188, ID `57387083-9f7f-4cd8-a9f2-84414f2604d6`.
-- Public `/api/status` generated at `2026-08-31T15:07:12.161Z`: HTTP `200`, overall `degraded`, 6/8 components operational, 0 active incidents.
-- Fresh D1 evidence: `operational`, `192 ms`, `evidenceKind: synthetic_probe`, checked at `2026-08-31T15:05:19.870Z`.
-- Public provider codes are redacted to `PROVIDER_UNAVAILABLE`.
-- Earlier read-only D1 evidence recorded `PROVIDER_CREDIT_BALANCE_LOW` for OpenAI and Anthropic; that pre-top-up detail is retained as historical evidence, not asserted as the current Anthropic account state.
-- Provider failure intervals after v187 were 10.36–15.82 minutes rather than the pre-release 3–6 minute cadence.
-- Document-analysis evidence advanced after 26.2 minutes and recorded the routed provider failure instead of repeating every scheduler cycle.
-- Chrome rendered the status root, unlocalized status route, RU and UZ localized status routes, and the app-host RU status route with no console errors or warnings. Raw response HTML confirmed that status-host icons resolve to `status.juro.uz` and app-host icons remain on `app.juro.uz`; the existing CSP was unchanged.
+- Active Worker: v99, ID `0b35483c-9bf4-4a21-ba45-dadbde198f83`, 100% traffic.
+- Rollback: v98, ID `b1b242f0-9033-40e3-bdf2-d9aee9ef5b48`.
+- Public `/api/status` generated at `2026-09-01T04:58:58.390Z`: HTTP `200`, overall `operational`, 8/8 components operational, 0 active incidents.
+- Current OpenAI probe: `operational` at 3,467 ms; current Anthropic probe: `operational` at 7,198 ms.
+- Five consecutive OpenAI probes passed at 2,844–3,591 ms.
+- Five consecutive Anthropic probes passed at 6,288–7,875 ms.
+- Five consecutive routed document-analysis probes passed at 3,743–5,735 ms.
+- Live request-boundary proof returned `401` for ordinary small unauthenticated JSON and `413 PAYLOAD_TOO_LARGE` above 1 MiB.
 
-The Worker is deployed correctly, but AI and document analysis remain degraded until provider funding/workspace alignment yields fresh successful probes.
+The Worker and isolated provider contracts are operational in the checked window. This does not prove authenticated RU/UZ Legal Answer quality or provider fallback under a real primary outage.
+
+## Production data-quality checks
+
+All checks were read-only D1 aggregate queries and reported `rows_written=0`. No prompt, Legal Answer, document text, filename, identity value, legislation/corpus content, or vector data was selected.
+
+- `ai_provider_usage_events`: 65/65 unique IDs; 49 succeeded and 16 failed; no timestamp inversion, future row, invalid status/error pair, invalid token count, zero-usage success, or partial tenant scope.
+- `ai_runs`: 50/50 unique IDs; 46 completed and 4 failed; no missing completion timestamp/provider/model, invalid token count, negative latency, failed row without an error, completed row with an error, or missing tenant scope.
+- `ai_cost_daily_aggregates` reconciles exactly to provider events across grouped request, failure, token, and estimated-cost totals.
+- Pricing completeness after price-version go-live is 5/5 successful attempts; 44 earlier successful attempts are intentionally unpriced because no effective price version existed.
+- The provider-usage and run datasets end on 29 August. They are structurally sound for that period but stale for post-funding business usage and too small for a representative cost comparison.
 
 ## Public Sites v95 verification
 
@@ -58,7 +66,7 @@ The Worker is deployed correctly, but AI and document analysis remain degraded u
 - Chrome smoke passed on both the custom domain and provider hostname with no console errors.
 - Rollback: saved Sites v94.
 
-## Artifact budgets for v189
+## Latest recorded artifact sizes
 
 | Artifact | Measured size |
 | --- | ---: |
@@ -69,7 +77,7 @@ The Worker is deployed correctly, but AI and document analysis remain degraded u
 | Images | 564.4 KiB |
 | Worker entry | 3,576.8 KiB |
 
-These are build-budget measurements, not field Core Web Vitals.
+These v189 numeric measurements remain the latest recorded size snapshot. v99 passed the configured artifact budgets, but this documentation increment did not recapture exact byte totals. These are build measurements, not field Core Web Vitals.
 
 ## Still unproven
 
@@ -79,6 +87,7 @@ These are build-budget measurements, not field Core Web Vitals.
 - visual regression across every required viewport;
 - field performance baselines and before/after Core Web Vitals for every production route;
 - staging reliability, because the excluded staging D1 capacity blocker prevents fresh scheduler persistence;
-- provider recovery, because both public production probes still report `PROVIDER_UNAVAILABLE`; the reported Anthropic top-up has not yet produced a successful probe.
+- authenticated RU/UZ Legal Answer and deliberate provider-fallback production journeys, despite healthy isolated provider probes.
+- OpenAI/Anthropic billing-export reconciliation and a representative post-funding cost/latency baseline.
 
 The overall execution goal must remain active until these and the other Definition-of-Done gates are proven.
