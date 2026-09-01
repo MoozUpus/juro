@@ -45,6 +45,11 @@ export type CheckoutOrderView = Readonly<{
   paymentAttempt: Record<string, unknown> | null;
 }>;
 
+export type CheckoutAttemptTransition = Readonly<{
+  checkout: CheckoutOrderView;
+  createdPaymentAttempt: boolean;
+}>;
+
 function externalId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`;
 }
@@ -232,13 +237,13 @@ export async function createSubscriptionCheckout(
   return (await readCheckoutOrder(db, actor, orderId))!;
 }
 
-export async function confirmSubscriptionCheckout(
+export async function confirmSubscriptionCheckoutTransition(
   db: D1Database,
   actor: WorkspaceActor,
   orderId: string,
   input: Readonly<{ requestId: string; renewalMode: "ONE_TIME" | "AUTO_RENEW"; checkoutUrl: string }>,
   now = new Date(),
-): Promise<CheckoutOrderView> {
+): Promise<CheckoutAttemptTransition> {
   const view = await readCheckoutOrder(db, actor, orderId);
   if (!view) throw new BillingDomainError("ORDER_UNAVAILABLE", 404, "Заказ недоступен / Buyurtma mavjud emas.");
   const order = view.order;
@@ -250,7 +255,9 @@ export async function confirmSubscriptionCheckout(
     && order.status === "AWAITING_PAYMENT"
     && view.paymentAttempt?.internalStatus === "failed",
   );
-  if (order.acceptedPricingSnapshotId && !retryAfterFailure) return view;
+  if (order.acceptedPricingSnapshotId && !retryAfterFailure) {
+    return { checkout: view, createdPaymentAttempt: false };
+  }
   if (!retryAfterFailure && order.status !== "PRICED") throw new BillingDomainError("ORDER_NOT_CONFIRMABLE", 409, "Заказ уже изменился / Buyurtma holati o‘zgargan.");
   if (typeof order.expiresAt === "string" && Date.parse(order.expiresAt) <= now.getTime()) {
     throw new BillingDomainError("ORDER_EXPIRED", 409, "Расчёт истёк / Hisob muddati tugagan.");
@@ -261,7 +268,12 @@ export async function confirmSubscriptionCheckout(
   const existingAttempt = await db.prepare(
     "SELECT id FROM payment_attempts WHERE order_id=? AND idempotency_key=? LIMIT 1",
   ).bind(orderId, attemptIdempotency).first();
-  if (existingAttempt) return (await readCheckoutOrder(db, actor, orderId))!;
+  if (existingAttempt) {
+    return {
+      checkout: (await readCheckoutOrder(db, actor, orderId))!,
+      createdPaymentAttempt: false,
+    };
+  }
   const attemptCutoff = new Date(now.getTime() - 60 * 60_000).toISOString();
   const attemptCount = await db.prepare(`SELECT COUNT(*) AS count FROM payment_attempts a
     JOIN marketplace_orders o ON o.id=a.order_id
@@ -314,5 +326,21 @@ export async function confirmSubscriptionCheckout(
   if (!confirmed?.order.acceptedPricingSnapshotId) {
     throw new BillingDomainError("ORDER_CONFIRMATION_CONFLICT", 409, "Заказ уже обрабатывается / Buyurtma qayta ishlanmoqda.");
   }
-  return confirmed;
+  return { checkout: confirmed, createdPaymentAttempt: true };
+}
+
+export async function confirmSubscriptionCheckout(
+  db: D1Database,
+  actor: WorkspaceActor,
+  orderId: string,
+  input: Readonly<{ requestId: string; renewalMode: "ONE_TIME" | "AUTO_RENEW"; checkoutUrl: string }>,
+  now = new Date(),
+): Promise<CheckoutOrderView> {
+  return (await confirmSubscriptionCheckoutTransition(
+    db,
+    actor,
+    orderId,
+    input,
+    now,
+  )).checkout;
 }

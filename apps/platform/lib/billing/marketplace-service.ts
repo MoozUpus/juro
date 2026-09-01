@@ -1,7 +1,12 @@
 import { sha256 } from "../auth/crypto";
 import { applyBasisPoints } from "./money";
 import { calculatePricing } from "./pricing";
-import { BillingDomainError, readCheckoutOrder, type CheckoutOrderView } from "./checkout-service";
+import {
+  BillingDomainError,
+  readCheckoutOrder,
+  type CheckoutAttemptTransition,
+  type CheckoutOrderView,
+} from "./checkout-service";
 
 type Actor = Readonly<{ userId: string; workspaceId: string }>;
 type Proposal = { id: string; lawyerRequestId: string; lawyerProfileId: string; lawyerUserId: string; lawyerBaseAmountMinor: number; titleRu: string; titleUz: string; acceptanceId: string; agreementVersion: string; agreementSha256: string };
@@ -48,14 +53,14 @@ export async function createMarketplaceServiceCheckout(db: D1Database, actor: Ac
   return (await readCheckoutOrder(db, actor, orderId))!;
 }
 
-export async function confirmMarketplaceServiceCheckout(
+export async function confirmMarketplaceServiceCheckoutTransition(
   db: D1Database,
   actor: Actor,
   orderId: string,
   requestId: string,
   checkoutUrl: string,
   now = new Date(),
-): Promise<CheckoutOrderView> {
+): Promise<CheckoutAttemptTransition> {
   const view = await readCheckoutOrder(db, actor, orderId);
   if (!view || view.order.orderType !== "LEGAL_SERVICE" || !view.pricingSnapshot) {
     throw new BillingDomainError("ORDER_UNAVAILABLE", 404, "Заказ недоступен / Buyurtma mavjud emas.");
@@ -64,7 +69,12 @@ export async function confirmMarketplaceServiceCheckout(
   const existingAttempt = await db.prepare(
     "SELECT id FROM payment_attempts WHERE order_id=? AND idempotency_key=? LIMIT 1",
   ).bind(orderId, idempotencyKey).first<{ id: string }>();
-  if (existingAttempt) return (await readCheckoutOrder(db, actor, orderId))!;
+  if (existingAttempt) {
+    return {
+      checkout: (await readCheckoutOrder(db, actor, orderId))!,
+      createdPaymentAttempt: false,
+    };
+  }
   if (view.order.status !== "PRICED" || view.order.acceptedPricingSnapshotId) {
     throw new BillingDomainError("ORDER_NOT_CONFIRMABLE", 409, "Заказ уже изменился / Buyurtma o‘zgargan.");
   }
@@ -82,6 +92,7 @@ export async function confirmMarketplaceServiceCheckout(
   const at = now.toISOString();
   const attemptId = crypto.randomUUID();
   const providerAttemptId = ext("sandbox_pay");
+  let createdPaymentAttempt = true;
   try {
     await db.batch([
       db.prepare("UPDATE marketplace_orders SET accepted_pricing_snapshot_id=?,status='AWAITING_PAYMENT',provider='sandbox',provider_status='created',version=version+1,updated_at=? WHERE id=? AND workspace_id=? AND customer_user_id=? AND status='PRICED' AND accepted_pricing_snapshot_id IS NULL").bind(view.pricingSnapshot.id, at, orderId, actor.workspaceId, actor.userId),
@@ -96,10 +107,29 @@ export async function confirmMarketplaceServiceCheckout(
     if (!replay) {
       throw new BillingDomainError("ORDER_CONFIRMATION_CONFLICT", 409, "Заказ уже обрабатывается / Buyurtma qayta ishlanmoqda.");
     }
+    createdPaymentAttempt = false;
   }
   const confirmed = await readCheckoutOrder(db, actor, orderId);
   if (!confirmed?.paymentAttempt) {
     throw new BillingDomainError("ORDER_CONFIRMATION_CONFLICT", 409, "Заказ уже обрабатывается / Buyurtma qayta ishlanmoqda.");
   }
-  return confirmed;
+  return { checkout: confirmed, createdPaymentAttempt };
+}
+
+export async function confirmMarketplaceServiceCheckout(
+  db: D1Database,
+  actor: Actor,
+  orderId: string,
+  requestId: string,
+  checkoutUrl: string,
+  now = new Date(),
+): Promise<CheckoutOrderView> {
+  return (await confirmMarketplaceServiceCheckoutTransition(
+    db,
+    actor,
+    orderId,
+    requestId,
+    checkoutUrl,
+    now,
+  )).checkout;
 }

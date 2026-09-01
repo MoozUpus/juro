@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   confirmMarketplaceServiceCheckout,
+  confirmMarketplaceServiceCheckoutTransition,
   createMarketplaceServiceCheckout,
 } from "../lib/billing/marketplace-service";
 import { BillingDomainError } from "../lib/billing/checkout-service";
@@ -74,7 +75,7 @@ test("marketplace legal-service payment creates exactly one allocation and payab
     assert.equal(created.order.orderType, "LEGAL_SERVICE");
     assert.equal(created.pricingSnapshot?.clientTotalMinor, 1_232_000);
 
-    const confirmed = await confirmMarketplaceServiceCheckout(
+    const confirmedTransition = await confirmMarketplaceServiceCheckoutTransition(
       d1,
       actor,
       String(created.order.id),
@@ -82,7 +83,7 @@ test("marketplace legal-service payment creates exactly one allocation and payab
       "/ru/individual/orders/test/payment",
       new Date("2026-08-03T10:01:00.000Z"),
     );
-    const replayedConfirm = await confirmMarketplaceServiceCheckout(
+    const replayedTransition = await confirmMarketplaceServiceCheckoutTransition(
       d1,
       actor,
       String(created.order.id),
@@ -90,6 +91,10 @@ test("marketplace legal-service payment creates exactly one allocation and payab
       "/ru/individual/orders/test/payment",
       new Date("2026-08-03T10:01:01.000Z"),
     );
+    const confirmed = confirmedTransition.checkout;
+    const replayedConfirm = replayedTransition.checkout;
+    assert.equal(confirmedTransition.createdPaymentAttempt, true);
+    assert.equal(replayedTransition.createdPaymentAttempt, false);
     assert.equal(confirmed.paymentAttempt?.id, replayedConfirm.paymentAttempt?.id);
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM payment_attempts").get()?.count, 1);
     const event = {
