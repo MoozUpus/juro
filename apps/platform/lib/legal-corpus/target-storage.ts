@@ -8,6 +8,13 @@ import {
 export const LEGAL_TARGET_READINESS_PATH = "/internal/legal-corpus/target/readiness";
 
 const SERVICE_BINDING_MARKER = "legal-target-storage-v1";
+const SAFE_READINESS_ERROR_CODES = new Set([
+  "LEGAL_TARGET_CONFIGURATION_DRIFT",
+  "LEGAL_TARGET_DATABASE_UNAVAILABLE",
+  "LEGAL_TARGET_EVIDENCE_BUCKET_UNAVAILABLE",
+  "LEGAL_TARGET_AI_SEARCH_NAMESPACE_UNAVAILABLE",
+  "LEGAL_TARGET_STORAGE_EVIDENCE_INVALID",
+]);
 const environmentSchema = z.enum(["development", "staging", "production"]);
 const evidenceBucketNameSchema = z.string().regex(
   /^juro-legal-evidence-(?:development|staging|production)(?:-[a-z0-9]+)*$/u,
@@ -144,17 +151,23 @@ export async function handleLegalTargetReadinessRequest(
     const [rawControl, bucketObject, namespaceInstances] = await Promise.all([
       env.LEGAL_DB.prepare(`SELECT environment,migration_state AS migrationState,
         evidence_bucket_name AS evidenceBucketName
-        FROM legal_target_control WHERE control_key='environment'`).first(),
-      env.LEGAL_EVIDENCE_BUCKET.head(`control/environments/${environment.data}.json`),
-      env.LEGAL_AI_SEARCH_NAMESPACE.list({ page: 1, per_page: 100 }),
+        FROM legal_target_control WHERE control_key='environment'`).first()
+        .catch(() => { throw new TypeError("LEGAL_TARGET_DATABASE_UNAVAILABLE"); }),
+      env.LEGAL_EVIDENCE_BUCKET.head(`control/environments/${environment.data}.json`)
+        .catch(() => { throw new TypeError("LEGAL_TARGET_EVIDENCE_BUCKET_UNAVAILABLE"); }),
+      env.LEGAL_AI_SEARCH_NAMESPACE.list({ page: 1, per_page: 100 })
+        .catch(() => { throw new TypeError("LEGAL_TARGET_AI_SEARCH_NAMESPACE_UNAVAILABLE"); }),
     ]);
-    const control = controlRowSchema.parse(rawControl);
-    const bucketControl = bucketControlSchema.parse(bucketObject?.customMetadata ?? null);
+    const control = controlRowSchema.safeParse(rawControl);
+    const bucketControl = bucketControlSchema.safeParse(bucketObject?.customMetadata ?? null);
+    if (!control.success || !bucketControl.success) {
+      throw new TypeError("LEGAL_TARGET_STORAGE_EVIDENCE_INVALID");
+    }
     if (
-      control.environment !== environment.data
-      || control.evidenceBucketName !== env.LEGAL_EVIDENCE_BUCKET_NAME
-      || bucketControl.environment !== environment.data
-      || bucketControl.bucketName !== env.LEGAL_EVIDENCE_BUCKET_NAME
+      control.data.environment !== environment.data
+      || control.data.evidenceBucketName !== env.LEGAL_EVIDENCE_BUCKET_NAME
+      || bucketControl.data.environment !== environment.data
+      || bucketControl.data.bucketName !== env.LEGAL_EVIDENCE_BUCKET_NAME
       || namespaceInstances.result.some((instance) =>
         instance.namespace !== undefined
         && instance.namespace !== env.LEGAL_AI_SEARCH_NAMESPACE_NAME)
@@ -167,14 +180,14 @@ export async function handleLegalTargetReadinessRequest(
       environment: environment.data,
       database: "ready",
       evidenceBucket: "ready",
-      migrationState: control.migrationState,
+      migrationState: control.data.migrationState,
       aiSearchNamespace: "ready",
       aiSearchInstanceCount: namespaceInstances.result.length,
       declaredConfigurationIdentity,
       controlPlaneAttestation: "required",
     } satisfies LegalTargetReadiness);
   } catch (error) {
-    const errorCode = error instanceof TypeError && error.message === "LEGAL_TARGET_CONFIGURATION_DRIFT"
+    const errorCode = error instanceof TypeError && SAFE_READINESS_ERROR_CODES.has(error.message)
       ? error.message
       : "LEGAL_TARGET_DEPENDENCY_UNAVAILABLE";
     console.error(JSON.stringify({

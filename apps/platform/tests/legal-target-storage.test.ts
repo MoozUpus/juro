@@ -180,9 +180,10 @@ test("target readiness rejects unbound, cross-environment, and public requests",
   assert.equal(publicRequest.status, 404);
 });
 
-test("target readiness reports declared configuration drift without leaking payloads", async () => {
-  const env = targetEnv("staging");
-  Reflect.set(env, "LEGAL_AI_SEARCH_GATEWAY_CACHE", "true");
+async function assertReadinessFailure(
+  env: LegalTargetReadinessEnv,
+  errorCode: string,
+): Promise<void> {
   const errors: string[] = [];
   const originalError = console.error;
   console.error = (message?: unknown) => errors.push(String(message));
@@ -190,7 +191,7 @@ test("target readiness reports declared configuration drift without leaking payl
     await assert.rejects(() => createLegalTargetReadinessClient({
       service: inProcessReadinessService(env),
       environment: "staging",
-    }).readiness(), /LEGAL_TARGET_CONFIGURATION_DRIFT/u);
+    }).readiness(), new RegExp(errorCode, "u"));
   } finally {
     console.error = originalError;
   }
@@ -199,8 +200,101 @@ test("target readiness reports declared configuration drift without leaking payl
     service: "legal-corpus-worker",
     event: "legal_target.readiness_unavailable",
     environment: "staging",
-    errorCode: "LEGAL_TARGET_CONFIGURATION_DRIFT",
+    errorCode,
   });
+  assert.doesNotMatch(errors[0]!, /provider details|database details|bucket details/u);
+}
+
+const readinessFailureCases: Array<{
+  name: string;
+  errorCode: string;
+  mutate(env: LegalTargetReadinessEnv): void;
+}> = [
+  {
+    name: "declared configuration drift",
+    errorCode: "LEGAL_TARGET_CONFIGURATION_DRIFT",
+    mutate: (env) => { Reflect.set(env, "LEGAL_AI_SEARCH_GATEWAY_CACHE", "true"); },
+  },
+  {
+    name: "database rejection",
+    errorCode: "LEGAL_TARGET_DATABASE_UNAVAILABLE",
+    mutate: (env) => {
+      env.LEGAL_DB = { prepare: () => ({
+        async first() { throw new Error("database details must not escape"); },
+      }) };
+    },
+  },
+  {
+    name: "evidence bucket rejection",
+    errorCode: "LEGAL_TARGET_EVIDENCE_BUCKET_UNAVAILABLE",
+    mutate: (env) => {
+      env.LEGAL_EVIDENCE_BUCKET = {
+        async head() { throw new Error("bucket details must not escape"); },
+      };
+    },
+  },
+  {
+    name: "namespace rejection",
+    errorCode: "LEGAL_TARGET_AI_SEARCH_NAMESPACE_UNAVAILABLE",
+    mutate: (env) => {
+      env.LEGAL_AI_SEARCH_NAMESPACE!.list = async () => {
+        throw new Error("provider details must not escape");
+      };
+    },
+  },
+  {
+    name: "invalid persisted evidence",
+    errorCode: "LEGAL_TARGET_STORAGE_EVIDENCE_INVALID",
+    mutate: (env) => {
+      env.LEGAL_EVIDENCE_BUCKET = { async head() { return null; } };
+    },
+  },
+  {
+    name: "unexpected dependency response",
+    errorCode: "LEGAL_TARGET_DEPENDENCY_UNAVAILABLE",
+    mutate: (env) => {
+      Reflect.set(env.LEGAL_AI_SEARCH_NAMESPACE!, "list", async () => null);
+    },
+  },
+];
+
+for (const failure of readinessFailureCases) {
+  test(`target readiness reports ${failure.name} without leaking payloads`, async () => {
+    const env = targetEnv("staging");
+    failure.mutate(env);
+    await assertReadinessFailure(env, failure.errorCode);
+  });
+}
+
+test("an immediate readiness failure is not held open by a pending peer", async () => {
+  const env = targetEnv("staging");
+  env.LEGAL_DB = { prepare: () => ({
+    async first() { throw new Error("database details must not escape"); },
+  }) };
+  env.LEGAL_EVIDENCE_BUCKET = {
+    head: () => new Promise(() => undefined),
+  };
+  await Promise.race([
+    assertReadinessFailure(env, "LEGAL_TARGET_DATABASE_UNAVAILABLE"),
+    new Promise<never>((_resolve, reject) => setTimeout(
+      () => reject(new Error("READINESS_FAILURE_DEADLINE_EXCEEDED")),
+      100,
+    )),
+  ]);
+});
+
+test("readiness reports the first observed dependency failure", async () => {
+  const env = targetEnv("staging");
+  env.LEGAL_DB = { prepare: () => ({
+    async first() {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      throw new Error("database details must not escape");
+    },
+  }) };
+  env.LEGAL_EVIDENCE_BUCKET = {
+    async head() { throw new Error("bucket details must not escape"); },
+  };
+  await assertReadinessFailure(env, "LEGAL_TARGET_EVIDENCE_BUCKET_UNAVAILABLE");
 });
 
 test("the first legal-D1 migration is control-only and body-free", () => {
