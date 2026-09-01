@@ -6,6 +6,7 @@ const buildId = "build:staging:current:source-snapshot-qualification-v2";
 const lanes = [..."0123456789abcdef"].flatMap((first) =>
   [..."0123456789abcdef"].map((second) => `${first}${second}`));
 const laneConcurrency = 32;
+const replayLaneConcurrency = 8;
 
 async function call(action, body = {}, attempt = 0) {
   try {
@@ -118,7 +119,7 @@ async function replay(runId) {
   const laneQueue = [...lanes];
   let calls = 0;
   while (laneQueue.length > 0) {
-    const active = laneQueue.splice(0, laneConcurrency);
+    const active = laneQueue.splice(0, replayLaneConcurrency);
     const results = await Promise.all(active.map((lane) => call("replay", { runId, lane })));
     calls += results.length;
     for (let index = 0; index < results.length; index += 1) {
