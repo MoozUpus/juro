@@ -87,6 +87,7 @@ export function JuroMotionDirector() {
     let geometry = emptyGeometry();
     let measureFrame = 0;
     let disposed = false;
+    let initialized = false;
 
     const pageBox = (node: HTMLElement | null, scrollY: number): PageBox | null => {
       if (!node) return null;
@@ -215,6 +216,9 @@ export function JuroMotionDirector() {
         )
         : null;
 
+      // Commit state only after the cached layout reads in refreshGeometry.
+      // This keeps the first paint visible and prevents read/write interleaving.
+      root.dataset.motionReady = "true";
       root.style.setProperty("--page-progress", String(clamp(scrollY / geometry.pageRange)));
       root.style.setProperty("--hero-scroll", String(clamp(scrollY / (viewport * 0.9))));
       revealsToShow.forEach((node) => {
@@ -264,7 +268,7 @@ export function JuroMotionDirector() {
       scrollFrame = requestAnimationFrame(updateScrollStory);
     };
     const scheduleMeasure = () => {
-      if (disposed || measureFrame) return;
+      if (disposed || !initialized || measureFrame) return;
       measureFrame = requestAnimationFrame(() => {
         if (disposed) return;
         refreshGeometry();
@@ -274,9 +278,20 @@ export function JuroMotionDirector() {
     const resizeObserver = new ResizeObserver(scheduleMeasure);
     resizeObserver.observe(root);
 
-    refreshGeometry();
-    root.dataset.motionReady = "true";
-    updateScrollStory();
+    // Hydration and stylesheet activation leave layout dirty inside the mount
+    // task. Wait through one paint before the first geometry pass so slower
+    // devices do not pay for a synchronous layout during initial rendering.
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = requestAnimationFrame(() => {
+        if (disposed) {
+          scrollFrame = 0;
+          return;
+        }
+        refreshGeometry();
+        initialized = true;
+        updateScrollStory();
+      });
+    });
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", scheduleMeasure, { passive: true });
     void document.fonts.ready.then(scheduleMeasure);

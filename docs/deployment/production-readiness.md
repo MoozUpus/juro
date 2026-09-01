@@ -2,14 +2,21 @@
 
 Assessment: **NOT READY for the full execution brief**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-02 UZT**
 
-Production is reachable, Worker v189 is serving the platform, and Sites v95 is live on the public website. v189 keeps status-page icons same-origin across the status and app hosts without weakening CSP; it retains the direct D1 probe and provider/document-analysis safeguards from v188. Sites v95 preserves the noindex boundary on the provider-owned hostname without removing indexing from `juro.uz`. The latest public status truthfully reports 6/8 components operational, with AI and document analysis degraded. That is still narrower than the requested Definition of Done: provider recovery, authenticated role journeys, staging reliability, legacy DNS ownership, and complete Chrome QA remain open.
+Production is reachable and v101 is deployed from merge `840f1144f3ba8562a7866cd4bda99525be392758`. Website Worker `d6ff54c8-0bbc-4921-a54e-581027689a41`, platform Worker `9c434c4e-52af-41cd-b680-eb0730b87e37`, and admin Worker `53f0aef3-951c-40eb-8dc6-e4a5e3513dc9` were the active versions at the retained verification checkpoint. The public status was operational with 8/8 components and 0 active incidents at `2026-09-01T19:14:20Z`; this is point-in-time evidence, not a claim of sustained provider health. The undeployed v114 mainline candidate further stabilizes initial public-page layout work and the shared auth/Turnstile boundary. The full execution brief remains incomplete because authenticated role journeys and other Definition-of-Done gates are still open.
+
+The older v189/v95 tables and health narrative below are retained as historical evidence and do not supersede the current v101 checkpoint.
 
 ## Current release state
 
 | Surface | Current state | Evidence | Rollback point |
 | --- | --- | --- | --- |
+| v114 candidate | branch `codex/performance-v114-mainline`, based directly on current `origin/main`; not deployed | Local tests/builds/artifact budgets and Chrome checks pass; exact-head CI/security and deployed Chrome QA pending | No runtime rollback needed because it is not deployed |
+| GitHub main | merge `840f1144f3ba8562a7866cd4bda99525be392758` from PR #103 | Exact reviewed head `e14532c12a9200bc335f8a506fa452a788069efd`; CI, release workflow, security scan, and Chrome QA passed | Revert or redeploy the immediately preceding validated main revision if a regression is proven |
+| Public website Worker | version ID `d6ff54c8-0bbc-4921-a54e-581027689a41` at the retained checkpoint | RU/UZ/EN and `/ru#start` 21/21, responsive overflow checks, Lighthouse, trace, and console QA passed | Previous validated website Worker version captured by the release workflow |
+| Platform Worker | version ID `9c434c4e-52af-41cd-b680-eb0730b87e37` at the retained checkpoint | Release workflow passed; public status operational 8/8 at the retained checkpoint | Previous validated platform Worker version captured by the release workflow |
+| Admin Worker | version ID `53f0aef3-951c-40eb-8dc6-e4a5e3513dc9` at the retained checkpoint | No v114 admin change | Previous validated admin Worker version captured by its release workflow |
 | GitHub main | Merge commit `d133a470a49166875d9112b938ae3f7d765ee170`; live Worker v189 source from PR #95 | PR CI `33352197361`, post-merge CI `33404886188`, and production workflow `33404885913` completed successfully | Previous Git commit selected through the normal release process |
 | Public Sites | Live version **95**, source `855ba2161b716daabb96ac469456c101e5d3bb2c`; deployment `appgdep_6a94c1cfc364819190b65a5cb0a7e5ad` | Deployment succeeded; `juro.uz` remains indexable, the provider hostname returns `X-Robots-Tag: noindex, nofollow, noarchive`, 78/78 sitemap URLs and 149/149 discoverable JURO-zone links return `200` | Redeploy saved v94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`, if the public custom domain regresses |
 | Platform Worker | Worker version **189**, version ID `102dcb2d-f79f-4172-9a3a-19d55d51f6ed` | Production workflow `33404885913` deployed 100% traffic to the merged revision; no database migration, Admin Worker change, Sites change, DNS change, binding change, or secret change was part of that workflow | Prior version **188**, ID `57387083-9f7f-4cd8-a9f2-84414f2604d6` |

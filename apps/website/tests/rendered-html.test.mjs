@@ -65,8 +65,13 @@ test("scroll storytelling keeps layout reads out of the hot scroll path", () => 
   assert.match(refreshGeometry, /getBoundingClientRect/);
   assert.match(refreshGeometry, /revealTops: reveals\.map/);
   assert.match(updateScrollStory, /const revealsToShow[\s\S]*?geometry\.revealTops[\s\S]*?node\.dataset\.revealState = "visible"/);
+  assert.match(updateScrollStory, /const revealsToShow[\s\S]*?root\.dataset\.motionReady = "true"/);
   assert.match(motionDirector, /new ResizeObserver\(scheduleMeasure\)/);
   assert.match(motionDirector, /new IntersectionObserver\([\s\S]*?rootMargin: "0px 0px -8% 0px"/);
+  assert.match(
+    motionDirector,
+    /scrollFrame = requestAnimationFrame\(\(\) => \{[\s\S]*?scrollFrame = requestAnimationFrame\(\(\) => \{[\s\S]*?refreshGeometry\(\);[\s\S]*?updateScrollStory\(\);/,
+  );
 });
 
 test("renders the production landing with localized canonical metadata and real actions", async () => {

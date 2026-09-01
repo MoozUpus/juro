@@ -2,9 +2,36 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-02 UZT**
 
-Scope in this report: platform Worker v189 and public Sites v95. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: the deployed v101 release and the undeployed mainline v114 performance candidate. Older v189/v95 evidence below is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## v114 mainline candidate validation
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Auth layout regression | 7 focused Turnstile/auth CSS tests | PASS |
+| Public website regression | complete website suite | 46/46 PASS |
+| Website static gates | type-check and lint | PASS |
+| Platform static gates | type-check and lint | PASS |
+| Production artifacts | website build and platform production build/validation | PASS |
+| Platform artifact budgets | CSS 564.8 KiB; initial JS 294.1 KiB; largest lazy increment 212.1 KiB; fonts 453.6 KiB; images 564.4 KiB; Worker 3,640.6 KiB | PASS |
+| Chrome performance | local LCP 1,334 ms; CLS 0.00; no top-level JURO forced-reflow function; 83 ms unattributed | PASS AS LOCAL LAB EVIDENCE |
+| Chrome responsive/reveal matrix | RU/UZ/EN desktop and RU mobile 21/21; `/ru#start` 21/21; zero overflow; clean console | PASS |
+| Local auth layout | 1440 × 900 and 390 × 844; zero overflow; sampled mobile controls at least 44 CSS px | PASS WITH PROVIDER CHALLENGE UNAVAILABLE LOCALLY |
+| Exact-head CI and security | required after the candidate is committed and pushed | PENDING |
+| Deployment and post-deploy Chrome QA | v114 is not deployed | NOT RUN |
+
+The first ad-hoc Node invocations used unsupported paths and failed before loading product tests; the exact project test commands were then used and passed. The local production server cannot load `cloudflare:` modules without the project loader, so auth visual QA used the supported Vite/Cloudflare development server after the production artifact itself had already passed validation. These harness corrections are not product failures and are not hidden as uninterrupted green runs.
+
+## v101 release verification
+
+- PR #103 merged as `840f1144f3ba8562a7866cd4bda99525be392758`; the exact reviewed head was `e14532c12a9200bc335f8a506fa452a788069efd`.
+- Website Worker `d6ff54c8-0bbc-4921-a54e-581027689a41` and platform Worker `9c434c4e-52af-41cd-b680-eb0730b87e37` became active after successful release workflows.
+- Production Chrome verified 21/21 reveals on RU/UZ/EN and direct `/ru#start`, zero overflow at 1440 × 900 and 390 × 844, and a clean console.
+- Warm LCP was 519 ms with CLS 0.01; cold LCP was 2,717 ms with TTFB 1,769 ms. Desktop Lighthouse scored Accessibility, Best Practices, SEO, and Agentic Browsing at 100 each.
+- Exact-head security diff scan `e4263939-7125-4a85-b1e7-3e77985fb307` reported 0 findings.
+- Production status recovered to operational, 8/8 components and 0 active incidents at the retained checkpoint. This point-in-time result does not prove sustained provider health.
 
 ## Automated release checks
 
