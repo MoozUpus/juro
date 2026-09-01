@@ -3,6 +3,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../.
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import { workspaceEntitlements } from "../../../../../../lib/billing/entitlements";
+import { trackProductEvent } from "../../../../../../lib/platform/analytics";
 import { lawyerAccessGrantSchema, localizedHandoffError } from "../../../../../../lib/platform/lawyer-request";
 import { workspaceForContentEditor, workspaceForUser } from "../../../../../../lib/platform/workspace";
 import { recordLawyerAccessGrantCompletionEvidence } from "../../../../../../worker/dependency-health-evidence";
@@ -91,6 +92,13 @@ export const POST = withApiErrors(async function POST(request: Request, context:
   if (Number(results[0]?.meta.changes ?? 0) !== 1) {
     return response({ code: "CONFLICT_REQUIRED", error: localizedHandoffError(locale, "CONFLICT_REQUIRED") }, 409);
   }
+  trackProductEvent({
+    event: "lawyer_request_accepted",
+    surface: "platform",
+    locale,
+    accountType: workspace.type,
+    outcome: "completed",
+  });
   await recordLawyerAccessGrantCompletionEvidence({
     APP_ENV: runtimeEnv().APP_ENV ?? "development",
     DB: db,

@@ -1,6 +1,6 @@
 # JURO Privacy-Conscious Product Metrics
 
-Status: **event contract implemented for the first durable conversion slice; full funnel coverage and production baseline remain open**
+Status: **event contract implemented for two durable conversion slices; full funnel coverage and production baseline remain open**
 
 ## Decision framework
 
@@ -48,10 +48,13 @@ Forbidden data includes IDs, stable pseudonymous keys, URLs, IPs, questions, Leg
 | `plan_created` | case creation or non-replayed AI plan save after D1 success | `IMPLEMENTED` |
 | `case_created` | case/plan D1 batch success | `IMPLEMENTED` |
 | `lawyer_request_created` | request, consent, conflict-check, and audit D1 batch success | `IMPLEMENTED` |
+| `lawyer_request_accepted` | a new two-party case-access grant and request status transition succeed | `IMPLEMENTED` |
 | `consultation_scheduled` | booking, slot, consent, and audit D1 batch success | `IMPLEMENTED` |
+| `document_uploaded` | upload integrity/format validation and quarantine scan outbox transition succeed; quarantined replay is excluded | `IMPLEMENTED` |
+| `document_compared` | comparison result, changes, final state, and audit D1 writes succeed; completed replay is excluded | `IMPLEMENTED` |
 | `feedback_submitted` | first non-replayed AI feedback D1 save | `IMPLEMENTED` |
 | `landing_view`, `start_scenario`, `signup_started`, `source_opened`, `lawyer_viewed`, `paid_action_started` | browser interaction | `OPEN`: requires consent-aware client collection and anti-abuse design |
-| `signup_completed`, `first_question_sent`, `clarification_completed`, `document_uploaded`, `document_analyzed`, `document_compared`, `lawyer_request_accepted` | durable server transition | `OPEN`: add only at an idempotent authoritative transition |
+| `signup_completed`, `first_question_sent`, `clarification_completed`, `document_analyzed` | durable server transition | `OPEN`: add only at an idempotent authoritative transition |
 | `AI_error`, `retrieval_fallback`, `source_not_found` | content-free AI outcome | `OPEN`: existing SLO/cost ledgers are authoritative; avoid duplicate or inconsistent counting |
 
 ## Metric dictionary and limitations

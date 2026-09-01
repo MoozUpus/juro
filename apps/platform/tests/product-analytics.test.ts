@@ -112,7 +112,10 @@ test("the event catalog covers the execution brief and durable routes emit only 
     ["app/api/platform/cases/route.ts", "plan_created"],
     ["app/api/platform/ai/action-plan/route.ts", "plan_created"],
     ["app/api/platform/lawyer-requests/route.ts", "lawyer_request_created"],
+    ["app/api/platform/lawyer-requests/[requestId]/access-grant/route.ts", "lawyer_request_accepted"],
     ["app/api/platform/consultations/route.ts", "consultation_scheduled"],
+    ["app/api/platform/document-analysis/uploads/[analysisId]/finalize/route.ts", "document_uploaded"],
+    ["app/api/platform/document-comparisons/[comparisonId]/process/route.ts", "document_compared"],
     ["app/api/platform/ai/feedback/route.ts", "feedback_submitted"],
   ] as const;
   for (const [path, event] of routes) {
@@ -124,4 +127,20 @@ test("the event catalog covers the execution brief and durable routes emit only 
       path + " must emit after its awaited durable operation",
     );
   }
+});
+
+test("replayable milestones emit only after a newly completed durable transition", () => {
+  const upload = source("app/api/platform/document-analysis/uploads/[analysisId]/finalize/route.ts");
+  assert.ok(upload.indexOf('record.status === "quarantined"') < upload.lastIndexOf("trackProductEvent"));
+  assert.ok(upload.lastIndexOf("trackProductEvent") > upload.indexOf("const queued = await queueMalwareScan"));
+  assert.match(upload, /if \(queued\.created\) \{\s*trackProductEvent/);
+  assert.match(upload, /created = Number\(results\[1\]\?\.meta\.changes \?\? 0\) === 1/);
+
+  const comparison = source("app/api/platform/document-comparisons/[comparisonId]/process/route.ts");
+  assert.ok(comparison.indexOf('comparison.status === "completed"') < comparison.lastIndexOf("trackProductEvent"));
+  assert.ok(comparison.lastIndexOf("trackProductEvent") > comparison.lastIndexOf("await db.batch(["));
+
+  const grant = source("app/api/platform/lawyer-requests/[requestId]/access-grant/route.ts");
+  assert.ok(grant.lastIndexOf("trackProductEvent") > grant.indexOf("Number(results[0]?.meta.changes ?? 0) !== 1"));
+  assert.match(grant, /accountType: workspace\.type/);
 });

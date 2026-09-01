@@ -16,6 +16,7 @@ import {
   operationalLocaleFromRequest,
   operationalFeatureMessage,
 } from "../../../../../../../lib/operations/operational-feature-flags";
+import { trackProductEvent } from "../../../../../../../lib/platform/analytics";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -98,7 +99,24 @@ export const POST = withApiErrors(async function POST(
       }
     }
 
-    return queueMalwareScan(db, record, workspace.id, user.id, new Date().toISOString(), archiveInspection);
+    const queued = await queueMalwareScan(
+      db,
+      record,
+      workspace.id,
+      user.id,
+      new Date().toISOString(),
+      archiveInspection,
+    );
+    if (queued.created) {
+      trackProductEvent({
+        event: "document_uploaded",
+        surface: "platform",
+        locale: operationalLocaleFromRequest(request),
+        accountType: workspace.type,
+        outcome: "completed",
+      });
+    }
+    return queued.response;
   } catch (error) {
     if (error instanceof OperationalFeatureError) {
       return response({
@@ -145,9 +163,9 @@ async function queueMalwareScan(
   userId: string,
   now: string,
   archiveInspection: ArchiveInspection | null,
-): Promise<Response> {
+): Promise<{ response: Response; created: boolean }> {
   const jobId = `malware-scan:${record.analysisId}`;
-  await db.batch([
+  const results = await db.batch([
     db.prepare(
       "UPDATE document_files SET kind='analysis_quarantined',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND kind='analysis_uploaded'",
     ).bind(now, record.fileId, workspaceId, userId),
@@ -190,7 +208,11 @@ async function queueMalwareScan(
       now,
     ),
   ]);
-  return malwareScanQueuedResponse({ ...record, status: "quarantined" }, false);
+  const created = Number(results[1]?.meta.changes ?? 0) === 1;
+  return {
+    response: malwareScanQueuedResponse({ ...record, status: "quarantined" }, !created),
+    created,
+  };
 }
 
 function malwareScanQueuedResponse(

@@ -18,6 +18,7 @@ import {
 } from "../../../../../../lib/document-comparison/storage";
 import { ComparisonProcessingError, type ComparisonChange, type ComparisonLocale } from "../../../../../../lib/document-comparison/types";
 import { ArchiveInspectionError, verifyArchiveBytes } from "../../../../../../lib/document-analysis/archive-inspector";
+import { trackProductEvent } from "../../../../../../lib/platform/analytics";
 import { workspaceForContentEditor } from "../../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -220,6 +221,13 @@ export const POST = withApiErrors(async function POST(
         aiStatus,
       }), isoNow()),
     ]);
+    trackProductEvent({
+      event: "document_compared",
+      surface: "platform",
+      locale,
+      accountType: workspace.type,
+      outcome: "completed",
+    });
     return response({ comparison: { id: comparisonId, status: completedStatus, stage: "completed", summary } });
   } catch (error) {
     const code = error instanceof ComparisonProcessingError ? error.code : "COMPARISON_PROCESSING_FAILED";
