@@ -4,7 +4,7 @@ import {
 } from "../../auth/keyring";
 
 const ACCESS_CODE_HMAC_PURPOSE = "signed-share-access-code";
-const ACCESS_CODE_HMAC_PATTERN = /^h1:([a-z0-9][a-z0-9._-]{0,31}):([A-Za-z0-9_-]{43})$/u;
+const ACCESS_CODE_HMAC_PATTERN = /^h1:([a-z0-9][a-z0-9._-]{0,31}):([A-Za-z0-9_-]{43})$/iu;
 
 function secureEqual(left: string, right: string): boolean {
   const length = Math.max(left.length, right.length);

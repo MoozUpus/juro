@@ -10,20 +10,21 @@ Scope in this report: the undeployed v113 candidate plus the latest retained pro
 
 | Area | Evidence | Result |
 | --- | --- | --- |
-| Security remediations | 25 focused OTP, challenge-evidence, request-body, and signed-share tests | PASS |
-| Platform core application | 1,180 tests | PASS |
+| Security remediations | 26 focused OTP, challenge-evidence, request-body, and signed-share tests | PASS |
+| Platform core application | 1,181 tests | PASS |
 | Worker/runtime and infrastructure | 217 tests | PASS |
 | Public website regression | 49 tests | PASS |
 | TypeScript | `type-check` | PASS |
 | Lint | repository lint | PASS |
 | Cloudflare configuration | full development/staging/production matrix and generated-types check | PASS |
 | Production artifact | production artifact validation and emitted-size budgets | PASS |
-| Pull request CI | exact v113 Draft PR head | PENDING PUBLICATION |
+| Pull request CI | exact Draft PR #115 head; the per-head result is retained in GitHub rather than frozen into this commit | REQUIRED PER HEAD |
+| Security diff scan | exact Draft PR #115 head; sealed scan receipt retained with PR evidence | REQUIRED PER HEAD |
 | Deployment and browser QA | no v113 deployment; server-side candidate cannot be verified through production Chrome | NOT RUN |
 
-The full platform suite initially stopped on one stale source-string assertion after the authentication runtime helper was renamed. The assertion was updated, its 78/78 focused file passed, and the complete platform suite was rerun to 1,180/1,180. The first generated-types check reported an out-of-date file; the standard generator produced the same Git blob, and a clean sequential recheck passed. Neither event is hidden as an uninterrupted green run.
+The full platform suite initially stopped on one stale source-string assertion after the authentication runtime helper was renamed. The assertion was updated, its 78/78 focused file passed, and the complete platform suite was rerun to 1,180/1,180. The key-version compatibility closure then added one regression test, and the current exact worktree passed 1,181/1,181. The first generated-types check reported an out-of-date file; the standard generator produced the same Git blob, and a clean sequential recheck passed. Neither event is hidden as an uninterrupted green run.
 
-The v113 Standard security scan (`fb8621fe-664a-4364-86df-e357d586a2b3`) reviewed 68 of 1,594 scoped files at base revision `beae3e05d7552b999c0fb7bcba14ee615c04906a`. It reported one high and three medium findings; v113 contains focused candidate fixes for all four. This is partial source-review evidence, not a complete security certificate or production verification. See [`../audit/security-audit.md`](../audit/security-audit.md).
+The v113 Standard security scan (`fb8621fe-664a-4364-86df-e357d586a2b3`) reviewed 68 of 1,594 scoped files at base revision `beae3e05d7552b999c0fb7bcba14ee615c04906a`. It reported one high and three medium findings; v113 contains focused candidate fixes for all four. A separate exact-head diff scan is a mandatory PR receipt and must be repeated after any commit change. This remains partial source-review evidence, not a complete security certificate or production verification. See [`../audit/security-audit.md`](../audit/security-audit.md).
 
 ## Latest deployed release checks (v189)
 

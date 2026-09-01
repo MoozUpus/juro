@@ -15,7 +15,7 @@ This matrix is the canonical index for the execution brief. A present document c
 | `docs/audit/ux-ui-audit.md` | yes | PARTIAL |
 | `docs/audit/mobile-audit.md` | yes | PARTIAL |
 | `docs/audit/accessibility-audit.md` | yes | PARTIAL |
-| `docs/audit/security-audit.md` | yes | PARTIAL; 4 base findings fixed in the undeployed candidate |
+| `docs/audit/security-audit.md` | yes | PARTIAL; 4 base findings fixed in the undeployed candidate, with per-head PR scan required |
 | `docs/audit/performance-audit.md` | yes | PARTIAL |
 | `docs/audit/seo-audit.md` | yes | PARTIAL |
 | `docs/audit/broken-links-report.md` | yes | VERIFIED for the captured public crawl |
@@ -50,7 +50,7 @@ This matrix is the canonical index for the execution brief. A present document c
 | AI | Provider cost, quota, and circuit controls | `docs/ai/cost-control.md` | VERIFIED in source/tests |
 | AI | Citation/source grounding | `docs/ai/citation-policy.md` | VERIFIED in source/tests |
 | AI | Reviewed RU/UZ answer-quality matrix | `docs/ai/model-evaluation.md` | OPEN |
-| Security | Auth, CSRF, tenant/object access | sealed partial scan plus v113 remediation tests | PARTIAL |
+| Security | Auth, CSRF, tenant/object access | sealed partial base scan, v113 remediation tests, and per-head diff-scan gate | PARTIAL |
 | Security | Privacy, logging, prompt-injection boundaries | canonical security and AI documents | PARTIAL |
 | Security | Production penetration/IDOR evidence | no complete current-revision record | OPEN |
 | Quality | Unit/integration/runtime tests | `docs/qa/test-report.md` | VERIFIED for tested revision |

@@ -22,7 +22,7 @@ The evidence is categorical and audit-oriented, so tables are more useful than c
 | Domain and route coverage | Production/staging/code-only hosts and route families are inventoried | [`domain-route-inventory.md`](./domain-route-inventory.md) | Authenticated route outcomes remain incomplete | PARTIAL |
 | UX and UI | Current platform audit and responsive evidence are indexed | [`ux-ui-audit.md`](./ux-ui-audit.md), [`mobile-audit.md`](./mobile-audit.md) | Not every role and viewport passed on one deployed revision | PARTIAL |
 | Accessibility | Automated contracts and bounded Chrome evidence exist | [`accessibility-audit.md`](./accessibility-audit.md) | Full keyboard, screen-reader, zoom, and authenticated matrix is open | PARTIAL |
-| Security | A sealed source scan found four issues and v113 contains focused remediations | [`security-audit.md`](./security-audit.md) | The scan reviewed 68/1,594 files and the fixes are not deployed | PARTIAL |
+| Security | A sealed base scan found four issues and v113 contains focused remediations with an exact-head diff-scan gate | [`security-audit.md`](./security-audit.md) | Broader coverage remains 68/1,594 files and the fixes are not deployed | PARTIAL |
 | AI | Provider routing, cost controls, evaluation, answer pipeline, and citation policy are canonicalized | [`../ai/model-routing.md`](../ai/model-routing.md) | Reviewed production answer-quality and provider-health gates remain open | PARTIAL |
 | Legal sources | Direct Lex.uz and secondary web boundaries are documented | [`../sources/lexuz-provider.md`](../sources/lexuz-provider.md) | Corpus/Advice work is explicitly excluded; live legal correctness is not inferred | PARTIAL |
 | QA | Automated and live evidence is separated by revision | [`../qa/test-report.md`](../qa/test-report.md) | Current v113 production smoke is not applicable because v113 is not deployed | PARTIAL |
@@ -34,7 +34,7 @@ The evidence is categorical and audit-oriented, so tables are more useful than c
 
 Source counts at this baseline are 165 platform page definitions, 233 platform API route definitions, 225 platform test files, and 111 shared/shell TSX components across the seven application component groups. Counts are inventory evidence only; they do not measure quality or coverage.
 
-Production statements in the existing route, performance, QA, and deployment reports have an evidence cutoff of 2026-08-31. v112 is an open Draft PR with green CI, not a production release. v113 changes source, tests, and evidence documents but remains a local candidate until its own Draft PR and CI complete; it is not a production release.
+Production statements in the existing route, performance, QA, and deployment reports have an evidence cutoff of 2026-08-31. v112 and v113 remain stacked Draft PR candidates, not production releases. Exact-head CI and security-diff results are retained in the PR evidence and must be renewed after every head change.
 
 ## Audit method
 

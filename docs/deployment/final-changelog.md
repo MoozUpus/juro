@@ -14,8 +14,10 @@ This file records verified production increments and separately labelled release
 - Removed the email-wide OTP replacement lock while preserving resend cooldowns and issuance budgets.
 - Applied the common streaming request limiter at exactly 2 MiB to lawyer profile-photo uploads.
 - Changed new signed-PDF access codes to a key-versioned, domain-separated HMAC with constant-time verification; legacy rows retain only their existing maximum 24-hour share lifetime.
-- Passed 25/25 focused remediation tests, 1,180/1,180 platform tests, 217/217 Worker/runtime tests, 49/49 website tests, type-check, lint, the full Cloudflare environment matrix, generated-types consistency, production artifact validation, and emitted-size budgets.
+- Preserved mixed-case key-version compatibility between the shared keyring parser and the signed-share verifier envelope.
+- Passed 26/26 focused remediation tests, 1,181/1,181 platform tests, 217/217 Worker/runtime tests, 49/49 website tests, type-check, lint, the full Cloudflare environment matrix, generated-types consistency, production artifact validation, and emitted-size budgets.
 - Retained the Standard security scan as partial evidence: one high and three medium findings at base revision `beae3e05d7552b999c0fb7bcba14ee615c04906a`, with 68/1,594 scoped files fully reviewed.
+- Made exact-head CI and a sealed exact-head diff scan mandatory per-head Draft PR evidence; neither receipt is treated as production verification.
 - Performed no database migration, production or staging deployment, DNS change, binding change, secret change, provider billing mutation, or legislation/corpus operation. Chrome candidate QA remains not applicable until the exact server revision is deployed.
 
 ## Platform Worker v189

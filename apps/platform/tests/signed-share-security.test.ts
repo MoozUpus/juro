@@ -83,6 +83,21 @@ test("share access codes use a server-keyed verifier with bounded legacy compati
   await assert.rejects(accessCodeVerifier(undefined, "123456"));
 });
 
+test("share access codes preserve valid mixed-case key versions", async () => {
+  const mixedCaseKeyring = JSON.stringify({
+    active: "ReleaseV2",
+    versions: {
+      ReleaseV2: { aead: encodedKey(65), hmac: encodedKey(97) },
+    },
+  });
+  const verifier = await accessCodeVerifier(mixedCaseKeyring, "123456");
+  assert.match(verifier, /^h1:ReleaseV2:[A-Za-z0-9_-]{43}$/u);
+  assert.equal(
+    await accessCodeMatches(mixedCaseKeyring, "123456", verifier),
+    true,
+  );
+});
+
 test("share verification atomically caps a window and resets only after lock expiry", async () => {
   const sqlite = new DatabaseSync(":memory:");
   try {

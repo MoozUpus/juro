@@ -1,16 +1,18 @@
 # JURO security audit
 
-Status: **PARTIAL — four base-revision findings remediated in the v113 candidate; production verification remains open**
+Status: **PARTIAL — four base-revision findings remediated in the v113 candidate; exact-head and production evidence are tracked separately**
 
 Evidence cutoff: **2026-09-01**
 
 Scanned revision: `beae3e05d7552b999c0fb7bcba14ee615c04906a`
 
-Security scan ID: `fb8621fe-664a-4364-86df-e357d586a2b3`
+Base security scan ID: `fb8621fe-664a-4364-86df-e357d586a2b3`
 
 ## Result
 
 The source-only Standard scan of `apps/platform` reported one high- and three medium-severity findings. All four have corresponding fixes and focused regression tests in the v113 working tree. The scan remains `PARTIAL`: 68 of 1,594 scoped files were fully reviewed, the working tree changed after the base snapshot, and no live Cloudflare, D1, R2, authenticated-browser, or penetration testing was performed.
+
+The release process also requires a sealed diff scan for the exact Draft PR #115 head. That result is recorded in the PR evidence after the commit is immutable rather than embedded as a self-referential commit claim; any head change invalidates the earlier diff receipt and requires a rerun.
 
 | Finding on the scanned revision | Severity | v113 remediation | Candidate status |
 | --- | --- | --- | --- |
@@ -23,10 +25,11 @@ The source-only Standard scan of `apps/platform` reported one high- and three me
 
 ## Focused verification
 
-- 25/25 focused OTP, challenge-evidence, request-body, and signed-share tests passed.
+- 26/26 focused OTP, challenge-evidence, request-body, and signed-share tests passed.
 - The replacement-challenge test exhausts one OTP under concurrency, then proves a new challenge can be issued after cooldown and the predecessor is invalidated.
 - The keyed OTP test proves verification does not depend on a retained SHA value while email-evidence divergence checks remain active.
 - The signed-share test covers correct and incorrect keyed verifiers, bounded legacy compatibility, and fail-closed creation without the keyring.
+- A compatibility test proves valid mixed-case key-version identifiers accepted by the shared keyring remain verifiable in the signed-share envelope.
 - The request-body test proves the common policy assigns exactly 2 MiB to the lawyer-photo route; existing stream tests cover missing and understated `Content-Length`.
 
 The full repository and Worker/runtime suites are recorded separately in [`../qa/test-report.md`](../qa/test-report.md). A green build or focused suite is not a production-security certificate.
@@ -46,7 +49,7 @@ These statements apply only to the sampled paths and do not imply full route cov
 
 | Priority | Gate | Why it remains open | Required evidence |
 | --- | --- | --- | --- |
-| P1 | Exact-head security verification | The canonical scan targets the pre-fix base revision | Review the v113 diff, pass exact-head CI, and retain the sealed base-scan evidence plus remediation tests |
+| P1 | Per-head security and CI receipts | A branch document cannot safely embed a receipt for the commit that contains it | Require the sealed exact-head diff scan and exact-head CI in Draft PR #115; rerun both after every head change |
 | P1 | Production rollout | No v113 Worker is deployed | Deploy through the normal rollback-gated workflow, then verify OTP issuance, share verification, the 2 MiB boundary, logs, and error rates without exposing credentials |
 | P1 | Complete platform coverage | Only 68/1,594 scoped files were fully reviewed | Continue route-by-route security review, prioritizing authentication, tenant authorization, file access, billing, and privileged operations |
 | P1 | End-to-end admin boundary | The separate `juro-admin` Worker was outside this scan | Review that Worker's cookie, CSRF, routing, token-injection, and capability enforcement against the live service binding |
