@@ -5,6 +5,37 @@ import styles from "./juro-motion.module.css";
 
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 
+type PageBox = {
+  height: number;
+  top: number;
+};
+
+type MotionGeometry = {
+  chapterTops: number[];
+  continuity: PageBox | null;
+  documentStory: PageBox | null;
+  handoff: PageBox | null;
+  hero: (PageBox & { left: number; width: number }) | null;
+  pageRange: number;
+  revealTops: number[];
+  storySection: PageBox | null;
+  storyStepCenters: number[];
+  viewport: number;
+};
+
+const emptyGeometry = (): MotionGeometry => ({
+  chapterTops: [],
+  continuity: null,
+  documentStory: null,
+  handoff: null,
+  hero: null,
+  pageRange: 1,
+  revealTops: [],
+  storySection: null,
+  storyStepCenters: [],
+  viewport: 1,
+});
+
 export function JuroMotionDirector() {
   useEffect(() => {
     const root = document.querySelector<HTMLElement>("[data-juro-motion-root]");
@@ -30,12 +61,6 @@ export function JuroMotionDirector() {
       return;
     }
 
-    const initiallyVisible = reveals.filter(
-      (node) => node.getBoundingClientRect().top < window.innerHeight * .96,
-    );
-    initiallyVisible.forEach((node) => { node.dataset.revealState = "visible"; });
-    root.dataset.motionReady = "true";
-
     const revealObserver = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -49,12 +74,66 @@ export function JuroMotionDirector() {
     );
     reveals.forEach((node) => revealObserver.observe(node));
 
+    const footerObserver = footer
+      ? new IntersectionObserver(
+        ([entry]) => {
+          root.dataset.footerVisible = entry?.isIntersecting ? "true" : "false";
+        },
+        { rootMargin: "0px 0px -8% 0px", threshold: 0 },
+      )
+      : null;
+    if (footer) footerObserver?.observe(footer);
+
+    let geometry = emptyGeometry();
+    let measureFrame = 0;
+    let disposed = false;
+
+    const pageBox = (node: HTMLElement | null, scrollY: number): PageBox | null => {
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return { height: rect.height, top: rect.top + scrollY };
+    };
+
+    const refreshGeometry = () => {
+      measureFrame = 0;
+      const viewport = window.innerHeight;
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      const railRect = storyRail?.getBoundingClientRect() ?? null;
+      const heroRect = hero?.getBoundingClientRect() ?? null;
+
+      geometry = {
+        chapterTops: chapters.map((chapter) => chapter.getBoundingClientRect().top + scrollY),
+        continuity: pageBox(continuity, scrollY),
+        documentStory: pageBox(documentStory, scrollY),
+        handoff: pageBox(handoff, scrollY),
+        hero: heroRect
+          ? {
+            height: Math.max(1, heroRect.height),
+            left: heroRect.left + scrollX,
+            top: heroRect.top + scrollY,
+            width: Math.max(1, heroRect.width),
+          }
+          : null,
+        pageRange: Math.max(1, document.documentElement.scrollHeight - viewport),
+        revealTops: reveals.map((node) => node.getBoundingClientRect().top + scrollY),
+        storySection: pageBox(storySection, scrollY),
+        storyStepCenters: railRect
+          ? storySteps.map((step) => {
+            const rect = step.getBoundingClientRect();
+            return rect.top - railRect.top + rect.height / 2;
+          })
+          : [],
+        viewport,
+      };
+    };
+
     let pointerFrame = 0;
     const onPointerMove = (event: PointerEvent) => {
-      if (!hero || event.pointerType === "touch") return;
-      const rect = hero.getBoundingClientRect();
-      const x = clamp((event.clientX - rect.left) / rect.width) * 2 - 1;
-      const y = clamp((event.clientY - rect.top) / rect.height) * 2 - 1;
+      const heroGeometry = geometry.hero;
+      if (!hero || !heroGeometry || event.pointerType === "touch") return;
+      const x = clamp((event.clientX + window.scrollX - heroGeometry.left) / heroGeometry.width) * 2 - 1;
+      const y = clamp((event.clientY + window.scrollY - heroGeometry.top) / heroGeometry.height) * 2 - 1;
       cancelAnimationFrame(pointerFrame);
       pointerFrame = requestAnimationFrame(() => {
         hero.style.setProperty("--pointer-x", x.toFixed(3));
@@ -69,16 +148,16 @@ export function JuroMotionDirector() {
     let lastContinuityStep = -1;
     const updateScrollStory = () => {
       scrollFrame = 0;
-      const viewport = window.innerHeight;
-      const pageRange = Math.max(1, document.documentElement.scrollHeight - viewport);
-      const footerVisible = Boolean(footer && footer.getBoundingClientRect().top < viewport * .92);
+      const { viewport } = geometry;
+      const scrollY = window.scrollY;
       const revealsToShow = reveals.filter(
-        (node) => node.dataset.revealState !== "visible" && node.getBoundingClientRect().top < viewport * .96,
+        (node, index) => node.dataset.revealState !== "visible"
+          && (geometry.revealTops[index] ?? Number.POSITIVE_INFINITY) - scrollY < viewport * .96,
       );
       let activeChapter = 0;
       if (chapters.length && chapterLinks.length) {
-        chapters.forEach((chapter, index) => {
-          if (chapter.getBoundingClientRect().top <= viewport * .48) activeChapter = index;
+        geometry.chapterTops.forEach((top, index) => {
+          if (top - scrollY <= viewport * .48) activeChapter = index;
         });
       }
 
@@ -89,21 +168,20 @@ export function JuroMotionDirector() {
         trackProgress?: number;
       } = null;
       if (storySteps.length) {
-        const sectionRect = storySection?.getBoundingClientRect();
+        const section = geometry.storySection;
         const stickyOffset = Math.min(144, viewport * .14);
-        const storyRange = Math.max(1, (sectionRect?.height ?? viewport) - viewport * .72);
-        const storyProgress = sectionRect ? clamp((stickyOffset - sectionRect.top) / storyRange) : 0;
+        const storyRange = Math.max(1, (section?.height ?? viewport) - viewport * .72);
+        const storyProgress = section ? clamp((stickyOffset - (section.top - scrollY)) / storyRange) : 0;
         const active = Math.round(storyProgress * (storySteps.length - 1));
-        const activeStep = storySteps[active];
-        if (storyRail && activeStep) {
-          const railRect = storyRail.getBoundingClientRect();
-          const stepCenter = (step: HTMLElement) => {
-            const rect = step.getBoundingClientRect();
-            return rect.top - railRect.top + rect.height / 2;
-          };
-          const trackStart = stepCenter(storySteps[0]);
-          const trackEnd = stepCenter(storySteps[storySteps.length - 1]);
-          const activeCenter = stepCenter(activeStep);
+        const trackStart = geometry.storyStepCenters[0];
+        const trackEnd = geometry.storyStepCenters[storySteps.length - 1];
+        const activeCenter = geometry.storyStepCenters[active];
+        if (
+          storyRail
+          && trackStart !== undefined
+          && trackEnd !== undefined
+          && activeCenter !== undefined
+        ) {
           storyState = {
             active,
             trackStart,
@@ -115,27 +193,30 @@ export function JuroMotionDirector() {
         }
       }
 
-      const documentRect = documentStory?.getBoundingClientRect();
-      const documentProgress = documentRect
-        ? clamp((viewport * 0.76 - documentRect.top) / (documentRect.height + viewport * 0.34))
+      const documentProgress = geometry.documentStory
+        ? clamp(
+          (viewport * 0.76 - (geometry.documentStory.top - scrollY))
+            / (geometry.documentStory.height + viewport * 0.34),
+        )
         : null;
-      const continuityRect = continuity?.getBoundingClientRect();
-      const continuityProgress = continuityRect
-        ? clamp((Math.min(56, viewport * .06) - continuityRect.top) / Math.max(1, continuityRect.height - viewport))
+      const continuityProgress = geometry.continuity
+        ? clamp(
+          (Math.min(56, viewport * .06) - (geometry.continuity.top - scrollY))
+            / Math.max(1, geometry.continuity.height - viewport),
+        )
         : null;
       const continuityActive = continuityProgress === null
         ? null
         : Math.round(continuityProgress * (continuitySteps.length - 1));
-      const handoffRect = handoff?.getBoundingClientRect();
-      const handoffProgress = handoffRect
-        ? clamp((viewport * 0.78 - handoffRect.top) / (handoffRect.height + viewport * 0.25))
+      const handoffProgress = geometry.handoff
+        ? clamp(
+          (viewport * 0.78 - (geometry.handoff.top - scrollY))
+            / (geometry.handoff.height + viewport * 0.25),
+        )
         : null;
 
-      // Commit state only after every layout read above, preventing read/write
-      // interleaving from forcing repeated synchronous reflows.
-      root.style.setProperty("--page-progress", String(clamp(window.scrollY / pageRange)));
-      root.style.setProperty("--hero-scroll", String(clamp(window.scrollY / (viewport * 0.9))));
-      root.dataset.footerVisible = footerVisible ? "true" : "false";
+      root.style.setProperty("--page-progress", String(clamp(scrollY / geometry.pageRange)));
+      root.style.setProperty("--hero-scroll", String(clamp(scrollY / (viewport * 0.9))));
       revealsToShow.forEach((node) => {
         node.dataset.revealState = "visible";
         revealObserver.unobserve(node);
@@ -182,15 +263,33 @@ export function JuroMotionDirector() {
       if (scrollFrame) return;
       scrollFrame = requestAnimationFrame(updateScrollStory);
     };
+    const scheduleMeasure = () => {
+      if (disposed || measureFrame) return;
+      measureFrame = requestAnimationFrame(() => {
+        if (disposed) return;
+        refreshGeometry();
+        updateScrollStory();
+      });
+    };
+    const resizeObserver = new ResizeObserver(scheduleMeasure);
+    resizeObserver.observe(root);
+
+    refreshGeometry();
+    root.dataset.motionReady = "true";
     updateScrollStory();
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
+    window.addEventListener("resize", scheduleMeasure, { passive: true });
+    void document.fonts.ready.then(scheduleMeasure);
 
     return () => {
+      disposed = true;
       revealObserver.disconnect();
+      footerObserver?.disconnect();
+      resizeObserver.disconnect();
       hero?.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("resize", scheduleMeasure);
+      cancelAnimationFrame(measureFrame);
       cancelAnimationFrame(pointerFrame);
       cancelAnimationFrame(scrollFrame);
       delete root.dataset.motionReady;

@@ -52,19 +52,21 @@ test("small gold labels meet WCAG AA contrast on the warmest public surface", ()
   assert.ok(contrastRatio("805d26", "f1eee8") >= 4.5);
 });
 
-test("scroll storytelling batches every layout read before DOM mutations", () => {
+test("scroll storytelling keeps layout reads out of the hot scroll path", () => {
   const updateScrollStory = motionDirector.slice(
     motionDirector.indexOf("const updateScrollStory = () =>"),
     motionDirector.indexOf("const onScroll = () =>"),
   );
-  const lastLayoutRead = updateScrollStory.lastIndexOf("getBoundingClientRect");
-  const firstMutation = Math.min(
-    ...["root.style.setProperty", "root.dataset.footerVisible =", "node.dataset.revealState ="]
-      .map((needle) => updateScrollStory.indexOf(needle))
-      .filter((index) => index >= 0),
+  const refreshGeometry = motionDirector.slice(
+    motionDirector.indexOf("const refreshGeometry = () =>"),
+    motionDirector.indexOf("let pointerFrame = 0"),
   );
-  assert.ok(lastLayoutRead >= 0);
-  assert.ok(firstMutation > lastLayoutRead, { firstMutation, lastLayoutRead });
+  assert.doesNotMatch(updateScrollStory, /getBoundingClientRect|scrollHeight/);
+  assert.match(refreshGeometry, /getBoundingClientRect/);
+  assert.match(refreshGeometry, /revealTops: reveals\.map/);
+  assert.match(updateScrollStory, /const revealsToShow[\s\S]*?geometry\.revealTops[\s\S]*?node\.dataset\.revealState = "visible"/);
+  assert.match(motionDirector, /new ResizeObserver\(scheduleMeasure\)/);
+  assert.match(motionDirector, /new IntersectionObserver\([\s\S]*?rootMargin: "0px 0px -8% 0px"/);
 });
 
 test("renders the production landing with localized canonical metadata and real actions", async () => {
