@@ -1,6 +1,6 @@
 # JURO Privacy-Conscious Product Metrics
 
-Status: **event contract implemented for three durable conversion slices; full funnel coverage and production baseline remain open**
+Status: **event contract implemented for four durable conversion slices; full funnel coverage and production baseline remain open**
 
 ## Decision framework
 
@@ -55,8 +55,9 @@ Forbidden data includes IDs, stable pseudonymous keys, URLs, IPs, questions, Leg
 | `feedback_submitted` | first non-replayed AI feedback D1 save | `IMPLEMENTED` |
 | `signup_completed` | new account and mandatory registration acceptances persist after verified OTP; existing-account and spent-OTP replays are excluded | `IMPLEMENTED` |
 | `first_question_sent` | first user question and response persist with a unique D1-local account milestone in the same batch | `IMPLEMENTED` |
+| `document_analyzed` | normalized result, usage ledger, completed analysis state, index outbox, and audit persist; only the winning `persisting` to `completed` transition emits | `IMPLEMENTED` |
 | `landing_view`, `start_scenario`, `signup_started`, `source_opened`, `lawyer_viewed`, `paid_action_started` | browser interaction | `OPEN`: requires consent-aware client collection and anti-abuse design |
-| `clarification_completed`, `document_analyzed` | durable server transition | `OPEN`: add only at an idempotent authoritative transition |
+| `clarification_completed` | durable server transition | `OPEN`: define the user-completed clarification boundary before adding an emitter |
 | `AI_error`, `retrieval_fallback`, `source_not_found` | content-free AI outcome | `OPEN`: existing SLO/cost ledgers are authoritative; avoid duplicate or inconsistent counting |
 
 ## Metric dictionary and limitations

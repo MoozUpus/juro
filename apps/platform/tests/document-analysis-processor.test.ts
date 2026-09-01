@@ -280,8 +280,14 @@ test("safe retrying document analysis persists normalized result, usage, audit a
     relationships: [{ fromMemberId: "package-member-02", toMemberId: "package-member-01", kind: "annex_to" as const, confidence: "high" as const, evidence: ["member_role"] }],
   };
   const derived = new Map<string, { bytes: Uint8Array; sha256: string }>();
+  const productEvents: AnalyticsEngineDataPoint[] = [];
   const env = {
     DB: fixture.db,
+    PRODUCT_ANALYTICS: {
+      writeDataPoint(value = {}) {
+        productEvents.push(value);
+      },
+    } as AnalyticsEngineDataset,
     BUCKET: {
       async get(key: string) {
         const stored = derived.get(key);
@@ -368,6 +374,18 @@ test("safe retrying document analysis persists normalized result, usage, audit a
   assert.equal((fixture.sqlite.prepare("SELECT count(*) AS count FROM suggested_revisions").get() as { count: number }).count, 1);
   assert.equal((fixture.sqlite.prepare("SELECT count(*) AS count FROM user_document_index_jobs").get() as { count: number }).count, 0);
   assert.equal((fixture.sqlite.prepare("SELECT action FROM workspace_audit_events").get() as { action: string }).action, "analysis_completed");
+  assert.deepEqual(productEvents, [{
+    blobs: [
+      "product_event_v1",
+      "document_analyzed",
+      "platform",
+      "ru",
+      "individual",
+      "completed",
+      "none",
+    ],
+    doubles: [1, 0],
+  }]);
   fixture.sqlite.close();
 });
 
@@ -535,9 +553,9 @@ async function databaseFixture(status: string, fileKind: string) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`
     PRAGMA foreign_keys=ON;
-    CREATE TABLE workspaces(id TEXT PRIMARY KEY);
+    CREATE TABLE workspaces(id TEXT PRIMARY KEY,type TEXT NOT NULL);
     CREATE TABLE user_profiles(id TEXT PRIMARY KEY);
-    INSERT INTO workspaces VALUES ('workspace-a'),('workspace-b');
+    INSERT INTO workspaces VALUES ('workspace-a','individual'),('workspace-b','business');
     INSERT INTO user_profiles VALUES ('user-a');
     CREATE TABLE document_files (id TEXT PRIMARY KEY,workspace_id TEXT,owner_user_id TEXT NOT NULL,kind TEXT NOT NULL,r2_key TEXT NOT NULL UNIQUE,file_name TEXT NOT NULL,mime_type TEXT NOT NULL,size_bytes INTEGER NOT NULL,sha256 TEXT,archived_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
     CREATE TABLE document_analyses (id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,owner_user_id TEXT NOT NULL,uploaded_file_id TEXT NOT NULL UNIQUE,status TEXT NOT NULL,summary_json TEXT,result_sha256 TEXT,error_code TEXT,consent_version TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
