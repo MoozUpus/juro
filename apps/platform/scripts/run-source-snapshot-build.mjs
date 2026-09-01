@@ -87,7 +87,7 @@ if (started.phase === "projections") {
 }
 
 let reconcileCalls = 0;
-for (;;) {
+while (started.phase !== "complete") {
   const result = await call("reconcile");
   reconcileCalls += 1;
   if (result.laneRequired) {
