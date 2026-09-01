@@ -66,6 +66,7 @@ import { trackProductEvent, type ProductEventInput } from "../../../../lib/platf
 import {
   productAccountMilestoneCreated,
   productAccountMilestoneStatement,
+  productClarificationCompletedStatement,
 } from "../../../../lib/platform/product-account-milestone";
 import {
   listUserMemories,
@@ -1351,17 +1352,37 @@ async function executePostWithinBudget(
     }), now),
   ];
   const firstQuestionMilestoneIndex = statements.length;
+  const milestoneStatements: D1PreparedStatement[] = [
+    productAccountMilestoneStatement({
+      db,
+      userId: user.id,
+      eventName: "first_question_sent",
+      completedAt: now,
+    }),
+  ];
+  const clarificationMilestoneEligible = result.responseKind === "answer"
+    && branchInput.operation === "follow_up"
+    && Boolean(branchInput.parentBranchId);
+  const clarificationMilestoneIndex = clarificationMilestoneEligible
+    ? firstQuestionMilestoneIndex + milestoneStatements.length
+    : -1;
+  if (clarificationMilestoneEligible) {
+    milestoneStatements.push(productClarificationCompletedStatement({
+      db,
+      userId: user.id,
+      workspaceId: workspace.id,
+      conversationId,
+      parentBranchId: branchInput.parentBranchId!,
+      completedAt: now,
+    }));
+  }
   const persistenceStage = budget.beginStage("persistence");
   let firstQuestionCreated = false;
+  let clarificationCompleted = false;
   try {
     const persistenceResults = await db.batch([
       ...statements,
-      productAccountMilestoneStatement({
-        db,
-        userId: user.id,
-        eventName: "first_question_sent",
-        completedAt: now,
-      }),
+      ...milestoneStatements,
       ...completeAiRunStatements({
         db, runId: reservation.runId, ledgerId: reservation.ledgerId,
         workspaceId: workspace.id, userId: user.id, idempotencyKey,
@@ -1377,6 +1398,10 @@ async function executePostWithinBudget(
     firstQuestionCreated = productAccountMilestoneCreated(
       persistenceResults[firstQuestionMilestoneIndex],
     );
+    clarificationCompleted = clarificationMilestoneIndex >= 0
+      && productAccountMilestoneCreated(
+        persistenceResults[clarificationMilestoneIndex],
+      );
     persistenceStage.complete();
   } catch (error) {
     persistenceStage.fail();
@@ -1403,6 +1428,15 @@ async function executePostWithinBudget(
   if (firstQuestionCreated) {
     trackProductEvent({
       event: "first_question_sent",
+      surface: "platform",
+      locale,
+      accountType: workspace.type,
+      outcome: "completed",
+    });
+  }
+  if (clarificationCompleted) {
+    trackProductEvent({
+      event: "clarification_completed",
       surface: "platform",
       locale,
       accountType: workspace.type,
