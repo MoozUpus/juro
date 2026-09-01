@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-01T23:55:00.080Z",
+  "branch": "feature/full-legal-corpus",
+  "purpose": "Record the five-database physical inventory without treating per-database arithmetic as a deduplicated release metric.",
+  "inventory": {
+    "juro-staging": {
+      "role": "legacy-main-staging",
+      "canonicalDocuments": 3575,
+      "exactCurrentProvisions": 62075,
+      "indexedChunks": 151499
+    },
+    "juro-staging-corpus-v2": {
+      "role": "frozen-v2",
+      "canonicalDocuments": 599,
+      "exactCurrentProvisions": 15899,
+      "indexedChunks": 55814
+    },
+    "juro-staging-corpus-shard-1": {
+      "role": "frozen-shard-1",
+      "canonicalDocuments": 1635,
+      "exactCurrentProvisions": 18724,
+      "indexedChunks": 52370
+    },
+    "juro-staging-corpus-shard-2": {
+      "role": "frozen-shard-2",
+      "canonicalDocuments": 2495,
+      "exactCurrentProvisions": 19484,
+      "indexedChunks": 62089
+    },
+    "juro-staging-corpus-shard-3": {
+      "role": "active-continuation-shard-excluded-from-all-staging-d1",
+      "canonicalDocuments": 3313,
+      "exactCurrentProvisions": 33084,
+      "indexedChunks": 93097
+    }
+  },
+  "rawPhysicalSums": {
+    "canonicalDocuments": 11617,
+    "exactCurrentProvisions": 149266,
+    "indexedChunks": 414869
+  },
+  "numericThresholdAssessment": {
+    "minimumCanonicalDocuments": 1500,
+    "minimumUniqueProvisions": 22000,
+    "minimumIndexedChunks": 22513,
+    "physicalSumsExceedFloors": true,
+    "uniqueFederatedTotalsProven": false,
+    "countsAloneCloseReleaseGate": false
+  },
+  "freshSequentialD1Probe": {
+    "rowsWritten": 0,
+    "probeType": "read-only grouped status/checkpoint/lock/scheduled-run queries",
+    "sources": {
+      "juro-staging": {
+        "jobs": {"completed": 11259, "dead_letter": 1, "queued": 43539},
+        "failureLedger": {"retrying": 102, "technically_unavailable": 269, "terminal": 1},
+        "locks": 2,
+        "checkpointsCompleted": 44,
+        "latestRun": {"status": "failed", "errorCode": "QUEUE_HEALTH_PROBE_ENQUEUE_FAILED"}
+      },
+      "juro-staging-corpus-v2": {
+        "jobs": {"completed": 2674, "queued": 27686, "retrying": 1, "running": 2},
+        "failureLedger": {"retrying": 28, "technically_unavailable": 5},
+        "locks": 0,
+        "checkpointsCompleted": 44,
+        "latestRun": {"status": "failed", "errorCode": "D1_ERROR"}
+      },
+      "juro-staging-corpus-shard-1": {
+        "jobs": {"completed": 30165},
+        "failureLedger": {"retrying": 23, "technically_unavailable": 10},
+        "locks": 0,
+        "checkpointsCompleted": 44,
+        "latestRun": {"status": "completed", "errorCode": null}
+      },
+      "juro-staging-corpus-shard-2": {
+        "jobs": {"completed": 31671},
+        "failureLedger": {"retrying": 21, "technically_unavailable": 8},
+        "locks": 0,
+        "checkpointsCompleted": 44,
+        "latestRun": {"status": "completed", "errorCode": null}
+      },
+      "juro-staging-corpus-shard-3": {
+        "jobs": {"completed": 7868, "queued": 23713},
+        "failureLedger": {"retrying": 342, "technically_unavailable": 17},
+        "locks": 0,
+        "checkpointsCompleted": 44,
+        "latestRun": {"status": "failed", "errorCode": "D1_ERROR"}
+      }
+    }
+  },
+  "releaseGateInterpretation": {
+    "physicalNumericReserve": "covered by the five-source arithmetic sum",
+    "gateStatus": "closed",
+    "reasons": [
+      "Per-database rows include duplicate canonical identities and versions; a disjoint federated partition manifest is not proven.",
+      "The legacy source has one historical dead-letter job and one terminal failure-ledger row.",
+      "The v2 and shard-3 sources retain queued/running/retrying work; ingestion is not queue-empty across all sources.",
+      "Shard-2 and the legacy/v2/shard-3 sources exceed the per-database release-capacity reserve.",
+      "The current federated snapshot, indexed 314-scenario benchmark and federated Qdrant/D1 restore gates remain unproven."
+    ]
+  },
+  "sourceEvidence": [
+    "STAGING_SHARD3_READONLY_RECHECK_2026-09-02T2320Z.json",
+    "STAGING_LEGACY_FAILURE_RECHECK_2026-09-02T2329Z.json",
+    "STAGING_FEDERATED_RETRIEVAL_2026-08-28.md"
+  ]
+}
