@@ -6,13 +6,20 @@ Evidence cutoff: **2026-09-02 UZT**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
 
-## v115 mobile accessibility candidate — not deployed
+## v115 mobile accessibility release
 
 - Moves the mobile auth form heading below the fixed theme/language controls, eliminating the overlap observed on the live lawyer login at 390 × 844.
 - Enlarges all three public theme buttons from 32 × 32 to 44 × 44 CSS px without introducing horizontal overflow at 390 px.
 - Adds source-level regression contracts for both defects.
 - Passed 19/19 focused website tests, 14/14 focused platform auth/theme tests, website/platform lint and type-check, both production builds, artifact validation, and local Chrome geometry/visual QA.
-- Performed no database, legal-corpus, vector, embedding, migration, DNS, binding, secret, or production operation. Exact-head CI/security and post-deploy Chrome QA remain required.
+- Merged PR #118 as `cd3ee161bb4a54c7bdc71b89c39a402f3ad35c4d` after exact-head CI `33562290115` and a complete 0-finding security diff scan `a255ec0b-c48d-46f7-bf95-119d6f6b389e`; post-merge CI `33562912368` also passed.
+- Activated platform Worker `ca427ea9-97cb-45fe-84dc-b468e8bd8995` and website Worker `fad80c80-ee92-44bb-93a3-e250ee314891` at 100% traffic.
+- Published public Sites v96 from source `489c56d029f164c030127f7465d528f8f1bdf396` through deployment `appgdep_6a974c2c182481919de7a0a165025b29`; saved v95 is the immediate rollback and v94 remains available.
+- Production Chrome at 390 × 844 verified 44 × 44 public theme controls, zero horizontal overflow, 21/21 reveal nodes, zero lawyer-login heading/control overlap, visible Turnstile, and a disabled submit action before verification.
+- RU, UZ, EN, and `/ru#start` return `200`; 78/78 sitemap URLs and 120/120 unique discoverable apex links return `200`. The provider hostname retains `X-Robots-Tag: noindex, nofollow, noarchive` while `juro.uz` remains indexable.
+- A repeated mobile Lighthouse run scored Accessibility 100, Best Practices 100, SEO 100, and Agentic Browsing 100. The warm production trace recorded LCP 776 ms and CLS 0.00.
+- The production `/api/status` snapshot generated at `2026-09-01T22:10:42.083Z` was operational with 8/8 operational components and no active incidents. This is point-in-time evidence, not sustained-health proof.
+- Performed no database, legal-corpus, vector, embedding, migration, DNS, binding, or secret operation. Authenticated Business, Lawyer, Pending Lawyer, and Staff/Admin journeys remain separate open gates.
 
 ## v114 mainline performance release
 
@@ -27,7 +34,7 @@ This file records verified production increments. It must not be read as a claim
 - Retained website `d6ff54c8-0bbc-4921-a54e-581027689a41` and platform `9c434c4e-52af-41cd-b680-eb0730b87e37` as rollback versions.
 - Production Chrome verified RU/UZ/EN at 21/21 reveals, direct `/ru#start`, zero overflow, and a clean public console. A throttled mobile trace recorded LCP 1,744 ms and CLS 0.00 with no estimated DevTools savings; remaining forced layout was primarily framework/unattributed rather than eliminated.
 - Production `/api/status` returned HTTP 200, `operational`, 8/8 operational components, and zero active incidents at the checked snapshot. This is point-in-time evidence, not a sustained-health claim.
-- Production QA found the 32 px public theme targets and a mobile lawyer-auth heading overlap; both are addressed in the separate v115 candidate above.
+- Production QA found the 32 px public theme targets and a mobile lawyer-auth heading overlap; both are resolved by the v115 release above.
 
 ## v101 production release
 
