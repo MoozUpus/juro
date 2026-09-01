@@ -733,29 +733,44 @@ async function finalizeBuild(env: SourceSnapshotBuildEnv) {
     projectionIdentity,
     shard: "00",
   }));
-  const membership = await db.prepare(`SELECT
-      (SELECT count(*) FROM legal_search_release_items WHERE search_release_id=?) AS releaseItems,
-      (SELECT count(*) FROM legal_source_snapshot_release_members WHERE search_release_id=?) AS releaseMembers,
-      (SELECT count(*) FROM legal_search_release_items item
-        LEFT JOIN legal_retrieval_eligibility eligibility
-          ON eligibility.snapshot_provision_id=replace(item.provision_rendition_id,'rendition:','snapshot-provision:')
-          AND eligibility.build_id=? AND eligibility.capability='current' AND eligibility.status='eligible'
-        WHERE item.search_release_id=? AND eligibility.id IS NULL) AS releaseWithoutEligible,
-      (SELECT count(*) FROM legal_retrieval_eligibility eligibility
-        LEFT JOIN legal_source_snapshot_release_members member
-          ON member.snapshot_provision_id=eligibility.snapshot_provision_id AND member.search_release_id=?
-        WHERE eligibility.build_id=? AND eligibility.capability='current'
-          AND eligibility.status='eligible' AND member.canonical_chunk_id IS NULL) AS eligibleWithoutRelease,
-      (SELECT count(*) FROM legal_source_snapshot_release_members member
-        LEFT JOIN legal_search_release_items item ON item.search_release_id=member.search_release_id
-          AND item.canonical_chunk_id=member.canonical_chunk_id
-        WHERE member.search_release_id=? AND item.canonical_chunk_id IS NULL) AS memberWithoutItem,
-      (SELECT count(*) FROM legal_search_release_shards shard
-        WHERE shard.search_release_id=?) AS shardCount,
-      (SELECT coalesce(sum(item_count),0) FROM legal_search_release_shards shard
-        WHERE shard.search_release_id=?) AS shardItemCount`).bind(
-    RELEASE_ID, RELEASE_ID, BUILD_ID, RELEASE_ID, RELEASE_ID, BUILD_ID, RELEASE_ID, RELEASE_ID, RELEASE_ID,
-  ).first<Record<string, number>>();
+  const membershipParts = await Promise.all([
+    db.prepare(`SELECT count(*) AS count FROM legal_search_release_items WHERE search_release_id=?`)
+      .bind(RELEASE_ID).first<{ count: number }>(),
+    db.prepare(`SELECT count(*) AS count FROM legal_source_snapshot_release_members
+      WHERE search_release_id=?`).bind(RELEASE_ID).first<{ count: number }>(),
+    db.prepare(`SELECT count(*) AS count FROM legal_search_release_items item
+      JOIN legal_snapshot_provisions provision
+        ON provision.legacy_provision_rendition_id=item.provision_rendition_id
+      LEFT JOIN legal_retrieval_eligibility eligibility
+        ON eligibility.snapshot_provision_id=provision.id AND eligibility.build_id=?
+        AND eligibility.capability='current' AND eligibility.status='eligible'
+      WHERE item.search_release_id=? AND eligibility.id IS NULL`).bind(BUILD_ID, RELEASE_ID)
+      .first<{ count: number }>(),
+    db.prepare(`SELECT count(*) AS count FROM legal_retrieval_eligibility eligibility
+      JOIN legal_canonical_chunks chunk ON chunk.snapshot_provision_id=eligibility.snapshot_provision_id
+      LEFT JOIN legal_source_snapshot_release_members member
+        ON member.canonical_chunk_id=chunk.id AND member.search_release_id=?
+      WHERE eligibility.build_id=? AND eligibility.capability='current'
+        AND eligibility.status='eligible' AND member.canonical_chunk_id IS NULL`).bind(RELEASE_ID, BUILD_ID)
+      .first<{ count: number }>(),
+    db.prepare(`SELECT count(*) AS count FROM legal_source_snapshot_release_members member
+      LEFT JOIN legal_search_release_items item ON item.search_release_id=member.search_release_id
+        AND item.canonical_chunk_id=member.canonical_chunk_id
+      WHERE member.search_release_id=? AND item.canonical_chunk_id IS NULL`).bind(RELEASE_ID)
+      .first<{ count: number }>(),
+    db.prepare(`SELECT count(*) AS shardCount,coalesce(sum(item_count),0) AS shardItemCount
+      FROM legal_search_release_shards WHERE search_release_id=?`).bind(RELEASE_ID)
+      .first<{ shardCount: number; shardItemCount: number }>(),
+  ]);
+  const membership = {
+    releaseItems: Number(membershipParts[0]?.count ?? -1),
+    releaseMembers: Number(membershipParts[1]?.count ?? -1),
+    releaseWithoutEligible: Number(membershipParts[2]?.count ?? -1),
+    eligibleWithoutRelease: Number(membershipParts[3]?.count ?? -1),
+    memberWithoutItem: Number(membershipParts[4]?.count ?? -1),
+    shardCount: Number(membershipParts[5]?.shardCount ?? -1),
+    shardItemCount: Number(membershipParts[5]?.shardItemCount ?? -1),
+  };
   if (!membership || Number(membership.releaseItems) !== 160_978
     || Number(membership.releaseMembers) !== 160_978 || Number(membership.releaseWithoutEligible) !== 0
     || Number(membership.eligibleWithoutRelease) !== 0 || Number(membership.memberWithoutItem) !== 0
