@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-01T23:20:43.661Z",
+  "applicationCommit": "8ecea46643035f4f2ccd7b8eefdfed6c5f6ff336",
+  "databaseName": "juro-staging-corpus-shard-3",
+  "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+  "readOnly": true,
+  "queries": {
+    "documents": 3313,
+    "uniqueCurrentProvisions": 33084,
+    "currentChunks": 97470,
+    "indexedCurrentChunks": 93097,
+    "ingestionJobsByStatus": {
+      "completed": 7868,
+      "queued": 23713
+    },
+    "failureLedgerByRetryState": {
+      "retrying": 342,
+      "technically_unavailable": 17
+    },
+    "scheduledLocks": 0,
+    "checkpointsByStatus": {
+      "completed": 44
+    },
+    "latestScheduledRun": {
+      "id": "c5910075-03a1-408a-8dc5-3d50b4ccf6c5",
+      "status": "failed",
+      "errorCode": "D1_ERROR",
+      "startedAt": "2026-09-01T20:12:58.114Z",
+      "finishedAt": "2026-09-01T20:13:51.682Z"
+    },
+    "databaseSizeBytes": 9997344768
+  },
+  "queryMetadata": {
+    "rowsWritten": 0,
+    "changedDatabase": false,
+    "source": "wrangler_d1_execute_remote_read_only",
+    "qualityProbeSql": "separate_read_only_selects"
+  },
+  "interpretation": {
+    "terminalOrDeadLetterJobs": 0,
+    "unresolvedRetryingFailureLedgerRows": 342,
+    "ingestionMutationsFrozen": true,
+    "durableQueueEmpty": false,
+    "releaseGateClosed": true,
+    "reason": "The shard has no running, failed, or dead-letter jobs and no active lock, but 23,713 queued jobs and historical retrying failure-ledger rows remain. The latest scheduled run is a historical D1_ERROR. No retry or failure row was rewritten without a reproducible fix."
+  },
+  "scope": "Staging read-only health recheck only; not a corpus snapshot, federated disjointness proof, legal evaluation, or release approval."
+}
