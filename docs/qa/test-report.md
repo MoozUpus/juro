@@ -4,9 +4,23 @@ Status: **living evidence report, not full Definition of Done**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope in this report: the deployed v101 release and the undeployed mainline v114 performance candidate. Older v189/v95 evidence below is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v114 production evidence plus the undeployed v115 mobile accessibility candidate. Older v101/v189/v95 evidence below is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
 
-## v114 mainline candidate validation
+## v115 mobile accessibility candidate validation
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Website regression | focused homepage production suite | 19/19 PASS |
+| Platform auth/theme regression | focused Turnstile/auth/theme suites | 14/14 PASS |
+| Website static gates | type-check and lint | PASS |
+| Platform static gates | type-check and lint | PASS |
+| Production artifacts | website and platform production builds with artifact validation | PASS |
+| Platform artifact budgets | CSS 564.9 KiB; initial JS 294.1 KiB; largest lazy increment 212.1 KiB; fonts 453.6 KiB; images 564.4 KiB; Worker 3,640.6 KiB | PASS |
+| Public mobile Chrome | theme controls 44 × 44 at 390 × 844; zero horizontal overflow | PASS |
+| Mobile auth Chrome | theme/form-heading overlap 0 px² at 390 × 844; zero horizontal overflow | PASS |
+| Exact-head CI/security and deployment | required after commit and push | PENDING |
+
+## v114 production release validation
 
 | Area | Evidence | Result |
 | --- | --- | --- |
@@ -19,8 +33,12 @@ Scope in this report: the deployed v101 release and the undeployed mainline v114
 | Chrome performance | local LCP 1,334 ms; CLS 0.00; no top-level JURO forced-reflow function; 83 ms unattributed | PASS AS LOCAL LAB EVIDENCE |
 | Chrome responsive/reveal matrix | RU/UZ/EN desktop and RU mobile 21/21; `/ru#start` 21/21; zero overflow; clean console | PASS |
 | Local auth layout | 1440 × 900 and 390 × 844; zero overflow; sampled mobile controls at least 44 CSS px | PASS WITH PROVIDER CHALLENGE UNAVAILABLE LOCALLY |
-| Exact-head CI and security | required after the candidate is committed and pushed | PENDING |
-| Deployment and post-deploy Chrome QA | v114 is not deployed | NOT RUN |
+| Exact-head CI and security | CI `33553792614`; 0-finding scan `76bb90c9-cd9d-4ee2-a54f-3b2ea6a5f10c` | PASS |
+| Post-merge CI | workflow `33557373604` | PASS |
+| Deployment | workflow `33557372781`; website `5f04e052-c2ef-4af7-820a-b29819bcdef9`; platform `cef2e39c-4f56-4743-9287-b036192f1771` | PASS |
+| Production public Chrome | RU/UZ/EN 21/21 reveals; `/ru#start`; zero overflow; clean console | PASS |
+| Production mobile performance | throttled LCP 1,744 ms; CLS 0.00; no estimated DevTools savings | PASS WITH REMAINING FRAMEWORK/UNATTRIBUTED FORCED LAYOUT |
+| Production status | HTTP 200; operational; 8/8 components; 0 active incidents | PASS AS POINT-IN-TIME EVIDENCE |
 
 The first ad-hoc Node invocations used unsupported paths and failed before loading product tests; the exact project test commands were then used and passed. The local production server cannot load `cloudflare:` modules without the project loader, so auth visual QA used the supported Vite/Cloudflare development server after the production artifact itself had already passed validation. These harness corrections are not product failures and are not hidden as uninterrupted green runs.
 
@@ -100,12 +118,12 @@ These are build-budget measurements, not field Core Web Vitals.
 
 ## Still unproven
 
-- authenticated Chrome journeys for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin;
+- state-changing authenticated journeys; full Business, Lawyer, Pending Lawyer, and Staff/Admin coverage;
 - full critical-scenario E2E with real authorized test sessions;
 - manual keyboard accessibility for all critical flows;
 - visual regression across every required viewport;
 - field performance baselines and before/after Core Web Vitals for every production route;
 - staging reliability, because the excluded staging D1 capacity blocker prevents fresh scheduler persistence;
-- provider recovery, because both public production probes still report `PROVIDER_UNAVAILABLE`; the reported Anthropic top-up has not yet produced a successful probe.
+- sustained provider recovery beyond the current operational snapshot.
 
 The overall execution goal must remain active until these and the other Definition-of-Done gates are proven.

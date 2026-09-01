@@ -4,6 +4,7 @@ import test from "node:test";
 
 const rootPage = fs.readFileSync("app/page.tsx", "utf8");
 const localizedPage = fs.readFileSync("app/[locale]/page.tsx", "utf8");
+const globalStyles = fs.readFileSync("app/globals.css", "utf8");
 const adapter = fs.readFileSync("app/components/cinematic/CinematicLandingPage.tsx", "utf8");
 const homepage = fs.readFileSync("app/components/public/JuroHomepage.tsx", "utf8");
 const homepageStyles = fs.readFileSync("app/components/public/juro-home.module.css", "utf8");
@@ -104,6 +105,7 @@ test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(chrome, /headerTouchStyles\.language/);
   assert.match(headerTouchStyles, /min-height: 44px/);
   assert.match(headerTouchStyles, /aria-current="page"/);
+  assert.match(globalStyles, /\.public-theme-switcher button\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/s);
 });
 
 test("Jurobek uses a lightweight, reduced-motion-safe ambient treatment", () => {
