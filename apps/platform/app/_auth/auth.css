@@ -140,7 +140,8 @@
 .auth-card form header,
 .auth-unavailable {
   display: flex;
-  padding-right: 90px;
+  padding-top: 56px;
+  padding-right: 0;
   gap: 14px;
 }
 
@@ -153,7 +154,6 @@
 }
 
 .auth-unavailable {
-  padding-top: 40px;
   padding-bottom: 28px;
 }
 
@@ -460,8 +460,6 @@
   .auth-brand h1 { font-size: 36px; }
   .auth-brand p { display: none; }
   .auth-card { width: calc(100% - 24px); padding: 24px 18px; border-radius: 20px; }
-  .auth-card form header { padding-top: 56px; padding-right: 0; }
-  .auth-unavailable { padding-top: 56px; padding-right: 0; }
   .auth-card form header > svg { display: none; }
   .auth-account-type,
   .auth-code-actions { grid-template-columns: 1fr; }

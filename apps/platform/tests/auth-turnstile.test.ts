@@ -20,10 +20,10 @@ test("Turnstile reserves its challenge height before the provider renders", () =
   );
 });
 
-test("mobile auth headings clear the fixed theme and language controls", () => {
+test("auth headings clear the fixed theme and language controls at every viewport", () => {
   assert.match(
     authStyles,
-    /@media\s*\(max-width:\s*520px\)[\s\S]*?\.auth-card form header\s*\{[^}]*padding-top:\s*56px;[^}]*padding-right:\s*0;/,
+    /\.auth-card form header,\s*\n\.auth-unavailable\s*\{[^}]*padding-top:\s*56px;[^}]*padding-right:\s*0;/,
   );
   assert.match(
     authStyles,

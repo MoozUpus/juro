@@ -235,6 +235,13 @@ test("laptop layouts prevent large headline and product-grid clipping", () => {
   assert.match(motionStyles, /\[data-reveal="mask"\]\[data-reveal-state="visible"\]\) \{\s*clip-path: inset/);
 });
 
+test("public header language links keep a 44px touch target at every viewport", () => {
+  assert.match(
+    headerTouchStyles,
+    /\.language\s*\{[^}]*min-height:\s*44px;[^}]*min-width:\s*44px;/,
+  );
+});
+
 test("brand mark uses a dedicated symbol asset and keeps one intentional wordmark", () => {
   assert.match(chrome, /brandStyles\.markFrame/);
   assert.match(chrome, /brandStyles\.mobileMarkFrame/);
