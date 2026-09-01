@@ -3,7 +3,9 @@
 const origin = process.env.LEGAL_SOURCE_SNAPSHOT_BUILD_ORIGIN ?? "http://127.0.0.1:8787";
 const root = `${origin}/internal/legal-corpus/source-snapshot-build`;
 const buildId = "build:staging:current:source-snapshot-v1";
-const lanes = [..."0123456789abcdef"];
+const lanes = [..."0123456789abcdef"].flatMap((first) =>
+  [..."0123456789abcdef"].map((second) => `${first}${second}`));
+const laneConcurrency = 64;
 
 async function call(action, body = {}) {
   const response = await fetch(`${root}/${action}`, {
@@ -36,7 +38,7 @@ console.log(JSON.stringify({ event: "source_snapshot.start", result: started }))
 
 if (started.phase === "projections" && !started.resumed) {
   try {
-    await call("advance", { injectPartialFailure: true, lane: "0" });
+    await call("advance", { injectPartialFailure: true, lane: "00" });
     throw new Error("SOURCE_SNAPSHOT_INJECTION_DID_NOT_FAIL");
   } catch (error) {
     if (error.status !== 503 || error.message !== "SOURCE_SNAPSHOT_INJECTED_PARTIAL_FAILURE") throw error;
@@ -45,18 +47,18 @@ if (started.phase === "projections" && !started.resumed) {
 }
 
 let advanceCalls = 0;
-const incompleteLanes = new Set(lanes);
+const laneQueue = [...lanes];
 let wave = 0;
-while (incompleteLanes.size > 0) {
+while (laneQueue.length > 0) {
   wave += 1;
-  const active = [...incompleteLanes];
+  const active = laneQueue.splice(0, laneConcurrency);
   const results = await Promise.all(active.map((lane) => call("advance", { lane })));
   advanceCalls += results.length;
   for (let index = 0; index < results.length; index += 1) {
-    if (results[index].laneComplete) incompleteLanes.delete(active[index]);
+    if (!results[index].laneComplete) laneQueue.push(active[index]);
   }
   console.log(JSON.stringify({ event: "source_snapshot.advance_wave", wave, calls: advanceCalls,
-    activeLanes: active.length, remainingLanes: incompleteLanes.size,
+    activeLanes: active.length, remainingLanes: laneQueue.length,
     processedCount: Math.max(...results.map((result) => result.processedCount ?? 0)) }));
 }
 const projectionComplete = await call("advance");

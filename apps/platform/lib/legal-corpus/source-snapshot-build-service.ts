@@ -19,8 +19,7 @@ const RECONCILIATION_PAGE_SIZE = 1_000;
 const inputSchema = z.object({
   buildId: z.literal(BUILD_ID).default(BUILD_ID),
   injectPartialFailure: z.boolean().optional(),
-  lane: z.enum(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-    "a", "b", "c", "d", "e", "f"]).optional(),
+  lane: z.string().regex(/^[a-f0-9]{2}$/u).optional(),
 }).strict();
 
 const provisionObjectSchema = z.object({
@@ -338,7 +337,7 @@ async function advanceBuild(
     JOIN legal_instruments instrument ON instrument.id=document.legacy_instrument_id
     JOIN legal_evidence_locators locator ON locator.id=provision.provision_locator_id
     LEFT JOIN legal_canonical_chunks chunk ON chunk.snapshot_provision_id=provision.id
-    WHERE chunk.id IS NULL ${lane ? "AND substr(provision.id,20,1)=?" : ""}
+    WHERE chunk.id IS NULL ${lane ? "AND substr(provision.id,20,2)=?" : ""}
     ORDER BY provision.id LIMIT ?`);
   const packet = lane
     ? await rows.bind(lane, PROJECTION_BATCH_SIZE).all<ProjectionRow>()
