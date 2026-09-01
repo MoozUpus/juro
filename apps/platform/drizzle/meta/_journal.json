@@ -1065,6 +1065,13 @@
       "when": 1788294000000,
       "tag": "0151_product_value_activations",
       "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1788297600000,
+      "tag": "0152_product_insight_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -47,6 +47,19 @@ function addConversation(
   ).run(id, workspaceId, userId, createdAt, createdAt);
 }
 
+function addCase(
+  sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
+  id: string,
+  workspaceId: string,
+  userId: string,
+  createdAt: string,
+): void {
+  sqlite.prepare(
+    `INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,legal_area,status,created_at,updated_at)
+     VALUES (?,?,?,'individual','ru','Case','contracts','open',?,?)`,
+  ).run(id, workspaceId, userId, createdAt, createdAt);
+}
+
 function addAiRun(input: {
   sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"];
   id: string;
@@ -297,8 +310,24 @@ test("product dashboard calculates mature cohorts, TTFV, cost, reliability, and 
     pricingComplete: true,
     microusdPerAnswer: 1_000,
   });
+  assert.deepEqual(dashboard.averageAiAttemptCost, {
+    status: "sufficient",
+    minimumSampleSize: 20,
+    providerAttempts: 20,
+    pricingComplete: true,
+    microusdPerAttempt: 1_000,
+  });
   assert.equal(dashboard.aiReliability.completion.rate, 1);
   assert.equal(dashboard.aiReliability.fallback.rate, 0.5);
+  assert.deepEqual(dashboard.aiReliability.latency, {
+    status: "sufficient",
+    minimumSampleSize: 20,
+    observed: 40,
+    endToEndP50Ms: 1_000,
+    endToEndP95Ms: 1_000,
+    firstUsefulP50Ms: 500,
+    firstUsefulP95Ms: 500,
+  });
   assert.deepEqual(
     dashboard.providerAvailability.map((item) => [item.provider, item.currentState, item.availability.rate]),
     [["anthropic", "operational", 0.75], ["openai", "operational", 0.75]],
@@ -327,6 +356,175 @@ test("product dashboard calculates mature cohorts, TTFV, cost, reliability, and 
     pricingComplete: false,
     microusdPerAnswer: null,
   });
+  assert.equal(incompletePricing.averageAiAttemptCost.status, "incomplete_pricing");
+  assert.equal(incompletePricing.averageAiAttemptCost.microusdPerAttempt, null);
+
+});
+
+test("successful-answer cost is withheld when provider usage accounting is incomplete", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const completedAt = "2026-08-10T01:00:00.000Z";
+  for (let index = 0; index < 20; index += 1) {
+    const userId = `usage-gap-user-${index}`;
+    const workspaceId = `usage-gap-workspace-${index}`;
+    const conversationId = `usage-gap-conversation-${index}`;
+    const responseMessageId = `usage-gap-response-${index}`;
+    addUser(sqlite, userId, "2026-08-10T00:00:00.000Z");
+    addWorkspace(sqlite, workspaceId, "2026-08-10T00:00:00.000Z");
+    addConversation(sqlite, conversationId, workspaceId, userId, completedAt);
+    sqlite.prepare(
+      `INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at)
+       VALUES (?,?,'assistant','Answer',?,?)`,
+    ).run(responseMessageId, conversationId, JSON.stringify({ responseKind: "answer" }), completedAt);
+    addAiRun({
+      sqlite,
+      id: `usage-gap-run-${index}`,
+      workspaceId,
+      userId,
+      conversationId,
+      responseMessageId,
+      status: "completed",
+      startedAt: completedAt,
+      completedAt,
+    });
+  }
+  const dashboard = await readProductMetricsDashboard({
+    db: d1,
+    environment: "production",
+    days: 30,
+    now: new Date("2026-09-01T00:00:00.000Z"),
+  });
+  assert.equal(dashboard.successfulAnswerCost.status, "incomplete_usage");
+  assert.equal(dashboard.successfulAnswerCost.microusdPerAnswer, null);
+});
+
+test("product insights calculate mature question, return, workflow, lawyer, and feedback cohorts", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const signupAt = "2026-08-10T00:00:00.000Z";
+  const questionAt = "2026-08-10T00:30:00.000Z";
+  const answerAt = "2026-08-10T01:00:00.000Z";
+  const returnedAt = "2026-08-12T01:00:00.000Z";
+  addUser(sqlite, "insight-lawyer", "2026-07-01T00:00:00.000Z");
+  sqlite.prepare(
+    `INSERT INTO lawyer_profiles
+       (id,user_id,display_name,specialties_json,languages_json,status,public_approved_at,created_at,updated_at)
+     VALUES ('insight-lawyer-profile','insight-lawyer','Lawyer','[]','[]','public_approved',?,?,?)`,
+  ).run(signupAt, signupAt, signupAt);
+
+  for (let index = 0; index < 20; index += 1) {
+    const userId = `insight-user-${index}`;
+    const workspaceId = `insight-workspace-${index}`;
+    const conversationId = `insight-conversation-${index}`;
+    const responseMessageId = `insight-response-${index}`;
+    const runId = `insight-run-${index}`;
+    const baseCaseId = `insight-base-case-${index}`;
+    addUser(sqlite, userId, signupAt);
+    addWorkspace(sqlite, workspaceId, signupAt);
+    addConversation(sqlite, conversationId, workspaceId, userId, signupAt);
+    addCase(sqlite, baseCaseId, workspaceId, userId, questionAt);
+    sqlite.prepare(
+      `INSERT INTO product_account_milestones (user_id,event_name,first_completed_at)
+       VALUES (?,'first_question_sent',?)`,
+    ).run(userId, questionAt);
+    sqlite.prepare(
+      `INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at)
+       VALUES (?,?,'assistant','Answer',?,?)`,
+    ).run(responseMessageId, conversationId, JSON.stringify({ responseKind: "answer" }), answerAt);
+    addAiRun({
+      sqlite,
+      id: runId,
+      workspaceId,
+      userId,
+      conversationId,
+      responseMessageId,
+      status: "completed",
+      startedAt: questionAt,
+      completedAt: answerAt,
+    });
+    sqlite.prepare(
+      "INSERT INTO product_value_activations (user_id,ai_run_id,first_completed_at) VALUES (?,?,?)",
+    ).run(userId, runId, answerAt);
+    sqlite.prepare(
+      `INSERT INTO action_plans
+       (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at)
+       VALUES (?,?,?,'Plan',?,?,1,?,?)`,
+    ).run(
+      `insight-plan-${index}`,
+      baseCaseId,
+      userId,
+      index < 10 ? "completed" : "in_progress",
+      index < 10 ? 100 : 0,
+      questionAt,
+      index < 10 ? "2026-08-15T00:00:00.000Z" : questionAt,
+    );
+    sqlite.prepare(
+      `INSERT INTO lawyer_requests
+       (id,workspace_id,case_id,requester_user_id,lawyer_profile_id,status,anonymized_summary,requested_scope_json,created_at,updated_at)
+       VALUES (?,?,?,?,?,'requested','Anonymized legal request','{}',?,?)`,
+    ).run(
+      `insight-request-${index}`,
+      workspaceId,
+      baseCaseId,
+      userId,
+      "insight-lawyer-profile",
+      questionAt,
+      questionAt,
+    );
+    if (index < 10) {
+      sqlite.prepare(
+        `INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at)
+         VALUES (?,?,'user','Follow-up',NULL,?)`,
+      ).run(`insight-return-${index}`, conversationId, returnedAt);
+      addCase(
+        sqlite,
+        `insight-followup-case-${index}`,
+        workspaceId,
+        userId,
+        returnedAt,
+      );
+      sqlite.prepare(
+        `INSERT INTO lawyer_access_grants
+         (id,lawyer_request_id,case_id,lawyer_user_id,granted_by_user_id,created_at)
+         VALUES (?,?,?,?,?,?)`,
+      ).run(
+        `insight-grant-${index}`,
+        `insight-request-${index}`,
+        baseCaseId,
+        "insight-lawyer",
+        userId,
+        returnedAt,
+      );
+      sqlite.prepare(
+        `INSERT INTO ai_feedback
+         (id,workspace_id,user_id,conversation_id,assistant_message_id,ai_run_id,feedback_type,comment,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,'wrong_norm',NULL,?,?)`,
+      ).run(
+        `insight-feedback-${index}`,
+        workspaceId,
+        userId,
+        conversationId,
+        responseMessageId,
+        runId,
+        returnedAt,
+        returnedAt,
+      );
+    }
+  }
+
+  const dashboard = await readProductMetricsDashboard({
+    db: d1,
+    environment: "development",
+    days: 30,
+    now: new Date("2026-09-01T00:00:00.000Z"),
+  });
+  assert.equal(dashboard.questionJourney.completion.rate, 1);
+  assert.equal(dashboard.questionJourney.dropOff.rate, 0);
+  assert.equal(dashboard.returnRate.rate, 0.5);
+  assert.equal(dashboard.caseCreation.rate, 0.5);
+  assert.equal(dashboard.planCompletion.rate, 0.5);
+  assert.equal(dashboard.lawyerConversion.rate, 0.5);
+  assert.equal(dashboard.userReportedError.rate, 0.5);
+  assert.doesNotMatch(JSON.stringify(dashboard), /insight-user|insight-workspace|insight-run/);
 });
 
 test("small cohorts are returned without exact counts", async () => {
@@ -472,6 +670,20 @@ test("downstream cohort cells cannot reveal a suppressed activation complement",
     denominator: null,
     rate: null,
   });
+  assert.deepEqual(dashboard.caseCreation, {
+    status: "suppressed",
+    minimumSampleSize: 10,
+    numerator: null,
+    denominator: null,
+    rate: null,
+  });
+  assert.deepEqual(dashboard.returnRate, {
+    status: "suppressed",
+    minimumSampleSize: 10,
+    numerator: null,
+    denominator: null,
+    rate: null,
+  });
 });
 
 test("admin product metrics stay MFA-gated, no-store, noindex, and locale-complete", () => {
@@ -479,6 +691,7 @@ test("admin product metrics stay MFA-gated, no-store, noindex, and locale-comple
   const page = source("app/[locale]/admin/product-metrics/page.tsx");
   const consoleSource = source("app/_staff/ProductMetricsConsole.tsx");
   const migration = source("drizzle/0151_product_value_activations.sql");
+  const insightMigration = source("drizzle/0152_product_insight_indexes.sql");
   const analytics = source("lib/platform/analytics.ts");
 
   assert.match(route, /staff\.operations\.manage/);
@@ -487,10 +700,14 @@ test("admin product metrics stay MFA-gated, no-store, noindex, and locale-comple
   assert.match(page, /index: false, follow: false, nocache: true/);
   assert.match(consoleSource, /Ключевые метрики JURO/);
   assert.match(consoleSource, /JURO asosiy ko‘rsatkichlari/);
+  assert.match(consoleSource, /Ошибка по отзыву пользователя/);
+  assert.match(consoleSource, /Foydalanuvchi bildirgan xato/);
   assert.match(migration, /product_value_activations/);
   assert.match(migration, /product_kpi_user_profiles_created_idx/);
   assert.match(migration, /product_kpi_ai_runs_completed_idx/);
   assert.match(migration, /product_kpi_provider_usage_completed_idx/);
   assert.match(migration, /product_kpi_cases_owner_created_idx/);
+  assert.match(insightMigration, /product_kpi_milestones_event_completed_idx/);
+  assert.match(insightMigration, /product_kpi_ai_feedback_type_created_idx/);
   assert.match(analytics, /first_legal_answer_completed/);
 });
