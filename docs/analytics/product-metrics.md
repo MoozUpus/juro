@@ -1,6 +1,6 @@
 # JURO Privacy-Conscious Product Metrics
 
-Status: **event contract and the first cohort-safe D1 dashboard are implemented; production deployment and baseline remain open**
+Status: **event contract and the expanded cohort-safe D1 dashboard are implemented through v112; production deployment and baseline remain open**
 
 ## Decision framework
 
@@ -12,11 +12,11 @@ The first operating question is whether a new account reaches a useful, trustwor
 | Workflow progression rate | mature activated accounts that create a plan, case, lawyer request, or consultation within 7 days / mature activated accounts | test whether the Legal Answer leads to a practical next step | v111 D1 aggregate over durable records |
 | Successful Legal Answer cost | priced Legal Chat provider cost / completed, validated Legal Answers | control unit economics without rewarding failed/unsupported answers | v111 D1 aggregate over `ai_provider_usage_events` and `ai_runs`; provider invoice reconciliation remains separate |
 
-Driver metrics are time to first value, Legal Answer completion rate, plan/case creation, source-open rate, and lawyer conversion. Guardrails are citation-validation failure, source-not-found/outdated-source rate, user-reported error rate, p95 latency, provider availability, fallback rate, and analytics privacy violations.
+Driver metrics now implemented in the D1 dashboard are time to first value, first-question completion/drop-off, 14-day return, separate case creation, 14-day plan completion, and 14-day lawyer-request acceptance. Guardrails now implemented there are user-reported error rate, end-to-end and first-useful p50/p95 latency, provider availability, fallback rate, successful-answer cost, average successful provider-attempt cost, and analytics privacy thresholds. Source-open and legal-source quality metrics remain intentionally outside this release because they require a separately validated source-quality contract.
 
-No numerical target is set. v111 does not claim a production baseline: the migration, route, and dashboard must first be deployed, then accumulate a mature and fully priced sample. A firm target before that evidence would be invented.
+No numerical target is set. v112 does not claim a production baseline: migrations, route, and dashboard must first be deployed, then accumulate mature and fully priced samples. A firm target before that evidence would be invented.
 
-The protected dashboard uses a fixed 30-day window by default (operator-selectable only to 60 or 90 days). Seven-day conversion metrics include only cohorts that have received the complete seven-day observation window. Product cohorts require at least 10 accounts and apply complementary suppression when either side of a conversion could expose a small positive cell. Downstream time-to-value and workflow cells are also hidden whenever the activation cell is suppressed, preventing them from reconstructing its hidden count. Content-free reliability and provider-probe rates require at least 20 observations. Suppressed and insufficient metrics return `null`, never exact hidden counts.
+The protected dashboard uses a fixed 30-day window by default (operator-selectable only to 60 or 90 days). Seven- and fourteen-day conversion metrics include only cohorts that have received their complete observation window. Product cohorts require at least 10 accounts, plans, requests, or answers as applicable and apply complementary suppression when either side of a conversion could expose a small positive cell. Downstream time-to-value, return, case-creation, and combined-workflow cells are also hidden whenever activation is suppressed, preventing reconstruction of its hidden count. Content-free reliability, latency, provider-probe, and average-attempt-cost metrics require at least 20 observations. Suppressed and insufficient metrics return `null`, never exact hidden counts.
 
 ## Product event row contract
 
@@ -67,27 +67,27 @@ Forbidden data includes IDs, stable pseudonymous keys, URLs, IPs, questions, Leg
 
 | Metric | Numerator / denominator | Grain and caveat |
 | --- | --- | --- |
-| activation rate | activated accounts / mature completed signups | v111 returns only thresholded aggregate cells; first-question counts are not treated as activation |
+| activation rate | activated accounts / mature completed signups | thresholded aggregate only; first-question counts are not treated as activation |
 | time to first value | first completed useful Legal Answer time - signup completion time | exact nearest-rank p50/p95 are calculated inside D1 and returned only after the cohort threshold |
-| completion rate | completed Legal Answers / first questions sent | separate clarification-required and cancelled outcomes |
-| drop-off by step | entries that do not reach the next defined milestone / entries at the step | only after all relevant events share one release contract |
-| return rate | accounts with a useful action in a later review window / activated accounts | cannot be calculated from identity-free Analytics Engine rows |
-| plan completion | completed plans / created plans | define terminal/cancelled handling before release |
-| case creation | created cases / activated accounts | v111 includes case creation in the combined workflow-progression KPI; a separate rate needs an adequately sized baseline |
-| lawyer conversion | accepted lawyer requests or scheduled consultations / lawyer views | browser view and accepted-state events remain open |
-| source open rate | Legal Answers with at least one source opened / completed Legal Answers | client event remains open |
-| cost per successful answer | estimated provider cost / completed validated Legal Answers | withheld whenever a successful provider attempt lacks an immutable price version; reconcile to OpenAI/Anthropic billing exports |
-| average AI cost | total estimated provider cost / provider attempts or product runs | always state the chosen denominator |
-| escalation rate | lawyer requests / completed Legal Answers | cohort/window alignment required |
+| completion rate | accounts with a first validated Legal Answer within 7 days / mature accounts with a first question | clarification-only responses do not count as completion |
+| drop-off by step | first-question accounts without a validated answer within 7 days / mature first-question accounts | the complement of the completion cell; both are hidden together when either side is small |
+| return rate | activated accounts with a new user question, case, plan, lawyer request, or consultation 24 hours to 14 days later / mature activated accounts | calculated by D1-local joins; actions inside the first 24 hours are excluded |
+| plan completion | plans completed within 14 days / mature plans created | a plan is complete only when its durable status is `completed`; plans with cancelled steps remain non-completers in the denominator |
+| case creation | activated accounts that create a case within 7 days / mature activated accounts | separate from the combined workflow-progression rate and activation-dependent for suppression |
+| lawyer conversion | lawyer requests with a durable case-access grant within 14 days / mature lawyer requests | request acceptance, not a browser profile view, is the conversion boundary |
+| source open rate | Legal Answers with at least one source opened / completed Legal Answers | the identity-free client event is implemented, but it intentionally cannot be joined back to an answer; this rate remains unavailable without a new privacy-safe contract |
+| cost per successful answer | estimated provider cost / completed validated Legal Answers | withheld when recorded successful attempts are fewer than completed answers or any attempt lacks an immutable price version; reconcile to OpenAI/Anthropic billing exports |
+| average AI cost | total estimated Legal Chat provider cost / successful provider attempts | withheld if any successful attempt lacks an immutable price version; minimum 20 attempts |
+| escalation rate | activated accounts with a lawyer request or consultation within 7 days / mature activated accounts | currently visible inside combined workflow progression; request acceptance is reported separately |
 | web fallback rate | Live Official Search or Secondary Web Research runs / retrieval runs | keep Source Ladder stages separate |
 | citation validation failure | failed citation validations / citation validations | legal-quality gate; provider health is not a substitute |
 | outdated source rate | runs blocked for stale source / source-grounded runs | source freshness work is outside v102 |
-| user-reported error rate | error-coded feedback / completed Legal Answers | `feedback_submitted` reason is allowlisted; deduplicate replays |
-| latency | p50/p95 end-to-end and first-useful latency | use `ai_slo_telemetry_events`, not browser guesses |
+| user-reported error rate | validated answers with at least one negative feedback category within 7 days / mature validated answers | distinct by assistant answer; repeated or multiple negative categories do not multiply the numerator |
+| latency | nearest-rank p50/p95 end-to-end and first-useful latency for completed authenticated Legal Chat requests | calculated inside D1 from content-free `ai_slo_telemetry_events`; minimum 20 completed observations |
 | provider availability | successful fresh probes / scheduled probes | report OpenAI and Anthropic separately |
 
 ## Release interpretation
 
-Identity-free Analytics Engine rows remain suitable for event volume, locale, account type, outcome, and safe-reason trends, but cannot calculate account-level activation, return, or multi-step conversion. v111 therefore records the first validated Legal Answer in a replay-safe D1-local row and performs joins only inside D1. The staff-only route requires `staff.operations.manage`, MFA verified within 15 minutes, `private, no-store`, and a noindex page. Its response contains window metadata, thresholded totals/rates, durations, costs, and content-free technical status only—never a user, workspace, conversation, run, document, URL, or stable pseudonymous identifier.
+Identity-free Analytics Engine rows remain suitable for event volume, locale, account type, outcome, and safe-reason trends, but cannot calculate account-level activation, return, or multi-step conversion. v111 records the first validated Legal Answer in a replay-safe D1-local row; v112 adds only aggregate queries and indexes over existing durable records. All joins remain inside D1. The staff-only route requires `staff.operations.manage`, MFA verified within 15 minutes, `private, no-store`, and a noindex page. Its response contains window metadata, thresholded totals/rates, durations, costs, and content-free technical status only—never a user, workspace, conversation, run, document, URL, or stable pseudonymous identifier.
 
-`IMPLEMENTED` means present and locally verified in the release branch. It does not mean the v111 migration is applied to production or that a production KPI baseline is available.
+`IMPLEMENTED` means present and locally verified in the release branch. It does not mean the v110-v112 migrations are applied to production or that a production KPI baseline is available.
