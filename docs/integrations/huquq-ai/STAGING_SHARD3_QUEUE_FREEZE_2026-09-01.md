@@ -44,6 +44,16 @@ Independent table probes also found 20,867 chunks with a dense vector,
 1,413,980 chunks without one, and 1,430,474 rows with `indexed_at`; these are
 not a Qdrant parity proof and must not be used as release evidence.
 
+## Later read-only recheck
+
+The point-in-time capture above is not a current ledger snapshot. A sequential
+read-only recheck at `2026-09-01T22:44:17.162Z` (see
+`STAGING_SHARD3_READONLY_RECHECK_2026-09-02.json`) found the same frozen
+job-state boundary—0 failed/dead-letter jobs, 0 scheduled locks and 44 completed
+checkpoints—but the failure ledger then contained 342 historical `retrying`
+rows and 17 `technically_unavailable` rows. No retry or failure row was
+rewritten; these rows keep the release gate closed.
+
 ## Guard and failed probes
 
 - `scheduled_locks` is empty.
