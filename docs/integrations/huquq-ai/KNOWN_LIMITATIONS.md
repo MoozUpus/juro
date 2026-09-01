@@ -49,6 +49,13 @@
   D1 export/restore rehearsals now have verified local `quick_check=ok` and zero
   foreign-key violations, but no federated snapshot, indexed 314-scenario
   benchmark or full-corpus Qdrant evidence has been claimed.
+- A 2026-09-02 read-only recheck found one historical legacy dead-letter fetch
+  (`lexuz:8411573`, `LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT`) and its terminal
+  ledger row, plus two expired audit lock rows. The guard intentionally fails
+  closed when language aliases map to multiple document IDs. The original
+  source payload is not retained, so no deterministic repair or status rewrite
+  is safe; details are recorded in
+  `STAGING_LEGACY_FAILURE_RECHECK_2026-09-02T2329Z.json`.
 - The new source-card and full-article modal passed type-check, focused boundary
   tests and staging artifact/deployment checks. Authenticated desktop QA passed
   for the AI-chat light/dark empty state and caught one dark-history contrast
