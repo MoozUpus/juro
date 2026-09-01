@@ -14,7 +14,8 @@ const BUILD_ID = "build:staging:current:source-snapshot-v1";
 const CUTOFF = "2026-08-31T06:26:27.2253695Z";
 const CONFIGURATION_ID = "ai-search-staging-v1";
 const PROJECTION_BATCH_SIZE = 128;
-const RECONCILIATION_PAGE_SIZE = 1_000;
+const RECONCILIATION_PAGE_SIZE = 5_000;
+const R2_RECONCILIATION_PAGE_SIZE = 250;
 
 const inputSchema = z.object({
   buildId: z.literal(BUILD_ID).default(BUILD_ID),
@@ -438,8 +439,53 @@ const inventoryKinds: readonly InventoryKind[] = [
 
 type ReconciliationCursor = { kind: number; after: string | null; page: number };
 
-async function reconcileBuild(env: SourceSnapshotBuildEnv) {
-  const { db } = await requireTarget(env);
+async function reconcileReleaseR2Lane(
+  db: D1Database,
+  bucket: SourceSnapshotBucket,
+  lane: string,
+) {
+  const latest = await db.prepare(`SELECT inventory_kind AS inventoryKind,inventory_json AS inventoryJson
+    FROM legal_source_snapshot_inventories WHERE build_id=? AND inventory_kind LIKE ?
+    ORDER BY inventory_kind DESC LIMIT 1`).bind(BUILD_ID, `page:release_r2:${lane}:%`)
+    .first<{ inventoryKind: string; inventoryJson: string }>();
+  const previous = latest ? z.object({ last: z.string() }).parse(JSON.parse(latest.inventoryJson)) : null;
+  const page = latest ? Number(latest.inventoryKind.slice(latest.inventoryKind.lastIndexOf(":") + 1)) + 1 : 0;
+  const query = `SELECT * FROM legal_canonical_chunks
+    WHERE substr(snapshot_provision_id,20,2)=? ${previous ? "AND id>?" : ""}
+    ORDER BY id LIMIT ?`;
+  const packet = previous
+    ? await db.prepare(query).bind(lane, previous.last, R2_RECONCILIATION_PAGE_SIZE)
+      .all<Record<string, unknown>>()
+    : await db.prepare(query).bind(lane, R2_RECONCILIATION_PAGE_SIZE).all<Record<string, unknown>>();
+  if (packet.results.length === 0) {
+    const pages = await db.prepare(`SELECT inventory_kind AS inventoryKind,item_count AS itemCount,
+        inventory_sha256 AS inventorySha256 FROM legal_source_snapshot_inventories
+      WHERE build_id=? AND inventory_kind LIKE ? ORDER BY inventory_kind`).bind(
+      BUILD_ID, `page:release_r2:${lane}:%`,
+    ).all<{ inventoryKind: string; itemCount: number; inventorySha256: string }>();
+    const itemCount = pages.results.reduce((sum, item) => sum + item.itemCount, 0);
+    await db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_inventories
+      (build_id,inventory_kind,item_count,inventory_sha256,inventory_json,recorded_at)
+      VALUES (?,?,?,?,?,?)`).bind(BUILD_ID, `summary:release_r2:${lane}`, itemCount,
+      await sha256(stable(pages.results)), JSON.stringify({ lane, pages: pages.results.length, itemCount }), CUTOFF).run();
+    return { status: "building", phase: "reconciliation", kind: "release_r2", lane,
+      laneComplete: true, itemCount };
+  }
+  await Promise.all(packet.results.map(async (row) => {
+    await verifiedObject(bucket, String(row.r2_key), Number(row.byte_count), String(row.sha256));
+  }));
+  const last = String(packet.results.at(-1)!.id);
+  await db.prepare(`INSERT INTO legal_source_snapshot_inventories
+    (build_id,inventory_kind,item_count,inventory_sha256,inventory_json,recorded_at)
+    VALUES (?,?,?,?,?,?)`).bind(BUILD_ID,
+    `page:release_r2:${lane}:${String(page).padStart(6, "0")}`, packet.results.length,
+    await sha256(stable(packet.results)), JSON.stringify({ lane, first: packet.results[0]!.id, last }), CUTOFF).run();
+  return { status: "building", phase: "reconciliation", kind: "release_r2", lane,
+    laneComplete: false, page, itemCount: packet.results.length };
+}
+
+async function reconcileBuild(env: SourceSnapshotBuildEnv, lane?: string) {
+  const { db, bucket } = await requireTarget(env);
   const build = await db.prepare(`SELECT status,phase,cursor FROM legal_source_snapshot_builds WHERE id=?`)
     .bind(BUILD_ID).first<{ status: string; phase: string; cursor: string | null }>();
   if (!build || build.status !== "building") throw new Error("SOURCE_SNAPSHOT_BUILD_NOT_RUNNING");
@@ -454,6 +500,27 @@ async function reconcileBuild(env: SourceSnapshotBuildEnv) {
     return { status: "building", phase: "release" };
   }
   const kind = inventoryKinds[cursor.kind]!;
+  if (kind.verifyR2 && lane) return reconcileReleaseR2Lane(db, bucket, lane);
+  if (kind.verifyR2) {
+    const laneSummaries = await db.prepare(`SELECT inventory_kind AS inventoryKind,
+        item_count AS itemCount,inventory_sha256 AS inventorySha256
+      FROM legal_source_snapshot_inventories WHERE build_id=?
+        AND inventory_kind LIKE 'summary:release_r2:__' ORDER BY inventory_kind`)
+      .bind(BUILD_ID).all<{ inventoryKind: string; itemCount: number; inventorySha256: string }>();
+    if (laneSummaries.results.length < 256) return { status: "building", phase: "reconciliation",
+      kind: "release_r2", laneRequired: true, completedLanes: laneSummaries.results.length };
+    const itemCount = laneSummaries.results.reduce((sum, item) => sum + item.itemCount, 0);
+    await db.batch([
+      db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_inventories
+        (build_id,inventory_kind,item_count,inventory_sha256,inventory_json,recorded_at)
+        VALUES (?,?,?,?,?,?)`).bind(BUILD_ID, "summary:release_r2", itemCount,
+        await sha256(stable(laneSummaries.results)), JSON.stringify({ lanes: 256, itemCount }), CUTOFF),
+      db.prepare(`UPDATE legal_source_snapshot_builds SET cursor=?,updated_at=? WHERE id=?`).bind(
+        JSON.stringify({ kind: cursor.kind + 1, after: null, page: 0 }), new Date().toISOString(), BUILD_ID,
+      ),
+    ]);
+    return { status: "building", phase: "reconciliation", kind: "release_r2", itemCount, complete: true };
+  }
   const where = [kind.where, cursor.after ? `${kind.key}>?` : null].filter(Boolean).join(" AND ");
   const query = `SELECT * FROM ${kind.table}${where ? ` WHERE ${where}` : ""}
     ORDER BY ${kind.key} LIMIT ?`;
@@ -478,12 +545,6 @@ async function reconcileBuild(env: SourceSnapshotBuildEnv) {
       ),
     ]);
     return { status: "building", phase: "reconciliation", kind: kind.name, itemCount, complete: true };
-  }
-  if (kind.verifyR2) {
-    await Promise.all(packet.results.map(async (row) => {
-      await verifiedObject(env.LEGAL_EVIDENCE_BUCKET!, String(row.r2_key), Number(row.byte_count),
-        String(row.sha256));
-    }));
   }
   const pageIdentity = await sha256(stable(packet.results));
   const last = String(packet.results.at(-1)![kind.key]);
@@ -716,7 +777,7 @@ export async function handleSourceSnapshotBuildRequest(
     if (path === ADVANCE_PATH) {
       return response({ result: await advanceBuild(env, input.injectPartialFailure === true, input.lane) });
     }
-    if (path === RECONCILE_PATH) return response({ result: await reconcileBuild(env) });
+    if (path === RECONCILE_PATH) return response({ result: await reconcileBuild(env, input.lane) });
     if (path === FINALIZE_PATH) return response({ result: await finalizeBuild(env) });
     if (path === DRY_RUN_PATH) return response({ result: await dryRun(env) });
     return response({ code: "NOT_FOUND" }, 404);

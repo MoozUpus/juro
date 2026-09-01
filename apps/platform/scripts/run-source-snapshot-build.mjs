@@ -87,6 +87,22 @@ let reconcileCalls = 0;
 for (;;) {
   const result = await call("reconcile");
   reconcileCalls += 1;
+  if (result.laneRequired) {
+    const r2LaneQueue = [...lanes];
+    let r2Wave = 0;
+    while (r2LaneQueue.length > 0) {
+      r2Wave += 1;
+      const active = r2LaneQueue.splice(0, laneConcurrency);
+      const results = await Promise.all(active.map((lane) => call("reconcile", { lane })));
+      reconcileCalls += results.length;
+      for (let index = 0; index < results.length; index += 1) {
+        if (!results[index].laneComplete) r2LaneQueue.push(active[index]);
+      }
+      console.log(JSON.stringify({ event: "source_snapshot.r2_reconcile_wave", r2Wave,
+        calls: reconcileCalls, activeLanes: active.length, remainingLanes: r2LaneQueue.length }));
+    }
+    continue;
+  }
   if (reconcileCalls % 25 === 0 || result.complete || result.phase !== "reconciliation") {
     console.log(JSON.stringify({ event: "source_snapshot.reconcile", calls: reconcileCalls, result }));
   }
