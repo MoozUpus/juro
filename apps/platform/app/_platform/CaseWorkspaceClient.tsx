@@ -202,7 +202,7 @@ function SimpleList({ icon, title, empty, items, action, note }: { icon: typeof 
 
 function SimpleListContent({ items, empty }: { items: SimpleItem[]; empty: string }) {
   if (!items.length) return <p className="case-workspace-muted">{empty}</p>;
-  return <ul className="case-workspace-records">{items.map((entry) => <li key={entry.id}><div><strong>{entry.title}</strong><span>{entry.meta}</span>{entry.trailing && <em>{entry.trailing}</em>}</div>{entry.href ? <Link href={entry.href}><ArrowUpRight /><span className="sr-only">{entry.title}</span></Link> : entry.externalHref ? <a href={entry.externalHref} target="_blank" rel="noreferrer"><ArrowUpRight /><span className="sr-only">{entry.title}</span></a> : null}</li>)}</ul>;
+  return <ul className="case-workspace-records">{items.map((entry) => <li key={entry.id}><div><strong>{entry.title}</strong><span>{entry.meta}</span>{entry.trailing && <em>{entry.trailing}</em>}</div>{entry.href ? <Link href={entry.href}><ArrowUpRight /><span className="sr-only">{entry.title}</span></Link> : entry.externalHref ? <a href={entry.externalHref} data-juro-product-event="source_opened" target="_blank" rel="noreferrer"><ArrowUpRight /><span className="sr-only">{entry.title}</span></a> : null}</li>)}</ul>;
 }
 
 function CaseSourcesPanel({ locale, sources, initialBookmarks }: { locale: PlatformLocale; sources: CaseSource[]; initialBookmarks: CaseBookmark[] }) {
@@ -248,7 +248,7 @@ function CaseSourcesPanel({ locale, sources, initialBookmarks }: { locale: Platf
         {bookmark.comment && <p>{bookmark.comment}</p>}
       </div>
       <div className="case-bookmark-actions">
-        {safeOfficialUrl(bookmark.officialUrl) && <a href={bookmark.officialUrl} target="_blank" rel="noreferrer"><ArrowUpRight /><span className="sr-only">{ru ? "Открыть официальный источник" : "Rasmiy manbani ochish"}</span></a>}
+        {safeOfficialUrl(bookmark.officialUrl) && <a href={bookmark.officialUrl} data-juro-product-event="source_opened" target="_blank" rel="noreferrer"><ArrowUpRight /><span className="sr-only">{ru ? "Открыть официальный источник" : "Rasmiy manbani ochish"}</span></a>}
         <button type="button" disabled={busyId === bookmark.bookmarkId} aria-label={ru ? `Удалить закладку «${bookmark.actTitle}»` : `«${bookmark.actTitle}» xatcho‘pini olib tashlash`} onClick={() => void removeBookmark(bookmark)}><Trash2 /></button>
       </div>
     </li>)}</ul></div>}

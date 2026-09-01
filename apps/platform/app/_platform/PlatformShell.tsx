@@ -40,6 +40,7 @@ import {
   type PlatformLocale,
 } from "../../lib/platform/routing";
 import type { WorkspaceOption } from "../../lib/platform/workspace";
+import { trackPlatformSourceOpened } from "../../lib/platform/client-analytics";
 import { GlobalSearch } from "./GlobalSearch";
 import { LogoutButton } from "./LogoutButton";
 import { PlatformRouteProvider } from "./PlatformRouteContext";
@@ -216,6 +217,16 @@ export function PlatformShell({
   }, []);
   useEffect(() => {
     document.documentElement.lang = locale;
+  }, [locale]);
+  useEffect(() => {
+    const onProductEventClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const link = target.closest<HTMLAnchorElement>('a[data-juro-product-event="source_opened"]');
+      if (link) trackPlatformSourceOpened(locale);
+    };
+    document.addEventListener("click", onProductEventClick, { capture: true });
+    return () => document.removeEventListener("click", onProductEventClick, { capture: true });
   }, [locale]);
   useEffect(() => {
     if (!open) return;

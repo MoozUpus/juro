@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "@fontsource-variable/manrope/wght.css";
+import { PublicAnalytics } from "./components/public/PublicAnalytics";
 import "./globals.css";
 
 const themeBootstrap = `(function(){try{var c=document.cookie.match(/(?:^|; )juro_theme=(system|light|dark)(?:;|$)/);var l=localStorage.getItem("juro-theme");var m=c?c[1]:(l==="light"||l==="dark"||l==="system"?l:"system");var d=m==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):m;document.documentElement.dataset.theme=d;document.documentElement.dataset.themeMode=m;document.documentElement.style.colorScheme=d;}catch(e){document.documentElement.dataset.theme="light";document.documentElement.dataset.themeMode="system";}})();`;
@@ -37,6 +38,7 @@ export default async function RootLayout({
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
         {children}
+        <PublicAnalytics locale={locale} />
       </body>
     </html>
   );

@@ -9,6 +9,7 @@ import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryReques
 import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
 import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, type VoiceSpeechPhase } from "../../lib/ai/voice-ui";
 import { formatPlatformDate, formatPlatformLongDate, formatPlatformMonth } from "../../lib/platform/date-time";
+import { trackPlatformSourceOpened } from "../../lib/platform/client-analytics";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import { uzbekistanCalendarDate } from "../../lib/legal/applicability-date";
 import { usePlatformBasePath, usePlatformWorkspaceId } from "./PlatformRouteContext";
@@ -605,6 +606,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }
 
   function revealCitation(sourceId: string) {
+    trackPlatformSourceOpened(locale);
     setEvidenceCollapsed(false);
     setMobileContextTab("sources");
     if (window.matchMedia("(max-width: 1380px)").matches) setMobileContextOpen(true);
@@ -1002,7 +1004,7 @@ function PendingConversationTurn({
           <p className="ai-preliminary-source">
             <span>{preliminary.source.title}{preliminary.source.article ? ` · ${preliminary.source.article}` : ""}</span>
             {safeOfficialUrl(preliminary.source.canonicalUrl)
-              ? <a href={preliminary.source.canonicalUrl} target="_blank" rel="noreferrer">Lex.uz</a>
+              ? <a href={preliminary.source.canonicalUrl} data-juro-product-event="source_opened" target="_blank" rel="noreferrer">Lex.uz</a>
               : null}
           </p>
         </div>
@@ -1071,6 +1073,7 @@ function LegalSourceCard({
   }, [closeSourceDialog, open]);
 
   async function showArticle() {
+    trackPlatformSourceOpened(locale);
     sourceReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setOpen(true);
     setError("");
@@ -1146,7 +1149,7 @@ function LegalSourceCard({
     </div>
     <div className="ai-source-actions">
       {!secondarySource && <button type="button" onClick={() => void showArticle()}><BookOpenCheck aria-hidden="true" />{privateSource ? (ru ? "Текст документа" : "Hujjat matni") : (ru ? "Текст статьи" : "Modda matni")}</button>}
-      {!privateSource && <a href={source.originalUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{secondarySource ? (ru ? "Открыть материал" : "Materialni ochish") : (ru ? "Открыть Lex.uz" : "Lex.uz saytini ochish")}</a>}
+      {!privateSource && <a href={source.originalUrl} data-juro-product-event="source_opened" target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{secondarySource ? (ru ? "Открыть материал" : "Materialni ochish") : (ru ? "Открыть Lex.uz" : "Lex.uz saytini ochish")}</a>}
     </div>
     {!privateSource && !secondarySource && <SourceBookmarkControl source={source} cases={cases} locale={locale} />}
     {open && <div className="ai-source-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeSourceDialog(); }}>
@@ -1176,7 +1179,7 @@ function LegalSourceCard({
           </dl>
           {display.availableLanguages.length > 0 && <section className="ai-source-modal-related" aria-label={ru ? "Доступные языки" : "Mavjud tillar"}>
             <h3>{ru ? "Доступные языки" : "Mavjud tillar"}</h3>
-            <div>{display.availableLanguages.map((variant) => <a key={`${variant.language}:${variant.officialUrl}`} href={variant.officialUrl} target="_blank" rel="noreferrer">{languageLabel(variant.language, ru)}{variant.official ? " · official" : ""}</a>)}</div>
+            <div>{display.availableLanguages.map((variant) => <a key={`${variant.language}:${variant.officialUrl}`} href={variant.officialUrl} data-juro-product-event="source_opened" target="_blank" rel="noreferrer">{languageLabel(variant.language, ru)}{variant.official ? " · official" : ""}</a>)}</div>
           </section>}
           {display.versionHistory.length > 0 && <details className="ai-source-modal-history">
             <summary>{ru ? `История редакций (${display.versionHistory.length})` : `Tahrirlar tarixi (${display.versionHistory.length})`}</summary>
@@ -1184,7 +1187,7 @@ function LegalSourceCard({
           </details>}
           <div className="ai-source-modal-text">{display.text || (ru ? "Текст статьи не сохранён." : "Modda matni saqlanmagan.")}</div>
         </>}
-        {!privateSource && <footer><a href={display.officialUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{ru ? "Официальный источник" : "Rasmiy manba"}</a></footer>}
+        {!privateSource && <footer><a href={display.officialUrl} data-juro-product-event="source_opened" target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{ru ? "Официальный источник" : "Rasmiy manba"}</a></footer>}
       </section>
     </div>}
   </article>;

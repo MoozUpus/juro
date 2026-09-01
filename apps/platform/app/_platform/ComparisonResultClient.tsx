@@ -759,7 +759,7 @@ function ChangeCard({
           <strong>{change.confidencePercent === null ? "—" : `${change.confidencePercent}%`}</strong>
         </div>
         {source && safeOfficialUrl(source.officialUrl) ? (
-          <a href={source.officialUrl} target="_blank" rel="noreferrer"><ExternalLink />{source.actTitle}</a>
+          <a href={source.officialUrl} data-juro-product-event="source_opened" target="_blank" rel="noreferrer"><ExternalLink />{source.actTitle}</a>
         ) : <span className="comparison-unverified"><ShieldAlert />{copy.sourceUnavailable}</span>}
         <div className="comparison-decision">
           <span aria-live="polite">
@@ -904,7 +904,7 @@ function SourcesView({
             <div><dt>{copy.originalLanguage}</dt><dd>{source.locale.toUpperCase()}</dd></div>
             <div><dt>{copy.status}</dt><dd>{source.status}</dd></div>
           </dl>
-          <a href={source.officialUrl} target="_blank" rel="noreferrer"><ExternalLink />{copy.officialSource}</a>
+          <a href={source.officialUrl} data-juro-product-event="source_opened" target="_blank" rel="noreferrer"><ExternalLink />{copy.officialSource}</a>
         </article>
       ))}
     </div>

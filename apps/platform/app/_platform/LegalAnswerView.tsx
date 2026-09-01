@@ -154,7 +154,7 @@ function CitationList({
       const href = publicSourceUrl(source);
       if (onCitationSelect) return <button type="button" key={source.sourceId} onClick={() => onCitationSelect(source.sourceId)}>{label}</button>;
       return href
-        ? <a href={href} target="_blank" rel="noopener noreferrer" key={source.sourceId} title={copy.openSource}>{label}<ExternalLink aria-hidden="true" /></a>
+        ? <a href={href} data-juro-product-event="source_opened" target="_blank" rel="noopener noreferrer" key={source.sourceId} title={copy.openSource}>{label}<ExternalLink aria-hidden="true" /></a>
         : <span key={source.sourceId}>{label}</span>;
     })}
   </span>;

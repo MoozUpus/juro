@@ -87,6 +87,30 @@ test("product analytics failures never escape into the durable product workflow"
   }), false);
 });
 
+test("source-open interactions require consent and emit only content-free dimensions", () => {
+  const route = source("app/api/platform/product-events/route.ts");
+  const client = source("lib/platform/client-analytics.ts");
+  const shell = source("app/_platform/PlatformShell.tsx");
+  const aiClient = source("app/_platform/AiLawyerClient.tsx");
+  const legalAnswer = source("app/_platform/LegalAnswerView.tsx");
+
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /juro_consent=analytics/);
+  assert.match(route, /requireApiUser\(\)/);
+  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /parseJsonRequest\(request, browserProductEventSchema, 256\)/);
+  assert.match(route, /event: z\.literal\("source_opened"\)/);
+  assert.match(route, /trackProductEvent\(\{/);
+  assert.doesNotMatch(route, /user\.id|workspace\.id|sourceId|originalUrl|question/i);
+
+  assert.match(client, /juro_consent=analytics/);
+  assert.match(client, /JSON\.stringify\(\{ event: "source_opened", locale \}\)/);
+  assert.doesNotMatch(client, /sourceId|originalUrl|question/i);
+  assert.match(shell, /data-juro-product-event="source_opened"/);
+  assert.match(aiClient, /trackPlatformSourceOpened\(locale\)/);
+  assert.match(legalAnswer, /data-juro-product-event="source_opened"/);
+});
+
 test("AI quality events separate retrieval degradation from source absence", () => {
   const healthy = {
     queryUnderstandingFallback: false,
