@@ -121,7 +121,7 @@ test("story progress rail ends at the active row without shifting its marker", (
   assert.match(motionStyles, /\.storyRail[\s\S]*?align-self: start/);
   assert.match(motionStyles, /\.storyRail[\s\S]*?position: sticky[\s\S]*?top: clamp\(6rem, 12vh, 9rem\)/);
   assert.match(motionStyles, /@media \(max-width: 980px\)[\s\S]*?\.storyRail \{ position: relative; top: auto; \}/);
-  assert.match(motionDirector, /const storyProgress = sectionRect \? clamp\(\(stickyOffset - sectionRect\.top\) \/ storyRange\) : 0/);
+  assert.match(motionDirector, /const storyProgress = section \? clamp\(\(stickyOffset - \(section\.top - scrollY\)\) \/ storyRange\) : 0/);
   assert.match(motionStyles, /\.storyStep\[data-active="true"\][\s\S]*?transform: none/);
   assert.match(motionDirector, /step\.dataset\.complete = index < storyState\.active/);
   assert.match(motionStyles, /\.storyStep\[data-complete="true"\]::after/);
@@ -145,7 +145,7 @@ test("case continuity timeline keeps active and pending segments on one axis", (
   assert.match(homepage, /aria-current=\{index === continuityStep \? "step"/);
   assert.match(homepage, /--continuity-stage-progress/);
   assert.match(motionDirector, /juro:continuity-step/);
-  assert.match(motionDirector, /const continuityProgress = continuityRect[\s\S]*?Math\.min\(56, viewport \* \.06\) - continuityRect\.top/);
+  assert.match(motionDirector, /const continuityProgress = geometry\.continuity[\s\S]*?Math\.min\(56, viewport \* \.06\) - \(geometry\.continuity\.top - scrollY\)/);
   assert.match(motionStyles, /\.continuitySteps::after[\s\S]*?scaleY\(var\(--continuity-stage-progress\)\)/);
   assert.match(motionStyles, /\.continuitySteps button[\s\S]*?grid-template-columns: 2\.5rem 1fr/);
   assert.match(homepage, /<div className=\{styles\.nextCard\}><span>\{t\.continuity\.next\}<\/span><strong>\{t\.continuity\.nextBody\}<\/strong><\/div>/);

@@ -17,6 +17,25 @@ Scope: Chrome-only lab measurements for the public RU landing page and the publi
 
 This audit does not claim complete platform performance coverage. Authenticated role journeys, field data, INP, long-task interaction profiles, and every target viewport remain open.
 
+## v101 candidate — cached public motion geometry
+
+Status: **validated locally; not deployed; fresh Chrome trace pending explicit browser permission**
+
+The public homepage motion director no longer performs element-geometry or document-height reads inside the animation frame scheduled by scrolling. Page-relative chapter, story, document, continuity, handoff, hero, and page-range geometry is measured outside the hot path and refreshed only after root-size, viewport, or web-font layout changes. Reveal and footer visibility are delegated to `IntersectionObserver`.
+
+Evidence collected on 2026-09-01:
+
+- website type-check: PASS;
+- website lint: PASS;
+- production build and artifact validation: PASS;
+- website suite: 45/45 PASS after updating two source-contract assertions to the equivalent cached formulas;
+- regression assertion: `updateScrollStory` contains neither `getBoundingClientRect` nor `scrollHeight`;
+- emitted client CSS: unchanged at 126,320 raw bytes across eight files;
+- emitted client JavaScript: 629,563 raw bytes across 15 files versus 628,879 on v99, an increase of 684 bytes (0.11%);
+- cinematic landing chunk: 94,472 raw bytes versus 93,782 on v99, an increase of 690 bytes (0.74%).
+
+The change is expected to reduce synchronous layout work during scrolling, but source inspection and green tests do not prove a user-visible performance gain. A cold/repeat Chrome DevTools trace, network analysis, Lighthouse audit, accessibility snapshot, and responsive interaction check remain release gates before production deployment or any updated Core Web Vitals claim.
+
 ## Chrome test method
 
 | Setting | Value |
