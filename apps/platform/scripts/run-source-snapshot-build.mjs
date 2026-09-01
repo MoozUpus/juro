@@ -64,24 +64,26 @@ if (started.phase === "projections" && !started.resumed) {
 }
 
 let advanceCalls = 0;
-const laneQueue = [...lanes];
-let wave = 0;
-while (laneQueue.length > 0) {
-  wave += 1;
-  const active = laneQueue.splice(0, laneConcurrency);
-  const results = await Promise.all(active.map((lane) => call("advance", { lane })));
-  advanceCalls += results.length;
-  for (let index = 0; index < results.length; index += 1) {
-    if (!results[index].laneComplete) laneQueue.push(active[index]);
+if (started.phase === "projections") {
+  const laneQueue = [...lanes];
+  let wave = 0;
+  while (laneQueue.length > 0) {
+    wave += 1;
+    const active = laneQueue.splice(0, laneConcurrency);
+    const results = await Promise.all(active.map((lane) => call("advance", { lane })));
+    advanceCalls += results.length;
+    for (let index = 0; index < results.length; index += 1) {
+      if (!results[index].laneComplete) laneQueue.push(active[index]);
+    }
+    console.log(JSON.stringify({ event: "source_snapshot.advance_wave", wave, calls: advanceCalls,
+      activeLanes: active.length, remainingLanes: laneQueue.length,
+      processedCount: Math.max(...results.map((result) => result.processedCount ?? 0)) }));
   }
-  console.log(JSON.stringify({ event: "source_snapshot.advance_wave", wave, calls: advanceCalls,
-    activeLanes: active.length, remainingLanes: laneQueue.length,
-    processedCount: Math.max(...results.map((result) => result.processedCount ?? 0)) }));
+  const projectionComplete = await call("advance");
+  advanceCalls += 1;
+  console.log(JSON.stringify({ event: "source_snapshot.advance", calls: advanceCalls,
+    result: projectionComplete }));
 }
-const projectionComplete = await call("advance");
-advanceCalls += 1;
-console.log(JSON.stringify({ event: "source_snapshot.advance", calls: advanceCalls,
-  result: projectionComplete }));
 
 let reconcileCalls = 0;
 for (;;) {
