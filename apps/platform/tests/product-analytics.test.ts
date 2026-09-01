@@ -161,6 +161,15 @@ test("replayable milestones emit only after a newly completed durable transition
   assert.match(ai, /productAccountMilestoneCreated/);
   assert.ok(ai.lastIndexOf('event: "first_question_sent"') > ai.indexOf("await db.batch"));
   assert.ok(ai.lastIndexOf('event: "first_question_sent"') > ai.indexOf("await input.db.batch"));
+
+  const analysis = source("lib/document-analysis/processor.ts");
+  assert.match(analysis, /event: "document_analyzed"/);
+  assert.match(analysis, /const completedTransition = await persistNormalizedAnalysis/);
+  assert.match(analysis, /return Number\(results\[2\]\?\.meta\.changes \?\? 0\) === 1/);
+  assert.ok(
+    analysis.indexOf("writeProductEvent(scopedEnv.PRODUCT_ANALYTICS")
+      > analysis.indexOf("const completedTransition = await persistNormalizedAnalysis"),
+  );
 });
 
 test("the first-question account milestone stays in D1 and is concurrency-safe", () => {

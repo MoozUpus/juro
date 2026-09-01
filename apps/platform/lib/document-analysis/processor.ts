@@ -42,6 +42,7 @@ import {
 import { scheduleTrustedUserDocumentIndexStatements } from "./user-document-vectors";
 import { resolveAiRuntimeSettings, type AiRuntimeSettings } from "../ai/runtime-settings";
 import { publishPendingOwnerCorpusUpload } from "../legal-corpus/owner-upload";
+import { writeProductEvent } from "../platform/analytics";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
@@ -50,6 +51,7 @@ export type DocumentAnalysisProcessorEnv = {
   APP_ENV?: "development" | "staging" | "production";
   DB: D1Database;
   BUCKET: R2Bucket;
+  PRODUCT_ANALYTICS?: AnalyticsEngineDataset;
   LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST?: string;
   LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST?: string;
   OPENAI_API_KEY?: string;
@@ -65,6 +67,7 @@ type AnalysisRow = {
   analysisId: string;
   workspaceId: string;
   ownerUserId: string;
+  workspaceType: string;
   consentVersion: string;
   createdAt: string;
   status: string;
@@ -408,7 +411,18 @@ export async function executeDocumentAnalysisJob(
   }
 
   try {
-    await persistNormalizedAnalysis(scopedEnv, row, persisted);
+    const completedTransition = await persistNormalizedAnalysis(scopedEnv, row, persisted);
+    if (completedTransition) {
+      writeProductEvent(scopedEnv.PRODUCT_ANALYTICS, {
+        event: "document_analyzed",
+        surface: "platform",
+        locale: persisted.result.outputLanguage,
+        accountType: row.workspaceType === "business" || row.workspaceType === "individual"
+          ? row.workspaceType
+          : "unknown",
+        outcome: "completed",
+      });
+    }
     // A protected admin upload carries an immutable owner authorization. Once
     // scan, extraction and analysis have completed, publication is attempted
     // automatically; failure is recorded on the request and never rolls back
@@ -815,7 +829,7 @@ async function persistNormalizedAnalysis(
   env: DocumentAnalysisProcessorEnv,
   row: AnalysisRow,
   persisted: PersistedAnalysis,
-): Promise<void> {
+): Promise<boolean> {
   const db = env.DB;
   const now = new Date().toISOString();
   const summary = legacyCompatibleSummary(persisted);
@@ -894,7 +908,7 @@ async function persistNormalizedAnalysis(
   )
     ? persisted.extraction.detectedLanguage as "ru" | "uz" | "mixed" | "unknown"
     : "unknown";
-  await db.batch([
+  const results = await db.batch([
     db.prepare(
       `INSERT INTO ai_runs
        (id,workspace_id,user_id,conversation_id,request_message_id,response_message_id,idempotency_key,
@@ -967,6 +981,7 @@ async function persistNormalizedAnalysis(
       now,
     ),
   ]);
+  return Number(results[2]?.meta.changes ?? 0) === 1;
 }
 
 function uniqueBy<T>(items: readonly T[], key: (item: T) => string, limit: number): T[] {
@@ -1040,10 +1055,13 @@ async function loadAnalysis(
 ): Promise<AnalysisRow | null> {
   return db.prepare(
     `SELECT a.id AS analysisId,a.workspace_id AS workspaceId,a.owner_user_id AS ownerUserId,
+      w.type AS workspaceType,
       a.consent_version AS consentVersion,a.created_at AS createdAt,
       a.status,a.summary_json AS summaryJson,f.id AS fileId,f.kind AS fileKind,f.r2_key AS r2Key,
       f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,f.sha256
-     FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id
+     FROM document_analyses a
+     JOIN document_files f ON f.id=a.uploaded_file_id
+     JOIN workspaces w ON w.id=a.workspace_id
      WHERE a.id=? AND a.workspace_id=? AND f.workspace_id=? AND f.archived_at IS NULL LIMIT 1`,
   ).bind(analysisId, workspaceId, workspaceId).first<AnalysisRow>();
 }
