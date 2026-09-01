@@ -7,23 +7,43 @@ export type LegalEvidenceSource = {
   sourceOrigin?: "indexed" | "live" | "web";
 };
 
+export type LegalEvidenceSourceClass =
+  | "official"
+  | "secondary"
+  | "private"
+  | "owner_global"
+  | "unknown";
+
+export function legalEvidenceSourceClass(
+  source: LegalEvidenceSource,
+): LegalEvidenceSourceClass {
+  if (["OFFICIAL_LEGISLATION", "OFFICIAL_GOVERNMENT_GUIDANCE"].includes(source.sourceClass ?? "")) {
+    return "official";
+  }
+  if (source.sourceClass === "SECONDARY_REFERENCE" || source.sourceOrigin === "web") {
+    return "secondary";
+  }
+  if (["USER_TRUSTED_PRIVATE", "TENANT_TRUSTED_PRIVATE"].includes(
+    source.sourceClass ?? "",
+  )) return "private";
+  if (source.sourceClass === "OWNER_TRUSTED_GLOBAL") return "owner_global";
+  try {
+    const url = new URL(source.originalUrl);
+    if (url.protocol === "juro-private:") return "private";
+    if (url.hostname === "lex.uz" || url.hostname === "www.lex.uz") return "official";
+  } catch { /* Legacy rows can contain a non-URL locator. */ }
+  return source.status === "unconfirmed" ? "secondary" : "unknown";
+}
+
 /** Client-safe compatibility derivation for responses saved before evidenceMode existed. */
 export function deriveLegalEvidenceMode(input: {
   sources: readonly LegalEvidenceSource[];
   evidenceMode?: LegalEvidenceMode;
 }): LegalEvidenceMode {
   if (input.evidenceMode) return input.evidenceMode;
-  const classes = new Set(input.sources.flatMap((source) => {
-    if (["OFFICIAL_LEGISLATION", "OFFICIAL_GOVERNMENT_GUIDANCE"].includes(source.sourceClass ?? "")) return ["official"];
-    if (source.sourceClass === "SECONDARY_REFERENCE" || source.sourceOrigin === "web") return ["secondary"];
-    if (["USER_TRUSTED_PRIVATE", "TENANT_TRUSTED_PRIVATE", "OWNER_TRUSTED_GLOBAL"].includes(source.sourceClass ?? "")) return ["private"];
-    try {
-      const url = new URL(source.originalUrl);
-      if (url.protocol === "juro-private:") return ["private"];
-      if (url.hostname === "lex.uz" || url.hostname === "www.lex.uz") return ["official"];
-    } catch { /* Legacy rows can contain a non-URL locator. */ }
-    return source.status === "unconfirmed" ? ["secondary"] : [];
-  }));
+  const classes = new Set(input.sources
+    .map(legalEvidenceSourceClass)
+    .filter(sourceClass => sourceClass !== "unknown" && sourceClass !== "owner_global"));
   const official = classes.has("official");
   const secondary = classes.has("secondary");
   const privateEvidence = classes.has("private");

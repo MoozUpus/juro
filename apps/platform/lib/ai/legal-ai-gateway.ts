@@ -755,7 +755,7 @@ export function validateLegalGatewayAnswer(input: {
     // requirement-specific late ranking, graph completion and exact D1
     // hydration. Reapplying a literal user-word overlap gate here erased
     // complementary provisions whose statutory wording differs from the
-    // colloquial question (for example "декрет" versus childcare leave).
+    // colloquial question whose wording differs from the formal legal concept.
     // Copying its verified span adds no model-authored law.
     const matched = sourceGroundedFallback(
       [source],

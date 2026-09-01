@@ -17,14 +17,18 @@ async function source(relativePath: string): Promise<string> {
 test("chat completes the official authority ladder before conditionally using lower-authority web research", async () => {
   const route = await source("../app/api/platform/ai/route.ts");
   const privateContext = route.indexOf("const privateDocumentRetrieval = (async");
-  const lex = route.indexOf("const retrieval: LegalChatSourceRetrieval = await");
+  const lex = route.indexOf("const retrievalResult: LegalChatSourceRetrieval | Response = await");
+  const unavailableGuard = route.indexOf("if (retrievalResult instanceof Response) return retrievalResult", lex);
+  const acceptedOfficialResult = route.indexOf("const retrieval = retrievalResult", lex);
   const secondaryGate = route.indexOf("shouldRetrieveSecondaryInternet(retrieval)");
   const web = route.indexOf("await retrieveSecondaryInternetSources", secondaryGate);
   const orderedSources = route.indexOf("const sources = [...retrieval.sources, ...privateDocuments.sources, ...secondaryInternet.sources]");
 
   assert.ok(privateContext >= 0);
   assert.ok(lex > privateContext);
-  assert.ok(secondaryGate > lex);
+  assert.ok(unavailableGuard > lex);
+  assert.ok(acceptedOfficialResult > unavailableGuard);
+  assert.ok(secondaryGate > acceptedOfficialResult);
   assert.ok(web > secondaryGate);
   assert.ok(orderedSources > web);
   assert.match(route, /legal corpus -> live Lex\.uz/u);
