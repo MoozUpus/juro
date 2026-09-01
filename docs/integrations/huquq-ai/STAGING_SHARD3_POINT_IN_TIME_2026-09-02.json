@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-01T22:44:17.162Z",
+  "databaseName": "juro-staging-corpus-shard-3",
+  "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+  "pointInTime": "2026-09-01T22:44:17.162Z",
+  "bookmark": "00000142-00000002-000050d9-8d5f66d68bbd6b4cd9cceb06ed839d2a",
+  "source": "wrangler_d1_time_travel_info",
+  "readOnly": true,
+  "remoteDataMutated": false,
+  "limitations": [
+    "A Time Travel bookmark is a point-in-time locator, not a D1 export or restore verification.",
+    "This artifact does not prove a federated partition manifest, Qdrant parity, indexed 314-scenario evaluation, or release approval."
+  ]
+}
