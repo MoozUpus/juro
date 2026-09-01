@@ -1,10 +1,11 @@
 import { parseJsonRequest } from "../../../../../lib/auth/input";
-import { BillingDomainError, confirmSubscriptionCheckout } from "../../../../../lib/billing/checkout-service";
+import { BillingDomainError, confirmSubscriptionCheckoutTransition } from "../../../../../lib/billing/checkout-service";
 import { paymentFoundationStatus } from "../../../../../lib/billing/foundation";
 import { checkoutConfirmSchema, checkoutOrderParamsSchema } from "../../../../../lib/billing/input";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
 import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser, workspaceForUserById } from "../../../../../lib/platform/workspace";
+import { trackProductEvent } from "../../../../../lib/platform/analytics";
 
 type Context = { params: Promise<{ orderId: string }> };
 function response(body: unknown, status = 200) {
@@ -30,13 +31,22 @@ export const POST = withApiErrors(async function POST(request: Request, context:
     : `/${parsed.data.locale}/${parsed.data.accountType}`;
   const checkoutUrl = `${base}/orders/${orderId}/payment`;
   try {
-    const checkout = await confirmSubscriptionCheckout(
+    const transition = await confirmSubscriptionCheckoutTransition(
       requireD1(),
       { userId: user.id, workspaceId: workspace.id },
       orderId,
       { requestId: parsed.data.requestId, renewalMode: parsed.data.renewalMode, checkoutUrl },
     );
-    return response(checkout);
+    if (transition.createdPaymentAttempt) {
+      trackProductEvent({
+        event: "paid_action_started",
+        surface: "platform",
+        locale: parsed.data.locale,
+        accountType: workspace.type,
+        outcome: "started",
+      });
+    }
+    return response(transition.checkout);
   } catch (error) {
     if (error instanceof BillingDomainError) return response({ code: error.code, error: error.message }, error.status);
     throw error;

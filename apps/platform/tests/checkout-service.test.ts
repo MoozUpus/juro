@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { BillingDomainError, confirmSubscriptionCheckout, createSubscriptionCheckout, readCheckoutOrder } from "../lib/billing/checkout-service";
+import {
+  BillingDomainError,
+  confirmSubscriptionCheckout,
+  confirmSubscriptionCheckoutTransition,
+  createSubscriptionCheckout,
+  readCheckoutOrder,
+} from "../lib/billing/checkout-service";
 import { paymentFoundationStatus } from "../lib/billing/foundation";
 import { checkoutConfirmSchema, checkoutCreateSchema } from "../lib/billing/input";
 import { finalizeSandboxPayment } from "../lib/billing/payment-finalization";
@@ -81,16 +87,20 @@ test("subscription checkout is tenant-scoped, priced once, and replay-safe", asy
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM pricing_snapshots").get()?.count, 1);
     assert.equal(await readCheckoutOrder(d1, { userId: ids.user, workspaceId: "other-workspace" }, String(first.order.id)), null);
 
-    const confirmed = await confirmSubscriptionCheckout(d1, actor, String(first.order.id), {
+    const confirmedTransition = await confirmSubscriptionCheckoutTransition(d1, actor, String(first.order.id), {
       requestId: ids.confirmRequest,
       renewalMode: "AUTO_RENEW",
       checkoutUrl: `/ru/individual/orders/${String(first.order.id)}/payment`,
     }, new Date("2026-08-03T10:05:00.000Z"));
-    const confirmReplay = await confirmSubscriptionCheckout(d1, actor, String(first.order.id), {
+    const replayTransition = await confirmSubscriptionCheckoutTransition(d1, actor, String(first.order.id), {
       requestId: ids.confirmRequest,
       renewalMode: "AUTO_RENEW",
       checkoutUrl: `/ru/individual/orders/${String(first.order.id)}/payment`,
     }, new Date("2026-08-03T10:05:01.000Z"));
+    const confirmed = confirmedTransition.checkout;
+    const confirmReplay = replayTransition.checkout;
+    assert.equal(confirmedTransition.createdPaymentAttempt, true);
+    assert.equal(replayTransition.createdPaymentAttempt, false);
     assert.equal(confirmed.order.status, "AWAITING_PAYMENT");
     assert.equal(confirmed.order.acceptedPricingSnapshotId, first.pricingSnapshot?.id);
     assert.equal(confirmReplay.paymentAttempt?.id, confirmed.paymentAttempt?.id);

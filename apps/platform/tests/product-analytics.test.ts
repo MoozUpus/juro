@@ -126,6 +126,8 @@ test("the event catalog covers the execution brief and durable routes emit only 
     ["app/api/auth/verify-otp/route.ts", "signup_completed"],
     ["app/api/platform/ai/route.ts", "first_question_sent"],
     ["app/api/platform/ai/route.ts", "clarification_completed"],
+    ["app/api/checkout/[orderId]/confirm/route.ts", "paid_action_started"],
+    ["app/api/checkout/[orderId]/confirm-marketplace/route.ts", "paid_action_started"],
   ] as const;
   for (const [path, event] of routes) {
     const route = source(path);
@@ -176,6 +178,19 @@ test("replayable milestones emit only after a newly completed durable transition
     analysis.indexOf("writeProductEvent(scopedEnv.PRODUCT_ANALYTICS")
       > analysis.indexOf("const completedTransition = await persistNormalizedAnalysis"),
   );
+
+  for (const path of [
+    "app/api/checkout/[orderId]/confirm/route.ts",
+    "app/api/checkout/[orderId]/confirm-marketplace/route.ts",
+  ]) {
+    const checkout = source(path);
+    assert.match(checkout, /if \(transition\.createdPaymentAttempt\)/);
+    assert.ok(
+      checkout.indexOf('event: "paid_action_started"')
+        > checkout.indexOf("await confirm"),
+      path,
+    );
+  }
 });
 
 test("the first-question account milestone stays in D1 and is concurrency-safe", () => {
