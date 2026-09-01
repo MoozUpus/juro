@@ -88,6 +88,7 @@ export const userProfiles = sqliteTable(
     index("user_profiles_phone_lookup_idx")
       .on(table.phoneLookupKeyVersion, table.phoneLookupHash)
       .where(sql`${table.phoneLookupHash} IS NOT NULL`),
+    index("product_kpi_user_profiles_created_idx").on(table.createdAt, table.accountType),
   ],
 );
 
@@ -1472,7 +1473,11 @@ export const cases = sqliteTable("cases", {
   accountType: text("account_type").notNull(), locale: text("locale").notNull(), title: text("title").notNull(), description: text("description"), legalArea: text("legal_area").notNull(),
   status: text("status").notNull().default("open"), currentRevision: integer("current_revision").notNull().default(1), nextDeadlineAt: text("next_deadline_at"), archivedAt: text("archived_at"),
   lifecycleRevision: integer("lifecycle_revision").notNull().default(0), completedAt: text("completed_at"), completedByUserId: text("completed_by_user_id"), archivedByUserId: text("archived_by_user_id"), ...timestamps,
-}, (table) => [index("cases_owner_idx").on(table.ownerUserId, table.updatedAt), index("cases_workspace_idx").on(table.workspaceId, table.updatedAt)]);
+}, (table) => [
+  index("cases_owner_idx").on(table.ownerUserId, table.updatedAt),
+  index("cases_workspace_idx").on(table.workspaceId, table.updatedAt),
+  index("product_kpi_cases_owner_created_idx").on(table.ownerUserId, table.createdAt),
+]);
 
 export const caseEvents = sqliteTable("case_events", {
   id: text("id").primaryKey(), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), actorUserId: text("actor_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
@@ -1500,7 +1505,10 @@ export const caseLifecycleEvents = sqliteTable("case_lifecycle_events", {
 export const actionPlans = sqliteTable("action_plans", {
   id: text("id").primaryKey(), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), createdByUserId: text("created_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
   title: text("title").notNull(), status: text("status").notNull().default("in_progress"), progressPercent: integer("progress_percent").notNull().default(0), currentRevision: integer("current_revision").notNull().default(1), ...timestamps,
-}, (table) => [uniqueIndex("action_plans_case_uidx").on(table.caseId)]);
+}, (table) => [
+  uniqueIndex("action_plans_case_uidx").on(table.caseId),
+  index("product_kpi_action_plans_creator_created_idx").on(table.createdByUserId, table.createdAt),
+]);
 
 // Append-only evidence of user-confirmed action-plan changes. Current editable
 // state remains in action_plans/action_plan_steps; history reads this table.
@@ -1591,7 +1599,11 @@ export const lawyerProfileLifecycleEvents = sqliteTable("lawyer_profile_lifecycl
 
 export const lawyerRequests = sqliteTable("lawyer_requests", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), requesterUserId: text("requester_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), lawyerProfileId: text("lawyer_profile_id").references(() => lawyerProfiles.id, { onDelete: "set null" }), status: text("status").notNull().default("requested"), anonymizedSummary: text("anonymized_summary").notNull(), requestedScopeJson: text("requested_scope_json").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
-}, (table) => [index("lawyer_requests_workspace_idx").on(table.workspaceId, table.updatedAt), index("lawyer_requests_lawyer_idx").on(table.lawyerProfileId, table.status)]);
+}, (table) => [
+  index("lawyer_requests_workspace_idx").on(table.workspaceId, table.updatedAt),
+  index("lawyer_requests_lawyer_idx").on(table.lawyerProfileId, table.status),
+  index("product_kpi_lawyer_requests_requester_created_idx").on(table.requesterUserId, table.createdAt),
+]);
 
 export const lawyerConsultations = sqliteTable("lawyer_consultations", {
   id: text("id").primaryKey(),
@@ -1611,6 +1623,7 @@ export const lawyerConsultations = sqliteTable("lawyer_consultations", {
   uniqueIndex("lawyer_consultations_request_uidx").on(table.lawyerRequestId),
   index("lawyer_consultations_lawyer_time_idx").on(table.lawyerProfileId, table.startsAt, table.status),
   index("lawyer_consultations_client_time_idx").on(table.clientUserId, table.startsAt, table.status),
+  index("product_kpi_consultations_client_created_idx").on(table.clientUserId, table.createdAt),
   check("lawyer_consultations_time_check", sql`${table.startsAt} < ${table.endsAt}`),
 ]);
 
@@ -1974,6 +1987,16 @@ export const aiRuns = sqliteTable("ai_runs", {
   uniqueIndex("ai_runs_idempotency_uidx").on(table.workspaceId, table.userId, table.idempotencyKey),
   index("ai_runs_workspace_status_idx").on(table.workspaceId, table.status, table.createdAt),
   index("ai_runs_conversation_idx").on(table.conversationId, table.createdAt),
+  index("product_kpi_ai_runs_completed_idx").on(table.status, table.completedAt, table.responseMessageId),
+]);
+
+export const productValueActivations = sqliteTable("product_value_activations", {
+  userId: text("user_id").primaryKey().references(() => userProfiles.id, { onDelete: "cascade" }),
+  aiRunId: text("ai_run_id").notNull().references(() => aiRuns.id, { onDelete: "cascade" }),
+  firstCompletedAt: text("first_completed_at").notNull(),
+}, (table) => [
+  uniqueIndex("product_value_activations_run_uidx").on(table.aiRunId),
+  index("product_value_activations_completed_idx").on(table.firstCompletedAt),
 ]);
 
 export const aiFeedback = sqliteTable("ai_feedback", {
