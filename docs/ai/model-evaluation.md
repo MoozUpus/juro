@@ -25,3 +25,9 @@ A provider being operational does not mean a model is legally accurate. A green 
 6. fresh production-safe dependency evidence after release.
 
 The legislation/corpus data population and legal-source freshness evaluation are excluded from this v100 increment. The existing detailed framework is in [`LEGAL-EVALUATION.md`](../../apps/platform/docs/ai-platform/LEGAL-EVALUATION.md) and [`AI-RELIABILITY-SLO.md`](../../apps/platform/docs/ai-platform/AI-RELIABILITY-SLO.md).
+
+## Current routing evidence boundary
+
+Read-only production aggregates show 38 historical completed fast Legal Answers on OpenAI `gpt-5.6-terra`, three completed deep Legal Answers on `gpt-5.6-sol`, and one completed Anthropic fallback Legal Answer. The historical latency observation favors Terra, and the five priced successes after price-version go-live show a lower observed successful-attempt cost for Terra than Sol.
+
+That evidence supports keeping the current conservative default while more data is collected; it does not justify a new model-quality claim or an automatic routing change. The samples are not equivalent, the priced subset is only five successes, no real customer usage was recorded after 29 August, and Anthropic has no post-price real-usage sample. A routing decision still requires the same validated RU/UZ packets, Official Coverage checks, unsupported-claim review, and human legal review described above.

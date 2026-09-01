@@ -2,7 +2,7 @@
 
 Assessment: **NOT READY for the full execution brief**
 
-Evidence cutoff: **2026-09-01 08:49 UZT (2026-09-01 03:49 UTC)**
+Evidence cutoff: **2026-09-01 09:58 UZT (2026-09-01 04:58 UTC)**
 
 Production is reachable, Worker v99 is serving the platform, and Sites v95 is live on the public website. v99 adds workspace invitation authorization/expiry enforcement and a streamed-byte limit for public structured API bodies while preserving controlled upload routes. Sites v95 preserves the noindex boundary on the provider-owned hostname without removing indexing from `juro.uz`. The latest public status reports all eight components operational, backed by repeated successful provider records. That is still narrower than the requested Definition of Done: authenticated role journeys, staging reliability, legacy DNS ownership, full performance/accessibility evidence, and complete Chrome QA remain open.
 
@@ -20,20 +20,26 @@ Platform Worker v99 was built from commit `7935d560b29705f1886fa34f7bb61eb1b3af2
 
 ## Live health
 
-Production `/api/status` generated at `2026-09-01T03:49:05.435Z` after the v99 cutover:
+Production `/api/status` generated at `2026-09-01T04:58:58.390Z` after the v99 cutover:
 
 - overall: `operational`;
 - components: **8/8 operational**;
 - active incidents: **0**;
-- D1 synthetic probe: `operational`, checked at `2026-09-01T03:46:45.749Z`, latency `35 ms`;
-- OpenAI synthetic probe: `operational`, checked at `2026-09-01T03:42:08.991Z`, latency `3,273 ms`;
-- Anthropic synthetic probe: `operational`, checked at `2026-09-01T03:42:16.942Z`, latency `7,875 ms`;
-- routed document-analysis probe: `operational`, checked at `2026-09-01T03:21:49.369Z`, latency `4,390 ms`;
+- D1 synthetic probe: `operational`, checked at `2026-09-01T04:56:28.990Z`, latency `31 ms`;
+- OpenAI synthetic probe: `operational`, checked at `2026-09-01T04:56:21.539Z`, latency `3,467 ms`;
+- Anthropic synthetic probe: `operational`, checked at `2026-09-01T04:56:28.817Z`, latency `7,198 ms`;
+- routed document-analysis probe: `operational`, checked at `2026-09-01T04:42:22.973Z`, latency `4,099 ms`;
 - read-only D1 inspection found five consecutive operational records for each provider and routed document analysis, so recovery is not inferred from one transient row;
 - the public API exposes no provider response body, credential, request content, or user traffic;
 - authenticated Chrome role and Legal Answer journeys were not run in this increment.
 
 The operational label is correct for this checked production snapshot. Repeated D1 rows show that both provider contracts and routed document analysis recovered after funding, while existing cooldown/fallback behavior remains in place. This health evidence does not replace authenticated Legal Answer or deliberate primary-outage fallback QA.
+
+## Production AI cost evidence
+
+Read-only aggregate D1 checks, all with `rows_written=0`, found 65 append-only provider-attempt events and 50 product `ai_runs` rows through 29 August. Structural checks passed, and the daily aggregate table reconciles exactly to the provider-attempt ledger. After price versions became effective on 25 August, all 5/5 successful provider attempts were priced and none were unpriced. The recorded total is $0.113652, but 44 earlier successes predate price-version go-live and have no backfilled estimate.
+
+This proves the current internal price lookup and aggregation path is functioning. It does not prove lifetime spend, provider-invoice parity, a post-funding run rate, or a statistically representative model comparison: the priced Legal Answer sample is only three Terra successes and two Sol successes, and no real customer usage event is newer than 29 August. Provider billing exports, equivalent-workload sampling, and controlled fallback/no-double-charge verification remain open.
 
 Staging `/api/status` at `2026-08-29T19:08:53Z`:
 
@@ -50,6 +56,9 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 
 - Cloudflare account and Worker deployment metadata read successfully with Wrangler 4.115.0.
 - Cloudflare DNS inventory verified: 22 records and seven Worker hostnames.
+- Current read-only Cloudflare route inspection confirms `juro.uz/*` and `www.juro.uz/*` target `juro-legaltech`; the OAuth session lacks DNS/SSL/Rules read scopes, so those APIs were not presented as verified.
+- Public DNS, Certificate Transparency, RIPE, TLS, HTTP, and narrow port evidence confirms `ftp.juro.uz` exposes a default web/mail origin at `95.46.96.77` rather than an FTP service; no mutation was made.
+- Production D1 provider-usage structure, post-price completeness, and daily-aggregate reconciliation passed with zero written rows; provider-invoice reconciliation remains open.
 - Public sitemap crawl: 78/78 URLs `200`, self-canonical, indexable.
 - Discoverable link crawl: 136/136 final `200` after redirects.
 - Protected production surfaces return both meta and header `noindex` directives.
@@ -89,7 +98,7 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 | Priority | Gap | Evidence | Required action |
 | --- | --- | --- | --- |
 | P1 | Staging health is degraded/stale after a newer deployment | Active cron delivery fails in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`; D1 reports 9,999,998,976 bytes | Resolve staging D1 capacity in the separately scoped legislation/corpus work, then verify fresh scheduler writes and 8/8 component health |
-| P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
+| P1 | Cloudflare reports partial origin exposure; `ftp.juro.uz` is a misnamed direct web/mail origin | `95.46.96.77` serves a default AlmaLinux/nginx page, uses certificates for other Webspace hostnames, accepts SMTP on 587, and has FTP port 21 closed | Identify the owner and mail-client dependency, record the exact recovery configuration, then repair or retire it through a separate reversible DNS/server change |
 | P1 | Authenticated role matrix incomplete | Only anonymous boundary checks are current | Chrome QA for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin with no fabricated session |
 | P2 | Production v99 behavior is not deployed or authenticated on staging | The canonical host is Access-protected; staging Worker remains on its prior version | Deploy staging only in a safe non-legislation increment, then complete post-Access Client/Lawyer route QA with real authorized sessions |
 

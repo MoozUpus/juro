@@ -2,7 +2,7 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-09-01 08:49 UZT (2026-09-01 03:49 UTC)**
+Evidence cutoff: **2026-09-01 09:58 UZT (2026-09-01 04:58 UTC)**
 
 Scope in this report: platform Worker v99 and public Sites v95. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
 
@@ -36,13 +36,24 @@ Independent post-patch review found a dispatch-order regression in the first req
 
 - Active Worker: v99, ID `0b35483c-9bf4-4a21-ba45-dadbde198f83`, 100% traffic.
 - Rollback: v98, ID `b1b242f0-9033-40e3-bdf2-d9aee9ef5b48`.
-- Public `/api/status` generated at `2026-09-01T03:49:05.435Z`: HTTP `200`, overall `operational`, 8/8 components operational, 0 active incidents.
+- Public `/api/status` generated at `2026-09-01T04:58:58.390Z`: HTTP `200`, overall `operational`, 8/8 components operational, 0 active incidents.
+- Current OpenAI probe: `operational` at 3,467 ms; current Anthropic probe: `operational` at 7,198 ms.
 - Five consecutive OpenAI probes passed at 2,844–3,591 ms.
 - Five consecutive Anthropic probes passed at 6,288–7,875 ms.
 - Five consecutive routed document-analysis probes passed at 3,743–5,735 ms.
 - Live request-boundary proof returned `401` for ordinary small unauthenticated JSON and `413 PAYLOAD_TOO_LARGE` above 1 MiB.
 
 The Worker and isolated provider contracts are operational in the checked window. This does not prove authenticated RU/UZ Legal Answer quality or provider fallback under a real primary outage.
+
+## Production data-quality checks
+
+All checks were read-only D1 aggregate queries and reported `rows_written=0`. No prompt, Legal Answer, document text, filename, identity value, legislation/corpus content, or vector data was selected.
+
+- `ai_provider_usage_events`: 65/65 unique IDs; 49 succeeded and 16 failed; no timestamp inversion, future row, invalid status/error pair, invalid token count, zero-usage success, or partial tenant scope.
+- `ai_runs`: 50/50 unique IDs; 46 completed and 4 failed; no missing completion timestamp/provider/model, invalid token count, negative latency, failed row without an error, completed row with an error, or missing tenant scope.
+- `ai_cost_daily_aggregates` reconciles exactly to provider events across grouped request, failure, token, and estimated-cost totals.
+- Pricing completeness after price-version go-live is 5/5 successful attempts; 44 earlier successful attempts are intentionally unpriced because no effective price version existed.
+- The provider-usage and run datasets end on 29 August. They are structurally sound for that period but stale for post-funding business usage and too small for a representative cost comparison.
 
 ## Public Sites v95 verification
 
@@ -77,5 +88,6 @@ These v189 numeric measurements remain the latest recorded size snapshot. v99 pa
 - field performance baselines and before/after Core Web Vitals for every production route;
 - staging reliability, because the excluded staging D1 capacity blocker prevents fresh scheduler persistence;
 - authenticated RU/UZ Legal Answer and deliberate provider-fallback production journeys, despite healthy isolated provider probes.
+- OpenAI/Anthropic billing-export reconciliation and a representative post-funding cost/latency baseline.
 
 The overall execution goal must remain active until these and the other Definition-of-Done gates are proven.
