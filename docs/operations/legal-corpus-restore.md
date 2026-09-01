@@ -1,5 +1,16 @@
 # Legal corpus restore rehearsal
 
+## Source Snapshot candidate
+
+Restore the dedicated green2 D1 export only into an isolated database, then
+run `PRAGMA quick_check`, `PRAGMA foreign_key_check` and exact table inventory
+comparison. Reconcile every canonical chunk with its immutable R2 byte count
+and SHA-256, prove each eligible Snapshot Provision occurs exactly once in the
+sparse, dense, release-member and shard sets, and repeat the dry run to prove
+the same inventory/projection/release identities. A Ticket 12 Search Release
+remains draft and inactive: restoration must not promote green2, select an
+Activation Set or move visible staging off the legacy Adapter.
+
 Restore only into an isolated D1 database and private test R2 namespace. Never
 use production as a rehearsal target.
 

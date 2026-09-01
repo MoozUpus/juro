@@ -1,5 +1,11 @@
 # Use AI Search for official-corpus candidate retrieval
 
+The source/eligibility portions of this decision are superseded by
+[ADR 0005](./0005-use-source-snapshot-retrieval-eligibility.md). AI Search,
+release isolation, failure and activation decisions remain in force. Legacy
+authority and language-relationship records remain preserved audit evidence;
+they are not current Retrieval Eligibility gates.
+
 Status: accepted
 
 JURO will keep every immutable official-corpus body in a dedicated R2 bucket and relational identity, authority, temporal applicability, lineage, release manifests, and activation state in a dedicated legal-corpus D1 database. Versioned Cloudflare AI Search hybrid instances will provide sparse and dense candidates for the Indexed Official Corpus through a private JURO-owned `LegalCandidateIndex` Interface. JURO will use only search results: Question Interpretation, D1 eligibility revalidation, R2 hash-verified hydration, provision grouping, coverage mapping, semantic reranking, the Source Ladder, Citations, and Legal Answer generation remain JURO responsibilities.

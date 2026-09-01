@@ -12,6 +12,14 @@ Before an enabled corpus update, create a private R2 manifest containing:
 - the Qdrant collection name, engine version and collection snapshot SHA-256
   when dense retrieval is enabled; and
 - the current feature-flag configuration with secrets excluded.
+- the dedicated legal D1 export including every `legal_source_*`,
+  `legal_snapshot_*`, `legal_retrieval_eligibility`, `legal_canonical_chunks`,
+  sparse/dense projection, build/checkpoint/inventory, Search Release, shard
+  and activation table;
+- the immutable `search-releases/<release-id>/` R2 prefix and manifest, with
+  complete object count, byte count and SHA-256 readback identity; and
+- exact baseline, deferred, post-cutoff, unresolved temporal and quarantine
+  inventories for the build cutoff.
 
 Never include API keys, session data, user documents, or corpus raw HTML in a
 Git commit or public artifact.
@@ -28,6 +36,10 @@ Git commit or public artifact.
    with `priority=snapshot`, verify exact point count and repeat dense, sparse
    and hybrid queries before changing an active collection pointer.
 6. Keep restoration evidence separately from legal-answer content.
+7. For a Source Snapshot candidate, prove every eligible provision appears in
+   exactly one canonical chunk, sparse row, dense candidate, release member
+   and shard; prove the shard union is complete and pairwise disjoint; then
+   repeat the dry run and compare inventory, projection and release identities.
 
 The executable CI rehearsal is
 `npm run validate:legal-corpus:qdrant-gate`. It follows Qdrant's official
@@ -51,5 +63,10 @@ successful integrity claim. Retry sequentially with an isolated restore.
    manifest; never pair an index with a different corpus snapshot.
 6. Verify that direct Lex retrieval remains available before re-enabling
    indexed corpus traffic.
+7. If the Source Snapshot Search Release has not been activated, leave it
+   draft and leave the visible staging service on the legacy Adapter. Do not
+   delete its D1 rows or R2 objects; restore or reconcile from the verified
+   build checkpoints. If it was activated later, atomically select the prior
+   Activation Set rather than changing release membership.
 
 Rollbacks do not delete historical legal text or silently replace citations.

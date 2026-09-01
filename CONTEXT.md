@@ -39,17 +39,17 @@ The visible connection between a legal proposition and the validated source evid
 _Avoid_: source link, bibliography entry, model reference
 
 **Official Citation**:
-A Citation to official law rendered with an act-and-provision label and the validated provision-specific Lex.uz URL, falling back to the validated act URL when necessary.
+A Citation to official-source material rendered with a provision label, publisher, captured revision and validated provision-specific Lex.uz URL, falling back to the validated document URL when necessary. It does not imply controlling-text or translation status.
 _Avoid_: model-authored link, generated anchor, bare article number
 
 ### Authority and evidence
 
 **Controlling Text**:
-The certified or adopted state-language expression of a Legal Instrument that prevails when another-language rendering conflicts with it. Its language, script, revision, and authority evidence are established for each Text Revision rather than inferred from a Lex.uz route or language code.
+Legacy audit evidence for a certified or adopted state-language expression that prevails when another-language rendering conflicts with it. It is optional enrichment, never inferred from a Lex.uz route, language code, source grouping or publication, and is not a Retrieval Eligibility gate.
 _Avoid_: preferred translation, default language, newest script
 
 **Official Translation**:
-A non-controlling rendering of a Controlling Text published or supplied through an official source and labeled with its authority and provenance. It may support discovery and user-language presentation but cannot silently replace the Controlling Text for a material legal proposition.
+Legacy audit evidence for a non-controlling rendering whose relationship was explicitly supplied by an official source. Publication in another language does not establish this relationship; it is optional enrichment and is not a Retrieval Eligibility gate.
 _Avoid_: equivalent law, controlling variant, localized original
 
 ### Question context
@@ -61,19 +61,31 @@ _Avoid_: legal proposition, Citation, source-freshness state
 ### Official corpus
 
 **Indexed Official Corpus**:
-JURO's reviewed and indexed collection of official legal sources that is searched before any online source.
+JURO's integrity-verified and indexed collection of public official-source snapshots eligible for a named retrieval capability, searched before any online source.
 _Avoid_: knowledge base, local data, internal search
 
-**Official Eligibility**:
-The evidence-backed state in which an official source version has validated provenance, integrity, extraction, scope, textual authority, and temporal metadata sufficient for a specified retrieval capability. It does not imply per-document human legal approval.
+**Retrieval Eligibility**:
+The deterministic, capability-specific state derived from verified official-source provenance, exact D1/R2 integrity, supported extraction and stable identities, a verified current pointer when required, supported temporal state, public privacy classification, quarantine clearance, and conflict-free canonicalization. Textual authority and translation relationships are not inputs.
 _Avoid_: human approval, model confidence, indexed status
 
+**Source Document**:
+A stable identity assigned by an official publisher to one published document in one language/script. Different publisher document identities are not grouped merely because content or titles resemble one another.
+_Avoid_: Legal Instrument, inferred language family, translated copy
+
+**Source Snapshot**:
+An immutable capture of a Source Document identified by publisher revision token, language, capture identity, content hash, capture time, and exact raw/normalized R2 evidence.
+_Avoid_: current pointer, mutable page, inferred Text Revision
+
+**Snapshot Provision**:
+An exact deterministic provision or fragment extracted from one Source Snapshot, retaining its publisher position token, sequence, normalized-content hash, source locator, provenance, privacy and temporal state.
+_Avoid_: Provision Concept, search result, authority claim
+
 **Legal Instrument**:
-The stable, language-independent identity of an official act across its expressions and revisions.
+An optional legacy cross-source/cross-language grouping preserved for audit and later evidence-backed enrichment. It is not inferred and does not gate current retrieval.
 _Avoid_: Lex.uz page, language variant, document version
 
 **Official Expression**:
-An immutable source identity for a Legal Instrument in one language and script, with explicit textual-authority status, origin, certification evidence, and any derivation relationship to another expression.
+An immutable legacy source identity with preserved textual-authority and relationship evidence. Existing rows remain auditable, but the model is not required to establish a Source Document or Retrieval Eligibility.
 _Avoid_: translated copy, URL prefix, equivalent law
 
 **Text Revision**:
@@ -93,7 +105,7 @@ A sourced half-open interval during which a Legal Instrument or Provision Concep
 _Avoid_: scrape date, Lex.uz ONDATE token, current-version flag
 
 **Corpus Snapshot**:
-A named immutable selection of Official Expressions, Text Revisions, Provision Renditions, relationships, and eligibility findings accepted together at one cutoff.
+A named immutable selection of Source Documents, Source Snapshots, Snapshot Provisions and Retrieval Eligibility findings accepted together at one cutoff. Legacy identity and authority rows may be referenced as audit provenance without becoming gates.
 _Avoid_: database backup, index build, current corpus pointer
 
 **Search Release**:

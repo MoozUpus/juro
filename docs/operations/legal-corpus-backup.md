@@ -1,5 +1,17 @@
 # Legal corpus backup
 
+## Source Snapshot candidate boundary
+
+Before any Ticket 12 green2 mutation, verify the Cloudflare account, exact D1
+UUID/name, exact R2 bucket, route-free Worker and paused private namespace;
+verify the latest full D1 export restores with `quick_check=ok` and zero foreign
+key failures; and verify the R2 inventory/readback manifest. Preserve the
+export, restored SQLite, configuration, current/deferred/post-cutoff inventory
+and checksums outside Git. After the build, capture all additive Source
+Document/Snapshot/Provision/Eligibility and projection/release tables plus a
+complete hash-verified readback of `search-releases/<release-id>/`. Never put
+`OPENAI_API_KEY`, payload text or private objects in logs or evidence.
+
 Create a backup before enabling discovery, ingestion, reindexing or a version
 pointer update in an environment.
 

@@ -44,10 +44,14 @@ and cutoff before evidence writes, records cutoff-pinned current pointers, and
 stores verified applicability intervals or explicitly classified temporal
 gaps. Checkpointed pages are capped below the Worker D1 query budget and every
 replay revalidates canonical identity, capture provenance, locators, and
-capability-specific eligibility. Unknown textual authority remains an
-ineligibility reason even when temporal provenance is available. Visible
-retrieval stays on the legacy Adapter until a separately sealed Search Release
-and capability-scoped Activation Set pass their gates.
+capability-specific eligibility. Unknown textual authority remains preserved
+legacy evidence but is not a Retrieval Eligibility input. Current eligibility
+is rebuilt from official-source provenance, exact D1/R2 integrity, supported
+extraction, stable source identities, the cutoff-pinned current pointer,
+supported temporal state, public privacy, quarantine clearance and
+deterministic canonicalization. Visible retrieval stays on the legacy Adapter
+until Ticket 13 seals and activates the separately constructed Search Release
+through a capability-scoped Activation Set.
 
 ## Local development against the staging index
 

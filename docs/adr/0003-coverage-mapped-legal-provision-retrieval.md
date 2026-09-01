@@ -1,5 +1,10 @@
 # Retrieve legal evidence as a coverage-mapped provision set
 
+Source identity and eligibility now follow
+[ADR 0005](./0005-use-source-snapshot-retrieval-eligibility.md). Any authority
+metadata mentioned here is optional explicitly evidenced reranking enrichment,
+not a Retrieval Eligibility gate, and must never be inferred.
+
 For a natural-language legal question, JURO derives explicit Coverage Requirements for every materially plausible interpretation, generates candidates from versioned provision-aware sparse and dense indexes, and requires a semantic reranker to select the Provision Set that satisfies those requirements. Official Coverage is evaluated over that set, with one bounded targeted repair search for uncovered requirements; only an explicit, unambiguous act-and-article lookup may bypass semantic reranking.
 
 ## Consequences

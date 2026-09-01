@@ -1,5 +1,12 @@
 # AI Search target architecture for the Indexed Official Corpus
 
+Source identity and eligibility in this document follow
+[ADR 0005](../adr/0005-use-source-snapshot-retrieval-eligibility.md): Source
+Document → Source Snapshot → Snapshot Provision → Retrieval Eligibility. Any
+older statement below that makes textual authority, controlling-language or a
+translation relationship a retrieval prerequisite is superseded. Those legacy
+records remain immutable audit evidence and optional enrichment only.
+
 Status: accepted detailed design; capability-scoped promotion gates apply
 
 This is the final target architecture for general and citation-specific legal research over JURO's complete official corpus. It implements [ADR-0001](../adr/0001-strict-legal-source-ladder.md), [ADR-0003](../adr/0003-coverage-mapped-legal-provision-retrieval.md), and [ADR-0004](../adr/0004-use-ai-search-for-official-corpus-candidates.md).
@@ -18,7 +25,7 @@ The architecture is designed so that a General Legal Question such as `можн�
 8. Activation is atomic per supported retrieval capability. A current Search Release may activate before history; before indexed comparisons activate, compatible current and history releases from the same Corpus Snapshot are selected together by one Activation Set.
 9. Current, point-in-time, and comparative Temporal Scopes are routed deliberately. A date inferred from source freshness is never treated as a legal effective date.
 10. General-question safety and coverage are identical in fast and deep modes. They may differ in exposition, not in evidence eligibility.
-11. The certified or adopted state-language expression is the Controlling Text. A shared Legal Instrument identity never makes translations co-controlling.
+11. No controlling-text or translation relationship is inferred. A neutral candidate retains its publisher document/revision, language, capture and URL; any explicit legacy authority evidence remains separate from Retrieval Eligibility.
 12. AI Search metadata is an efficiency filter only. Every returned item must have exact release membership and metadata parity in D1, then pass R2 byte-count and SHA-256 verification; one integrity failure invalidates the indexed packet.
 13. Public legal bodies and provider-bound query text follow separate privacy paths. Raw user wording, direct identifiers, private documents, and case records never enter the official-corpus bucket or index.
 
@@ -68,11 +75,11 @@ search-releases/<release-id>/history/<shard>/<chunk-id>.md
 search-releases/<release-id>/manifest.json
 ```
 
-The raw layer preserves the complete captured publisher artifact and response metadata. The normalized layer preserves one immutable Text Revision with its structure, textual-authority evidence, source capture hash, and exact official revision token. The provisions layer preserves one Provision Rendition per object so a Legal Answer can hydrate only the evidence it needs. Search-release objects are deterministic, disposable projections; each contains one JURO chunk with:
+The raw layer preserves the complete captured publisher artifact and response metadata. The normalized layer preserves one immutable Source Snapshot with structure, source capture hash and exact publisher revision token. The provisions layer preserves one Snapshot Provision per deterministic source position so a Legal Answer can hydrate only the evidence it needs. Search-release objects are deterministic, disposable projections; each contains one JURO chunk with:
 
-- Legal Instrument, Official Expression, Text Revision, Provision Concept, Provision Rendition, and chunk identifiers;
+- Source Document, Source Snapshot, Snapshot Provision and chunk identifiers, plus legacy identifiers only as audit references;
 - act title, document type, adopting authority, article number/title, and hierarchy;
-- BCP-47 language/script tag, textual-authority status, and Legal Instrument identifier;
+- BCP-47 language/script tag, publisher document/revision tokens and capture time, without authority or translation claims;
 - exact official provision text;
 - Applicability Period when known;
 - normalized and provision object keys, byte counts, and SHA-256 values.
@@ -93,7 +100,7 @@ D1 retains compact relational facts in a dedicated `LEGAL_CORPUS_DB` for each en
 - many-to-many provision-lineage edges for unchanged, modified, renumbered, moved, split, merged, and repealed transitions;
 - cross-language equivalence, citation, and cross-reference edges;
 - provision/chunk ordinals, R2 keys, byte counts, content hashes, and source-normalized hashes—but no canonical body text;
-- Official Eligibility findings and temporal coverage gaps;
+- Retrieval Eligibility findings and temporal coverage gaps;
 - Corpus Snapshots, Search Releases, provider instances, shards, builds, evaluations, Activation Sets, activation events, and rollback records.
 
 The current `legal_corpus_documents.id` may seed Legal Instrument identity, but article numbers, route language prefixes, ingestion order, and version-bound provision IDs never establish stable legal identity by themselves. Lex `ONDATE` revision identity retains its full token, including same-day suffixes. Editorial validity and substantive legal applicability are never conflated.
@@ -145,7 +152,7 @@ The four occupied custom metadata fields are:
 3. `valid_from`
 4. `valid_to`
 
-The fifth custom field remains deliberately reserved for a measured future need. `language` and `document_type` are `text`; `valid_from` and `valid_to` are `datetime`. Jurisdiction is fixed to Uzbekistan by the dedicated instance, while authority is enforced by the release builder and D1 revalidation instead of a coarse provider rank. Environment, release ID, current/history class, and shard belong in the instance name and R2 prefix. Open-ended effective intervals use a documented far-future sentinel in search metadata while retaining `null` as the canonical D1 value.
+The fifth custom field remains deliberately reserved for a measured future need. `language` and `document_type` are `text`; `valid_from` and `valid_to` are `datetime`. Jurisdiction is fixed to Uzbekistan by the dedicated instance, while Retrieval Eligibility is enforced by the release builder and D1 revalidation instead of a coarse provider rank. Environment, release ID, current/history class, and shard belong in the instance name and R2 prefix. Open-ended effective intervals use a documented far-future sentinel in search metadata while retaining `null` as the canonical D1 value.
 
 The release gate reconciles metadata for 100% of indexed items against D1. Changing the provider metadata schema produces new off-side instances and a full reindex. Prefilter false negatives are therefore release-blocking defects: D1 can reject an ineligible result, but it cannot recover an eligible result that the provider filter hid.
 
@@ -239,7 +246,7 @@ The architecture must not depend on that phrase occurring verbatim in legislatio
    - one or more Russian legal-register formulations around termination of an employment relationship and the described leave/status;
    - Uzbek Latin and Uzbek Cyrillic legal-register variants against their matching language filters when linked Russian evidence is absent or incomplete.
 5. Use dense retrieval to bridge colloquial and statutory language and BM25 to preserve exact legal terms, article labels, and named statuses.
-6. Group linked Official Expressions under their Legal Instrument so translations do not crowd the Provision Set, while preserving each expression's distinct textual authority.
+6. Preserve distinct Source Documents and languages. Deduplicate only through deterministic exact canonical identities; never group candidates through a guessed Legal Instrument or translation relationship.
 7. Require complementary provisions that cover all material branches. A single passage mentioning leave or dismissal cannot produce a yes/no answer.
 8. If the outcome changes based on the exact leave, who initiates termination, or the stated ground, return a Conditional Answer and ask only those material questions. Otherwise return a source-grounded Main Point, What the Law Says, and What to Do Next with provision-specific Official Citations.
 
@@ -259,16 +266,16 @@ AI Search filters narrow candidates, but D1 is the final authority for Applicabi
 ## Language routing
 
 1. Search the user's language first for discovery, then run bounded cross-language recovery when coverage is incomplete.
-2. Link Official Expressions through the Legal Instrument; never infer identity, body language, or authority from provider IDs or URL route prefixes.
-3. Record `uz-Latn`, `uz-Cyrl`, `ru`, and `en` separately with textual authority, origin, publication status, derivation, and authority evidence for each Text Revision.
-4. Verify every material proposition against the linked Controlling Text. Cite it as the operative evidence and optionally pair it with a clearly labeled Official Translation in the user's language.
-5. If only a translation can be retrieved, use it as a locator and hydrate the Controlling Text before claiming good Official Coverage. If that cannot be done, return the evidence limitation.
+2. Keep each publisher Source Document and language identity separate; never infer cross-language identity or authority from provider IDs, titles or URL route prefixes.
+3. Record `uz-Latn`, `uz-Cyrl`, `ru`, and `en` separately with publisher provenance, exact revision/capture identity and content hashes.
+4. Cite the exact hydrated Snapshot Provision neutrally by publisher, revision, language, capture and URL.
+5. Apply a controlling-text or official-translation label only when independent explicit evidence establishes it; absence of that enrichment does not make an otherwise eligible source snapshot ineligible.
 6. For Uzbek Latin-versus-Cyrillic discrepancies, the certified or adopted expression for that revision controls; a modern script preference never overrides a historical certified original.
 7. Transliteration and machine translation are query normalization only. They never become official evidence or silently replace the stored quotation.
 
 ## Eligibility, freshness, and evidence retention
 
-Official Eligibility is produced by deterministic provenance, integrity, extraction, scope, textual-authority, and temporal checks; it is not per-document human legal approval. A Text Revision with unknown authority is ineligible. A Provision Concept with unknown applicability may participate in the current capability only when a validated official current pointer covers its expression. It is ineligible for point-in-time and comparison endpoints until sourced applicability evidence exists.
+Retrieval Eligibility is produced by deterministic official-source provenance, exact D1/R2 integrity, extraction, stable identity, current-pointer, temporal, privacy, quarantine and canonicalization checks; it is not per-document human legal approval. Unknown textual authority is preserved but does not affect eligibility. A Snapshot Provision with unsupported temporal state is ineligible for the current capability, and unsupported point-in-time or comparison scopes remain unavailable until sourced applicability evidence exists.
 
 The current Corpus Snapshot must be rebuilt and eligible for activation within 24 hours after JURO validates an official change. An emergency path targets four hours for urgent corrections or newly effective rules. Historical discovery and lineage reconciliation run at least weekly and whenever new historical material is validated. A failed build never moves the Activation Set: the previous indexed release stays active and Live Official Search covers the freshness gap.
 
@@ -333,7 +340,7 @@ Its Implementation hides provision grouping, graph expansion, semantic reranking
 | One topic dominates results                            | Enforce per-requirement/per-reading diversity before provision reranking                                                       |
 | Current and historical text conflict                   | Keep separate temporal Provision Sets and explain the change; do not average or merge them                                     |
 | Applicability evidence is missing                      | Allow current only through an authoritative current pointer; exclude from history, record the gap, and continue the Source Ladder |
-| Controlling Text is missing                            | Use translations only as locators; do not claim good Official Coverage until controlling evidence is hydrated                    |
+| Controlling/translation evidence is missing            | Retrieve and cite the eligible Source Snapshot neutrally; make no controlling or official-translation claim                      |
 | Colloquial or misspelled wording                       | Preserve privacy-transformed wording plus bounded legal-register, transliterated, and cross-language formulations               |
 | Question contains an exact article plus general facts  | Use the exact provision as a required anchor, then perform general retrieval for surrounding rules, conditions, and exceptions |
 | Very broad question exceeds the context ceiling        | Ask a focused clarification or return an Insufficient-Evidence Result rather than truncating silently                          |
@@ -395,7 +402,7 @@ Porter and trigram candidates run the same matrix. Promotion is based on proposi
 1. Create and verify the local recovery bundle before implementation.
 2. Add the dedicated legal D1 schema, separate platform/legal database boundary, and forward-only metadata migration tooling; never copy bodies into the new D1 database.
 3. Export every raw capture, normalized Text Revision, and Provision Rendition into the dedicated legal-corpus R2 bucket with byte counts, hashes, retention locks, and reconciliation evidence.
-4. Migrate legal identities, Official Expressions, authority evidence, Text Revisions, Applicability Periods, provision concepts/renditions, lineage/equivalence edges, and R2 locators into the legal D1 database. Preserve unresolved temporal/authority gaps explicitly.
+4. Add Source Documents, Source Snapshots, Snapshot Provisions, Retrieval Eligibility and R2 locators to the legal D1 database. Preserve every legacy identity, authority, applicability, lineage/equivalence and failed-candidate row; preserve unresolved temporal gaps explicitly without making authority a gate.
 5. Introduce the route-free legal-corpus Worker, service binding, `LegalCandidateIndex` Seam, AI Search Adapter, D1 revalidation, and R2 hash-verified hydration without changing visible answers.
 6. Remove topic-specific interpretation rules and introduce typed Plausible Readings, proposition-level Coverage Requirements, privacy-transformed bounded formulations, arbitrary temporal endpoints, and per-endpoint Provision Sets.
 7. Build and attest the frozen current Search Release from the approximately 151,499-chunk candidate. Evaluate Porter and trigram in staging shadow mode and activate only the winner after all current gates and backups pass.
