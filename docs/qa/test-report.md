@@ -2,11 +2,30 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-01**
 
-Scope in this report: platform Worker v189 and public Sites v95. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: the undeployed v113 candidate plus the latest retained production evidence for platform Worker v189 and public Sites v95. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
 
-## Automated release checks
+## v113 candidate validation
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Security remediations | 25 focused OTP, challenge-evidence, request-body, and signed-share tests | PASS |
+| Platform core application | 1,180 tests | PASS |
+| Worker/runtime and infrastructure | 217 tests | PASS |
+| Public website regression | 49 tests | PASS |
+| TypeScript | `type-check` | PASS |
+| Lint | repository lint | PASS |
+| Cloudflare configuration | full development/staging/production matrix and generated-types check | PASS |
+| Production artifact | production artifact validation and emitted-size budgets | PASS |
+| Pull request CI | exact v113 Draft PR head | PENDING PUBLICATION |
+| Deployment and browser QA | no v113 deployment; server-side candidate cannot be verified through production Chrome | NOT RUN |
+
+The full platform suite initially stopped on one stale source-string assertion after the authentication runtime helper was renamed. The assertion was updated, its 78/78 focused file passed, and the complete platform suite was rerun to 1,180/1,180. The first generated-types check reported an out-of-date file; the standard generator produced the same Git blob, and a clean sequential recheck passed. Neither event is hidden as an uninterrupted green run.
+
+The v113 Standard security scan (`fb8621fe-664a-4364-86df-e357d586a2b3`) reviewed 68 of 1,594 scoped files at base revision `beae3e05d7552b999c0fb7bcba14ee615c04906a`. It reported one high and three medium findings; v113 contains focused candidate fixes for all four. This is partial source-review evidence, not a complete security certificate or production verification. See [`../audit/security-audit.md`](../audit/security-audit.md).
+
+## Latest deployed release checks (v189)
 
 | Area | Evidence | Result |
 | --- | --- | --- |

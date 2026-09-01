@@ -1,8 +1,8 @@
 import { assertSafeWrite, requireApiUser } from "../../../../../../lib/document-builder/auth/api";
 import { apiError, badRequest, forbidden, jsonResponse } from "../../../../../../lib/document-builder/auth/responses";
-import { addHours, randomToken, sha256, sixDigitCode } from "../../../../../../lib/document-builder/share-links/crypto";
+import { accessCodeVerifier, addHours, randomToken, sha256, sixDigitCode } from "../../../../../../lib/document-builder/share-links/crypto";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
-import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
 
 export const dynamic = "force-dynamic";
@@ -81,7 +81,10 @@ export async function POST(request: Request, context: Context): Promise<Response
     }
     const code = sixDigitCode();
     const token = randomToken(32);
-    const [tokenHash, codeHash] = await Promise.all([sha256(token), sha256(code)]);
+    const [tokenHash, codeHash] = await Promise.all([
+      sha256(token),
+      accessCodeVerifier(runtimeEnv().IDENTITY_KEYRING, code),
+    ]);
     const expiresAt = addHours(now, 24);
     const shareId = crypto.randomUUID();
     await db.batch([

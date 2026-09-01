@@ -4,7 +4,7 @@ import {
   userIdByEmail,
   userIdentityWriteBindings,
 } from "../../../../lib/auth/identity-protection";
-import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
+import { runtimeOtpProtection } from "../../../../lib/auth/identity-runtime";
 import {
   consumeOtpChallenge,
   type OtpChallengeResult,
@@ -138,7 +138,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (purpose === "register" && (!body.acceptTerms || !body.acceptPrivacy || !body.acceptPersonalData)) return json({ error: locale === "ru" ? "Нужно принять обязательные документы." : "Majburiy hujjatlarni qabul qilish kerak." }, 400);
 
   const db = requireD1();
-  const identityContext = runtimeIdentityProtection();
+  const identityContext = runtimeOtpProtection();
   const now = new Date().toISOString();
   const verification = await consumeOtpChallenge(db, {
     identityContext,

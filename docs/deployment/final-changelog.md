@@ -2,9 +2,21 @@
 
 Status: **living changelog; the full execution goal remains active**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-01**
 
-This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
+This file records verified production increments and separately labelled release candidates. It must not be read as a claim that every item in the execution brief is complete.
+
+## v113 security and evidence candidate — not deployed
+
+- Added the canonical full-platform, completion, UX/UI, mobile, accessibility, security, design-system, component, AI, and source-boundary evidence documents required by the execution brief.
+- Kept legislation-database, local-corpus, Advice.uz ingestion, vector, embedding, and staging-capacity work explicitly excluded rather than counting it as delivered.
+- Changed new login OTP evidence to a key-versioned, domain-separated HMAC without a usable retained raw SHA verifier; legacy rows retain only their bounded ten-minute compatibility window.
+- Removed the email-wide OTP replacement lock while preserving resend cooldowns and issuance budgets.
+- Applied the common streaming request limiter at exactly 2 MiB to lawyer profile-photo uploads.
+- Changed new signed-PDF access codes to a key-versioned, domain-separated HMAC with constant-time verification; legacy rows retain only their existing maximum 24-hour share lifetime.
+- Passed 25/25 focused remediation tests, 1,180/1,180 platform tests, 217/217 Worker/runtime tests, 49/49 website tests, type-check, lint, the full Cloudflare environment matrix, generated-types consistency, production artifact validation, and emitted-size budgets.
+- Retained the Standard security scan as partial evidence: one high and three medium findings at base revision `beae3e05d7552b999c0fb7bcba14ee615c04906a`, with 68/1,594 scoped files fully reviewed.
+- Performed no database migration, production or staging deployment, DNS change, binding change, secret change, provider billing mutation, or legislation/corpus operation. Chrome candidate QA remains not applicable until the exact server revision is deployed.
 
 ## Platform Worker v189
 

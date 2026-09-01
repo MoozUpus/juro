@@ -541,7 +541,7 @@ test("short-lived challenge evidence is keyed without enabling rollout", async (
       "utf8",
     ),
   ]);
-  assert.match(requestOtp, /runtimeIdentityProtection/);
+  assert.match(requestOtp, /runtimeOtpProtection/);
   assert.match(verifyOtp, /identityContext/);
   assert.match(otpReservation, /prepareAuthOtpChallengeEvidence/);
   assert.match(otpReservation, /email_lookup_key_version/);

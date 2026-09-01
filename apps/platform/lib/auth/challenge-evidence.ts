@@ -145,15 +145,16 @@ async function prepareCodeEvidence(
     legacyNormalizedValue: string;
     purpose: "auth-otp-code" | "account-deletion-code"
       | "email-change-current-code" | "email-change-new-code";
+    keyedOnly?: boolean;
   },
 ): Promise<PreparedChallengeCodeEvidence> {
-  const [legacyHash, keyed] = await Promise.all([
-    sha256(input.legacyNormalizedValue),
-    prepareKeyedIdentityEvidence(context, {
-      normalizedValue: input.normalizedValue,
-      purpose: input.purpose,
-    }),
-  ]);
+  const keyed = await prepareKeyedIdentityEvidence(context, {
+    normalizedValue: input.normalizedValue,
+    purpose: input.purpose,
+  });
+  const legacyHash = input.keyedOnly && keyed.lookupHash !== null
+    ? ""
+    : await sha256(input.legacyNormalizedValue);
   return {
     legacyHash,
     lookupHash: keyed.lookupHash,
@@ -188,6 +189,7 @@ export async function prepareAuthOtpChallengeEvidence(
       }),
       legacyNormalizedValue: `${input.codeSalt}:${input.code}`,
       purpose: "auth-otp-code",
+      keyedOnly: true,
     }),
   ]);
   return {
@@ -228,9 +230,13 @@ export async function authOtpCodeMatches(
   },
 ): Promise<boolean> {
   const legacyNormalizedValue = `${input.codeSalt}:${input.code}`;
+  const hasKeyedEvidence = input.evidence.lookupHash !== null
+    || input.evidence.lookupKeyVersion !== null;
   return identityEvidenceMatches(context, {
     normalizedValue: authOtpCodeValue(input),
-    legacyNormalizedValue,
+    legacyNormalizedValue: hasKeyedEvidence
+      ? undefined
+      : legacyNormalizedValue,
     purpose: "auth-otp-code",
     legacyHash: input.evidence.legacyHash,
     lookupHash: input.evidence.lookupHash,

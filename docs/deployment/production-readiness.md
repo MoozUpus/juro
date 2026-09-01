@@ -2,14 +2,17 @@
 
 Assessment: **NOT READY for the full execution brief**
 
-Evidence cutoff: **2026-08-31 20:08 UZT (2026-08-31 15:08 UTC)**
+Evidence cutoff: **2026-09-01**
 
 Production is reachable, Worker v189 is serving the platform, and Sites v95 is live on the public website. v189 keeps status-page icons same-origin across the status and app hosts without weakening CSP; it retains the direct D1 probe and provider/document-analysis safeguards from v188. Sites v95 preserves the noindex boundary on the provider-owned hostname without removing indexing from `juro.uz`. The latest public status truthfully reports 6/8 components operational, with AI and document analysis degraded. That is still narrower than the requested Definition of Done: provider recovery, authenticated role journeys, staging reliability, legacy DNS ownership, and complete Chrome QA remain open.
+
+The v113 branch is an undeployed stacked candidate. It remediates four findings from a partial base-revision security scan and supplies the missing canonical audit package. Local validation passed 25/25 focused security tests, 1,180/1,180 platform tests, 217/217 Worker/runtime tests, 49/49 website tests, type-check, lint, the Cloudflare environment matrix, generated-types consistency, production artifact validation, and emitted-size budgets. These results do not change the live v189 production state and do not authorize a v113 production cutover before its parent Draft PR chain is reviewed.
 
 ## Current release state
 
 | Surface | Current state | Evidence | Rollback point |
 | --- | --- | --- | --- |
+| v113 candidate | `codex/completion-evidence-v113`, stacked on `codex/product-insights-v112`; not deployed | Local exact-worktree suites and release checks passed; Draft PR CI still required | No runtime rollback needed because the candidate has not been deployed |
 | GitHub main | Merge commit `d133a470a49166875d9112b938ae3f7d765ee170`; live Worker v189 source from PR #95 | PR CI `33352197361`, post-merge CI `33404886188`, and production workflow `33404885913` completed successfully | Previous Git commit selected through the normal release process |
 | Public Sites | Live version **95**, source `855ba2161b716daabb96ac469456c101e5d3bb2c`; deployment `appgdep_6a94c1cfc364819190b65a5cb0a7e5ad` | Deployment succeeded; `juro.uz` remains indexable, the provider hostname returns `X-Robots-Tag: noindex, nofollow, noarchive`, 78/78 sitemap URLs and 149/149 discoverable JURO-zone links return `200` | Redeploy saved v94, source `6f5c70f947df14597cca2e289c3b38bbd36b589d`, if the public custom domain regresses |
 | Platform Worker | Worker version **189**, version ID `102dcb2d-f79f-4172-9a3a-19d55d51f6ed` | Production workflow `33404885913` deployed 100% traffic to the merged revision; no database migration, Admin Worker change, Sites change, DNS change, binding change, or secret change was part of that workflow | Prior version **188**, ID `57387083-9f7f-4cd8-a9f2-84414f2604d6` |

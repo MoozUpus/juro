@@ -96,6 +96,7 @@ test("dual OTP evidence is key-versioned, record-bound, and authoritative", asyn
     ["v2", "v1"],
   );
   assert.equal(prepared.codeEvidence.lookupKeyVersion, "v2");
+  assert.equal(prepared.codeEvidence.legacyHash, "");
   assert.equal(
     await authOtpCodeMatches(dualContext, {
       challengeId: "challenge-1",
