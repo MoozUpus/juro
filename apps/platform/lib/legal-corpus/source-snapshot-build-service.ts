@@ -608,11 +608,34 @@ async function reconcileBuild(env: SourceSnapshotBuildEnv, lane?: string) {
     ]);
     return { status: "building", phase: "reconciliation", kind: "release_r2", itemCount, complete: true };
   }
-  const where = [kind.where, cursor.after ? `${kind.key}>?` : null].filter(Boolean).join(" AND ");
+  const completedSummary = await db.prepare(`SELECT item_count AS itemCount
+    FROM legal_source_snapshot_inventories WHERE build_id=? AND inventory_kind=?`).bind(
+    BUILD_ID, `summary:${kind.name}`,
+  ).first<{ itemCount: number }>();
+  if (completedSummary) {
+    await db.prepare(`UPDATE legal_source_snapshot_builds SET cursor=?,updated_at=? WHERE id=?`).bind(
+      JSON.stringify({ kind: cursor.kind + 1, after: null, page: 0 }), new Date().toISOString(), BUILD_ID,
+    ).run();
+    return { status: "building", phase: "reconciliation", kind: kind.name,
+      itemCount: completedSummary.itemCount, complete: true, resumed: true };
+  }
+  const latestPage = cursor.after === null
+    ? await db.prepare(`SELECT inventory_kind AS inventoryKind,inventory_json AS inventoryJson
+      FROM legal_source_snapshot_inventories WHERE build_id=? AND inventory_kind LIKE ?
+      ORDER BY inventory_kind DESC LIMIT 1`).bind(BUILD_ID, `page:${kind.name}:%`)
+      .first<{ inventoryKind: string; inventoryJson: string }>()
+    : null;
+  const latestEvidence = latestPage
+    ? z.object({ last: z.string() }).parse(JSON.parse(latestPage.inventoryJson) as unknown) : null;
+  const effectiveCursor: ReconciliationCursor = latestPage && latestEvidence
+    ? { kind: cursor.kind, after: latestEvidence.last,
+      page: Number(latestPage.inventoryKind.slice(latestPage.inventoryKind.lastIndexOf(":") + 1)) + 1 }
+    : cursor;
+  const where = [kind.where, effectiveCursor.after ? `${kind.key}>?` : null].filter(Boolean).join(" AND ");
   const query = `SELECT * FROM ${kind.table}${where ? ` WHERE ${where}` : ""}
     ORDER BY ${kind.key} LIMIT ?`;
-  const packet = cursor.after
-    ? await db.prepare(query).bind(cursor.after, RECONCILIATION_PAGE_SIZE).all<Record<string, unknown>>()
+  const packet = effectiveCursor.after
+    ? await db.prepare(query).bind(effectiveCursor.after, RECONCILIATION_PAGE_SIZE).all<Record<string, unknown>>()
     : await db.prepare(query).bind(RECONCILIATION_PAGE_SIZE).all<Record<string, unknown>>();
   if (packet.results.length === 0) {
     const pages = await db.prepare(`SELECT inventory_kind AS inventoryKind,item_count AS itemCount,
@@ -638,14 +661,14 @@ async function reconcileBuild(env: SourceSnapshotBuildEnv, lane?: string) {
   await db.batch([
     db.prepare(`INSERT INTO legal_source_snapshot_inventories
       (build_id,inventory_kind,item_count,inventory_sha256,inventory_json,recorded_at)
-      VALUES (?,?,?,?,?,?)`).bind(BUILD_ID, `page:${kind.name}:${String(cursor.page).padStart(6, "0")}`,
+      VALUES (?,?,?,?,?,?)`).bind(BUILD_ID, `page:${kind.name}:${String(effectiveCursor.page).padStart(6, "0")}`,
       packet.results.length, pageIdentity, JSON.stringify({ first: packet.results[0]![kind.key], last }), CUTOFF),
     db.prepare(`UPDATE legal_source_snapshot_builds SET cursor=?,updated_at=? WHERE id=?`).bind(
-      JSON.stringify({ kind: cursor.kind, after: last, page: cursor.page + 1 }), new Date().toISOString(), BUILD_ID,
+      JSON.stringify({ kind: cursor.kind, after: last, page: effectiveCursor.page + 1 }), new Date().toISOString(), BUILD_ID,
     ),
   ]);
   return { status: "building", phase: "reconciliation", kind: kind.name,
-    page: cursor.page, itemCount: packet.results.length, complete: false };
+    page: effectiveCursor.page, itemCount: packet.results.length, complete: false };
 }
 
 async function inventorySummary(db: D1Database, name: string) {
