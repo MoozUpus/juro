@@ -24,7 +24,7 @@ This runbook covers the currently verified public Sites and platform Worker rele
 6. Re-run the 78-URL sitemap crawl and the discoverable JURO-zone link crawl.
 7. Record the rollback deployment and the exact reason in `production-readiness.md`.
 
-The v96 acceptance contract is:
+The v97 acceptance contract is:
 
 - `juro.uz` remains indexable and uses self-canonical localized URLs;
 - the provider hostname remains reachable but returns `X-Robots-Tag: noindex, nofollow, noarchive`;
@@ -34,7 +34,7 @@ The v96 acceptance contract is:
 ## Platform Worker rollback
 
 1. Confirm the fault against the current v116 platform or website Worker version and capture only bounded, non-sensitive diagnostics.
-2. Prefer the Cloudflare version rollback to the corresponding v114 version; do not rebuild an unrelated Git state.
+2. Prefer the Cloudflare version rollback to website v11 `fad80c80-ee92-44bb-93a3-e250ee314891` or platform v200 `ca427ea9-97cb-45fe-84dc-b468e8bd8995`; do not rebuild an unrelated Git state.
 3. Do not apply or alter a D1 migration during this rollback. v116 introduced no migration.
 4. Verify public status, authentication redirects, private API `401` boundaries, lawyer-host routing, and the document-analysis route boundary.
 5. Verify D1 evidence is a direct `synthetic_probe` with plausible latency, then verify provider-probe evidence freshness and ensure failed probes are not writing every five minutes.
