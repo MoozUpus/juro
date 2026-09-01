@@ -6,7 +6,15 @@ Evidence cutoff: **2026-09-02 UZT**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
 
-## v114 mainline performance candidate — not deployed
+## v115 mobile accessibility candidate — not deployed
+
+- Moves the mobile auth form heading below the fixed theme/language controls, eliminating the overlap observed on the live lawyer login at 390 × 844.
+- Enlarges all three public theme buttons from 32 × 32 to 44 × 44 CSS px without introducing horizontal overflow at 390 px.
+- Adds source-level regression contracts for both defects.
+- Passed 19/19 focused website tests, 14/14 focused platform auth/theme tests, website/platform lint and type-check, both production builds, artifact validation, and local Chrome geometry/visual QA.
+- Performed no database, legal-corpus, vector, embedding, migration, DNS, binding, secret, or production operation. Exact-head CI/security and post-deploy Chrome QA remain required.
+
+## v114 mainline performance release
 
 - Based directly on current `origin/main` rather than the superseded stacked v102-v113 chain.
 - Defers initial public-page geometry measurement through two animation frames and publishes motion readiness only after layout reads complete.
@@ -14,7 +22,12 @@ This file records verified production increments. It must not be read as a claim
 - Uses content-sized mobile auth rows and reserves at least 72 CSS px through the nested Turnstile boundary.
 - Passed 7/7 focused auth tests, 46/46 website tests, website/platform type-check and lint, website and platform production builds, platform artifact budgets, and local Chrome responsive/reveal/console checks.
 - Local Chrome recorded LCP 1,334 ms, CLS 0.00, no top-level JURO forced-reflow function, and 83 ms of unattributed layout work with no estimated savings. This is local lab evidence, not a production or field claim.
-- Performed no deployment, migration, DNS, binding, secret, provider-billing, or legislation/corpus operation. Exact-head CI, exact-head security review, and post-deploy Chrome QA remain required.
+- Merged PR #117 as `98af3130d34b255e14159a864d44747fdc9c8c95` after exact-head CI `33553792614` and security scan `76bb90c9-cd9d-4ee2-a54f-3b2ea6a5f10c` reported zero findings; post-merge CI `33557373604` also passed.
+- Production workflow `33557372781` activated website Worker `5f04e052-c2ef-4af7-820a-b29819bcdef9` and platform Worker `cef2e39c-4f56-4743-9287-b036192f1771` at 100% traffic.
+- Retained website `d6ff54c8-0bbc-4921-a54e-581027689a41` and platform `9c434c4e-52af-41cd-b680-eb0730b87e37` as rollback versions.
+- Production Chrome verified RU/UZ/EN at 21/21 reveals, direct `/ru#start`, zero overflow, and a clean public console. A throttled mobile trace recorded LCP 1,744 ms and CLS 0.00 with no estimated DevTools savings; remaining forced layout was primarily framework/unattributed rather than eliminated.
+- Production `/api/status` returned HTTP 200, `operational`, 8/8 operational components, and zero active incidents at the checked snapshot. This is point-in-time evidence, not a sustained-health claim.
+- Production QA found the 32 px public theme targets and a mobile lawyer-auth heading overlap; both are addressed in the separate v115 candidate above.
 
 ## v101 production release
 
@@ -79,8 +92,8 @@ This file records verified production increments. It must not be read as a claim
 
 ## Current limitations
 
-- OpenAI and Anthropic public production probes still report `PROVIDER_UNAVAILABLE`; AI and document analysis remain degraded until fresh successful probes exist. The owner-reported Anthropic top-up had not yet produced a successful probe at the evidence cutoff.
-- Authenticated role QA remains incomplete for Client, Business, Lawyer, Pending Lawyer, and Staff/Admin.
+- The checked v114 production snapshot reports fresh successful OpenAI and Anthropic probes, but sustained provider health is not yet proven.
+- Authenticated read-only Chrome QA now covers the individual dashboard and seven primary individual routes; the individual account is redirected away from a business-only route, and the lawyer host requires lawyer reauthentication. State-changing individual flows plus Business, Lawyer, Pending Lawyer, and Staff/Admin journeys remain incomplete.
 - Staging scheduler persistence remains blocked by the excluded staging D1 capacity issue.
 - Legacy origin ownership/TLS risk and the full manual accessibility, responsive, performance, and E2E matrices remain open.
 - All legislation-database, corpus, Lex.uz, Advice.uz, vector, and source-record work remains excluded from this increment.

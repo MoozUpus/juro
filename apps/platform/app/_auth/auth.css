@@ -460,12 +460,13 @@
   .auth-brand h1 { font-size: 36px; }
   .auth-brand p { display: none; }
   .auth-card { width: calc(100% - 24px); padding: 24px 18px; border-radius: 20px; }
-  .auth-card form header { padding-right: 70px; }
-  .auth-unavailable { padding-right: 0; }
+  .auth-card form header { padding-top: 56px; padding-right: 0; }
+  .auth-unavailable { padding-top: 56px; padding-right: 0; }
   .auth-card form header > svg { display: none; }
   .auth-account-type,
   .auth-code-actions { grid-template-columns: 1fr; }
   .auth-language { top: 14px; right: 16px; }
+  .auth-theme { top: 14px; left: 16px; }
   .auth-row { gap: 12px; }
 }
 

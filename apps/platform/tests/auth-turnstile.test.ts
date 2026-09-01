@@ -20,6 +20,17 @@ test("Turnstile reserves its challenge height before the provider renders", () =
   );
 });
 
+test("mobile auth headings clear the fixed theme and language controls", () => {
+  assert.match(
+    authStyles,
+    /@media\s*\(max-width:\s*520px\)[\s\S]*?\.auth-card form header\s*\{[^}]*padding-top:\s*56px;[^}]*padding-right:\s*0;/,
+  );
+  assert.match(
+    authStyles,
+    /@media\s*\(max-width:\s*520px\)[\s\S]*?\.auth-theme\s*\{[^}]*top:\s*14px;[^}]*left:\s*16px;/,
+  );
+});
+
 test("Turnstile client failures are bounded and distinguish configuration errors", () => {
   assert.equal(turnstileClientRetryMode, "never");
   assert.deepEqual(turnstileClientFailure("110200", "ru"), {
