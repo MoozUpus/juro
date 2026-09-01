@@ -124,6 +124,7 @@ test("the event catalog covers the execution brief and durable routes emit only 
     ["app/api/platform/document-comparisons/[comparisonId]/process/route.ts", "document_compared"],
     ["app/api/platform/ai/feedback/route.ts", "feedback_submitted"],
     ["app/api/auth/verify-otp/route.ts", "signup_completed"],
+    ["app/api/auth/request-otp/route.ts", "signup_started"],
     ["app/api/platform/ai/route.ts", "first_question_sent"],
     ["app/api/platform/ai/route.ts", "clarification_completed"],
     ["app/api/checkout/[orderId]/confirm/route.ts", "paid_action_started"],
@@ -158,6 +159,13 @@ test("replayable milestones emit only after a newly completed durable transition
   const signup = source("app/api/auth/verify-otp/route.ts");
   assert.ok(signup.lastIndexOf("trackProductEvent") > signup.indexOf("await recordRegistrationAcceptances"));
   assert.match(signup, /purpose === "register"/);
+
+  const signupStart = source("app/api/auth/request-otp/route.ts");
+  assert.match(signupStart, /if \(purpose === "register"\)/);
+  assert.ok(
+    signupStart.indexOf('event: "signup_started"')
+      > signupStart.indexOf("if (!sent?.ok)"),
+  );
 
   const ai = source("app/api/platform/ai/route.ts");
   assert.match(ai, /productAccountMilestoneStatement/);
