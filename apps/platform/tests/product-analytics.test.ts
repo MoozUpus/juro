@@ -7,6 +7,7 @@ import {
   productEventSchema,
   writeProductEvent,
 } from "../lib/platform/analytics";
+import { completedAiQualityEvents } from "../lib/platform/ai-quality-events";
 import {
   productAccountMilestoneCreated,
   productAccountMilestoneStatement,
@@ -84,6 +85,42 @@ test("product analytics failures never escape into the durable product workflow"
     accountType: "business",
     outcome: "completed",
   }), false);
+});
+
+test("AI quality events separate retrieval degradation from source absence", () => {
+  const healthy = {
+    queryUnderstandingFallback: false,
+    secondaryRetrievalFallbackUsed: false,
+    rerankingOutcome: "selected",
+    responseKind: "answer" as const,
+    sourceCount: 2,
+  };
+  assert.deepEqual(completedAiQualityEvents(healthy), []);
+  assert.deepEqual(completedAiQualityEvents({
+    ...healthy,
+    queryUnderstandingFallback: true,
+  }), ["retrieval_fallback"]);
+  assert.deepEqual(completedAiQualityEvents({
+    ...healthy,
+    secondaryRetrievalFallbackUsed: true,
+    rerankingOutcome: "deterministic_fallback",
+  }), ["retrieval_fallback"]);
+  assert.deepEqual(completedAiQualityEvents({
+    ...healthy,
+    responseKind: "clarification_required",
+    sourceCount: 0,
+  }), ["source_not_found"]);
+  assert.deepEqual(completedAiQualityEvents({
+    ...healthy,
+    secondaryRetrievalFallbackUsed: true,
+    responseKind: "clarification_required",
+    sourceCount: 0,
+  }), ["retrieval_fallback", "source_not_found"]);
+  assert.deepEqual(completedAiQualityEvents({
+    ...healthy,
+    responseKind: "clarification_required",
+    sourceCount: 1,
+  }), []);
 });
 
 test("the event catalog covers the execution brief and durable routes emit only after persistence", () => {
@@ -174,6 +211,11 @@ test("replayable milestones emit only after a newly completed durable transition
   assert.match(ai, /productClarificationCompletedStatement/);
   assert.match(ai, /result\.responseKind === "answer"/);
   assert.match(ai, /branchInput\.operation === "follow_up"/);
+  assert.match(ai, /completedAiQualityEvents/);
+  assert.equal(
+    ai.match(/await failAiRun\(\{[\s\S]*?\}\);\s*trackDurableAiError\(\);/g)?.length,
+    4,
+  );
   assert.ok(ai.lastIndexOf('event: "first_question_sent"') > ai.indexOf("await db.batch"));
   assert.ok(ai.lastIndexOf('event: "clarification_completed"') > ai.indexOf("await db.batch"));
   assert.ok(ai.lastIndexOf('event: "first_question_sent"') > ai.indexOf("await input.db.batch"));

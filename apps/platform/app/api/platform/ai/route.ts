@@ -63,6 +63,7 @@ import {
 import { workspaceForUser, workspaceForUserById } from "../../../../lib/platform/workspace";
 import { isWorkspaceId } from "../../../../lib/platform/routing";
 import { trackProductEvent, type ProductEventInput } from "../../../../lib/platform/analytics";
+import { completedAiQualityEvents } from "../../../../lib/platform/ai-quality-events";
 import {
   productAccountMilestoneCreated,
   productAccountMilestoneStatement,
@@ -293,6 +294,13 @@ async function executePostWithinBudget(
   } | null;
   const locale = body?.locale === "uz" ? "uz" : "ru";
   const db = requireD1();
+  const trackDurableAiError = () => trackProductEvent({
+    event: "AI_error",
+    surface: "platform",
+    locale,
+    accountType: workspace.type,
+    outcome: "failed",
+  });
   let preliminaryAtMs: number | null = null;
   let providerFirstDeltaAtMs: number | null = null;
   let fallbackFromProgress: "openai" | "anthropic" | null = null;
@@ -759,8 +767,9 @@ async function executePostWithinBudget(
   // Secondary internet material is consulted only after the combined official result is weak or empty.
   // It can explain practice, but can never establish
   // a legal rule, deadline, calculation, or mandatory action.
-  const secondaryInternet: SecondaryInternetRetrieval = !applicableAt
-    && shouldRetrieveSecondaryInternet(retrieval)
+  const secondaryRetrievalFallbackUsed = !applicableAt
+    && shouldRetrieveSecondaryInternet(retrieval);
+  const secondaryInternet: SecondaryInternetRetrieval = secondaryRetrievalFallbackUsed
     ? await (async () => {
       if (budget.remainingMs < 8_000) {
         return { sources: [], evidence: [], errors: [{ code: "SECONDARY_RESEARCH_BUDGET_SKIPPED" }] };
@@ -1065,6 +1074,7 @@ async function executePostWithinBudget(
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
       workspaceId: workspace.id, userId: user.id, idempotencyKey, errorCode: code,
     });
+    trackDurableAiError();
     const lastProviderCall = providerCalls.at(-1);
     const telemetryProvider = lastProviderCall?.provider
       ?? (provider.name === "anthropic" ? "anthropic" : "openai");
@@ -1141,6 +1151,7 @@ async function executePostWithinBudget(
       workspaceId: workspace.id, userId: user.id, idempotencyKey,
       errorCode: "INVALID_AI_OUTPUT",
     });
+    trackDurableAiError();
     await recordLegalChatSlo({
       db,
       budget,
@@ -1168,6 +1179,7 @@ async function executePostWithinBudget(
       workspaceId: workspace.id, userId: user.id, idempotencyKey,
       errorCode: "PROVIDER_TIMEOUT",
     });
+    trackDurableAiError();
     await recordLegalChatSlo({
       db,
       budget,
@@ -1409,6 +1421,7 @@ async function executePostWithinBudget(
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
       workspaceId: workspace.id, userId: user.id, idempotencyKey, errorCode: "PERSISTENCE_FAILED",
     });
+    trackDurableAiError();
     await recordLegalChatSlo({
       db,
       budget,
@@ -1441,6 +1454,21 @@ async function executePostWithinBudget(
       locale,
       accountType: workspace.type,
       outcome: "completed",
+    });
+  }
+  for (const event of completedAiQualityEvents({
+    queryUnderstandingFallback,
+    secondaryRetrievalFallbackUsed,
+    rerankingOutcome: retrieval.retrievalTelemetry?.rerankingOutcome ?? null,
+    responseKind: result.responseKind,
+    sourceCount: result.sources.length,
+  })) {
+    trackProductEvent({
+      event,
+      surface: "platform",
+      locale,
+      accountType: workspace.type,
+      outcome: event === "source_not_found" ? "failed" : "completed",
     });
   }
 
