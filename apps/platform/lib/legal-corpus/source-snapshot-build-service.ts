@@ -26,7 +26,8 @@ const SNAPSHOT_ID = "snapshot:staging:current:source-snapshot-v1";
 const BUILD_ID = "build:staging:current:source-snapshot-qualification-v2";
 const CUTOFF = "2026-08-31T06:26:27.2253695Z";
 const CONFIGURATION_ID = "ai-search-staging-v1";
-const PROJECTION_BATCH_SIZE = 64;
+const PROJECTION_BATCH_SIZE = 128;
+const D1_WRITE_BATCH_SIZE = 64;
 const RECONCILIATION_PAGE_SIZE = 5_000;
 const R2_RECONCILIATION_PAGE_SIZE = 250;
 
@@ -410,35 +411,44 @@ async function advanceBuild(
         provisionObjectSha256: item.row.provisionSha256 }), CUTOFF,
     ]),
   };
+  const writeStatements = Array.from({ length: Math.ceil(projected.length / D1_WRITE_BATCH_SIZE) },
+    (_, index) => {
+      const start = index * D1_WRITE_BATCH_SIZE;
+      const end = start + D1_WRITE_BATCH_SIZE;
+      const items = projected.slice(start, end);
+      return [
+        db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_stable_identities
+          (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at)
+          VALUES ${values(identityRows.sourceDocuments.slice(start, end))}`),
+        db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_stable_identities
+          (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at)
+          VALUES ${values(identityRows.sourceSnapshots.slice(start, end))}`),
+        db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_stable_identities
+          (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at)
+          VALUES ${values(identityRows.snapshotProvisions.slice(start, end))}`),
+        db.prepare(`INSERT INTO legal_source_snapshot_integrity_attestations
+          (build_id,snapshot_provision_id,source_object_r2_key,source_object_byte_count,
+           source_object_sha256,normalized_text_sha256,verified_at) VALUES ${values(items.map((item) => [
+          BUILD_ID, item.row.snapshotProvisionId, item.row.provisionKey, item.row.provisionBytes,
+          item.row.provisionSha256, item.normalizedTextSha256, now,
+        ]))}`),
+        db.prepare(`INSERT INTO legal_retrieval_eligibility
+          (id,build_id,snapshot_provision_id,capability,status,reason_codes_json,official_source_verified,
+           d1_r2_integrity_verified,extraction_verified,identity_stable,current_pointer_verified,
+           temporal_state_supported,privacy_verified,quarantine_clear,canonicalization_clear,evaluated_at)
+          VALUES ${values(items.map((item) => [
+          `retrieval-eligibility:${item.row.snapshotProvisionId}:current:${BUILD_ID}`, BUILD_ID,
+          item.row.snapshotProvisionId, "current", item.reasonCodes.length === 0 ? "eligible" : "ineligible",
+          JSON.stringify(item.reasonCodes), item.officialSourceVerified ? 1 : 0, 1, 1, 1,
+          item.row.currentPointerId === null ? 0 : 1,
+          item.row.temporalState === "current_supported" ? 1 : 0,
+          item.row.privacyClass === "public_official_source" ? 1 : 0,
+          item.row.quarantineId === null ? 1 : 0, item.row.aliasId === null ? 1 : 0, now,
+        ]))}`),
+      ];
+    }).flat();
   await db.batch([
-    db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_stable_identities
-      (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at)
-      VALUES ${values(identityRows.sourceDocuments)}`),
-    db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_stable_identities
-      (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at)
-      VALUES ${values(identityRows.sourceSnapshots)}`),
-    db.prepare(`INSERT OR IGNORE INTO legal_source_snapshot_stable_identities
-      (subject_type,subject_id,canonical_identity_sha256,identity_evidence_json,recorded_at)
-      VALUES ${values(identityRows.snapshotProvisions)}`),
-    db.prepare(`INSERT INTO legal_source_snapshot_integrity_attestations
-      (build_id,snapshot_provision_id,source_object_r2_key,source_object_byte_count,
-       source_object_sha256,normalized_text_sha256,verified_at) VALUES ${values(projected.map((item) => [
-      BUILD_ID, item.row.snapshotProvisionId, item.row.provisionKey, item.row.provisionBytes,
-      item.row.provisionSha256, item.normalizedTextSha256, now,
-    ]))}`),
-    db.prepare(`INSERT INTO legal_retrieval_eligibility
-      (id,build_id,snapshot_provision_id,capability,status,reason_codes_json,official_source_verified,
-       d1_r2_integrity_verified,extraction_verified,identity_stable,current_pointer_verified,
-       temporal_state_supported,privacy_verified,quarantine_clear,canonicalization_clear,evaluated_at)
-      VALUES ${values(projected.map((item) => [
-      `retrieval-eligibility:${item.row.snapshotProvisionId}:current:${BUILD_ID}`, BUILD_ID,
-      item.row.snapshotProvisionId, "current", item.reasonCodes.length === 0 ? "eligible" : "ineligible",
-      JSON.stringify(item.reasonCodes), item.officialSourceVerified ? 1 : 0, 1, 1, 1,
-      item.row.currentPointerId === null ? 0 : 1,
-      item.row.temporalState === "current_supported" ? 1 : 0,
-      item.row.privacyClass === "public_official_source" ? 1 : 0,
-      item.row.quarantineId === null ? 1 : 0, item.row.aliasId === null ? 1 : 0, now,
-    ]))}`),
+    ...writeStatements,
     db.prepare(`UPDATE legal_source_snapshot_builds SET cursor=?,processed_count=processed_count+?,
       eligible_count=eligible_count+?,excluded_count=excluded_count+?,updated_at=? WHERE id=?`).bind(
       projected.at(-1)!.row.snapshotProvisionId, projected.length,
