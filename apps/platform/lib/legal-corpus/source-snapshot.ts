@@ -116,15 +116,17 @@ export class SourceSnapshotBuildInterruptedError extends Error {
   }
 }
 
-function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+export function stableSourceSnapshotJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableSourceSnapshotJson).join(",")}]`;
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value as Record<string, unknown>)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(",")}}`;
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableSourceSnapshotJson(item)}`).join(",")}}`;
   }
   return JSON.stringify(value);
 }
+
+const stable = stableSourceSnapshotJson;
 
 function bytes(value: unknown): Uint8Array {
   return new TextEncoder().encode(`${stable(value)}\n`);
@@ -154,7 +156,7 @@ export function serializeNeutralSourceSnapshotChunk(input: NeutralSourceSnapshot
   return bytes({ schemaVersion: 1, ...input });
 }
 
-async function sha256(value: string | Uint8Array): Promise<string> {
+export async function sourceSnapshotSha256(value: string | Uint8Array): Promise<string> {
   const encoded = typeof value === "string" ? new TextEncoder().encode(value) : value;
   const owned = new Uint8Array(encoded.byteLength);
   owned.set(encoded);
@@ -163,8 +165,68 @@ async function sha256(value: string | Uint8Array): Promise<string> {
     .map((part) => part.toString(16).padStart(2, "0")).join("");
 }
 
-async function identity(prefix: string, value: string): Promise<string> {
-  return `${prefix}:${await sha256(value)}`;
+const sha256 = sourceSnapshotSha256;
+
+export const SOURCE_SNAPSHOT_RELEASE_STATUS = "constructed_unsealed" as const;
+
+export async function sourceDocumentCanonicalIdentity(input: {
+  publisher: "lex.uz";
+  publisherDocumentToken: string;
+  languageTag: string;
+  sourceUrl: string;
+}): Promise<string> {
+  return sha256(stable({ schemaVersion: 1, kind: "source_document", ...input }));
+}
+
+export async function sourceSnapshotCanonicalIdentity(input: {
+  sourceDocumentCanonicalIdentity: string;
+  publisherRevisionToken: string;
+  languageTag: string;
+  captureId: string;
+  rawLocatorId: string;
+  rawSha256: string;
+  normalizedLocatorId: string;
+  normalizedSha256: string;
+}): Promise<string> {
+  return sha256(stable({ schemaVersion: 1, kind: "source_snapshot", ...input }));
+}
+
+export async function snapshotProvisionCanonicalIdentity(input: {
+  sourceSnapshotCanonicalIdentity: string;
+  sourcePositionToken: string;
+  normalizedTextSha256: string;
+  provisionLocatorId: string;
+  provisionObjectSha256: string;
+}): Promise<string> {
+  return sha256(stable({ schemaVersion: 1, kind: "snapshot_provision", ...input }));
+}
+
+export function legacyProjectionChunkId(legacyProvisionRenditionId: string, ordinal = 0): string {
+  const suffix = legacyProvisionRenditionId.startsWith("rendition:")
+    ? legacyProvisionRenditionId.slice("rendition:".length) : legacyProvisionRenditionId;
+  return `chunk:${suffix}:${ordinal}`;
+}
+
+export async function canonicalChunkId(
+  snapshotProvisionCanonicalIdentityValue: string,
+  ordinal = 0,
+): Promise<string> {
+  return `chunk:source-snapshot-v1:${await sha256(stable({
+    snapshotProvisionCanonicalIdentity: snapshotProvisionCanonicalIdentityValue,
+    ordinal,
+  }))}`;
+}
+
+export async function sourceSnapshotShardId(chunkId: string, shardCount: number): Promise<string> {
+  return String(Number.parseInt((await sha256(chunkId)).slice(0, 8), 16) % shardCount).padStart(2, "0");
+}
+
+export function sourceSnapshotChunkKey(releaseId: string, shardId: string, chunkId: string): string {
+  return `search-releases/${releaseId}/current/${shardId}/${chunkId}.json`;
+}
+
+export function serializeSourceSnapshotReleaseManifest(body: Record<string, unknown>): Uint8Array {
+  return bytes({ ...body, status: SOURCE_SNAPSHOT_RELEASE_STATUS });
 }
 
 type RetrievalReasonCode =
@@ -213,8 +275,7 @@ export async function buildSourceSnapshotProjectionPlan(untrustedInput: SourceSn
   const sourceDocuments = await Promise.all([...input.sourceDocuments]
     .sort((left, right) => left.publisherDocumentToken.localeCompare(right.publisherDocumentToken))
     .map(async (document) => ({
-      id: await identity("source-document", [document.publisher, document.publisherDocumentToken,
-        document.languageTag, document.sourceUrl].join("|")),
+      id: `source-document:${await sourceDocumentCanonicalIdentity(document)}`,
       ...document,
     })));
   const sourceDocumentByToken = new Map(sourceDocuments
@@ -226,9 +287,16 @@ export async function buildSourceSnapshotProjectionPlan(untrustedInput: SourceSn
       const sourceDocument = sourceDocumentByToken.get(snapshot.publisherDocumentToken);
       if (!sourceDocument) throw new Error("SOURCE_SNAPSHOT_DOCUMENT_MISSING");
       return {
-        id: await identity("source-snapshot", [sourceDocument.id, snapshot.publisherRevisionToken,
-          snapshot.languageTag, snapshot.captureId, snapshot.rawSha256,
-          snapshot.normalizedSha256].join("|")),
+        id: `source-snapshot:${await sourceSnapshotCanonicalIdentity({
+          sourceDocumentCanonicalIdentity: sourceDocument.id.slice("source-document:".length),
+          publisherRevisionToken: snapshot.publisherRevisionToken,
+          languageTag: snapshot.languageTag,
+          captureId: snapshot.captureId,
+          rawLocatorId: snapshot.rawLocatorId,
+          rawSha256: snapshot.rawSha256,
+          normalizedLocatorId: snapshot.normalizedLocatorId,
+          normalizedSha256: snapshot.normalizedSha256,
+        })}`,
         sourceDocumentId: sourceDocument.id,
         ...snapshot,
       };
@@ -240,8 +308,14 @@ export async function buildSourceSnapshotProjectionPlan(untrustedInput: SourceSn
     .sort((left, right) => left.legacyProvisionRenditionId.localeCompare(right.legacyProvisionRenditionId))
     .map(async (provision) => {
       const snapshot = snapshotByRevision.get(provision.legacyTextRevisionId);
-      const id = await identity("snapshot-provision", [snapshot?.id ?? "missing",
-        provision.sourcePositionToken, provision.provisionSha256].join("|"));
+      const normalizedTextSha256 = await sha256(provision.provisionText);
+      const id = `snapshot-provision:${await snapshotProvisionCanonicalIdentity({
+        sourceSnapshotCanonicalIdentity: snapshot?.id.slice("source-snapshot:".length) ?? "missing",
+        sourcePositionToken: provision.sourcePositionToken,
+        normalizedTextSha256,
+        provisionLocatorId: provision.provisionLocatorId,
+        provisionObjectSha256: provision.provisionSha256,
+      })}`;
       return { id, sourceSnapshotId: snapshot?.id ?? null, ...provision };
     }));
 
@@ -258,20 +332,21 @@ export async function buildSourceSnapshotProjectionPlan(untrustedInput: SourceSn
   const eligibleIds = new Set(eligibility
     .filter((row) => row.status === "eligible")
     .map((row) => row.snapshotProvisionId));
+  const sourceDocumentById = new Map(sourceDocuments.map((document) => [document.id, document]));
+  const sourceSnapshotById = new Map(sourceSnapshots.map((snapshot) => [snapshot.id, snapshot]));
 
   const chunkRows = await Promise.all(snapshotProvisions
     .filter((provision) => eligibleIds.has(provision.id))
     .map(async (provision) => {
-      const snapshot = sourceSnapshots.find((candidate) => candidate.id === provision.sourceSnapshotId)!;
-      const document = sourceDocuments.find((candidate) => candidate.id === snapshot.sourceDocumentId)!;
-      const canonicalChunkId = await identity("chunk", `${provision.id}|0`);
-      const shard = String(Number.parseInt((await sha256(canonicalChunkId)).slice(0, 8), 16)
-        % input.shardCount).padStart(2, "0");
+      const snapshot = sourceSnapshotById.get(provision.sourceSnapshotId!)!;
+      const document = sourceDocumentById.get(snapshot.sourceDocumentId)!;
+      const canonicalChunkIdValue = await canonicalChunkId(provision.id.slice("snapshot-provision:".length));
+      const shard = await sourceSnapshotShardId(canonicalChunkIdValue, input.shardCount);
       const artifact = serializeNeutralSourceSnapshotChunk({
         sourceDocumentId: document.id,
         sourceSnapshotId: snapshot.id,
         snapshotProvisionId: provision.id,
-        canonicalChunkId,
+        canonicalChunkId: canonicalChunkIdValue,
         publisher: document.publisher,
         publisherDocumentToken: document.publisherDocumentToken,
         publisherRevisionToken: snapshot.publisherRevisionToken,
@@ -287,25 +362,25 @@ export async function buildSourceSnapshotProjectionPlan(untrustedInput: SourceSn
         sourceNormalizedSha256: provision.sourceNormalizedSha256,
       });
       const artifactSha256 = await sha256(artifact);
-      const key = `search-releases/${input.releaseId}/current/${shard}/${canonicalChunkId}.json`;
+      const key = sourceSnapshotChunkKey(input.releaseId, shard, canonicalChunkIdValue);
       return {
         canonicalChunk: {
-          id: canonicalChunkId,
+          id: canonicalChunkIdValue,
           snapshotProvisionId: provision.id,
           ordinal: 0,
           byteCount: artifact.byteLength,
           sha256: artifactSha256,
         },
-        sparsePosting: { canonicalChunkId, postingInventorySha256: provision.provisionSha256 },
+        sparsePosting: { canonicalChunkId: canonicalChunkIdValue, postingInventorySha256: provision.provisionSha256 },
         denseCandidate: {
-          canonicalChunkId,
+          canonicalChunkId: canonicalChunkIdValue,
           embeddingModel: "openai/text-embedding-3-large",
           dimensions: 1_536,
-          providerCandidateId: `canonical:${canonicalChunkId}`,
+          providerCandidateId: `canonical:${canonicalChunkIdValue}`,
         },
         releaseItem: {
           releaseId: input.releaseId,
-          canonicalChunkId,
+          canonicalChunkId: canonicalChunkIdValue,
           snapshotProvisionId: provision.id,
           legacyProvisionRenditionId: provision.legacyProvisionRenditionId,
           shardId: shard,
@@ -381,7 +456,7 @@ export async function buildSourceSnapshotProjectionPlan(untrustedInput: SourceSn
   const release = { ...releaseBody, identity: await sha256(stable(releaseBody)) };
   const manifest = {
     key: `search-releases/${input.releaseId}/manifest.json`,
-    bytes: bytes({ ...release, status: "sealed" }),
+    bytes: serializeSourceSnapshotReleaseManifest(release),
   };
   const rows: PersistedRow[] = [
     ...sourceDocuments.map((row) => ({ identity: `source_document:${row.id}`, serialized: stable(row) })),

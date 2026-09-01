@@ -195,9 +195,29 @@ test("current Source Snapshot retrieval ignores textual authority but fails clos
   assert.notEqual(plan.sourceDocuments[0]?.id, plan.sourceDocuments[1]?.id,
     "different language/source identities must never merge through a guessed relationship");
   assert.equal(plan.releaseItems.length, 1);
+  const manifest = JSON.parse(new TextDecoder().decode(plan.manifest.bytes)) as { status: string };
+  assert.equal(manifest.status, "constructed_unsealed");
   const artifact = new TextDecoder().decode(plan.chunkArtifacts[0]?.bytes);
   assert.match(artifact, /Eligible current provision/u);
   assert.doesNotMatch(artifact, /controlling|official.translation|textual.authority/iu);
+});
+
+test("canonical identities and release membership never depend on legacy textual authority", async () => {
+  const input = representativeInput();
+  const changed = structuredClone(input);
+  changed.snapshots[0]!.legacyTextualAuthority = "controlling";
+  changed.provisions[0]!.legacyTextualAuthority = "official_translation";
+  const [baseline, withLegacyClaims] = await Promise.all([
+    buildSourceSnapshotProjectionPlan(input), buildSourceSnapshotProjectionPlan(changed),
+  ]);
+  assert.deepEqual(withLegacyClaims.sourceDocuments.map((row) => row.id),
+    baseline.sourceDocuments.map((row) => row.id));
+  assert.deepEqual(withLegacyClaims.sourceSnapshots.map((row) => row.id),
+    baseline.sourceSnapshots.map((row) => row.id));
+  assert.deepEqual(withLegacyClaims.snapshotProvisions.map((row) => row.id),
+    baseline.snapshotProvisions.map((row) => row.id));
+  assert.deepEqual(withLegacyClaims.releaseItems, baseline.releaseItems);
+  assert.equal(withLegacyClaims.release.identity, baseline.release.identity);
 });
 
 test("a partial Source Snapshot build restarts to byte-identical projections and one disjoint shard union", async () => {
@@ -238,6 +258,11 @@ test("the additive target schema preserves legacy authority rows and protects So
       "legal_source_snapshot_builds",
       "legal_source_snapshot_build_checkpoints",
       "legal_source_snapshot_inventories",
+      "legal_source_snapshot_stable_identities",
+      "legal_source_snapshot_integrity_attestations",
+      "legal_source_snapshot_replay_pages",
+      "legal_source_snapshot_replay_runs",
+      "legal_source_snapshot_qualifications",
     ];
     const rows = sqlite.prepare(`SELECT name FROM sqlite_master
       WHERE type='table' ORDER BY name`).all() as Array<{ name: string }>;
@@ -245,6 +270,36 @@ test("the additive target schema preserves legacy authority rows and protects So
     for (const table of expectedTables) assert.equal(names.has(table), true, table);
     assert.equal(names.has("legal_official_expressions"), true);
     assert.equal(names.has("legal_official_eligibility"), true);
+    const triggers = new Set((sqlite.prepare(`SELECT name FROM sqlite_master
+      WHERE type='trigger' ORDER BY name`).all() as Array<{ name: string }>).map((row) => row.name));
+    for (const trigger of [
+      "legal_source_documents_no_delete",
+      "legal_source_snapshots_no_delete",
+      "legal_snapshot_provisions_no_delete",
+      "legal_source_snapshot_current_pointers_no_delete",
+      "legal_retrieval_eligibility_no_delete",
+      "legal_source_snapshot_quarantines_no_delete",
+      "legal_source_snapshot_aliases_no_delete",
+      "legal_canonical_chunks_no_delete",
+      "legal_sparse_projection_postings_no_delete",
+      "legal_dense_projection_candidates_no_delete",
+      "legal_source_snapshot_release_members_no_delete",
+      "legal_source_snapshot_build_checkpoints_no_delete",
+      "legal_source_snapshot_inventories_no_delete",
+      "legal_source_snapshot_deferred_inventories_no_delete",
+      "legal_source_snapshot_stable_identities_no_delete",
+      "legal_source_snapshot_integrity_attestations_no_delete",
+      "legal_source_snapshot_replay_pages_no_delete",
+      "legal_source_snapshot_replay_runs_no_delete",
+      "legal_source_snapshot_qualifications_no_delete",
+    ]) assert.equal(triggers.has(trigger), true, trigger);
+    sqlite.prepare(`INSERT INTO legal_source_documents
+      (id,publisher,publisher_document_token,language_tag,source_url,legacy_instrument_id,
+       legacy_expression_id,provenance_sha256,created_at)
+      VALUES ('source-document:immutability-test','lex.uz','immutability-test','en',
+        'https://lex.uz/docs/immutability-test',NULL,NULL,?,?)`).run(HASH_A, CAPTURED_AT);
+    assert.throws(() => sqlite.prepare(`DELETE FROM legal_source_documents
+      WHERE id='source-document:immutability-test'`).run(), /LEGAL_SOURCE_DOCUMENT_IMMUTABLE/u);
   } finally {
     sqlite.close();
   }

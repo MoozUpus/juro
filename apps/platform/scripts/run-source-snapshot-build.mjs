@@ -2,7 +2,7 @@
 
 const origin = process.env.LEGAL_SOURCE_SNAPSHOT_BUILD_ORIGIN ?? "http://127.0.0.1:8787";
 const root = `${origin}/internal/legal-corpus/source-snapshot-build`;
-const buildId = "build:staging:current:source-snapshot-v1";
+const buildId = "build:staging:current:source-snapshot-qualification-v2";
 const lanes = [..."0123456789abcdef"].flatMap((first) =>
   [..."0123456789abcdef"].map((second) => `${first}${second}`));
 const laneConcurrency = 32;
@@ -112,15 +112,39 @@ for (;;) {
 }
 
 const finalized = await call("finalize");
-const dryRunOne = await call("dry-run");
-const dryRunTwo = await call("dry-run");
-if (identity(finalized) !== identity(dryRunOne) || identity(dryRunOne) !== identity(dryRunTwo)) {
+
+async function replay(runId) {
+  const laneQueue = [...lanes];
+  let calls = 0;
+  while (laneQueue.length > 0) {
+    const active = laneQueue.splice(0, laneConcurrency);
+    const results = await Promise.all(active.map((lane) => call("replay", { runId, lane })));
+    calls += results.length;
+    for (let index = 0; index < results.length; index += 1) {
+      if (!results[index].laneComplete) laneQueue.push(active[index]);
+    }
+    if (calls % 256 === 0 || laneQueue.length === 0) {
+      console.log(JSON.stringify({ event: "source_snapshot.replay_wave", runId, calls,
+        remainingLanes: laneQueue.length }));
+    }
+  }
+  return call("replay", { runId });
+}
+
+const baselineReplay = await replay("baseline");
+const repeatedReplay = await replay("repeat");
+if (!baselineReplay.complete || !repeatedReplay.complete
+  || baselineReplay.itemCount !== repeatedReplay.itemCount
+  || baselineReplay.identitySha256 !== repeatedReplay.identitySha256) {
   throw new Error("SOURCE_SNAPSHOT_REPEATED_BUILD_IDENTITY_MISMATCH");
 }
+const dryRun = await call("dry-run");
+if (identity(finalized) !== identity(dryRun)) throw new Error("SOURCE_SNAPSHOT_DRY_RUN_IDENTITY_MISMATCH");
 console.log(JSON.stringify({
   event: "source_snapshot.complete",
   advanceCalls,
   reconcileCalls,
-  repeatedDryRunIdentity: true,
-  result: finalized,
+  repeatedBuildIdentity: baselineReplay.identitySha256,
+  repeatedBuildItemCount: baselineReplay.itemCount,
+  result: dryRun,
 }));
