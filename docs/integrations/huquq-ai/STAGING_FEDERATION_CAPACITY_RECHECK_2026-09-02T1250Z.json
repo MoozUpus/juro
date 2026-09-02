@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T12:53:35.8085181Z",
+  "probeWindowUtc": "2026-09-02T12:48Z-12:50Z",
+  "probe": "wrangler d1 info (read-only metadata/capacity)",
+  "sources": [
+    {"databaseName":"juro-staging","databaseId":"bb716a96-b2fb-4823-90d6-6c228fed181a","databaseSizeBytes":9999998976},
+    {"databaseName":"juro-staging-corpus-v2","databaseId":"62620fb3-3da3-4c76-a8e9-aa60858c1063","databaseSizeBytes":9999998976},
+    {"databaseName":"juro-staging-corpus-shard-1","databaseId":"e09e0682-0c2e-4458-a8f3-be9de28117e3","databaseSizeBytes":2890203136},
+    {"databaseName":"juro-staging-corpus-shard-2","databaseId":"36fa1cfe-6d00-47b7-a980-864020028d86","databaseSizeBytes":8116838400},
+    {"databaseName":"juro-staging-corpus-shard-3","databaseId":"ccf1f18e-66cf-4358-a7aa-f1d725b7653c","databaseSizeBytes":9999892480},
+    {"databaseName":"juro-staging-corpus-shard-4","databaseId":"7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2","databaseSizeBytes":8560640}
+  ],
+  "headroomBytes": {
+    "juro-staging": 0,
+    "juro-staging-corpus-v2": 0,
+    "juro-staging-corpus-shard-1": 7109795840,
+    "juro-staging-corpus-shard-2": 1883160576,
+    "juro-staging-corpus-shard-3": 106496,
+    "juro-staging-corpus-shard-4": 9991438336
+  },
+  "capacityDecision": "queue_processing_held_fail_closed",
+  "sourceRowsChanged": false,
+  "failureLedgerChanged": false,
+  "productionChanged": false,
+  "note": "D1 info is a capacity observation, not an export or restore. The two 10 GB sources and near-full shard-3 do not provide a safe queue-drain window; shard-4 is a small ownership projection target."
+}
