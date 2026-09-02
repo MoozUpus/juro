@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T05:37:53.5554392Z",
+  "applicationCommit": "f48e70f5ceff77b9407f46431bb4c971590fee12",
+  "probeType": "sequential remote D1 read-only corpus and queue recheck",
+  "queryMode": "One SELECT aggregate per database; no INSERT, UPDATE, DELETE, migration, export, or ingestion",
+  "rowsWritten": 0,
+  "probeErrors": [
+    {
+      "databaseName": "juro-staging",
+      "code": 7500,
+      "error": "no such table: legal_corpus_index_entries",
+      "impact": "invalid probe query only; no database mutation"
+    }
+  ],
+  "sources": {
+    "juro-staging": {
+      "canonicalDocuments": 4291,
+      "activeProvisionRows": 162886,
+      "currentChunks": 1301928,
+      "indexedChunks": 168621,
+      "openJobs": 43539,
+      "deadLetterJobs": 1,
+      "terminalFailureRows": 275,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "d1SizeBytes": 9999998976
+    },
+    "juro-staging-corpus-v2": {
+      "canonicalDocuments": 599,
+      "activeProvisionRows": 55949,
+      "currentChunks": 1308850,
+      "indexedChunks": 55814,
+      "openJobs": 27689,
+      "deadLetterJobs": 0,
+      "terminalFailureRows": 5,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "d1SizeBytes": 9999998976
+    },
+    "juro-staging-corpus-shard-1": {
+      "canonicalDocuments": 1635,
+      "activeProvisionRows": 45311,
+      "currentChunks": 369081,
+      "indexedChunks": 52370,
+      "openJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailureRows": 10,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "d1SizeBytes": 2890203136
+    },
+    "juro-staging-corpus-shard-2": {
+      "canonicalDocuments": 2495,
+      "activeProvisionRows": 59969,
+      "currentChunks": 997338,
+      "indexedChunks": 62089,
+      "openJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailureRows": 8,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "d1SizeBytes": 8116838400
+    },
+    "juro-staging-corpus-shard-3": {
+      "canonicalDocuments": 3313,
+      "activeProvisionRows": 90529,
+      "currentChunks": 1434847,
+      "indexedChunks": 93097,
+      "openJobs": 23713,
+      "deadLetterJobs": 0,
+      "terminalFailureRows": 17,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "d1SizeBytes": 9997344768
+    }
+  },
+  "physicalSums": {
+    "canonicalDocuments": 12333,
+    "activeProvisionRows": 414644,
+    "currentChunks": 5412044,
+    "indexedChunks": 431991,
+    "openJobs": 94941,
+    "deadLetterJobs": 1,
+    "terminalFailureRows": 315,
+    "completedCheckpoints": 220,
+    "totalCheckpoints": 220
+  },
+  "identityReference": {
+    "source": "STAGING_CANONICAL_ID_OVERLAP_RECHECK_2026-09-02.json",
+    "unionCanonicalIds": 7152,
+    "crossSourceDuplicateRows": 5181,
+    "canonicalDocumentIdsDisjoint": false
+  },
+  "assessment": {
+    "numericFloorsExceededByPhysicalSum": true,
+    "allCheckpointsComplete": true,
+    "queueEmptyAcrossAllSources": false,
+    "terminalAndDeadLetterZeroAcrossAllSources": false,
+    "physicalDisjointPartitionProven": false,
+    "releaseGate": "closed"
+  },
+  "safety": {
+    "ingestionStarted": false,
+    "productionChanged": false,
+    "dnsChanged": false,
+    "temporaryExportsRetained": false
+  }
+}
