@@ -1,6 +1,6 @@
 # JURO Broken Links Report
 
-Evidence cutoff: **2026-09-02 06:32 UZT**
+Evidence cutoff: **2026-09-02 07:03 UZT**
 
 Live site: `https://juro.uz` Sites v97
 
@@ -25,7 +25,7 @@ The live crawl fetched every sitemap URL, resolved relative links, removed fragm
 | `https://staging.app.juro.uz/ru/lawyer/auth` | `302` to Cloudflare Access with `Cache-Control: no-store` | Canonical staging lawyer path remains protected before application execution | `VERIFIED` for the anonymous Access boundary; authenticated runtime QA remains open |
 | `https://app.staging.juro.uz/` | DNS does not resolve; PR #80 makes the platform routing helper return no lawyer origin | The wrong spelling can no longer be selected as a platform lawyer destination | `RESOLVED IN CODE`; keep rejected and use `staging.app.juro.uz` |
 | `https://lawyer.staging.juro.uz/` | DNS does not resolve; PR #80 removed it from Worker and OTP/MFA dedicated-host routing | The formerly accepted hostname is no longer treated as a reachable lawyer host | `RESOLVED IN CODE`; shared staging uses `staging.app.juro.uz/{locale}/lawyer/**` |
-| `https://ftp.juro.uz/` | TLS certificate hostname validation fails | Legacy service is not safely reachable over HTTPS | `SECURITY RISK`; confirm owner and intended protocol before change |
+| `https://ftp.juro.uz/` | A record `95.46.96.77`; port 21 times out; HTTP returns the default AlmaLinux test page; TLS hostname validation fails | This is not an operational JURO FTP endpoint and directly exposes a default origin | `SECURITY RISK`; reversible record retirement is prepared but awaits Cloudflare DNS authentication/permission |
 
 ## Caveats
 

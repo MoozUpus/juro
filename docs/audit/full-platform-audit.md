@@ -2,9 +2,9 @@
 
 Status: **partial, evidence-backed audit; the full execution goal remains active**
 
-Evidence cutoff: **2026-09-02 06:32 UZT (2026-09-02 01:32 UTC)**
+Evidence cutoff: **2026-09-02 07:03 UZT (2026-09-02 02:03 UTC)**
 
-Baseline: merge `617ec64ffcb21633f7b8bb734d28639de8b099e1`, platform Worker v206, website Worker v13, public Sites v97.
+Baseline: documentation main `75e71304d121d35321b44152be0f334d224048d1`; runtime merge `617ec64ffcb21633f7b8bb734d28639de8b099e1`, platform Worker v206, website Worker v13, public Sites v97.
 
 The owner excluded legislation databases, legal corpus ingestion, vectors, embeddings, and staging-capacity remediation. This document therefore records product, release, browser, access-boundary, and public operational evidence without claiming completion of the excluded scope.
 
@@ -12,7 +12,7 @@ The owner excluded legislation databases, legal corpus ingestion, vectors, embed
 
 The public site, protected login boundary, and authenticated Individual shell are deployed and responsive in Chrome. Public locale targets and auth-heading overlap defects found after v115 are fixed in v116; v117 closes the sampled Individual touch-target gaps; v118 closes the dashboard keyboard-focus clipping defect. Production role enforcement behaved correctly for the checked Individual account: Business did not grant a different persona, Lawyer required explicit reauthentication, and Admin required a protected admin session.
 
-This does not complete the Definition of Done. End-to-end Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, upload, billing, and destructive account workflows still require authorized role-specific accounts and controlled test data.
+This does not complete the Definition of Done. End-to-end Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, upload, billing, and destructive account workflows still require authorized role-specific accounts and controlled test data. The obsolete `ftp.juro.uz` record also remains live until Cloudflare DNS authentication/permission is available.
 
 ## Verified release evidence
 
@@ -27,6 +27,8 @@ This does not complete the Definition of Done. End-to-end Business, Lawyer, Pend
 | Public routes | RU/UZ/EN, robots and sitemap 200; 78 sitemap URLs | PASS |
 | Indexing split | apex indexable; provider host noindex/nofollow/noarchive | PASS |
 | Point-in-time status | operational, 8/8, 0 active incidents at `2026-09-02T01:32:20.313Z` | PASS FOR SNAPSHOT |
+| Provider recovery history | 24 hours: OpenAI 97/98 and Anthropic 98/99 operational probes; 41 and 29 consecutive successes after the last timeouts | PASS FOR OBSERVED WINDOW; NOT AN SLA |
+| Legacy FTP boundary | no FTP response; default AlmaLinux HTTP page; invalid hostname TLS; direct A record still present | P1 OPEN; DNS AUTH REQUIRED |
 
 ## Journey and boundary matrix
 
@@ -47,6 +49,7 @@ This does not complete the Definition of Done. End-to-end Business, Lawyer, Pend
 - Complete role-specific Business, Lawyer, Pending Lawyer, and Staff/Admin journeys.
 - Exercise controlled test-data flows for document creation, upload/scan, comparison, cases, consultations, billing, support, and account lifecycle.
 - Record durable analytics/KPI evidence and cost-control evidence against real production telemetry without exposing private data.
-- Keep point-in-time provider health separate from sustained reliability claims.
+- Keep the bounded 24-hour provider recovery evidence separate from an availability SLA or future-health claim.
+- Retire only the prepared `ftp.juro.uz` A record after Cloudflare DNS sign-in and complete the recorded route/email rollback checks.
 
 The next browser handoff is left on `lawyer.juro.uz` for the owner to complete the required reauthentication without sharing email, OTP, or CAPTCHA data with the agent.

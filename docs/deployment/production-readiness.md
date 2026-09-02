@@ -4,7 +4,15 @@ Assessment: **NOT READY for the full execution brief**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Production is reachable and v118 is deployed from merge `617ec64ffcb21633f7b8bb734d28639de8b099e1`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker v206 `1ec688d4-e085-4aa9-a34d-df02b0c1ae1c`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T01:32:20.313Z` was operational with 8/8 components and 0 active incidents; this is point-in-time evidence, not a claim of sustained provider health. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, and other Definition-of-Done gates are still open.
+Production is reachable and v118 is deployed from merge `617ec64ffcb21633f7b8bb734d28639de8b099e1`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker v206 `1ec688d4-e085-4aa9-a34d-df02b0c1ae1c`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T02:02:51.223Z` was operational with 8/8 components and 0 active incidents. A separate content-free 24-hour D1 history now supports a bounded provider-recovery statement, but not an availability SLA. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, DNS-remediation, and other Definition-of-Done gates are still open.
+
+## v120 production-operations evidence
+
+- Read-only production history covered the 24 hours ending with provider probes at `2026-09-02T02:01Z`. OpenAI recorded 97 operational probes out of 98 and Anthropic 98 out of 99; each provider had one isolated `PROVIDER_TIMEOUT` observation and no billing/balance error in that window.
+- After the last non-operational observation, OpenAI recorded 41 consecutive operational probes through `2026-09-02T02:01:22.374Z`; Anthropic recorded 29 through `2026-09-02T02:01:30.425Z`. This proves observed recovery across multiple scheduled checks, not uninterrupted provider availability.
+- The public status API at `2026-09-02T02:02:51.223Z` matched the latest evidence: operational, 8/8 components, no active incidents; OpenAI latency 4,091 ms and Anthropic latency 8,001 ms.
+- `ftp.juro.uz` still resolves directly to `95.46.96.77`. Port 21 timed out, HTTP port 80 returned the default AlmaLinux server test page, and HTTPS failed hostname validation. Repository search found no product dependency on this hostname. The record is therefore a retirement candidate rather than a working JURO FTP service.
+- No DNS mutation occurred. Wrangler OAuth can read the zone but lacks DNS-record permission, and the authorized Chrome tab reached the Cloudflare sign-in boundary. The exact reversible retirement procedure is recorded below.
 
 ## Current v118 release state
 
@@ -14,7 +22,7 @@ Production is reachable and v118 is deployed from merge `617ec64ffcb21633f7b8bb7
 | Public Sites | v97, source `77691d0c2f4d7eaeff759ff3f08eded893d2f835`, deployment `appgdep_6a975c1651d0819194779c579abd961b` | RU/UZ/EN 200; sitemap 78/78; discoverable apex links 120/120; indexing split preserved | Saved v96, source `489c56d029f164c030127f7465d528f8f1bdf396`; v95 remains available |
 | Website Worker | v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, 100% traffic | visible RU/UZ/EN targets are 44 × 44 CSS px wherever rendered; routes and indexing passed | v11 `fad80c80-ee92-44bb-93a3-e250ee314891` |
 | Platform Worker | v206 `1ec688d4-e085-4aa9-a34d-df02b0c1ae1c`, deployment `63cb71bb-5482-4bcf-9bd0-e652c81c9ef0`, 100% traffic | At 390 × 844 the dashboard composer and quick cards have explicit focus rings; all four cards scroll fully into view; one main/H1, zero overflow, and a clean console | v204 `12ae95e6-5eac-4f14-8257-a30dff56128d`, the last independently receipt-verified rollback |
-| Production health | operational, 8/8 components, no active incidents at the retained snapshot | `/api/status` generated `2026-09-02T01:32:20.313Z` | Health evidence is observational; it has no deployment rollback |
+| Production health | operational, 8/8 components, no active incidents at the retained snapshot | `/api/status` generated `2026-09-02T02:02:51.223Z`; 24-hour provider history recorded 195/197 operational probes | Health evidence is observational; it has no deployment rollback |
 
 The older v117/v116/v115/v101/v189/v95 tables and health narrative below are retained as historical evidence and do not supersede the current v118 checkpoint.
 
@@ -105,9 +113,8 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 
 | Priority | Gap | Evidence | Required action |
 | --- | --- | --- | --- |
-| P2 | Sustained AI-provider health is not yet proven | The current snapshot reports successful OpenAI and Anthropic probes, but one point-in-time result is not a service-level history | Continue normal monitoring and keep public health claims bounded to observed evidence |
 | Excluded | Staging health/capacity | The retained historical staging evidence is stale/degraded and the owner explicitly excluded legislation database/corpus/capacity remediation | No action in this goal; do not use this row to block the permitted non-corpus work |
-| P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
+| P1 | Cloudflare reports partial origin IP exposure; obsolete `ftp` record remains live | `ftp.juro.uz` points to `95.46.96.77`; port 21 times out, HTTP exposes an AlmaLinux test page, HTTPS hostname validation fails, and no code dependency was found | Sign in to Cloudflare DNS, capture the record ID/value, delete only this A record, then verify NXDOMAIN and all production/email routes; recreate the saved A record immediately if a dependency appears |
 | P1 | Authenticated role matrix incomplete | Authenticated individual read-only coverage exists; Business, Lawyer, Pending Lawyer, Staff/Admin, and state-changing flows remain open | Chrome QA with real authorized sessions and no fabricated identity |
 | P2 | Production v118 behavior is not authenticated on staging | Main is normalized and the canonical staging host is Access-protected; staging release remains separate | Complete post-Access Client/Lawyer route QA only in a safe, non-corpus staging increment |
 
@@ -129,7 +136,9 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 
 ### DNS
 
-No DNS record should be changed until the record owner, service purpose, current clients, TLS behavior, and recovery record set are documented. Export/record the exact old value before any mutation.
+The only currently approved retirement candidate is `A ftp.juro.uz → 95.46.96.77`, DNS-only, TTL 300. Before deletion, capture the Cloudflare record ID and confirm those exact fields in the dashboard. Delete only that record; do not change apex, Worker hostnames, MX, TXT, `mail`, or `send` records. Verify that `ftp.juro.uz` no longer resolves, all public/app/lawyer/admin/status routes still pass, and Cloudflare Email Routing MX remains unchanged. If any legitimate dependency appears, recreate the saved DNS-only A record with TTL 300. The current blocker is Cloudflare DNS authentication/permission, not uncertainty about the observed network behavior.
+
+Provider reliability remains an ongoing monitoring duty. The v120 24-hour history closes the earlier point-in-time-only evidence gap for the observed recovery window; it does not establish an SLA or guarantee future availability.
 
 ## Scope exclusion
 
