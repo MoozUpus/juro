@@ -101,3 +101,12 @@
   candidates and are not silently merged into the five-source federation.
   The ownership/queue/recovery decision is captured in
   `STAGING_FEDERATION_AUTHORIZED_ACTION_2026-09-02.{json,md}`.
+- The 2026-09-02 12:17Z safety recheck revalidated all six staging D1 bindings:
+  the source rows and failure ledger remain unchanged, no new terminal failure
+  appeared, and queue processing remains fail-closed because the legacy/v2
+  databases are at the 10 GB ceiling while shard-3 has only 106,496 bytes of
+  headroom. The exact legacy recovery job is still pending the protected
+  named-staff fresh-MFA action. See
+  `STAGING_FEDERATION_SAFE_QUEUE_RECHECK_2026-09-02T1217Z.{json,md}` and the
+  refreshed ownership evidence
+  `STAGING_FEDERATION_OWNERSHIP_REBUILD_2026-09-02T1207Z.{json,md}`.
