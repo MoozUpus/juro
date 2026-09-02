@@ -1,6 +1,6 @@
 # JURO Performance Audit
 
-Status: **living evidence report; v101 deployed and production-verified; v114 measured locally and not deployed**
+Status: **living evidence report; v101 deployed and production-verified; v114 and PR #132 candidates measured locally and not deployed**
 
 Evidence cutoff: **2026-09-02 UZT**
 
@@ -10,6 +10,7 @@ Scope: Chrome-only lab measurements for the public RU landing page and the publi
 
 - Production v101 is live from merge `840f1144f3ba8562a7866cd4bda99525be392758`: website Worker `d6ff54c8-0bbc-4921-a54e-581027689a41` and platform Worker `9c434c4e-52af-41cd-b680-eb0730b87e37`.
 - Production v101 Chrome QA recorded warm LCP **519 ms**, CLS **0.01**, and cold LCP **2,717 ms** with TTFB **1,769 ms**. Desktop Lighthouse scored Accessibility, Best Practices, SEO, and Agentic Browsing at **100/100/100/100**. These are lab results, not field Core Web Vitals.
+- PR #132 targets two measured public-landing bottlenecks without changing product behavior: an oversized JURO mark and delayed hydration entrance animations that repaint the above-the-fold hero. The production Slow 4G / 4x CPU baseline was LCP **3,090 ms**, TTFB **481 ms**, render delay **2,609 ms**, and CLS **0.00**. The candidate remains Draft and undeployed, so no production improvement is claimed.
 - The undeployed mainline v114 build recorded local LCP **1,334 ms**, TTFB **472 ms**, render delay **862 ms**, and CLS **0.00**. Chrome no longer attributed forced reflow to a top-level JURO function after the site header moved from a synchronous `scrollY` read to an observer sentinel; **83 ms** of unattributed layout work remained and Chrome estimated no metric savings.
 - Local v114 Chrome checks exposed all **21/21** reveal sections in RU, UZ, and EN at 1440 × 900 and in RU at 390 × 844, with zero document-level horizontal overflow and no console errors or warnings. Direct navigation to `/ru#start` also exposed 21/21.
 - `https://juro.uz/ru` passed mobile Lighthouse Accessibility, Best Practices, SEO, and Agentic Browsing at **100/100/100/100**.
@@ -20,6 +21,26 @@ Scope: Chrome-only lab measurements for the public RU landing page and the publi
 - Worker v189 makes status-page favicon metadata same-origin on every production status route while preserving the existing `img-src 'self' data: blob:` policy. Chrome reported no console errors or warnings on the five checked status routes.
 
 This audit does not claim complete platform performance coverage. Authenticated role journeys, field data, INP, long-task interaction profiles, and every target viewport remain open.
+
+## PR #132 candidate — responsive brand image and hydration-stable hero
+
+Status: **Draft; validated locally and in CI; not merged or deployed**
+
+Chrome identified the 1024 × 1024 public JURO mark as an avoidable image-delivery cost when it was displayed at roughly 73 × 73 CSS px. The image-delivery insight estimated about **62 KB** of avoidable transfer and a potential **400 ms** LCP opportunity. PR #132 routes the desktop header, mobile menu, and footer marks through the standard responsive image pipeline. The Worker accepts both the current `/_next/image` route and the legacy `/_vinext/image` route, then delegates the requested width to Cloudflare Images.
+
+The same production trace identified hero lead text as the LCP element and attributed **2,609 ms** of the **3,090 ms** LCP to render delay. Source inspection found that hydration changed `data-motion-ready` and started delayed entrance animations on already-visible hero copy and the product stage. The candidate removes only those hydration-triggered above-the-fold entrance animations. Pointer tilt, scenario crossfades, atmospheric motion, below-fold reveals, and reduced-motion behavior remain intact.
+
+| Evidence | Result |
+| --- | --- |
+| Production baseline, 390 × 844, DPR 2, Slow 4G, 4x CPU | LCP 3,090 ms; TTFB 481 ms; render delay 2,609 ms; CLS 0.00 |
+| Production image-delivery insight | 1024 × 1024 source displayed at about 73 × 73; about 62 KB avoidable; estimated LCP opportunity 400 ms |
+| Local comparative trace with hydration product-stage animation | LCP 5,901 ms; TTFB 399 ms |
+| Local comparative trace without hydration product-stage animation | LCP 4,367 ms; TTFB 567 ms |
+| Focused and website tests | 49/49 PASS |
+| Type-check, lint, verified Sites artifact build | PASS |
+| Functional code commit `adfad6bd186669a03e97c1400ff5f935df5b3719` | website CI PASS; platform CI PASS; merge state CLEAN before this documentation-only update |
+
+The local comparisons used the same viewport and throttling profile but a local HTTP/1.1 server. They are evidence that removing the hydration product-stage repaint improves the controlled local path despite a worse TTFB; they are not a production before/after measurement. Merge, Sites publication, and an exact deployed-revision Chrome trace remain separate release gates.
 
 ## v114 mainline candidate — initial-paint and auth stability
 

@@ -79,6 +79,14 @@ test("initial scroll geometry waits until paint and public chrome avoids synchro
   assert.match(chrome, /style=\{\{[^}]*position: "absolute"[^}]*top: 0/);
 });
 
+test("above-the-fold hero is never repainted by hydration motion", () => {
+  assert.doesNotMatch(motionStyles, /data-motion-ready="true"[^}]+hero(?:Copy|Product)Motion/);
+  assert.doesNotMatch(motionStyles, /@keyframes (?:hero-(?:label|line|support)-in|product-stage-in)/);
+  assert.match(motionStyles, /heroProductMotion\.heroProductMotion[\s\S]*?transition: transform/);
+  assert.match(motionStyles, /caseMapMotion[\s\S]*?product-crossfade/);
+  assert.match(motionStyles, /atmosphereMotion[\s\S]*?ambient-drift/);
+});
+
 test("document review opens on the first clause and changes only by direct selection", () => {
   assert.match(homepage, /const \[clause, setClause\] = useState\(0\)/);
   assert.match(homepage, /const selectClause = \(index: number\) => \{\s*setClause\(index\);\s*\}/);
@@ -228,7 +236,7 @@ test("laptop layouts prevent large headline and product-grid clipping", () => {
   assert.match(laptopStyles, /\.heroCopy\.heroCopy \{ max-width: 900px; \}/);
   assert.match(homepage, /styles\.heroNote.*laptopStyles\.heroNote/);
   assert.match(laptopStyles, /\.heroNote\.heroNote[\s\S]*?margin: clamp\(1\.35rem, 2\.4vw, 1\.75rem\) 0 0[\s\S]*?line-height: 1\.65|\.heroNote\.heroNote[\s\S]*?line-height: 1\.65[\s\S]*?margin: clamp\(1\.35rem, 2\.4vw, 1\.75rem\) 0 0/);
-  assert.match(motionStyles, /100% \{ clip-path: none; opacity: 1; transform: translateY\(0\); \}/);
+  assert.doesNotMatch(motionStyles, /hero-line-in/);
   assert.match(laptopStyles, /font-size: clamp\(2\.05rem, 8vw, 3\.25rem\)/);
   assert.match(laptopStyles, /\.transitionTitle\.transitionTitle[\s\S]*?max-width: 100%/);
   assert.match(motionStyles, /\[data-reveal\]\[data-reveal-state="visible"\]\) \{\s*clip-path: none/);
@@ -249,6 +257,10 @@ test("brand mark uses a dedicated symbol asset and keeps one intentional wordmar
   assert.match(chrome, /src=\{tone === "dark" && !scrolled \? "\/juro-mark-light\.png" : "\/juro-mark\.png"\}/);
   assert.match(chrome, /src="\/juro-mark\.png"/);
   assert.match(chrome, /src="\/juro-mark-light\.png"/);
+  assert.match(chrome, /height=\{64\} priority sizes="\(max-width: 620px\) 58px, 64px"/);
+  assert.match(chrome, /height=\{56\} sizes="56px" src="\/juro-mark\.png" width=\{56\}/);
+  assert.match(chrome, /height=\{72\} sizes="72px" src="\/juro-mark-light\.png" width=\{72\}/);
+  assert.doesNotMatch(chrome, /juro-mark[^\n>]*unoptimized/);
   assert.match(chrome, /brandStyles\.wordmark\}>JURO/);
   assert.match(chrome, /juro-mark-light\.png/);
   assert.match(chrome, /juro-mark\.png/);
