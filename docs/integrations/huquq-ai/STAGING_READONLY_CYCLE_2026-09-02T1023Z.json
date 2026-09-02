@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-09-02T10:23:14.959Z",
+  "environment": "staging",
+  "queryMode": "sequential read-only D1 --command SELECT",
+  "sources": [
+    {"databaseName":"juro-staging","documents":4291,"openJobs":43539,"runningJobs":0,"deadLetterJobs":1,"terminalFailures":1,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-v2","documents":599,"openJobs":27689,"runningJobs":2,"deadLetterJobs":0,"terminalFailures":0,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-1","documents":1635,"openJobs":0,"runningJobs":0,"deadLetterJobs":0,"terminalFailures":0,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-2","documents":2495,"openJobs":0,"runningJobs":0,"deadLetterJobs":0,"terminalFailures":0,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-3","documents":3313,"openJobs":23706,"runningJobs":0,"deadLetterJobs":7,"terminalFailures":7,"completedCheckpoints":44}
+  ],
+  "aggregate": {
+    "rawDocumentRows": 12333,
+    "uniqueCanonicalDocumentIds": 7152,
+    "duplicateDocumentRows": 5181,
+    "terminalFailures": 8,
+    "completedCheckpoints": 220,
+    "newTerminalFailuresSince2026-09-02T1009Z": 0
+  },
+  "normalizedGreen2": {
+    "databaseName":"juro-legal-catalog-staging-green2-20260831",
+    "sourceDocuments":6895,
+    "snapshotProvisions":165852,
+    "canonicalChunks":160978,
+    "snapshotStatus":"frozen",
+    "searchReleaseStatus":"draft",
+    "excludedEligibilityRows":9748,
+    "decision":"hold"
+  },
+  "actions": {
+    "ownershipIndexRun":"ownership-20260902100911",
+    "queueProcessing":"not_started_capacity_and_failure_guard",
+    "legacyRecovery":"not_started_fresh_MFA_required",
+    "failureLedgerMutation":false,
+    "productionChanged":false
+  },
+  "releaseGate":"closed",
+  "probeNote":"All successful SELECT probes reported rows_written=0; earlier import/aggregate probe errors were recorded as read-only technical failures and did not mutate D1."
+}
