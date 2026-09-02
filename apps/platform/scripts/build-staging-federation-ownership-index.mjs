@@ -94,6 +94,25 @@ async function executeFile(file) {
   if (!parsed.every((entry) => entry?.success)) throw new Error("FEDERATION_OWNERSHIP_IMPORT_FAILED");
 }
 
+async function verifyTarget(expectedRows, expectedOccurrenceSum, expectedPartitions) {
+  const sql = "SELECT (SELECT COUNT(*) FROM legal_corpus_federation_ownership) AS rows,(SELECT COUNT(DISTINCT canonical_document_id) FROM legal_corpus_federation_ownership) AS distinct_ids,(SELECT SUM(source_occurrence_count) FROM legal_corpus_federation_ownership) AS occurrence_sum,(SELECT COUNT(DISTINCT partition_name) FROM legal_corpus_federation_ownership) AS partitions";
+  const raw = await run(process.execPath, [WRANGLER, "d1", "execute", TARGET_DATABASE, "--remote", "--config", CONFIG, "--env", "staging", "--json", "--command", sql]);
+  const rows = parseWranglerJson(raw, "target-verification");
+  const row = rows[0];
+  if (Number(row?.rows) !== expectedRows
+    || Number(row?.distinct_ids) !== expectedRows
+    || Number(row?.occurrence_sum) !== expectedOccurrenceSum
+    || Number(row?.partitions) !== expectedPartitions) {
+    throw new Error("FEDERATION_OWNERSHIP_TARGET_VERIFICATION_FAILED");
+  }
+  return {
+    ownershipRows: Number(row.rows),
+    distinctCanonicalIds: Number(row.distinct_ids),
+    partitionCount: Number(row.partitions),
+    occurrenceSum: Number(row.occurrence_sum),
+  };
+}
+
 async function main() {
   const capturedAt = new Date().toISOString();
   const byId = new Map();
@@ -133,7 +152,13 @@ async function main() {
   const runId = `ownership-${capturedAt.replace(/[-:.TZ]/gu, "").slice(0, 14)}`;
   const directory = await mkdtemp(join(tmpdir(), "juro-federation-ownership-"));
   try {
-    const statements = rows.map((row) => `INSERT OR REPLACE INTO legal_corpus_federation_ownership (canonical_document_id,partition_name,source_database_name,source_database_id,source_occurrence_count,source_class,canonical_url,document_type,document_number,source_updated_at,assigned_at,assignment_rule) VALUES (${sql(row.id)},${sql(row.partition)},${sql(row.source)},${sql(row.sourceId)},${row.occurrences},${sql(row.sourceClass)},${sql(row.canonicalUrl)},${sql(row.documentType)},${sql(row.documentNumber)},${sql(row.sourceUpdatedAt)},${sql(capturedAt)},${sql(ASSIGNMENT_RULE)});`);
+    const statements = [
+      // The target is a rebuildable projection. Replacing only this table
+      // prevents stale IDs after a future source reconciliation while leaving
+      // every source corpus and failure-ledger table untouched.
+      "DELETE FROM legal_corpus_federation_ownership;",
+      ...rows.map((row) => `INSERT OR REPLACE INTO legal_corpus_federation_ownership (canonical_document_id,partition_name,source_database_name,source_database_id,source_occurrence_count,source_class,canonical_url,document_type,document_number,source_updated_at,assigned_at,assignment_rule) VALUES (${sql(row.id)},${sql(row.partition)},${sql(row.source)},${sql(row.sourceId)},${row.occurrences},${sql(row.sourceClass)},${sql(row.canonicalUrl)},${sql(row.documentType)},${sql(row.documentNumber)},${sql(row.sourceUpdatedAt)},${sql(capturedAt)},${sql(ASSIGNMENT_RULE)});`),
+    ];
     statements.push(`INSERT OR REPLACE INTO legal_corpus_federation_ownership_runs (run_id,captured_at,source_set_sha256,partition_manifest_sha256,raw_document_rows,unique_canonical_document_ids,duplicate_document_rows,partition_count,status) VALUES (${sql(runId)},${sql(capturedAt)},${sql(sourceDigest)},${sql(ownershipDigest)},${rawRows},${rows.length},${rawRows - rows.length},${partitionNames.length},'verified');`);
     for (let offset = 0; offset < statements.length; offset += 200) {
       const file = join(directory, `ownership-${offset}.sql`);
@@ -143,6 +168,7 @@ async function main() {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+  const verification = await verifyTarget(rows.length, rawRows, partitionNames.length);
   const summary = {
     schemaVersion: 1,
     environment: "staging",
@@ -158,6 +184,7 @@ async function main() {
     partitionCounts: Object.fromEntries(partitionNames.map((partition) => [partition, rows.filter((row) => row.partition === partition).length])),
     sourceDigest,
     partitionManifestSha256: ownershipDigest,
+    verification,
     sourceRowsAreUnchanged: true,
     failureLedgerRowsChanged: 0,
     releaseGate: "closed_until_physical_partition_snapshot_and_restore",
