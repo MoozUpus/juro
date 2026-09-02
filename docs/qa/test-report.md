@@ -4,7 +4,21 @@ Status: **living evidence report, not full Definition of Done**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope in this report: deployed v116 responsive accessibility evidence, including public Sites v97, Worker production verification, and a read-only authenticated Individual boundary check. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## v117 Individual touch-target validation
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Focused regression | platform shell accessibility suite | 9/9 PASS |
+| Static and full test gates | lint, type-check, 1,164 core tests, 217 Worker/runtime tests | PASS |
+| Production artifact | production build, binding/manifest validation, all size budgets | PASS |
+| Exact-head CI/security | CI `33574360732`; complete 0-finding scan `d803816b-0e51-42e8-9d6e-359ea36ccc04` | PASS |
+| Post-merge CI | `33574968921` on `40667c017358011a3017da0bea379839fb328297` | PASS |
+| Worker deployment | platform v204 `12ae95e6-5eac-4f14-8257-a30dff56128d`; 100% traffic | PASS |
+| Production Chrome matrix | 390/768/1024/1440 px; case link 44 px; four settings tabs 44 px; overflow 0; one main and visible H1 | PASS |
+| Production status | `2026-09-02T00:26:20.487Z`; operational; 8/8; 0 active incidents | PASS AS POINT-IN-TIME EVIDENCE |
+| Change boundary | no migration, database write, corpus/vector/embedding, DNS, secret, payment, or auth-policy operation | PASS |
 
 ## v116 responsive auth and locale-target validation
 
