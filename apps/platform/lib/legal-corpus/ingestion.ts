@@ -408,7 +408,7 @@ function internalErrorCode(error: unknown): string | null {
   return /^LEGAL_CORPUS_[A-Z0-9_]{1,100}$/u.test(message) ? message : null;
 }
 
-function safeErrorCode(error: unknown): string {
+export function safeErrorCode(error: unknown): string {
   if (error instanceof LegalSourceFetchError || error instanceof LegalSourceParserError) {
     return error.code;
   }
@@ -417,6 +417,21 @@ function safeErrorCode(error: unknown): string {
   }
   const internal = internalErrorCode(error);
   if (internal) return internal;
+  // D1 provider failures can arrive as ordinary Error instances rather than
+  // the typed corpus errors above. Preserve only the bounded operational code
+  // so a capacity failure is diagnosable without leaking SQL, URLs or source
+  // text into the failure ledger. Existing rows are intentionally immutable;
+  // this affects only future attempts.
+  const message = error instanceof Error ? error.message : String(error);
+  if (/\b(?:exceeded maximum db size|maximum database size|database is full|sqlite_full)\b/iu.test(message)) {
+    return "LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED";
+  }
+  const explicitCode = typeof error === "object" && error !== null && "code" in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+  const match = (typeof explicitCode === "string" ? explicitCode : message)
+    .match(/\b(?:D1|LEGAL|SQLITE|QDRANT|EMBEDDING|PROVIDER)_[A-Z0-9_]+\b/u);
+  if (match) return match[0];
   return "LEGAL_CORPUS_INGESTION_FAILED";
 }
 

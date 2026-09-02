@@ -9,6 +9,7 @@ import {
   reconcileLexCatalogFetchJobs,
   reconcileLegalCorpusTitleUiNoise,
   runNextLegalCorpusIngestionJob,
+  safeErrorCode,
 } from "../lib/legal-corpus/ingestion";
 import { seedLexCatalogDiscoveryCheckpoints } from "../lib/legal-corpus/lex-catalog-discovery";
 import { QdrantCorpusError } from "../lib/legal-corpus/qdrant";
@@ -24,6 +25,21 @@ class MemoryBucket {
 }
 
 const now = new Date("2026-08-14T12:00:00.000Z");
+
+test("safeErrorCode preserves bounded D1 capacity diagnostics without raw details", () => {
+  assert.equal(
+    safeErrorCode(new Error("D1_ERROR: SQLITE_NOMEM while writing https://lex.uz/private")),
+    "SQLITE_NOMEM",
+  );
+  assert.equal(
+    safeErrorCode(new Error("database is full; source=https://lex.uz/private")),
+    "LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED",
+  );
+  assert.equal(
+    safeErrorCode(new Error("provider response contained an unsafe message")),
+    "LEGAL_CORPUS_INGESTION_FAILED",
+  );
+});
 
 function lexHtml(articleTwo = true): string {
   const paragraph = "Правило применяется при наличии установленных законом обстоятельств. ".repeat(8);
