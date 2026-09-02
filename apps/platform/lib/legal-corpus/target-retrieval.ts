@@ -62,7 +62,7 @@ const comparisonScopeSchema = z.object({
   left: temporalEndpointSchema,
   right: temporalEndpointSchema,
 }).strict();
-const interpretationPlanSchema = z.object({
+export const questionInterpretationPlanSchema = z.object({
   id: legalIdentifierSchema,
   originalLanguage: z.string().trim().min(2).max(35),
   answerLanguage: z.string().trim().min(2).max(35),
@@ -77,11 +77,11 @@ const interpretationPlanSchema = z.object({
   }
 });
 
-export type QuestionInterpretationPlan = z.infer<typeof interpretationPlanSchema>;
+export type QuestionInterpretationPlan = z.infer<typeof questionInterpretationPlanSchema>;
 export function parseQuestionInterpretationPlan(value: unknown): QuestionInterpretationPlan {
-  return interpretationPlanSchema.parse(value);
+  return questionInterpretationPlanSchema.parse(value);
 }
-const revalidatedCandidateSchema = z.object({
+export const revalidatedCandidateSchema = z.object({
   candidate: candidateSchema,
   canonicalChunkId: canonicalChunkIdSchema,
   provisionRenditionId: provisionRenditionIdSchema,
@@ -113,7 +113,7 @@ const selectedDecisionSchema = z.object({
   }).strict()).min(1).max(300),
   whatToDoNext: z.array(z.string().trim().min(1).max(2_000)).max(20),
 }).strict();
-const selectionDecisionSchema = z.discriminatedUnion("outcome", [
+export const selectionDecisionSchema = z.discriminatedUnion("outcome", [
   repairDecisionSchema,
   rejectedDecisionSchema,
   selectedDecisionSchema,
@@ -395,7 +395,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       const request = questionSchema.parse(untrustedInput);
       let plan: QuestionInterpretationPlan;
       try {
-        plan = interpretationPlanSchema.parse(await dependencies.interpreter.interpret(request.question));
+        plan = questionInterpretationPlanSchema.parse(await dependencies.interpreter.interpret(request.question));
       } catch {
         return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
       }

@@ -475,6 +475,7 @@ type CandidateIndexOptions = {
   attestPrivateNames: (input: {
     text: string;
     formulationSha256: string;
+    legalTitleSpans: readonly string[];
   }) => Promise<unknown>;
   emitTelemetry?: (event: CandidateTelemetryEvent) => void;
   now?: () => number;
@@ -630,7 +631,11 @@ export function createAiSearchCandidateIndex(
             text,
           ].join("\n"));
           const attestation = privateNameAttestationSchema.parse(
-            await options.attestPrivateNames({ text, formulationSha256 }),
+            await options.attestPrivateNames({
+              text,
+              formulationSha256,
+              legalTitleSpans: formulation.legalTitleSpans ?? [],
+            }),
           );
           if (attestation.status !== "complete"
             || attestation.formulationSha256 !== formulationSha256) {

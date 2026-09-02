@@ -26,7 +26,7 @@ const configuration = {
 
 function runtimeDatabase(options: { missingMapping?: boolean } = {}): D1Database {
   return {
-    prepare(sql: string) {
+    prepare() {
       return {
         bind() {
           return {

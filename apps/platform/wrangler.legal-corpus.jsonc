@@ -76,6 +76,12 @@
       "namespace": "juro-legal-development"
     }
   ],
+  "services": [
+    {
+      "binding": "LEGAL_CORPUS_REASONING_SERVICE",
+      "service": "juro-platform-development"
+    }
+  ],
   "observability": {
     "enabled": true,
     "logs": {
@@ -175,6 +181,10 @@
         {
           "binding": "LEGAL_CORPUS_EMBEDDING_SERVICE",
           "service": "juro-platform-staging"
+        },
+        {
+          "binding": "LEGAL_CORPUS_REASONING_SERVICE",
+          "service": "juro-platform-staging"
         }
       ]
     },
@@ -250,6 +260,12 @@
         {
           "binding": "LEGAL_AI_SEARCH_NAMESPACE",
           "namespace": "juro-legal-production"
+        }
+      ],
+      "services": [
+        {
+          "binding": "LEGAL_CORPUS_REASONING_SERVICE",
+          "service": "juro"
         }
       ]
     }

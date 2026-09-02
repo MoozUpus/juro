@@ -28,6 +28,7 @@ import {
   handleLegalCorpusQdrantServiceRequest,
   LegalCorpusQdrantContainer,
 } from "./legal-corpus-private-services";
+import { handleTargetReasoningServiceRequest } from "../lib/legal-corpus/target-reasoning-service";
 import { lawyerHostTarget } from "./lawyer-host-router";
 
 export { MalwareScannerContainer, LegalCorpusQdrantContainer };
@@ -108,6 +109,9 @@ function withSecurityHeaders(response: Response, url: URL): Response {
 const worker = {
   async fetch(request: Request, env: FrameworkEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.hostname === "legal-corpus.internal") {
+      return handleTargetReasoningServiceRequest(request, env);
+    }
     if (url.hostname === "malware-scanner.internal") {
       return handleMalwareScannerServiceRequest(request, env);
     }
