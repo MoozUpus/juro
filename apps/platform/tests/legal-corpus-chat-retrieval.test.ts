@@ -106,11 +106,12 @@ test("federated runtime bindings are staging-only, contiguous, and require two s
   }
 });
 
-test("all-staging federation accepts the four explicit corpus D1 bindings", () => {
+test("all-staging federation accepts the five explicit corpus D1 bindings", () => {
   const legacy = sqliteD1Fixture();
   const v2 = sqliteD1Fixture();
   const shard1 = sqliteD1Fixture();
   const shard2 = sqliteD1Fixture();
+  const shard3 = sqliteD1Fixture();
   try {
     const configured = configuredFederatedCorpusShards({
       DB: legacy.d1,
@@ -121,12 +122,14 @@ test("all-staging federation accepts the four explicit corpus D1 bindings", () =
       LEGAL_CORPUS_V2_DB: v2.d1,
       LEGAL_CORPUS_SHARD_1_DB: shard1.d1,
       LEGAL_CORPUS_SHARD_2_DB: shard2.d1,
+      LEGAL_CORPUS_SHARD_3_DB: shard3.d1,
     });
     assert.deepEqual(configured?.map((shard) => shard.databaseName), [
       "juro-staging",
       "juro-staging-corpus-v2",
       "juro-staging-corpus-shard-1",
       "juro-staging-corpus-shard-2",
+      "juro-staging-corpus-shard-3",
     ]);
     assert.throws(
       () => configuredFederatedCorpusShards({
@@ -145,6 +148,7 @@ test("all-staging federation accepts the four explicit corpus D1 bindings", () =
     v2.sqlite.close();
     shard1.sqlite.close();
     shard2.sqlite.close();
+    shard3.sqlite.close();
   }
 });
 

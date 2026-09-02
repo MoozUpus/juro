@@ -219,6 +219,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             "LEGAL_CORPUS_V2_DB",
             "LEGAL_CORPUS_SHARD_1_DB",
             "LEGAL_CORPUS_SHARD_2_DB",
+            "LEGAL_CORPUS_SHARD_3_DB",
           ]
         : ["DB"],
     );
@@ -231,6 +232,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             { binding: "LEGAL_CORPUS_V2_DB", migrations_dir: undefined },
             { binding: "LEGAL_CORPUS_SHARD_1_DB", migrations_dir: undefined },
             { binding: "LEGAL_CORPUS_SHARD_2_DB", migrations_dir: undefined },
+            { binding: "LEGAL_CORPUS_SHARD_3_DB", migrations_dir: undefined },
           ]
         : [],
     );

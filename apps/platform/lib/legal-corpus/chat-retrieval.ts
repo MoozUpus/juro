@@ -32,6 +32,7 @@ type CorpusRuntimeEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
     LEGAL_CORPUS_V2_DB?: D1Database;
     LEGAL_CORPUS_SHARD_1_DB?: D1Database;
     LEGAL_CORPUS_SHARD_2_DB?: D1Database;
+    LEGAL_CORPUS_SHARD_3_DB?: D1Database;
     OPENAI_API_KEY?: string;
     EMBEDDING_MODEL?: string;
     QDRANT_URL?: string;
@@ -61,6 +62,7 @@ export function configuredFederatedCorpusShards(
       ["juro-staging-corpus-v2", record.LEGAL_CORPUS_V2_DB],
       ["juro-staging-corpus-shard-1", record.LEGAL_CORPUS_SHARD_1_DB],
       ["juro-staging-corpus-shard-2", record.LEGAL_CORPUS_SHARD_2_DB],
+      ["juro-staging-corpus-shard-3", record.LEGAL_CORPUS_SHARD_3_DB],
     ] as const;
     if (explicit.some(([, value]) => !isD1Database(value))) {
       throw new TypeError("LEGAL_CORPUS_FEDERATION_BINDINGS_INCOMPLETE");

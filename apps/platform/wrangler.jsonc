@@ -249,6 +249,11 @@
           "binding": "LEGAL_CORPUS_SHARD_2_DB",
           "database_name": "juro-staging-corpus-shard-2",
           "database_id": "36fa1cfe-6d00-47b7-a980-864020028d86"
+        },
+        {
+          "binding": "LEGAL_CORPUS_SHARD_3_DB",
+          "database_name": "juro-staging-corpus-shard-3",
+          "database_id": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c"
         }
       ],
       "migrations": [
