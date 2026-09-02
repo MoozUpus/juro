@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T07:31:03.7722258Z",
+  "applicationCommit": "1dcc3ecf6bcea6ab7a9abd35f875e75b1b568ead",
+  "databaseName": "juro-staging-corpus-shard-3",
+  "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+  "readOnly": true,
+  "latestScheduledRuns": [
+    {
+      "id": "14d5c7cb-9c3b-4929-b9dc-47cc7c0df947",
+      "status": "failed",
+      "startedAt": "2026-09-02T07:00:12.054Z",
+      "finishedAt": "2026-09-02T07:10:57.197Z",
+      "errorCode": "LEGAL_CORPUS_INGESTION_FAILED"
+    },
+    {
+      "id": "c16cdc51-2897-45cc-84ff-b61d26e3b1ba",
+      "status": "failed",
+      "startedAt": "2026-09-02T06:48:12.047Z",
+      "finishedAt": "2026-09-02T06:59:16.750Z",
+      "errorCode": "LEGAL_CORPUS_INGESTION_FAILED"
+    },
+    {
+      "id": "fdb9b202-f4a3-49c7-8718-2f6aa3d64fef",
+      "status": "failed",
+      "startedAt": "2026-09-02T06:36:12.049Z",
+      "finishedAt": "2026-09-02T06:46:50.066Z",
+      "errorCode": "LEGAL_CORPUS_INGESTION_FAILED"
+    },
+    {
+      "id": "cd0a9ae7-c80a-4401-b124-7d130b6d73ca",
+      "status": "failed",
+      "startedAt": "2026-09-02T06:24:12.045Z",
+      "finishedAt": "2026-09-02T06:34:53.303Z",
+      "errorCode": "LEGAL_CORPUS_INGESTION_FAILED"
+    }
+  ],
+  "jobStatus": {
+    "completed": 7868,
+    "queued": 23702,
+    "retrying": 4,
+    "deadLetter": 7,
+    "running": 0
+  },
+  "terminalFailureRows": 7,
+  "scheduledRunsRunning": 0,
+  "scheduledLocks": 0,
+  "databaseSizeBytes": 9999892480,
+  "queueProcessingConfig": false,
+  "stagingCrons": [],
+  "assessment": {
+    "noNewRunsAfterStopObserved": true,
+    "failureLedgerMutated": false,
+    "releaseGate": "closed",
+    "scope": "Post-stop read-only recheck; not a successful drain, handoff, disjointness proof, snapshot, evaluation or release approval."
+  }
+}
