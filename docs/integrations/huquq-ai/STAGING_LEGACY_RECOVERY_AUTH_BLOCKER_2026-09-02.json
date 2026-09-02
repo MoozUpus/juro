@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "recordedAt": "2026-09-02T05:37:53.5554392Z",
+  "target": {
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "canonicalDocumentId": "lexuz:8411573",
+    "sourceUrl": "https://lex.uz/en/docs/8411573",
+    "errorCode": "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT"
+  },
+  "requiredAction": "recover_legacy_ingestion",
+  "accessProbe": {
+    "url": "https://admin.staging.juro.uz/legal-corpus",
+    "result": "application_protected_session_required",
+    "required": ["staff assignment", "fresh MFA/TOTP within 15 minutes"],
+    "bypassAttempted": false
+  },
+  "databaseProbe": {
+    "jobStatus": "dead_letter",
+    "attemptCount": 5,
+    "maxAttempts": 5,
+    "failureLedgerRows": 5,
+    "latestFailureRetryState": "terminal",
+    "rowsWritten": 0
+  },
+  "assessment": {
+    "recoveryExecuted": false,
+    "failureLedgerPreserved": true,
+    "reason": "The bounded action must be issued by an authenticated staff session with fresh MFA; technical access alone cannot impersonate that audit principal."
+  }
+}
