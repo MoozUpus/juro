@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T11:15:55.7594861Z",
+  "queryMode": "sequential read-only D1 --command SELECT",
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "databaseId": "bb716a96-b2fb-4823-90d6-6c228fed181a",
+      "canonicalDocuments": 4291,
+      "languageVariants": 6918,
+      "uniqueProvisions": 68296,
+      "indexedChunks": 168621,
+      "openJobs": 43539,
+      "runningJobs": 0,
+      "deadLetterJobs": 1,
+      "terminalFailures": 1,
+      "technicallyUnavailable": 269,
+      "completedCheckpoints": 44
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "databaseId": "62620fb3-3da3-4c76-a8e9-aa60858c1063",
+      "canonicalDocuments": 599,
+      "languageVariants": 1049,
+      "uniqueProvisions": 15899,
+      "indexedChunks": 55814,
+      "openJobs": 27687,
+      "runningJobs": 2,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "technicallyUnavailable": 5,
+      "completedCheckpoints": 44
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "databaseId": "e09e0682-0c2e-4458-a8f3-be9de28117e3",
+      "canonicalDocuments": 1635,
+      "languageVariants": 2152,
+      "uniqueProvisions": 18724,
+      "indexedChunks": 52370,
+      "openJobs": 0,
+      "runningJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "technicallyUnavailable": 10,
+      "completedCheckpoints": 44
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "databaseId": "36fa1cfe-6d00-47b7-a980-864020028d86",
+      "canonicalDocuments": 2495,
+      "languageVariants": 2906,
+      "uniqueProvisions": 19484,
+      "indexedChunks": 62089,
+      "openJobs": 0,
+      "runningJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "technicallyUnavailable": 8,
+      "completedCheckpoints": 44
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+      "canonicalDocuments": 3313,
+      "languageVariants": 6310,
+      "uniqueProvisions": 33084,
+      "indexedChunks": 93097,
+      "openJobs": 23706,
+      "runningJobs": 0,
+      "deadLetterJobs": 7,
+      "terminalFailures": 7,
+      "technicallyUnavailable": 17,
+      "completedCheckpoints": 44
+    }
+  ],
+  "aggregate": {
+    "rawDocumentRows": 12333,
+    "uniqueCanonicalDocumentIds": 7152,
+    "duplicateDocumentRows": 5181,
+    "uniqueProvisions": 155487,
+    "indexedChunks": 431991,
+    "openJobs": 94932,
+    "runningJobs": 2,
+    "deadLetterJobs": 8,
+    "terminalFailures": 8,
+    "completedCheckpointRows": 220
+  },
+  "ownershipProjection": {
+    "databaseName": "juro-staging-corpus-shard-4",
+    "runId": "ownership-20260902103236",
+    "status": "verified",
+    "rows": 7152,
+    "partitions": 4,
+    "occurrenceSum": 12333,
+    "sourceRowsChanged": false,
+    "failureLedgerRowsChanged": false
+  },
+  "releaseGate": "closed",
+  "decisions": {
+    "queueProcessing": "held fail-closed while release gate is closed; no queue row was mutated",
+    "legacyRecovery": "not executed; protected named-staff fresh-MFA action remains required",
+    "physicalDisjointness": "not proven; ownership projection is logical and source IDs overlap",
+    "production": "unchanged; no production deployment, migration, feature-flag or DNS action"
+  },
+  "ci": {
+    "runId": 33622571667,
+    "headSha": "8dc1827acbfbd9482096c6aace7ce9a462fb1be6",
+    "status": "success",
+    "url": "https://github.com/MoozUpus/juro/actions/runs/33622571667"
+  }
+}
