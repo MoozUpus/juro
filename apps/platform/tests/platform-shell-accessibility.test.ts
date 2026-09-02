@@ -11,6 +11,7 @@ const lawyerStylesheet = new URL("../app/_platform/lawyer-workspace.css", import
 const dashboardSource = new URL("../app/_platform/DashboardClient.tsx", import.meta.url);
 const dashboardStylesheet = new URL("../app/_platform/dashboard.css", import.meta.url);
 const calendarStylesheet = new URL("../app/_platform/calendar.css", import.meta.url);
+const aiStylesheet = new URL("../app/_platform/ai-lawyer.css", import.meta.url);
 const documentBuilderStylesheet = new URL("../app/_document-builder/document-builder.css", import.meta.url);
 const accountDocumentsLayout = new URL("../app/[locale]/[accountType]/documents/layout.tsx", import.meta.url);
 const businessDocumentsLayout = new URL("../app/[locale]/business/[workspaceId]/documents/layout.tsx", import.meta.url);
@@ -129,4 +130,18 @@ test("canonical document routes load the builder styles and keep folder controls
   assert.match(css, /\.platform-shell \.dbt-doc-filters \{ grid-template-columns: 1fr 1fr; \}/);
   assert.match(accountLayout, /import "\.\.\/\.\.\/\.\.\/_document-builder\/document-builder\.css";/);
   assert.match(businessLayout, /import "\.\.\/\.\.\/\.\.\/\.\.\/_document-builder\/document-builder\.css";/);
+});
+
+test("mobile AI, notification, and privacy actions retain 44px touch targets", async () => {
+  const [ai, documents, profile] = await Promise.all([
+    readFile(aiStylesheet, "utf8"),
+    readFile(documentBuilderStylesheet, "utf8"),
+    readFile(profileStylesheet, "utf8"),
+  ]);
+
+  assert.match(ai, /\.ai-composer-options > summary \{[\s\S]*?min-height: 44px;/);
+  assert.match(ai, /@media \(max-width: 520px\) \{[\s\S]*?\.ai-composer-mode button \{ width: 44px; min-width: 44px;/);
+  assert.match(documents, /\.dbt-notification-list article > a, \.dbt-notification-list article > button \{ min-width: 44px; min-height: 44px;/);
+  assert.match(documents, /\.dbt-notification-list article > a, \.dbt-notification-list article > button \{ grid-column: 2; justify-self: start; \}/);
+  assert.match(profile, /\.delete-request button \{ min-height: 44px; \}/);
 });

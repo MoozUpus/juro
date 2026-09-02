@@ -481,6 +481,8 @@
 .dbt-notification-list p { margin: 3px 0; color: #52616f; font-size: 11px; }
 .dbt-notification-list small { color: var(--dbt-muted); }
 .dbt-notification-list a { color: var(--dbt-gold); font-size: 11px; font-weight: 800; }
+.dbt-notification-list article > a, .dbt-notification-list article > button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.dbt-notification-list article > button { padding: 0 10px; border: 1px solid var(--dbt-line); border-radius: 8px; background: white; color: var(--dbt-navy); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 
 .dbt-public-document { min-height: 100vh; padding: 24px; background: #e9e6e0; color: var(--dbt-text); font-family: var(--font-primary); }
 .dbt-public-document > header { width: min(794px, 100%); margin: 0 auto 16px; padding: 12px 16px; display: flex; align-items: center; gap: 15px; background: white; border-radius: 11px; }
@@ -638,7 +640,7 @@
   .dbt-contact-list article { grid-template-columns: 38px 1fr; }
   .dbt-contact-list article > button { grid-column: auto; justify-content: center; }
   .dbt-notification-list article { grid-template-columns: 36px 1fr; }
-  .dbt-notification-list a { grid-column: 2; }
+  .dbt-notification-list article > a, .dbt-notification-list article > button { grid-column: 2; justify-self: start; }
   .dbt-public-document { padding: 10px; }
   .dbt-public-document > header { align-items: flex-start; flex-direction: column; }
   .dbt-public-document > header div { padding-left: 0; border-left: 0; }
