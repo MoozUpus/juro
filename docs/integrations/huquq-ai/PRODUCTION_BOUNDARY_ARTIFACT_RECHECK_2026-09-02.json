@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "environment": "production",
+  "observedAt": "2026-09-02T09:42:48.5386258Z",
+  "branch": "feature/full-legal-corpus",
+  "commit": "08d203748bd4c37ebd9114ab89ad681040b21279",
+  "command": "npm run validate:artifact:production",
+  "result": "passed",
+  "artifactChecks": [
+    "bindings",
+    "migrations",
+    "manifest",
+    "Worker handlers",
+    "performance budgets"
+  ],
+  "productionLegalCorpusFlags": {
+    "LEGAL_CORPUS_ENABLED": "false",
+    "LEGAL_CORPUS_FEDERATED_ENABLED": "false",
+    "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
+    "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "false"
+  },
+  "productionD1": {
+    "databaseName": "juro-production",
+    "migrationsPattern": "../../drizzle/012[145-9]_*.sql"
+  },
+  "deploymentPerformed": false,
+  "rawWranglerDryRun": {
+    "result": "failed_probe",
+    "error": "assets property missing required directory in source wrangler.jsonc",
+    "interpretation": "No deployment occurred; generated Sites artifact validation above is the authoritative build check."
+  }
+}
