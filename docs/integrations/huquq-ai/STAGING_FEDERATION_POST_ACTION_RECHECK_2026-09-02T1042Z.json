@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T10:42:37.035Z",
+  "queryMode": "sequential read-only D1 --command SELECT",
+  "ownershipRun": {
+    "runId": "ownership-20260902103236",
+    "capturedAt": "2026-09-02T10:32:36.443Z",
+    "status": "verified",
+    "rawDocumentRows": 12333,
+    "uniqueCanonicalDocumentIds": 7152,
+    "duplicateDocumentRows": 5181,
+    "partitionCount": 4,
+    "rowsWritten": 0
+  },
+  "legacyRecoveryTarget": {
+    "databaseName": "juro-staging",
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "status": "dead_letter",
+    "attemptCount": 5,
+    "lastErrorCode": "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
+    "updatedAt": "2026-08-29T21:22:47.872Z",
+    "failureLedgerRows": 5,
+    "latestFailureAttemptedAt": "2026-08-29T21:22:47.872Z",
+    "latestFailureRetryState": "terminal",
+    "rowsWritten": 0
+  },
+  "queueObservation": {
+    "juro-staging": {"openJobs": 43539, "runningJobs": 0, "deadLetterJobs": 1, "terminalFailures": 1},
+    "juro-staging-corpus-v2": {"openJobs": 27689, "runningJobs": 2, "deadLetterJobs": 0, "terminalFailures": 0},
+    "juro-staging-corpus-shard-1": {"openJobs": 0, "runningJobs": 0, "deadLetterJobs": 0, "terminalFailures": 0},
+    "juro-staging-corpus-shard-2": {"openJobs": 0, "runningJobs": 0, "deadLetterJobs": 0, "terminalFailures": 0},
+    "juro-staging-corpus-shard-3": {"openJobs": 23706, "runningJobs": 0, "deadLetterJobs": 7, "terminalFailures": 7}
+  },
+  "integrity": {
+    "sourceRowsChanged": false,
+    "failureLedgerChanged": false,
+    "productionChanged": false,
+    "newTerminalFailuresSince2026-09-02T10:32:36.443Z": 0
+  },
+  "releaseGate": "closed",
+  "note": "The legacy retry remains blocked to the protected named-staff fresh-MFA action. This read-only recheck does not substitute, delete or rewrite the failure ledger."
+}
