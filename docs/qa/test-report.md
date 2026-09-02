@@ -2,9 +2,9 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-09-02 15:47 UZT**
+Evidence cutoff: **2026-09-02 16:12 UZT**
 
-Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, the later bounded DNS-retirement and authenticated Lawyer receipts, a later 78-route public production Chrome desktop crawl, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, the later bounded DNS-retirement and authenticated Lawyer receipts, a later 78-route public production Chrome desktop crawl, a native-Tab RU/UZ/EN public entry-page traversal, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
 
 ## Public sitemap desktop Chrome validation (2026-09-02)
 
@@ -17,7 +17,19 @@ Scope in this report: deployed v101 mobile interaction-target evidence dated 202
 | Layout | document scroll width did not exceed the viewport by more than 1 CSS px | 78/78 PASS |
 | Images and error surface | no completed image with a zero natural width; no localized not-found text | 78/78 PASS |
 | Console | no warning/error entry after each route navigation and hydration wait | 78/78 PASS |
-| Evidence boundary | no claim for the missing responsive widths, keyboard traversal, zoom, screen readers, dialogs, form/error states, or visual pixel equivalence | HONESTLY PARTIAL |
+| Evidence boundary | no claim for the missing responsive widths, keyboard traversal on the remaining 75 sitemap URLs, zoom, screen readers, dialogs, form/error states, or visual pixel equivalence | HONESTLY PARTIAL |
+
+## Public entry-page native keyboard validation (2026-09-02)
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Browser and viewport | real Chrome; 1536 × 770; native control-level `Tab` keypresses on `https://juro.uz/{ru,uz,en}` | CHECKED |
+| Traversal scope | RU 74, UZ 74, EN 71 detected focusable controls | 219 CONTROL POSITIONS CHECKED |
+| Order and wrap | every locale reached the document-body transition and wrapped to the first control; zero stuck positions | PASS FOR SEQUENCE |
+| Focus indicator | every real control matched `:focus-visible`; computed outline was `2.4px solid` gold; zero missing indicators | PASS FOR CHECKED CONTROLS |
+| Console | no warning/error entries after each locale traversal | PASS |
+| Harness limitation | focus advanced after the first viewport while automated `scrollY` remained `0`; 52 RU, 52 UZ, and 49 EN positions were therefore outside the unchanged viewport | NOT A PAGE FAILURE; VIEWPORT AUTO-SCROLL UNVERIFIED |
+| Evidence boundary | public entry pages only; does not prove post-fold automatic focus scrolling, feature workflows, dialogs, focus restoration, zoom, forced colors, text spacing, screen readers, or WCAG conformance | HONESTLY PARTIAL |
 
 ## DNS retirement and authenticated Lawyer validation (2026-09-02)
 

@@ -2,9 +2,9 @@
 
 Status: **living production audit, not a usability certification**
 
-Evidence cutoff: **2026-09-02 12:45 UZT**
+Evidence cutoff: **2026-09-02 16:12 UZT**
 
-Scope: Chrome-only public, auth, authenticated Individual, and authenticated read-only Lawyer surfaces through the v101 checkpoint. Excluded: legal-data/corpus operations, unsupported browsers, physical devices, and unowned role sessions.
+Scope: Chrome-only public, auth, authenticated Individual, and authenticated read-only Lawyer surfaces through the v101 checkpoint, plus a later RU/UZ/EN public entry-page native-Tab traversal. Excluded: legal-data/corpus operations, unsupported browsers, physical devices, and unowned role sessions.
 
 ## Outcome
 
@@ -21,11 +21,12 @@ v116 resolves the two production polish defects found during the v115 audit: tab
 | Individual shell | clear primary H1, responsive navigation, search/theme/locale/logout controls at least 44 px in the sample | live dashboard matrix | VERIFIED FOR SHELL |
 | Lawyer shell | dedicated host, discovered professional route family, settled H1/main structure, zero horizontal overflow at desktop and 390 px | real authenticated read-only route matrix | VERIFIED FOR READ-ONLY SHELL |
 | Persona routing | Individual cannot silently become Business, Lawyer, or Admin | redirect/reauth/admin-session boundaries | VERIFIED |
+| Public entry-page keyboard path | all 74 RU, 74 UZ, and 71 EN focus positions traversed and wrapped; visible focus styling present on every real control; automation did not reproduce post-fold viewport scrolling | native Chrome `Tab` traversal at 1536 × 770 | VERIFIED FOR ORDER/INDICATOR; SCROLL PARTIAL |
 
 ## Open UX gates
 
 - Role-specific onboarding and empty/error/success states for Business, Pending Lawyer, and Admin; state-changing Lawyer/client collaboration remains open.
-- Full keyboard order, focus restoration, modal trapping, and screen-reader narration across feature workflows.
+- Post-fold automatic focus scrolling on the public entry pages, plus full keyboard order, focus restoration, modal trapping, and screen-reader narration across feature workflows.
 - Controlled real-data substitutes for uploads, document generation, comparison, payments, and destructive settings.
 - Long-content and localization stress tests on every dense workspace page.
 
