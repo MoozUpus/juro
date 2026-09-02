@@ -53,6 +53,14 @@
   source payload is not retained, so no deterministic repair or status rewrite
   is safe; details are recorded in
   `STAGING_LEGACY_FAILURE_RECHECK_2026-09-02T2329Z.json`.
+- A staging-only logical ownership projection was built in the existing empty
+  `juro-staging-corpus-shard-4` (`0143_staging_federation_ownership_index.sql`).
+  It contains 7,152 canonical identifiers assigned to four deterministic,
+  disjoint buckets and preserves the 5,181 observed duplicate source rows as
+  metadata. It does not copy article text, versions, chunks or Qdrant points,
+  and it does not prove physical source disjointness or close the release gate.
+  Evidence is recorded in
+  `STAGING_LOGICAL_DISJOINT_OWNERSHIP_INDEX_2026-09-02.{json,md}`.
 - The new source-card and full-article modal passed type-check, focused boundary
   tests and staging artifact/deployment checks. Authenticated desktop QA passed
   for the AI-chat light/dark empty state and caught one dark-history contrast
