@@ -2,7 +2,7 @@
 
 Status: **living evidence report, not a WCAG certification**
 
-Evidence cutoff: **2026-09-02 12:45 UZT**
+Evidence cutoff: **2026-09-02 15:47 UZT**
 
 Scope: Chrome-only public, authentication-boundary, authenticated Individual, and authenticated read-only Lawyer checks through the deployed v101 checkpoint. Legislation database/corpus work, non-Chrome browsers, and physical devices are excluded.
 
@@ -23,6 +23,7 @@ Scope: Chrome-only public, authentication-boundary, authenticated Individual, an
 - At 390 × 844, the sampled auth buttons and links were at least 44 CSS px high and the page did not overflow horizontally.
 - Source tests preserve keyboard/focus and reduced-motion contracts. The v114 Turnstile wrapper reserves 72 CSS px before the provider challenge renders.
 - A real Lawyer session completed 16 discovered protected routes at desktop width and 15 role routes at 390 × 844 without login fallback, 404, horizontal overflow, visible alert, or console error. Each route retained a main landmark; protected settings/security/privacy pages exposed a visible H1 after their asynchronous loader settled.
+- A later production Chrome crawl covered all 78 public sitemap URLs at the actual 1536 px desktop viewport across RU, UZ, and EN. Every route retained exactly one `main` and at least one visible H1, with zero horizontal overflow, broken loaded images, not-found text, console warnings, or console errors. This is structural desktop evidence, not a keyboard, screen-reader, zoom, or WCAG certification.
 
 ## Open manual gates
 

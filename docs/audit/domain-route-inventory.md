@@ -2,7 +2,7 @@
 
 Status: **live baseline, not a completion certificate**
 
-Evidence cutoff: **2026-09-02 14:50 UZT (2026-09-02 09:50 UTC)**
+Evidence cutoff: **2026-09-02 15:47 UZT (2026-09-02 10:47 UTC)**
 
 Repository baseline: `origin/main` at documentation merge `1bdece2d98d3abde1e93e595d023242a95da2a8e`; live platform Worker `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8`, website Worker v13, and public Sites v97 were verified independently after deployment
 
@@ -18,6 +18,7 @@ Sources used:
 - live HTTPS GETs with redirects enabled;
 - a confirmed Cloudflare DNS deletion receipt plus post-change queries through `1.1.1.1`, `8.8.8.8`, and both authoritative nameservers;
 - an authenticated, read-only Chrome Lawyer route audit plus negative Business/Admin role-boundary checks that intentionally recorded structure and route outcomes without reading client, matter, document, or message content;
+- a production Chrome desktop crawl of all 78 sitemap URLs at the actual 1536 px viewport, recording only route/structure, overflow, broken-image, not-found, and console outcomes;
 - `https://juro.uz/sitemap.xml` and rendered canonical/robots metadata;
 - the current GitHub tree: 161 platform `page.tsx` route definitions and 227 API `route.ts` definitions.
 
@@ -29,7 +30,7 @@ An HTTP `200` after a redirect proves reachability and the public/auth boundary 
 
 | Host / URL | Environment | Purpose, role, auth, language | Discovery source | Live HTTP / redirect evidence | Indexing and sensitivity | Issue / next action | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| [juro.uz](https://juro.uz/) | production | Public website; anonymous; RU/UZ/EN | Cloudflare apex A records; Sites hosting metadata | `200`; `/`, `/ru`, `/uz`, `/en` all `200`; 78/78 sitemap URLs and 120/120 discoverable apex links `200` after v97 with self-canonical metadata | `index, follow`; public | v97 preserves the custom-domain indexing contract; saved v96 is the immediate rollback | `VERIFIED` |
+| [juro.uz](https://juro.uz/) | production | Public website; anonymous; RU/UZ/EN | Cloudflare apex A records; Sites hosting metadata | `200`; `/`, `/ru`, `/uz`, `/en` all `200`; 78/78 sitemap URLs and 120/120 discoverable apex links `200` after v97 with self-canonical metadata; a later 78/78 Chrome desktop crawl retained the requested URL, one `main`, a visible H1, zero horizontal overflow, zero broken loaded images, no not-found text, and no console warning/error | `index, follow`; public | v97 preserves the custom-domain indexing contract; saved v96 is the immediate rollback | `VERIFIED` |
 | [www.juro.uz](https://www.juro.uz/) | production alias | Public website alias | Proxied CNAME | One redirect to `https://juro.uz/`, final `200` | Redirect-only; public | Keep as canonical alias | `VERIFIED` |
 | [juro-legaltech.muzaffarbekmurodoff.chatgpt.site](https://juro-legaltech.muzaffarbekmurodoff.chatgpt.site/) | production provider surface | Sites service hostname; anonymous; RU/UZ/EN content clone | Sites deployment result | `200`; canonical points to `https://juro.uz/ru` | v97 returns `X-Robots-Tag: noindex, nofollow, noarchive` on the localized route, `robots.txt`, and `sitemap.xml` | Duplicate-host indexing boundary remains enforced while `juro.uz` remains indexable | `VERIFIED` |
 | [app.juro.uz](https://app.juro.uz/) | production | Client and business platform; auth required; RU/UZ | Platform Worker `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8` and `apps/platform/wrangler.jsonc` | One redirect to localized login, final `200`; authenticated Individual shell was sampled at four retained viewports, 18 read-only routes, and the v118 mobile dashboard focus path; an approved Lawyer attempt at `/ru/business/dashboard` returned to the Lawyer dashboard | HTML and header both `noindex`; private data | Individual read-only shell and negative Lawyer-to-Business isolation are verified; a positive authenticated Business journey and state-changing flows remain incomplete | `PARTIAL` |
@@ -60,7 +61,7 @@ The retained pre-change dashboard inventory contained three A records, two CNAME
 
 ## Public sitemap route matrix
 
-The sitemap contains 26 route shapes for each of RU, UZ, and EN: **78 URLs total**. Every URL below returned `200`, retained itself as canonical, returned `meta robots=index, follow`, and appeared in the sitemap. These results prove HTTP/SEO reachability; visual and mobile status remains `PARTIAL` until every state is manually checked in Chrome.
+The sitemap contains 26 route shapes for each of RU, UZ, and EN: **78 URLs total**. Every URL below returned `200`, retained itself as canonical, returned `meta robots=index, follow`, and appeared in the sitemap. A later real-Chrome desktop crawl at the actual 1536 px viewport navigated all 78 URLs and found zero route, one-main, visible-H1, horizontal-overflow, broken-loaded-image, not-found-text, or console warning/error failures. This closes the sitemap-wide desktop structural gate at that viewport; mobile, interaction-state, zoom, and full visual-regression coverage remain `PARTIAL`.
 
 | Route shape | RU URL | UZ URL | EN URL | HTTP / canonical / sitemap | Result |
 | --- | --- | --- | --- | --- | --- |

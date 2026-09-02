@@ -2,9 +2,22 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-09-02 14:50 UZT**
+Evidence cutoff: **2026-09-02 15:47 UZT**
 
-Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, the later bounded DNS-retirement and authenticated Lawyer receipts, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, the later bounded DNS-retirement and authenticated Lawyer receipts, a later 78-route public production Chrome desktop crawl, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## Public sitemap desktop Chrome validation (2026-09-02)
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Sitemap scope | current production sitemap; 26 RU + 26 UZ + 26 EN URLs | 78/78 CHECKED |
+| Browser and viewport | real Chrome; actual 1536 px desktop viewport; sequential navigation to every URL | PASS FOR THIS VIEWPORT |
+| Route identity | final `location.href` matched the requested sitemap URL | 78/78 PASS |
+| Landmarks and headings | exactly one `main` and at least one visible H1 | 78/78 PASS |
+| Layout | document scroll width did not exceed the viewport by more than 1 CSS px | 78/78 PASS |
+| Images and error surface | no completed image with a zero natural width; no localized not-found text | 78/78 PASS |
+| Console | no warning/error entry after each route navigation and hydration wait | 78/78 PASS |
+| Evidence boundary | no claim for the missing responsive widths, keyboard traversal, zoom, screen readers, dialogs, form/error states, or visual pixel equivalence | HONESTLY PARTIAL |
 
 ## DNS retirement and authenticated Lawyer validation (2026-09-02)
 
