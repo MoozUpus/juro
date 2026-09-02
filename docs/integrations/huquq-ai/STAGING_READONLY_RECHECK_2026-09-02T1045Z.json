@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T10:45:15.393Z",
+  "queryMode": "sequential read-only D1 --command SELECT",
+  "legacySources": {
+    "juro-staging": {"documents": 4291, "openJobs": 43539, "runningJobs": 0, "deadLetterJobs": 1, "terminalFailures": 1, "completedCheckpoints": 44, "runningRuns": 0, "locks": 0},
+    "juro-staging-corpus-v2": {"documents": 599, "openJobs": 27689, "runningJobs": 0, "deadLetterJobs": 0, "terminalFailures": 0, "completedCheckpoints": 44, "runningRuns": 0, "locks": 0},
+    "juro-staging-corpus-shard-1": {"documents": 1635, "openJobs": 0, "runningJobs": 0, "deadLetterJobs": 0, "terminalFailures": 0, "completedCheckpoints": 44, "runningRuns": 0, "locks": 0},
+    "juro-staging-corpus-shard-2": {"documents": 2495, "openJobs": 0, "runningJobs": 0, "deadLetterJobs": 0, "terminalFailures": 0, "completedCheckpoints": 44, "runningRuns": 0, "locks": 0},
+    "juro-staging-corpus-shard-3": {"documents": 3313, "openJobs": 23706, "runningJobs": 0, "deadLetterJobs": 7, "terminalFailures": 7, "completedCheckpoints": 44, "runningRuns": 0, "locks": 0}
+  },
+  "logicalOwnership": {"runId": "ownership-20260902103236", "ownershipRows": 7152, "sourceRows": 12333, "duplicateRows": 5181, "partitions": 4, "rowsWritten": 0},
+  "normalizedGreen2": {"sourceDocuments": 6895, "snapshotProvisions": 165852, "canonicalChunks": 160978, "sealedReleases": 0, "draftReleases": 1, "qualifications": 1, "reconciliationCheckpoints": 0},
+  "probeIncident": {"type": "read_only_schema_probe", "initialError": "no such table: legal_source_snapshot_reconciliation_checkpoints", "resolution": "queried existing legal_migration_reconciliation_checkpoints table; corrected SELECT succeeded", "rowsWritten": 0},
+  "integrity": {"newTerminalFailuresSince2026-09-02T10:32:36.443Z": 0, "sourceRowsChanged": false, "failureLedgerChanged": false, "productionChanged": false},
+  "releaseGate": "closed"
+}
