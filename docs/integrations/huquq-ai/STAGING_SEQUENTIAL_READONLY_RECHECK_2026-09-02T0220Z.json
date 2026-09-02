@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T02:20:53.8843452Z",
+  "applicationCommit": "371618a6e90c1c53e510bf888647081f3df75891",
+  "probeType": "sequential read-only D1 scheduler and ingestion status recheck",
+  "queryMode": "Five sequential wrangler d1 execute --remote aggregate SELECTs; no INSERT, UPDATE, DELETE, migration, or ingestion",
+  "rowsWritten": 0,
+  "sources": {
+    "juro-staging": {
+      "queuedJobs": 43539,
+      "runningJobs": 0,
+      "retryingJobs": 0,
+      "deadLetterJobs": 1,
+      "terminalFailures": 1,
+      "liveLocks": 2,
+      "runningRuns": 0,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    },
+    "juro-staging-corpus-v2": {
+      "queuedJobs": 27686,
+      "runningJobs": 2,
+      "retryingJobs": 1,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "liveLocks": 0,
+      "runningRuns": 0,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    },
+    "juro-staging-corpus-shard-1": {
+      "queuedJobs": 0,
+      "runningJobs": 0,
+      "retryingJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "liveLocks": 0,
+      "runningRuns": 0,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    },
+    "juro-staging-corpus-shard-2": {
+      "queuedJobs": 0,
+      "runningJobs": 0,
+      "retryingJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "liveLocks": 0,
+      "runningRuns": 0,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    },
+    "juro-staging-corpus-shard-3": {
+      "queuedJobs": 23713,
+      "runningJobs": 0,
+      "retryingJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "liveLocks": 0,
+      "runningRuns": 0,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    }
+  },
+  "interpretation": {
+    "allSourcesCheckpointComplete": true,
+    "newTerminalFailureDelta": "not measured by this probe; current terminal counts are unchanged from the 2026-09-02T01:40Z release recheck",
+    "queueFrozen": false,
+    "releaseGate": "closed",
+    "reason": "The physical databases remain above the accepted numeric floors, but active/deferred jobs remain, the legacy source retains one historical terminal/dead-letter failure, and canonical IDs are not a disjoint federated partition. No snapshot, indexed-314 evaluation, full-corpus Qdrant parity, or federated D1 restore is claimed."
+  },
+  "safety": {
+    "readOnly": true,
+    "productionChanged": false,
+    "dnsChanged": false,
+    "featureFlagsChanged": false
+  }
+}
