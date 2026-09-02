@@ -1002,6 +1002,13 @@
       "when": 1787644800000,
       "tag": "0142_legal_corpus_shard_handoffs",
       "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1788338299693,
+      "tag": "0143_staging_federation_ownership_index",
+      "breakpoints": true
     }
   ]
 }
