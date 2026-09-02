@@ -87,3 +87,8 @@
   projection remain stable, but it does not convert overlapping physical
   rows into a disjoint snapshot, drain a near-capacity queue, or alter the
   preserved failure ledger.
+- The authorized action run and its exact sequential queue observation are
+  recorded in
+  `STAGING_FEDERATION_ACTION_RUN_2026-09-02.{json,md}`. Alias resolution is
+  available, but the legacy job itself still requires a named-staff fresh-MFA
+  retry through the protected staging admin flow.

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "environment": "staging",
-  "observedAt": "2026-09-02T08:55:27.1939130Z",
-  "applicationCommit": "24a6887d0a352f0a6549ff6cc88b62f6fa478f38",
-  "purpose": "Read-only reconciliation after authorization to build a disjoint federation, drain queues and recover the legacy document; no ledger rewrite or release approval.",
+  "observedAt": "2026-09-02T09:22:31.125Z",
+  "applicationCommit": "3a791a67f7930badcd3f30957221c10e3fec4987",
+  "purpose": "Staging reconciliation after authorization to build a logical disjoint ownership index, handle queues safely and recover the legacy document without rewriting the failure ledger.",
   "sources": [
     {"databaseName":"juro-staging","databaseId":"bb716a96-b2fb-4823-90d6-6c228fed181a","documents":4291,"activeProvisions":68296,"indexedChunks":168621,"openJobs":43539,"deadLetter":1,"terminalFailures":1,"completedCheckpoints":44},
     {"databaseName":"juro-staging-corpus-v2","databaseId":"62620fb3-3da3-4c76-a8e9-aa60858c1063","documents":599,"activeProvisions":15899,"indexedChunks":55814,"openJobs":27689,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44},
@@ -24,9 +24,10 @@
     "checkpointRowsCompleted": 220
   },
   "decisions": {
+    "ownershipIndex": "rebuilt and post-seed verified in juro-staging-corpus-shard-4; source rows and failure ledger unchanged",
     "logicalFederatedRetrieval": "enabled for the five existing staging sources with deterministic evidence-key deduplication",
-    "physicalDisjointFederation": "not yet proven; shard-1 and shard-2 overlap by 1335 canonical IDs and shard-3 overlaps both",
-    "queueProcessing": "not resumed; shard-3 remains fail-closed and source capacity is 106496 bytes below the D1 hard ceiling; a bounded read-only recheck found no safe drain window",
+    "physicalDisjointFederation": "not yet proven; shard-1 and shard-2 overlap by 1335 canonical IDs and shard-3 overlaps both; ownership projection is logical only",
+    "queueProcessing": "not resumed; shard-3 remains fail-closed and source capacity is 106496 bytes below the D1 hard ceiling; v2 has two stale running version rows with no active lock; no queue or ledger mutation was safe",
     "legacyRecovery": "not performed; protected admin retry still requires the named legal-corpus staff session with fresh MFA",
     "shard4": "initialized schema-only rollover target; no documents, jobs, binding deployment or route membership",
     "failureLedger": "preserved; no UPDATE/DELETE/INSERT was issued against existing failure rows; current terminal/dead-letter totals are unchanged"

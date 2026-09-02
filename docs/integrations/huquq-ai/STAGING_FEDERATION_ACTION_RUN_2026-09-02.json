@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T09:22:31.125Z",
+  "applicationCommit": "3a791a67f7930badcd3f30957221c10e3fec4987",
+  "authorization": "User authorized a confirmed logical disjoint index, safe queue handling and legacy recovery without failure-ledger substitution.",
+  "actions": {
+    "ownershipIndex": {
+      "status": "verified",
+      "runId": "ownership-20260902092231",
+      "targetDatabase": "juro-staging-corpus-shard-4",
+      "ownershipRows": 7152,
+      "partitionCount": 4,
+      "sourceOccurrenceSum": 12333,
+      "sourceRowsWritten": 0,
+      "failureLedgerRowsChanged": 0
+    },
+    "queueHandling": {
+      "status": "held_fail_closed",
+      "reason": "juro-staging and juro-staging-corpus-v2 are at the 10GB ceiling; shard-3 has 106496 bytes of headroom and seven terminal/dead-letter failures. v2 also has two stale running version rows without a live lock. No safe drain window was available.",
+      "sourceRowsWritten": 0,
+      "failureLedgerRowsChanged": 0
+    },
+    "legacyRecovery": {
+      "status": "alias_resolved_admin_retry_pending",
+      "legacyCanonicalDocumentId": "lexuz:8411573",
+      "resolvedCanonicalDocumentId": "lexuz-family:8407544",
+      "sourceUrl": "https://lex.uz/en/docs/8411573",
+      "failureLedgerSubstitution": false,
+      "requires": "named legal-corpus staff session with fresh MFA through the protected staging admin action"
+    }
+  },
+  "sequentialReadOnlyQueueObservation": {
+    "juro-staging": {"openJobs": 43539, "runningJobs": 0, "deadLetterJobs": 1, "terminalFailures": 1, "completedCheckpoints": 44},
+    "juro-staging-corpus-v2": {"openJobs": 27687, "runningJobs": 2, "deadLetterJobs": 0, "terminalFailures": 0, "completedCheckpoints": 44},
+    "juro-staging-corpus-shard-1": {"openJobs": 0, "runningJobs": 0, "deadLetterJobs": 0, "terminalFailures": 0, "completedCheckpoints": 44},
+    "juro-staging-corpus-shard-2": {"openJobs": 0, "runningJobs": 0, "deadLetterJobs": 0, "terminalFailures": 0, "completedCheckpoints": 44},
+    "juro-staging-corpus-shard-3": {"openJobs": 23706, "runningJobs": 0, "deadLetterJobs": 7, "terminalFailures": 7, "completedCheckpoints": 44},
+    "juro-staging-corpus-shard-4": {"openJobs": 0, "runningJobs": 0, "deadLetterJobs": 0, "terminalFailures": 0, "completedCheckpoints": 0}
+  },
+  "releaseGate": "closed",
+  "productionChanged": false
+}
