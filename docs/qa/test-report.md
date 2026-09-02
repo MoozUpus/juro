@@ -4,7 +4,24 @@ Status: **living evidence report, not full Definition of Done**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope in this report: v120 read-only production operations evidence, deployed v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## v121 production accessibility validation
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Focused regression | platform shell accessibility suite | 11/11 PASS |
+| Static and full test gates | lint, type-check, 33 rendered-route tests, 1,166 core tests, 217 Worker/runtime tests | PASS |
+| Production artifact | production build and artifact budgets | PASS |
+| Exact-head CI/security | CI `33586952165`; complete 0-finding scan `421746e4-7a82-40dd-80ed-1c4d8310c17c` | PASS |
+| Post-merge CI | `33589980918` on `4210bb18088e572eef7ddc5a30491f5c63811bac` | PASS |
+| Worker deployment | platform v207 `8dc48732-f611-4ed0-abdf-ef57c2fa0936`; deployment `a302b677-ea56-4a93-8b2b-ade4e5827801`; 100% traffic | PASS |
+| Production case focus | authenticated Chrome; `2.4px solid` outline, `1.6px` offset; zero desktop overflow | PASS |
+| Production action-plan targets | 16 scenario controls, minimum height 44 px; refresh 44 × 44 px | PASS |
+| Production security targets | three session action controls, minimum height 44 px; no action clicked | PASS |
+| Production mobile routes | cases, action plan, security at 390 × 844; zero horizontal overflow, failed resources, or console errors | PASS |
+| Production status | `2026-09-02T04:32:30.760Z`; operational; 8/8; 0 active incidents | PASS AS POINT-IN-TIME EVIDENCE |
+| Change boundary | no migration, database write, website/Sites, DNS, secret, payment, auth-policy, corpus/vector/embedding, or staging-capacity operation | PASS |
 
 ## v120 production-operations validation
 

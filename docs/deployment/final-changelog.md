@@ -6,6 +6,17 @@ Evidence cutoff: **2026-09-02 UZT**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
 
+## v121 production accessibility release
+
+- Added a visible focus ring to the case-search container and raised action-plan scenario, refresh, and security-session controls to a minimum 44 CSS px target.
+- Passed 11/11 focused accessibility tests, lint, type-check, 33 rendered-route tests, 1,166 core tests, 217 Worker/runtime tests, production build, and artifact budgets.
+- PR #127 passed exact-head CI `33586952165` and complete 0-finding security scan `421746e4-7a82-40dd-80ed-1c4d8310c17c`, then merged as `4210bb18088e572eef7ddc5a30491f5c63811bac`. Post-merge CI `33589980918` passed.
+- Production workflow `33589981236` activated platform Worker v207 `8dc48732-f611-4ed0-abdf-ef57c2fa0936` through deployment `a302b677-ea56-4a93-8b2b-ade4e5827801` at 100% traffic. Website, Admin, and public Sites were unchanged.
+- Authenticated Chrome verified a visible `2.4px solid` case-search focus ring with `1.6px` offset, 16 scenario controls at least 44 px tall, a 44 × 44 refresh control, and three security-session controls at least 44 px tall. No session action was clicked and no private case or session content was read.
+- The cases, action-plan, and security routes had zero horizontal overflow at the 390 × 844 mobile override, zero failed resources with an exposed HTTP error status, and zero console errors. The viewport override was reset.
+- The public status snapshot generated at `2026-09-02T04:32:30.760Z` was operational with 8/8 components and no active incidents. This is point-in-time evidence only.
+- Performed no migration, database write, DNS change, binding, secret, payment, auth-policy, legal-corpus, vector, embedding, or staging-capacity operation. The role matrix and obsolete FTP DNS retirement remain open.
+
 ## v120 production-operations evidence
 
 - Replaced the earlier point-in-time-only provider statement with a content-free 24-hour production history: OpenAI 97/98 and Anthropic 98/99 operational probes, one isolated timeout each, and no billing/balance error in the window.
