@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-02T12:17:30.5469667Z",
+  "applicationCommit": "4851e44449259a0c298938f07f4d47ed95ff7bbe",
+  "authorizationScope": "confirmed disjoint ownership index, safe queue handling and legacy recovery without failure-ledger substitution",
+  "sources": [
+    {"databaseName":"juro-staging","databaseId":"bb716a96-b2fb-4823-90d6-6c228fed181a","documents":4291,"activeProvisions":162886,"indexedChunks":1301928,"openJobs":43539,"deadLetter":1,"terminalFailures":1,"completedCheckpoints":44,"sizeBytes":9999998976},
+    {"databaseName":"juro-staging-corpus-v2","databaseId":"62620fb3-3da3-4c76-a8e9-aa60858c1063","documents":599,"activeProvisions":55949,"indexedChunks":1308850,"openJobs":27689,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44,"sizeBytes":9999998976},
+    {"databaseName":"juro-staging-corpus-shard-1","databaseId":"e09e0682-0c2e-4458-a8f3-be9de28117e3","documents":1635,"activeProvisions":45311,"indexedChunks":369081,"openJobs":0,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44,"sizeBytes":2890203136},
+    {"databaseName":"juro-staging-corpus-shard-2","databaseId":"36fa1cfe-6d00-47b7-a980-864020028d86","documents":2495,"activeProvisions":59969,"indexedChunks":997338,"openJobs":0,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44,"sizeBytes":8116838400},
+    {"databaseName":"juro-staging-corpus-shard-3","databaseId":"ccf1f18e-66cf-4358-a7aa-f1d725b7653c","documents":3313,"activeProvisions":90529,"indexedChunks":1430474,"openJobs":23706,"deadLetter":7,"terminalFailures":7,"completedCheckpoints":44,"sizeBytes":9999892480},
+    {"databaseName":"juro-staging-corpus-shard-4","databaseId":"7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2","documents":0,"activeProvisions":0,"indexedChunks":0,"openJobs":0,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":0,"sizeBytes":8560640}
+  ],
+  "queueDecision": {
+    "status": "held_fail_closed",
+    "reason": "legacy and v2 are at the 10GB D1 ceiling; shard-3 has only 106496 bytes of headroom and seven existing terminal/dead-letter jobs; draining would risk SQLITE_FULL/SQLITE_NOMEM and create new failures",
+    "sourceRowsWritten": 0,
+    "failureLedgerRowsChanged": 0,
+    "directD1Mutation": false,
+    "newTerminalFailuresSincePreviousObservation": 0
+  },
+  "legacyRecovery": {
+    "status": "pending_protected_admin_action",
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "canonicalDocumentId": "lexuz:8411573",
+    "statusObserved": "dead_letter",
+    "attemptCount": 5,
+    "failureRows": 5,
+    "terminalRows": 1,
+    "lastErrorCode": "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
+    "requires": "named legal-corpus staff session with fresh MFA/TOTP",
+    "technicalBypassAttempted": false
+  },
+  "ownershipIndex": {
+    "runId": "ownership-20260902120720",
+    "targetDatabase": "juro-staging-corpus-shard-4",
+    "uniqueCanonicalDocumentIds": 7152,
+    "duplicateSourceRowsRetained": 5181,
+    "partitionManifestSha256": "0497eb8a434e9298972798b033d7734a0e8753e0c4b554512a3d86a1b279087c"
+  },
+  "releaseGate": "closed",
+  "productionChanged": false
+}
