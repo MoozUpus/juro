@@ -1,53 +1,115 @@
 {
   "schemaVersion": 1,
   "environment": "staging",
-  "observedAt": "2026-09-01T23:55:00.080Z",
+  "observedAt": "2026-09-02T00:30:58.0309364Z",
   "branch": "feature/full-legal-corpus",
   "purpose": "Record the five-database physical inventory without treating per-database arithmetic as a deduplicated release metric.",
+  "countMethod": "Per-database totals use the aggregate SQL in apps/platform/lib/legal-corpus/admin-operations.ts (readLegalCorpusAdminDashboard).",
   "inventory": {
     "juro-staging": {
       "role": "legacy-main-staging",
-      "canonicalDocuments": 3575,
-      "exactCurrentProvisions": 62075,
-      "indexedChunks": 151499
+      "canonicalDocuments": 4291,
+      "languageVariants": 6918,
+      "uniqueProvisions": 68296,
+      "currentProvisions": 167767,
+      "currentChunks": 168621,
+      "indexedChunks": 168621,
+      "activeDocuments": 3320,
+      "repealedDocuments": 0,
+      "historicalVersions": 4116,
+      "liveOrManualQueued": 7033,
+      "failedDocuments": 203
     },
     "juro-staging-corpus-v2": {
       "role": "frozen-v2",
       "canonicalDocuments": 599,
-      "exactCurrentProvisions": 15899,
-      "indexedChunks": 55814
+      "languageVariants": 1049,
+      "uniqueProvisions": 15899,
+      "currentProvisions": 55650,
+      "currentChunks": 55814,
+      "indexedChunks": 55814,
+      "activeDocuments": 596,
+      "repealedDocuments": 0,
+      "historicalVersions": 1620,
+      "liveOrManualQueued": 816,
+      "failedDocuments": 5
     },
     "juro-staging-corpus-shard-1": {
       "role": "frozen-shard-1",
       "canonicalDocuments": 1635,
-      "exactCurrentProvisions": 18724,
-      "indexedChunks": 52370
+      "languageVariants": 2152,
+      "uniqueProvisions": 18724,
+      "currentProvisions": 52228,
+      "currentChunks": 52370,
+      "indexedChunks": 52370,
+      "activeDocuments": 1509,
+      "repealedDocuments": 0,
+      "historicalVersions": 354,
+      "liveOrManualQueued": 0,
+      "failedDocuments": 10
     },
     "juro-staging-corpus-shard-2": {
       "role": "frozen-shard-2",
       "canonicalDocuments": 2495,
-      "exactCurrentProvisions": 19484,
-      "indexedChunks": 62089
+      "languageVariants": 2906,
+      "uniqueProvisions": 19484,
+      "currentProvisions": 61983,
+      "currentChunks": 62089,
+      "indexedChunks": 62089,
+      "activeDocuments": 2482,
+      "repealedDocuments": 0,
+      "historicalVersions": 1504,
+      "liveOrManualQueued": 0,
+      "failedDocuments": 8
     },
     "juro-staging-corpus-shard-3": {
       "role": "active-continuation-shard-excluded-from-all-staging-d1",
       "canonicalDocuments": 3313,
-      "exactCurrentProvisions": 33084,
-      "indexedChunks": 93097
+      "languageVariants": 6310,
+      "uniqueProvisions": 33084,
+      "currentProvisions": 97239,
+      "currentChunks": 97470,
+      "indexedChunks": 93097,
+      "activeDocuments": 3188,
+      "repealedDocuments": 0,
+      "historicalVersions": 1559,
+      "liveOrManualQueued": 5404,
+      "failedDocuments": 16
     }
   },
   "rawPhysicalSums": {
-    "canonicalDocuments": 11617,
-    "exactCurrentProvisions": 149266,
-    "indexedChunks": 414869
+    "canonicalDocuments": 12333,
+    "uniqueProvisions": 155487,
+    "currentProvisions": 434867,
+    "currentChunks": 436364,
+    "indexedChunks": 431991,
+    "liveOrManualQueued": 13253,
+    "failedDocuments": 242
   },
   "numericThresholdAssessment": {
     "minimumCanonicalDocuments": 1500,
     "minimumUniqueProvisions": 22000,
     "minimumIndexedChunks": 22513,
     "physicalSumsExceedFloors": true,
+    "totalsFormula": "Same per-database aggregate formula as readLegalCorpusAdminDashboard; values are independently read from each D1 and then added only for reserve illustration.",
     "uniqueFederatedTotalsProven": false,
     "countsAloneCloseReleaseGate": false
+  },
+  "canonicalIdReconciliation": {
+    "query": "SELECT id FROM legal_corpus_documents ORDER BY id",
+    "rawRowsAcrossSources": 12333,
+    "unionCanonicalIds": 7152,
+    "duplicateCanonicalIdCount": 2850,
+    "duplicateRows": 8031,
+    "occurrenceHistogram": [
+      {"occurrences": 1, "ids": 4302},
+      {"occurrences": 2, "ids": 1260},
+      {"occurrences": 3, "ids": 1122},
+      {"occurrences": 4, "ids": 195},
+      {"occurrences": 5, "ids": 273}
+    ],
+    "disjointPartitionProven": false,
+    "note": "Raw identifier union only; it does not establish current-version or chunk parity and is not a release snapshot."
   },
   "freshSequentialD1Probe": {
     "rowsWritten": 0,
@@ -102,6 +164,7 @@
     ]
   },
   "sourceEvidence": [
+    "apps/platform/lib/legal-corpus/admin-operations.ts (totals SQL)",
     "STAGING_SHARD3_READONLY_RECHECK_2026-09-02T2320Z.json",
     "STAGING_LEGACY_FAILURE_RECHECK_2026-09-02T2329Z.json",
     "STAGING_FEDERATED_RETRIEVAL_2026-08-28.md"
