@@ -12,7 +12,16 @@
     "migrationsApplied": 143,
     "latestMigration": "0142_legal_corpus_shard_handoffs.sql",
     "acquisitionState": "active",
-    "not_boundOrDeployed": true
+    "not_boundOrDeployed": true,
+    "verifiedEmptyCounts": {
+      "documents": 0,
+      "provisions": 0,
+      "chunks": 0,
+      "jobs": 0,
+      "handoffs": 0,
+      "migrations": 143,
+      "observedAt": "2026-09-02T07:18:00.000Z"
+    }
   },
   "attempt": {
     "queueProcessingWasEnabledBriefly": true,
