@@ -4,7 +4,17 @@ Assessment: **NOT READY for the full execution brief**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Production is reachable and v121 is deployed from merge `4210bb18088e572eef7ddc5a30491f5c63811bac`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker v207 `8dc48732-f611-4ed0-abdf-ef57c2fa0936`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T04:32:30.760Z` was operational with 8/8 components and 0 active incidents. A separate content-free 24-hour D1 history supports a bounded provider-recovery statement, but not an availability SLA. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, DNS-remediation, and other Definition-of-Done gates are still open.
+Production is reachable and the owner-requested v101 mobile interaction-target increment is deployed from merge `498ab8944575134163cadcc6c74deeadd3a93fac`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker version `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T06:08:14.064Z` was operational with 8/8 components and 0 active incidents. A separate content-free 24-hour D1 history supports a bounded provider-recovery statement, but not an availability SLA. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, DNS-remediation, and other Definition-of-Done gates are still open.
+
+## v101 mobile interaction-target production evidence (2026-09-02)
+
+- Raised the AI options summary, both mobile AI-mode controls, notification actions, and the privacy deletion control to a minimum 44 CSS px target. Canonical Individual and Business notification layouts now load the existing notification stylesheet.
+- Focused accessibility tests passed 12/12. Lint, type-check, 1,167 core tests, 217 Worker/runtime tests, production build, and artifact budgets passed.
+- PR #129 passed final exact-head CI `33595599646`. Complete security scans `d4ae3e1a-a276-4f3d-ba00-3b1a1ad02a2f` and `fea3204e-c3a2-43ba-8210-4fc02a27bb00` each finished with zero findings. It merged as `498ab8944575134163cadcc6c74deeadd3a93fac`; post-merge CI `33596215521` passed.
+- Production workflow `33596214731` activated platform Worker version `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8` through deployment `08bc17ea-be50-4b1b-a4bc-2ed8110ede8f` at 100% traffic. Website, Admin, and public Sites deploy jobs were correctly skipped because their paths were unchanged.
+- Authenticated Chrome at 320 x 844 and 390 x 844 verified a 44 px AI options summary, two 44 x 44 AI-mode controls, 200 notification actions with a 44 px minimum height and no overlap, and one privacy deletion control with a 44 px minimum height. No notification action or destructive control was clicked and no form was submitted.
+- The AI chat, notifications, and privacy routes had zero horizontal overflow, zero resources with an exposed HTTP error status, and zero console errors at both mobile widths. The viewport override was reset after the checks.
+- No migration, database write, DNS change, binding, secret, payment, auth-policy, legal-corpus, vector, embedding, or staging-capacity operation was part of this release.
 
 ## v121 production accessibility evidence
 
@@ -24,17 +34,17 @@ Production is reachable and v121 is deployed from merge `4210bb18088e572eef7ddc5
 - `ftp.juro.uz` still resolves directly to `95.46.96.77`. Port 21 timed out, HTTP port 80 returned the default AlmaLinux server test page, and HTTPS failed hostname validation. Repository search found no product dependency on this hostname. The record is therefore a retirement candidate rather than a working JURO FTP service.
 - No DNS mutation occurred. Wrangler OAuth can read the zone but lacks DNS-record permission, and the authorized Chrome tab reached the Cloudflare sign-in boundary. The exact reversible retirement procedure is recorded below.
 
-## Current v121 release state
+## Current production release state
 
 | Surface | Current state | Evidence | Rollback point |
 | --- | --- | --- | --- |
-| GitHub main | merge `4210bb18088e572eef7ddc5a30491f5c63811bac` from PR #127 | exact-head CI `33586952165`, complete 0-finding security diff scan `421746e4-7a82-40dd-80ed-1c4d8310c17c`, post-merge CI `33589980918`, platform deploy, and focused Chrome QA passed | Revert or redeploy the immediately preceding validated main revision if a regression is proven |
+| GitHub main | merge `498ab8944575134163cadcc6c74deeadd3a93fac` from PR #129 | exact-head CI `33595599646`, complete zero-finding security scans `d4ae3e1a-a276-4f3d-ba00-3b1a1ad02a2f` and `fea3204e-c3a2-43ba-8210-4fc02a27bb00`, post-merge CI `33596215521`, platform deploy, and focused Chrome QA passed | Revert or redeploy the immediately preceding validated main revision if a regression is proven |
 | Public Sites | v97, source `77691d0c2f4d7eaeff759ff3f08eded893d2f835`, deployment `appgdep_6a975c1651d0819194779c579abd961b` | RU/UZ/EN 200; sitemap 78/78; discoverable apex links 120/120; indexing split preserved | Saved v96, source `489c56d029f164c030127f7465d528f8f1bdf396`; v95 remains available |
 | Website Worker | v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, 100% traffic | visible RU/UZ/EN targets are 44 × 44 CSS px wherever rendered; routes and indexing passed | v11 `fad80c80-ee92-44bb-93a3-e250ee314891` |
-| Platform Worker | v207 `8dc48732-f611-4ed0-abdf-ef57c2fa0936`, deployment `a302b677-ea56-4a93-8b2b-ade4e5827801`, 100% traffic | Authenticated Chrome proved the case-search focus ring, 44 px action-plan and session controls, zero overflow on three mobile routes, zero failed resources, and a clean console | v206 `1ec688d4-e085-4aa9-a34d-df02b0c1ae1c` |
-| Production health | operational, 8/8 components, no active incidents at the retained snapshot | `/api/status` generated `2026-09-02T04:32:30.760Z`; 24-hour provider history recorded 195/197 operational probes | Health evidence is observational; it has no deployment rollback |
+| Platform Worker | version `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8`, deployment `08bc17ea-be50-4b1b-a4bc-2ed8110ede8f`, 100% traffic | Authenticated Chrome proved 44 px AI, notification, and privacy targets at 320/390 px, zero overlap or horizontal overflow, zero failed resources, and a clean console | v207 `8dc48732-f611-4ed0-abdf-ef57c2fa0936` |
+| Production health | operational, 8/8 components, no active incidents at the retained snapshot | `/api/status` generated `2026-09-02T06:08:14.064Z`; 24-hour provider history remains bounded historical evidence | Health evidence is observational; it has no deployment rollback |
 
-The older v120/v118/v117/v116/v115/v101/v189/v95 tables and health narrative below are retained as historical evidence and do not supersede the current v121 checkpoint.
+The prior v121/v120/v118/v117/v116/v115/v189/v95 tables and health narrative below are retained as historical evidence and do not supersede this checkpoint. Any older row labelled v101 predates this dated 2026-09-02 owner-requested release.
 
 ## Retained historical release state
 
