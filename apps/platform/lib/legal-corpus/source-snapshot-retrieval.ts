@@ -55,6 +55,10 @@ export function createD1SourceSnapshotRetrievalCatalog(db: D1Database): SourceSn
           AND eligibility.capability='current'
         JOIN legal_source_snapshot_builds build ON build.id=eligibility.build_id
           AND build.release_id=member.search_release_id
+          AND build.status='sealed' AND build.phase='complete'
+        JOIN legal_source_snapshot_qualifications qualification
+          ON qualification.build_id=build.id
+          AND qualification.release_id=member.search_release_id
         WHERE member.search_release_id=? AND member.canonical_chunk_id=?`)
         .bind(releaseId, canonicalChunkId).first<SourceSnapshotCandidateRecord>();
     },

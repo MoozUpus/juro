@@ -287,6 +287,8 @@ test("the additive target schema preserves legacy authority rows and protects So
       "legal_source_snapshot_build_checkpoints_no_delete",
       "legal_source_snapshot_inventories_no_delete",
       "legal_source_snapshot_deferred_inventories_no_delete",
+      "legal_source_snapshot_deferred_inventories_no_update",
+      "legal_source_snapshot_deferred_inventories_validate_insert",
       "legal_source_snapshot_stable_identities_no_delete",
       "legal_source_snapshot_integrity_attestations_no_delete",
       "legal_source_snapshot_replay_pages_no_delete",
@@ -300,6 +302,25 @@ test("the additive target schema preserves legacy authority rows and protects So
         'https://lex.uz/docs/immutability-test',NULL,NULL,?,?)`).run(HASH_A, CAPTURED_AT);
     assert.throws(() => sqlite.prepare(`DELETE FROM legal_source_documents
       WHERE id='source-document:immutability-test'`).run(), /LEGAL_SOURCE_DOCUMENT_IMMUTABLE/u);
+    sqlite.prepare(`INSERT INTO legal_source_snapshot_builds
+      (id,environment,cutoff_at,release_id,configuration_identity,shard_count,status,phase,
+       processed_count,eligible_count,excluded_count,created_at,updated_at)
+      VALUES ('build:deferred-inventory-test','staging',?,'release:test',?,1,'complete','complete',
+        0,0,0,?,?)`).run(CAPTURED_AT, HASH_A, CAPTURED_AT, CAPTURED_AT);
+    sqlite.prepare(`INSERT INTO legal_source_snapshot_deferred_inventories
+      (build_id,inventory_kind,item_count,inventory_sha256,evidence_json,recorded_at)
+      VALUES ('build:deferred-inventory-test','valid',0,?,'{}',?)`).run(HASH_A, CAPTURED_AT);
+    assert.throws(() => sqlite.prepare(`UPDATE legal_source_snapshot_deferred_inventories
+      SET item_count=1 WHERE build_id='build:deferred-inventory-test' AND inventory_kind='valid'`).run(),
+    /LEGAL_SOURCE_SNAPSHOT_DEFERRED_INVENTORY_IMMUTABLE/u);
+    assert.throws(() => sqlite.prepare(`INSERT INTO legal_source_snapshot_deferred_inventories
+      (build_id,inventory_kind,item_count,inventory_sha256,evidence_json,recorded_at)
+      VALUES ('build:deferred-inventory-test','negative-count',-1,?,'{}',?)`).run(HASH_A, CAPTURED_AT),
+    /LEGAL_SOURCE_SNAPSHOT_DEFERRED_INVENTORY_INVALID/u);
+    assert.throws(() => sqlite.prepare(`INSERT INTO legal_source_snapshot_deferred_inventories
+      (build_id,inventory_kind,item_count,inventory_sha256,evidence_json,recorded_at)
+      VALUES ('build:deferred-inventory-test','invalid-hash',0,?,'{}',?)`)
+      .run("A".repeat(64), CAPTURED_AT), /LEGAL_SOURCE_SNAPSHOT_DEFERRED_INVENTORY_INVALID/u);
   } finally {
     sqlite.close();
   }
