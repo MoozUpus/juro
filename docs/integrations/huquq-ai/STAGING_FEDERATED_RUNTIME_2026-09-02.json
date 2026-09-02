@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "environment": "staging",
   "observedAt": "2026-09-02T05:30:00Z",
-  "applicationCommit": "c85e35cc",
+  "applicationCommit": "d3b18e3c92f32426ea5c1b4a22939d762f98b36e",
   "platformDeployment": "5de1b204-a53b-48ed-8c95-e4e140263efe",
   "adminDeployment": "0e558828-af23-4828-a8be-31143a0fb35f",
   "sourceSet": "all-staging-d1",
