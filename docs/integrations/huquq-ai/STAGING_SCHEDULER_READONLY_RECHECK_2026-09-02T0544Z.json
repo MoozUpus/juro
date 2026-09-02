@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "recordedAt": "2026-09-02T05:44:00.7159562Z",
+  "applicationCommit": "b396a93368838a8c692914004310513af9ecfce2",
+  "probeType": "sequential read-only scheduler, lock and ingestion status probe",
+  "rowsWritten": 0,
+  "sources": {
+    "juro-staging": {
+      "openJobs": 43539,
+      "jobStatusBreakdown": {"completed": 11259, "queued": 43539, "dead_letter": 1},
+      "deadLetterJobs": 1,
+      "terminalFailureRows": 275,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "runningSchedules": 4,
+      "locks": 2,
+      "latestJobUpdate": "2026-09-01T16:32:02.628Z",
+      "runningScheduleIds": [
+        "a2fc7df6-deb5-4db1-a795-595ea63aba25",
+        "776c394e-c314-4db0-babe-45356778d3df",
+        "09ee888e-0bce-45df-989c-fd1d28a1518c",
+        "afa84bba-8f4f-4b35-8726-3d38a954c1e9"
+      ],
+      "lockNames": [
+        "legal-source-crawl:staging:advice.uz",
+        "legal-source-crawl:staging:lex.uz"
+      ]
+    },
+    "juro-staging-corpus-v2": {
+      "openJobs": 27689,
+      "deadLetterJobs": 0,
+      "terminalFailureRows": 5,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "runningSchedules": 0,
+      "locks": 0,
+      "latestJobUpdate": "2026-08-24T01:12:32.100Z"
+    },
+    "juro-staging-corpus-shard-1": {
+      "openJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailureRows": 10,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "runningSchedules": 0,
+      "locks": 0,
+      "latestJobUpdate": "2026-08-25T16:14:57.719Z"
+    },
+    "juro-staging-corpus-shard-2": {
+      "openJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailureRows": 8,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "runningSchedules": 0,
+      "locks": 0,
+      "latestJobUpdate": "2026-08-28T00:59:49.107Z"
+    },
+    "juro-staging-corpus-shard-3": {
+      "openJobs": 23713,
+      "deadLetterJobs": 0,
+      "terminalFailureRows": 17,
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44,
+      "runningSchedules": 0,
+      "locks": 0,
+      "latestJobUpdate": "2026-09-01T19:59:44.611Z"
+    }
+  },
+  "assessment": {
+    "allCheckpointsComplete": true,
+    "queueEmptyAcrossAllSources": false,
+    "terminalAndDeadLetterZeroAcrossAllSources": false,
+    "legacyRunningSchedulesRequireProtectedRecoveryReview": true,
+    "ingestionMutated": false,
+    "releaseGate": "closed"
+  }
+}
