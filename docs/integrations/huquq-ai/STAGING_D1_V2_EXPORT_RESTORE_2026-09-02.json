@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "databaseName": "juro-staging-corpus-v2",
+  "databaseId": "62620fb3-3da3-4c76-a8e9-aa60858c1063",
+  "observedAt": "2026-09-02T22:34:05.9136254Z",
+  "export": {
+    "mode": "wrangler d1 export --remote",
+    "completedAt": "2026-09-02T21:50:51Z",
+    "path": "D:\\juro-corpus-release-work\\juro-staging-corpus-v2-20260903.sql",
+    "bytes": 15869568967,
+    "sha256": "c1ffaca73040bb85b668215888f1ba28db545102a73dfc68a8b903d9ef8e0b14"
+  },
+  "restore": {
+    "tool": "apps/platform/scripts/verify-d1-full-export-restore.mjs",
+    "completedAt": "2026-09-02T22:34:05Z",
+    "path": "D:\\juro-corpus-release-work\\juro-staging-corpus-v2-20260903.restore.sqlite",
+    "bytes": 9840861184,
+    "sha256": "687189c97645cc827332976e601d28bc2a850f4a48c2319fb211b3692e84f490",
+    "statementCount": 69074536,
+    "tableCount": 258,
+    "indexCount": 563,
+    "triggerCount": 346,
+    "migrationCount": 142,
+    "quickCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "documents": 599,
+    "provisions": 1311096,
+    "chunks": 1308850
+  },
+  "remoteMutation": {
+    "rowsWritten": 0,
+    "changedDb": false,
+    "sourceRowsChanged": false,
+    "failureLedgerRowsChanged": 0
+  },
+  "releaseGate": "not_sufficient_alone",
+  "note": "This proves isolated export-to-local-restore integrity for the frozen v2 source. It does not prove physical disjointness, indexed evaluation, Qdrant parity, legal review or production approval."
+}
