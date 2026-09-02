@@ -61,6 +61,13 @@
   and it does not prove physical source disjointness or close the release gate.
   Evidence is recorded in
   `STAGING_LOGICAL_DISJOINT_OWNERSHIP_INDEX_2026-09-02.{json,md}`.
+- The legacy dead-letter URL `https://lex.uz/en/docs/8411573` is already
+  available in shard-1 and shard-3 under canonical family ID
+  `lexuz-family:8407544` (all four language variants). This read-only
+  federated alias resolution keeps chat retrieval usable without rewriting the
+  legacy failure ledger; a named-staff MFA-bound retry is still required to
+  claim the legacy job itself recovered. Evidence is in
+  `STAGING_LEGACY_FEDERATED_ALIAS_RECOVERY_2026-09-02.{json,md}`.
 - The new source-card and full-article modal passed type-check, focused boundary
   tests and staging artifact/deployment checks. Authenticated desktop QA passed
   for the AI-chat light/dark empty state and caught one dark-history contrast

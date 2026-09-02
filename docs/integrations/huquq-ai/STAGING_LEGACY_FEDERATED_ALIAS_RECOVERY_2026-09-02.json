@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-02T08:36:23Z",
+  "applicationCommit": "1757b4957d93707e852b1f54ef30319718b917e1",
+  "purpose": "Record a read-only federated resolution for the preserved legacy dead-letter URL; this is not an admin retry or failure-ledger rewrite.",
+  "legacyFailure": {
+    "databaseName": "juro-staging",
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "canonicalDocumentId": "lexuz:8411573",
+    "sourceUrl": "https://lex.uz/en/docs/8411573",
+    "errorCode": "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
+    "retryState": "terminal",
+    "attemptCount": 5
+  },
+  "matchedFederatedDocument": {
+    "canonicalDocumentId": "lexuz-family:8407544",
+    "sourceUrl": "https://lex.uz/en/docs/8411573",
+    "documentType": "Постановление",
+    "documentNumber": "ПП-294",
+    "sourceClass": "OFFICIAL_LEGISLATION",
+    "matchingSources": [
+      "juro-staging-corpus-shard-1",
+      "juro-staging-corpus-shard-3"
+    ],
+    "languages": {
+      "en": {"currentVersion": "lexuz-family:8407544:en:v1:9782ada8733f", "provisions": 1},
+      "ru": {"currentVersion": "lexuz-family:8407544:ru:v1:b255aaea65cd", "provisions": 11},
+      "uz-Cyrl": {"currentVersion": "lexuz-family:8407544:uz-Cyrl:v1:1b154d05f089", "provisions": 11},
+      "uz-Latn": {"currentVersion": "lexuz-family:8407544:uz-Latn:v1:f175b08719fd", "provisions": 11}
+    },
+    "availabilityStatus": "ready",
+    "latestObservedUpdateAt": "2026-08-29T22:28:44.588Z"
+  },
+  "verification": {
+    "legacyRowsWritten": 0,
+    "legacyFailureLedgerRowsChanged": 0,
+    "matchedSourceRowsWritten": 0,
+    "officialUrlMatch": true,
+    "federatedRetrievalCanUseMatchedDocument": true,
+    "adminRetryPerformed": false,
+    "freshMfaReviewerEvidence": false
+  },
+  "status": "federated_alias_resolved_legacy_admin_retry_pending",
+  "limitations": [
+    "The legacy failure remains terminal and immutable; no row was changed.",
+    "This resolution does not prove the legacy job itself succeeded and cannot close the release failure gate.",
+    "A protected named-staff recovery action with fresh MFA is still required if the legacy ledger must be retried.",
+    "The matched document is official-source data already present in staging; no raw HTML or corpus text was copied into Git."
+  ]
+}
