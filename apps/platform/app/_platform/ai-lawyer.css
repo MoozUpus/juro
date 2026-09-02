@@ -260,7 +260,7 @@
 
 .ai-composer-options > summary {
   display: flex;
-  min-height: 34px;
+  min-height: 44px;
   align-items: center;
   gap: 7px;
   color: var(--ai-muted);
@@ -470,7 +470,7 @@
   .ai-dialog > header > div { min-width: 0; }
   .ai-dialog h1 { white-space: nowrap; }
   .ai-composer-mode { width: auto; margin-left: auto; }
-  .ai-composer-mode button { width: 40px; min-width: 40px; flex: none; font-size: 0; }
+  .ai-composer-mode button { width: 44px; min-width: 44px; flex: none; font-size: 0; }
   .ai-composer-mode button svg { width: 17px; height: 17px; }
 }
 
