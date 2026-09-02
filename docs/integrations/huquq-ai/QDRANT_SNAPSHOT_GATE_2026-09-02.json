@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "status": "pass",
+  "environment": "staging-only CI fixture",
+  "workflowRun": "33580550884",
+  "workflowUrl": "https://github.com/MoozUpus/juro/actions/runs/33580550884",
+  "applicationCommit": "76c64cc540f957befe234c0ac61b2795da629e0a",
+  "qdrantVersion": "1.18.2",
+  "image": "qdrant/qdrant:v1.18.2@sha256:da65a06bc75e42702f80c992b99c5144b0fbd675ae7a96d2991de0bf957b7071",
+  "collection": "juro_legal_corpus_gate_33580550884",
+  "vectorDimensions": 1536,
+  "namedVectors": ["dense", "sparse"],
+  "pointCount": 3,
+  "denseFirst": "chunk-alpha",
+  "sparseFirst": "chunk-alpha",
+  "hybridFirst": "chunk-alpha",
+  "restoredHybridFirst": "chunk-alpha",
+  "snapshot": {
+    "name": "juro_legal_corpus_gate_33580550884-1986947933814579-2026-09-02-01-44-32.snapshot",
+    "bytes": 118784,
+    "sha256": "8498f1346528d007b4e0595930b646d0e6ad52c62686f7b4e86a7b3401c28edf",
+    "createDownloadDurationMs": 1197.32
+  },
+  "totalDurationMs": 1394.39,
+  "generatedAt": "2026-09-02T01:44:33.658Z",
+  "scope": {
+    "fullCorpusBenchmark": false,
+    "indexed314Evaluation": false,
+    "legalReleaseGateClosed": true,
+    "note": "This run proves the pinned Qdrant engine, dense+sparse ordering and snapshot upload/restore path with three synthetic points. It is not evidence of full-corpus point-count parity, relevance metrics, or a federated legal release."
+  }
+}
