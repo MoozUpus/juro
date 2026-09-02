@@ -77,6 +77,10 @@ import {
   createRuntimeTargetLegalAnswerRetriever,
   type TargetRetrievalRuntimeEnv,
 } from "../lib/legal-corpus/target-runtime";
+import {
+  handleTargetCandidateEvaluationRequest,
+  TARGET_CANDIDATE_EVALUATION_PATH,
+} from "../lib/legal-corpus/target-evaluation";
 
 export const LEGAL_CORPUS_PROCESS_CRON = "*/5 * * * *";
 export const LEGAL_CORPUS_STAGING_PROCESS_CRON = "*/4 * * * *";
@@ -634,6 +638,9 @@ const worker = {
       } catch {
         return response({ code: "TARGET_LEGAL_ANSWER_UNAVAILABLE" }, 503);
       }
+    }
+    if (url.pathname === TARGET_CANDIDATE_EVALUATION_PATH) {
+      return handleTargetCandidateEvaluationRequest(request, env);
     }
     if (isJuroLegalCorpusReadToolPath(url.pathname)) {
       return handleJuroLegalCorpusReadToolRequest(request, env);

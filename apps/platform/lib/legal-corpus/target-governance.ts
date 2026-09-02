@@ -106,6 +106,15 @@ const providerItemSchema = z.object({
   validFrom: instant,
   validTo: instant.nullable(),
 }).strict();
+const candidateReconciliationSchema = z.object({
+  instanceId: identifier,
+  providerItems: z.number().int().positive(),
+  uniqueItems: z.number().int().positive(),
+  chunks: z.number().int().positive(),
+  mismatches: z.record(z.string(), z.number().int().nonnegative()),
+  verifiedInventorySha256: sha,
+  ok: z.literal(true),
+}).passthrough();
 export const governedAiSearchConfigurationSchema = candidateConfigurationSchema.extend({
   metadataSchema: z.array(z.string().min(1).max(40)).max(5),
   fifthMetadataFieldReserved: z.boolean(),
@@ -150,7 +159,8 @@ const evidenceSchema = z.object({
     syncJobId: identifier,
     scheduledIndexingPaused: z.boolean(),
   }).strict()).min(1).max(99),
-  providerItems: z.array(providerItemSchema),
+  providerItems: z.array(providerItemSchema).max(1_000).optional(),
+  candidateQualificationIds: z.array(identifier).min(1).max(99).optional(),
   cost: z.object({
     measuredEmbeddingTokens: z.number().int().positive(),
     acceptedUsdPerMillionTokens: z.number().positive(),
@@ -184,7 +194,29 @@ const evidenceSchema = z.object({
     historyLastReconciledAt: instant,
     rollbackHealthy: z.boolean(),
   }).strict(),
-}).strict();
+}).strict().superRefine((value, context) => {
+  const hasItems = value.providerItems !== undefined;
+  const hasQualifications = value.candidateQualificationIds !== undefined;
+  if (hasItems === hasQualifications) {
+    context.addIssue({
+      code: "custom",
+      message: "Provide exactly one provider inventory evidence form",
+    });
+  }
+  if (value.environment !== "development" && !hasQualifications) {
+    context.addIssue({
+      code: "custom",
+      message: "Staging and production require immutable candidate qualifications",
+    });
+  }
+});
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 function minimum(failures: string[], label: string, actual: number, threshold: number): void {
   if (actual < threshold) failures.push(label);
@@ -296,14 +328,144 @@ export async function recordSearchReleaseGovernance(
       || !shard.scheduledIndexingPaused)) {
     failures.push("PROVIDER_INSTANCE_IDENTITY_MISMATCH");
   }
-  try {
-    await assertSearchReleaseMetadataParity(
-      dependencies,
-      evidence.releaseId,
-      evidence.providerItems,
-    );
-  } catch {
-    failures.push("ITEM_METADATA_PARITY_FAILED");
+  if (evidence.providerItems) {
+    try {
+      await assertSearchReleaseMetadataParity(
+        dependencies,
+        evidence.releaseId,
+        evidence.providerItems,
+      );
+    } catch {
+      failures.push("ITEM_METADATA_PARITY_FAILED");
+    }
+  } else {
+    const qualificationIds = evidence.candidateQualificationIds ?? [];
+    const uniqueQualificationIds = new Set(qualificationIds);
+    if (uniqueQualificationIds.size !== qualificationIds.length
+      || qualificationIds.length !== evidence.shards.length) {
+      failures.push("CANDIDATE_QUALIFICATION_INVENTORY_MISMATCH");
+    }
+    const qualificationByInstance = new Map<string, {
+      searchReleaseId: string;
+      environment: string;
+      capability: string;
+      reconciliationRunId: string;
+      providerNamespace: string;
+      providerInstanceId: string;
+      shardId: string;
+      syncJobId: string;
+      configurationJson: string;
+      configurationSha256: string;
+      providerItemCount: number;
+      providerChunkCount: number;
+      providerInventorySha256: string;
+      providerReconciliationJson: string;
+      providerReconciliationSha256: string;
+      sourcePrefix: string;
+      scheduledIndexingPaused: number;
+      status: string;
+      recordedAt: string;
+    }>();
+    for (const qualificationId of uniqueQualificationIds) {
+      const qualification = await dependencies.db.prepare(`SELECT
+          search_release_id AS searchReleaseId,environment,capability,
+          reconciliation_run_id AS reconciliationRunId,
+          provider_namespace AS providerNamespace,
+          provider_instance_id AS providerInstanceId,shard_id AS shardId,
+          sync_job_id AS syncJobId,configuration_json AS configurationJson,
+          configuration_sha256 AS configurationSha256,
+          provider_item_count AS providerItemCount,
+          provider_chunk_count AS providerChunkCount,
+          provider_inventory_sha256 AS providerInventorySha256,
+          provider_reconciliation_json AS providerReconciliationJson,
+          provider_reconciliation_sha256 AS providerReconciliationSha256,
+          source_prefix AS sourcePrefix,
+          scheduled_indexing_paused AS scheduledIndexingPaused,
+          status,recorded_at AS recordedAt
+        FROM legal_search_candidate_qualifications WHERE id=? LIMIT 1`)
+        .bind(qualificationId).first<{
+          searchReleaseId: string;
+          environment: string;
+          capability: string;
+          reconciliationRunId: string;
+          providerNamespace: string;
+          providerInstanceId: string;
+          shardId: string;
+          syncJobId: string;
+          configurationJson: string;
+          configurationSha256: string;
+          providerItemCount: number;
+          providerChunkCount: number;
+          providerInventorySha256: string;
+          providerReconciliationJson: string;
+          providerReconciliationSha256: string;
+          sourcePrefix: string;
+          scheduledIndexingPaused: number;
+          status: string;
+          recordedAt: string;
+        }>();
+      if (!qualification || qualificationByInstance.has(qualification.providerInstanceId)) {
+        failures.push("CANDIDATE_QUALIFICATION_INVENTORY_MISMATCH");
+        continue;
+      }
+      qualificationByInstance.set(qualification.providerInstanceId, qualification);
+    }
+    for (const shard of evidence.shards) {
+      const qualification = qualificationByInstance.get(shard.providerInstanceId);
+      let parsedConfiguration: z.infer<typeof governedAiSearchConfigurationSchema> | null = null;
+      let parsedReconciliation: z.infer<typeof candidateReconciliationSchema> | null = null;
+      try {
+        parsedConfiguration = qualification
+          ? governedAiSearchConfigurationSchema.parse(
+            JSON.parse(qualification.configurationJson) as unknown,
+          )
+          : null;
+        parsedReconciliation = qualification
+          ? candidateReconciliationSchema.parse(
+            JSON.parse(qualification.providerReconciliationJson) as unknown,
+          )
+          : null;
+      } catch {
+        // The aggregate failure below deliberately remains content-free.
+      }
+      const configurationHash = qualification
+        ? await sha256Hex(qualification.configurationJson)
+        : null;
+      const reconciliationHash = qualification
+        ? await sha256Hex(qualification.providerReconciliationJson)
+        : null;
+      if (!qualification
+        || qualification.searchReleaseId !== evidence.releaseId
+        || qualification.environment !== evidence.environment
+        || qualification.capability !== evidence.capability
+        || qualification.reconciliationRunId !== evidence.reconciliationRunId
+        || qualification.providerNamespace !== shard.providerNamespaceIdentity
+        || qualification.shardId !== shard.id
+        || qualification.syncJobId !== shard.syncJobId
+        || Number(qualification.providerItemCount) !== shard.itemCount
+        || Number(qualification.providerChunkCount) < Number(qualification.providerItemCount)
+        || qualification.providerInventorySha256 !== shard.inventorySha256
+        || reconciliationHash !== qualification.providerReconciliationSha256
+        || !parsedReconciliation
+        || parsedReconciliation.instanceId !== qualification.providerInstanceId
+        || parsedReconciliation.providerItems !== Number(qualification.providerItemCount)
+        || parsedReconciliation.uniqueItems !== Number(qualification.providerItemCount)
+        || parsedReconciliation.chunks !== Number(qualification.providerChunkCount)
+        || parsedReconciliation.verifiedInventorySha256 !== qualification.providerInventorySha256
+        || Object.keys(parsedReconciliation.mismatches).length !== 0
+        || qualification.sourcePrefix !== evidence.configuration.sourcePrefix
+        || Number(qualification.scheduledIndexingPaused) !== 1
+        || qualification.status !== "qualified"
+        || Date.parse(qualification.recordedAt) > Date.parse(evidence.recordedAt)
+        || configurationHash !== qualification.configurationSha256
+        || !parsedConfiguration
+        || JSON.stringify(parsedConfiguration) !== JSON.stringify(evidence.configuration)) {
+        failures.push("CANDIDATE_QUALIFICATION_REJECTED");
+      }
+    }
+    if (qualificationByInstance.size !== evidence.shards.length) {
+      failures.push("CANDIDATE_QUALIFICATION_INVENTORY_MISMATCH");
+    }
   }
   const measuredCost = evidence.cost.measuredEmbeddingTokens
     * evidence.cost.acceptedUsdPerMillionTokens / 1_000_000 * 1.25;

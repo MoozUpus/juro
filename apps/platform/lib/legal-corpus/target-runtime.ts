@@ -32,12 +32,25 @@ const governanceSchema = z.object({
 
 export type TargetRetrievalRuntimeEnv = {
   APP_ENV: string;
+  LEGAL_CORPUS_SHADOW_MODE?: string;
+  LEGAL_AI_SEARCH_PAUSED?: string;
   LEGAL_DB?: D1Database;
   LEGAL_EVIDENCE_BUCKET?: Pick<LegalEvidenceBucket, "get">;
   LEGAL_AI_SEARCH_NAMESPACE?: AiSearchNamespace;
   LEGAL_AI_SEARCH_NAMESPACE_NAME?: string;
   LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME?: string;
   LEGAL_CORPUS_REASONING_SERVICE?: Fetcher;
+};
+
+type RuntimeDependencies = {
+  environment: z.infer<typeof environmentSchema>;
+  db: D1Database;
+  evidenceBucket: Pick<LegalEvidenceBucket, "get">;
+  reasoningService: Fetcher;
+};
+
+type RuntimeReleaseResolver = {
+  resolve(endpoint: TemporalEndpoint): Promise<PinnedCandidateRelease | null>;
 };
 
 type RuntimeProviderGovernance = {
@@ -241,29 +254,15 @@ function createCandidateCatalog(db: D1Database) {
   };
 }
 
-export function createRuntimeTargetLegalAnswerRetriever(
-  env: TargetRetrievalRuntimeEnv,
-): TargetLegalAnswerRetriever {
-  const environment = environmentSchema.parse(env.APP_ENV);
-  if (!env.LEGAL_DB || !env.LEGAL_EVIDENCE_BUCKET
-    || !env.LEGAL_AI_SEARCH_NAMESPACE || !env.LEGAL_AI_SEARCH_NAMESPACE_NAME
-    || !env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME || !env.LEGAL_CORPUS_REASONING_SERVICE) {
-    throw new TypeError("TARGET_RETRIEVAL_RUNTIME_UNAVAILABLE");
-  }
-  const db = env.LEGAL_DB;
-  const evidenceBucket = env.LEGAL_EVIDENCE_BUCKET;
-  const reasoningService = env.LEGAL_CORPUS_REASONING_SERVICE;
-  const releaseLifecycle = createReleaseLifecycle({ db });
-  const candidateIndex = createAiSearchCandidateIndex(createRuntimeAiSearchProvider({
-    db,
-    namespace: env.LEGAL_AI_SEARCH_NAMESPACE,
-    namespaceName: env.LEGAL_AI_SEARCH_NAMESPACE_NAME,
-    sourceBucketName: env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME,
-  }), {
+function createRuntimeCandidateIndex(
+  dependencies: RuntimeDependencies,
+  provider: AiSearchProvider,
+) {
+  return createAiSearchCandidateIndex(provider, {
     async attestPrivateNames(input) {
       return serviceJson(
-        reasoningService,
-        environment,
+        dependencies.reasoningService,
+        dependencies.environment,
         "/internal/legal-corpus/privacy/classify-private-names",
         input,
       );
@@ -272,7 +271,7 @@ export function createRuntimeTargetLegalAnswerRetriever(
       console.log(JSON.stringify({ event: "legal_target_candidate", ...event }));
     },
     async resolveTrustedLegalTitles(release) {
-      const result = await db.prepare(`SELECT DISTINCT instrument.canonical_title AS title
+      const result = await dependencies.db.prepare(`SELECT DISTINCT instrument.canonical_title AS title
         FROM legal_search_release_items item
         JOIN legal_provision_renditions rendition
           ON rendition.id=item.provision_rendition_id
@@ -284,6 +283,14 @@ export function createRuntimeTargetLegalAnswerRetriever(
       return result.results.map((row) => z.string().trim().min(3).max(300).parse(row.title));
     },
   });
+}
+
+function createRuntimeRetriever(
+  dependencies: RuntimeDependencies,
+  candidateIndex: ReturnType<typeof createRuntimeCandidateIndex>,
+  releaseResolver: RuntimeReleaseResolver,
+): TargetLegalAnswerRetriever {
+  const { environment, db, evidenceBucket, reasoningService } = dependencies;
   return createTargetLegalAnswerRetriever({
     environment,
     interpreter: {
@@ -298,7 +305,59 @@ export function createRuntimeTargetLegalAnswerRetriever(
         return parseQuestionInterpretationPlan(response.result);
       },
     },
-    releaseResolver: {
+    releaseResolver,
+    candidateIndex,
+    candidateCatalog: createCandidateCatalog(db),
+    evidenceResolver: {
+      resolveControlling: (provisionRenditionId, endpoint) => resolveControllingEvidence(
+        { db, bucket: evidenceBucket },
+        provisionRenditionId,
+        endpoint,
+      ),
+    },
+    provisionSelector: {
+      async select(input): Promise<SelectionDecision> {
+        const body = await serviceJson(
+          reasoningService,
+          environment,
+          "/internal/legal-corpus/reasoning/select",
+          input,
+        );
+        const response = z.object({ result: z.unknown() }).strict().parse(body);
+        return parseSelectionDecision(response.result);
+      },
+    },
+    lineageResolver: {
+      resolve: (leftConceptIds, rightConceptIds) => resolveProvisionLineage(
+        { db },
+        leftConceptIds,
+        rightConceptIds,
+      ),
+    },
+  });
+}
+
+export function createRuntimeTargetLegalAnswerRetriever(
+  env: TargetRetrievalRuntimeEnv,
+): TargetLegalAnswerRetriever {
+  const environment = environmentSchema.parse(env.APP_ENV);
+  if (!env.LEGAL_DB || !env.LEGAL_EVIDENCE_BUCKET
+    || !env.LEGAL_AI_SEARCH_NAMESPACE || !env.LEGAL_AI_SEARCH_NAMESPACE_NAME
+    || !env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME || !env.LEGAL_CORPUS_REASONING_SERVICE) {
+    throw new TypeError("TARGET_RETRIEVAL_RUNTIME_UNAVAILABLE");
+  }
+  const db = env.LEGAL_DB;
+  const evidenceBucket = env.LEGAL_EVIDENCE_BUCKET;
+  const reasoningService = env.LEGAL_CORPUS_REASONING_SERVICE;
+  const dependencies = { environment, db, evidenceBucket, reasoningService };
+  const releaseLifecycle = createReleaseLifecycle({ db });
+  const candidateIndex = createRuntimeCandidateIndex(dependencies, createRuntimeAiSearchProvider({
+    db,
+    namespace: env.LEGAL_AI_SEARCH_NAMESPACE,
+    namespaceName: env.LEGAL_AI_SEARCH_NAMESPACE_NAME,
+    sourceBucketName: env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME,
+  }));
+  return createRuntimeRetriever(dependencies, candidateIndex, {
       async resolve(endpoint) {
         const capability = endpoint.kind === "current" ? "current" : "as_of";
         const resolution = await releaseLifecycle.resolveActiveCapability(capability, environment);
@@ -344,34 +403,192 @@ export function createRuntimeTargetLegalAnswerRetriever(
           configuration: toPinnedCandidateConfiguration(evidence.configuration),
         });
       },
-    },
-    candidateIndex,
-    candidateCatalog: createCandidateCatalog(db),
-    evidenceResolver: {
-      resolveControlling: (provisionRenditionId, endpoint) => resolveControllingEvidence(
-        { db, bucket: evidenceBucket },
-        provisionRenditionId,
-        endpoint,
-      ),
-    },
-    provisionSelector: {
-      async select(input): Promise<SelectionDecision> {
-        const body = await serviceJson(
-          reasoningService,
-          environment,
-          "/internal/legal-corpus/reasoning/select",
-          input,
-        );
-        const response = z.object({ result: z.unknown() }).strict().parse(body);
-        return parseSelectionDecision(response.result);
-      },
-    },
-    lineageResolver: {
-      resolve: (leftConceptIds, rightConceptIds) => resolveProvisionLineage(
-        { db },
-        leftConceptIds,
-        rightConceptIds,
-      ),
+  });
+}
+
+const qualificationIdentifier = z.string().trim().min(1).max(200)
+  .regex(/^[A-Za-z0-9._:-]+$/u);
+const qualificationReconciliationSchema = z.object({
+  instanceId: z.string().trim().min(1).max(64),
+  providerItems: z.number().int().positive(),
+  uniqueItems: z.number().int().positive(),
+  chunks: z.number().int().positive(),
+  mismatches: z.record(z.string(), z.number().int().nonnegative()),
+  verifiedInventorySha256: z.string().regex(/^[a-f0-9]{64}$/u),
+  ok: z.literal(true),
+}).passthrough();
+
+type CandidateQualificationRow = {
+  id: string;
+  searchReleaseId: string;
+  environment: string;
+  capability: string;
+  reconciliationRunId: string;
+  providerNamespace: string;
+  providerInstanceId: string;
+  shardId: string;
+  configurationJson: string;
+  configurationSha256: string;
+  providerItemCount: number;
+  providerChunkCount: number;
+  providerInventorySha256: string;
+  providerReconciliationJson: string;
+  providerReconciliationSha256: string;
+  sourcePrefix: string;
+  scheduledIndexingPaused: number;
+  status: string;
+  recordedAt: string;
+  releaseEnvironment: string;
+  releaseCapability: string;
+  releaseStatus: string;
+  releaseItemCount: number;
+  releaseConfigurationIdentity: string;
+  reconciliationStatus: string;
+  reconciliationEnvironment: string;
+  reconciliationReleaseId: string;
+  reconciliationCapability: string;
+  projectionStatus: string;
+  projectionEnvironment: string;
+  projectionExpectedItems: number;
+  projectionCopiedItems: number;
+  projectionBucketName: string;
+};
+
+/**
+ * Opens one immutable, fully reconciled off-side candidate for staging-only
+ * Legal Answer evaluation. It does not create governance, seal a release, or
+ * change the active capability set.
+ */
+export async function createRuntimeTargetCandidateEvaluationRetriever(
+  env: TargetRetrievalRuntimeEnv,
+  untrustedQualificationId: string,
+): Promise<TargetLegalAnswerRetriever> {
+  const environment = environmentSchema.parse(env.APP_ENV);
+  if (environment !== "staging" || env.LEGAL_CORPUS_SHADOW_MODE !== "true"
+    || env.LEGAL_AI_SEARCH_PAUSED !== "true"
+    || !env.LEGAL_DB || !env.LEGAL_EVIDENCE_BUCKET
+    || !env.LEGAL_AI_SEARCH_NAMESPACE || !env.LEGAL_AI_SEARCH_NAMESPACE_NAME
+    || !env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME || !env.LEGAL_CORPUS_REASONING_SERVICE) {
+    throw new TypeError("TARGET_CANDIDATE_EVALUATION_UNAVAILABLE");
+  }
+  const qualificationId = qualificationIdentifier.parse(untrustedQualificationId);
+  const row = await env.LEGAL_DB.prepare(`SELECT qualification.id,
+      qualification.search_release_id AS searchReleaseId,
+      qualification.environment,qualification.capability,
+      qualification.reconciliation_run_id AS reconciliationRunId,
+      qualification.provider_namespace AS providerNamespace,
+      qualification.provider_instance_id AS providerInstanceId,
+      qualification.shard_id AS shardId,
+      qualification.configuration_json AS configurationJson,
+      qualification.configuration_sha256 AS configurationSha256,
+      qualification.provider_item_count AS providerItemCount,
+      qualification.provider_chunk_count AS providerChunkCount,
+      qualification.provider_inventory_sha256 AS providerInventorySha256,
+      qualification.provider_reconciliation_json AS providerReconciliationJson,
+      qualification.provider_reconciliation_sha256 AS providerReconciliationSha256,
+      qualification.source_prefix AS sourcePrefix,
+      qualification.scheduled_indexing_paused AS scheduledIndexingPaused,
+      qualification.status,qualification.recorded_at AS recordedAt,
+      release.environment AS releaseEnvironment,release.capability AS releaseCapability,
+      release.status AS releaseStatus,release.item_count AS releaseItemCount,
+      release.configuration_identity AS releaseConfigurationIdentity,
+      reconciliation.status AS reconciliationStatus,
+      reconciliation.environment AS reconciliationEnvironment,
+      reconciliation.release_id AS reconciliationReleaseId,
+      reconciliation.capability AS reconciliationCapability,
+      projection.status AS projectionStatus,
+      projection.environment AS projectionEnvironment,
+      projection.expected_item_count AS projectionExpectedItems,
+      projection.copied_item_count AS projectionCopiedItems,
+      projection.projection_bucket_name AS projectionBucketName
+    FROM legal_search_candidate_qualifications qualification
+    JOIN legal_search_releases release ON release.id=qualification.search_release_id
+    JOIN legal_migration_reconciliation_reports reconciliation
+      ON reconciliation.run_id=qualification.reconciliation_run_id
+    JOIN legal_ai_search_projection_builds projection
+      ON projection.search_release_id=qualification.search_release_id
+    WHERE qualification.id=? AND projection.projection_bucket_name=? LIMIT 1`)
+    .bind(qualificationId, env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME)
+    .first<CandidateQualificationRow>();
+  if (!row) throw new TypeError("TARGET_CANDIDATE_QUALIFICATION_NOT_FOUND");
+  const configuration = governedAiSearchConfigurationSchema.parse(
+    JSON.parse(row.configurationJson) as unknown,
+  );
+  const configurationSha256 = await sha256Hex(row.configurationJson);
+  const reconciliationSha256 = await sha256Hex(row.providerReconciliationJson);
+  const providerReconciliation = qualificationReconciliationSchema.parse(
+    JSON.parse(row.providerReconciliationJson) as unknown,
+  );
+  const inventorySha = z.string().regex(/^[a-f0-9]{64}$/u)
+    .safeParse(row.providerInventorySha256);
+  const exactIdentity = row.environment === environment
+    && row.capability === "current"
+    && row.status === "qualified"
+    && row.releaseEnvironment === environment
+    && row.releaseCapability === "current"
+    && row.releaseStatus === "draft"
+    && row.reconciliationStatus === "clean"
+    && row.reconciliationEnvironment === environment
+    && row.reconciliationReleaseId === row.searchReleaseId
+    && row.reconciliationCapability === "current"
+    && row.projectionStatus === "complete"
+    && row.projectionEnvironment === environment
+    && Number(row.providerItemCount) === Number(row.releaseItemCount)
+    && Number(row.projectionExpectedItems) === Number(row.releaseItemCount)
+    && Number(row.projectionCopiedItems) === Number(row.releaseItemCount)
+    && Number(row.providerChunkCount) >= Number(row.providerItemCount)
+    && Number(row.scheduledIndexingPaused) === 1
+    && row.providerNamespace === env.LEGAL_AI_SEARCH_NAMESPACE_NAME
+    && row.projectionBucketName === env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME
+    && row.configurationSha256 === configurationSha256
+    && row.providerReconciliationSha256 === reconciliationSha256
+    && inventorySha.success
+    && providerReconciliation.instanceId === row.providerInstanceId
+    && providerReconciliation.providerItems === Number(row.providerItemCount)
+    && providerReconciliation.uniqueItems === Number(row.providerItemCount)
+    && providerReconciliation.chunks === Number(row.providerChunkCount)
+    && providerReconciliation.verifiedInventorySha256 === row.providerInventorySha256
+    && Object.keys(providerReconciliation.mismatches).length === 0
+    && configuration.identity === row.releaseConfigurationIdentity
+    && configuration.providerNamespaceIdentity === row.providerNamespace
+    && configuration.sourcePrefix === row.sourcePrefix
+    && row.sourcePrefix === `search-releases/${row.searchReleaseId}/current/`;
+  if (!exactIdentity) throw new TypeError("TARGET_CANDIDATE_QUALIFICATION_REJECTED");
+  const pinnedConfiguration = toPinnedCandidateConfiguration(configuration);
+  const pinnedRelease = parsePinnedCandidateRelease({
+    id: row.searchReleaseId,
+    environment,
+    capability: "current",
+    instances: [{ id: row.providerInstanceId, shardId: row.shardId }],
+    configuration: pinnedConfiguration,
+  });
+  const provider = createCloudflareAiSearchProvider(env.LEGAL_AI_SEARCH_NAMESPACE, {
+    namespaceIdentity: row.providerNamespace,
+    sourceBucketName: env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME,
+    sourcePrefix: row.sourcePrefix,
+    shardByInstance: { [row.providerInstanceId]: row.shardId },
+    configuration: pinnedConfiguration,
+    async attestManagement(instanceId) {
+      if (instanceId !== row.providerInstanceId) {
+        throw new TypeError("TARGET_CANDIDATE_INSTANCE_REJECTED");
+      }
+      return {
+        instanceId,
+        configuration: pinnedConfiguration,
+        evidenceSha256: row.configurationSha256,
+        observedAt: row.recordedAt,
+      };
     },
   });
+  const dependencies = {
+    environment,
+    db: env.LEGAL_DB,
+    evidenceBucket: env.LEGAL_EVIDENCE_BUCKET,
+    reasoningService: env.LEGAL_CORPUS_REASONING_SERVICE,
+  };
+  return createRuntimeRetriever(
+    dependencies,
+    createRuntimeCandidateIndex(dependencies, provider),
+    { resolve: async (endpoint) => endpoint.kind === "current" ? pinnedRelease : null },
+  );
 }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import { legalEvaluationCorpus } from "../evaluation/legal-evaluation-corpus";
@@ -361,6 +362,72 @@ test("a complete governed manifest seals while any failed numeric or zero-tolera
     } finally {
       staleFixture.sqlite.close();
     }
+  } finally {
+    fixture.sqlite.close();
+  }
+});
+
+test("staging-scale governance accepts a compact immutable candidate qualification", async () => {
+  const fixture = await governedDraft();
+  try {
+    const evidence = governanceEvidence(fixture.releaseId, fixture.reportId, {
+      itemKey: fixture.item.itemKey,
+      language: fixture.item.language,
+      documentType: fixture.item.documentType,
+      validFrom: fixture.item.validFrom,
+    });
+    const { providerItems: explicitProviderItems, ...compactBase } = evidence;
+    void explicitProviderItems;
+    const compact = {
+      ...compactBase,
+      candidateQualificationIds: ["qualification-governance-v1"],
+    };
+    const configurationJson = JSON.stringify(compact.configuration);
+    const configurationSha256 = createHash("sha256").update(configurationJson).digest("hex");
+    const providerReconciliationJson = JSON.stringify({
+      instanceId: compact.shards[0]!.providerInstanceId,
+      providerItems: 1,
+      uniqueItems: 1,
+      chunks: 1,
+      mismatches: {},
+      verifiedInventorySha256: compact.shards[0]!.inventorySha256,
+      ok: true,
+    });
+    const providerReconciliationSha256 = createHash("sha256")
+      .update(providerReconciliationJson).digest("hex");
+    fixture.sqlite.prepare(`INSERT INTO legal_search_candidate_qualifications
+      (id,search_release_id,environment,capability,reconciliation_run_id,
+       provider_namespace,provider_instance_id,shard_id,sync_job_id,
+       configuration_json,configuration_sha256,provider_item_count,
+       provider_chunk_count,provider_inventory_sha256,provider_reconciliation_json,
+       provider_reconciliation_sha256,source_prefix,
+       scheduled_indexing_paused,status,recorded_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "qualification-governance-v1",
+      fixture.releaseId,
+      "development",
+      "current",
+      fixture.reportId,
+      compact.shards[0]!.providerNamespaceIdentity,
+      compact.shards[0]!.providerInstanceId,
+      compact.shards[0]!.id,
+      compact.shards[0]!.syncJobId,
+      configurationJson,
+      configurationSha256,
+      1,
+      1,
+      compact.shards[0]!.inventorySha256,
+      providerReconciliationJson,
+      providerReconciliationSha256,
+      compact.configuration.sourcePrefix,
+      1,
+      "qualified",
+      "2026-08-30T02:59:00.000Z",
+    );
+    assert.deepEqual(await recordSearchReleaseGovernance({ db: fixture.d1 }, compact), {
+      passed: true,
+      failures: [],
+    });
   } finally {
     fixture.sqlite.close();
   }

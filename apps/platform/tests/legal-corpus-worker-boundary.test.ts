@@ -227,6 +227,8 @@ test("private dense services stay behind service bindings and staging-only flags
   assert.match(corpusConfig, /"binding": "BACKUP_BUCKET"/u);
   assert.match(corpusWorker, /url\.pathname === TARGET_LEGAL_ANSWER_PATH/u);
   assert.match(corpusWorker, /createRuntimeTargetLegalAnswerRetriever\(env\)/u);
+  assert.match(corpusWorker, /url\.pathname === TARGET_CANDIDATE_EVALUATION_PATH/u);
+  assert.match(corpusWorker, /handleTargetCandidateEvaluationRequest\(request, env\)/u);
   const production = corpusConfig.slice(corpusConfig.indexOf('"production"'));
   assert.doesNotMatch(production, /"binding": "QDRANT_SERVICE"/u);
   assert.match(production, /"LEGAL_CORPUS_DENSE_ENABLED": "false"/u);
