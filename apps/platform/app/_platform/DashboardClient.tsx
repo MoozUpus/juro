@@ -355,7 +355,14 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
         <div className="dashboard-section-heading"><h2>{copy.quickTitle}</h2></div>
         <div className="dashboard-quick-grid">
           {quickActions.map(({ href, icon: Icon, copy: item }) => (
-            <Link href={href} key={href}>
+            <Link
+              href={href}
+              key={href}
+              onFocus={(event) => event.currentTarget.scrollIntoView({
+                block: "nearest",
+                inline: "nearest",
+              })}
+            >
               <span className="dashboard-action-icon"><Icon /></span>
               <span><strong>{item.title}</strong><small>{item.description}</small></span>
               <ArrowRight aria-hidden="true" />

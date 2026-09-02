@@ -8,6 +8,7 @@ const shellStylesheet = new URL("../app/_platform/platform-shell.css", import.me
 const profileStylesheet = new URL("../app/_platform/profile-settings.css", import.meta.url);
 const casesStylesheet = new URL("../app/_platform/cases.css", import.meta.url);
 const lawyerStylesheet = new URL("../app/_platform/lawyer-workspace.css", import.meta.url);
+const dashboardSource = new URL("../app/_platform/DashboardClient.tsx", import.meta.url);
 const dashboardStylesheet = new URL("../app/_platform/dashboard.css", import.meta.url);
 const calendarStylesheet = new URL("../app/_platform/calendar.css", import.meta.url);
 const documentBuilderStylesheet = new URL("../app/_document-builder/document-builder.css", import.meta.url);
@@ -90,6 +91,17 @@ test("client dashboard and calendar actions retain 44px touch targets", async ()
   assert.match(dashboard, /\.dashboard-section-title-row > button \{\s+width: 44px;\s+padding: 0;/);
   assert.match(calendar, /\.calendar-tabs button\{min-width:0;min-height:44px/);
   assert.match(calendar, /@media \(max-width:430px\)\{[\s\S]*?\.calendar-range button\{width:44px;height:44px\}/);
+});
+
+test("dashboard keyboard focus stays visible in the composer and mobile action scroller", async () => {
+  const [dashboard, css] = await Promise.all([
+    readFile(dashboardSource, "utf8"),
+    readFile(dashboardStylesheet, "utf8"),
+  ]);
+
+  assert.match(css, /\.dashboard-command-form:focus-within\s*\{\s*outline:\s*3px solid var\(--focus-ring, #87631f\);\s*outline-offset:\s*3px;/);
+  assert.match(css, /\.dashboard-quick-grid > a:focus-visible\s*\{\s*outline:\s*3px solid var\(--focus-ring, #87631f\);\s*outline-offset:\s*3px;/);
+  assert.match(dashboard, /onFocus=\{\(event\) => event\.currentTarget\.scrollIntoView\(\{\s*block: "nearest",\s*inline: "nearest",\s*\}\)\}/);
 });
 
 test("canonical document routes load the builder styles and keep folder controls touchable", async () => {
