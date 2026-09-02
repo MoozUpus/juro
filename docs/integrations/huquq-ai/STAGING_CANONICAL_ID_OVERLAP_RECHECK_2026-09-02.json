@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T00:50:17.1226245Z",
+  "applicationCommit": "a907411735a175a814e95c425a29c29002d005f6",
+  "purpose": "Read-only reconciliation of canonical document identities before any federated snapshot; this is not a corpus snapshot or release approval.",
+  "query": "SELECT id FROM legal_corpus_documents ORDER BY id",
+  "queryMode": "wrangler d1 execute --remote --json; no INSERT, UPDATE, DELETE, migration, or ingestion",
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "databaseId": "bb716a96-b2fb-4823-90d6-6c228fed181a",
+      "rowCount": 4291,
+      "sortedIdSetSha256": "ea067d1d827b76960ef9eee50b75dc2f68a1bff1c8a2019bacb7f00332832006"
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "databaseId": "62620fb3-3da3-4c76-a8e9-aa60858c1063",
+      "rowCount": 599,
+      "sortedIdSetSha256": "b68f5d5af20fb4e92d5cc1212045c13fdc336b0fb7125e4127900b4e64f89712"
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "databaseId": "e09e0682-0c2e-4458-a8f3-be9de28117e3",
+      "rowCount": 1635,
+      "sortedIdSetSha256": "0bf5cfd0e12c4194e1226975f7abf14c2e144713692d9dc39208bf8087bcd413"
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "databaseId": "36fa1cfe-6d00-47b7-a980-864020028d86",
+      "rowCount": 2495,
+      "sortedIdSetSha256": "ae9837317735d6bb19eb166366f60bc8c2ae02d6392641fe505f3cfa6775eda4"
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+      "rowCount": 3313,
+      "sortedIdSetSha256": "2b2341b66c0d60db482a0a67141baec7d3859022a2d461656dae6074e20babb5"
+    }
+  ],
+  "rawRowsAcrossSources": 12333,
+  "unionCanonicalIds": 7152,
+  "crossSourceDuplicateRows": 5181,
+  "pairwiseIntersectionCounts": [
+    {"left": "juro-staging", "right": "juro-staging-corpus-v2", "count": 469},
+    {"left": "juro-staging", "right": "juro-staging-corpus-shard-1", "count": 389},
+    {"left": "juro-staging", "right": "juro-staging-corpus-shard-2", "count": 316},
+    {"left": "juro-staging", "right": "juro-staging-corpus-shard-3", "count": 468},
+    {"left": "juro-staging-corpus-v2", "right": "juro-staging-corpus-shard-1", "count": 491},
+    {"left": "juro-staging-corpus-v2", "right": "juro-staging-corpus-shard-2", "count": 374},
+    {"left": "juro-staging-corpus-v2", "right": "juro-staging-corpus-shard-3", "count": 590},
+    {"left": "juro-staging-corpus-shard-1", "right": "juro-staging-corpus-shard-2", "count": 1335},
+    {"left": "juro-staging-corpus-shard-1", "right": "juro-staging-corpus-shard-3", "count": 1617},
+    {"left": "juro-staging-corpus-shard-2", "right": "juro-staging-corpus-shard-3", "count": 2477}
+  ],
+  "partitionAssessment": {
+    "canonicalDocumentIdsDisjoint": false,
+    "federatedPartitionManifestAllowed": false,
+    "releaseGateImpact": "Counts cannot be summed as a unique corpus until an explicit deduplication/partition manifest is produced and independently verified.",
+    "temporaryExtractsRetained": false
+  },
+  "relatedEvidence": [
+    "STAGING_FIVE_SOURCE_INVENTORY_2026-09-02.json",
+    "apps/platform/lib/legal-corpus/federated-release-evidence-builder.ts"
+  ]
+}
