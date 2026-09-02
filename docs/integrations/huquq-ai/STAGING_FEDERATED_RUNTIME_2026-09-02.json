@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T05:30:00Z",
+  "applicationCommit": "c85e35cc",
+  "platformDeployment": "5de1b204-a53b-48ed-8c95-e4e140263efe",
+  "adminDeployment": "0e558828-af23-4828-a8be-31143a0fb35f",
+  "sourceSet": "all-staging-d1",
+  "sources": [
+    {"databaseName": "juro-staging", "binding": "LEGAL_CORPUS_LEGACY_DB"},
+    {"databaseName": "juro-staging-corpus-v2", "binding": "LEGAL_CORPUS_V2_DB"},
+    {"databaseName": "juro-staging-corpus-shard-1", "binding": "LEGAL_CORPUS_SHARD_1_DB"},
+    {"databaseName": "juro-staging-corpus-shard-2", "binding": "LEGAL_CORPUS_SHARD_2_DB"},
+    {"databaseName": "juro-staging-corpus-shard-3", "binding": "LEGAL_CORPUS_SHARD_3_DB"}
+  ],
+  "ownership": {
+    "mode": "logical_retrieval_boundary",
+    "evidenceKey": ["source_class", "canonical_source_url_or_document_id", "language", "article_number"],
+    "representativeOrder": ["active", "unknown", "historical", "repealed", "newest_version", "newest_fetched_at", "stable_chunk_id"],
+    "duplicateContributionPolicy": "one_sparse_and_one_dense_contribution_per_evidence_key",
+    "logicalResultKeysAreDisjoint": true
+  },
+  "physicalIdentityProbe": {
+    "rawRowsAcrossSources": 12333,
+    "unionCanonicalIds": 7152,
+    "crossSourceDuplicateRows": 5181,
+    "canonicalDocumentIdsDisjoint": false,
+    "chunkIdsDisjoint": "not_proven"
+  },
+  "verification": {
+    "federatedRetrievalTests": {"passed": 187, "failed": 0},
+    "platformTypeCheck": "passed",
+    "platformLint": "passed",
+    "productionChanged": false,
+    "dnsChanged": false,
+    "bulkIngestionStarted": false
+  },
+  "releaseAssessment": {
+    "physicalDisjointPartitionGate": "closed",
+    "reason": "Underlying D1 identities overlap; a physical numbered-shard partition, point-in-time snapshot and restore evidence are still required.",
+    "indexed314Evaluation": "open",
+    "qdrantBenchmarkAndRestore": "open",
+    "d1BackupAndRestore": "open"
+  }
+}
