@@ -2,9 +2,16 @@
 
 Assessment: **NOT READY for the full execution brief**
 
-Evidence cutoff: **2026-09-02 16:47 UZT**
+Evidence cutoff: **2026-09-02 16:56 UZT**
 
-Production is reachable and the owner-requested v101 mobile interaction-target increment is deployed from merge `498ab8944575134163cadcc6c74deeadd3a93fac`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker version `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T06:08:14.064Z` was operational with 8/8 components and 0 active incidents. A separate content-free 24-hour D1 history supports a bounded provider-recovery statement, but not an availability SLA. The obsolete FTP DNS exposure is resolved, the authenticated Lawyer read-only shell is verified, the checked approved Lawyer session was denied Business and Admin surfaces, and all 78 public sitemap URLs passed both the actual 1536 px desktop crawl and a later 780-check Chrome structural matrix across the ten required widths from 320 through 1920 px. The full execution brief remains incomplete because positive authenticated Business, Pending Lawyer, Staff/Admin, state-changing Lawyer/client collaboration, authenticated responsive/accessibility matrices, and other Definition-of-Done gates are still open.
+Production is reachable and the owner-requested v101 mobile interaction-target increment is deployed from merge `498ab8944575134163cadcc6c74deeadd3a93fac`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker version `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T11:56:13.706Z` was operational with 8/8 components, 0 active/recent incidents, and operational OpenAI plus Anthropic checks. Provider evidence was about 13 minutes old while OTP/email evidence was about 8.7 hours old, so this remains a checkpoint rather than an SLA. A separate content-free 24-hour D1 history supports a bounded provider-recovery statement, but not an availability SLA. The obsolete FTP DNS exposure is resolved, the authenticated Lawyer read-only shell is verified, the checked approved Lawyer session was denied Business and Admin surfaces, and all 78 public sitemap URLs passed both the actual 1536 px desktop crawl and a later 780-check Chrome structural matrix across the ten required widths from 320 through 1920 px. The full execution brief remains incomplete because positive authenticated Business, Pending Lawyer, Staff/Admin, state-changing Lawyer/client collaboration, authenticated responsive/accessibility matrices, and other Definition-of-Done gates are still open.
+
+## Current public-safe health receipt (2026-09-02)
+
+- `status.juro.uz/api/status` returned HTTP `200` with `generatedAt=2026-09-02T11:56:13.706Z`, operational 8/8, and zero active/recent incidents.
+- OpenAI was operational at `11:42:48Z` with 3,804 ms latency; Anthropic was operational at `11:42:59Z` with 10,129 ms latency. Neither exposed a safe error code.
+- D1, queues, private R2, DLQ, and document-builder evidence was refreshed between `11:52:11Z` and `11:55:49Z` and remained operational.
+- OTP/email evidence was materially older at about 8.7 hours. The receipt proves only the returned point-in-time state and does not establish sustained availability.
 
 ## DNS retirement and authenticated Lawyer receipt (2026-09-02)
 

@@ -2,9 +2,20 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-09-02 16:47 UZT**
+Evidence cutoff: **2026-09-02 16:56 UZT**
 
 Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, the later bounded DNS-retirement and authenticated Lawyer receipts, a 78-route public production Chrome crawl at desktop and all ten required responsive widths, a native-Tab RU/UZ/EN public entry-page traversal, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## Current production health checkpoint (2026-09-02)
+
+| Area | Public-safe evidence | Result |
+| --- | --- | --- |
+| Status response | HTTP `200`; generated `2026-09-02T11:56:13.706Z` | PASS |
+| Overall | operational; 8/8 components; zero active or recent incidents | PASS AS POINT-IN-TIME EVIDENCE |
+| OpenAI | checked `2026-09-02T11:42:48.699Z`; 3,804 ms; no safe error code | OPERATIONAL |
+| Anthropic | checked `2026-09-02T11:42:59.226Z`; 10,129 ms; no safe error code | OPERATIONAL |
+| Fresh infrastructure evidence | D1 210 ms; queues 1,965 ms; private R2 3,148 ms; DLQ zero; checks between `11:52:11Z` and `11:55:49Z` | OPERATIONAL |
+| Freshness boundary | OTP/email evidence was about 8.7 hours old; provider evidence was about 13 minutes old | CHECKPOINT ONLY; NOT AN SLA |
 
 ## Public full responsive Chrome matrix (2026-09-02)
 

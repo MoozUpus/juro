@@ -2,7 +2,7 @@
 
 Status: **partial, evidence-backed audit; the full execution goal remains active**
 
-Evidence cutoff: **2026-09-02 16:47 UZT (2026-09-02 11:47 UTC)**
+Evidence cutoff: **2026-09-02 16:56 UZT (2026-09-02 11:56 UTC)**
 
 Baseline: documentation main `1bdece2d98d3abde1e93e595d023242a95da2a8e`; runtime merge `498ab8944575134163cadcc6c74deeadd3a93fac`, platform Worker `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8`, website Worker v13, public Sites v97.
 
@@ -27,7 +27,7 @@ This does not complete the Definition of Done. End-to-end Business, Pending Lawy
 | Public routes | RU/UZ/EN, robots and sitemap 200; 78 sitemap URLs | PASS |
 | Public responsive structure | 78 URLs × 10 required widths; URL/200, one main, visible H1, zero overflow/broken image/not-found; 26 transient transport failures passed isolated recheck | 780/780 PASS AFTER RECHECK |
 | Indexing split | apex indexable; provider host noindex/nofollow/noarchive | PASS |
-| Point-in-time status | operational, 8/8, 0 active incidents at `2026-09-02T01:32:20.313Z` | PASS FOR SNAPSHOT |
+| Point-in-time status | operational, 8/8, 0 active/recent incidents at `2026-09-02T11:56:13.706Z`; OpenAI and Anthropic operational | PASS FOR SNAPSHOT; NOT AN SLA |
 | Provider recovery history | 24 hours: OpenAI 97/98 and Anthropic 98/99 operational probes; 41 and 29 consecutive successes after the last timeouts | PASS FOR OBSERVED WINDOW; NOT AN SLA |
 | Legacy FTP retirement | only record `4435f48bc863cc0ccaddd74a21791e5d` deleted; recursive and authoritative NXDOMAIN; production/email contract unchanged | PASS |
 | Authenticated Lawyer shell | 16 protected routes on the dedicated host; no login fallback, 404, horizontal overflow, visible alert, or console error; 15 routes also checked at 390 × 844 | PASS FOR READ-ONLY SHELL |
