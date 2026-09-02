@@ -42,6 +42,15 @@ import {
   type SourceSnapshotBuildEnv,
 } from "../lib/legal-corpus/source-snapshot-build-service";
 import {
+  handleAiSearchProjectionRequest,
+  isAiSearchProjectionPath,
+  type AiSearchProjectionEnv,
+} from "../lib/legal-corpus/ai-search-projection";
+import {
+  AI_SEARCH_MANAGEMENT_PATH,
+  handleAiSearchManagementRequest,
+} from "../lib/legal-corpus/ai-search-management";
+import {
   resolveActiveLegalSearchIndex,
   resolveLegalSearchIndexManifest,
 } from "../lib/legal-corpus/search-index-manifest";
@@ -147,7 +156,7 @@ export function legalCorpusIngestionStartAllowed(
 
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv
   & LegalTargetReadinessEnv & OfficialEvidenceEnv & ReleaseLifecycleEnv
-  & TargetRetrievalRuntimeEnv & SourceSnapshotBuildEnv & {
+  & TargetRetrievalRuntimeEnv & SourceSnapshotBuildEnv & AiSearchProjectionEnv & {
   BACKUP_BUCKET?: R2Bucket;
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
@@ -634,6 +643,12 @@ const worker = {
     }
     if (isSourceSnapshotBuildPath(url.pathname)) {
       return handleSourceSnapshotBuildRequest(request, env);
+    }
+    if (isAiSearchProjectionPath(url.pathname)) {
+      return handleAiSearchProjectionRequest(request, env);
+    }
+    if (url.pathname === AI_SEARCH_MANAGEMENT_PATH) {
+      return handleAiSearchManagementRequest(request, env);
     }
     if (request.method !== "GET") return response({ code: "METHOD_NOT_ALLOWED" }, 405);
     if (url.pathname === "/health") {

@@ -19,6 +19,7 @@
     "LEGAL_CORPUS_DENSE_ENABLED": "false",
     "LEGAL_CORPUS_SHADOW_MODE": "false",
     "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-development",
+    "LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME": "juro-legal-ai-search-development",
     "LEGAL_AI_SEARCH_NAMESPACE_NAME": "juro-legal-development",
     "LEGAL_AI_SEARCH_CONFIGURATION_ID": "ai-search-development-v1",
     "LEGAL_AI_GATEWAY_ID": "juro-ai-search-development",
@@ -63,6 +64,10 @@
     {
       "binding": "LEGAL_EVIDENCE_BUCKET",
       "bucket_name": "juro-legal-evidence-development"
+    },
+    {
+      "binding": "LEGAL_AI_SEARCH_SOURCE_BUCKET",
+      "bucket_name": "juro-legal-ai-search-development"
     }
   ],
   "ai_search_namespaces": [
@@ -100,6 +105,7 @@
         "LEGAL_CORPUS_DENSE_ENABLED": "true",
         "LEGAL_CORPUS_SHADOW_MODE": "true",
         "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-staging-green2-20260831",
+        "LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME": "juro-legal-ai-search-staging-20260902",
         "LEGAL_AI_SEARCH_NAMESPACE_NAME": "juro-legal-staging",
         "LEGAL_AI_SEARCH_CONFIGURATION_ID": "ai-search-staging-v1",
         "LEGAL_AI_GATEWAY_ID": "juro-ai-search-staging",
@@ -149,6 +155,10 @@
         {
           "binding": "LEGAL_EVIDENCE_BUCKET",
           "bucket_name": "juro-legal-evidence-staging-green2-20260831"
+        },
+        {
+          "binding": "LEGAL_AI_SEARCH_SOURCE_BUCKET",
+          "bucket_name": "juro-legal-ai-search-staging-20260902"
         }
       ],
       "ai_search_namespaces": [
@@ -184,6 +194,7 @@
         "LEGAL_CORPUS_DENSE_ENABLED": "false",
         "LEGAL_CORPUS_SHADOW_MODE": "false",
         "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-production",
+        "LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME": "juro-legal-ai-search-production",
         "LEGAL_AI_SEARCH_NAMESPACE_NAME": "juro-legal-production",
         "LEGAL_AI_SEARCH_CONFIGURATION_ID": "ai-search-production-v1",
         "LEGAL_AI_GATEWAY_ID": "juro-ai-search-production",
@@ -229,6 +240,10 @@
         {
           "binding": "LEGAL_EVIDENCE_BUCKET",
           "bucket_name": "juro-legal-evidence-production"
+        },
+        {
+          "binding": "LEGAL_AI_SEARCH_SOURCE_BUCKET",
+          "bucket_name": "juro-legal-ai-search-production"
         }
       ],
       "ai_search_namespaces": [

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createAiSearchCandidateIndex,
+  createCloudflareAiSearchProvider,
   createInMemoryCandidateIndex,
   createQdrantCandidateIndex,
   parseCandidatePacket,
@@ -13,6 +14,7 @@ import {
   type PinnedCandidateRelease,
   type QuestionInterpretation,
 } from "../lib/legal-corpus/legal-candidate-index";
+import { governedAiSearchInstanceUpdate } from "../lib/legal-corpus/ai-search-management";
 
 const interpretation: QuestionInterpretation = {
   id: "interpretation-1",
@@ -53,6 +55,18 @@ const normalizedCandidate = {
   keywordRank: 2,
   keywordScore: 4.5,
   fusionScore: 0.8,
+};
+const providerMetadata = {
+  language: "ru" as const,
+  document_type: "Закон",
+  valid_from: "2026-01-01T00:00:00.000Z",
+  valid_to: null,
+};
+const managementAttestation = {
+  instanceId: "current-00",
+  configuration: release.configuration,
+  evidenceSha256: "a".repeat(64),
+  observedAt: "2026-09-02T00:00:00.000Z",
 };
 
 function aiProvider(overrides: {
@@ -136,6 +150,203 @@ test("AI Search, Qdrant/D1, and memory adapters satisfy one LegalCandidateIndex 
   await assertCandidateContract(memory);
   await assertCandidateContract(qdrant);
   await assertCandidateContract(aiSearch);
+});
+
+test("Cloudflare AI Search namespace adapter attests pinned configuration and preserves hybrid ranks", async () => {
+  const calls: unknown[] = [];
+  const namespace = {
+    get(instanceId: string) {
+      assert.equal(instanceId, "current-00");
+      return {
+        async info() {
+          return {
+            id: instanceId,
+            namespace: "juro-legal-development",
+            type: "r2",
+            source: "juro-legal-ai-search-development",
+            paused: true,
+            modified_at: "2026-09-01T00:00:00.000Z",
+            embedding_model: "openai/text-embedding-3-large",
+            ai_gateway_id: "juro-ai-search-development",
+            rewrite_query: false,
+            reranking: false,
+            index_method: { vector: true, keyword: true },
+            fusion_method: "rrf",
+            indexing_options: { keyword_tokenizer: "porter" },
+            max_num_results: 50,
+            score_threshold: 0,
+            cache: false,
+            chunk: false,
+            sync_interval: 86400,
+            source_params: { prefix: `search-releases/${release.id}/current/` },
+            custom_metadata: [
+              { field_name: "language", data_type: "text" },
+              { field_name: "document_type", data_type: "text" },
+              { field_name: "valid_from", data_type: "datetime" },
+              { field_name: "valid_to", data_type: "datetime" },
+            ],
+          };
+        },
+      };
+    },
+    async search(input: unknown) {
+      calls.push(input);
+      return {
+        search_query: "прекращение трудового договора",
+        chunks: [{
+          id: "provider-chunk-1",
+          instance_id: "current-00",
+          type: "text/markdown",
+          score: 0.8,
+          text: "candidate excerpt must not cross the adapter",
+          item: { key: itemKey, metadata: {
+            language: "ru", document_type: "Закон",
+            valid_from: "2026-01-01T00:00:00.000Z",
+          } },
+          scoring_details: {
+            vector_rank: 1,
+            vector_score: 0.92,
+            keyword_rank: 2,
+            keyword_score: 4.5,
+            fusion_method: "rrf",
+          },
+        }],
+        errors: [],
+      };
+    },
+  };
+  const provider = createCloudflareAiSearchProvider(namespace as unknown as AiSearchNamespace, {
+    namespaceIdentity: "juro-legal-development",
+    sourceBucketName: "juro-legal-ai-search-development",
+    sourcePrefix: `search-releases/${release.id}/current/`,
+    shardByInstance: { "current-00": "current-00" },
+    configuration: release.configuration,
+    async attestManagement() { return managementAttestation; },
+  });
+
+  assert.deepEqual(await provider.attest("current-00"), release.configuration);
+  const result = await provider.search({
+    instanceIds: ["current-00"],
+    query: interpretation.formulations[0]!.text,
+    endpoint,
+    maxResults: 50,
+    vectorThreshold: 0,
+  });
+  assert.deepEqual(calls, [{
+    query: interpretation.formulations[0]!.text,
+    ai_search_options: {
+      instance_ids: ["current-00"],
+      retrieval: {
+        retrieval_type: "hybrid",
+        fusion_method: "rrf",
+        max_num_results: 50,
+        match_threshold: 0,
+        context_expansion: 0,
+        metadata_only: true,
+        return_on_failure: false,
+      },
+      query_rewrite: { enabled: false },
+      reranking: { enabled: false },
+      cache: { enabled: false },
+    },
+  }]);
+  assert.deepEqual(result, {
+    hits: [{ ...normalizedCandidate, providerMetadata }],
+    errors: [],
+    searchedInstanceIds: ["current-00"],
+  });
+});
+
+test("Cloudflare AI Search namespace adapter rejects configuration drift", async () => {
+  const provider = createCloudflareAiSearchProvider({
+    get() {
+      return {
+        async info() {
+          return {
+            id: "current-00",
+            namespace: "juro-legal-development",
+            embedding_model: "openai/text-embedding-3-large",
+            ai_gateway_id: "juro-ai-search-development",
+            rewrite_query: false,
+            reranking: false,
+            index_method: { vector: true, keyword: true },
+            fusion_method: "rrf",
+            indexing_options: { keyword_tokenizer: "trigram" },
+            max_num_results: 50,
+            cache: false,
+            source_params: { prefix: `search-releases/${release.id}/current/` },
+            custom_metadata: [],
+          };
+        },
+      };
+    },
+  } as unknown as AiSearchNamespace, {
+    namespaceIdentity: "juro-legal-development",
+    sourceBucketName: "juro-legal-ai-search-development",
+    sourcePrefix: `search-releases/${release.id}/current/`,
+    shardByInstance: { "current-00": "current-00" },
+    configuration: release.configuration,
+    async attestManagement() { return managementAttestation; },
+  });
+
+  await assert.rejects(provider.attest("current-00"), /AI_SEARCH_CONFIGURATION_DRIFT/u);
+});
+
+test("Cloudflare AI Search namespace adapter rejects stale management privacy evidence", async () => {
+  const provider = createCloudflareAiSearchProvider({
+    get() {
+      return { async info() { return {
+        id: "current-00", namespace: "juro-legal-development", type: "r2",
+        source: "juro-legal-ai-search-development", paused: true,
+        modified_at: "2026-09-02T00:00:00.000Z",
+        embedding_model: "openai/text-embedding-3-large",
+        ai_gateway_id: "juro-ai-search-development", rewrite_query: false, reranking: false,
+        index_method: { vector: true, keyword: true }, fusion_method: "rrf",
+        indexing_options: { keyword_tokenizer: "porter" }, max_num_results: 50,
+        score_threshold: 0, cache: false, chunk: false, sync_interval: 86400,
+        source_params: { prefix: `search-releases/${release.id}/current/` },
+        custom_metadata: [
+          { field_name: "language", data_type: "text" },
+          { field_name: "document_type", data_type: "text" },
+          { field_name: "valid_from", data_type: "datetime" },
+          { field_name: "valid_to", data_type: "datetime" },
+        ],
+      }; } };
+    },
+  } as unknown as AiSearchNamespace, {
+    namespaceIdentity: "juro-legal-development",
+    sourceBucketName: "juro-legal-ai-search-development",
+    sourcePrefix: `search-releases/${release.id}/current/`,
+    shardByInstance: { "current-00": "current-00" },
+    configuration: release.configuration,
+    async attestManagement() {
+      return { ...managementAttestation, observedAt: "2026-09-01T00:00:00.000Z" };
+    },
+  });
+  await assert.rejects(provider.attest("current-00"), /AI_SEARCH_CONFIGURATION_DRIFT/u);
+});
+
+test("governed AI Search instance updates pin retrieval, privacy, sync, and tokenizer settings", () => {
+  assert.deepEqual(governedAiSearchInstanceUpdate("trigram"), {
+    paused: true,
+    ai_gateway_id: "juro-ai-search-staging",
+    rewrite_query: false,
+    reranking: false,
+    index_method: { vector: true, keyword: true },
+    fusion_method: "rrf",
+    indexing_options: { keyword_tokenizer: "trigram" },
+    chunk: false,
+    score_threshold: 0,
+    max_num_results: 50,
+    cache: false,
+    sync_interval: 86400,
+    custom_metadata: [
+      { field_name: "language", data_type: "text" },
+      { field_name: "document_type", data_type: "text" },
+      { field_name: "valid_from", data_type: "datetime" },
+      { field_name: "valid_to", data_type: "datetime" },
+    ],
+  });
 });
 
 test("shadow AI Search cannot change the active packet", async () => {
