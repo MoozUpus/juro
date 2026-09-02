@@ -30,25 +30,22 @@
   and do not affect legal-answer freshness. User-upload factual grounding now
   has a separate private provider path; it does not promote owner material into
   global law or make a private document an official source.
-- Staging source discovery and metadata seeding remain disabled. Under the
-  owner's explicit queue-processing approval, the shard Worker now uses the
-  staging-only `LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED=true` path while keeping
-  `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false` and live Lex disabled. It drains only
-  already-materialized durable `fetch/version` jobs through the existing
-  single-stream robots pacer and lock; it does not start new catalog discovery.
-  The shard-3 control row remains `active` and queued jobs are not deleted or
-  rewritten, so the ingestion queue is not yet a release-frozen queue. The
-  read-only federated
-  runtime routes the frozen legacy, v2, shard-1 and shard-2 bindings; shard-3
-  remains outside that release set. Per-database totals, queue reconciliation,
-  duplicate identity findings and the remaining release gates are recorded in
-  `STAGING_FEDERATED_RETRIEVAL_2026-08-28.md` and
-  `STAGING_ACQUISITION_FREEZE_2026-08-28.json`. These totals are not summed as
-  a unique-corpus metric: cross-source overlap requires a formal
-  partition/deduplication manifest. Isolated shard-1, shard-2, v2 and shard-3
-  D1 export/restore rehearsals now have verified local `quick_check=ok` and zero
-  foreign-key violations, but no federated snapshot, indexed 314-scenario
-  benchmark or full-corpus Qdrant evidence has been claimed.
+- Staging source discovery and metadata seeding remain disabled. A bounded
+  queue-processing attempt was authorized, but two valid `*/4` ticks on
+  shard-3 produced sanitized `LEGAL_CORPUS_INGESTION_FAILED` outcomes while
+  the D1 file was 9,999,892,480 bytes against its 9,999,998,976-byte ceiling.
+  Queue processing is now disabled again (`crons=[]`); 23,702 queued, 4
+  retrying and 7 dead-letter jobs remain, with 7 terminal failure-ledger rows
+  preserved. An empty `juro-staging-corpus-shard-4` was created and migrated
+  through `0142_legal_corpus_shard_handoffs.sql` as a rollover target only; it
+  is not bound, deployed or seeded. The read-only federated runtime routes all
+  five existing D1 sources, including shard-3, with deterministic logical
+  evidence-key deduplication. The underlying stores still overlap physically,
+  so the formal disjoint-partition release gate, federated snapshot, indexed
+  314-scenario benchmark and full-corpus Qdrant evidence remain unproven.
+  Details are recorded in `STAGING_FEDERATED_RUNTIME_2026-09-02.md`,
+  `STAGING_SHARD3_QUEUE_DRAIN_FAILURE_2026-09-02T0712Z.json` and the existing
+  read-only identity probes.
 - A 2026-09-02 read-only recheck found one historical legacy dead-letter fetch
   (`lexuz:8411573`, `LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT`) and its terminal
   ledger row, plus two expired audit lock rows. The guard intentionally fails
