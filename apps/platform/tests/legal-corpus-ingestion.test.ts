@@ -32,6 +32,10 @@ test("safeErrorCode preserves bounded D1 capacity diagnostics without raw detail
     "SQLITE_NOMEM",
   );
   assert.equal(
+    safeErrorCode(new Error("D1_ERROR: SQLITE_NOMEM; provider envelope=capacity")),
+    "SQLITE_NOMEM",
+  );
+  assert.equal(
     safeErrorCode(new Error("database is full; source=https://lex.uz/private")),
     "LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED",
   );

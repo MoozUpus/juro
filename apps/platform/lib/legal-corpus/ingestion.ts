@@ -423,6 +423,11 @@ export function safeErrorCode(error: unknown): string {
   // text into the failure ledger. Existing rows are intentionally immutable;
   // this affects only future attempts.
   const message = error instanceof Error ? error.message : String(error);
+  // Cloudflare may prefix the concrete SQLite condition with a generic
+  // provider envelope such as `D1_ERROR`. Prefer the actionable condition so
+  // capacity/memory failures remain diagnosable instead of being collapsed
+  // into the less useful wrapper code.
+  if (/\bSQLITE_NOMEM\b/u.test(message)) return "SQLITE_NOMEM";
   if (/\b(?:exceeded maximum db size|maximum database size|database is full|sqlite_full)\b/iu.test(message)) {
     return "LEGAL_CORPUS_D1_CAPACITY_EXHAUSTED";
   }
