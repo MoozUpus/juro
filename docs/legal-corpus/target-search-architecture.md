@@ -84,7 +84,7 @@ The raw layer preserves the complete captured publisher artifact and response me
 - Applicability Period when known;
 - normalized and provision object keys, byte counts, and SHA-256 values.
 
-Every search artifact stays well below AI Search's 4 MB file limit and below the configured chunk-token ceiling. The release gate expects one AI Search item and normally one AI Search chunk per JURO artifact. If Cloudflare splits an artifact, the build fails unless the split is explicitly represented and every returned piece still maps to the same JURO chunk through `item.key`.
+Every search artifact stays below AI Search's 4,000,000-byte file limit and the pinned 8,191-token embedding-input ceiling. The release gate expects one AI Search item and normally one AI Search chunk per JURO artifact. If Cloudflare splits an artifact, the build fails unless the split is explicitly represented and every returned piece still maps to the same JURO chunk through `item.key`. Ticket 12 records these limits, the 50-result and ten-instance request ceilings, and the USD 0.13-per-million-token/current-build USD 50/production-query USD 25 circuit breakers without creating or synchronizing a provider instance.
 
 Release prefixes are immutable. A corrected source produces a new Text Revision and Search Release; it never edits the evidence that supported a prior Legal Answer.
 

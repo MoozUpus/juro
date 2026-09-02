@@ -33,6 +33,16 @@ reconciliation. Ticket 12 may seal the green2 storage candidate, but the Search
 Release stays draft, inactive and unpromoted until Ticket 13 completes provider
 evaluation, failure/quality/latency/cost gates and activation.
 
+Legacy primary keys remain compatibility surrogates only. Additive stable
+identity mappings derive Source Document, Source Snapshot and Snapshot
+Provision identities from publisher tokens, capture provenance, source
+position and verified content hashes; authority and translation fields do not
+participate. Construction finishes as `complete` but unsealed. Two independently
+named full source/R2 replays must regenerate the same member count and root,
+including recovery from a partial process failure, before an external
+qualification record may seal the storage coordinator and mark the target
+ready. That qualification does not seal or activate the Search Release.
+
 ## Consequences
 
 - Unsupported current temporal state remains fail-closed and inventoried.

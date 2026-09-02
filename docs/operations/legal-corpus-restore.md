@@ -11,6 +11,13 @@ the same inventory/projection/release identities. A Ticket 12 Search Release
 remains draft and inactive: restoration must not promote green2, select an
 Activation Set or move visible staging off the legacy Adapter.
 
+When resuming a replay, an already-completed run is terminal and its stored
+root must be returned unchanged; do not enqueue its lanes again. An incomplete
+run resumes from each lane's last immutable page. Complete every lane, rebuild
+the run root, compare `baseline` and `repeat`, and run the non-mutating dry run
+before accepting recovery parity. A conflicting page or root is a failed
+restore, never a reason to delete or rewrite the evidence.
+
 Restore only into an isolated D1 database and private test R2 namespace. Never
 use production as a rehearsal target.
 

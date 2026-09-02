@@ -12,6 +12,13 @@ Document/Snapshot/Provision/Eligibility and projection/release tables plus a
 complete hash-verified readback of `search-releases/<release-id>/`. Never put
 `OPENAI_API_KEY`, payload text or private objects in logs or evidence.
 
+For final Source Snapshot qualification, preserve both independently named
+replay run roots, the injected failure/restart record, dry-run identity, review
+attestations and the pre-qualification export/restore hashes. The coordinator
+may be sealed only after those external hashes exist. Record the final
+qualification object separately; it must still show a draft Search Release,
+zero active Activation Sets and the Ticket 13 provider boundary.
+
 Create a backup before enabling discovery, ingestion, reindexing or a version
 pointer update in an environment.
 

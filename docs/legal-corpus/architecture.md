@@ -53,6 +53,17 @@ deterministic canonicalization. Visible retrieval stays on the legacy Adapter
 until Ticket 13 seals and activates the separately constructed Search Release
 through a capability-scoped Activation Set.
 
+The release builder and replay validator share the same canonical projection
+primitive. A completed construction is deliberately unsealed: post-build
+reconciliation must prove exactly-once projection membership and the complete,
+pairwise-disjoint shard union, then independent `baseline` and `repeat` runs
+must re-read the source objects and reproduce the same full-corpus root.
+Checkpoint restart may reuse verified pages but must reject a changed page or
+run identity. External validation, review and verified recovery-export hashes
+are recorded by a final immutable qualification before the green2 storage
+coordinator becomes sealed/ready. The Search Release remains draft and no
+Activation Set is selected in Ticket 12.
+
 ## Local development against the staging index
 
 Use the dedicated opt-in command from the repository root:
