@@ -5,6 +5,7 @@ import { experience } from "../../../content/experience";
 import type { PublicLanguage } from "../../../content/types";
 import { SiteFooter, SiteHeader } from "../../components/public/SiteChrome";
 import { legalConfig } from "../../legal-config";
+import narrowStyles from "../../components/public/narrow-public.module.css";
 import styles from "./trust.module.css";
 
 type Props = { params: Promise<{ locale: string }> };
@@ -62,7 +63,7 @@ function EnglishTrustPage() {
   return <div className={styles.page} lang="en">
     <SiteHeader languageHref="/ru/trust" locale="en" />
     <main id="main-content">
-      <section className={styles.hero}><div className={styles.heroCopy}><div className={styles.breadcrumbs}><Link href="/en">JURO</Link><span>/</span><span>Trust Center</span></div><span className={styles.eyebrow}>TRUST CENTER</span><h1>Security, data and transparency</h1><p>JURO separates verified product facts from information that is still being clarified.</p><small>Last public review: 9 August 2026</small></div><aside className={styles.heroIndex} aria-label="Data-control map"><span>DATA FLOW</span><ol><li><b>01</b><strong>Public website</strong><small>no file upload</small></li><li><b>02</b><strong>Protected account</strong><small>session and permissions</small></li><li><b>03</b><strong>Professional handoff</strong><small>only with confirmation</small></li></ol></aside></section>
+      <section className={styles.hero}><div className={styles.heroCopy}><div className={styles.breadcrumbs}><Link href="/en">JURO</Link><span>/</span><span>Trust Center</span></div><span className={styles.eyebrow}>TRUST CENTER</span><h1 className={narrowStyles.trustHeading}>Security, data and transparency</h1><p>JURO separates verified product facts from information that is still being clarified.</p><small>Last public review: 9 August 2026</small></div><aside className={styles.heroIndex} aria-label="Data-control map"><span>DATA FLOW</span><ol><li><b>01</b><strong>Public website</strong><small>no file upload</small></li><li><b>02</b><strong>Protected account</strong><small>session and permissions</small></li><li><b>03</b><strong>Professional handoff</strong><small>only with confirmation</small></li></ol></aside></section>
       <section className={styles.architecture} aria-labelledby="trust-flow-title"><header><span>HOW DATA MOVES</span><h2 id="trust-flow-title">The user remains in control at every transition</h2><p>The public website does not upload anything. Work on a question or document begins in a protected account, and handing context to a professional requires a separate action.</p></header><ol><li><span>01</span><strong>Public website</strong><p>Explore JURO without real files or personal case data.</p></li><li><span>02</span><strong>Protected account</strong><p>Session, role and permissions determine access.</p></li><li><span>03</span><strong>Work object</strong><p>A question, case and document remain private.</p></li><li><span>04</span><strong>Professional handoff</strong><p>Only selected context, with separate confirmation.</p></li></ol></section>
       <section className={styles.details}><header><span>DETAILS</span><h2>What is confirmed and what is still being clarified</h2></header><div>{sections.map(([title, body, state]) => <article key={title}><span>{state}</span><h3>{title}</h3><p>{body}</p></article>)}</div></section>
       <section className={styles.policies}><h2>Policies and rules</h2><div><Link href="/en/legal">Legal Centre</Link><Link href="/en/terms">Terms of use</Link><Link href="/en/privacy-policy">Privacy policy</Link><Link href="/en/personal-data-processing">Personal data processing</Link><Link href="/en/cookies">Cookies</Link><Link href="/en/ai-rules">AI rules</Link></div></section>
@@ -152,7 +153,7 @@ export default async function TrustPage({ params }: Props) {
           <div className={styles.heroCopy}>
             <div className={styles.breadcrumbs}><Link href={`/${locale}`}>JURO</Link><span>/</span><span>Trust Center</span></div>
             <span className={styles.eyebrow}>TRUST CENTER</span>
-            <h1>{ru ? "Безопасность, данные и прозрачность" : "Xavfsizlik, ma’lumotlar va shaffoflik"}</h1>
+            <h1 className={narrowStyles.trustHeading}>{ru ? "Безопасность, данные и прозрачность" : "Xavfsizlik, ma’lumotlar va shaffoflik"}</h1>
             <p>{summary.body}</p>
             <small>{summary.checked}</small>
           </div>

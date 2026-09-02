@@ -16,6 +16,7 @@ const runtime = { ASSETS: { fetch: async () => new Response("Not found", { statu
 const context = { waitUntil() {}, passThroughOnException() {} };
 const legalStyles = fs.readFileSync("app/[locale]/legal/legal.module.css", "utf8");
 const trustStyles = fs.readFileSync("app/[locale]/trust/trust.module.css", "utf8");
+const narrowStyles = fs.readFileSync("app/components/public/narrow-public.module.css", "utf8");
 const homeStyles = fs.readFileSync("app/components/public/juro-home.module.css", "utf8");
 const motionDirector = fs.readFileSync("app/components/public/JuroMotionDirector.tsx", "utf8");
 const rootLayout = fs.readFileSync("app/layout.tsx", "utf8");
@@ -40,6 +41,7 @@ test("Trust Center keeps narrow mobile grids and Uzbek headings inside the viewp
   assert.match(trustStyles, /\.hero\{grid-template-columns:minmax\(0,1fr\)\}/);
   assert.match(trustStyles, /\.details\{gap:3rem;grid-template-columns:minmax\(0,1fr\)\}/);
   assert.match(trustStyles, /\.details header h2,\.details article h3\{overflow-wrap:anywhere\}/);
+  assert.match(narrowStyles, /\.trustHeading\.trustHeading[\s\S]*?font-size: clamp\(2\.6rem, 13vw, 3\.25rem\)[\s\S]*?hyphens: auto[\s\S]*?word-break: normal/);
 });
 
 test("public typography is self-hosted without leaking build-machine paths", () => {
