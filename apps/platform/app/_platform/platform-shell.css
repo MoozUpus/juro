@@ -124,3 +124,7 @@
 }
 @media(max-width:340px){.platform-topbar-logout{display:none!important}}
 @media(max-width:520px){.platform-topbar>div:first-of-type{display:none}}
+
+/* Keep high-frequency plan controls comfortably touchable on compact screens. */
+.scenario-pills button{min-height:44px}
+.plan-section-title button{width:44px;height:44px}

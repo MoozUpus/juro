@@ -75,6 +75,19 @@ test("individual case links and settings tabs retain 44px touch targets", async 
   assert.match(profile, /\.profile-workspace>nav a\{min-height:44px/);
 });
 
+test("case filters expose focus and plan and session actions retain 44px targets", async () => {
+  const [cases, shell, profile] = await Promise.all([
+    readFile(casesStylesheet, "utf8"),
+    readFile(shellStylesheet, "utf8"),
+    readFile(profileStylesheet, "utf8"),
+  ]);
+
+  assert.match(cases, /\.cases-live-tools label:focus-within\{outline:3px solid var\(--focus-ring,#87631f\);outline-offset:2px\}/);
+  assert.match(shell, /\.scenario-pills button\{min-height:44px\}/);
+  assert.match(shell, /\.plan-section-title button\{width:44px;height:44px\}/);
+  assert.match(profile, /\.session-actions button \{ min-height: 44px; \}/);
+});
+
 test("lawyer calendar actions retain a 44px touch target", async () => {
   const css = await readFile(lawyerStylesheet, "utf8");
 
