@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "workflow": "CI",
+  "runId": 33679609113,
+  "runUrl": "https://github.com/MoozUpus/juro/actions/runs/33679609113",
+  "event": "workflow_dispatch",
+  "headSha": "226668f3aeef63b1861f8c9f84e5ed7cb772ed43",
+  "status": "completed",
+  "conclusion": "success",
+  "jobs": [
+    {"name": "validate (apps/website)", "conclusion": "success"},
+    {"name": "validate (apps/platform)", "conclusion": "success"}
+  ],
+  "checks": [
+    "lint",
+    "type-check",
+    "tests",
+    "deployable artifact",
+    "Cloudflare environment matrix",
+    "dependency licence policy"
+  ],
+  "scope": "code-quality-only",
+  "releaseGate": "not_proven",
+  "productionChanged": false,
+  "note": "A green CI run does not prove corpus ingestion, physical disjointness, legal review, snapshot/restore or production approval."
+}
