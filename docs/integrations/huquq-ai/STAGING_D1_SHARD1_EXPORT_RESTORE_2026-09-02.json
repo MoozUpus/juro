@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "databaseName": "juro-staging-corpus-shard-1",
+  "databaseId": "e09e0682-0c2e-4458-a8f3-be9de28117e3",
+  "export": {
+    "mode": "wrangler d1 export --remote",
+    "completedAt": "2026-09-02T13:23:55.7726830Z",
+    "bytes": 4447911164,
+    "sha256": "f1b1e843f733fbc68b3e4183492e38bf9b9fd5fa04356446d8f079c87653108e"
+  },
+  "restore": {
+    "tool": "apps/platform/scripts/verify-d1-full-export-restore.mjs",
+    "completedAt": "2026-09-02T15:48:40.8338830Z",
+    "bytes": 2846097408,
+    "sha256": "bfc59d4c64d18033c7ab0c52bd4f8b51fcaaa3e19a1e5a1e02701cebe720db9e",
+    "quickCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "migrationCount": 143,
+    "documents": 1635,
+    "provisions": 370808,
+    "chunks": 369081
+  },
+  "remoteMutation": {
+    "rowsWritten": 0,
+    "changedDb": false,
+    "sourceRowsChanged": false,
+    "failureLedgerRowsChanged": 0
+  },
+  "releaseGate": "not_sufficient_alone",
+  "note": "This proves isolated export-to-local-restore integrity for frozen shard-1 only. It is not a federated snapshot, physical disjointness proof, indexed evaluation, Qdrant parity, legal review or production approval."
+}
