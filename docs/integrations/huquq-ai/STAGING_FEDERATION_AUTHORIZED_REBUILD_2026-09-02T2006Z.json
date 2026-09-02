@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-02T20:06:30.011Z",
+  "authorizationScope": "User authorized a confirmed logical disjoint federation/index, safe queue handling and legacy recovery without failure-ledger substitution.",
+  "operation": "rebuild_logical_ownership_projection",
+  "script": "apps/platform/scripts/build-staging-federation-ownership-index.mjs",
+  "targetDatabase": "juro-staging-corpus-shard-4",
+  "targetDatabaseId": "7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2",
+  "runId": "ownership-20260902200630",
+  "assignmentRule": "sha256(canonical_document_id) modulo 4; representative=official/newest",
+  "sourceDatabases": [
+    {"databaseName": "juro-staging", "databaseId": "bb716a96-b2fb-4823-90d6-6c228fed181a"},
+    {"databaseName": "juro-staging-corpus-v2", "databaseId": "62620fb3-3da3-4c76-a8e9-aa60858c1063"},
+    {"databaseName": "juro-staging-corpus-shard-1", "databaseId": "e09e0682-0c2e-4458-a8f3-be9de28117e3"},
+    {"databaseName": "juro-staging-corpus-shard-2", "databaseId": "36fa1cfe-6d00-47b7-a980-864020028d86"},
+    {"databaseName": "juro-staging-corpus-shard-3", "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c"}
+  ],
+  "rawDocumentRows": 12333,
+  "uniqueCanonicalDocumentIds": 7152,
+  "duplicateSourceRows": 5181,
+  "partitionCounts": {
+    "juro-staging-corpus-shard-1": 1812,
+    "juro-staging-corpus-shard-2": 1728,
+    "juro-staging-corpus-shard-3": 1806,
+    "juro-staging-corpus-shard-4": 1806
+  },
+  "sourceDigest": "3ff8fbf050d47e9e7fcb72ed3f13f7bd76a5c7afce1c2dffe0ef93eccd0a312d",
+  "partitionManifestSha256": "0497eb8a434e9298972798b033d7734a0e8753e0c4b554512a3d86a1b279087c",
+  "verification": {
+    "ownershipRows": 7152,
+    "distinctCanonicalIds": 7152,
+    "partitionCount": 4,
+    "occurrenceSum": 12333
+  },
+  "sourceRowsChanged": false,
+  "failureLedgerRowsChanged": 0,
+  "queueMutation": false,
+  "physicalDisjointness": "unproven_source_ids_overlap",
+  "releaseGate": "closed",
+  "notes": [
+    "The target is a rebuildable logical ownership projection; existing source corpus and failure-ledger rows were not rewritten.",
+    "The projection proves one deterministic logical owner per canonical ID, not physical disjointness, chunk parity, legal review, evaluation, or production approval.",
+    "Queue processing remains fail-closed because two sources are at the D1 ceiling and shard-3 has only 106496 bytes of headroom with existing terminal/dead-letter rows.",
+    "Legacy recovery remains pending the protected named-staff staging action with fresh MFA/TOTP; technical access does not impersonate that assertion."
+  ]
+}
