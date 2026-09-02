@@ -6,6 +6,16 @@ Evidence cutoff: **2026-09-02 UZT**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
 
+## v117 Individual touch-target release
+
+- Raises the existing Individual case-row navigation link from 17 CSS px to a 44 px minimum touch target without changing its route or tenant boundary.
+- Raises all four Individual profile/settings tabs from 42 to 44 CSS px and adds a focused source-level regression contract.
+- Passed focused touch-target tests 9/9, lint, type-check, the full platform suites (1,164 core and 217 Worker/runtime tests), production artifact validation, exact-head CI `33574360732`, post-merge CI `33574968921`, and complete 0-finding security scan `d803816b-0e51-42e8-9d6e-359ea36ccc04`.
+- Merged PR #122 as `40667c017358011a3017da0bea379839fb328297` and activated platform Worker v204 `12ae95e6-5eac-4f14-8257-a30dff56128d` at 100% traffic. Public Sites v97 and website Worker v13 were unchanged.
+- Production Chrome proved 44 px case links, four 44 px settings tabs, one main landmark, a visible H1, and zero horizontal overflow at 390, 768, 1024, and 1440 px.
+- The status snapshot generated at `2026-09-02T00:26:20.487Z` was operational with 8/8 components and no active incidents. This is point-in-time evidence only.
+- Performed no migration, database write, legal-corpus, vector, embedding, staging-capacity, DNS, secret, payment, or auth-policy operation.
+
 ## v116 responsive auth and locale-target release
 
 - Reserves a protected top row for auth theme and locale controls at every viewport, resolving the production heading overlap observed at 768 × 1024 and 1024 × 768.

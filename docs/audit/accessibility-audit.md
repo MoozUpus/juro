@@ -4,7 +4,7 @@ Status: **living evidence report, not a WCAG certification**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope: Chrome-only public, authentication-boundary, and authenticated Individual checks through the deployed v116 release. Legislation database/corpus work, non-Chrome browsers, and physical devices are excluded.
+Scope: Chrome-only public, authentication-boundary, and authenticated Individual checks through the deployed v117 release. Legislation database/corpus work, non-Chrome browsers, and physical devices are excluded.
 
 ## Verified evidence
 
@@ -12,6 +12,7 @@ Scope: Chrome-only public, authentication-boundary, and authenticated Individual
 - Visible public RU/UZ/EN header links measure 44 × 44 CSS px at 768 px and wider; the current locale remains 44 × 44 on mobile while alternate locales are intentionally hidden below 620 px.
 - The v116 lawyer-login heading has 0 px² overlap with both theme and language controls at all four checked viewports. Turnstile remained visible and the submit action stayed protected until verification completed.
 - The authenticated Individual dashboard retained one visible H1, one main landmark, zero horizontal overflow, and 44 px or larger sampled controls at 390, 768, 1024, and 1440 px.
+- v117 production Chrome confirmed the Individual case-row link and all four profile/settings tabs are 44 CSS px high at 390, 768, 1024, and 1440 px, with zero horizontal overflow and one main/H1 on both routes.
 - Production v101 desktop Lighthouse scored Accessibility **100** on `https://juro.uz/ru`.
 - The v114 local public page retained 21/21 visible reveal sections in RU, UZ, and EN at 1440 × 900 and in RU at 390 × 844.
 - The checked desktop and mobile pages had zero document-level horizontal overflow and no console errors or warnings.

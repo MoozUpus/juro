@@ -2,16 +2,16 @@
 
 Status: **partial Chrome responsive evidence; no physical-device certification**
 
-Evidence cutoff: **2026-09-02 04:19 UZT**
+Evidence cutoff: **2026-09-02 05:27 UZT**
 
 ## Checked viewports
 
 | Viewport | Public site | Lawyer login | Individual shell |
 | --- | --- | --- | --- |
-| 390 × 844 | overflow 0; active locale 44 × 44 | overflow 0; overlap 0; Turnstile visible | overflow 0; sampled controls at least 44 px |
-| 768 × 1024 | all locale links 44 × 44 | overlap 0 | responsive shell, one H1/main |
-| 1024 × 768 | all locale links 44 × 44 | overlap 0 | responsive shell, one H1/main |
-| 1440 × 900 | all locale links 44 × 44 | overlap 0 | desktop shell, one H1/main |
+| 390 × 844 | overflow 0; active locale 44 × 44 | overflow 0; overlap 0; Turnstile visible | overflow 0; case link 44 px; four settings tabs 44 px; one H1/main |
+| 768 × 1024 | all locale links 44 × 44 | overlap 0 | overflow 0; case link and settings tabs 44 px; one H1/main |
+| 1024 × 768 | all locale links 44 × 44 | overlap 0 | overflow 0; case link and settings tabs 44 px; one H1/main |
+| 1440 × 900 | all locale links 44 × 44 | overlap 0 | overflow 0; case link and settings tabs 44 px; one H1/main |
 
 Local pre-release checks additionally covered 320 × 720. Production v115 evidence covers 390 × 844 theme controls, reveal visibility, and Lighthouse accessibility. These are lab/browser measurements, not field Core Web Vitals or physical-device results.
 
@@ -19,6 +19,7 @@ Local pre-release checks additionally covered 320 × 720. Production v115 eviden
 
 1. Auth theme controls previously covered the login heading at 768 and 1024 px. v116 reserves the top control row at every viewport.
 2. Public locale links were approximately 33 px wide on tablet/desktop. v116 enforces a 44 px minimum width.
+3. The Individual case-row link was 17 px high and profile/settings tabs were 42 px high. v117 raises both to the 44 px touch-target floor across the checked matrix.
 
 ## Open responsive gates
 
