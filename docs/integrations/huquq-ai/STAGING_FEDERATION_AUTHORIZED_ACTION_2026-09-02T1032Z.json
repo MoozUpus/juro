@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-02T10:32:36.443Z",
+  "applicationCommit": "ef97fc8f41392299cc5ccfc659ebb4752567fff6",
+  "authorizationScope": "User authorized a confirmed logical disjoint ownership index, safe queue handling and legacy recovery without failure-ledger substitution.",
+  "ownershipIndex": {
+    "status": "verified",
+    "targetDatabase": "juro-staging-corpus-shard-4",
+    "targetDatabaseId": "7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2",
+    "runId": "ownership-20260902103236",
+    "assignmentRule": "sha256(canonical_document_id) modulo 4; representative=official/newest",
+    "rawDocumentRows": 12333,
+    "uniqueCanonicalDocumentIds": 7152,
+    "duplicateDocumentRows": 5181,
+    "partitionCounts": {
+      "juro-staging-corpus-shard-1": 1812,
+      "juro-staging-corpus-shard-2": 1728,
+      "juro-staging-corpus-shard-3": 1806,
+      "juro-staging-corpus-shard-4": 1806
+    },
+    "sourceRowsAreUnchanged": true,
+    "failureLedgerRowsChanged": 0
+  },
+  "queueHandling": {
+    "status": "held_fail_closed",
+    "sourceRowsWritten": 0,
+    "failureLedgerRowsChanged": 0,
+    "reason": "The active release gate requires ingestion freeze. juro-staging and juro-staging-corpus-v2 are at the 10GB ceiling; shard-3 has 106496 bytes of headroom and seven terminal/dead-letter failures. v2 also has stale running rows without an active lock. No bounded drain window was safe."
+  },
+  "legacyRecovery": {
+    "status": "not_executed",
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "canonicalDocumentId": "lexuz:8411573",
+    "sourceUrl": "https://lex.uz/en/docs/8411573",
+    "failureLedgerPolicy": "append_only_preserved",
+    "requiredFlow": "named legal-corpus staff assignment with fresh MFA/TOTP through protected staging admin action",
+    "reason": "The protected endpoint redirects unauthenticated requests to Cloudflare Access. Technical authorization cannot impersonate the audit principal or invent fresh MFA. Alias variants remain available in shard-1 and shard-3."
+  },
+  "releaseGate": "closed",
+  "productionChanged": false,
+  "note": "The verified artifact is a logical ownership projection. It does not prove physical disjointness, snapshot/restore, indexed 314-scenario evaluation, Qdrant parity, D1 restore, legal review or production approval."
+}
