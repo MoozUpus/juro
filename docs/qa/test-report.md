@@ -2,9 +2,23 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-09-02 16:12 UZT**
+Evidence cutoff: **2026-09-02 16:47 UZT**
 
-Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, the later bounded DNS-retirement and authenticated Lawyer receipts, a later 78-route public production Chrome desktop crawl, a native-Tab RU/UZ/EN public entry-page traversal, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, the later bounded DNS-retirement and authenticated Lawyer receipts, a 78-route public production Chrome crawl at desktop and all ten required responsive widths, a native-Tab RU/UZ/EN public entry-page traversal, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## Public full responsive Chrome matrix (2026-09-02)
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Browser | isolated Google Chrome 152.0.7977.66; temporary profile removed after the run | PASS |
+| Sitemap scope | 78 production URLs: 26 RU + 26 UZ + 26 EN | CHECKED |
+| Required widths | 320, 360, 375, 390, 430, 768, 1024, 1280, 1440, and 1920 CSS px | 10/10 CHECKED |
+| Route/viewport scope | 78 URLs × 10 widths | 780 CHECKS |
+| Final page contract | requested URL and HTTP `200`; exactly one `main`; at least one visible H1 | 780/780 PASS AFTER TRANSIENT RECHECK |
+| Layout and assets | zero document-level horizontal overflow; zero completed broken images; no localized not-found surface | 780/780 PASS AFTER TRANSIENT RECHECK |
+| Console/network | clean on successful checks; the high-rate pass recorded 23 resets/QUIC errors at 768 px and three resets at 1024 px | 754 INITIAL PASS; 26 TRANSIENTS RETESTED |
+| Transient recheck | only the 26 affected route/viewport pairs, isolated lower-load Chrome with QUIC disabled | 26/26 PASS |
+| Evidence boundary | structural production evidence only; no claim for visual pixel equivalence, orientation change, touch gestures, soft keyboard, zoom, screen readers, or authenticated feature pages at every width | HONESTLY PARTIAL |
 
 ## Public sitemap desktop Chrome validation (2026-09-02)
 
@@ -17,7 +31,7 @@ Scope in this report: deployed v101 mobile interaction-target evidence dated 202
 | Layout | document scroll width did not exceed the viewport by more than 1 CSS px | 78/78 PASS |
 | Images and error surface | no completed image with a zero natural width; no localized not-found text | 78/78 PASS |
 | Console | no warning/error entry after each route navigation and hydration wait | 78/78 PASS |
-| Evidence boundary | no claim for the missing responsive widths, keyboard traversal on the remaining 75 sitemap URLs, zoom, screen readers, dialogs, form/error states, or visual pixel equivalence | HONESTLY PARTIAL |
+| Evidence boundary | no claim for keyboard traversal on the remaining 75 sitemap URLs, zoom, screen readers, dialogs, form/error states, or visual pixel equivalence | HONESTLY PARTIAL |
 
 ## Public entry-page native keyboard validation (2026-09-02)
 
