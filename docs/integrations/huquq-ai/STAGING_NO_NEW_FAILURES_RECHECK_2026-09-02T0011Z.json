@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T00:11:44.8645631Z",
+  "since": "2026-09-01T23:29:12.767Z",
+  "readOnly": true,
+  "queryScope": [
+    "new terminal failure-ledger rows",
+    "new dead-letter ingestion jobs",
+    "new failed ingestion jobs",
+    "new queued/running/retrying ingestion jobs"
+  ],
+  "sources": {
+    "juro-staging": {
+      "newTerminal": 0,
+      "newDeadLetter": 0,
+      "newFailedJobs": 0,
+      "newNoncompleted": 0
+    },
+    "juro-staging-corpus-v2": {
+      "newTerminal": 0,
+      "newDeadLetter": 0,
+      "newFailedJobs": 0,
+      "newNoncompleted": 0
+    },
+    "juro-staging-corpus-shard-1": {
+      "newTerminal": 0,
+      "newDeadLetter": 0,
+      "newFailedJobs": 0,
+      "newNoncompleted": 0
+    },
+    "juro-staging-corpus-shard-2": {
+      "newTerminal": 0,
+      "newDeadLetter": 0,
+      "newFailedJobs": 0,
+      "newNoncompleted": 0
+    },
+    "juro-staging-corpus-shard-3": {
+      "newTerminal": 0,
+      "newDeadLetter": 0,
+      "newFailedJobs": 0,
+      "newNoncompleted": 0
+    }
+  },
+  "rowsWritten": 0,
+  "interpretation": {
+    "stableSince": true,
+    "historicalFailuresResolved": false,
+    "queueEmptyAcrossSources": false,
+    "releaseGateClosed": true,
+    "note": "No new terminal/dead-letter/failed/non-completed rows appeared during the observation window. Existing queued work and the historical legacy terminal/dead-letter rows remain and are not reclassified."
+  }
+}
