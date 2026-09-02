@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-02T20:22:28.0212954Z",
+  "queryMode": "sequential_read_only_d1",
+  "authorizationScope": "User authorized safe queue handling and legacy recovery without failure-ledger substitution.",
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "documents": 4291,
+      "jobStatus": {"completed": 11259, "queued": 43539, "dead_letter": 1},
+      "failureLedgerStatus": {"retrying": 102, "technically_unavailable": 269, "terminal": 1},
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 9999998976,
+      "lastTerminalFailureAt": "2026-08-29T21:22:47.872Z"
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "documents": 599,
+      "jobStatus": {"completed": 2674, "queued": 27686, "retrying": 1, "running": 2},
+      "failureLedgerStatus": {"retrying": 28, "technically_unavailable": 5},
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 9999998976
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "documents": 1635,
+      "jobStatus": {"completed": 30165},
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 2890203136
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "documents": 2495,
+      "jobStatus": {"completed": 31671},
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 8116838400
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "documents": 3313,
+      "jobStatus": {"completed": 7868, "queued": 23702, "retrying": 4, "dead_letter": 7},
+      "failureLedgerStatus": {"retrying": 384, "technically_unavailable": 17, "terminal": 7},
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 9999892480,
+      "headroomBytes": 106496,
+      "lastTerminalFailureAt": "2026-09-02T07:07:45.368Z"
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-4",
+      "documents": 0,
+      "jobStatus": {},
+      "completedCheckpoints": 0,
+      "databaseSizeBytes": 8560640,
+      "ownershipProjectionRows": 7152
+    }
+  ],
+  "aggregateJobObservation": {
+    "openJobs": 94934,
+    "deadLetterJobs": 8,
+    "terminalJobRows": 8,
+    "completedCheckpoints": 220
+  },
+  "queryIntegrity": {
+    "rowsWritten": 0,
+    "changedDb": false,
+    "newTerminalFailuresSincePreviousObservation": 0,
+    "legacyLastTerminalUnchanged": true,
+    "shard3LastTerminalUnchanged": true
+  },
+  "queueDecision": {
+    "status": "held_fail_closed",
+    "reason": "Legacy and v2 are at the 10 GB D1 ceiling; shard-3 has 106496 bytes of headroom and existing terminal/dead-letter jobs. Resuming queue work would risk capacity failures and append new ledger rows.",
+    "ingestionStarted": false,
+    "failureLedgerMutated": false
+  },
+  "legacyRecovery": {
+    "status": "pending_protected_admin_action",
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "canonicalDocumentId": "lexuz:8411573",
+    "requires": "named staff staging session with fresh MFA/TOTP",
+    "recoveryExecuted": false,
+    "failureLedgerPreserved": true
+  },
+  "releaseGate": "closed",
+  "productionChanged": false,
+  "note": "Counts and queue observations are not a physical disjoint snapshot, indexed evaluation, Qdrant/D1 restore, legal review or production approval."
+}
