@@ -6,6 +6,14 @@ Evidence cutoff: **2026-09-02 UZT**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
 
+## v120 production-operations evidence
+
+- Replaced the earlier point-in-time-only provider statement with a content-free 24-hour production history: OpenAI 97/98 and Anthropic 98/99 operational probes, one isolated timeout each, and no billing/balance error in the window.
+- Confirmed 41 consecutive successful OpenAI probes and 29 consecutive successful Anthropic probes after their last timeouts. The public status snapshot at `2026-09-02T02:02:51.223Z` was operational with 8/8 components and no active incidents.
+- Proved `ftp.juro.uz` is not an operational FTP service: port 21 timed out, HTTP exposed the default AlmaLinux test page, HTTPS hostname validation failed, and repository search found no product dependency.
+- Prepared an exact reversible DNS retirement and rollback contract. No DNS mutation occurred because the available OAuth token lacks DNS-record permission and the authorized Chrome session required Cloudflare sign-in.
+- This increment changes documentation only. It performs no runtime deployment, migration, database write, DNS write, secret, payment, auth-policy, legal-corpus, vector, embedding, or staging-capacity operation.
+
 ## v118 Dashboard keyboard-focus release
 
 - Adds an explicit focus ring to the dashboard AI composer and quick-action cards, and uses nearest-edge native scrolling when a quick card receives keyboard focus.

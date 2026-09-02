@@ -2,7 +2,7 @@
 
 Status: **active runbook, not a completion certificate**
 
-Evidence cutoff: **2026-09-02 06:32 UZT (2026-09-02 01:32 UTC)**
+Evidence cutoff: **2026-09-02 07:03 UZT (2026-09-02 02:03 UTC)**
 
 This runbook covers the currently verified public Sites and platform Worker releases. It intentionally excludes legislation-database, legal-corpus, Lex.uz, Advice.uz, vector, and staging-capacity operations.
 
@@ -49,6 +49,12 @@ The v97 acceptance contract is:
 - public/private boundary unchanged;
 - production `/api/status` reported honestly, even when still degraded for an external provider reason;
 - rollback action and remaining limitation recorded in the readiness document.
+
+## Legacy `ftp` DNS retirement rollback
+
+The prepared forward change is deletion of only `A ftp.juro.uz → 95.46.96.77`, TTL 300, DNS-only. Before deletion, capture the Cloudflare record ID and confirm these exact fields in the dashboard. Do not alter apex, Worker custom-domain records, MX/TXT, `mail`, or `send`.
+
+After deletion, verify DNS no longer resolves `ftp.juro.uz`, all public and protected JURO hostnames retain their existing behavior, and Cloudflare Email Routing MX records are unchanged. If a legitimate dependency appears, recreate the same DNS-only A record with TTL 300 and repeat the route/email checks. The old endpoint's default AlmaLinux page and invalid TLS are not acceptance criteria; rollback is only for a proven external dependency.
 
 ## Data safety
 

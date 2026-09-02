@@ -2,9 +2,9 @@
 
 Status: **live baseline, not a completion certificate**
 
-Evidence cutoff: **2026-09-02 06:32 UZT (2026-09-02 01:32 UTC)**
+Evidence cutoff: **2026-09-02 07:03 UZT (2026-09-02 02:03 UTC)**
 
-Repository baseline: `origin/main` at merge commit `617ec64ffcb21633f7b8bb734d28639de8b099e1`; live platform Worker v206, website Worker v13, and public Sites v97 were verified independently after deployment
+Repository baseline: `origin/main` at documentation merge `75e71304d121d35321b44152be0f334d224048d1`; live platform Worker v206, website Worker v13, and public Sites v97 were verified independently after deployment
 
 This inventory separates live production, protected staging, provider-owned Sites surfaces, code-only hostnames, and legacy DNS. It intentionally does not inspect or change the legislation database, legal-corpus contents, Lex.uz ingestion, Advice.uz ingestion, vectors, or legal-source records, following the owner's explicit scope exclusion.
 
@@ -42,11 +42,11 @@ An HTTP `200` after a redirect proves reachability and the public/auth boundary 
 | `lawyer.staging.juro.uz` | rejected legacy alias | Former accepted-but-unroutable lawyer staging hostname | PR #80 / Worker and auth host routing | DNS resolution fails; current platform routing returns no lawyer origin for this host | Not indexable | Keep rejected; shared staging uses `staging.app.juro.uz/{locale}/lawyer/**` behind Access | `DEPRECATED` |
 | `staging.juro.uz` | historical docs | Old staging alias | Historical route documentation | DNS resolution fails; HTTP status `000` | Not indexable | Keep marked historical; remove from current-state prose | `DEPRECATED` |
 | `local.juro.uz` | local-only | Development identity fixture, not a network service | Dev-login code and tests | DNS resolution fails as expected | Not applicable; synthetic/local data | Keep explicitly local-only | `NOT APPLICABLE` |
-| `ftp.juro.uz` | legacy | DNS-only A record to `95.46.96.77` | Cloudflare DNS | HTTPS fails certificate hostname validation | Potentially exposes an origin; operational purpose unverified | Confirm owner/service, certificate, and whether record is needed before proxying or removing | `SECURITY RISK` |
+| `ftp.juro.uz` | legacy retirement candidate | DNS-only A record to `95.46.96.77`, TTL 300 | Cloudflare DNS plus bounded public probes | Port 21 times out; HTTP `200` exposes the default AlmaLinux test page; HTTPS fails hostname validation | Directly exposes an unrelated/default origin; no product-code dependency found | After Cloudflare DNS sign-in, capture the record ID, delete only this A record, verify NXDOMAIN and production/email routes, and recreate the saved DNS-only A record if any legitimate dependency appears | `SECURITY RISK` |
 | `mail.juro.uz` | email/legacy | DNS-only CNAME to apex; not a product web app | Cloudflare DNS | HTTPS `403` | Email infrastructure; not in sitemap | Confirm the DNS-only CNAME is intentional and does not expose an origin | `PARTIAL` |
 | `send.juro.uz` | email | MX/TXT only for sending; no web service expected | Cloudflare DNS | No A/AAAA/CNAME; HTTP resolution fails as expected | Email infrastructure; not indexable | No web action; retain only while the mail provider uses it | `NOT APPLICABLE` |
 
-Cloudflare DNS composition at the evidence cutoff: three A records, two CNAME records, four MX records, six TXT records, and seven Worker hostname records. The dashboard also reports: **“Your origin IP address is partially exposed.”** No DNS mutation was made because the affected legacy service ownership is not yet proven.
+Cloudflare DNS composition at the retained dashboard cutoff: three A records, two CNAME records, four MX records, six TXT records, and seven Worker hostname records. The dashboard reports: **“Your origin IP address is partially exposed.”** v120 independently proved that the direct `ftp` host is not serving FTP and exposes only a default AlmaLinux HTTP page with invalid hostname TLS. No DNS mutation was made because the current OAuth token lacks DNS-record permission and Chrome reached the Cloudflare sign-in boundary.
 
 ## Public sitemap route matrix
 
@@ -102,7 +102,7 @@ The current tree defines 161 page files and 227 API route files. Dynamic paramet
 
 1. **Resolved — provider-host indexing:** Sites v97 is live. The provider hostname returns `X-Robots-Tag: noindex, nofollow, noarchive`, while `juro.uz` retains `index, follow`; 78/78 sitemap URLs and 120/120 discoverable apex links return `200`.
 2. **P1 — staging observability:** the staging status endpoint is reachable but reports all eight components degraded from stale evidence. Active Cloudflare schedules were verified, and a live five-minute cron failed in `claimSchedule` with `D1_ERROR: Exceeded maximum DB size`; capacity remediation stays in the separately excluded legislation/corpus scope.
-3. **P1 — legacy origin exposure:** Cloudflare flags partial origin exposure and `ftp.juro.uz` fails TLS hostname validation. Ownership must be confirmed before DNS changes.
+3. **P1 — legacy origin exposure:** `ftp.juro.uz` is now evidenced as an obsolete retirement candidate: no FTP response, default AlmaLinux HTTP page, invalid hostname TLS, and no repository dependency. Deletion is prepared and reversible but awaits Cloudflare DNS authentication/permission.
 4. **Resolved code-only drift:** PR #80 removed the accepted `app.staging.juro.uz` and `lawyer.staging.juro.uz` aliases from platform auth and Worker routing. The canonical staging host remains `staging.app.juro.uz` behind Cloudflare Access; the staging Worker itself was not redeployed in this increment.
 5. **Open evidence gate:** authenticated Business, Lawyer, Pending Lawyer, and Staff/Admin Chrome runs are still required before these families can be marked `VERIFIED`; authenticated Individual shell coverage is read-only and state-changing flows remain open. No session was fabricated. Production v118 preserves the lawyer persona boundary and public-approved directory contract.
-6. **Monitor — production AI providers:** the checked v118 snapshot reports successful OpenAI and Anthropic probes and overall operational status. This is point-in-time evidence only; continue normal monitoring before making a sustained-health claim.
+6. **Monitor — production AI providers:** v120 records a bounded 24-hour history with 195/197 operational probes, one isolated timeout per provider, and 41/29 consecutive operational checks after those timeouts. Continue normal monitoring; this observed recovery window is not an availability SLA.

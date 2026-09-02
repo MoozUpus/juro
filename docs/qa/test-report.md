@@ -4,7 +4,18 @@ Status: **living evidence report, not full Definition of Done**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope in this report: deployed v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: v120 read-only production operations evidence, deployed v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## v120 production-operations validation
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Provider history | 24-hour content-free D1 history: OpenAI 97/98 operational, Anthropic 98/99 operational; one timeout each, no billing/balance error | PASS FOR BOUNDED RECOVERY WINDOW |
+| Recovery sequence | 41 consecutive OpenAI and 29 consecutive Anthropic operational probes after the last timeout | PASS FOR OBSERVED SEQUENCE; NOT AN SLA |
+| Public status | `2026-09-02T02:02:51.223Z`; operational; 8/8; 0 active incidents; latest provider evidence matched D1 | PASS AS CURRENT SNAPSHOT |
+| Legacy FTP reachability | `ftp.juro.uz` resolves to `95.46.96.77`; FTP timeout; HTTP default AlmaLinux page; invalid hostname TLS | FAIL / RETIREMENT REQUIRED |
+| DNS safety boundary | API token rejected DNS-record access; Chrome reached Cloudflare sign-in; no record was changed | PASS FOR NO UNAUTHORIZED MUTATION |
+| Change boundary | documentation only; no runtime deploy, migration, DNS, secret, payment, auth-policy, corpus/vector/embedding, or staging-capacity operation | PASS |
 
 ## v118 Dashboard keyboard-focus validation
 
