@@ -312,6 +312,15 @@ function providerSourcePrefix(info: AiSearchInstanceInfo): string | null {
   return typeof prefix === "string" ? prefix : null;
 }
 
+function providerPublicEndpointDisabled(info: AiSearchInstanceInfo): boolean {
+  const params = info.public_endpoint_params;
+  if (!params || typeof params !== "object") return false;
+  const values = params as Record<string, unknown>;
+  const customDomains = values.custom_domains;
+  return values.enabled === false
+    && (customDomains === undefined || (Array.isArray(customDomains) && customDomains.length === 0));
+}
+
 /**
  * Adapts the native Workers AI Search namespace binding to the provider-neutral
  * candidate contract. Configuration is attested from the provider immediately
@@ -354,10 +363,14 @@ export function createCloudflareAiSearchProvider(
         && info.index_method?.keyword === true
         && info.fusion_method === "rrf"
         && info.indexing_options?.keyword_tokenizer === options.configuration.keywordTokenizer
+        && info.retrieval_options?.keyword_match_mode === "or"
         && info.max_num_results === 50
         && info.score_threshold === 0
         && info.cache === false
-        && info.chunk === false
+        && info.chunk === true
+        && info.chunk_size === 4_096
+        && info.chunk_overlap === 0
+        && providerPublicEndpointDisabled(info)
         && info.sync_interval === 86_400
         && providerSourcePrefix(info) === options.sourcePrefix
         && JSON.stringify(providerMetadataSchema(info)) === JSON.stringify(expectedMetadata)

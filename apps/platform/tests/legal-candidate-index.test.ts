@@ -173,10 +173,19 @@ test("Cloudflare AI Search namespace adapter attests pinned configuration and pr
             index_method: { vector: true, keyword: true },
             fusion_method: "rrf",
             indexing_options: { keyword_tokenizer: "porter" },
+            retrieval_options: { keyword_match_mode: "or" },
             max_num_results: 50,
             score_threshold: 0,
             cache: false,
-            chunk: false,
+            chunk: true,
+            chunk_size: 4096,
+            chunk_overlap: 0,
+            public_endpoint_params: {
+              enabled: false,
+              chat_completions_endpoint: { disabled: true },
+              search_endpoint: { disabled: true },
+              mcp: { disabled: true },
+            },
             sync_interval: 86400,
             source_params: { prefix: `search-releases/${release.id}/current/` },
             custom_metadata: [
@@ -258,6 +267,10 @@ test("Cloudflare AI Search namespace adapter attests pinned configuration and pr
 });
 
 test("Cloudflare AI Search namespace adapter rejects configuration drift", async () => {
+  let keywordMatchMode: "and" | "or" = "and";
+  let publicEndpointEnabled = false;
+  let chunkSize = 4096;
+  let chunkOverlap = 0;
   const provider = createCloudflareAiSearchProvider({
     get() {
       return {
@@ -265,17 +278,32 @@ test("Cloudflare AI Search namespace adapter rejects configuration drift", async
           return {
             id: "current-00",
             namespace: "juro-legal-development",
+            type: "r2",
+            source: "juro-legal-ai-search-development",
+            paused: true,
             embedding_model: "openai/text-embedding-3-large",
             ai_gateway_id: "juro-ai-search-development",
             rewrite_query: false,
             reranking: false,
             index_method: { vector: true, keyword: true },
             fusion_method: "rrf",
-            indexing_options: { keyword_tokenizer: "trigram" },
+            indexing_options: { keyword_tokenizer: "porter" },
+            retrieval_options: { keyword_match_mode: keywordMatchMode },
             max_num_results: 50,
+            score_threshold: 0,
             cache: false,
+            chunk: true,
+            chunk_size: chunkSize,
+            chunk_overlap: chunkOverlap,
+            public_endpoint_params: { enabled: publicEndpointEnabled, custom_domains: [] },
+            sync_interval: 86400,
             source_params: { prefix: `search-releases/${release.id}/current/` },
-            custom_metadata: [],
+            custom_metadata: [
+              { field_name: "language", data_type: "text" },
+              { field_name: "document_type", data_type: "text" },
+              { field_name: "valid_from", data_type: "datetime" },
+              { field_name: "valid_to", data_type: "datetime" },
+            ],
           };
         },
       };
@@ -290,9 +318,19 @@ test("Cloudflare AI Search namespace adapter rejects configuration drift", async
   });
 
   await assert.rejects(provider.attest("current-00"), /AI_SEARCH_CONFIGURATION_DRIFT/u);
+  keywordMatchMode = "or";
+  publicEndpointEnabled = true;
+  await assert.rejects(provider.attest("current-00"), /AI_SEARCH_CONFIGURATION_DRIFT/u);
+  publicEndpointEnabled = false;
+  chunkSize = 4095;
+  await assert.rejects(provider.attest("current-00"), /AI_SEARCH_CONFIGURATION_DRIFT/u);
+  chunkSize = 4096;
+  chunkOverlap = 1;
+  await assert.rejects(provider.attest("current-00"), /AI_SEARCH_CONFIGURATION_DRIFT/u);
 });
 
 test("Cloudflare AI Search namespace adapter rejects stale management privacy evidence", async () => {
+  let observedAt = "2026-09-01T00:00:00.000Z";
   const provider = createCloudflareAiSearchProvider({
     get() {
       return { async info() { return {
@@ -302,8 +340,11 @@ test("Cloudflare AI Search namespace adapter rejects stale management privacy ev
         embedding_model: "openai/text-embedding-3-large",
         ai_gateway_id: "juro-ai-search-development", rewrite_query: false, reranking: false,
         index_method: { vector: true, keyword: true }, fusion_method: "rrf",
-        indexing_options: { keyword_tokenizer: "porter" }, max_num_results: 50,
-        score_threshold: 0, cache: false, chunk: false, sync_interval: 86400,
+        indexing_options: { keyword_tokenizer: "porter" },
+        retrieval_options: { keyword_match_mode: "or" }, max_num_results: 50,
+        score_threshold: 0, cache: false, chunk: true, chunk_size: 4096,
+        chunk_overlap: 0, public_endpoint_params: { enabled: false, custom_domains: [] },
+        sync_interval: 86400,
         source_params: { prefix: `search-releases/${release.id}/current/` },
         custom_metadata: [
           { field_name: "language", data_type: "text" },
@@ -320,10 +361,12 @@ test("Cloudflare AI Search namespace adapter rejects stale management privacy ev
     shardByInstance: { "current-00": "current-00" },
     configuration: release.configuration,
     async attestManagement() {
-      return { ...managementAttestation, observedAt: "2026-09-01T00:00:00.000Z" };
+      return { ...managementAttestation, observedAt };
     },
   });
   await assert.rejects(provider.attest("current-00"), /AI_SEARCH_CONFIGURATION_DRIFT/u);
+  observedAt = "2026-09-02T00:00:00.000Z";
+  await assert.doesNotReject(provider.attest("current-00"));
 });
 
 test("governed AI Search instance updates pin retrieval, privacy, sync, and tokenizer settings", () => {
@@ -335,10 +378,19 @@ test("governed AI Search instance updates pin retrieval, privacy, sync, and toke
     index_method: { vector: true, keyword: true },
     fusion_method: "rrf",
     indexing_options: { keyword_tokenizer: "trigram" },
-    chunk: false,
+    retrieval_options: { keyword_match_mode: "or" },
+    chunk: true,
+    chunk_size: 4096,
+    chunk_overlap: 0,
     score_threshold: 0,
     max_num_results: 50,
     cache: false,
+    public_endpoint_params: {
+      enabled: false,
+      chat_completions_endpoint: { disabled: true },
+      search_endpoint: { disabled: true },
+      mcp: { disabled: true },
+    },
     sync_interval: 86400,
     custom_metadata: [
       { field_name: "language", data_type: "text" },
