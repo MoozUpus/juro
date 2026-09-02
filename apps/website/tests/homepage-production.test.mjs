@@ -18,6 +18,7 @@ const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
 const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.css", "utf8");
 const footerRailStyles = fs.readFileSync("app/components/public/footer-rail.module.css", "utf8");
 const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-targets.module.css", "utf8");
+const narrowStyles = fs.readFileSync("app/components/public/narrow-public.module.css", "utf8");
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
@@ -106,6 +107,15 @@ test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(headerTouchStyles, /min-height: 44px/);
   assert.match(headerTouchStyles, /aria-current="page"/);
   assert.match(globalStyles, /\.public-theme-switcher button\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/s);
+});
+
+test("narrow public chrome keeps the logo, menu, and hero copy inside the viewport", () => {
+  assert.match(chrome, /narrowStyles\.headerTheme/);
+  assert.match(chrome, /narrowStyles\.languageSet/);
+  assert.match(homepage, /narrowStyles\.homeHeading/);
+  assert.match(narrowStyles, /@media \(max-width: 620px\)[\s\S]*?\.languageSet\.languageSet[\s\S]*?display: none/);
+  assert.match(narrowStyles, /@media \(max-width: 420px\)[\s\S]*?\.homeHeading\.homeHeading[\s\S]*?font-size: clamp\(2\.6rem, 13vw, 3\.25rem\)/);
+  assert.match(narrowStyles, /@media \(max-width: 350px\)[\s\S]*?\.headerTheme[\s\S]*?display: none[\s\S]*?\.homeHeading\.homeHeading\.homeHeading[\s\S]*?font-size: clamp\(2\.35rem, 12vw, 2\.6rem\)/);
 });
 
 test("Jurobek uses a lightweight, reduced-motion-safe ambient treatment", () => {

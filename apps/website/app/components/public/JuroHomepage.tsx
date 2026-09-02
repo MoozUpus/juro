@@ -27,6 +27,7 @@ import motionStyles from "./juro-motion.module.css";
 import editorialStyles from "./juro-editorial.module.css";
 import decisionStyles from "./juro-decision.module.css";
 import laptopStyles from "./juro-laptop.module.css";
+import narrowStyles from "./narrow-public.module.css";
 import processStyles from "./scenario-process.module.css";
 
 const copy = {
@@ -378,7 +379,7 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
           <div className={`${styles.heroGrid} ${laptopStyles.heroGrid}`}>
             <div className={`${styles.heroCopy} ${motionStyles.heroCopyMotion} ${laptopStyles.heroCopy}`}>
               <p className={styles.eyebrow}>{t.hero.eyebrow}</p>
-              <h1 className={laptopStyles.heroTitle}><span>{t.hero.titleA}</span><span>{t.hero.titleB}</span><em>{t.hero.titleC}</em></h1>
+              <h1 className={`${laptopStyles.heroTitle} ${narrowStyles.homeHeading}`}><span>{t.hero.titleA}</span><span>{t.hero.titleB}</span><em>{t.hero.titleC}</em></h1>
               <p className={styles.heroLead}>{t.hero.lead}</p>
               <div className={styles.heroActions}>
                 <a className={styles.buttonGold} href={register}>{t.hero.primary}<ArrowRight aria-hidden="true" size={18} /></a>

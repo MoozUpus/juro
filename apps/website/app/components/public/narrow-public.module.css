@@ -1,0 +1,33 @@
+.headerTheme {
+  display: flex;
+}
+
+@media (max-width: 620px) {
+  .languageSet.languageSet {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .homeHeading.homeHeading,
+  .trustHeading.trustHeading {
+    font-size: clamp(2.6rem, 13vw, 3.25rem);
+    max-width: 100%;
+  }
+
+  .trustHeading.trustHeading {
+    hyphens: auto;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}
+
+@media (max-width: 350px) {
+  .headerTheme {
+    display: none;
+  }
+
+  .homeHeading.homeHeading.homeHeading {
+    font-size: clamp(2.35rem, 12vw, 2.6rem);
+  }
+}
