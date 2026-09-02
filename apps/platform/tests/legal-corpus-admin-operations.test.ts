@@ -179,6 +179,79 @@ test("MFA-bound corpus actions seed and retry without a legal approval queue", a
   } finally { sqlite.close(); }
 });
 
+test("staging legacy recovery processes only the approved job and preserves its failure ledger", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = {
+    async put() { return {} as R2Object; },
+  } as unknown as R2Bucket;
+  const html = `<!doctype html><html><body><main id="divCont">
+    <div class="docContentHeader__item-link" onclick="openUrl('/ru/docs/8407553')">Рус</div>
+    <div class="docContentHeader__item-link" onclick="openUrl('/docs/8407544')">Ўзб</div>
+    <div class="docContentHeader__item-link" onclick="openUrl('/en/docs/8411573')">Eng</div>
+    <div class="lx_elem ACT_TITLE">QMMB: 07/26/294/0848-son</div>
+    <div class="lx_elem ARTICLE">Статья 1. Порядок</div>
+    <div class="lx_elem">${"Официальная норма применяется в установленном порядке. ".repeat(10)}</div>
+  </main></body></html>`;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => String(input).endsWith("/robots.txt")
+    ? new Response("User-agent: *\\nAllow: /\\n")
+    : new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  try {
+    const env = {
+      DB: d1,
+      BUCKET: bucket,
+      APP_ENV: "staging" as const,
+      LEGAL_CORPUS_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "false",
+      LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED: "true",
+      LEGAL_CORPUS_MULTILINGUAL_ENABLED: "true",
+    };
+    const jobId = "legal-corpus:07aa10e095f0c77b28e6ada80fc8";
+    sqlite.prepare(`INSERT INTO legal_corpus_ingestion_jobs
+      (id,job_type,status,provider,canonical_document_id,variant_id,source_url,language,idempotency_key,
+       attempt_count,max_attempts,next_attempt_at,last_error_code,correlation_id,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?,?)`).run(
+      jobId, "fetch", "dead_letter", "lex_uz", "lexuz:8411573", null,
+      "https://lex.uz/en/docs/8411573", "en", "legacy-recovery-test", 5, 5,
+      "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT", "lex-catalog:president:en",
+      now.toISOString(), now.toISOString(),
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+       safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,5,'terminal')`).run(
+      "legacy-recovery-failure", jobId, "lexuz:8411573", "https://lex.uz/en/docs/8411573", "en",
+      now.toISOString(), "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT", "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
+    );
+    const result = await performLegalCorpusAdminAction({
+      env,
+      staff,
+      value: {
+        action: "recover_legacy_ingestion",
+        jobId,
+        reason: "Recover the verified split Lex language family without rewriting evidence.",
+      },
+      now,
+    });
+    assert.deepEqual(result, { action: "recover_legacy_ingestion", affected: 1, targetId: jobId });
+    assert.deepEqual(
+      { ...sqlite.prepare("SELECT status,attempt_count AS attemptCount,last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?").get(jobId) as { status: string; attemptCount: number; errorCode: string | null } },
+      { status: "completed", attemptCount: 6, errorCode: null },
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare("SELECT id,error_code AS errorCode,retry_count AS retryCount,retry_state AS retryState FROM legal_corpus_failures WHERE id=?").get("legacy-recovery-failure") as { id: string; errorCode: string; retryCount: number; retryState: string } },
+      { id: "legacy-recovery-failure", errorCode: "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT", retryCount: 5, retryState: "retrying" },
+    );
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_admin_events WHERE action='ingestion_retried'").get() as { count: number }).count),
+      1,
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+    sqlite.close();
+  }
+});
+
 test("dashboard proves coverage from indexed or technically unavailable documents", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {

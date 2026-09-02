@@ -19,6 +19,7 @@ import {
   promoteCompletedAnalysisToOwnerCorpus,
   withdrawOwnerMaterial,
 } from "./owner-materials";
+import { runNextLegalCorpusIngestionJob } from "./ingestion";
 import {
   QdrantCorpusError,
   QdrantLegalCorpusClient,
@@ -28,6 +29,7 @@ import {
 type AdminEnv = Pick<Env, "DB"> & Partial<Pick<Env, "BUCKET">> & { APP_ENV?: Env["APP_ENV"] }
   & Partial<Pick<QdrantCorpusEnv,
     "QDRANT_URL" | "QDRANT_API_KEY" | "QDRANT_COLLECTION" | "QDRANT_SERVICE" | "QDRANT_CONTAINER">>
+  & { LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED?: string }
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
 export const legalCorpusAdminActionSchema = z.discriminatedUnion("action", [
@@ -43,6 +45,11 @@ export const legalCorpusAdminActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("retry_ingestion"),
     jobId: z.string().min(1).max(180).regex(/^[A-Za-z0-9:_-]+$/u),
+    reason: z.string().trim().min(10).max(500),
+  }).strict(),
+  z.object({
+    action: z.literal("recover_legacy_ingestion"),
+    jobId: z.string().min(1).max(180).regex(/^legal-corpus:[A-Za-z0-9_-]{20,80}$/u),
     reason: z.string().trim().min(10).max(500),
   }).strict(),
   z.object({
@@ -535,6 +542,14 @@ async function eventStatement(input: {
 
 function requireEnabled(env: AdminEnv, action: LegalCorpusAdminAction["action"]): void {
   if (action === "withdraw_owner_material") return;
+  if (action === "recover_legacy_ingestion") {
+    if (env.APP_ENV !== "staging"
+      || env.LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED !== "true"
+      || !featureEnabled(env, "LEGAL_CORPUS_ENABLED")) {
+      throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_DISABLED");
+    }
+    return;
+  }
   const actionFlag = action === "publish_owner_material"
     ? "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST"
     : "LEGAL_CORPUS_AUTO_INGEST_ENABLED";
@@ -583,6 +598,62 @@ export async function performLegalCorpusAdminAction(input: {
         affected: result.status === "published" ? 1 : 0,
         targetId: result.documentId,
       };
+    }
+    if (input.value.action === "recover_legacy_ingestion") {
+      if (!input.env.BUCKET) throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_INVALID");
+      const target = await input.env.DB.prepare(`SELECT id,status,provider,source_url AS sourceUrl,
+          canonical_document_id AS canonicalDocumentId,last_error_code AS lastErrorCode
+        FROM legal_corpus_ingestion_jobs
+        WHERE id=? AND handoff_id IS NULL LIMIT 1`).bind(input.value.jobId).first<{
+        id: string; status: string; provider: string; sourceUrl: string | null;
+        canonicalDocumentId: string | null; lastErrorCode: string | null;
+      }>();
+      if (!target) throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_NOT_FOUND");
+      if (target.provider !== "lex_uz"
+        || target.canonicalDocumentId !== "lexuz:8411573"
+        || target.sourceUrl !== "https://lex.uz/en/docs/8411573"
+        || target.lastErrorCode !== "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT"
+        || !["dead_letter", "retrying", "queued"].includes(target.status)) {
+        throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_INVALID");
+      }
+      const result = await runNextLegalCorpusIngestionJob(
+        {
+          ...input.env,
+          DB: input.env.DB,
+          BUCKET: input.env.BUCKET,
+          APP_ENV: "staging",
+          LEGAL_CORPUS_LANGUAGE_FAMILY_RECONCILIATION_ENABLED: "true",
+        },
+        {
+          allowQueuedProcessing: true,
+          preferredJobId: target.id,
+          wait: async (delayMs) => {
+            await new Promise<void>((resolve) => setTimeout(resolve, Math.min(delayMs, 25_000)));
+          },
+        },
+      );
+      if (result.jobId !== target.id || result.status !== "completed") {
+        throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_CONFLICT");
+      }
+      await eventStatement({
+        db: input.env.DB,
+        environment,
+        // Keep the existing append-only action vocabulary. The details carry
+        // the bounded recovery reason without requiring a production schema
+        // migration or rewriting the failure ledger.
+        action: "ingestion_retried",
+        targetType: "ingestion_job",
+        targetId: target.id,
+        reason: input.value.reason,
+        details: {
+          previousStatus: target.status,
+          previousErrorCode: target.lastErrorCode,
+          failureLedgerPolicy: "preserved",
+        },
+        staff: input.staff,
+        now,
+      }).then((statement) => input.env.DB.batch([statement]));
+      return { action: input.value.action, affected: 1, targetId: target.id };
     }
     if (input.value.action === "seed_discovery") {
       const statements: D1PreparedStatement[] = [];

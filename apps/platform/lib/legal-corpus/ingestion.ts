@@ -86,6 +86,7 @@ const RECOVERABLE_DEAD_LETTER_CODES = [
   ...RETRYABLE_INTERNAL_ERROR_CODES,
 ] as const;
 const LEGACY_CONTENT_INSUFFICIENT_V2 = "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2";
+const LEGACY_LANGUAGE_FAMILY_CONFLICT = "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT";
 // A processor upgrade can make an otherwise reachable official source
 // processable (for example, by falling back to Lex's official PDF/ZIP
 // representation). Re-read an exhausted row once, and only from the initial
@@ -921,7 +922,7 @@ async function reconcileRecoverableDeadLetter(
       -- This was emitted before the parser distinguished a page with no
       -- usable official text from a locale-prefixed archive. Re-read an
       -- exhausted legacy row exactly once under the corrected classifier.
-      OR (last_error_code=? AND attempt_count>=max_attempts)
+      OR (last_error_code IN (?,?) AND attempt_count>=max_attempts)
       -- Re-read parser/size dead letters exactly once after a bounded parser
       -- upgrade. Do not revive rows already given that additional attempt.
       OR (last_error_code IN (${boundedRecoveryPlaceholders})
@@ -930,6 +931,7 @@ async function reconcileRecoverableDeadLetter(
     ORDER BY updated_at ASC,id ASC LIMIT 1
   `).bind(
     ...RECOVERABLE_DEAD_LETTER_CODES,
+    LEGACY_LANGUAGE_FAMILY_CONFLICT,
     LEGACY_CONTENT_INSUFFICIENT_V2,
     ...ONE_TIME_BOUNDED_RECOVERY_CODES,
     INITIAL_INGESTION_MAX_ATTEMPTS,
@@ -946,7 +948,7 @@ async function reconcileRecoverableDeadLetter(
       next_attempt_at=?,updated_at=?
     WHERE id=? AND status='dead_letter' AND handoff_id IS NULL AND (
       attempt_count<max_attempts OR last_error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
-      OR last_error_code=?
+      OR last_error_code IN (${placeholders})
       OR (last_error_code IN (${boundedRecoveryPlaceholders})
         AND attempt_count>=max_attempts AND max_attempts=?)
     )
@@ -954,7 +956,7 @@ async function reconcileRecoverableDeadLetter(
     now,
     now,
     stranded.id,
-    LEGACY_CONTENT_INSUFFICIENT_V2,
+    ...RECOVERABLE_DEAD_LETTER_CODES,
     ...ONE_TIME_BOUNDED_RECOVERY_CODES,
     INITIAL_INGESTION_MAX_ATTEMPTS,
   ).run();
@@ -1592,6 +1594,10 @@ export async function runNextLegalCorpusIngestionJob(
      * still has global precedence, and an empty reservation falls back to
      * ordinary FIFO work rather than leaving a paced source slot idle. */
     reservedQueuedJobType?: IngestionJob["jobType"];
+    /** Exact staging recovery target. This is intentionally narrower than a
+     * general queue drain: the caller can prove one preserved dead-letter
+     * row, then process only that job without claiming unrelated work. */
+    preferredJobId?: string;
     /** A bounded share may favour already-discovered, high-value official
      * source families. Retries always retain global precedence, and callers
      * keep ordinary FIFO slots so this cannot starve the rest of the corpus. */
@@ -1627,7 +1633,16 @@ export async function runNextLegalCorpusIngestionJob(
       AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
   `).bind(now).first<IngestionJob>();
-  const reservedCandidate = retryCandidate || !input.reservedQueuedJobType
+  const preferredJob = !input.preferredJobId
+    ? null
+    : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
+        canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
+      FROM legal_corpus_ingestion_jobs
+      WHERE id=? AND status IN ('queued','retrying') AND handoff_id IS NULL
+        AND (next_attempt_at IS NULL OR next_attempt_at<=?) LIMIT 1
+    `).bind(input.preferredJobId, now).first<IngestionJob>();
+  const selectedRetryCandidate = preferredJob ?? retryCandidate;
+  const reservedCandidate = selectedRetryCandidate || !input.reservedQueuedJobType
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
         canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
@@ -1637,18 +1652,18 @@ export async function runNextLegalCorpusIngestionJob(
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
     `).bind(input.reservedQueuedJobType, now).first<IngestionJob>();
   const preferredDocumentIds = preferredCanonicalDocumentIds(input.preferredCanonicalDocumentIds);
-  const preferredCodeCandidate = retryCandidate || reservedCandidate || preferredDocumentIds.length === 0
+  const preferredCodeCandidate = selectedRetryCandidate || reservedCandidate || preferredDocumentIds.length === 0
     ? null
     : await findPreferredCanonicalDocumentJob(env.DB, now, preferredDocumentIds);
   const categories = preferredCatalogCategories(input.preferredCatalogCategories);
   const languages = preferredCatalogLanguages(input.preferredCatalogLanguages);
-  const preferredCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || categories.length === 0
+  const preferredCandidate = selectedRetryCandidate || reservedCandidate || preferredCodeCandidate || categories.length === 0
     ? null
     : await findPreferredCatalogJob(env.DB, now, categories, languages)
       ?? (languages.length > 0
         ? await findPreferredCatalogJob(env.DB, now, categories, [])
         : null);
-  const nonCatalogCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate
+  const nonCatalogCandidate = selectedRetryCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate
     || input.preferNonCatalogQueuedJob !== true
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
@@ -1658,7 +1673,7 @@ export async function runNextLegalCorpusIngestionJob(
         AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
     `).bind(now).first<IngestionJob>();
-  const fifoCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate || nonCatalogCandidate
+  const fifoCandidate = selectedRetryCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate || nonCatalogCandidate
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
       FROM legal_corpus_ingestion_jobs
@@ -1666,7 +1681,7 @@ export async function runNextLegalCorpusIngestionJob(
         AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
     `).bind(now).first<IngestionJob>();
-  const candidate = retryCandidate ?? reservedCandidate ?? preferredCodeCandidate ?? preferredCandidate
+  const candidate = selectedRetryCandidate ?? reservedCandidate ?? preferredCodeCandidate ?? preferredCandidate
     ?? nonCatalogCandidate ?? fifoCandidate;
   if (!candidate) return { claimed: false, status: "empty", jobId: null, safeErrorCode: null };
   const claimed = await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
