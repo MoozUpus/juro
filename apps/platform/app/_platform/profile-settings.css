@@ -751,3 +751,5 @@
     transition: none;
   }
 }
+
+.session-actions button { min-height: 44px; }
