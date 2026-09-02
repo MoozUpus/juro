@@ -2,12 +2,20 @@
 
 Status: **release-scoped evidence, not a repository-wide penetration test**
 
-Evidence cutoff: **2026-09-02 07:03 UZT**
+Evidence cutoff: **2026-09-02 12:45 UZT**
 
-## v120 production-operations evidence
+## Bounded DNS retirement and authenticated Lawyer evidence
 
-- A bounded network check proved that `ftp.juro.uz` does not answer on FTP port 21, exposes the default AlmaLinux server page over plain HTTP, and presents a certificate that fails hostname validation over HTTPS. The DNS-only A record still reveals `95.46.96.77`; no JURO code dependency was found.
-- The safe remediation is deletion of only the saved DNS-only A record after Cloudflare sign-in, followed by NXDOMAIN, public-route, protected-boundary, and email-MX verification. Rollback is recreation of `A ftp.juro.uz → 95.46.96.77`, TTL 300, DNS-only.
+- With the owner's exact action-time confirmation, authenticated Chrome deleted only Cloudflare DNS record `4435f48bc863cc0ccaddd74a21791e5d`: `A ftp.juro.uz → 95.46.96.77`, DNS-only, dashboard TTL Auto/public TTL 300.
+- The exact dashboard row disappeared. `1.1.1.1`, `8.8.8.8`, `tadeo.ns.cloudflare.com`, and `tess.ns.cloudflare.com` then returned NXDOMAIN for `ftp.juro.uz A`.
+- Pre/post snapshots matched for apex Cloudflare Email Routing MX, `mail.juro.uz` CNAME, and `send.juro.uz` MX/TXT. Public, app, lawyer, admin, and status hosts returned final HTTP `200`. No other DNS record was edited.
+- A real Lawyer session remained on the dedicated host and completed 16 protected routes read-only without login fallback, 404, horizontal overflow, visible alert, or console error. The audit collected route/structure outcomes only and did not read private clients, matters, messages, or documents.
+- The deletion has no one-click undo. Its bounded rollback is recreation of the saved DNS-only A record with TTL Auto/300, followed by the same DNS, production-route, and mail checks.
+
+## Retained v120 pre-deletion production-operations evidence
+
+- Before deletion, a bounded network check proved that `ftp.juro.uz` did not answer on FTP port 21, exposed the default AlmaLinux server page over plain HTTP, and presented a certificate that failed hostname validation over HTTPS. The DNS-only A record revealed `95.46.96.77`; no JURO code dependency was found.
+- That checkpoint proposed deleting only the saved DNS-only A record after Cloudflare sign-in, followed by NXDOMAIN, public-route, protected-boundary, and email-MX verification. The later receipt above records completion; rollback remains recreation of `A ftp.juro.uz → 95.46.96.77`, TTL Auto/public 300, DNS-only.
 - No DNS write was attempted through an under-permissioned token. The OAuth API correctly rejected DNS-record access, and Chrome was stopped at Cloudflare sign-in without entering credentials.
 - Read-only production dependency history contained no request, response, document, user identifier, or credential. It showed 195/197 operational provider probes in the 24-hour window and no provider billing/balance error; this is operational evidence, not a penetration test or availability SLA.
 
@@ -31,8 +39,8 @@ The scan followed supporting code far enough to verify that authentication autho
 ## Limitations and open security work
 
 - This is not a fresh repository-wide scan, penetration test, or authenticated authorization matrix.
-- Business, Lawyer, Pending Lawyer, Staff/Admin, cross-tenant, IDOR, upload, share-link, billing, and account-deletion tests remain open until controlled role accounts and test data are available.
-- The broader domain inventory now identifies `ftp.juro.uz` as a reversible retirement candidate; the remaining blocker is Cloudflare DNS authentication/permission. No DNS change has yet occurred.
+- Business, Pending Lawyer, Staff/Admin, state-changing Lawyer/client collaboration, cross-tenant, IDOR, upload, share-link, billing, and account-deletion tests remain open until controlled role accounts and test data are available.
+- The legacy `ftp.juro.uz` exposure is resolved. Continue to monitor for a legitimate dependency; recreate only the documented record if one is proven.
 - TAC display entitlement could not be verified because the Codex Security access connector was not connected; the sealed local report and SARIF were still generated.
 - Legislation databases, legal corpus, vectors, embeddings, and staging-capacity work are explicitly excluded.
 

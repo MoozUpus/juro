@@ -2,9 +2,17 @@
 
 Assessment: **NOT READY for the full execution brief**
 
-Evidence cutoff: **2026-09-02 UZT**
+Evidence cutoff: **2026-09-02 12:45 UZT**
 
-Production is reachable and the owner-requested v101 mobile interaction-target increment is deployed from merge `498ab8944575134163cadcc6c74deeadd3a93fac`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker version `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T06:08:14.064Z` was operational with 8/8 components and 0 active incidents. A separate content-free 24-hour D1 history supports a bounded provider-recovery statement, but not an availability SLA. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, DNS-remediation, and other Definition-of-Done gates are still open.
+Production is reachable and the owner-requested v101 mobile interaction-target increment is deployed from merge `498ab8944575134163cadcc6c74deeadd3a93fac`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker version `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T06:08:14.064Z` was operational with 8/8 components and 0 active incidents. A separate content-free 24-hour D1 history supports a bounded provider-recovery statement, but not an availability SLA. The obsolete FTP DNS exposure is resolved and the authenticated Lawyer read-only shell is verified. The full execution brief remains incomplete because authenticated Business, Pending Lawyer, Staff/Admin, state-changing Lawyer/client collaboration, and other Definition-of-Done gates are still open.
+
+## DNS retirement and authenticated Lawyer receipt (2026-09-02)
+
+- Deleted only Cloudflare record `4435f48bc863cc0ccaddd74a21791e5d`, exactly `A ftp.juro.uz → 95.46.96.77`, DNS-only, dashboard TTL Auto/public TTL 300, after the owner's exact action-time confirmation.
+- The dashboard row disappeared; `1.1.1.1`, `8.8.8.8`, and both authoritative nameservers returned NXDOMAIN. Apex MX, `mail` CNAME, and `send` MX/TXT matched the pre-change snapshot.
+- Public, app, lawyer, admin, and status endpoints returned final HTTP `200`. No unrelated DNS, runtime, database, secret, binding, payment, auth-policy, corpus/vector/embedding, or staging-capacity operation occurred.
+- A real Lawyer session completed 16 discovered protected routes on `lawyer.juro.uz` read-only. Fifteen role routes also passed at 390 × 844. There was no login fallback, 404, horizontal overflow, visible alert, or console error; protected settings loaders settled to one visible H1.
+- No private client, matter, message, document, or session content was read and no state-changing control was used. Lawyer mutations remain a separate gate.
 
 ## v101 mobile interaction-target production evidence (2026-09-02)
 
@@ -134,8 +142,8 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 | Priority | Gap | Evidence | Required action |
 | --- | --- | --- | --- |
 | Excluded | Staging health/capacity | The retained historical staging evidence is stale/degraded and the owner explicitly excluded legislation database/corpus/capacity remediation | No action in this goal; do not use this row to block the permitted non-corpus work |
-| P1 | Cloudflare reports partial origin IP exposure; obsolete `ftp` record remains live | `ftp.juro.uz` points to `95.46.96.77`; port 21 times out, HTTP exposes an AlmaLinux test page, HTTPS hostname validation fails, and no code dependency was found | Sign in to Cloudflare DNS, capture the record ID/value, delete only this A record, then verify NXDOMAIN and all production/email routes; recreate the saved A record immediately if a dependency appears |
-| P1 | Authenticated role matrix incomplete | Authenticated individual read-only coverage exists; Business, Lawyer, Pending Lawyer, Staff/Admin, and state-changing flows remain open | Chrome QA with real authorized sessions and no fabricated identity |
+| Resolved | Obsolete `ftp` origin exposure | only the confirmed A record was deleted; recursive and authoritative DNS return NXDOMAIN; production/email checks passed | Keep absent; recreate the saved DNS-only A record only if a legitimate dependency is proven |
+| P1 | Authenticated role matrix incomplete | Authenticated Individual and Lawyer read-only coverage exists; Business, Pending Lawyer, Staff/Admin, state-changing flows, and Lawyer/client mutations remain open | Chrome QA with real authorized sessions and controlled test data; no fabricated identity |
 | P2 | Production v118 behavior is not authenticated on staging | Main is normalized and the canonical staging host is Access-protected; staging release remains separate | Complete post-Access Client/Lawyer route QA only in a safe, non-corpus staging increment |
 
 ## Rollback protocol
@@ -156,7 +164,7 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 
 ### DNS
 
-The only currently approved retirement candidate is `A ftp.juro.uz → 95.46.96.77`, DNS-only, TTL 300. Before deletion, capture the Cloudflare record ID and confirm those exact fields in the dashboard. Delete only that record; do not change apex, Worker hostnames, MX, TXT, `mail`, or `send` records. Verify that `ftp.juro.uz` no longer resolves, all public/app/lawyer/admin/status routes still pass, and Cloudflare Email Routing MX remains unchanged. If any legitimate dependency appears, recreate the saved DNS-only A record with TTL 300. The current blocker is Cloudflare DNS authentication/permission, not uncertainty about the observed network behavior.
+The approved retirement is complete: Cloudflare record `4435f48bc863cc0ccaddd74a21791e5d` (`A ftp.juro.uz → 95.46.96.77`, DNS-only, TTL Auto/public 300) was the only deleted record. Recursive and authoritative DNS return NXDOMAIN; public/app/lawyer/admin/status reachability and the saved email-DNS contract passed. If a legitimate dependency appears, recreate only the saved DNS-only A record and repeat the same route/email checks. There is no current DNS-authentication blocker.
 
 Provider reliability remains an ongoing monitoring duty. The v120 24-hour history closes the earlier point-in-time-only evidence gap for the observed recovery window; it does not establish an SLA or guarantee future availability.
 

@@ -2,13 +2,13 @@
 
 Status: **living production audit, not a usability certification**
 
-Evidence cutoff: **2026-09-02 04:19 UZT**
+Evidence cutoff: **2026-09-02 12:45 UZT**
 
-Scope: Chrome-only public, auth, and authenticated Individual surfaces through v116. Excluded: legal-data/corpus operations, unsupported browsers, physical devices, and unowned role sessions.
+Scope: Chrome-only public, auth, authenticated Individual, and authenticated read-only Lawyer surfaces through the v101 checkpoint. Excluded: legal-data/corpus operations, unsupported browsers, physical devices, and unowned role sessions.
 
 ## Outcome
 
-v116 resolves the two current production polish defects found during the v115 audit: tablet/desktop auth-heading overlap and sub-44-pixel public locale links. The checked public, auth, and Individual layouts now have zero horizontal overflow at 390, 768, 1024, and 1440 px.
+v116 resolves the two production polish defects found during the v115 audit: tablet/desktop auth-heading overlap and sub-44-pixel public locale links. The checked public, auth, and Individual layouts have zero horizontal overflow at 390, 768, 1024, and 1440 px. A later real Lawyer session completed 16 protected routes read-only at desktop width and 15 role routes at 390 × 844 without login fallback, 404, horizontal overflow, visible alert, or console error.
 
 ## Surface review
 
@@ -19,11 +19,12 @@ v116 resolves the two current production polish defects found during the v115 au
 | Auth top row | theme and language controls no longer cover the form heading | overlap 0 px² at four viewports | RESOLVED |
 | Turnstile | challenge reserves stable height and exposes localized status | 104 px live container; submit protected | VERIFIED |
 | Individual shell | clear primary H1, responsive navigation, search/theme/locale/logout controls at least 44 px in the sample | live dashboard matrix | VERIFIED FOR SHELL |
+| Lawyer shell | dedicated host, discovered professional route family, settled H1/main structure, zero horizontal overflow at desktop and 390 px | real authenticated read-only route matrix | VERIFIED FOR READ-ONLY SHELL |
 | Persona routing | Individual cannot silently become Business, Lawyer, or Admin | redirect/reauth/admin-session boundaries | VERIFIED |
 
 ## Open UX gates
 
-- Role-specific onboarding and empty/error/success states for Business, Lawyer, Pending Lawyer, and Admin.
+- Role-specific onboarding and empty/error/success states for Business, Pending Lawyer, and Admin; state-changing Lawyer/client collaboration remains open.
 - Full keyboard order, focus restoration, modal trapping, and screen-reader narration across feature workflows.
 - Controlled real-data substitutes for uploads, document generation, comparison, payments, and destructive settings.
 - Long-content and localization stress tests on every dense workspace page.

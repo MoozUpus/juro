@@ -2,7 +2,7 @@
 
 Status: **partial Chrome responsive evidence; no physical-device certification**
 
-Evidence cutoff: **2026-09-02 06:32 UZT**
+Evidence cutoff: **2026-09-02 12:45 UZT**
 
 ## Checked viewports
 
@@ -14,6 +14,13 @@ Evidence cutoff: **2026-09-02 06:32 UZT**
 | 1440 × 900 | all locale links 44 × 44 | overlap 0 | overflow 0; case link and settings tabs 44 px; one H1/main |
 
 Local pre-release checks additionally covered 320 × 720. Production v115 evidence covers 390 × 844 theme controls, reveal visibility, and Lighthouse accessibility. These are lab/browser measurements, not field Core Web Vitals or physical-device results.
+
+## Authenticated Lawyer responsive receipt
+
+- A real Lawyer session completed 15 protected role routes at 390 × 844 with the temporary Chrome viewport override.
+- Every checked route stayed on `lawyer.juro.uz`, retained a main landmark, avoided login fallback and 404, and had zero document-level horizontal overflow.
+- Settings, security, and privacy initially showed their protected loading state; after it settled, each exposed one visible H1 and no visible alert. This prevents a premature loading-state snapshot from being misreported as a heading defect.
+- The viewport override was reset to the normal 1536 px desktop width, and the user-owned tab was returned to `/ru/dashboard`.
 
 ## Resolved defects
 

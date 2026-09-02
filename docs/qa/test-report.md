@@ -2,9 +2,24 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-09-02 UZT**
+Evidence cutoff: **2026-09-02 12:45 UZT**
 
-Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, the later bounded DNS-retirement and authenticated Lawyer receipts, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## DNS retirement and authenticated Lawyer validation (2026-09-02)
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Exact DNS target | Cloudflare record `4435f48bc863cc0ccaddd74a21791e5d`; A `ftp.juro.uz → 95.46.96.77`; DNS-only; TTL Auto/public 300 | PASS |
+| Cloudflare change | owner-confirmed deletion; exact row count became zero; no other record edited | PASS |
+| Recursive DNS | `1.1.1.1` and `8.8.8.8` returned NXDOMAIN | PASS |
+| Authoritative DNS | `tadeo.ns.cloudflare.com` and `tess.ns.cloudflare.com` returned NXDOMAIN | PASS |
+| Mail boundary | apex MX, `mail` CNAME, and `send` MX/TXT matched the pre-change snapshot | PASS FOR CONFIGURATION EQUALITY |
+| Production hosts | public, app, lawyer, admin, and status checks returned final HTTP `200` | PASS FOR REACHABILITY |
+| Lawyer desktop shell | real Lawyer session; 16 protected routes; no login fallback, 404, horizontal overflow, visible alert, or console error | PASS FOR READ-ONLY SHELL |
+| Lawyer mobile shell | 15 role routes at 390 × 844; no login fallback, 404, or horizontal overflow; settings loaders settled to visible H1 | PASS FOR RESPONSIVE READ-ONLY SHELL |
+| Privacy boundary | no private client, matter, message, document, or session content read; no state-changing control used | PASS |
+| Change boundary | one confirmed DNS deletion; no runtime deploy, migration, database write, secret, payment, auth-policy, corpus/vector/embedding, or staging-capacity operation | PASS |
 
 ## v101 mobile interaction-target production validation (2026-09-02)
 
@@ -219,7 +234,7 @@ These are build-budget measurements, not field Core Web Vitals.
 
 ## Still unproven
 
-- state-changing authenticated journeys; full Business, Lawyer, Pending Lawyer, and Staff/Admin coverage;
+- state-changing authenticated journeys; full Business, Pending Lawyer, and Staff/Admin coverage; state-changing Lawyer/client collaboration;
 - full critical-scenario E2E with real authorized test sessions;
 - manual keyboard accessibility for all critical flows;
 - visual regression across every required viewport;
