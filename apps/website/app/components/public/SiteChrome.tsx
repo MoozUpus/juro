@@ -161,7 +161,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
         <a className={styles.skipLink} href="#main-content">{t.skip}</a>
         <div className={styles.headerInner}>
           <Link aria-label="JURO" className={`${styles.logo} ${brandStyles.logo}`} href={`/${locale}`}>
-            <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={1024} priority src={tone === "dark" && !scrolled ? "/juro-mark-light.png" : "/juro-mark.png"} unoptimized width={1024} /></span>
+            <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={64} priority sizes="(max-width: 620px) 58px, 64px" src={tone === "dark" && !scrolled ? "/juro-mark-light.png" : "/juro-mark.png"} width={64} /></span>
             <span className={brandStyles.wordmark}>JURO</span>
           </Link>
           <nav aria-label={t.nav} className={styles.desktopNav}>
@@ -181,7 +181,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
             <div aria-label={t.nav} aria-modal="true" className={styles.mobilePanel} id={panelId} ref={panelRef} role="dialog">
               <div className={styles.mobileTop}>
                 <div className={brandStyles.mobileBrand}>
-                  <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={1024} src="/juro-mark.png" unoptimized width={1024} /></span>
+                  <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={56} sizes="56px" src="/juro-mark.png" width={56} /></span>
                   <span>JURO</span>
                 </div>
                 <button aria-label={t.close} className={styles.closeButton} onClick={() => setOpen(false)} type="button"><X aria-hidden="true" size={22} /></button>
@@ -220,7 +220,7 @@ export function SiteFooter({ locale }: { locale: Locale }) {
       <div className={`${styles.footerTop} ${footerRailStyles.top}`}>
         <div className={`${styles.footerBrand} ${footerRailStyles.brand}`}>
           <Link aria-label="JURO" className={brandStyles.footerLogo} href={`/${locale}`}>
-            <span className={brandStyles.footerMarkFrame}><Image alt="" className={brandStyles.footerMark} height={1024} src="/juro-mark-light.png" unoptimized width={1024} /></span>
+            <span className={brandStyles.footerMarkFrame}><Image alt="" className={brandStyles.footerMark} height={72} sizes="72px" src="/juro-mark-light.png" width={72} /></span>
             <span>JURO</span>
           </Link>
           <p>{t.description}</p>

@@ -110,6 +110,48 @@ test("renders the production landing with localized canonical metadata and real 
   }
 });
 
+test("routes standard Next image URLs through the Cloudflare Images binding", async () => {
+  const worker = await createWorker();
+  let requestedWidth = null;
+  const imageRuntime = {
+    ASSETS: {
+      fetch: async () => new Response(new Uint8Array([137, 80, 78, 71]), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      }),
+    },
+    IMAGES: {
+      input() {
+        return {
+          transform({ width }) {
+            requestedWidth = width;
+            return {
+              output: async ({ format }) => ({
+                response: () => new Response(new Uint8Array([1, 2, 3]), {
+                  status: 200,
+                  headers: { "content-type": format },
+                }),
+              }),
+            };
+          },
+        };
+      },
+    },
+  };
+  const response = await worker.fetch(
+    new Request("http://localhost/_next/image?url=%2Fjuro-mark-light.png&w=128&q=75", {
+      headers: { accept: "image/webp" },
+    }),
+    imageRuntime,
+    context,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/webp");
+  assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  assert.equal(requestedWidth, 128);
+});
+
 test("fingerprinted public assets are cached immutably", async () => {
   const { withSecurityHeaders } = await createWorkerModule();
   const response = withSecurityHeaders(

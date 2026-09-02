@@ -249,6 +249,10 @@ test("brand mark uses a dedicated symbol asset and keeps one intentional wordmar
   assert.match(chrome, /src=\{tone === "dark" && !scrolled \? "\/juro-mark-light\.png" : "\/juro-mark\.png"\}/);
   assert.match(chrome, /src="\/juro-mark\.png"/);
   assert.match(chrome, /src="\/juro-mark-light\.png"/);
+  assert.match(chrome, /height=\{64\} priority sizes="\(max-width: 620px\) 58px, 64px"/);
+  assert.match(chrome, /height=\{56\} sizes="56px" src="\/juro-mark\.png" width=\{56\}/);
+  assert.match(chrome, /height=\{72\} sizes="72px" src="\/juro-mark-light\.png" width=\{72\}/);
+  assert.doesNotMatch(chrome, /juro-mark[^\n>]*unoptimized/);
   assert.match(chrome, /brandStyles\.wordmark\}>JURO/);
   assert.match(chrome, /juro-mark-light\.png/);
   assert.match(chrome, /juro-mark\.png/);
