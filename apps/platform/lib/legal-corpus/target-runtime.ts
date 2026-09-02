@@ -2,10 +2,10 @@ import { z } from "zod";
 
 import {
   createAiSearchCandidateIndex,
-  candidateConfigurationSchema,
+  createCloudflareAiSearchProvider,
   parsePinnedCandidateRelease,
   toPinnedCandidateConfiguration,
-  type CandidateConfiguration,
+  type AiSearchProvider,
   type CandidatePacket,
   type PinnedCandidateRelease,
   type TemporalEndpoint,
@@ -34,9 +34,129 @@ export type TargetRetrievalRuntimeEnv = {
   APP_ENV: string;
   LEGAL_DB?: D1Database;
   LEGAL_EVIDENCE_BUCKET?: Pick<LegalEvidenceBucket, "get">;
-  LEGAL_AI_SEARCH_SERVICE?: Fetcher;
+  LEGAL_AI_SEARCH_NAMESPACE?: AiSearchNamespace;
+  LEGAL_AI_SEARCH_NAMESPACE_NAME?: string;
+  LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME?: string;
   LEGAL_CORPUS_REASONING_SERVICE?: Fetcher;
 };
+
+type RuntimeProviderGovernance = {
+  governanceId: string;
+  evidenceJson: string;
+  recordedAt: string;
+  providerNamespace: string;
+};
+
+async function sha256Hex(value: string): Promise<string> {
+  const encoded = new TextEncoder().encode(value);
+  const bytes = new Uint8Array(encoded.byteLength);
+  bytes.set(encoded);
+  const digest = await crypto.subtle.digest("SHA-256", bytes.buffer);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export function createRuntimeAiSearchProvider(input: {
+  db: D1Database;
+  namespace: AiSearchNamespace;
+  namespaceName: string;
+  sourceBucketName: string;
+}): AiSearchProvider {
+  const governanceByInstance = new Map<string, Promise<RuntimeProviderGovernance>>();
+  const providerByGovernance = new Map<string, Promise<AiSearchProvider>>();
+  const loadGovernance = (instanceId: string): Promise<RuntimeProviderGovernance> => {
+    const existing = governanceByInstance.get(instanceId);
+    if (existing) return existing;
+    const loaded = input.db.prepare(`SELECT provider.governance_id AS governanceId,
+        governance.evidence_json AS evidenceJson,governance.recorded_at AS recordedAt,
+        provider.provider_namespace AS providerNamespace
+      FROM legal_search_release_provider_instances provider
+      JOIN legal_search_release_governance governance ON governance.id=provider.governance_id
+      WHERE provider.provider_instance_id=? AND provider.scheduled_indexing_paused=1
+        AND governance.status='passed' AND governance.failures_json='[]'
+      ORDER BY governance.recorded_at DESC LIMIT 1`).bind(instanceId)
+      .first<RuntimeProviderGovernance>().then((row) => {
+        if (!row || row.providerNamespace !== input.namespaceName) {
+          throw new TypeError("AI_SEARCH_PROVIDER_GOVERNANCE_UNAVAILABLE");
+        }
+        return row;
+      });
+    governanceByInstance.set(instanceId, loaded);
+    return loaded;
+  };
+  const loadProvider = async (governance: RuntimeProviderGovernance): Promise<AiSearchProvider> => {
+    const existing = providerByGovernance.get(governance.governanceId);
+    if (existing) return existing;
+    const loaded = (async () => {
+      const evidence = governanceSchema.parse(JSON.parse(governance.evidenceJson) as unknown);
+      if (evidence.configuration.providerNamespaceIdentity !== input.namespaceName) {
+        throw new TypeError("AI_SEARCH_PROVIDER_NAMESPACE_DRIFT");
+      }
+      const mappings = await input.db.prepare(`SELECT shard.shard_id AS shardId,
+          shard.sync_state AS syncState,provider.provider_instance_id AS instanceId,
+          provider.provider_namespace AS providerNamespace,
+          provider.scheduled_indexing_paused AS scheduledIndexingPaused
+        FROM legal_search_release_shards shard
+        LEFT JOIN legal_search_release_provider_instances provider
+          ON provider.governance_id=shard.governance_id
+          AND provider.shard_id=shard.shard_id
+          AND provider.search_release_id=shard.search_release_id
+        WHERE shard.governance_id=? ORDER BY shard.shard_id`).bind(governance.governanceId).all<{
+          shardId: string;
+          syncState: string;
+          instanceId: string | null;
+          providerNamespace: string | null;
+          scheduledIndexingPaused: number | null;
+        }>();
+      if (mappings.results.length === 0 || mappings.results.some((mapping) =>
+        mapping.syncState !== "complete" || mapping.instanceId === null
+        || mapping.providerNamespace !== input.namespaceName
+        || Number(mapping.scheduledIndexingPaused) !== 1)) {
+        throw new TypeError("AI_SEARCH_PROVIDER_SHARD_MAPPING_INCOMPLETE");
+      }
+      const configuration = toPinnedCandidateConfiguration(evidence.configuration);
+      const shardByInstance = Object.fromEntries(mappings.results.map((mapping) => [
+        mapping.instanceId!, mapping.shardId,
+      ]));
+      const evidenceSha256 = await sha256Hex(governance.evidenceJson);
+      return createCloudflareAiSearchProvider(input.namespace, {
+        namespaceIdentity: input.namespaceName,
+        sourceBucketName: input.sourceBucketName,
+        sourcePrefix: evidence.configuration.sourcePrefix,
+        shardByInstance,
+        configuration,
+        async attestManagement(instanceId) {
+          if (!(instanceId in shardByInstance)) {
+            throw new TypeError("AI_SEARCH_INSTANCE_NOT_IN_GOVERNED_RELEASE");
+          }
+          return {
+            instanceId,
+            configuration,
+            evidenceSha256,
+            observedAt: governance.recordedAt,
+          };
+        },
+      });
+    })();
+    providerByGovernance.set(governance.governanceId, loaded);
+    return loaded;
+  };
+  return {
+    async attest(instanceId) {
+      const governance = await loadGovernance(instanceId);
+      return (await loadProvider(governance)).attest(instanceId);
+    },
+    async search(searchInput) {
+      const governances = await Promise.all(searchInput.instanceIds.map(loadGovernance));
+      const governanceIds = new Set(governances.map(({ governanceId }) => governanceId));
+      if (governanceIds.size !== 1 || governances.length === 0) {
+        throw new TypeError("AI_SEARCH_CROSS_GOVERNANCE_QUERY_REJECTED");
+      }
+      return (await loadProvider(governances[0]!)).search(searchInput);
+    },
+  };
+}
 
 async function serviceJson(
   service: Fetcher,
@@ -126,44 +246,20 @@ export function createRuntimeTargetLegalAnswerRetriever(
 ): TargetLegalAnswerRetriever {
   const environment = environmentSchema.parse(env.APP_ENV);
   if (!env.LEGAL_DB || !env.LEGAL_EVIDENCE_BUCKET
-    || !env.LEGAL_AI_SEARCH_SERVICE || !env.LEGAL_CORPUS_REASONING_SERVICE) {
+    || !env.LEGAL_AI_SEARCH_NAMESPACE || !env.LEGAL_AI_SEARCH_NAMESPACE_NAME
+    || !env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME || !env.LEGAL_CORPUS_REASONING_SERVICE) {
     throw new TypeError("TARGET_RETRIEVAL_RUNTIME_UNAVAILABLE");
   }
   const db = env.LEGAL_DB;
   const evidenceBucket = env.LEGAL_EVIDENCE_BUCKET;
-  const aiSearchService = env.LEGAL_AI_SEARCH_SERVICE;
   const reasoningService = env.LEGAL_CORPUS_REASONING_SERVICE;
   const releaseLifecycle = createReleaseLifecycle({ db });
-  const candidateIndex = createAiSearchCandidateIndex({
-    async attest(instanceId): Promise<CandidateConfiguration> {
-      const body = await serviceJson(
-        aiSearchService,
-        environment,
-        "/internal/legal-corpus/ai-search/attest",
-        { instanceId },
-      );
-      return z.object({ configuration: candidateConfigurationSchema }).strict()
-        .parse(body).configuration;
-    },
-    async search(input) {
-      const body = await serviceJson(
-        aiSearchService,
-        environment,
-        "/internal/legal-corpus/ai-search/search",
-        input,
-      );
-      return z.object({ result: z.object({
-        hits: z.array(z.object({
-          itemKey: z.string(), instanceId: z.string(), shardId: z.string(),
-          vectorRank: z.number(), vectorScore: z.number(), keywordRank: z.number(),
-          keywordScore: z.number(), fusionScore: z.number(),
-        }).passthrough()),
-        errors: z.array(z.object({ code: z.string(), instanceId: z.string().optional() })),
-        searchedInstanceIds: z.array(z.string()),
-        tokenUsage: z.number().int().nonnegative().optional(),
-      }).strict() }).strict().parse(body).result;
-    },
-  }, {
+  const candidateIndex = createAiSearchCandidateIndex(createRuntimeAiSearchProvider({
+    db,
+    namespace: env.LEGAL_AI_SEARCH_NAMESPACE,
+    namespaceName: env.LEGAL_AI_SEARCH_NAMESPACE_NAME,
+    sourceBucketName: env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME,
+  }), {
     async attestPrivateNames(input) {
       return serviceJson(
         reasoningService,
