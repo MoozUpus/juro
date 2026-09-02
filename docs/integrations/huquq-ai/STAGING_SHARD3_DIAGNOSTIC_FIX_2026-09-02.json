@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T07:42:00Z",
+  "applicationCommit": "ffc03c2dee24d44fb0de089769f3005f617e8c06",
+  "workerDeployment": "35c8888c-c154-4539-9100-feb8882be92a",
+  "databaseName": "juro-staging-corpus-shard-3",
+  "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+  "change": {
+    "function": "safeErrorCode",
+    "behavior": "Preserve bounded SQLITE/D1/LEGAL operational codes from ordinary Error instances without copying raw SQL, URLs or source text.",
+    "existingLedgerRowsRewritten": false,
+    "ingestionFlags": {
+      "LEGAL_CORPUS_ENABLED": true,
+      "LEGAL_CORPUS_AUTO_INGEST_ENABLED": false,
+      "LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED": false,
+      "stagingCrons": []
+    }
+  },
+  "checks": {
+    "cloudflareTests": {"passed": 187, "failed": 0},
+    "typeCheck": "passed",
+    "lint": "passed",
+    "artifactDryRun": "passed",
+    "targetsDeployed": false
+  },
+  "assessment": {
+    "productionChanged": false,
+    "dnsChanged": false,
+    "queueDrainResumed": false,
+    "releaseGate": "closed"
+  },
+  "scope": "Staging-only diagnostic hardening; no claim of queue completion, physical disjointness, legal evaluation, snapshot or release approval."
+}
