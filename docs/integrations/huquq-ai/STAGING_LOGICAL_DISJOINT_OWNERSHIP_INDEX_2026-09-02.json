@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-02T08:17:48.041Z",
+  "applicationCommit": "40ed4b963c41e66df473044743c1c96dcaa48e9f",
+  "indexCode": "apps/platform/scripts/build-staging-federation-ownership-index.mjs",
+  "migration": "apps/platform/drizzle/0143_staging_federation_ownership_index.sql",
+  "targetDatabase": {
+    "name": "juro-staging-corpus-shard-4",
+    "id": "7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2",
+    "migrationCountAfterApply": 144,
+    "sizeBytesAfterSeed": 8560640
+  },
+  "sourceDatabases": [
+    {"name":"juro-staging","id":"bb716a96-b2fb-4823-90d6-6c228fed181a"},
+    {"name":"juro-staging-corpus-v2","id":"62620fb3-3da3-4c76-a8e9-aa60858c1063"},
+    {"name":"juro-staging-corpus-shard-1","id":"e09e0682-0c2e-4458-a8f3-be9de28117e3"},
+    {"name":"juro-staging-corpus-shard-2","id":"36fa1cfe-6d00-47b7-a980-864020028d86"},
+    {"name":"juro-staging-corpus-shard-3","id":"ccf1f18e-66cf-4358-a7aa-f1d725b7653c"}
+  ],
+  "runId": "ownership-20260902081748",
+  "assignmentRule": "sha256(canonical_document_id) modulo 4; representative=official/newest",
+  "rawDocumentRows": 12333,
+  "uniqueCanonicalDocumentIds": 7152,
+  "duplicateDocumentRows": 5181,
+  "partitionCounts": {
+    "juro-staging-corpus-shard-1": 1812,
+    "juro-staging-corpus-shard-2": 1728,
+    "juro-staging-corpus-shard-3": 1806,
+    "juro-staging-corpus-shard-4": 1806
+  },
+  "sourceDigest": "3ff8fbf050d47e9e7fcb72ed3f13f7bd76a5c7afce1c2dffe0ef93eccd0a312d",
+  "partitionManifestSha256": "0497eb8a434e9298972798b033d7734a0e8753e0c4b554512a3d86a1b279087c",
+  "verification": {
+    "ownershipRows": 7152,
+    "distinctCanonicalIds": 7152,
+    "partitionCount": 4,
+    "occurrenceSum": 12333,
+    "verifiedRuns": 1,
+    "rowsWrittenToSourceDatabases": 0,
+    "failureLedgerRowsChanged": 0,
+    "sourceRowsAreUnchanged": true,
+    "queryMetaRowsWritten": 0
+  },
+  "status": "logical_disjoint_ownership_index_verified",
+  "releaseGate": "closed",
+  "limitations": [
+    "This projection has one logical owner per canonical document, but source D1 tables remain physically overlapping.",
+    "No legal-corpus text, versions, chunks, or Qdrant points were copied into shard-4.",
+    "Chunk-set disjointness, point-in-time snapshot/restore, indexed 314-scenario evaluation, Qdrant benchmark, D1 backup/restore and human legal review remain open.",
+    "The index is not yet bound into the production Worker and does not change production flags or migrations."
+  ]
+}
