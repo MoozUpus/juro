@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { createSourceSnapshotPassageResolver } from "../lib/legal-corpus/source-snapshot-retrieval";
@@ -79,4 +80,10 @@ test("Source Snapshot hydration rejects ineligible rows before R2", async () => 
   });
   await assert.rejects(resolve("release:1", "chunk:1:0"), /SOURCE_SNAPSHOT_CANDIDATE_INELIGIBLE/u);
   assert.equal(read, false);
+});
+
+test("Source Snapshot replay driver terminates lanes for an already-completed run", async () => {
+  const driver = await readFile(new URL("../scripts/run-source-snapshot-build.mjs", import.meta.url), "utf8");
+  assert.match(driver,
+    /if \(!results\[index\]\.laneComplete && !results\[index\]\.complete\) laneQueue\.push\(active\[index\]\);/u);
 });

@@ -123,7 +123,7 @@ async function replay(runId) {
     const results = await Promise.all(active.map((lane) => call("replay", { runId, lane })));
     calls += results.length;
     for (let index = 0; index < results.length; index += 1) {
-      if (!results[index].laneComplete) laneQueue.push(active[index]);
+      if (!results[index].laneComplete && !results[index].complete) laneQueue.push(active[index]);
     }
     if (calls % 256 === 0 || laneQueue.length === 0) {
       console.log(JSON.stringify({ event: "source_snapshot.replay_wave", runId, calls,
