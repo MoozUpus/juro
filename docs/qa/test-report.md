@@ -4,7 +4,22 @@ Status: **living evidence report, not full Definition of Done**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope in this report: deployed v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## v118 Dashboard keyboard-focus validation
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Focused regression | platform shell accessibility suite | 10/10 PASS |
+| Static and full test gates | lint, type-check, full platform test command, 217 Worker/runtime tests | PASS |
+| Production artifact | CSS 565.0 KiB; initial JS 294.1 KiB; largest lazy increment 212.1 KiB; fonts 453.6 KiB; images 564.4 KiB; Worker 3,640.6 KiB | PASS |
+| Exact-head CI/security | CI `33578000481`; complete 0-finding scan `cad38f72-f2c0-40ed-a3ed-7cd0b525d76e` across all three changed artifacts | PASS |
+| Post-merge CI | `33578605701` on `617ec64ffcb21633f7b8bb734d28639de8b099e1` | PASS |
+| Worker deployment | platform v206 `1ec688d4-e085-4aa9-a34d-df02b0c1ae1c`; deployment `63cb71bb-5482-4bcf-9bd0-e652c81c9ef0`; 100% traffic | PASS |
+| Production Chrome focus path | 390 × 844; composer focus ring visible; four quick cards fully visible after Tab; scroller positions 2/334/666/974 px; one main/H1; overflow 0 | PASS |
+| Authenticated read-only route audit | 18 Individual routes; correct final paths; one main and one visible H1; overflow 0; zero new console errors | PASS FOR READ-ONLY SHELL |
+| Production status | `2026-09-02T01:32:20.313Z`; operational; 8/8; 0 active incidents | PASS AS POINT-IN-TIME EVIDENCE |
+| Change boundary | no migration, database write, website/Sites, DNS, secret, payment, auth-policy, corpus/vector/embedding, or staging-capacity operation | PASS |
 
 ## v117 Individual touch-target validation
 

@@ -4,7 +4,7 @@ Status: **living evidence report, not a WCAG certification**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope: Chrome-only public, authentication-boundary, and authenticated Individual checks through the deployed v117 release. Legislation database/corpus work, non-Chrome browsers, and physical devices are excluded.
+Scope: Chrome-only public, authentication-boundary, and authenticated Individual checks through the deployed v118 release. Legislation database/corpus work, non-Chrome browsers, and physical devices are excluded.
 
 ## Verified evidence
 
@@ -13,6 +13,8 @@ Scope: Chrome-only public, authentication-boundary, and authenticated Individual
 - The v116 lawyer-login heading has 0 px² overlap with both theme and language controls at all four checked viewports. Turnstile remained visible and the submit action stayed protected until verification completed.
 - The authenticated Individual dashboard retained one visible H1, one main landmark, zero horizontal overflow, and 44 px or larger sampled controls at 390, 768, 1024, and 1440 px.
 - v117 production Chrome confirmed the Individual case-row link and all four profile/settings tabs are 44 CSS px high at 390, 768, 1024, and 1440 px, with zero horizontal overflow and one main/H1 on both routes.
+- v118 production Chrome at 390 × 844 confirmed an explicit focus ring on the dashboard AI composer and on every quick-action card. Keyboard focus moved all four cards fully into the 347 px scroller viewport; recorded `scrollLeft` positions were 2, 334, 666, and 974 px, with no document-level horizontal overflow.
+- The same v118 dashboard check retained one main landmark, one visible H1, and a clean Chrome console. This is a focused keyboard regression pass, not a full keyboard or WCAG certification.
 - Production v101 desktop Lighthouse scored Accessibility **100** on `https://juro.uz/ru`.
 - The v114 local public page retained 21/21 visible reveal sections in RU, UZ, and EN at 1440 × 900 and in RU at 390 × 844.
 - The checked desktop and mobile pages had zero document-level horizontal overflow and no console errors or warnings.
@@ -23,7 +25,7 @@ Scope: Chrome-only public, authentication-boundary, and authenticated Individual
 
 ## Open manual gates
 
-- Complete keyboard traversal, error recovery, 200%/400% zoom, forced-colors, text-spacing, and Russian/Uzbek screen-reader passes.
+- Complete keyboard traversal beyond the checked dashboard composer/quick-action path, plus error recovery, 200%/400% zoom, forced-colors, text-spacing, and Russian/Uzbek screen-reader passes.
 - Complete authenticated Business, Lawyer, Pending Lawyer, and Staff/Admin journeys with accounts that actually hold those roles. Current production correctly redirects the Individual account away from Business, requires explicit lawyer reauthentication, and rejects the Individual session at the Admin boundary.
 - Repeat the full execution-brief viewport matrix on authenticated feature pages, including dense tables, dialogs, uploads, and error states.
 

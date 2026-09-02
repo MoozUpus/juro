@@ -4,19 +4,19 @@ Assessment: **NOT READY for the full execution brief**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Production is reachable and v117 is deployed from merge `40667c017358011a3017da0bea379839fb328297`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker v204 `12ae95e6-5eac-4f14-8257-a30dff56128d`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T00:26:20.487Z` was operational with 8/8 components and 0 active incidents; this is point-in-time evidence, not a claim of sustained provider health. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, and other Definition-of-Done gates are still open.
+Production is reachable and v118 is deployed from merge `617ec64ffcb21633f7b8bb734d28639de8b099e1`. Website Worker v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, platform Worker v206 `1ec688d4-e085-4aa9-a34d-df02b0c1ae1c`, and public Sites v97 were active at the latest verification checkpoint. The public status snapshot generated at `2026-09-02T01:32:20.313Z` was operational with 8/8 components and 0 active incidents; this is point-in-time evidence, not a claim of sustained provider health. The full execution brief remains incomplete because authenticated Business, Lawyer, Pending Lawyer, Staff/Admin, state-changing, and other Definition-of-Done gates are still open.
 
-## Current v117 release state
+## Current v118 release state
 
 | Surface | Current state | Evidence | Rollback point |
 | --- | --- | --- | --- |
-| GitHub main | merge `40667c017358011a3017da0bea379839fb328297` from PR #122 | exact-head CI `33574360732`, complete 0-finding security diff scan `d803816b-0e51-42e8-9d6e-359ea36ccc04`, post-merge CI `33574968921`, platform deploy, and Chrome QA passed | Revert or redeploy the immediately preceding validated main revision if a regression is proven |
+| GitHub main | merge `617ec64ffcb21633f7b8bb734d28639de8b099e1` from PR #124 | exact-head CI `33578000481`, complete 0-finding security diff scan `cad38f72-f2c0-40ed-a3ed-7cd0b525d76e`, post-merge CI `33578605701`, platform deploy, and focused Chrome QA passed | Revert or redeploy the immediately preceding validated main revision if a regression is proven |
 | Public Sites | v97, source `77691d0c2f4d7eaeff759ff3f08eded893d2f835`, deployment `appgdep_6a975c1651d0819194779c579abd961b` | RU/UZ/EN 200; sitemap 78/78; discoverable apex links 120/120; indexing split preserved | Saved v96, source `489c56d029f164c030127f7465d528f8f1bdf396`; v95 remains available |
 | Website Worker | v13 `3ee7a1ae-888a-4c98-8f49-de73783e6b7e`, 100% traffic | visible RU/UZ/EN targets are 44 × 44 CSS px wherever rendered; routes and indexing passed | v11 `fad80c80-ee92-44bb-93a3-e250ee314891` |
-| Platform Worker | v204 `12ae95e6-5eac-4f14-8257-a30dff56128d`, 100% traffic | Individual case link and all four settings tabs measure 44 px at 390/768/1024/1440; one main/H1 and zero overflow | v202 `a88dbd8d-b368-4ff8-911c-0c817df7d9a7` |
-| Production health | operational, 8/8 components, no active incidents at the retained snapshot | `/api/status` generated `2026-09-02T00:26:20.487Z` | Health evidence is observational; it has no deployment rollback |
+| Platform Worker | v206 `1ec688d4-e085-4aa9-a34d-df02b0c1ae1c`, deployment `63cb71bb-5482-4bcf-9bd0-e652c81c9ef0`, 100% traffic | At 390 × 844 the dashboard composer and quick cards have explicit focus rings; all four cards scroll fully into view; one main/H1, zero overflow, and a clean console | v204 `12ae95e6-5eac-4f14-8257-a30dff56128d`, the last independently receipt-verified rollback |
+| Production health | operational, 8/8 components, no active incidents at the retained snapshot | `/api/status` generated `2026-09-02T01:32:20.313Z` | Health evidence is observational; it has no deployment rollback |
 
-The older v116/v115/v101/v189/v95 tables and health narrative below are retained as historical evidence and do not supersede the current v117 checkpoint.
+The older v117/v116/v115/v101/v189/v95 tables and health narrative below are retained as historical evidence and do not supersede the current v118 checkpoint.
 
 ## Retained historical release state
 
@@ -109,7 +109,7 @@ This is a P1 release-gate failure even though the staging host returns HTTP `200
 | Excluded | Staging health/capacity | The retained historical staging evidence is stale/degraded and the owner explicitly excluded legislation database/corpus/capacity remediation | No action in this goal; do not use this row to block the permitted non-corpus work |
 | P1 | Cloudflare reports partial origin IP exposure; FTP TLS is invalid | DNS dashboard and HTTPS probe | Establish ownership/need, back up configuration, then proxy, repair, or retire through a separate reversible DNS change |
 | P1 | Authenticated role matrix incomplete | Authenticated individual read-only coverage exists; Business, Lawyer, Pending Lawyer, Staff/Admin, and state-changing flows remain open | Chrome QA with real authorized sessions and no fabricated identity |
-| P2 | Production v116 behavior is not authenticated on staging | Main is normalized and the canonical staging host is Access-protected; staging release remains separate | Complete post-Access Client/Lawyer route QA only in a safe, non-corpus staging increment |
+| P2 | Production v118 behavior is not authenticated on staging | Main is normalized and the canonical staging host is Access-protected; staging release remains separate | Complete post-Access Client/Lawyer route QA only in a safe, non-corpus staging increment |
 
 ## Rollback protocol
 

@@ -6,6 +6,16 @@ Evidence cutoff: **2026-09-02 UZT**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
 
+## v118 Dashboard keyboard-focus release
+
+- Adds an explicit focus ring to the dashboard AI composer and quick-action cards, and uses nearest-edge native scrolling when a quick card receives keyboard focus.
+- Passed the focused accessibility suite 10/10, lint, type-check, the full platform test command, 217 Worker/runtime tests, production artifact validation and budgets, exact-head CI `33578000481`, post-merge CI `33578605701`, and complete 0-finding security scan `cad38f72-f2c0-40ed-a3ed-7cd0b525d76e`.
+- Merged PR #124 as `617ec64ffcb21633f7b8bb734d28639de8b099e1` and activated platform Worker v206 `1ec688d4-e085-4aa9-a34d-df02b0c1ae1c` through deployment `63cb71bb-5482-4bcf-9bd0-e652c81c9ef0` at 100% traffic. Public Sites v97 and website Worker v13 were unchanged.
+- Production Chrome at 390 × 844 proved one main, one visible H1, zero horizontal overflow, a visible composer focus ring, all four quick cards fully visible as keyboard focus advanced, and zero console messages.
+- The retained 18-route authenticated Individual read-only audit resolved every route correctly with one main/H1, zero overflow, and no new console errors. No state-changing action or private document inspection was performed.
+- The status snapshot generated at `2026-09-02T01:32:20.313Z` was operational with 8/8 components and no active incidents. This is point-in-time evidence only.
+- Performed no migration, database write, website/Sites, DNS, binding, secret, payment, auth-policy, legal-corpus, vector, embedding, or staging-capacity operation. Role-specific and state-changing journeys remain open.
+
 ## v117 Individual touch-target release
 
 - Raises the existing Individual case-row navigation link from 17 CSS px to a 44 px minimum touch target without changing its route or tenant boundary.
