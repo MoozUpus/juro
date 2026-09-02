@@ -117,7 +117,8 @@ const CATALOG_LANGUAGE_KEYS = new Set<LegalCorpusLanguage>(["uz-Cyrl", "uz-Latn"
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export type LegalCorpusIngestionEnv = Pick<Env, "APP_ENV" | "BUCKET" | "DB">
-  & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
+  & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>
+  & { LEGAL_CORPUS_LANGUAGE_FAMILY_RECONCILIATION_ENABLED?: string };
 
 export type LegalCorpusQueueEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
@@ -566,9 +567,27 @@ async function existingVariant(
   `).bind(documentId, language).first<ExistingVariant>();
 }
 
+function normalizedFamilyTitle(value: string | null): string {
+  return (value ?? "")
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+    ?.toLocaleLowerCase()
+    .replace(/\s+/gu, " ")
+    ?? "";
+}
+
+function languageFamilyReconciliationEnabled(
+  env: Pick<LegalCorpusIngestionEnv, "APP_ENV" | "LEGAL_CORPUS_LANGUAGE_FAMILY_RECONCILIATION_ENABLED">,
+): boolean {
+  return env.APP_ENV === "staging"
+    && env.LEGAL_CORPUS_LANGUAGE_FAMILY_RECONCILIATION_ENABLED === "true";
+}
+
 async function linkedDocumentId(
   db: D1Database,
   variants: readonly LexDiscoveredDocument[],
+  allowFamilyReconciliation = false,
 ): Promise<string | null> {
   const linked = new Set<string>();
   for (const variant of variants) {
@@ -577,7 +596,51 @@ async function linkedDocumentId(
     `).bind(variant.sourceUrl).first<{ documentId: string }>();
     if (row?.documentId) linked.add(row.documentId);
   }
-  if (linked.size > 1) throw new TypeError("LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT");
+  if (linked.size > 1) {
+    // A stale catalogue can assign two official language URLs from the same
+    // Lex page to different family IDs. Keep the normal path fail-closed and
+    // permit reconciliation only behind an explicit staging flag. The check
+    // below is deliberately content-free: it requires every linked document
+    // to be official global legislation and to expose the same first title
+    // line, then chooses Lex's deterministic minimum-ID family key. It never
+    // rewrites the immutable failure ledger; the successful retry will only
+    // upsert the affected aliases through the normal ingestion transaction.
+    if (!allowFamilyReconciliation) {
+      throw new TypeError("LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT");
+    }
+    const familyId = lexLanguageFamilyId(variants);
+    const ids = [...linked];
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = await db.prepare(`SELECT id,title,provider,jurisdiction,source_class,
+        scope,visibility,canonical_url
+      FROM legal_corpus_documents WHERE id IN (${placeholders})`)
+      .bind(...ids)
+      .all<{
+        id: string;
+        title: string | null;
+        provider: string;
+        jurisdiction: string;
+        source_class: string;
+        scope: string;
+        visibility: string;
+        canonical_url: string | null;
+      }>();
+    const expectedTitle = normalizedFamilyTitle(rows.results[0]?.title ?? null);
+    const safeRows = rows.results.length === ids.length
+      && expectedTitle.length > 0
+      && rows.results.every((row) => row.provider === "lex_uz"
+        && row.jurisdiction === "UZ"
+        && row.source_class === "OFFICIAL_LEGISLATION"
+        && row.scope === "global"
+        && row.visibility === "global"
+        && typeof row.canonical_url === "string"
+        && row.canonical_url.startsWith("https://lex.uz/")
+        && normalizedFamilyTitle(row.title) === expectedTitle);
+    if (!safeRows || !ids.includes(familyId)) {
+      throw new TypeError("LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT");
+    }
+    return familyId;
+  }
   return [...linked][0] ?? null;
 }
 
@@ -1017,7 +1080,11 @@ export async function ingestOfficialLexDocument(
   const revisionHistory = discoverLexRevisionHistory(rawHtml, currentDocument);
   const effectivity = parseLexDocumentEffectivity(rawHtml);
   const documentMetadata = parseLexDocumentMetadata(rawHtml);
-  const documentId = await linkedDocumentId(env.DB, languageVariants)
+  const documentId = await linkedDocumentId(
+    env.DB,
+    languageVariants,
+    languageFamilyReconciliationEnabled(env),
+  )
     ?? lexLanguageFamilyId(languageVariants);
   const normalizedSource = await normalizeOfficialLexSource({
     rawHtml,

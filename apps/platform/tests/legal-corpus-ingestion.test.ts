@@ -1460,6 +1460,75 @@ test("an official page without legal text or a supported representation resolves
   }
 });
 
+test("staging-only family reconciliation recovers a split Lex language family without rewriting failure evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const title = "QMMB: 07/26/294/0848-son";
+  const insertDocument = (id: string, canonicalUrl: string, documentType: string | null) => {
+    sqlite.prepare(`INSERT INTO legal_corpus_documents
+      (id,provider,jurisdiction,source_class,scope,tenant_id,owner_user_id,matter_id,visibility,
+       canonical_url,title,short_title,document_type,document_number,adopting_authority,adoption_date,
+       publication_date,availability_status,trusted,verification_status,approval_required,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      id, "lex_uz", "UZ", "OFFICIAL_LEGISLATION", "global", null, null, null, "global",
+      canonicalUrl, title, title, documentType, "ПП-294", null, "2026-08-14", null,
+      "ready", 1, "official_source", 0, now.toISOString(), now.toISOString(),
+    );
+  };
+  const splitHtml = `<!doctype html><html><body><main id="divCont">
+    <div class="docContentHeader__item-link" onclick="openUrl('/ru/docs/8407553')" title="На русском">Рус</div>
+    <div class="docContentHeader__item-link" onclick="openUrl('/en/docs/8411573')" title="In english">Eng</div>
+    <div class="docContentHeader__item-link" onclick="openUrl('/docs/8407544')" title="Ўзбекча">Ўзб</div>
+    <div class="docContentHeader__item-link" onclick="openUrl('/en/docs/-8407544')" title="O'zbekcha">O’zb</div>
+    <div class="lx_elem ACT_TITLE">${title}</div>
+    <div class="lx_elem ARTICLE">Статья 1. Установленный порядок</div>
+    <div class="lx_elem">${"Официальная норма применяется в установленном порядке. ".repeat(10)}</div>
+  </main></body></html>`;
+  try {
+    insertDocument("lexuz-family:8407544", "https://lex.uz/docs/8407544", null);
+    insertDocument("lexuz-family:8407553", "https://lex.uz/ru/docs/8407553", "Постановление");
+    sqlite.prepare(`INSERT INTO legal_corpus_source_aliases
+      (source_url,document_id,provider_source_id,language,created_at) VALUES (?,?,?,?,?)`).run(
+      "https://lex.uz/docs/8407544", "lexuz-family:8407544", "lexuz:8407544", "uz-Cyrl", now.toISOString(),
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_source_aliases
+      (source_url,document_id,provider_source_id,language,created_at) VALUES (?,?,?,?,?)`).run(
+      "https://lex.uz/ru/docs/8407553", "lexuz-family:8407553", "lexuz:8407553", "ru", now.toISOString(),
+    );
+    const env = {
+      ...envFor(d1, bucket),
+      LEGAL_CORPUS_LANGUAGE_FAMILY_RECONCILIATION_ENABLED: "true",
+    };
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/en/docs/8411573",
+      now: new Date(now.getTime() + 60_000),
+      correlationId: "legacy-family-reconciliation",
+    });
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: fetchFor(splitHtml),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const aliases = sqlite.prepare(`SELECT source_url AS sourceUrl,document_id AS documentId
+      FROM legal_corpus_source_aliases
+      WHERE source_url IN ('https://lex.uz/docs/8407544','https://lex.uz/ru/docs/8407553',
+        'https://lex.uz/uz/docs/-8407544','https://lex.uz/en/docs/8411573')
+      ORDER BY source_url`).all() as Array<{
+        sourceUrl: string; documentId: string;
+      }>;
+    assert.equal(aliases.length, 4);
+    assert.equal(new Set(aliases.map((alias) => alias.documentId)).size, 1);
+    assert.equal(aliases[0]?.documentId, "lexuz-family:8407544");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a verified Lex alternate-language link is redriven once through its canonical source", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
