@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-02T13:11:03.746Z",
+  "authorization": "User authorized a confirmed logical federation/index, safe queue handling and legacy recovery without failure-ledger substitution.",
+  "queryMode": "sequential_read_only_d1",
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "documents": 4291,
+      "openJobs": 43539,
+      "deadLetterJobs": 1,
+      "terminalFailures": 1,
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 9999998976
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "documents": 599,
+      "openJobs": 27689,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 9999998976
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "documents": 1635,
+      "openJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 2890203136
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "documents": 2495,
+      "openJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 8116838400
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "documents": 3313,
+      "openJobs": 23706,
+      "deadLetterJobs": 7,
+      "terminalFailures": 7,
+      "completedCheckpoints": 44,
+      "databaseSizeBytes": 9999892480,
+      "headroomBytes": 106496
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-4",
+      "documents": 0,
+      "openJobs": 0,
+      "deadLetterJobs": 0,
+      "terminalFailures": 0,
+      "completedCheckpoints": 0,
+      "databaseSizeBytes": 8560640,
+      "ownershipProjectionRows": 7152
+    }
+  ],
+  "aggregateObservation": {
+    "openJobs": 94934,
+    "deadLetterJobs": 8,
+    "terminalFailures": 8,
+    "completedCheckpoints": 220,
+    "rowsWritten": 0,
+    "changedDb": false,
+    "newTerminalFailuresSincePreviousCycle": 0
+  },
+  "ownershipIndex": {
+    "status": "verified_logical_projection",
+    "runId": "ownership-20260902124248",
+    "targetDatabase": "juro-staging-corpus-shard-4",
+    "uniqueCanonicalDocumentIds": 7152,
+    "duplicateSourceRows": 5181,
+    "partitionCount": 4,
+    "sourceRowsChanged": false,
+    "failureLedgerRowsChanged": 0,
+    "physicalDisjointness": "unproven_source_ids_overlap"
+  },
+  "queueHandling": {
+    "status": "held_fail_closed",
+    "reason": "Two sources are at the 10GB ceiling and shard-3 has only 106496 bytes of headroom with seven terminal/dead-letter jobs; draining would risk additional capacity failures.",
+    "ingestionStarted": false,
+    "sourceRowsChanged": false,
+    "failureLedgerRowsChanged": 0
+  },
+  "legacyRecovery": {
+    "status": "pending_protected_action",
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "failureLedgerPreserved": true,
+    "requires": "named staff session with fresh MFA/TOTP through the protected staging admin action",
+    "recoveryExecuted": false
+  },
+  "releaseGate": "closed",
+  "productionChanged": false,
+  "note": "This recheck records authorization and current safety evidence. It is not a physical disjoint snapshot, legal review, indexed evaluation, Qdrant/D1 restore, CI result or production approval."
+}
