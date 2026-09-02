@@ -151,31 +151,6 @@
   z-index: 1;
 }
 
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion > p:first-child {
-  animation: hero-label-in 700ms 100ms var(--ease-story) both;
-}
-
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion h1 span,
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion h1 em {
-  animation: hero-line-in 900ms var(--ease-story) both;
-}
-
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion h1 span:nth-child(1) { animation-delay: 160ms; }
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion h1 span:nth-child(2) { animation-delay: 260ms; }
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion h1 em { animation-delay: 410ms; }
-
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion > p:nth-of-type(2),
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion > div,
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion > p:nth-of-type(3),
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion > ul {
-  animation: hero-support-in 720ms var(--ease-story) both;
-}
-
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion > p:nth-of-type(2) { animation-delay: 470ms; }
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion > div { animation-delay: 560ms; }
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion > p:nth-of-type(3) { animation-delay: 620ms; }
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroCopyMotion > ul { animation-delay: 680ms; }
-
 .heroProductMotion.heroProductMotion {
   transform: perspective(1400px)
     rotateY(calc(-1.3deg + var(--pointer-x) * 1.6deg))
@@ -184,10 +159,6 @@
   transform-origin: 52% 58%;
   transition: transform 260ms var(--ease-premium), box-shadow 260ms ease;
   will-change: transform;
-}
-
-:global([data-juro-motion-root][data-motion-ready="true"]) .heroProductMotion {
-  animation: product-stage-in 1050ms 260ms var(--ease-story) both;
 }
 
 .caseMapMotion {
@@ -616,28 +587,6 @@
 
 @keyframes orbit-slow {
   to { transform: rotate(360deg); }
-}
-
-@keyframes hero-label-in {
-  from { letter-spacing: .22em; opacity: .94; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes hero-line-in {
-  0% { clip-path: inset(0 0 100%); opacity: 0; transform: translateY(34px) skewY(2deg); }
-  70% { clip-path: inset(0); opacity: 1; transform: translateY(-2px) skewY(0); }
-  100% { clip-path: none; opacity: 1; transform: translateY(0); }
-}
-
-@keyframes hero-support-in {
-  from { opacity: .94; transform: translateY(7px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes product-stage-in {
-  0% { clip-path: inset(0 round 20px); opacity: .94; transform: perspective(1400px) rotateY(-2.2deg) translate3d(14px, 12px, 0) scale(.99); }
-  72% { clip-path: inset(0 round 20px); opacity: 1; transform: perspective(1400px) rotateY(-.7deg) translate3d(-2px, -1px, 0) scale(1.002); }
-  100% { clip-path: inset(0 round 20px); opacity: 1; }
 }
 
 @keyframes product-crossfade {
