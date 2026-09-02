@@ -213,17 +213,36 @@ export function createRuntimeTargetLegalAnswerRetriever(
           ORDER BY recorded_at DESC LIMIT 1`).bind(
           resolution.searchRelease.id,
         ).first<{ id: string; evidenceJson: string }>();
-        const shards = await db.prepare(`SELECT shard_id AS shardId
-          FROM legal_search_release_shards WHERE governance_id=? AND sync_state='complete'
-          ORDER BY shard_id`).bind(governance?.id ?? "").all<{ shardId: string }>();
+        const shards = await db.prepare(`SELECT shard.shard_id AS shardId,
+            shard.sync_state AS syncState,
+            provider.provider_instance_id AS instanceId,
+            provider.provider_namespace AS providerNamespace,
+            provider.scheduled_indexing_paused AS scheduledIndexingPaused
+          FROM legal_search_release_shards shard
+          LEFT JOIN legal_search_release_provider_instances provider
+            ON provider.governance_id=shard.governance_id
+            AND provider.shard_id=shard.shard_id
+            AND provider.search_release_id=shard.search_release_id
+          WHERE shard.governance_id=?
+          ORDER BY shard.shard_id`).bind(governance?.id ?? "").all<{
+            shardId: string;
+            syncState: string;
+            instanceId: string | null;
+            providerNamespace: string | null;
+            scheduledIndexingPaused: number | null;
+          }>();
         if (!governance || shards.results.length === 0) return null;
         const evidence = governanceSchema.parse(JSON.parse(governance.evidenceJson) as unknown);
+        if (shards.results.some((shard) => shard.syncState !== "complete"
+          || shard.instanceId === null
+          || shard.providerNamespace !== evidence.configuration.providerNamespaceIdentity
+          || Number(shard.scheduledIndexingPaused) !== 1)) return null;
         return parsePinnedCandidateRelease({
           id: resolution.searchRelease.id,
           environment,
           capability: resolution.searchRelease.capability,
-          instances: shards.results.map(({ shardId }) => ({
-            id: `${resolution.searchRelease.id}:${shardId}`,
+          instances: shards.results.map(({ shardId, instanceId }) => ({
+            id: instanceId!,
             shardId,
           })),
           configuration: toPinnedCandidateConfiguration(evidence.configuration),

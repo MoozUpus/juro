@@ -76,7 +76,16 @@ function governanceEvidence(releaseId: string, reportId: string, item: {
       stagingQueriesSyntheticOrNonPersonal: true,
     },
     sync: { state: "complete" as const, scheduledIndexingPaused: true, partialErrors: 0 },
-    shards: [{ id: "00", itemCount: 1, inventorySha256: "8".repeat(64), syncState: "complete" as const }],
+    shards: [{
+      id: "00",
+      itemCount: 1,
+      inventorySha256: "8".repeat(64),
+      syncState: "complete" as const,
+      providerNamespaceIdentity: "juro-legal-development",
+      providerInstanceId: "juro-current-development-00",
+      syncJobId: "00000000-0000-4000-8000-000000000001",
+      scheduledIndexingPaused: true,
+    }],
     providerItems: [{
       itemKey: item.itemKey,
       language: item.language,
@@ -232,6 +241,17 @@ test("a complete governed manifest seals while any failed numeric or zero-tolera
     );
     const verdict = await recordSearchReleaseGovernance({ db: fixture.d1 }, evidence);
     assert.deepEqual(verdict, { passed: true, failures: [] });
+    const providerInstance = fixture.sqlite.prepare(`SELECT provider_namespace AS namespace,
+        provider_instance_id AS instanceId,sync_job_id AS syncJobId,
+        scheduled_indexing_paused AS paused
+      FROM legal_search_release_provider_instances WHERE governance_id=? AND shard_id='00'`)
+      .get(evidence.id) as { namespace: string; instanceId: string; syncJobId: string; paused: number };
+    assert.deepEqual({ ...providerInstance }, {
+      namespace: "juro-legal-development",
+      instanceId: "juro-current-development-00",
+      syncJobId: "00000000-0000-4000-8000-000000000001",
+      paused: 1,
+    });
     const sealed = await fixture.lifecycle.sealSearchRelease({
       id: fixture.releaseId,
       environment: "development",

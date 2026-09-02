@@ -145,6 +145,10 @@ const evidenceSchema = z.object({
     itemCount: z.number().int().nonnegative(),
     inventorySha256: sha,
     syncState: z.enum(["pending", "complete", "failed"]),
+    providerNamespaceIdentity: identifier,
+    providerInstanceId: identifier,
+    syncJobId: identifier,
+    scheduledIndexingPaused: z.boolean(),
   }).strict()).min(1).max(99),
   providerItems: z.array(providerItemSchema),
   cost: z.object({
@@ -281,9 +285,16 @@ export async function recordSearchReleaseGovernance(
   if (evidence.sync.state !== "complete" || !evidence.sync.scheduledIndexingPaused
     || evidence.sync.partialErrors !== 0) failures.push("PROVIDER_SYNC_INCOMPLETE");
   const shardIds = new Set(evidence.shards.map((shard) => shard.id));
+  const providerInstanceIds = new Set(evidence.shards.map((shard) => shard.providerInstanceId));
   if (shardIds.size !== evidence.shards.length || evidence.shards.some((shard) => shard.syncState !== "complete")
     || evidence.shards.reduce((total, shard) => total + shard.itemCount, 0) !== Number(release?.itemCount ?? -1)) {
     failures.push("SHARD_INVENTORY_MISMATCH");
+  }
+  if (providerInstanceIds.size !== evidence.shards.length
+    || evidence.shards.some((shard) =>
+      shard.providerNamespaceIdentity !== evidence.configuration.providerNamespaceIdentity
+      || !shard.scheduledIndexingPaused)) {
+    failures.push("PROVIDER_INSTANCE_IDENTITY_MISMATCH");
   }
   try {
     await assertSearchReleaseMetadataParity(
@@ -411,6 +422,17 @@ export async function recordSearchReleaseGovernance(
       shard.itemCount,
       shard.inventorySha256,
       shard.syncState,
+    )),
+    ...evidence.shards.map((shard) => dependencies.db.prepare(`INSERT INTO legal_search_release_provider_instances
+      (governance_id,search_release_id,shard_id,provider_namespace,provider_instance_id,
+        sync_job_id,scheduled_indexing_paused) VALUES (?,?,?,?,?,?,?)`).bind(
+      evidence.id,
+      evidence.releaseId,
+      shard.id,
+      shard.providerNamespaceIdentity,
+      shard.providerInstanceId,
+      shard.syncJobId,
+      shard.scheduledIndexingPaused ? 1 : 0,
     )),
     ...evidence.evaluation.strata.map((row) => dependencies.db.prepare(`INSERT INTO legal_search_release_evaluation_strata
       (governance_id,search_release_id,stratum,scenario_count,metrics_json) VALUES (?,?,?,?,?)`).bind(
