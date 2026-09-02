@@ -6,6 +6,17 @@ Evidence cutoff: **2026-09-02 UZT**
 
 This file records verified production increments. It must not be read as a claim that every item in the execution brief is complete.
 
+## v101 mobile interaction-target production release (2026-09-02)
+
+- Raised the AI options summary, both mobile AI-mode controls, notification actions, and the privacy deletion control to a minimum 44 CSS px target. Added canonical notification route layouts so both Individual and Business notification pages load the existing notification stylesheet.
+- Passed 12/12 focused accessibility tests, lint, type-check, 1,167 core tests, 217 Worker/runtime tests, production build, and artifact budgets.
+- PR #129 passed final exact-head CI `33595599646` and two complete zero-finding security diff scans: initial scan `d4ae3e1a-a276-4f3d-ba00-3b1a1ad02a2f` and focused follow-up scan `fea3204e-c3a2-43ba-8210-4fc02a27bb00`. It merged as `498ab8944575134163cadcc6c74deeadd3a93fac`; post-merge CI `33596215521` passed.
+- Production workflow `33596214731` activated platform Worker version `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8` through deployment `08bc17ea-be50-4b1b-a4bc-2ed8110ede8f` at 100% traffic. Website, Admin, and public Sites were unchanged.
+- Authenticated Chrome at 320 x 844 and 390 x 844 verified a 44 px AI options summary, two 44 x 44 AI-mode controls, 200 notification actions with a 44 px minimum height and no overlap, and one privacy deletion control with a 44 px minimum height. The destructive control was not clicked and no form was submitted.
+- All three checked routes had zero horizontal overflow, zero resources with an exposed HTTP error status, and zero console errors. The temporary viewport override was reset and the QA tabs were closed.
+- The public status snapshot generated at `2026-09-02T06:08:14.064Z` was operational with 8/8 components and no active incidents. This is point-in-time evidence only.
+- Performed no migration, database write, DNS change, binding, secret, payment, auth-policy, legal-corpus, vector, embedding, or staging-capacity operation. The broader role matrix and obsolete FTP DNS retirement remain open.
+
 ## v121 production accessibility release
 
 - Added a visible focus ring to the case-search container and raised action-plan scenario, refresh, and security-session controls to a minimum 44 CSS px target.

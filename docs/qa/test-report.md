@@ -4,7 +4,24 @@ Status: **living evidence report, not full Definition of Done**
 
 Evidence cutoff: **2026-09-02 UZT**
 
-Scope in this report: deployed v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
+
+## v101 mobile interaction-target production validation (2026-09-02)
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| Focused regression | platform shell accessibility suite | 12/12 PASS |
+| Static and full test gates | lint, type-check, 1,167 core tests, 217 Worker/runtime tests | PASS |
+| Production artifact | CSS 565.7 KiB; initial JS 294.1 KiB; largest lazy increment 212.1 KiB; fonts 453.6 KiB; images 564.4 KiB; Worker 3,643.7 KiB | PASS |
+| Exact-head CI/security | CI `33595599646`; complete zero-finding scans `d4ae3e1a-a276-4f3d-ba00-3b1a1ad02a2f` and `fea3204e-c3a2-43ba-8210-4fc02a27bb00` | PASS |
+| Post-merge CI | `33596215521` on `498ab8944575134163cadcc6c74deeadd3a93fac` | PASS |
+| Worker deployment | version `9e7ff503-894e-4be1-a0dc-5ad413fc9ba8`; deployment `08bc17ea-be50-4b1b-a4bc-2ed8110ede8f`; 100% traffic | PASS |
+| Production AI targets | authenticated Chrome at 320/390 x 844; options summary 44 px; two mode controls 44 x 44 px | PASS |
+| Production notification targets | authenticated Chrome; 200 real-card actions; minimum 178.6 x 44 px; zero overlap; no action clicked | PASS |
+| Production privacy target | authenticated Chrome; one deletion control, minimum 191 x 44 px at 320 and 261 x 44 px at 390; no click or submission | PASS |
+| Production mobile routes | AI chat, notifications, privacy at 320/390 x 844; zero horizontal overflow, failed resources with exposed HTTP error status, or console errors | PASS |
+| Production status | `2026-09-02T06:08:14.064Z`; operational; 8/8; 0 active incidents | PASS AS POINT-IN-TIME EVIDENCE |
+| Change boundary | no migration, database write, website/Sites, DNS, secret, payment, auth-policy, corpus/vector/embedding, or staging-capacity operation | PASS |
 
 ## v121 production accessibility validation
 
