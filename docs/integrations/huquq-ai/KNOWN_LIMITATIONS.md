@@ -81,3 +81,9 @@
   single scenario is not a broad document-quality or retrieval benchmark.
 - `status.juro.uz` now resolves and is attached to the production Worker. Its
   status-host fence still needs to be preserved in every future routing change.
+- The post-authorization sequential recheck is recorded in
+  `STAGING_FEDERATION_QUEUE_AUTHORIZATION_RECHECK_2026-09-02.json`. It
+  confirms that the five-source logical federation and shard-4 ownership
+  projection remain stable, but it does not convert overlapping physical
+  rows into a disjoint snapshot, drain a near-capacity queue, or alter the
+  preserved failure ledger.
