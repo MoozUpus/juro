@@ -92,3 +92,12 @@
   `STAGING_FEDERATION_ACTION_RUN_2026-09-02.{json,md}`. Alias resolution is
   available, but the legacy job itself still requires a named-staff fresh-MFA
   retry through the protected staging admin flow.
+- A 2026-09-02 read-only discovery found three newer
+  `juro-legal-catalog-staging*` D1 databases. `green2-20260831` has a separate
+  normalized frozen snapshot (6,895 source documents and 160,978 canonical
+  chunks), but its search release remains `draft` with `qualificationPending`
+  and it has no current Worker binding. The other two lack the legacy
+  `legal_corpus_documents`/variants/provisions contract. They are held as
+  candidates and are not silently merged into the five-source federation.
+  The ownership/queue/recovery decision is captured in
+  `STAGING_FEDERATION_AUTHORIZED_ACTION_2026-09-02.{json,md}`.

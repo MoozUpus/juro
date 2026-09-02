@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-09-02T10:09:11.057Z",
+  "environment": "staging",
+  "purpose": "Record the authorized disjoint-ownership rebuild and the safety-gated queue and legacy-recovery assessment.",
+  "ownershipIndex": {
+    "targetDatabase": "juro-staging-corpus-shard-4",
+    "targetDatabaseId": "7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2",
+    "runId": "ownership-20260902100911",
+    "assignmentRule": "sha256(canonical_document_id) modulo 4; representative=official/newest",
+    "ownershipRows": 7152,
+    "distinctCanonicalIds": 7152,
+    "sourceOccurrenceSum": 12333,
+    "partitionCount": 4,
+    "sourceRowsAreUnchanged": true,
+    "failureLedgerRowsChanged": 0,
+    "status": "logical_disjoint_ownership_index_verified"
+  },
+  "legacySourceMetrics": [
+    {"databaseName":"juro-staging","documents":4291,"uniqueCurrentProvisions":68296,"indexedCurrentChunks":168621,"openJobs":43539,"runningJobs":0,"deadLetterJobs":1,"terminalFailures":1,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-v2","documents":599,"uniqueCurrentProvisions":15899,"indexedCurrentChunks":55814,"openJobs":27689,"runningJobs":2,"deadLetterJobs":0,"terminalFailures":0,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-1","documents":1635,"uniqueCurrentProvisions":18724,"indexedCurrentChunks":52370,"openJobs":0,"runningJobs":0,"deadLetterJobs":0,"terminalFailures":0,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-2","documents":2495,"uniqueCurrentProvisions":19484,"indexedCurrentChunks":62089,"openJobs":0,"runningJobs":0,"deadLetterJobs":0,"terminalFailures":0,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-3","documents":3313,"uniqueCurrentProvisions":33084,"indexedCurrentChunks":93097,"openJobs":23706,"runningJobs":0,"deadLetterJobs":7,"terminalFailures":7,"completedCheckpoints":44}
+  ],
+  "legacyAggregate": {
+    "rawDocumentRows": 12333,
+    "uniqueCanonicalDocumentIds": 7152,
+    "duplicateDocumentRows": 5181,
+    "uniqueCurrentProvisionsSum": 155487,
+    "indexedCurrentChunksSum": 431991,
+    "terminalFailures": 8,
+    "completedCheckpoints": 220
+  },
+  "candidateCatalogDiscovery": [
+    {
+      "databaseName":"juro-legal-catalog-staging",
+      "databaseId":"6d22ce28-de18-4792-b44a-7ee6304ccba1",
+      "expectedLegacyCorpusTablePresent":false,
+      "decision":"hold",
+      "reason":"Not compatible with the current legal_corpus_documents/variants/provisions Worker contract; not added to the federation."
+    },
+    {
+      "databaseName":"juro-legal-catalog-staging-green-20260831",
+      "databaseId":"645daa2f-0449-4fbf-8935-ce295735443e",
+      "expectedLegacyCorpusTablePresent":false,
+      "decision":"hold",
+      "reason":"Not compatible with the current legal_corpus_documents/variants/provisions Worker contract; not added to the federation."
+    },
+    {
+      "databaseName":"juro-legal-catalog-staging-green2-20260831",
+      "databaseId":"23863e4f-6a11-4c25-888a-63abf695248b",
+      "expectedLegacyCorpusTablePresent":false,
+      "normalizedCatalog":true,
+      "sourceDocuments":6895,
+      "instruments":4276,
+      "snapshotProvisions":165852,
+      "canonicalChunks":160978,
+      "sparsePostings":160978,
+      "denseCandidates":160978,
+      "eligibleCurrent":160978,
+      "excluded":4874,
+      "snapshotStatus":"frozen",
+      "buildStatus":"sealed",
+      "searchReleaseStatus":"draft",
+      "qualificationPending":true,
+      "targetControlState":"ready",
+      "decision":"hold",
+      "reason":"The catalog is a separate normalized schema with no current Worker binding; its search release is draft and qualificationPending=true. It is not exposed to JURO chat or merged into the legacy federation."
+    }
+  ],
+  "queueAction": {
+    "requested":true,
+    "performed":false,
+    "mutationCount":0,
+    "reason":"Legacy and v2 are at the 10 GB ceiling; shard-3 has 106496 bytes of headroom and 7 terminal/dead-letter failures. Processing would risk another terminal failure or capacity corruption. Existing running/retrying jobs were not force-reconciled."
+  },
+  "legacyRecovery": {
+    "requested":true,
+    "performed":false,
+    "jobId":"legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "canonicalDocumentId":"lexuz:8411573",
+    "sourceUrl":"https://lex.uz/en/docs/8411573",
+    "status":"dead_letter",
+    "attemptCount":5,
+    "errorCode":"LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
+    "ledgerPolicy":"preserve append-only failure ledger",
+    "aliasAvailableInShards":["juro-staging-corpus-shard-1","juro-staging-corpus-shard-3"],
+    "reason":"The protected admin action requires a named staff session with fresh MFA and a deployed queue-processing flag. Browser setup was unavailable; no guard was bypassed and no ledger row was rewritten."
+  },
+  "readOnlyProbeIncidents": [
+    {"scope":"staging D1 quality-file probe","databases":["juro-staging-corpus-shard-2","juro-staging-corpus-shard-3"],"error":"Wrangler import endpoint returned 7009; rows_written=0"},
+    {"scope":"staging D1 aggregate probe","databases":["juro-staging-corpus-shard-2","juro-staging-corpus-shard-3"],"error":"One heavy SELECT returned transient 7500/internal error; lighter sequential SELECTs succeeded; rows_written=0"}
+  ],
+  "releaseGate":"closed",
+  "productionChanged":false,
+  "notes":[
+    "The ownership projection is logical disjointness only; source D1 tables remain physically overlapping.",
+    "No corpus text, versions, chunks, Qdrant points, or secrets were copied into the ownership target.",
+    "Snapshot, indexed 314-scenario evaluation, Qdrant/D1 restore and CI remain blocked by the release gate.",
+    "No production binding, migration, flag, deployment, or DNS was changed."
+  ]
+}

@@ -24,7 +24,8 @@ result-level deduplication.
 
 Machine-readable evidence: [STAGING_LOGICAL_DISJOINT_OWNERSHIP_INDEX_2026-09-02.json](STAGING_LOGICAL_DISJOINT_OWNERSHIP_INDEX_2026-09-02.json).
 
-The projection was rebuilt on 2026-09-02 at 09:22:31Z (`ownership-20260902092231`)
-from commit `3a791a67f7930badcd3f30957221c10e3fec4987`. The post-seed verification
+The projection was rebuilt on 2026-09-02 at 10:09:11Z (`ownership-20260902100911`)
+from commit `82956c6bb79df4319f7063e9548b37ba1eaa6322`. The post-seed verification
 again returned 7,152 ownership rows, four partitions, occurrence sum 12,333,
-and zero source/failure-ledger writes.
+and zero source/failure-ledger writes. Four verified ownership runs are now
+retained in the target ledger.

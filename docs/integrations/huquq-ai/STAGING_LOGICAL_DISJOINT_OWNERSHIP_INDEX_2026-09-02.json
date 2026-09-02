@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "environment": "staging",
-  "capturedAt": "2026-09-02T09:22:31.125Z",
-  "applicationCommit": "3a791a67f7930badcd3f30957221c10e3fec4987",
+  "capturedAt": "2026-09-02T10:09:11.057Z",
+  "applicationCommit": "82956c6bb79df4319f7063e9548b37ba1eaa6322",
   "indexCode": "apps/platform/scripts/build-staging-federation-ownership-index.mjs",
   "migration": "apps/platform/drizzle/0143_staging_federation_ownership_index.sql",
   "targetDatabase": {
@@ -18,7 +18,7 @@
     {"name":"juro-staging-corpus-shard-2","id":"36fa1cfe-6d00-47b7-a980-864020028d86"},
     {"name":"juro-staging-corpus-shard-3","id":"ccf1f18e-66cf-4358-a7aa-f1d725b7653c"}
   ],
-  "runId": "ownership-20260902092231",
+  "runId": "ownership-20260902100911",
   "assignmentRule": "sha256(canonical_document_id) modulo 4; representative=official/newest",
   "rawDocumentRows": 12333,
   "uniqueCanonicalDocumentIds": 7152,
@@ -36,7 +36,7 @@
     "distinctCanonicalIds": 7152,
     "partitionCount": 4,
     "occurrenceSum": 12333,
-    "verifiedRuns": 1,
+    "verifiedRuns": 4,
     "rowsWrittenToSourceDatabases": 0,
     "failureLedgerRowsChanged": 0,
     "sourceRowsAreUnchanged": true,
