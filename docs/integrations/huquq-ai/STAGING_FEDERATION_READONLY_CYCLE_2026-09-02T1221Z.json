@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-02T12:21:58.6720269Z",
+  "applicationCommit": "6431c347614aaea7d5da8efa0132df6387bd2031",
+  "probe": {
+    "mode": "sequential_read_only_d1",
+    "sql": "SELECT document, open queue, dead-letter, terminal-failure and completed-checkpoint counts",
+    "rowsWritten": 0,
+    "changedDb": false,
+    "newTerminalFailuresSincePreviousCycle": 0
+  },
+  "sources": [
+    {"databaseName":"juro-staging","databaseId":"bb716a96-b2fb-4823-90d6-6c228fed181a","documents":4291,"openJobs":43539,"deadLetter":1,"terminalFailures":1,"lastTerminal":"2026-08-29T21:22:47.872Z","completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-v2","databaseId":"62620fb3-3da3-4c76-a8e9-aa60858c1063","documents":599,"openJobs":27689,"deadLetter":0,"terminalFailures":0,"lastTerminal":null,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-1","databaseId":"e09e0682-0c2e-4458-a8f3-be9de28117e3","documents":1635,"openJobs":0,"deadLetter":0,"terminalFailures":0,"lastTerminal":null,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-2","databaseId":"36fa1cfe-6d00-47b7-a980-864020028d86","documents":2495,"openJobs":0,"deadLetter":0,"terminalFailures":0,"lastTerminal":null,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-3","databaseId":"ccf1f18e-66cf-4358-a7aa-f1d725b7653c","documents":3313,"openJobs":23706,"deadLetter":7,"terminalFailures":7,"lastTerminal":"2026-09-02T07:07:45.368Z","completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-4","databaseId":"7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2","documents":0,"openJobs":0,"deadLetter":0,"terminalFailures":0,"lastTerminal":null,"completedCheckpoints":0}
+  ],
+  "queueDecision": {
+    "status": "held_fail_closed",
+    "openJobsAcrossSources": 94934,
+    "deadLetterAcrossSources": 8,
+    "terminalFailuresAcrossSources": 8,
+    "reason": "near-capacity legacy/v2/shard-3 and historical terminal rows; no safe drain window",
+    "failureLedgerMutation": false
+  },
+  "legacyRecovery": {
+    "status": "pending_protected_admin_action",
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "canonicalDocumentId": "lexuz:8411573",
+    "requiresFreshMfa": true
+  },
+  "releaseGate": "closed",
+  "productionChanged": false
+}
