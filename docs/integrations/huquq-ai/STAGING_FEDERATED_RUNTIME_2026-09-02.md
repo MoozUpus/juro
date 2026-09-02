@@ -15,12 +15,29 @@ the federated release evidence gate.
 - `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false`
 - `LEGAL_CORPUS_LIVE_LEXUZ_ENABLED=false`
 - `LEGAL_CORPUS_SHADOW_MODE=false`
-- `LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED=true` for the bounded, authenticated
-  recovery action only; no scheduler or bulk acquisition is enabled.
+- `LEGAL_CORPUS_QUEUE_PROCESSING_ENABLED=false` after the bounded recovery
+  attempt encountered capacity-correlated ingestion failures; the shard-3
+  Worker is now fail-closed with `crons=[]` and no scheduler or bulk
+  acquisition is enabled.
 
 The source set is explicit and server-side. The browser receives neither D1
 bindings nor service credentials. Production bindings, flags, migrations and
 DNS were not changed.
+
+## 2026-09-02 post-attempt recheck
+
+The queue-processing revision was stopped after two valid `*/4` ticks failed
+with the sanitized `LEGAL_CORPUS_INGESTION_FAILED` code. Shard-3 now has no
+running jobs or scheduler lock, but retains 23,702 queued jobs, 4 retrying
+jobs, 7 dead-letter jobs and 7 terminal failure-ledger rows. Its D1 file is
+9,999,892,480 bytes against the 9,999,998,976-byte ceiling, leaving 106,496
+bytes of headroom. The failure rows were not edited or replaced.
+
+An empty `juro-staging-corpus-shard-4` was created and migrated through
+`0142_legal_corpus_shard_handoffs.sql` as a staging-only rollover target. It
+is not yet bound, deployed, seeded, or included in the federation source set;
+the source shard must remain immutable until a handoff can pass its durable
+ledger and capacity checks.
 
 ## Federated sources
 
@@ -73,4 +90,3 @@ deployment, or DNS operation was performed. To roll back the federation, set
 the staging federation flag off and keep the existing direct Lex fallback;
 this does not alter any D1 rows. The bounded legacy recovery is a separate,
 single-job action and must preserve every immutable failure-ledger row.
-

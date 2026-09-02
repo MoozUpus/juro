@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "recordedAt": "2026-09-02T07:12:00.000Z",
+  "applicationCommit": "317835cebee2d5a51600d16147c900a8906825d1",
+  "databaseName": "juro-staging-corpus-shard-3",
+  "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+  "targetDatabase": {
+    "databaseName": "juro-staging-corpus-shard-4",
+    "databaseId": "7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2",
+    "initialized": true,
+    "migrationsApplied": 143,
+    "latestMigration": "0142_legal_corpus_shard_handoffs.sql",
+    "acquisitionState": "active",
+    "not_boundOrDeployed": true
+  },
+  "attempt": {
+    "queueProcessingWasEnabledBriefly": true,
+    "workerVersionWithQueueEnabled": "c2963a20-b483-45ef-ad25-6caf61b598c2",
+    "workerVersionAfterFailClosedStop": "f3993320-4a89-41e8-bac0-17074f594184",
+    "validProcessCron": "*/4 * * * *",
+    "boundedJobsPerRun": 20,
+    "runs": [
+      {
+        "id": "c16cdc51-2897-45cc-84ff-b61d26e3b1ba",
+        "status": "failed",
+        "startedAt": "2026-09-02T06:48:12.047Z",
+        "finishedAt": "2026-09-02T06:59:16.750Z",
+        "errorCode": "LEGAL_CORPUS_INGESTION_FAILED"
+      },
+      {
+        "id": "14d5c7cb-9c3b-4929-b9dc-47cc7c0df947",
+        "status": "failed",
+        "startedAt": "2026-09-02T07:00:12.054Z",
+        "finishedAt": "2026-09-02T07:10:57.197Z",
+        "errorCode": "LEGAL_CORPUS_INGESTION_FAILED"
+      }
+    ]
+  },
+  "observedAfterStop": {
+    "jobStatus": {
+      "completed": 7868,
+      "queued": 23702,
+      "retrying": 4,
+      "deadLetter": 7,
+      "running": 0
+    },
+    "terminalFailureRows": 7,
+    "scheduledLocks": 0,
+    "scheduledRunsRunning": 0,
+    "databaseSizeBytes": 9999892480,
+    "databaseMaximumBytes": 9999998976,
+    "remainingHeadroomBytes": 106496,
+    "checkpointsCompleted": 44,
+    "checkpointsTotal": 44
+  },
+  "failureLedger": {
+    "preserved": true,
+    "newTerminalRows": 7,
+    "canonicalDocumentId": "lexuz:4674893",
+    "jobType": "version",
+    "providerHttpStatus": null,
+    "safeErrorCode": "LEGAL_CORPUS_INGESTION_FAILED",
+    "underlyingCause": "Not proven from the sanitized ledger. The timing and near-capacity size are correlated with the failures; no raw provider or SQL error was copied into evidence."
+  },
+  "action": {
+    "queueProcessing": "disabled",
+    "stagingCron": [],
+    "sourceWorker": "deployed fail-closed revision; no new queue drain permitted",
+    "targetShard": "initialized only; no handoff or corpus writes performed",
+    "production": "unchanged",
+    "releaseGate": "closed"
+  },
+  "scope": "Staging failure evidence and safe-stop record. This is not a successful queue drain, a physical disjointness proof, a corpus snapshot, an indexed evaluation, or release approval."
+}
