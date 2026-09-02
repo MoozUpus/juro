@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "authorizedAt": "2026-09-02T12:42:48.649Z",
+  "observedAt": "2026-09-02T12:47:06.0102879Z",
+  "applicationCommit": "a593d3764be57fe0c8d9909a2b5162e78c07695a",
+  "action": "rebuild_logical_federation_ownership_index",
+  "ownershipRun": {
+    "runId": "ownership-20260902124248",
+    "targetDatabase": "juro-staging-corpus-shard-4",
+    "targetDatabaseId": "7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2",
+    "rawDocumentRows": 12333,
+    "uniqueCanonicalDocumentIds": 7152,
+    "duplicateDocumentRows": 5181,
+    "partitionCount": 4,
+    "partitionCounts": {
+      "juro-staging-corpus-shard-1": 1812,
+      "juro-staging-corpus-shard-2": 1728,
+      "juro-staging-corpus-shard-3": 1806,
+      "juro-staging-corpus-shard-4": 1806
+    },
+    "partitionManifestSha256": "0497eb8a434e9298972798b033d7734a0e8753e0c4b554512a3d86a1b279087c",
+    "sourceDigest": "3ff8fbf050d47e9e7fcb72ed3f13f7bd76a5c7afce1c2dffe0ef93eccd0a312d",
+    "verification": {
+      "ownershipRows": 7152,
+      "distinctCanonicalIds": 7152,
+      "occurrenceSum": 12333,
+      "partitions": 4
+    },
+    "sourceRowsAreUnchanged": true,
+    "failureLedgerRowsChanged": 0
+  },
+  "postActionSequentialProbe": {
+    "mode": "sequential_read_only_d1",
+    "rowsWritten": 0,
+    "changedDb": false,
+    "newTerminalFailuresSincePreviousCycle": 0,
+    "sources": [
+      {"databaseName":"juro-staging","documents":4291,"openJobs":43539,"deadLetter":1,"terminalFailures":1,"lastTerminal":"2026-08-29T21:22:47.872Z","completedCheckpoints":44,"runningLegalWorkerRuns":0},
+      {"databaseName":"juro-staging-corpus-v2","documents":599,"openJobs":27689,"deadLetter":0,"terminalFailures":0,"lastTerminal":null,"completedCheckpoints":44,"runningLegalWorkerRuns":0},
+      {"databaseName":"juro-staging-corpus-shard-1","documents":1635,"openJobs":0,"deadLetter":0,"terminalFailures":0,"lastTerminal":null,"completedCheckpoints":44,"runningLegalWorkerRuns":0},
+      {"databaseName":"juro-staging-corpus-shard-2","documents":2495,"openJobs":0,"deadLetter":0,"terminalFailures":0,"lastTerminal":null,"completedCheckpoints":44,"runningLegalWorkerRuns":0},
+      {"databaseName":"juro-staging-corpus-shard-3","documents":3313,"openJobs":23706,"deadLetter":7,"terminalFailures":7,"lastTerminal":"2026-09-02T07:07:45.368Z","completedCheckpoints":44,"runningLegalWorkerRuns":0},
+      {"databaseName":"juro-staging-corpus-shard-4","documents":0,"openJobs":0,"deadLetter":0,"terminalFailures":0,"lastTerminal":null,"completedCheckpoints":0,"runningLegalWorkerRuns":0}
+    ],
+    "aggregate": {"openJobs":94934,"deadLetter":8,"terminalFailures":8,"completedCheckpoints":220}
+  },
+  "queueDecision": "held_fail_closed",
+  "legacyRecovery": {
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "status": "dead_letter",
+    "failureLedgerRows": 5,
+    "requiresProtectedNamedStaffFreshMfa": true,
+    "recoveryExecuted": false
+  },
+  "releaseGate": "closed",
+  "physicalDisjointness": "unproven_source_ids_overlap",
+  "productionChanged": false,
+  "note": "The confirmed artifact is a logical ownership/deduplication projection. It does not claim physical source disjointness, chunk parity, a corpus snapshot, Qdrant/D1 restore, legal review, evaluation or production approval. No source or failure-ledger rows were rewritten."
+}
