@@ -6,6 +6,7 @@ const shellSource = new URL("../app/_platform/PlatformShell.tsx", import.meta.ur
 const searchStylesheet = new URL("../app/_platform/global-search.css", import.meta.url);
 const shellStylesheet = new URL("../app/_platform/platform-shell.css", import.meta.url);
 const profileStylesheet = new URL("../app/_platform/profile-settings.css", import.meta.url);
+const casesStylesheet = new URL("../app/_platform/cases.css", import.meta.url);
 const lawyerStylesheet = new URL("../app/_platform/lawyer-workspace.css", import.meta.url);
 const dashboardStylesheet = new URL("../app/_platform/dashboard.css", import.meta.url);
 const calendarStylesheet = new URL("../app/_platform/calendar.css", import.meta.url);
@@ -61,6 +62,16 @@ test("mid-width profile controls shrink inside the platform content column", asy
   assert.match(css, /\.profile-form\{min-width:0;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
   assert.match(css, /\.profile-form section,\.profile-form label\{min-width:0\}/);
   assert.match(css, /\.profile-form input,\.profile-form select,\.profile-form textarea\{width:100%;max-width:100%;min-width:0\}/);
+});
+
+test("individual case links and settings tabs retain 44px touch targets", async () => {
+  const [cases, profile] = await Promise.all([
+    readFile(casesStylesheet, "utf8"),
+    readFile(profileStylesheet, "utf8"),
+  ]);
+
+  assert.match(cases, /\.cases-live-list article>a\{display:inline-flex;min-height:44px;align-items:center/);
+  assert.match(profile, /\.profile-workspace>nav a\{min-height:44px/);
 });
 
 test("lawyer calendar actions retain a 44px touch target", async () => {
