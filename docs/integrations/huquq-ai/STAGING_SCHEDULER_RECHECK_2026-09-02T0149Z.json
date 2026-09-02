@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T01:49:09.6010430Z",
+  "applicationCommit": "e126df229b85a7d813dc7f28e3e6539e2e277a98",
+  "probeType": "sequential read-only D1 scheduler/checkpoint probe",
+  "rowsWritten": 0,
+  "sources": {
+    "juro-staging": {
+      "runningRuns": 0,
+      "liveLocks": 0,
+      "latestRunStatus": "failed",
+      "latestErrorCode": "LEGAL_CORPUS_SPARSE_BACKFILL_FAILED",
+      "latestFinishedAt": "2026-09-01T16:32:32.558Z",
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    },
+    "juro-staging-corpus-v2": {
+      "runningRuns": 0,
+      "liveLocks": 0,
+      "latestRunStatus": "failed",
+      "latestErrorCode": "D1_ERROR",
+      "latestFinishedAt": "2026-08-24T01:13:00.605Z",
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    },
+    "juro-staging-corpus-shard-1": {
+      "runningRuns": 0,
+      "liveLocks": 0,
+      "latestRunStatus": "completed",
+      "latestErrorCode": null,
+      "latestFinishedAt": "2026-08-25T16:09:09.353Z",
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    },
+    "juro-staging-corpus-shard-2": {
+      "runningRuns": 0,
+      "liveLocks": 0,
+      "latestRunStatus": "completed",
+      "latestErrorCode": null,
+      "latestFinishedAt": "2026-08-28T00:46:09.566Z",
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    },
+    "juro-staging-corpus-shard-3": {
+      "runningRuns": 0,
+      "liveLocks": 0,
+      "latestRunStatus": "failed",
+      "latestErrorCode": "D1_ERROR",
+      "latestFinishedAt": "2026-09-01T20:13:51.682Z",
+      "completedCheckpoints": 44,
+      "totalCheckpoints": 44
+    }
+  },
+  "interpretation": {
+    "allCheckpointsComplete": true,
+    "activeIngestionLocks": false,
+    "historicalSchedulerFailuresRemain": true,
+    "newIngestionStarted": false,
+    "productionChanged": false,
+    "note": "The scheduler rows are historical and no run is currently active. This probe does not rewrite failed runs, drain queues, or claim a release snapshot/evaluation."
+  }
+}
