@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-02T01:02:20.8029868Z",
+  "applicationCommit": "00e8191313b8d5ae65497d39b6d26eb30d835ad1",
+  "since": "2026-09-02T00:11:44.864Z",
+  "probeType": "sequential read-only D1 event delta probe",
+  "query": "SELECT counts of legal_corpus_failures and legal_corpus_ingestion_jobs updated after since; no writes",
+  "sources": {
+    "juro-staging": {
+      "newTerminalFailures": 0,
+      "newTechnicallyUnavailable": 0,
+      "newTerminalJobs": 0,
+      "newNoncompletedJobs": 0
+    },
+    "juro-staging-corpus-v2": {
+      "newTerminalFailures": 0,
+      "newTechnicallyUnavailable": 0,
+      "newTerminalJobs": 0,
+      "newNoncompletedJobs": 0
+    },
+    "juro-staging-corpus-shard-1": {
+      "newTerminalFailures": 0,
+      "newTechnicallyUnavailable": 0,
+      "newTerminalJobs": 0,
+      "newNoncompletedJobs": 0
+    },
+    "juro-staging-corpus-shard-2": {
+      "newTerminalFailures": 0,
+      "newTechnicallyUnavailable": 0,
+      "newTerminalJobs": 0,
+      "newNoncompletedJobs": 0
+    },
+    "juro-staging-corpus-shard-3": {
+      "newTerminalFailures": 0,
+      "newTechnicallyUnavailable": 0,
+      "newTerminalJobs": 0,
+      "newNoncompletedJobs": 0
+    }
+  },
+  "interpretation": "No new terminal/dead-letter, technically unavailable, or non-completed job rows were observed in the interval. Existing queues, historical failure-ledger rows, and prior failed scheduler runs remain unchanged and continue to block the release gate.",
+  "temporaryExtractsRetained": false
+}
