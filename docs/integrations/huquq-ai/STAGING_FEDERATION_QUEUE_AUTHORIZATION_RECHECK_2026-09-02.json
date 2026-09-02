@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
   "environment": "staging",
-  "observedAt": "2026-09-02T07:56:40Z",
-  "applicationCommit": "d25262801b2e4be4915fc4ea811c5118f1f282fb",
+  "observedAt": "2026-09-02T08:55:27.1939130Z",
+  "applicationCommit": "24a6887d0a352f0a6549ff6cc88b62f6fa478f38",
   "purpose": "Read-only reconciliation after authorization to build a disjoint federation, drain queues and recover the legacy document; no ledger rewrite or release approval.",
   "sources": [
-    {"databaseName":"juro-staging","databaseId":"bb716a96-b2fb-4823-90d6-6c228fed181a","documents":4291,"activeProvisions":162886,"indexedChunks":1301928,"openJobs":43539,"deadLetter":1,"terminalFailures":1,"completedCheckpoints":44},
-    {"databaseName":"juro-staging-corpus-v2","databaseId":"62620fb3-3da3-4c76-a8e9-aa60858c1063","documents":599,"activeProvisions":55949,"indexedChunks":1308850,"openJobs":27689,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44},
-    {"databaseName":"juro-staging-corpus-shard-1","databaseId":"e09e0682-0c2e-4458-a8f3-be9de28117e3","documents":1635,"activeProvisions":45311,"indexedChunks":369081,"openJobs":0,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44},
-    {"databaseName":"juro-staging-corpus-shard-2","databaseId":"36fa1cfe-6d00-47b7-a980-864020028d86","documents":2495,"activeProvisions":59969,"indexedChunks":997338,"openJobs":0,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44},
-    {"databaseName":"juro-staging-corpus-shard-3","databaseId":"ccf1f18e-66cf-4358-a7aa-f1d725b7653c","documents":3313,"activeProvisions":90529,"indexedChunks":1430474,"openJobs":23706,"deadLetter":7,"terminalFailures":7,"completedCheckpoints":44},
+    {"databaseName":"juro-staging","databaseId":"bb716a96-b2fb-4823-90d6-6c228fed181a","documents":4291,"activeProvisions":68296,"indexedChunks":168621,"openJobs":43539,"deadLetter":1,"terminalFailures":1,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-v2","databaseId":"62620fb3-3da3-4c76-a8e9-aa60858c1063","documents":599,"activeProvisions":15899,"indexedChunks":55814,"openJobs":27689,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-1","databaseId":"e09e0682-0c2e-4458-a8f3-be9de28117e3","documents":1635,"activeProvisions":18724,"indexedChunks":52370,"openJobs":0,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-2","databaseId":"36fa1cfe-6d00-47b7-a980-864020028d86","documents":2495,"activeProvisions":19484,"indexedChunks":62089,"openJobs":0,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44},
+    {"databaseName":"juro-staging-corpus-shard-3","databaseId":"ccf1f18e-66cf-4358-a7aa-f1d725b7653c","documents":3313,"activeProvisions":33084,"indexedChunks":93097,"openJobs":23706,"deadLetter":7,"terminalFailures":7,"completedCheckpoints":44},
     {"databaseName":"juro-staging-corpus-shard-4","databaseId":"7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2","documents":0,"activeProvisions":0,"indexedChunks":0,"openJobs":0,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":0}
   ],
   "aggregateObservation": {
     "rawDocumentRows": 12333,
     "unionCanonicalDocumentIds": 7152,
     "crossSourceDuplicateRows": 5181,
-    "activeProvisions": 414644,
-    "indexedChunks": 5417671,
+    "activeProvisions": 155487,
+    "indexedChunks": 431991,
     "openJobs": 94934,
     "deadLetter": 8,
     "terminalFailures": 8,
@@ -26,10 +26,10 @@
   "decisions": {
     "logicalFederatedRetrieval": "enabled for the five existing staging sources with deterministic evidence-key deduplication",
     "physicalDisjointFederation": "not yet proven; shard-1 and shard-2 overlap by 1335 canonical IDs and shard-3 overlaps both",
-    "queueProcessing": "not resumed; shard-3 remains fail-closed and source capacity is 106496 bytes below the D1 hard ceiling",
+    "queueProcessing": "not resumed; shard-3 remains fail-closed and source capacity is 106496 bytes below the D1 hard ceiling; a bounded read-only recheck found no safe drain window",
     "legacyRecovery": "not performed; protected admin retry still requires the named legal-corpus staff session with fresh MFA",
     "shard4": "initialized schema-only rollover target; no documents, jobs, binding deployment or route membership",
-    "failureLedger": "preserved; no UPDATE/DELETE/INSERT was issued against existing failure rows"
+    "failureLedger": "preserved; no UPDATE/DELETE/INSERT was issued against existing failure rows; current terminal/dead-letter totals are unchanged"
   },
   "releaseGate": "closed",
   "scope": "Staging-only read-only reconciliation; counts are not a snapshot, indexed 314-scenario evaluation, Qdrant/D1 restore proof, human legal review or production approval."
