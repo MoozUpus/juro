@@ -2,7 +2,7 @@
 
 Status: **release-scoped evidence, not a repository-wide penetration test**
 
-Evidence cutoff: **2026-09-02 12:45 UZT**
+Evidence cutoff: **2026-09-02 14:50 UZT**
 
 ## Bounded DNS retirement and authenticated Lawyer evidence
 
@@ -10,6 +10,7 @@ Evidence cutoff: **2026-09-02 12:45 UZT**
 - The exact dashboard row disappeared. `1.1.1.1`, `8.8.8.8`, `tadeo.ns.cloudflare.com`, and `tess.ns.cloudflare.com` then returned NXDOMAIN for `ftp.juro.uz A`.
 - Pre/post snapshots matched for apex Cloudflare Email Routing MX, `mail.juro.uz` CNAME, and `send.juro.uz` MX/TXT. Public, app, lawyer, admin, and status hosts returned final HTTP `200`. No other DNS record was edited.
 - A real Lawyer session remained on the dedicated host and completed 16 protected routes read-only without login fallback, 404, horizontal overflow, visible alert, or console error. The audit collected route/structure outcomes only and did not read private clients, matters, messages, or documents.
+- A forced reload still identified that session as the approved Lawyer persona. Opening the Business dashboard from it returned to `lawyer.juro.uz/ru/dashboard`; opening the Admin host returned `app.juro.uz/ru/admin/console?reason=admin-session` and a generic protected-entry screen requiring a staff role plus MFA/TOTP confirmed within 15 minutes. The screen did not enumerate staff roles or reveal which check failed.
 - The deletion has no one-click undo. Its bounded rollback is recreation of the saved DNS-only A record with TTL Auto/300, followed by the same DNS, production-route, and mail checks.
 
 ## Retained v120 pre-deletion production-operations evidence
@@ -32,6 +33,8 @@ The scan followed supporting code far enough to verify that authentication autho
 | Individual → Business | redirected to permitted Individual dashboard | ENFORCED |
 | Individual → Lawyer | lawyer host required explicit reauthentication | ENFORCED |
 | Individual → Admin | admin route required a protected admin session | ENFORCED |
+| Approved Lawyer → Business | Business dashboard returned to the authenticated Lawyer dashboard | ENFORCED |
+| Approved Lawyer → Admin | Admin host returned the generic protected-entry boundary requiring staff plus fresh MFA/TOTP | ENFORCED |
 | Public → auth submit | Turnstile required before submit became available | ENFORCED |
 | Public indexing | apex indexable; provider clone noindex | ENFORCED |
 | Protected indexing | platform Worker retains noindex headers | UNCHANGED BY v116 |
@@ -39,7 +42,7 @@ The scan followed supporting code far enough to verify that authentication autho
 ## Limitations and open security work
 
 - This is not a fresh repository-wide scan, penetration test, or authenticated authorization matrix.
-- Business, Pending Lawyer, Staff/Admin, state-changing Lawyer/client collaboration, cross-tenant, IDOR, upload, share-link, billing, and account-deletion tests remain open until controlled role accounts and test data are available.
+- The new negative-route evidence proves that the checked approved Lawyer session cannot enter Business or Admin surfaces. It does not prove positive Business, Pending Lawyer, or Staff/Admin journeys. Those roles plus state-changing Lawyer/client collaboration, cross-tenant, IDOR, upload, share-link, billing, and account-deletion tests remain open until controlled role accounts and test data are available.
 - The legacy `ftp.juro.uz` exposure is resolved. Continue to monitor for a legitimate dependency; recreate only the documented record if one is proven.
 - TAC display entitlement could not be verified because the Codex Security access connector was not connected; the sealed local report and SARIF were still generated.
 - Legislation databases, legal corpus, vectors, embeddings, and staging-capacity work are explicitly excluded.

@@ -2,7 +2,7 @@
 
 Status: **living evidence report, not full Definition of Done**
 
-Evidence cutoff: **2026-09-02 12:45 UZT**
+Evidence cutoff: **2026-09-02 14:50 UZT**
 
 Scope in this report: deployed v101 mobile interaction-target evidence dated 2026-09-02, the later bounded DNS-retirement and authenticated Lawyer receipts, retained v121 production accessibility evidence, v120 read-only production operations evidence, retained v118 dashboard keyboard-focus evidence, retained v117 Individual touch-target evidence, unchanged public Sites v97 and website Worker v13, plus retained v116 responsive accessibility evidence. Older release evidence is retained as history. Legislation database, legal corpus, Lex.uz/Advice.uz ingestion, vectors, and staging-capacity remediation are excluded by owner instruction.
 
@@ -18,6 +18,8 @@ Scope in this report: deployed v101 mobile interaction-target evidence dated 202
 | Production hosts | public, app, lawyer, admin, and status checks returned final HTTP `200` | PASS FOR REACHABILITY |
 | Lawyer desktop shell | real Lawyer session; 16 protected routes; no login fallback, 404, horizontal overflow, visible alert, or console error | PASS FOR READ-ONLY SHELL |
 | Lawyer mobile shell | 15 role routes at 390 × 844; no login fallback, 404, or horizontal overflow; settings loaders settled to visible H1 | PASS FOR RESPONSIVE READ-ONLY SHELL |
+| Approved Lawyer → Business isolation | after a forced reload confirmed the approved persona, `app.juro.uz/ru/business/dashboard` returned to `lawyer.juro.uz/ru/dashboard` | PASS FOR NEGATIVE ROLE BOUNDARY |
+| Approved Lawyer → Admin isolation | `admin.juro.uz/ru/dashboard` returned `app.juro.uz/ru/admin/console?reason=admin-session`; the generic screen required staff plus MFA/TOTP confirmed within 15 minutes and did not enumerate roles | PASS FOR NEGATIVE ROLE BOUNDARY |
 | Privacy boundary | no private client, matter, message, document, or session content read; no state-changing control used | PASS |
 | Change boundary | one confirmed DNS deletion; no runtime deploy, migration, database write, secret, payment, auth-policy, corpus/vector/embedding, or staging-capacity operation | PASS |
 
