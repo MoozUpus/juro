@@ -110,3 +110,14 @@
   `STAGING_FEDERATION_SAFE_QUEUE_RECHECK_2026-09-02T1217Z.{json,md}` and the
   refreshed ownership evidence
   `STAGING_FEDERATION_OWNERSHIP_REBUILD_2026-09-02T1207Z.{json,md}`.
+- The frozen v2 source now has a completed read-only full export and isolated
+  local restore: `PRAGMA quick_check=ok`, zero foreign-key violations and
+  migration ledger count 142. This closes only the v2 export/restore integrity
+  check; it is not a federated snapshot or release approval. See
+  `STAGING_D1_V2_EXPORT_RESTORE_2026-09-02.{json,md}`.
+- A 2026-09-03 sequential read-only probe confirms all five source databases
+  still report 44/44 checkpoints and no new terminal failures. The aggregate
+  immutable ledger remains eight terminal/dead-letter rows, and queue work is
+  held fail-closed. The source overlap and physical disjointness limitation
+  remain unchanged. See
+  `STAGING_FEDERATION_READONLY_RECHECK_2026-09-03T0439Z.{json,md}`.
