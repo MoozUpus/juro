@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-03T05:01:39.4900053Z",
+  "queryMode": "sequential_read_only_d1",
+  "sources": [
+    {
+      "databaseName": "juro-staging",
+      "activeLocks": 0,
+      "latestStatus": "failed",
+      "latestError": "LEGAL_CORPUS_SPARSE_BACKFILL_FAILED",
+      "latestFinishedAt": "2026-09-01T16:32:32.558Z",
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-v2",
+      "activeLocks": 0,
+      "latestStatus": "failed",
+      "latestError": "D1_ERROR",
+      "latestFinishedAt": "2026-08-24T01:13:00.605Z",
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-1",
+      "activeLocks": 0,
+      "latestStatus": "completed",
+      "latestError": null,
+      "latestFinishedAt": "2026-08-25T16:09:09.353Z",
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-2",
+      "activeLocks": 0,
+      "latestStatus": "completed",
+      "latestError": null,
+      "latestFinishedAt": "2026-08-28T00:46:09.566Z",
+      "rowsWritten": 0
+    },
+    {
+      "databaseName": "juro-staging-corpus-shard-3",
+      "activeLocks": 0,
+      "latestStatus": "failed",
+      "latestError": "LEGAL_CORPUS_INGESTION_FAILED",
+      "latestFinishedAt": "2026-09-02T07:10:57.197Z",
+      "rowsWritten": 0
+    }
+  ],
+  "newFailureAssessment": {
+    "newTerminalFailuresSincePreviousObservation": 0,
+    "latestErrorsAreHistorical": true,
+    "queueMutationPerformed": false,
+    "failureLedgerMutationPerformed": false
+  },
+  "releaseGate": "closed",
+  "note": "This captures scheduled-run and lock state only. Historical failed runs are preserved; no status, queue or failure-ledger rewrite was performed."
+}
