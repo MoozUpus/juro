@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-03T06:33:23.2654461Z",
+  "scope": "Post-handoff sequential read-only federation and queue recheck",
+  "queryMode": "wrangler d1 execute --remote --json; SELECT only; rows_written=0 and changed_db=false for every query",
+  "authorizationScope": "User authorized a confirmed logical federation/index, safe queue handling and legacy recovery without failure-ledger substitution.",
+  "sources": [
+    {"database": "juro-staging", "documents": 4291, "provisions": 1306019, "chunks": 1301928, "openJobs": 43539, "terminalFailureRows": 1, "deadLetterJobs": 1},
+    {"database": "juro-staging-corpus-v2", "documents": 599, "provisions": 1311096, "chunks": 1308850, "openJobs": 27689, "terminalFailureRows": 0, "deadLetterJobs": 0},
+    {"database": "juro-staging-corpus-shard-1", "documents": 1635, "provisions": 370808, "chunks": 369081, "openJobs": 0, "terminalFailureRows": 0, "deadLetterJobs": 0},
+    {"database": "juro-staging-corpus-shard-2", "documents": 2495, "provisions": 997115, "chunks": 997338, "openJobs": 0, "terminalFailureRows": 0, "deadLetterJobs": 0},
+    {"database": "juro-staging-corpus-shard-3", "documents": 3313, "provisions": 1434894, "chunks": 1434847, "openJobs": 0, "terminalFailureRows": 7, "deadLetterJobs": 7},
+    {"database": "juro-staging-corpus-shard-4", "documents": 0, "provisions": 0, "chunks": 0, "openJobs": 23706, "terminalFailureRows": 0, "deadLetterJobs": 0}
+  ],
+  "aggregatePhysicalRows": {
+    "documents": 12333,
+    "provisions": 5419932,
+    "chunks": 5412044,
+    "openJobs": 94934,
+    "terminalFailureRows": 8,
+    "deadLetterJobs": 8,
+    "completedCheckpoints": 264
+  },
+  "ownershipProjection": {
+    "targetDatabase": "juro-staging-corpus-shard-4",
+    "uniqueCanonicalDocumentIds": 7152,
+    "duplicateSourceRows": 5181,
+    "partitionCount": 4,
+    "physicalDisjointness": "unproven"
+  },
+  "handoff": {
+    "id": "14f54255-7025-47cd-ae13-38da842132fe",
+    "source": "juro-staging-corpus-shard-3",
+    "target": "juro-staging-corpus-shard-4",
+    "manifestSha256": "8a2d7192d0023c1ba1f667729e03aa705638c520990e1c4e4ad13f278d6b698d",
+    "sourceState": "frozen",
+    "targetState": "handoff_prepared",
+    "jobs": 23706,
+    "sourceFailureLedgerRowsChanged": 0,
+    "targetCorpusRowsCopied": 0,
+    "activation": "not performed"
+  },
+  "legacyRecovery": {
+    "jobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "canonicalDocumentId": "lexuz:8411573",
+    "status": "pending_protected_named_staff_fresh_mfa",
+    "failureLedgerSubstitution": false,
+    "queueProcessingFlag": "false"
+  },
+  "releaseGate": "closed",
+  "nextGates": [
+    "protected named-staff fresh-MFA legacy recovery",
+    "physical disjoint partition and chunk parity",
+    "queue freeze with zero terminal/dead-letter rows",
+    "federated snapshot",
+    "indexed 314-scenario evaluation",
+    "Qdrant benchmark and snapshot/restore",
+    "federated D1 backup/restore"
+  ],
+  "productionChanged": false
+}
