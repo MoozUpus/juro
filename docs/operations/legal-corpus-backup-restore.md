@@ -2,6 +2,18 @@
 
 ## Backup contents
 
+For a custom Search Release, the private backup additionally contains:
+
+- the evidence-R2 and derivative-index-R2 bucket identities and complete manifest roots;
+- Retrieval Chunk, BM25 base/delta/lexicon/posting/statistics and reusable embedding inventories with hashes;
+- the Vectorize index contract, metadata indexes, final mutation checkpoint and fresh full-list reconciliation identity;
+- Workflow/Queue and optional Container configuration/checkpoint roots;
+- deduplicated Batch input-manifest hashes, content-free File/Batch IDs,
+  terminal counts, actual usage/cost, exact output/error reconciliation and
+  verified provider-File deletion receipts (never JSONL or result bodies);
+- the active and prior Activation Sets and complete release/gate records; and
+- exact non-authoritative AI Search and Qdrant inventories while either remains retained.
+
 Before an enabled corpus update, create a private R2 manifest containing:
 
 - D1 export or a scoped export of `legal_corpus_*` tables;
@@ -25,6 +37,27 @@ Never include API keys, session data, user documents, or corpus raw HTML in a
 Git commit or public artifact.
 
 ## Restore rehearsal
+
+For the accepted custom target, perform this procedure before relying on a
+provider restore:
+
+1. Restore legal D1 in isolation and verify integrity, row counts, release roots and its measured size below the 7 GB release gate.
+2. Verify complete evidence-R2 and derivative-index-R2 inventory roots and sample object bytes/hashes.
+3. Open the pinned BM25 manifest, validate every declared analyzer/segment/range/hash and run representative sparse queries.
+4. Create a fresh compatible Vectorize index and metadata indexes, populate it only from hash-verified R2 embeddings, wait through the final mutation, then reconcile a fresh full-list snapshot for exact IDs/count/metadata.
+5. Run representative RU, Uzbek Latin, Uzbek Cyrillic and applicable English hybrid queries through `LegalCandidateIndex`, including temporal and declared-lane failure probes.
+6. Verify the build receipts prove every provider Batch File was reconciled and
+   deleted; no provider File is backup or restore authority.
+7. Record only content-free restore evidence. Any OpenAI call or recreated
+   Batch, count-only vector proof, mismatched release component or reliance on
+   Container-local disk fails the rehearsal.
+
+### Legacy Qdrant rehearsal
+
+The following procedure applies only to the retained legacy Adapter. If the
+historical full-corpus Qdrant snapshot never existed, inventory that fact
+truthfully and prove snapshot mechanics separately; never manufacture
+full-corpus recovery evidence.
 
 1. Export production or staging D1 before changing corpus pointers.
 2. Restore into an isolated D1 database; never use the production database as
@@ -59,11 +92,12 @@ successful integrity claim. Retry sequentially with an isolated restore.
    version only through an audited repair procedure; do not edit a version or
    provision row.
 4. Restore the verified snapshot only after the isolated rehearsal succeeds.
-5. Restore the Qdrant collection snapshot that is bound to the same D1/R2
+5. For the custom Adapter, atomically select the prior Activation Set and verify its exact R2-BM25/Vectorize component pair before traffic resumes.
+6. Restore a Qdrant collection snapshot only when the retained legacy manifest truthfully proves it is bound to the same D1/R2
    manifest; never pair an index with a different corpus snapshot.
-6. Verify that direct Lex retrieval remains available before re-enabling
+7. Verify that direct Lex retrieval remains available before re-enabling
    indexed corpus traffic.
-7. If the Source Snapshot Search Release has not been activated, leave it
+8. If the Source Snapshot Search Release has not been activated, leave it
    draft and leave the visible staging service on the legacy Adapter. Do not
    delete its D1 rows or R2 objects; restore or reconcile from the verified
    build checkpoints. If it was activated later, atomically select the prior

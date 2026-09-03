@@ -45,7 +45,7 @@ const inputSchema = z.object({
   }).strict().optional(),
 }).strict();
 
-const provisionObjectSchema = z.object({
+export const provisionObjectSchema = z.object({
   schemaVersion: z.literal(1),
   provisionRenditionId: z.string(),
   publisherInstrumentToken: z.string(),

@@ -64,6 +64,22 @@ _Avoid_: legal proposition, Citation, source-freshness state
 JURO's integrity-verified and indexed collection of public official-source snapshots eligible for a named retrieval capability, searched before any online source.
 _Avoid_: knowledge base, local data, internal search
 
+**Sparse Candidate Lane**:
+The required lexical-retrieval channel that ranks official-corpus candidates by agreement with the question's normalized legal terms and structural fields.
+_Avoid_: database search, exact lookup, dense fallback
+
+**Dense Candidate Lane**:
+The required semantic-retrieval channel that ranks official-corpus candidates by meaning across the question and eligible source representations.
+_Avoid_: AI answer, semantic evidence, sparse fallback
+
+**Hybrid Candidate Fusion**:
+The deterministic combination of independent Sparse Candidate Lane and Dense Candidate Lane rankings into one candidate ordering before evidence validation and Provision Set selection. It does not make provider scores comparable or turn candidates into evidence.
+_Avoid_: blended evidence, model reranking, coverage decision
+
+**Candidate Packet**:
+The request-scoped output of every candidate lane declared by one pinned Search Release for one Temporal Scope, containing stable locators, channel ranks and availability state but no legal conclusion or evidence. A partial packet is unavailable rather than a degraded search result.
+_Avoid_: search results, evidence packet, partial answer
+
 **Retrieval Eligibility**:
 The deterministic, capability-specific state derived from verified official-source provenance, exact D1/R2 integrity, supported extraction and stable identities, a verified current pointer when required, supported temporal state, public privacy classification, quarantine clearance, and conflict-free canonicalization. Textual authority and translation relationships are not inputs.
 _Avoid_: human approval, model confidence, indexed status
@@ -79,6 +95,10 @@ _Avoid_: current pointer, mutable page, inferred Text Revision
 **Snapshot Provision**:
 An exact deterministic provision or fragment extracted from one Source Snapshot, retaining its publisher position token, sequence, normalized-content hash, source locator, provenance, privacy and temporal state.
 _Avoid_: Provision Concept, search result, authority claim
+
+**Retrieval Chunk**:
+A deterministic bounded candidate unit derived from exactly one Snapshot Provision, retaining stable parent identity and order so retrieval can rank small passages without replacing the provision as the evidence boundary.
+_Avoid_: Snapshot Provision, provider chunk, evidence excerpt
 
 **Legal Instrument**:
 An optional legacy cross-source/cross-language grouping preserved for audit and later evidence-backed enrichment. It is not inferred and does not gate current retrieval.

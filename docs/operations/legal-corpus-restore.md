@@ -1,5 +1,31 @@
 # Legal corpus restore rehearsal
 
+## Custom hybrid Search Release
+
+Restore legal D1 only into an isolated database and verify integrity, exact
+release roots and the 7 GB capacity gate. Verify the evidence-R2 and
+derivative-index-R2 inventories independently. Open the pinned immutable BM25
+manifest, validate every declared analyzer, base/delta segment, lexicon/posting
+range, statistic and hash, and run representative sparse queries.
+
+Create a new compatible Vectorize index and its four metadata indexes. Populate
+it exclusively from hash-verified content-addressed R2 embedding artifacts; do
+not call OpenAI. Wait until the final mutation is processed, start a fresh list
+snapshot, and prove exact vector ID/count/metadata parity before representative
+hybrid, temporal and declared-lane failure probes. A restore based only on vector
+count, provider-local disk, cache state or components from different Search
+Releases fails.
+
+No provider Batch input, output or error File is restore authority. Before a
+release backup is accepted, its content-free Batch receipts must prove exact
+output reconciliation and verified File cleanup. Restoration uses the immutable
+deduplicated input-manifest hashes and content-addressed R2 embeddings only; it
+must neither recreate a Batch nor make a synchronous OpenAI call.
+
+The retained Qdrant steps below are legacy-only. When no full-corpus snapshot
+exists, record the exact incomplete inventory and test snapshot mechanics
+separately rather than claiming a complete backup.
+
 ## Source Snapshot candidate
 
 Restore the dedicated green2 D1 export only into an isolated database, then

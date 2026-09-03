@@ -1,5 +1,34 @@
 # Legal corpus backup
 
+## Custom hybrid Search Release
+
+Before any Tickets 23–27 or refactored Tickets 13–22 mutation, capture and
+verify the exact account/environment, legal D1 export/isolated restore, evidence
+R2 inventory root, derivative-index R2 inventory root, active/prior Activation
+Sets, Vectorize index/configuration/mutation state, Workflow/Queue configuration,
+Gateway logging/cache/authentication state, and the truthful legacy AI Search and
+Qdrant inventories. Configuration evidence contains names, IDs, versions, counts,
+hashes and safe states only—never token/key values, query/evidence text, postings
+or vectors.
+
+A sealed custom release backup includes its Retrieval Chunk inventory; every
+BM25 analyzer/base/delta/lexicon/posting/statistics manifest and SHA-256; every
+content-addressed embedding manifest and vector hash; the Vectorize full-list
+snapshot identity and final processed mutation; D1 release/gate/activation roots;
+the deduplicated Batch JSONL manifest hashes; content-free provider File/Batch
+IDs and terminal counts; actual usage/cost; output/error reconciliation; verified
+provider-File deletion receipts; and cost/privacy/evaluation evidence. Never
+back up JSONL bodies or provider output/error bodies. Backup succeeds only after an isolated
+reader opens the exact BM25 artifacts and a fresh Vectorize index is reconstructed
+solely from R2 embeddings without an OpenAI call, then representative hybrid
+queries pass.
+
+The root `CLOUDFLARE_API_TOKEN` and platform `OPENAI_API_KEY` stay in their
+ignored `.env` files and are never backup material. By owner direction the root
+token is not removed until every migration ticket is resolved; Ticket 22 owns
+final verified readback, removal of only that entry, leakage scan and owner
+revocation.
+
 ## Source Snapshot candidate boundary
 
 Before any Ticket 12 green2 mutation, verify the Cloudflare account, exact D1
@@ -51,12 +80,13 @@ Do not treat the private snapshot as a release backup until the final evidence
 also records an independent R2 readback hash and a successful isolated restore
 with point-count and representative hybrid-query parity.
 
-The corpus sparse index must use ordinary exportable D1 tables. Do not add an
-FTS5 virtual table to the application D1 database: Wrangler rejects a full D1
-export while such a table exists. Migration
-`0126_exportable_legal_corpus_sparse_index.sql` replaces the initial virtual
-index with `legal_corpus_sparse_terms`, which is rebuildable from immutable
-chunks and included in normal export/restore evidence.
+The implemented legacy sparse index uses ordinary exportable D1 tables. Do not
+add an FTS5 virtual table to the application D1 database: Wrangler rejects a
+full D1 export while such a table exists. Migration
+`0126_exportable_legal_corpus_sparse_index.sql` remains historical recovery
+machinery. The accepted custom target writes no term dictionary, posting or
+position table to D1; its exportable immutable BM25 artifacts and exhaustive
+inventories live in derivative-index R2.
 
 ## Staging migration evidence — 2026-08-15
 

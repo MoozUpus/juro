@@ -1,6 +1,6 @@
 # Legal corpus architecture
 
-> This document records the implemented corpus subsystem and its present rollout controls. The accepted target for legal search is [AI Search target architecture](./target-search-architecture.md); activation remains subject to its staging gates.
+> This document records the implemented corpus subsystem and its present rollout controls. The accepted replacement is the [custom hybrid target architecture](./target-search-architecture.md) selected by [ADR 0006](../adr/0006-own-hybrid-official-corpus-retrieval.md); no custom Search Release is implemented or active yet.
 
 ## Scope boundary
 
@@ -18,8 +18,8 @@ inert until a separate server-side feature flag and infrastructure are approved.
 | Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most three catalog pages and five sequential jobs per staging tick; four preferred-primary slots plus one version slot, global retry-first, shared D1 host pacing and robots delay; ambiguous metadata remains `null` |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
-| Retrieval | Exportable D1 BM25 terms plus optional Qdrant dense+sparse candidates and RRF | Every vector ID is rehydrated from D1 under current-version/status/scope filters |
-| Dense indexing | OpenAI 1,536-dimensional embeddings plus deterministic sparse term hashes | Dedicated corpus Worker only; Qdrant collection must already expose named `dense` and `sparse` vectors |
+| Retrieval | Implemented exportable D1 BM25 plus optional Qdrant dense/sparse and historical AI Search shadow code | Every candidate ID is revalidated in D1 and evidence is hydrated from immutable R2; the target R2-BM25/Vectorize Adapter is planned, not implemented |
+| Dense indexing | Implemented OpenAI 1,536-dimensional Qdrant path; target uses reusable application-generated R2 embeddings and off-side Vectorize | Dedicated route-free corpus boundary only; no query vector or provider secret is persisted |
 | Provider contract | Indexed legal corpus, live Lex, then secondary web research; user-scoped documents remain separate case-fact context | Typed source shape; no arbitrary-URL fetch tool; private facts and secondary web citations cannot establish law, deadlines or calculations |
 | Citation validation | Filters model-proposed citations against source packets | No generated URLs, title/article/quote checks |
 | Source UX | Server-owned cards and full-article modal | Type, number, adopting authority, language, live/indexed origin, available official variants and immutable version history are read from the validated corpus packet, never authored by the model |
@@ -50,8 +50,10 @@ is rebuilt from official-source provenance, exact D1/R2 integrity, supported
 extraction, stable source identities, the cutoff-pinned current pointer,
 supported temporal state, public privacy, quarantine clearance and
 deterministic canonicalization. Visible retrieval stays on the legacy Adapter
-until Ticket 13 seals and activates the separately constructed Search Release
-through a capability-scoped Activation Set.
+until Tickets 23–25 build a new custom candidate and Ticket 13 evaluates, soaks
+and activates it through a capability-scoped Activation Set. Ticket 12's Corpus
+Snapshot remains qualified, but its draft AI Search Search Release identity and
+provider gates do not transfer.
 
 The release builder and replay validator share the same canonical projection
 primitive. A completed construction is deliberately unsealed: post-build
@@ -63,6 +65,31 @@ run identity. External validation, review and verified recovery-export hashes
 are recorded by a final immutable qualification before the green2 storage
 coordinator becomes sealed/ready. The Search Release remains draft and no
 Activation Set is selected in Ticket 12.
+
+## Accepted custom retrieval transition
+
+The target keeps the existing `LegalCandidateIndex` Seam but replaces the AI
+Search Adapter with an application-owned pair. Private derivative-index R2 owns
+deterministic Retrieval Chunks, reusable `text-embedding-3-large` artifacts and
+immutable BM25 base/delta segments. One off-side Vectorize index per Search
+Release owns disposable dense search. JURO merges optional word/n-gram sparse
+rankings into one Sparse Candidate Lane, then performs equal-weight RRF with
+`k=60` against the Dense Candidate Lane. Both lanes are mandatory for a General
+Legal Question and activate together; exact act-and-provision lookup remains the
+only bypass.
+
+A private Workflow coordinates builds and bounded Queue consumers perform
+idempotent batches from R2 locators. A Container reducer is permitted only if the
+representative Ticket 23 prototype proves Worker sort limits inadequate. The
+system is intentionally laptop-independent. Vectorize restore reuses
+hash-verified R2 embeddings without another OpenAI call.
+
+Legal D1 owns compact legal facts, candidate-to-evidence mappings, release roots,
+gates and Activation Sets. It owns no body, term dictionary, posting/position
+list or vector. Exhaustive index inventories live in R2, and a measured
+projection above 7 GB blocks release pending an accepted catalog-sharding plan.
+The implemented D1 sparse tables and Qdrant path remain legacy rollback state
+until Tickets 21–22 satisfy their real stability and restore gates.
 
 ## Local development against the staging index
 

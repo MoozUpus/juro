@@ -1,5 +1,17 @@
 # Legal corpus rollback
 
+For an activated custom Search Release, first atomically select the prior
+capability-compatible Activation Set. Verify that its immutable R2 BM25 manifest,
+Vectorize index/configuration and D1 release roots match before resuming indexed
+traffic. Never roll back by editing release membership, overwriting a sparse
+segment, mutating reusable embeddings or pairing sparse and dense components from
+different releases. If no complete prior Candidate Packet is available, mark the
+Indexed Official Corpus unavailable and continue the strict Source Ladder.
+
+AI Search's partial Porter/trigram candidates are non-authoritative historical
+evidence, not a rollback target. Qdrant/D1 remains a legacy rollback Adapter only
+until Tickets 21–22 complete the accepted stability and restore gates.
+
 The first rollback action is server-side flag disablement:
 
 - `LEGAL_CORPUS_ENABLED=false`
