@@ -37,8 +37,9 @@
   Queue processing is now disabled again (`crons=[]`). Shard-3 had 23,702
   queued, 4 retrying and 7 dead-letter jobs; those queued/retrying jobs were
   moved through the audited handoff ledger to shard-4, making shard-3 frozen.
-  Shard-4 is prepared but not bound, deployed or activated, so its 23,706 jobs
-  remain held and no crawl was started. The source's 408 failure-ledger rows
+  Shard-4 is prepared and now has a target-bound staging Worker deployment, but
+  remains unactivated with queue processing disabled, so its 23,706 jobs remain
+  held and no crawl was started. The source's 408 failure-ledger rows
   remain append-only; no failure row was rewritten. The read-only federated
   runtime routes all five existing D1 sources, including shard-3, with deterministic logical
   evidence-key deduplication. The underlying stores still overlap physically,
@@ -134,8 +135,10 @@
 - On 2026-09-03 the authorized shard-3 → shard-4 handoff completed with source
   `frozen` and target `handoff_prepared`: 23,706 queued/retrying jobs,
   27,900 discovery rows and 14 associated failure rows were transferred via
-  the immutable handoff ledger. The target has no document/provision/chunk
-  content and no worker binding, so queue draining remains disabled. The
+  the immutable handoff ledger. A target-bound staging Worker deployment was
+  subsequently verified against the shard-4 D1 UUID, but activation remains
+  pending the protected legacy recovery and queue approval; queue draining is
+  disabled. The
   logical ownership projection was rebuilt and verified at 7,152 unique IDs;
   physical disjointness, legacy fresh-MFA recovery, snapshot, Qdrant, indexed
   evaluation and release approval remain open. Evidence:

@@ -78,7 +78,7 @@
         "LEGAL_CORPUS_QDRANT_REBUILD_APPROVED": "true",
         "LEGAL_CORPUS_QDRANT_DISJOINT_SNAPSHOT_APPROVED": "true",
         "QDRANT_URL": "https://qdrant.internal",
-        "QDRANT_COLLECTION": "juro_legal_staging_shard_3",
+        "QDRANT_COLLECTION": "juro_legal_staging_shard_4",
         "EMBEDDING_MODEL": "text-embedding-3-large"
       },
       "triggers": {
@@ -87,8 +87,8 @@
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "juro-staging-corpus-shard-3",
-          "database_id": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+          "database_name": "juro-staging-corpus-shard-4",
+          "database_id": "7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2",
           "migrations_dir": "./drizzle"
         }
       ],
