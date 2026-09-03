@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "observedAt": "2026-09-03T05:15:05.6839132Z",
+  "sourceEvidence": "STAGING_FEDERATION_READONLY_RECHECK_2026-09-03T0439Z.json",
+  "gateChecks": {
+    "canonicalDocuments": {
+      "rawSourceRows": 12333,
+      "logicalUniqueCanonicalIds": 7152,
+      "target": 1500,
+      "countThresholdMet": true,
+      "releaseProof": false,
+      "reason": "source rows overlap; logical ownership projection is not a physical partition snapshot"
+    },
+    "uniqueProvisions": {
+      "summedAcrossSources": 5419932,
+      "target": 22000,
+      "countThresholdMetOnSum": true,
+      "releaseProof": false,
+      "reason": "cross-source provision identity and disjointness are not proven"
+    },
+    "indexedChunks": {
+      "summedAcrossSources": 5412044,
+      "target": 22513,
+      "countThresholdMetOnSum": true,
+      "releaseProof": false,
+      "reason": "cross-source chunk identity/parity is not proven"
+    },
+    "checkpoints": {
+      "completedAcrossFiveSources": 220,
+      "requiredAcrossFiveSources": 220,
+      "allSources44Of44": true,
+      "releaseProof": true
+    },
+    "terminalFailures": {
+      "aggregateRows": 8,
+      "target": 0,
+      "passed": false
+    },
+    "deadLetterJobs": {
+      "aggregateRows": 8,
+      "target": 0,
+      "passed": false
+    },
+    "ingestionQueue": {
+      "openJobs": 94934,
+      "frozen": false,
+      "decision": "held_fail_closed"
+    }
+  },
+  "federation": {
+    "ownershipRows": 7152,
+    "partitionCount": 4,
+    "physicalDisjointness": "not_proven",
+    "observedDuplicateSourceRows": 5181,
+    "knownShard1Shard2CanonicalOverlap": 1335
+  },
+  "blockedNextGates": [
+    "frozen_federated_snapshot",
+    "indexed_314_scenario_evaluation",
+    "qdrant_benchmark_and_snapshot_restore"
+  ],
+  "completedSupportingGates": [
+    "v2_d1_export_to_local_restore_integrity",
+    "shard1_d1_export_to_local_restore_integrity",
+    "sequential_read_only_d1_reconciliation",
+    "exact_head_ci"
+  ],
+  "remoteMutation": {
+    "rowsWritten": 0,
+    "changedDb": false,
+    "failureLedgerMutated": false,
+    "productionChanged": false
+  },
+  "releaseGate": "closed",
+  "note": "This status intentionally does not convert overlapping source totals into release-qualified unique totals and does not claim legal review, benchmark, snapshot or production approval."
+}
