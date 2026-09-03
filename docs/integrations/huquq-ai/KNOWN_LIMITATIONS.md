@@ -34,18 +34,28 @@
   queue-processing attempt was authorized, but two valid `*/4` ticks on
   shard-3 produced sanitized `LEGAL_CORPUS_INGESTION_FAILED` outcomes while
   the D1 file was 9,999,892,480 bytes against its 9,999,998,976-byte ceiling.
-  Queue processing is now disabled again (`crons=[]`); 23,702 queued, 4
-  retrying and 7 dead-letter jobs remain, with 7 terminal failure-ledger rows
-  preserved. An empty `juro-staging-corpus-shard-4` was created and migrated
-  through `0142_legal_corpus_shard_handoffs.sql` as a rollover target only; it
-  is not bound, deployed or seeded. The read-only federated runtime routes all
-  five existing D1 sources, including shard-3, with deterministic logical
+  Queue processing is now disabled again (`crons=[]`). Shard-3 had 23,702
+  queued, 4 retrying and 7 dead-letter jobs; those queued/retrying jobs were
+  moved through the audited handoff ledger to shard-4, making shard-3 frozen.
+  Shard-4 is prepared but not bound, deployed or activated, so its 23,706 jobs
+  remain held and no crawl was started. The source's 408 failure-ledger rows
+  remain append-only; no failure row was rewritten. The read-only federated
+  runtime routes all five existing D1 sources, including shard-3, with deterministic logical
   evidence-key deduplication. The underlying stores still overlap physically,
   so the formal disjoint-partition release gate, federated snapshot, indexed
   314-scenario benchmark and full-corpus Qdrant evidence remain unproven.
   Details are recorded in `STAGING_FEDERATED_RUNTIME_2026-09-02.md`,
   `STAGING_SHARD3_QUEUE_DRAIN_FAILURE_2026-09-02T0712Z.json` and the existing
   read-only identity probes.
+- The authorized shard-3 → shard-4 handoff completed on 2026-09-03 with
+  manifest `8a2d7192d0023c1ba1f667729e03aa705638c520990e1c4e4ad13f278d6b698d`.
+  Target verification found 44 checkpoints, 27,900 discovery rows, 23,706
+  jobs, 23,706 handoff rows and 14 copied failure rows. The target contains no
+  document/provision/chunk content and remains `handoff_prepared` pending a
+  separately reviewed staging deployment. This closes queue handoff safety for
+  shard-3 only; it does not close the physical disjointness, snapshot, Qdrant,
+  evaluation, legal-review or production gates. See
+  `STAGING_FEDERATION_HANDOFF_SHARD3_TO_SHARD4_2026-09-03.{json,md}`.
 - A 2026-09-02 read-only recheck found one historical legacy dead-letter fetch
   (`lexuz:8411573`, `LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT`) and its terminal
   ledger row, plus two expired audit lock rows. The guard intentionally fails
@@ -121,3 +131,13 @@
   held fail-closed. The source overlap and physical disjointness limitation
   remain unchanged. See
   `STAGING_FEDERATION_READONLY_RECHECK_2026-09-03T0439Z.{json,md}`.
+- On 2026-09-03 the authorized shard-3 → shard-4 handoff completed with source
+  `frozen` and target `handoff_prepared`: 23,706 queued/retrying jobs,
+  27,900 discovery rows and 14 associated failure rows were transferred via
+  the immutable handoff ledger. The target has no document/provision/chunk
+  content and no worker binding, so queue draining remains disabled. The
+  logical ownership projection was rebuilt and verified at 7,152 unique IDs;
+  physical disjointness, legacy fresh-MFA recovery, snapshot, Qdrant, indexed
+  evaluation and release approval remain open. Evidence:
+  `STAGING_FEDERATION_HANDOFF_SHARD3_TO_SHARD4_2026-09-03.{json,md}` and
+  `STAGING_FEDERATION_OWNERSHIP_REBUILD_2026-09-03.{json,md}`.

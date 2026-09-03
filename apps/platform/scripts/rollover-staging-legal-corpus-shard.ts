@@ -321,7 +321,12 @@ export function parseWranglerImportJson(raw: string, scope: string): unknown {
 
 export function isLongRunningImportError(error: unknown): boolean {
   return error instanceof Error
-    && error.message.includes("Currently processing a long-running import");
+    && (error.message.includes("Currently processing a long-running import")
+      // D1 may finish an asynchronous import between Wrangler's upload and
+      // status probes. The batch is idempotent, so retry the same file within
+      // the bounded retry window instead of treating this race as a handoff
+      // failure.
+      || error.message.includes("Not currently importing anything."));
 }
 
 function parseWranglerRows(raw: string, database: string): JsonRecord[] {

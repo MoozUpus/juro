@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-03T06:13:59.9634833Z",
+  "operation": "sequential_read_only_federation_gate_recheck",
+  "databases": [
+    {"name":"juro-staging","documents":4291,"provisions":1306019,"chunks":1301928,"openJobs":43539,"deadLetter":1,"terminalFailures":1,"completedCheckpoints":44,"control":"not_available"},
+    {"name":"juro-staging-corpus-v2","documents":599,"provisions":1311096,"chunks":1308850,"openJobs":27689,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44,"control":"not_available"},
+    {"name":"juro-staging-corpus-shard-1","documents":1635,"provisions":370808,"chunks":369081,"openJobs":0,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44,"control":"frozen"},
+    {"name":"juro-staging-corpus-shard-2","documents":2495,"provisions":997115,"chunks":997338,"openJobs":0,"deadLetter":0,"completedCheckpoints":44,"control":"frozen"},
+    {"name":"juro-staging-corpus-shard-3","documents":3313,"provisions":1434894,"chunks":1434847,"openJobs":0,"deadLetter":7,"terminalFailures":7,"completedCheckpoints":44,"control":"frozen"},
+    {"name":"juro-staging-corpus-shard-4","documents":0,"provisions":0,"chunks":0,"openJobs":23706,"deadLetter":0,"terminalFailures":0,"completedCheckpoints":44,"control":"handoff_prepared"}
+  ],
+  "aggregatePhysicalRows": {"documents":12333,"provisions":5419932,"chunks":5412044,"openJobs":94934,"deadLetter":8,"terminalFailures":8,"completedCheckpoints":264},
+  "logicalOwnership": {"uniqueCanonicalDocumentIds":7152,"duplicateSourceRows":5181,"partitionCount":4,"partitionManifestSha256":"0497eb8a434e9298972798b033d7734a0e8753e0c4b554512a3d86a1b279087c"},
+  "queueState": {"sourceShard3Frozen":true,"targetShard4Prepared":true,"targetOpenJobs":23706,"allSourceQueuesFrozen":false},
+  "failureLedger": {"terminalRows":8,"deadLetterRows":8,"newRowsCreatedByRecheck":false,"sourceLedgerRewritten":false},
+  "releaseGate": {"numericFloorsByPhysicalSum":true,"uniqueDocumentFloorProven":true,"uniqueProvisionFloorProven":false,"indexedChunkFloorProven":false,"allCheckpoints":true,"zeroTerminalFailures":false,"zeroDeadLetter":false,"queueFrozen":false,"physicalDisjointness":false,"status":"closed"},
+  "nextGates": ["protected named-staff fresh-MFA legacy recovery", "physical disjoint partition and chunk parity", "frozen federated snapshot", "indexed 314-scenario evaluation", "full-corpus Qdrant benchmark and restore", "federated D1 backup/restore", "CI on exact head"],
+  "productionTouched":false,
+  "note":"Counts are read-only observations; sums are not release-qualified coverage because source IDs overlap and shard-4 contains only handoff metadata/queue rows, not corpus content."
+}

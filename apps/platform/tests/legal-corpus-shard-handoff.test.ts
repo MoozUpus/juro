@@ -49,9 +49,13 @@ test("rollover import parser accepts Wrangler progress before the JSON result", 
   );
 });
 
-test("rollover retries only the D1 long-running import contention error", () => {
+test("rollover retries bounded D1 import state races but not unrelated errors", () => {
   assert.equal(
     isLongRunningImportError(new Error("Currently processing a long-running import. Cannot start another import until that completes or times out.")),
+    true,
+  );
+  assert.equal(
+    isLongRunningImportError(new Error("Not currently importing anything.")),
     true,
   );
   assert.equal(isLongRunningImportError(new Error("permission denied")), false);

@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "capturedAt": "2026-09-03T05:38:46.908Z",
+  "authorizationScope": "User authorized a confirmed logical disjoint federation/index, safe queue handling and legacy recovery without failure-ledger substitution.",
+  "operation": "prepare_staging_shard_handoff",
+  "sourceDatabase": {
+    "name": "juro-staging-corpus-shard-3",
+    "databaseId": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c",
+    "controlBefore": "active",
+    "controlAfter": "frozen",
+    "deploymentId": "e4111ac6-2cb7-4ea1-aa63-08b7d726d3b5",
+    "versionId": "35c8888c-c154-4539-9100-feb8882be92a"
+  },
+  "targetDatabase": {
+    "name": "juro-staging-corpus-shard-4",
+    "databaseId": "7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2",
+    "controlAfter": "handoff_prepared",
+    "workerBindingActivated": false,
+    "databaseSizeBytesAfter": 39559168
+  },
+  "handoff": {
+    "handoffId": "14f54255-7025-47cd-ae13-38da842132fe",
+    "manifestSha256": "8a2d7192d0023c1ba1f667729e03aa705638c520990e1c4e4ad13f278d6b698d",
+    "checkpoints": 44,
+    "discoveryDocuments": 27900,
+    "activeJobs": 23706,
+    "failureRowsCopied": 14,
+    "documentAffinityJobs": 0,
+    "sourceEvents": ["prepared", "committed"],
+    "targetEvents": ["target_seeded"]
+  },
+  "sourceVerification": {
+    "jobStatusCounts": {"completed": 31574, "dead_letter": 7},
+    "handedOffJobs": 23706,
+    "openQueuedOrRetryingWithoutHandoff": 0,
+    "failureLedgerRows": 408,
+    "failureLedgerMutation": false
+  },
+  "targetVerification": {
+    "checkpoints": 44,
+    "discoveryDocuments": 27900,
+    "ingestionJobs": 23706,
+    "handoffJobs": 23706,
+    "failureRows": 14,
+    "documents": 0,
+    "provisions": 0,
+    "chunks": 0
+  },
+  "recovery": {
+    "partialImportError": "Not currently importing anything.",
+    "subsequentAuthError": "Authentication error [code: 10000]",
+    "retry": "same handoff ID was resumed idempotently after Wrangler authentication recovered",
+    "legacyJobId": "legal-corpus:07aa10e095f0c77b28e6ada80fc8",
+    "legacyCanonicalDocumentId": "lexuz:8411573",
+    "legacyRecovery": "not executed; protected named-staff fresh-MFA admin action remains required"
+  },
+  "safety": {
+    "sourceCorpusRowsCopied": false,
+    "sourceFailureLedgerRewritten": false,
+    "newIngestionFailuresCreated": false,
+    "productionTouched": false,
+    "physicalDisjointness": "unproven",
+    "releaseGate": "closed",
+    "nextStep": "deploy a target-bound staging worker and run activate only after an explicit deployment review; do not drain queued jobs automatically"
+  }
+}
