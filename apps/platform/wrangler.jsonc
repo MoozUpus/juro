@@ -213,7 +213,7 @@
         "EMAIL_FROM": "JURO <no-reply@juro.uz>",
         "OPERATIONS_ALERT_EMAIL": "muzaffarbekmurodoff@gmail.com",
         "STATUS_HOSTNAME": "status.staging.juro.uz",
-        "QDRANT_ALLOWED_COLLECTIONS": "juro_legal_staging,juro_legal_staging_v2,juro_legal_staging_shard_3",
+        "QDRANT_ALLOWED_COLLECTIONS": "juro_legal_staging,juro_legal_staging_v2,juro_legal_staging_shard_3,juro_legal_staging_shard_4",
         "ADMIN_CONSOLE_ORIGIN": "https://admin.staging.juro.uz",
         "OPENAI_CHAT_MODEL": "gpt-5.6-terra",
         "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
@@ -254,6 +254,11 @@
           "binding": "LEGAL_CORPUS_SHARD_3_DB",
           "database_name": "juro-staging-corpus-shard-3",
           "database_id": "ccf1f18e-66cf-4358-a7aa-f1d725b7653c"
+        },
+        {
+          "binding": "LEGAL_CORPUS_SHARD_4_DB",
+          "database_name": "juro-staging-corpus-shard-4",
+          "database_id": "7c6dba67-5561-473f-aaa8-a0f6ed6e9bf2"
         }
       ],
       "migrations": [

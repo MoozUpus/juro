@@ -436,7 +436,7 @@ test("private dense services stay behind service bindings and staging-only flags
   assert.match(privateServices, /QDRANT_ALLOWED_COLLECTIONS/u);
   assert.match(corpusConfig, /"binding": "QDRANT_SERVICE"/u);
   assert.match(corpusConfig, /"binding": "LEGAL_CORPUS_EMBEDDING_SERVICE"/u);
-  assert.match(platformConfig, /"QDRANT_ALLOWED_COLLECTIONS": "juro_legal_staging,juro_legal_staging_v2,juro_legal_staging_shard_3"/u);
+  assert.match(platformConfig, /"QDRANT_ALLOWED_COLLECTIONS": "juro_legal_staging,juro_legal_staging_v2,juro_legal_staging_shard_3,juro_legal_staging_shard_4"/u);
   assert.match(corpusConfig, /"binding": "BACKUP_BUCKET"/u);
   const production = corpusConfig.slice(corpusConfig.indexOf('"production"'));
   assert.doesNotMatch(production, /"binding": "QDRANT_SERVICE"/u);
