@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { link, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -32,6 +33,9 @@ import {
   type Ticket29RetainedLocator,
 } from "../lib/legal-corpus/complete-corpus-materialization";
 import { assertTicket29DistinctArtifactPaths } from "../scripts/ticket29-isolated-artifact-paths";
+import { countTicket29IdentityMismatches } from "../scripts/ticket29-isolated-identity";
+
+const testSha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 test("Ticket 29 retained-current identity matches Ticket 28's target natural key", async () => {
   assert.equal(await ticket29LegacyTargetRenditionId({
@@ -42,6 +46,73 @@ test("Ticket 29 retained-current identity matches Ticket 28's target natural key
     publisherProvisionToken: "article:7:sequence:3",
     sourceRevisionSha256: "a".repeat(64),
   }), "rendition:d4088b391910f63437d03ec76e35bce7f7a71babb23dcd6820a5da72272fb88d");
+});
+
+test("Ticket 29 isolated identity proof reads the source-version token owner", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE legal_complete_corpus_records (
+    run_id TEXT, source_id TEXT, source_document_id TEXT, source_version_id TEXT,
+    source_revision_sha256 TEXT, language TEXT, script TEXT, textual_authority TEXT,
+    valid_from TEXT, valid_to TEXT, instrument_id TEXT, official_expression_id TEXT,
+    text_revision_id TEXT, provision_concept_id TEXT, provision_rendition_id TEXT,
+    legacy_current_rendition_id TEXT, publisher_revision_token TEXT,
+    legacy_target_publisher_revision_token TEXT, source_publisher_revision_token TEXT,
+    publisher_provision_token TEXT, applicability_identity TEXT)`);
+  const sourceId = "source:test";
+  const documentId = "document:test";
+  const sourceVersionId = "version:test";
+  const sourceRevisionSha256 = "a".repeat(64);
+  const language = "uz-Latn";
+  const script = "Latn";
+  const textualAuthority = "unknown";
+  const publisherProvisionToken = "article:1";
+  const applicabilityIdentity = "gap/";
+  const publisherRevisionToken = JSON.stringify({
+    sourceVersionId,
+    versionDate: null,
+    versionNumber: 1,
+  });
+  const instrumentId = `instrument:${testSha256(documentId)}`;
+  const officialExpressionId = `expression:${testSha256(
+    `${instrumentId}\u0000${language}\u0000${script}\u0000${textualAuthority}`,
+  )}`;
+  const textRevisionId = `revision:${testSha256([
+    documentId,
+    language,
+    script,
+    textualAuthority,
+    publisherRevisionToken,
+  ].join("|"))}`;
+  const provisionConceptId = `concept:${testSha256(`source-provision:${sourceId}`)}`;
+  const provisionRenditionId = `rendition:${testSha256([
+    documentId,
+    provisionConceptId,
+    publisherProvisionToken,
+    textRevisionId,
+    language,
+    script,
+    textualAuthority,
+    applicabilityIdentity,
+  ].join("|"))}`;
+  const legacyRevisionId = `revision:${testSha256(
+    `${officialExpressionId}\u0000${sourceRevisionSha256}`,
+  )}`;
+  const legacyProvisionConceptId = `concept:${testSha256(
+    `${instrumentId}\u0000${publisherProvisionToken}`,
+  )}`;
+  const legacyCurrentRenditionId = `rendition:${testSha256(
+    `${legacyProvisionConceptId}\u0000${legacyRevisionId}`,
+  )}`;
+  database.prepare(`INSERT INTO legal_complete_corpus_records VALUES (
+    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    "run", sourceId, documentId, sourceVersionId, sourceRevisionSha256,
+    language, script, textualAuthority, null, null, instrumentId,
+    officialExpressionId, textRevisionId, provisionConceptId, provisionRenditionId,
+    legacyCurrentRenditionId, publisherRevisionToken, `1:${sourceRevisionSha256}`,
+    publisherRevisionToken, publisherProvisionToken, applicabilityIdentity,
+  );
+  assert.equal(countTicket29IdentityMismatches(database, "run"), 0);
+  database.close();
 });
 
 test("Ticket 29 finalization derives exact membership counts from sealed manifest lanes", () => {
