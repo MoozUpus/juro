@@ -19,9 +19,14 @@
       "database_id": "bb716a96-b2fb-4823-90d6-6c228fed181a"
     },
     {
-      "binding": "LEGAL_DB",
+      "binding": "RETAINED_DB",
       "database_name": "juro-legal-catalog-staging-green2-20260831",
-      "database_id": "23863e4f-6a11-4c25-888a-63abf695248b",
+      "database_id": "23863e4f-6a11-4c25-888a-63abf695248b"
+    },
+    {
+      "binding": "LEGAL_DB",
+      "database_name": "juro-legal-catalog-staging-green3-20260905",
+      "database_id": "10c71209-7cf6-47c3-a74e-9697e32d7c29",
       "migrations_dir": "./legal-drizzle"
     }
   ],

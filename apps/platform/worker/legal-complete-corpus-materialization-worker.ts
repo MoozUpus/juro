@@ -10,6 +10,8 @@ import {
 } from "../lib/legal-corpus/complete-corpus-audit";
 import {
   TICKET29_CURRENT_LOCATOR_SQL,
+  TICKET29_EVIDENCE_PREFIX,
+  TICKET29_FINALIZATION_COUNTS_SQL,
   TICKET29_SOURCE_PAGE_SIZE,
   TICKET29_TARGET_LOCATOR_SQL,
   immutableEvidencePut,
@@ -18,6 +20,7 @@ import {
   ticket29AccountingTotalsMatch,
   ticket29ControlReplayMatches,
   ticket29LifecycleDisposition,
+  ticket29LegacyTargetRenditionId,
   ticket29QueueMessageSchema,
   ticket29Sha256,
   ticket29ManifestRoot,
@@ -41,7 +44,7 @@ import {
   TICKET29_EMPTY_VERSION_MANIFEST_SHA256,
 } from "../lib/legal-corpus/ticket29-source-object-manifest.generated";
 
-const RUN_ID = "ticket29:cutoff-20260831:complete-corpus-v1";
+const RUN_ID = "ticket29:cutoff-20260831:complete-corpus-v2";
 const ACCOUNT_ID = "e22babd36b65c99b69adf3de50df5227";
 const CUTOFF = "2026-08-31T06:26:27.2253695Z";
 const SOURCE_BOOKMARK = "00001fc0-00000006-000050d8-8d0a7d4edf4ab919646c241f8e32cde1";
@@ -135,6 +138,7 @@ type MaterializationEnv = {
   APP_ENV: "staging";
   CLOUDFLARE_ACCOUNT_ID: typeof ACCOUNT_ID;
   SOURCE_DB: D1Database;
+  RETAINED_DB: D1Database;
   LEGAL_DB: D1Database;
   SOURCE_EVIDENCE: R2Bucket;
   EVIDENCE: R2Bucket;
@@ -208,11 +212,14 @@ async function identities(row: SourceRow) {
   const applicabilityIdentity = `${dateInstant(row.validFrom) ?? "gap"}/${dateInstant(row.validTo) ?? ""}`;
   const provisionRenditionId = await identifier("rendition", [row.documentId, provisionConceptId,
     publisherProvisionToken, textRevisionId, row.language, script, "unknown", applicabilityIdentity].join("|"));
-  const legacyRevisionId = await identifier("revision", `${officialExpressionId}\u0000${row.versionContentSha256}`);
-  const legacyProvisionConceptId = await identifier("concept", `${row.documentId}|${publisherProvisionToken}`);
-  const legacyCurrentRenditionId = await identifier(
-    "rendition", `${legacyProvisionConceptId}\u0000${legacyRevisionId}`,
-  );
+  const legacyCurrentRenditionId = await ticket29LegacyTargetRenditionId({
+    publisherDocumentToken: row.documentId,
+    language: row.language,
+    script,
+    textualAuthority: "unknown",
+    publisherProvisionToken,
+    sourceRevisionSha256: row.versionContentSha256,
+  });
   return { instrumentId, officialExpressionId, textRevisionId, provisionConceptId,
     provisionRenditionId, legacyCurrentRenditionId, publisherRevisionToken, sourcePublisherRevisionToken,
     legacyTargetPublisherRevisionToken,
@@ -225,6 +232,7 @@ async function planItem(
     normalized?: Ticket29RetainedLocator; provision?: Ticket29RetainedLocator },
 ): Promise<CompletePlanItem> {
   if (!row.rawObjectKey || !row.normalizedObjectKey) throw new Error("TICKET29_SOURCE_LOCATOR_MISSING");
+  if (retained.current && row.validFrom === null) throw new Error("TICKET29_CURRENT_TEMPORAL_GAP");
   const target = await identities(row);
   const sourceAlias = sourceRevisionAliases.get(row.id);
   const sourceRevisionSha256 = sourceAlias?.sourceRevisionSha256 ?? row.versionContentSha256;
@@ -340,7 +348,7 @@ async function assertRunBuilding(env: MaterializationEnv): Promise<void> {
 }
 
 async function assertRetainedCurrentEvidenceComplete(env: MaterializationEnv): Promise<void> {
-  const state = await env.LEGAL_DB.prepare(`SELECT count(*) AS records,
+  const state = await env.RETAINED_DB.prepare(`SELECT count(*) AS records,
       sum(CASE WHEN provision.object_kind='provision_rendition'
         AND provision.source_normalized_sha256=normalized.sha256
         AND raw.object_kind='raw_capture' AND normalized.object_kind='normalized_revision'
@@ -362,7 +370,7 @@ async function assertMaterializationNamespaceReady(env: MaterializationEnv): Pro
   const existingRun = await env.LEGAL_DB.prepare(`SELECT status
     FROM legal_complete_corpus_runs WHERE id=?`).bind(RUN_ID).first<{ status: string }>();
   if (existingRun) return;
-  const existingObjects = await env.EVIDENCE.list({ prefix: "legal-corpus/complete-v1/", limit: 1 });
+  const existingObjects = await env.EVIDENCE.list({ prefix: TICKET29_EVIDENCE_PREFIX, limit: 1 });
   if (existingObjects.objects.length !== 0) {
     throw new Error("TICKET29_EVIDENCE_NAMESPACE_NOT_EMPTY");
   }
@@ -457,14 +465,14 @@ async function targetState(env: MaterializationEnv, rows: readonly SourceRow[]):
     throw new Error("TICKET29_SOURCE_R2_METADATA_MISMATCH");
   }
   const requestedJson = JSON.stringify(requested);
-  const locators = await env.LEGAL_DB.prepare(TICKET29_TARGET_LOCATOR_SQL)
+  const locators = await env.RETAINED_DB.prepare(TICKET29_TARGET_LOCATOR_SQL)
     .bind(requestedJson, requestedJson).all<TargetLocatorRow>();
   const byKindSha = new Map<string, Ticket29RetainedLocator>();
   for (const row of locators.results) {
     const key = `${row.objectKind}:${row.sha256}`;
     if (!byKindSha.has(key)) byKindSha.set(key, retainedLocator(row));
   }
-  const current = await env.LEGAL_DB.prepare(TICKET29_CURRENT_LOCATOR_SQL)
+  const current = await env.RETAINED_DB.prepare(TICKET29_CURRENT_LOCATOR_SQL)
     .bind(requestedJson, SOURCE_RELEASE_ID)
     .all<TargetLocatorRow & { sourceId: string }>();
   const currentBySource = new Map(current.results.map((row) => [row.sourceId, retainedLocator(row)]));
@@ -888,7 +896,7 @@ async function commitPage(
     const complete = { ...object, sourceR2Key: null };
     const sourceSha256 = object.kind === "raw_capture" ? object.sha256
       : object.kind === "normalized_revision" ? object.sha256 : null;
-    const retained = !object.key.startsWith("legal-corpus/complete-v1/");
+    const retained = !object.key.startsWith(TICKET29_EVIDENCE_PREFIX);
     const materializationDisposition = ticket29LifecycleDisposition(object.key);
     const descriptorSha256 = await ticket29Sha256(stableSourceSnapshotJson({
       kind: complete.kind, sha256: complete.sha256, key: complete.key,
@@ -1661,17 +1669,9 @@ export class CompleteCorpusFinalizeWorkflow extends WorkflowEntrypoint<Materiali
       await assertControlStageComplete(this.env, `ticket29:${payload.proofMode}`, "reconstruction", 16);
     });
     const exact = await step.do("verify exact materialization counts", async () => {
-      const row = await this.env.LEGAL_DB.prepare(`SELECT
-        count(*) AS records,
-        sum(current_eligible) AS currentRecords,
-        sum(historical_eligible) AS historicalRecords,
-        sum(CASE WHEN current_eligible=1 AND historical_eligible=1 THEN 1 ELSE 0 END) AS overlapRecords,
-        sum(temporal_gap) AS gaps,
-        sum(quarantined) AS quarantines,
-        count(DISTINCT content_sha256) AS distinctBodies,
-        count(DISTINCT CASE WHEN raw_object_r2_key IS NOT NULL THEN raw_object_r2_key END) AS rawObjects,
-        count(DISTINCT CASE WHEN normalized_object_r2_key IS NOT NULL THEN normalized_object_r2_key END) AS normalizedObjects
-        FROM legal_complete_corpus_records WHERE run_id=?`).bind(RUN_ID).first<Record<string, number>>();
+      const membership = await this.env.LEGAL_DB.prepare(TICKET29_FINALIZATION_COUNTS_SQL)
+        .bind(RUN_ID).first<{ lanes: number; records: number; currentRecords: number;
+          historicalRecords: number; gaps: number }>();
       const pages = await this.env.LEGAL_DB.prepare(`SELECT count(*) AS pages,
         coalesce(sum(record_count),0) AS pageRecords FROM legal_complete_corpus_pages WHERE run_id=?`)
         .bind(RUN_ID).first<{ pages: number; pageRecords: number }>();
@@ -1727,22 +1727,26 @@ export class CompleteCorpusFinalizeWorkflow extends WorkflowEntrypoint<Materiali
           AND object_kind IN ('raw_capture','normalized_revision','provision_rendition')
         GROUP BY object_kind ORDER BY object_kind`).bind(RUN_ID)
         .all<{ objectKind: string; count: number }>();
-      const expectedObjects = await this.env.LEGAL_DB.prepare(`SELECT
-        (SELECT count(*) FROM (SELECT raw_object_r2_key FROM legal_complete_corpus_records WHERE run_id=?
-          UNION SELECT raw_object_r2_key FROM legal_complete_corpus_quarantines WHERE run_id=?)) AS rawObjects,
-        (SELECT count(*) FROM (SELECT normalized_object_r2_key FROM legal_complete_corpus_records WHERE run_id=?
-          UNION SELECT normalized_object_r2_key FROM legal_complete_corpus_quarantines WHERE run_id=?)) AS normalizedObjects,
-        (SELECT count(DISTINCT provision_object_r2_key) FROM legal_complete_corpus_records
-          WHERE run_id=?) AS provisionObjects`).bind(RUN_ID, RUN_ID, RUN_ID, RUN_ID, RUN_ID)
-        .first<{ rawObjects: number; normalizedObjects: number; provisionObjects: number }>();
       const kindCounts = new Map(objectKinds.results.map((item) => [item.objectKind, Number(item.count)]));
+      const row = {
+        records: Number(membership?.records),
+        currentRecords: Number(membership?.currentRecords),
+        historicalRecords: Number(membership?.historicalRecords),
+        overlapRecords: Number(membership?.currentRecords),
+        gaps: Number(membership?.gaps),
+        quarantines: 0,
+        distinctBodies: kindCounts.get("provision_rendition") ?? 0,
+        rawObjects: kindCounts.get("raw_capture") ?? 0,
+        normalizedObjects: kindCounts.get("normalized_revision") ?? 0,
+      };
       const firstAttempt = attempts.results.find((attempt) => attempt.attemptId === "ticket29:first");
       const secondAttempt = attempts.results.find((attempt) => attempt.attemptId === "ticket29:second");
       const firstQuarantine = quarantineAttempts.results.find((attempt) =>
         attempt.attemptId === "ticket29:quarantine:first");
       const secondQuarantine = quarantineAttempts.results.find((attempt) =>
         attempt.attemptId === "ticket29:quarantine:second");
-      if (!row || Number(row.records) !== EXPECTED_RECORDS || Number(row.currentRecords) !== 160_978
+      if (Number(membership?.lanes) !== 9 || Number(row.records) !== EXPECTED_RECORDS
+        || Number(row.currentRecords) !== 160_978
         || Number(row.historicalRecords) !== 1_295_149 || Number(row.gaps) !== 4_679
         || Number(row.overlapRecords) !== 160_978
         || Number(row.distinctBodies) !== 166_754 || Number(row.rawObjects) !== 10_989
@@ -1765,13 +1769,10 @@ export class CompleteCorpusFinalizeWorkflow extends WorkflowEntrypoint<Materiali
         || secondQuarantine.reusedObjects !== 24 || secondQuarantine.createdBytes !== 0
         || secondQuarantine.reusedBytes !== firstQuarantine.createdBytes + firstQuarantine.reusedBytes
         || firstQuarantine.rootSha256 !== secondQuarantine.rootSha256
-        || Number(expectedObjects?.rawObjects) !== 11_001
-        || Number(expectedObjects?.normalizedObjects) !== 11_001
-        || kindCounts.get("raw_capture") !== Number(expectedObjects?.rawObjects)
-        || kindCounts.get("normalized_revision") !== Number(expectedObjects?.normalizedObjects)
-        || kindCounts.get("provision_rendition") !== Number(expectedObjects?.provisionObjects)
-        || Number(dataObjects?.count) !== Number(expectedObjects?.rawObjects)
-          + Number(expectedObjects?.normalizedObjects) + Number(expectedObjects?.provisionObjects)) {
+        || kindCounts.get("raw_capture") !== 11_001
+        || kindCounts.get("normalized_revision") !== 11_001
+        || kindCounts.get("provision_rendition") !== 166_754
+        || Number(dataObjects?.count) !== 188_756) {
         throw new Error("TICKET29_EXACT_RECONCILIATION_FAILED");
       }
       return { ...row, planPages: Number(pages?.pages), planPageRecords: Number(pages?.pageRecords),

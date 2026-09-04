@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { link, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import {
+  TICKET29_FINALIZATION_COUNTS_SQL,
   TICKET29_SOURCE_PAGE_SIZE,
   TICKET29_MATERIALIZATION_PAGE_SIZE,
   buildBodyFreeMaterializationRecord,
@@ -14,6 +16,7 @@ import {
   ticket29AccountingTotalsMatch,
   ticket29ControlReplayMatches,
   ticket29LifecycleDisposition,
+  ticket29LegacyTargetRenditionId,
   ticket29EvidenceKey,
   ticket29ManifestRoot,
   ticket29PlanSourcePageInParallel,
@@ -26,6 +29,36 @@ import {
   type Ticket29EvidenceDescriptor,
 } from "../lib/legal-corpus/complete-corpus-materialization";
 import { assertTicket29DistinctArtifactPaths } from "../scripts/ticket29-isolated-artifact-paths";
+
+test("Ticket 29 retained-current identity matches Ticket 28's target natural key", async () => {
+  assert.equal(await ticket29LegacyTargetRenditionId({
+    publisherDocumentToken: "lexuz-family:42",
+    language: "uz-Latn",
+    script: "Latn",
+    textualAuthority: "unknown",
+    publisherProvisionToken: "article:7:sequence:3",
+    sourceRevisionSha256: "a".repeat(64),
+  }), "rendition:d4088b391910f63437d03ec76e35bce7f7a71babb23dcd6820a5da72272fb88d");
+});
+
+test("Ticket 29 finalization derives exact membership counts from sealed manifest lanes", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE legal_complete_corpus_lane_reports (
+    run_id TEXT NOT NULL, report_kind TEXT NOT NULL, lane TEXT NOT NULL,
+    record_count INTEGER NOT NULL, current_count INTEGER NOT NULL,
+    history_count INTEGER NOT NULL, gap_count INTEGER NOT NULL,
+    UNIQUE (run_id,report_kind,lane));
+    INSERT INTO legal_complete_corpus_lane_reports VALUES
+      ('run','manifest','1',7,2,6,1),('run','manifest','2',5,1,5,0);`);
+  assert.deepEqual({ ...database.prepare(TICKET29_FINALIZATION_COUNTS_SQL).get("run") }, {
+    lanes: 2,
+    records: 12,
+    currentRecords: 3,
+    historicalRecords: 11,
+    gaps: 1,
+  });
+  database.close();
+});
 
 test("Ticket 29 plans one bounded source page concurrently in source order", async () => {
   const started: number[] = [];
@@ -166,7 +199,7 @@ test("Ticket 29 complete control replay permits retry reuse then requires all-re
 });
 
 test("Ticket 29 lifecycle disposition survives interruption before D1 commit", () => {
-  assert.equal(ticket29LifecycleDisposition("legal-corpus/complete-v1/raw-capture/hash.bin"), "created");
+  assert.equal(ticket29LifecycleDisposition("legal-corpus/complete-v2/raw-capture/hash.bin"), "created");
   assert.equal(ticket29LifecycleDisposition("corpus/provisions/retained.json"), "reused");
   assert.throws(() => ticket29LifecycleDisposition("unscoped/object"),
     /TICKET29_OBJECT_NAMESPACE_INVALID/u);
@@ -261,11 +294,11 @@ test("Ticket 29 D1 record is body-free while retaining complete identities and l
   });
 
   assert.equal(record.provisionObjectKey,
-    `legal-corpus/complete-v1/provision-rendition/${contentSha256}.txt`);
+    `legal-corpus/complete-v2/provision-rendition/${contentSha256}.txt`);
   assert.equal(record.rawObjectKey,
-    `legal-corpus/complete-v1/raw-capture/${"3".repeat(64)}.bin`);
+    `legal-corpus/complete-v2/raw-capture/${"3".repeat(64)}.bin`);
   assert.equal(record.normalizedObjectKey,
-    `legal-corpus/complete-v1/normalized-revision/${"4".repeat(64)}.json`);
+    `legal-corpus/complete-v2/normalized-revision/${"4".repeat(64)}.json`);
   const serialized = JSON.stringify(record);
   assert.doesNotMatch(serialized, /Article 1|officialText|"text"|"body"/u);
   assert.match(serialized, /legalIdentitySha256|sourceVersionId|validFrom/u);
@@ -336,9 +369,9 @@ test("Ticket 29 manifests are deterministic and preserve current, history, and g
     contentSha256: "3".repeat(64),
     rawSourceKeySha256: "4".repeat(64),
     normalizedSourceKeySha256: "5".repeat(64),
-    rawObjectKey: `legal-corpus/complete-v1/raw-capture/${"6".repeat(64)}.bin`,
-    normalizedObjectKey: `legal-corpus/complete-v1/normalized-revision/${"7".repeat(64)}.json`,
-    provisionObjectKey: `legal-corpus/complete-v1/provision-rendition/${"3".repeat(64)}.txt`,
+    rawObjectKey: `legal-corpus/complete-v2/raw-capture/${"6".repeat(64)}.bin`,
+    normalizedObjectKey: `legal-corpus/complete-v2/normalized-revision/${"7".repeat(64)}.json`,
+    provisionObjectKey: `legal-corpus/complete-v2/provision-rendition/${"3".repeat(64)}.txt`,
     provisionObjectSha256: "3".repeat(64),
     rawSourceKey: "source/raw",
     normalizedSourceKey: "source/normalized",
@@ -413,8 +446,8 @@ test("isolated reconstruction uses only body-free mappings and evidence objects"
     contentSha256: sha256,
     rawSourceKeySha256: "1".repeat(64),
     normalizedSourceKeySha256: normalizedHash,
-    rawObjectKey: `legal-corpus/complete-v1/raw-capture/${"3".repeat(64)}.bin`,
-    normalizedObjectKey: `legal-corpus/complete-v1/normalized-revision/${normalizedHash}.json`,
+    rawObjectKey: `legal-corpus/complete-v2/raw-capture/${"3".repeat(64)}.bin`,
+    normalizedObjectKey: `legal-corpus/complete-v2/normalized-revision/${normalizedHash}.json`,
     provisionObjectKey: ticket29EvidenceKey("provision_rendition", sha256, "text/plain;charset=utf-8"),
     provisionObjectSha256: sha256,
     rawSourceKey: `source/raw/${sourceId}`,
@@ -454,7 +487,7 @@ test("Ticket 29 queue messages are identifiers-only", () => {
     kind: "materialize-page",
     runId: "ticket29:cutoff-20260831",
     attemptId: "ticket29:first",
-    planKey: "legal-corpus/complete-v1/plans/plan.jsonl",
+    planKey: "legal-corpus/complete-v2/plans/plan.jsonl",
     offset: 0,
     length: 1024,
     pageSha256: "a".repeat(64),

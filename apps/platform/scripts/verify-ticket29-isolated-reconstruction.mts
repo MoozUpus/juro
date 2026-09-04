@@ -16,12 +16,12 @@ import {
 
 const ACCOUNT_ID = "e22babd36b65c99b69adf3de50df5227";
 const BUCKET = "juro-legal-evidence-staging-green2-20260831";
-const RUN_ID = "ticket29:cutoff-20260831:complete-corpus-v1";
+const RUN_ID = "ticket29:cutoff-20260831:complete-corpus-v2";
 const SOURCE_DATABASE_ID = "bb716a96-b2fb-4823-90d6-6c228fed181a";
 const SOURCE_INVENTORY_SHA256 = "2105a4d39465ae8e0b923ab89a08dddf2599d57b9e1517490a8d2f1996fe4c00";
 const SOURCE_CANONICAL_SHA256 = "e527fa5221acf6063defa5f944d9ef54ca7e8b2667c47df34ba8135ef879f830";
 const SOURCE_ALIAS_SHA256 = "5ff75e07391b9acd01699d8aca2bbaa32684c402e3470e42660d66fdd064f201";
-const EVIDENCE_PREFIX = "legal-corpus/complete-v1/";
+const EVIDENCE_PREFIX = "legal-corpus/complete-v2/";
 const REQUEST_INTERVAL_MS = 275;
 let requestGate = Promise.resolve();
 let nextRequestAt = 0;
@@ -439,7 +439,9 @@ async function main(): Promise<void> {
       row.publisherProvisionToken, textRevisionId, row.language, row.script,
       row.textualAuthority, applicabilityIdentity].join("|"))}`;
     const legacyRevisionId = `revision:${sha256(`${officialExpressionId}\u0000${row.sourceRevisionSha256}`)}`;
-    const legacyProvisionConceptId = `concept:${sha256(`${row.documentId}|${row.publisherProvisionToken}`)}`;
+    const legacyProvisionConceptId = `concept:${sha256(
+      `${instrumentId}\u0000${row.publisherProvisionToken}`,
+    )}`;
     const legacyCurrentRenditionId = `rendition:${sha256(`${legacyProvisionConceptId}\u0000${legacyRevisionId}`)}`;
     if (row.instrumentId !== instrumentId || row.officialExpressionId !== officialExpressionId
       || row.textRevisionId !== textRevisionId || row.provisionConceptId !== provisionConceptId
@@ -819,7 +821,7 @@ async function main(): Promise<void> {
         LEFT JOIN legal_complete_corpus_objects provision ON provision.run_id=r.run_id
           AND provision.r2_key=r.provision_object_r2_key AND provision.object_kind='provision_rendition'
           AND provision.sha256=r.provision_object_sha256
-          AND ((provision.r2_key LIKE 'legal-corpus/complete-v1/%'
+        AND ((provision.r2_key LIKE 'legal-corpus/complete-v2/%'
                 AND provision.source_normalized_sha256 IS NULL)
             OR (provision.r2_key LIKE 'corpus/%'
                 AND provision.source_normalized_sha256=r.normalized_source_sha256))

@@ -89,6 +89,8 @@ test("Ticket 29 migration stores body-free immutable identities and locators", a
 test("Ticket 29 worker pins the authorized Cloudflare account", async () => {
   const config = await readFile(new URL("../wrangler.legal-complete-corpus.jsonc", import.meta.url), "utf8");
   assert.match(config, /"account_id": "e22babd36b65c99b69adf3de50df5227"/u);
+  assert.match(config, /"binding": "LEGAL_DB"[\s\S]*"database_id": "10c71209-7cf6-47c3-a74e-9697e32d7c29"/u);
+  assert.match(config, /"binding": "RETAINED_DB"[\s\S]*"database_id": "23863e4f-6a11-4c25-888a-63abf695248b"/u);
   assert.match(config, /"max_concurrency": 200/u);
   assert.doesNotMatch(config, /OPENAI|provider|embedding|QDRANT|VECTORIZE/iu);
 });

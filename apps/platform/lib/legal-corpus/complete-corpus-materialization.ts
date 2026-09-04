@@ -206,8 +206,39 @@ export async function ticket29Sha256(value: string | Uint8Array): Promise<string
     .join("");
 }
 
+export async function ticket29LegacyTargetRenditionId(input: {
+  publisherDocumentToken: string;
+  language: "en" | "ru" | "uz-Cyrl" | "uz-Latn";
+  script: "Cyrl" | "Latn";
+  textualAuthority: "unknown";
+  publisherProvisionToken: string;
+  sourceRevisionSha256: string;
+}): Promise<string> {
+  const sourceRevisionSha256 = sha256Schema.parse(input.sourceRevisionSha256);
+  const instrumentId = `instrument:${await ticket29Sha256(input.publisherDocumentToken)}`;
+  const expressionId = `expression:${await ticket29Sha256(
+    `${instrumentId}\u0000${input.language}\u0000${input.script}\u0000${input.textualAuthority}`,
+  )}`;
+  const revisionId = `revision:${await ticket29Sha256(
+    `${expressionId}\u0000${sourceRevisionSha256}`,
+  )}`;
+  const conceptId = `concept:${await ticket29Sha256(
+    `${instrumentId}\u0000${input.publisherProvisionToken}`,
+  )}`;
+  return `rendition:${await ticket29Sha256(`${conceptId}\u0000${revisionId}`)}`;
+}
+
+export const TICKET29_FINALIZATION_COUNTS_SQL = `SELECT count(*) AS lanes,
+    coalesce(sum(record_count),0) AS records,
+    coalesce(sum(current_count),0) AS currentRecords,
+    coalesce(sum(history_count),0) AS historicalRecords,
+    coalesce(sum(gap_count),0) AS gaps
+  FROM legal_complete_corpus_lane_reports
+  WHERE run_id=? AND report_kind='manifest'`;
+
 export const TICKET29_SOURCE_PAGE_SIZE = 600;
 export const TICKET29_MATERIALIZATION_PAGE_SIZE = 100;
+export const TICKET29_EVIDENCE_PREFIX = "legal-corpus/complete-v2/";
 
 export async function ticket29PlanSourcePageInParallel<TSource, TPlan>(
   sourceRows: readonly TSource[],
@@ -263,7 +294,7 @@ export function ticket29EvidenceKey(
   const kind = evidenceKindSchema.parse(rawKind);
   const sha256 = sha256Schema.parse(rawSha256);
   const segment = kind.replaceAll("_", "-");
-  const namespace = kind === "qualification" ? "qualification-v1" : "complete-v1";
+  const namespace = kind === "qualification" ? "qualification-v1" : "complete-v2";
   return `legal-corpus/${namespace}/${segment}/${sha256}.${evidenceExtension(kind, mediaType)}`;
 }
 
@@ -868,7 +899,7 @@ export function ticket29ControlReplayMatches(
 export function ticket29LifecycleDisposition(
   key: string,
 ): "created" | "reused" {
-  if (key.startsWith("legal-corpus/complete-v1/")) return "created";
+  if (key.startsWith(TICKET29_EVIDENCE_PREFIX)) return "created";
   if (key.startsWith("corpus/")) return "reused";
   throw new Error("TICKET29_OBJECT_NAMESPACE_INVALID");
 }
