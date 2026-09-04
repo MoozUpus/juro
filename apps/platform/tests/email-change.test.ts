@@ -9,7 +9,6 @@ import {
 import { sha256 } from "../lib/auth/crypto";
 import {
   createIdentityProtectionContext,
-  IdentityProtectionError,
   prepareUserIdentityWrite,
   userIdentityWriteBindings,
 } from "../lib/auth/identity-protection";
@@ -895,7 +894,7 @@ test("email-change audit failure rolls back identity, claim, and revocation", as
   }
 });
 
-test("legacy mode works while keyed mode rejects divergent retained evidence", async () => {
+test("legacy mode uses its digest while keyed mode ignores the non-verifier compatibility column", async () => {
   const legacy = await fixture({ identityContext: legacyContext });
   try {
     await reserve(
@@ -938,10 +937,9 @@ test("legacy mode works while keyed mode rejects divergent retained evidence", a
       `UPDATE email_change_challenges
        SET current_code_hash='divergent' WHERE id=?`,
     ).run(CHALLENGE_ID);
-    await assert.rejects(
-      confirm(keyed.d1, keyed.currentSession.sessionId),
-      (error: unknown) => error instanceof IdentityProtectionError
-        && error.code === "IDENTITY_VALUE_DIVERGED",
+    assert.equal(
+      (await confirm(keyed.d1, keyed.currentSession.sessionId)).status,
+      "confirmed",
     );
     assert.equal(
       (
@@ -949,7 +947,7 @@ test("legacy mode works while keyed mode rejects divergent retained evidence", a
           "SELECT email FROM user_profiles WHERE id=?",
         ).get(USER_ID) as { email: string }
       ).email,
-      CURRENT_EMAIL,
+      NEW_EMAIL,
     );
   } finally {
     keyed.sqlite.close();

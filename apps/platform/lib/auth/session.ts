@@ -7,6 +7,8 @@ import {
   SESSION_COOKIE,
 } from "./session-token";
 import {
+  clearLogoutPendingCookie,
+  logoutPendingCookie,
   sessionCookie,
   sessionCookieUntil,
   sharedAuthCookieDomain,
@@ -16,10 +18,17 @@ import type { LocalAssuranceLevel } from "./session-management";
 
 export {
   DEVICE_CONTINUITY_COOKIE,
+  LOGOUT_PENDING_COOKIE,
   MFA_CHALLENGE_COOKIE,
   SESSION_COOKIE,
 } from "./session-token";
-export { sessionCookie, sessionCookieUntil, sharedAuthCookieDomain };
+export {
+  clearLogoutPendingCookie,
+  logoutPendingCookie,
+  sessionCookie,
+  sessionCookieUntil,
+  sharedAuthCookieDomain,
+};
 
 export type SessionUser = {
   email: string;
@@ -65,9 +74,10 @@ export function clearSessionCookie(domain?: string): string {
 }
 
 /**
- * Replace any legacy host-only session before installing the shared
- * app/lawyer cookie. Browsers may otherwise send two `juro_session` values
- * and the request parser cannot distinguish their cookie scopes.
+ * Install a host-only bearer cookie. The parent-domain expiry removes the
+ * historical shared credential so unrelated juro.uz services no longer
+ * receive authentication cookies; cross-host continuity uses a one-time
+ * audience-bound session handoff instead.
  */
 export function replacementSessionCookies(
   token: string,
@@ -76,8 +86,29 @@ export function replacementSessionCookies(
 ): string[] {
   const sharedDomain = sharedAuthCookieDomain(hostname);
   return [
-    ...(sharedDomain ? [clearSessionCookie()] : []),
-    sessionCookie(token, rememberMe, sharedDomain),
+    ...(sharedDomain ? [clearSessionCookie(sharedDomain)] : []),
+    clearSessionCookie(),
+    clearLogoutPendingCookie(),
+    sessionCookie(token, rememberMe),
+  ];
+}
+
+/**
+ * Replace a rotated bearer credential without extending its persisted
+ * absolute expiry. Legacy parent-domain credentials are expired first.
+ */
+export function replacementSessionCookiesUntil(
+  token: string,
+  expiresAt: string,
+  hostname: string,
+  now = new Date(),
+): string[] {
+  const sharedDomain = sharedAuthCookieDomain(hostname);
+  return [
+    ...(sharedDomain ? [clearSessionCookie(sharedDomain)] : []),
+    clearSessionCookie(),
+    clearLogoutPendingCookie(),
+    sessionCookieUntil(token, expiresAt, now),
   ];
 }
 

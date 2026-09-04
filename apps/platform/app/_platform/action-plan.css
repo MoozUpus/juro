@@ -252,3 +252,66 @@
     transition-duration: .01ms;
   }
 }
+
+html[data-theme="dark"] :is(
+  .plan-step-date input,
+  .plan-step-status select,
+  .deadline-calculator-grid input,
+  .deadline-calculator-grid select,
+  .deadline-calculator-grid textarea,
+  .plan-change-actions > button:not(.plan-primary),
+  .plan-history li > button,
+  .plan-change-preview li
+) {
+  border-color: var(--line);
+  background: var(--white);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .deadline-calculator,
+  .plan-history-diff
+) {
+  border-color: var(--line);
+  background: var(--soft);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .deadline-result,
+  .plan-change-preview,
+  .plan-history li > button[aria-pressed="true"]
+) {
+  border-color: color-mix(in srgb, var(--gold) 42%, var(--line));
+  background: var(--surface-selected);
+}
+
+html[data-theme="dark"] :is(
+  .plan-step-date > span,
+  .deadline-calculator-grid label,
+  .deadline-result dt,
+  .deadline-result p,
+  .deadline-stored-evidence,
+  .plan-change-preview p,
+  .plan-change-preview li span,
+  .plan-history li > button span,
+  .plan-history li > button small,
+  .plan-history-empty,
+  .plan-history-diff ul,
+  .plan-history-diff p
+) {
+  color: var(--muted);
+}
+
+html[data-theme="dark"] :is(
+  .deadline-result dd,
+  .plan-change-preview h3,
+  .plan-change-preview li,
+  .plan-history-diff h4
+) {
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .deadline-calculator-error {
+  color: #f0aaa7;
+}

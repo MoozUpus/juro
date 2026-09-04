@@ -105,8 +105,8 @@ test("client dashboard and calendar actions retain 44px touch targets", async ()
 
   assert.match(dashboard, /\.dashboard-section-title-row > button \{\s+display: inline-flex;\s+min-height: 44px;/);
   assert.match(dashboard, /\.dashboard-section-title-row > button \{\s+width: 44px;\s+padding: 0;/);
-  assert.match(calendar, /\.calendar-tabs button\{min-width:0;min-height:44px/);
-  assert.match(calendar, /@media \(max-width:430px\)\{[\s\S]*?\.calendar-range button\{width:44px;height:44px\}/);
+  assert.match(calendar, /\.calendar-tabs button\s*\{[^}]*min-width:\s*0;[^}]*min-height:\s*44px/s);
+  assert.match(calendar, /@media\s*\(max-width:\s*430px\)\s*\{[\s\S]*?\.calendar-range button\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px/s);
 });
 
 test("dashboard keyboard focus stays visible in the composer and mobile action scroller", async () => {

@@ -70,6 +70,9 @@ const verifiedCorpusFreshnessEntry = journal.entries.find(({ idx }) => idx === 9
 const documentEvaluationReviewsEntry = journal.entries.find(({ idx }) => idx === 92);
 const caseLifecycleEvidenceEntry = journal.entries.find(({ idx }) => idx === 93);
 const caseLifecycleHashGuardEntry = journal.entries.find(({ idx }) => idx === 104);
+const englishPolicyEvidenceEntry = journal.entries.find(({ idx }) => idx === 151);
+const passwordChangedEmailRetryEntry = journal.entries.find(({ idx }) => idx === 152);
+const pendingRegistrationRetentionEntry = journal.entries.find(({ idx }) => idx === 153);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -188,6 +191,18 @@ assert.ok(
 assert.ok(
   caseLifecycleHashGuardEntry,
   "Drizzle journal must contain migration 0104",
+);
+assert.ok(
+  englishPolicyEvidenceEntry,
+  "Drizzle journal must contain migration 0151",
+);
+assert.ok(
+  passwordChangedEmailRetryEntry,
+  "Drizzle journal must contain migration 0152",
+);
+assert.ok(
+  pendingRegistrationRetentionEntry,
+  "Drizzle journal must contain migration 0153",
 );
 
 
@@ -4439,6 +4454,344 @@ test("0091 prevents unreviewed corpus fetches from claiming legal freshness", ()
     assert.throws(
       () => db.prepare("DELETE FROM source_sync_runs WHERE id='verified-success'").run(),
       /SOURCE_SYNC_RUN_IMMUTABLE/,
+    );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0151 preserves immutable policy evidence and permits exact English evidence", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 151)) {
+      applyMigration(db, entry);
+    }
+    const now = "2026-09-04T12:00:00.000Z";
+    const digest = "a".repeat(64);
+    db.prepare(
+      "INSERT INTO user_profiles (id,email,created_at,updated_at) VALUES (?,?,?,?)",
+    ).run("policy-migration-user", "policy-migration@example.test", now, now);
+    db.prepare(`
+      INSERT INTO policy_documents (
+        id,document_key,document_version,locale,content_sha256,status,created_at
+      ) VALUES ('policy-before','terms','legacy-v1','ru',?,'draft',?)
+    `).run(digest, now);
+    db.prepare(`
+      INSERT INTO user_acceptances (
+        id,user_id,document_key,document_version,accepted_at,
+        policy_document_id,locale,content_sha256,acceptance_method,auth_source
+      ) VALUES (
+        'acceptance-before','policy-migration-user','terms','legacy-v1',?,
+        'policy-before','ru',?,'registration_checkbox','email_otp'
+      )
+    `).run(now, digest);
+
+    applyMigration(db, englishPolicyEvidenceEntry);
+
+    assert.deepEqual(
+      { ...db.prepare("SELECT id,locale FROM policy_documents WHERE id='policy-before'").get() },
+      { id: "policy-before", locale: "ru" },
+    );
+    assert.deepEqual(
+      { ...db.prepare("SELECT id,locale FROM user_acceptances WHERE id='acceptance-before'").get() },
+      { id: "acceptance-before", locale: "ru" },
+    );
+    db.prepare(`
+      INSERT INTO policy_documents (
+        id,document_key,document_version,locale,content_sha256,status,created_at
+      ) VALUES ('policy-en','terms','en-v1','en',?,'draft',?)
+    `).run(digest, now);
+    db.prepare(`
+      INSERT INTO user_acceptances (
+        id,user_id,document_key,document_version,accepted_at,
+        policy_document_id,locale,content_sha256,acceptance_method,auth_source
+      ) VALUES (
+        'acceptance-en','policy-migration-user','terms','en-v1',?,
+        'policy-en','en',?,'registration_checkbox','email_otp'
+      )
+    `).run(now, digest);
+    assert.throws(
+      () => db.prepare("UPDATE policy_documents SET status='approved' WHERE id='policy-en'").run(),
+      /policy_documents append-only/,
+    );
+    assert.throws(
+      () => db.prepare("DELETE FROM user_acceptances WHERE id='acceptance-en'").run(),
+      /user_acceptances append-only/,
+    );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0152 preserves email-change jobs and adds exact password-reset retry evidence", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 152)) {
+      applyMigration(db, entry);
+    }
+    const now = "2026-09-04T14:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,created_at,updated_at)
+       VALUES ('security-email-v0152-user','retry@example.test',?,?)`,
+    ).run(now, now);
+    db.prepare(
+      `INSERT INTO workspaces (id,type,name,locale,created_at,updated_at)
+       VALUES ('security-email-v0152-workspace','individual','Retry','ru',?,?)`,
+    ).run(now, now);
+    db.prepare(
+      `INSERT INTO email_change_challenges (
+         id,user_id,session_id,current_email_hash,new_email,
+         current_code_salt,current_code_hash,new_code_salt,new_code_hash,
+         locale,attempt_count,max_attempts,expires_at,created_at
+       ) VALUES (
+         'security-email-v0152-change','security-email-v0152-user',NULL,
+         'current-hash','next@example.test','salt-current','hash-current',
+         'salt-next','hash-next','ru',0,5,?,?
+       )`,
+    ).run("2026-09-04T14:10:00.000Z", now);
+    db.prepare(
+      `INSERT INTO security_email_jobs (
+         id,user_id,workspace_id,challenge_id,event_type,locale,
+         recipient_ciphertext,recipient_iv,recipient_key_version,
+         status,attempt_count,created_at,updated_at
+       ) VALUES (
+         'security-email-v0152-existing','security-email-v0152-user',
+         'security-email-v0152-workspace','security-email-v0152-change',
+         'email_changed_previous_address','ru',?,?,?,'pending',0,?,?
+       )`,
+    ).run("a".repeat(22), "b".repeat(16), "v1", now, now);
+    db.prepare(
+      `INSERT INTO auth_otp_challenges (
+         id,email,email_hash,purpose,locale,account_type,code_salt,code_hash,
+         attempt_count,max_attempts,expires_at,consumed_at,created_at
+       ) VALUES (
+         '22222222-2222-4222-8222-222222222222','retry@example.test',
+         'otp-email-hash','password_reset','en','individual','otp-salt',
+         'otp-code-hash',1,5,?,?,?
+       )`,
+    ).run("2026-09-04T14:10:00.000Z", now, now);
+
+    applyMigration(db, passwordChangedEmailRetryEntry);
+
+    assert.deepEqual({ ...db.prepare(
+      `SELECT event_type AS eventType,challenge_id AS challengeId,
+         auth_otp_challenge_id AS authOtpChallengeId
+       FROM security_email_jobs WHERE id='security-email-v0152-existing'`,
+    ).get() }, {
+      eventType: "email_changed_previous_address",
+      challengeId: "security-email-v0152-change",
+      authOtpChallengeId: null,
+    });
+    db.prepare(
+      `INSERT INTO security_email_jobs (
+         id,user_id,workspace_id,challenge_id,auth_otp_challenge_id,
+         event_type,locale,recipient_ciphertext,recipient_iv,
+         recipient_key_version,status,attempt_count,created_at,updated_at
+       ) VALUES (
+         'security-email-v0152-password','security-email-v0152-user',NULL,NULL,
+         '22222222-2222-4222-8222-222222222222','password_changed','en',
+         ?,?,?,'pending',0,?,?
+       )`,
+    ).run("c".repeat(22), "d".repeat(16), "v1", now, now);
+    assert.throws(
+      () => db.prepare(
+        `INSERT INTO security_email_jobs (
+           id,user_id,workspace_id,challenge_id,auth_otp_challenge_id,
+           event_type,locale,recipient_ciphertext,recipient_iv,
+           recipient_key_version,status,attempt_count,created_at,updated_at
+         ) VALUES (
+           'security-email-v0152-invalid','security-email-v0152-user',NULL,
+           'security-email-v0152-change',NULL,'password_changed','en',
+           ?,?,?,'pending',0,?,?
+         )`,
+      ).run("e".repeat(22), "f".repeat(16), "v1", now, now),
+      /security_email_jobs_context_check/u,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE security_email_jobs SET recipient_ciphertext=?
+         WHERE id='security-email-v0152-password'`,
+      ).run("changed"),
+      /security email recipient is immutable/u,
+    );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0153 adds a constrained pending-registration marker and strictly backfills only registration-shaped rows", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 153)) {
+      applyMigration(db, entry);
+    }
+    const createdAt = "2026-09-04T10:00:00.000Z";
+    const updatedAt = "2026-09-04T11:00:00.000Z";
+    const profileInsert = db.prepare(`
+      INSERT INTO user_profiles (
+        id,email,email_verified_at,created_at,updated_at
+      ) VALUES (?,?,NULL,?,?)
+    `);
+    for (const [id, email] of [
+      ["pending-v0153-eligible", "eligible-v0153@example.test"],
+      ["pending-v0153-session", "session-v0153@example.test"],
+      ["pending-v0153-no-password", "no-password-v0153@example.test"],
+      ["pending-v0153-no-otp", "no-otp-v0153@example.test"],
+      ["pending-v0153-wrong-purpose", "wrong-purpose-v0153@example.test"],
+      ["pending-v0153-wrong-email", "wrong-email-v0153@example.test"],
+      ["pending-v0153-wrong-timestamp", "wrong-timestamp-v0153@example.test"],
+      ["pending-v0153-workspace-creator", "workspace-creator-v0153@example.test"],
+    ]) {
+      profileInsert.run(id, email, createdAt, updatedAt);
+    }
+    const credentialInsert = db.prepare(`
+      INSERT INTO user_password_credentials (
+        user_id,algorithm,iterations,salt_base64url,hash_base64url,
+        password_changed_at,created_at,updated_at
+      ) VALUES (?,'PBKDF2-SHA256',600000,?,?,?,?,?)
+    `);
+    for (const id of [
+      "pending-v0153-eligible",
+      "pending-v0153-session",
+      "pending-v0153-no-otp",
+      "pending-v0153-wrong-purpose",
+      "pending-v0153-wrong-email",
+      "pending-v0153-wrong-timestamp",
+      "pending-v0153-workspace-creator",
+    ]) {
+      credentialInsert.run(
+        id,
+        "s".repeat(22),
+        "h".repeat(43),
+        createdAt,
+        createdAt,
+        updatedAt,
+      );
+    }
+    db.prepare(`
+      INSERT INTO auth_sessions (
+        id,user_id,token_hash,auth_method,assurance_level,
+        authenticated_at,expires_at,created_at,last_seen_at
+      ) VALUES (
+        'pending-v0153-session-id','pending-v0153-session',?,'email_otp',
+        'primary',?, '2026-09-05T11:00:00.000Z',?,?
+      )
+    `).run("a".repeat(64), updatedAt, createdAt, updatedAt);
+    const registrationOtpInsert = db.prepare(`
+      INSERT INTO auth_otp_challenges (
+        id,email,email_hash,purpose,locale,account_type,code_salt,code_hash,
+        attempt_count,max_attempts,expires_at,created_at
+      ) VALUES (?,?,?,'register','ru','individual','otp-salt','otp-hash',
+        0,5,'2026-09-04T11:10:00.000Z',?)
+    `);
+    registrationOtpInsert.run(
+      "pending-v0153-eligible-otp",
+      "eligible-v0153@example.test",
+      "eligible-v0153-hash",
+      updatedAt,
+    );
+    registrationOtpInsert.run(
+      "pending-v0153-session-otp",
+      "session-v0153@example.test",
+      "session-v0153-hash",
+      updatedAt,
+    );
+    registrationOtpInsert.run(
+      "pending-v0153-no-password-otp",
+      "no-password-v0153@example.test",
+      "no-password-v0153-hash",
+      updatedAt,
+    );
+    registrationOtpInsert.run(
+      "pending-v0153-wrong-purpose-otp",
+      "wrong-purpose-v0153@example.test",
+      "wrong-purpose-v0153-hash",
+      updatedAt,
+    );
+    db.prepare(`
+      UPDATE auth_otp_challenges SET purpose='password_reset'
+      WHERE id='pending-v0153-wrong-purpose-otp'
+    `).run();
+    registrationOtpInsert.run(
+      "pending-v0153-wrong-email-otp",
+      "other-v0153@example.test",
+      "wrong-email-v0153-hash",
+      updatedAt,
+    );
+    registrationOtpInsert.run(
+      "pending-v0153-wrong-timestamp-otp",
+      "wrong-timestamp-v0153@example.test",
+      "wrong-timestamp-v0153-hash",
+      "2026-09-04T10:59:59.000Z",
+    );
+    db.prepare(`
+      UPDATE auth_otp_challenges SET invalidated_at=?
+      WHERE id='pending-v0153-eligible-otp'
+    `).run("2026-09-04T11:01:00.000Z");
+    registrationOtpInsert.run(
+      "pending-v0153-workspace-creator-otp",
+      "workspace-creator-v0153@example.test",
+      "workspace-creator-v0153-hash",
+      updatedAt,
+    );
+    db.prepare(`
+      INSERT INTO workspaces (
+        id,type,name,created_by_user_id,locale,created_at,updated_at
+      ) VALUES (
+        'pending-v0153-created-workspace','individual','Pending workspace',
+        'pending-v0153-workspace-creator','ru',?,?
+      )
+    `).run(createdAt, updatedAt);
+
+    applyMigration(db, pendingRegistrationRetentionEntry);
+
+    assert.deepEqual(
+      db.prepare(`
+        SELECT user_id AS userId,expires_at AS expiresAt,
+          created_at AS createdAt,updated_at AS updatedAt
+        FROM auth_pending_registrations ORDER BY user_id
+      `).all().map((row) => ({ ...row })),
+      [{
+        userId: "pending-v0153-eligible",
+        expiresAt: "2026-09-05T11:00:00.000Z",
+        createdAt,
+        updatedAt,
+      }],
+    );
+    assert.deepEqual(
+      db.prepare("PRAGMA index_info('auth_pending_registrations_expiry_idx')")
+        .all().map((row) => ({ ...row })),
+      [
+        { seqno: 0, cid: 1, name: "expires_at" },
+        { seqno: 1, cid: 0, name: "user_id" },
+      ],
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_pending_registrations (
+          user_id,expires_at,created_at,updated_at
+        ) VALUES ('pending-v0153-no-password',?,?,?)
+      `).run(updatedAt, createdAt, updatedAt),
+      /auth_pending_registrations_expiry_check/u,
+    );
+    db.prepare(
+      "DELETE FROM user_profiles WHERE id='pending-v0153-eligible'",
+    ).run();
+    assert.equal(
+      (db.prepare(
+        "SELECT count(*) AS total FROM auth_pending_registrations",
+      ).get() as { total: number }).total,
+      0,
+    );
+    assert.deepEqual(
+      { ...db.prepare("PRAGMA quick_check").get() },
+      { quick_check: "ok" },
     );
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {

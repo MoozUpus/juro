@@ -24,6 +24,10 @@ import { MfaError } from "../../../../../lib/auth/mfa-service";
 import { clearSessionCookie } from "../../../../../lib/auth/session";
 import { sharedAuthCookieDomain } from "../../../../../lib/auth/session-persistence";
 import {
+  renderJuroAuthEmail,
+  sendJuroAuthEmail,
+} from "../../../../../lib/auth/transactional-email";
+import {
   assertSafeWrite,
   withApiErrors,
 } from "../../../../../lib/document-builder/auth/api";
@@ -297,35 +301,19 @@ export const POST = withApiErrors(async function POST(request: Request) {
       );
     }
 
-    const subject =
-      locale === "ru"
-        ? "Подтверждение удаления аккаунта JURO"
-        : "JURO hisobini o‘chirishni tasdiqlash";
-    const html =
-      locale === "ru"
-        ? `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Подтверждение удаления JURO</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${code}</p><p>Код действует 10 минут. Если вы не запрашивали удаление аккаунта, никому не сообщайте код и завершите другие сессии в настройках безопасности.</p></div>`
-        : `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>JURO hisobini o‘chirishni tasdiqlash</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${code}</p><p>Kod 10 daqiqa amal qiladi. Hisobni o‘chirishni so‘ramagan bo‘lsangiz, kodni hech kimga bermang va xavfsizlik sozlamalarida boshqa sessiyalarni yakunlang.</p></div>`;
-    let sent: Response | null = null;
-    try {
-      sent = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${env.RESEND_API_KEY}`,
-          "content-type": "application/json",
-          "idempotency-key": `juro_account_deletion_${id}`,
-        },
-        body: JSON.stringify({
-          from: env.EMAIL_FROM,
-          to: [session.email],
-          subject,
-          html,
-        }),
-        signal: AbortSignal.timeout(8_000),
-      });
-    } catch {
-      sent = null;
-    }
-    if (!sent?.ok) {
+    const message = renderJuroAuthEmail({
+      locale,
+      purpose: "account_deletion",
+      code,
+    });
+    const sent = await sendJuroAuthEmail({
+      apiKey: env.RESEND_API_KEY,
+      from: env.EMAIL_FROM,
+      to: session.email,
+      idempotencyKey: `juro_account_deletion_${id}`,
+      message,
+    });
+    if (!sent) {
       await invalidateAccountDeletionChallenge(db, {
         id,
         userId: session.userId,

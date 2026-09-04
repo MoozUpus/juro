@@ -21,6 +21,7 @@ import { uz } from "../../../content/uz";
 import { en } from "../../../content/en";
 import type { PublicLanguage } from "../../../content/types";
 import { SiteFooter, SiteHeader } from "./SiteChrome";
+import { platformPersonalHref, platformRegistrationHref } from "./platform-hrefs";
 import { JuroMotionDirector } from "./JuroMotionDirector";
 import styles from "./juro-home.module.css";
 import motionStyles from "./juro-motion.module.css";
@@ -251,7 +252,6 @@ const englishCopy = {
 export function JuroHomepage({ language }: { language: PublicLanguage }) {
   const t = language === "en" ? englishCopy : copy[language];
   const content = language === "ru" ? ru : language === "uz" ? uz : en;
-  const platformLocale = language === "en" ? "ru" : language;
   const [scenario, setScenario] = useState(0);
   const [processStep, setProcessStep] = useState(0);
   const [clause, setClause] = useState(0);
@@ -261,7 +261,7 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
   const activeScenario = t.scenarios[scenario];
   const processLabels = [t.hero.facts, t.hero.risk, t.hero.source, t.hero.action];
   const activeClause = t.document.clauses[clause];
-  const register = `https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`;
+  const register = platformRegistrationHref(language);
 
   const scrollToSection = (targetId: string) => {
     const target = document.getElementById(targetId);
@@ -439,7 +439,7 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
                 <small>{t.document.finding}</small><strong>{activeClause[2]}</strong>
                 <small>{t.document.revision}</small><blockquote>{activeClause[3]}</blockquote>
               </div>
-              <a href={`https://app.juro.uz/${platformLocale}/individual/document-analysis`}>{t.document.cta}<ArrowRight aria-hidden="true" size={17} /></a>
+              <a href={platformPersonalHref(language, "/document-analysis")}>{t.document.cta}<ArrowRight aria-hidden="true" size={17} /></a>
             </div>
           </div>
         </section>

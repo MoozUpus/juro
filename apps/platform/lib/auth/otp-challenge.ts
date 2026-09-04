@@ -41,7 +41,7 @@ async function loadChallenge(
   db: D1Database,
   input: {
     challengeId: string;
-    purpose: "login" | "register";
+    purpose: "login" | "register" | "password_reset";
   },
 ): Promise<OtpChallengeRow | null> {
   return db.prepare(`
@@ -105,7 +105,7 @@ async function validatedChallenge(
     identityContext: IdentityProtectionContext;
     challengeId: string;
     email: string;
-    purpose: "login" | "register";
+    purpose: "login" | "register" | "password_reset";
   },
 ): Promise<OtpChallengeRow | null> {
   const challenge = await loadChallenge(db, input);
@@ -133,7 +133,7 @@ export async function consumeOtpChallenge(
     identityContext: IdentityProtectionContext;
     challengeId: string;
     email: string;
-    purpose: "login" | "register";
+    purpose: "login" | "register" | "password_reset";
     code: string;
     now: string;
   },

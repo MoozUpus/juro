@@ -181,6 +181,40 @@ test("serves public login and registration routes", async () => {
   }
 });
 
+test("lawyer auth uses same-origin icons and permits the injected Cloudflare analytics beacon", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(
+    new Request("https://lawyer.juro.uz/ru/auth/login", {
+      headers: { accept: "text/html" },
+    }),
+    runtime,
+    context,
+  );
+
+  assert.equal(response.status, 200);
+  const policy = response.headers.get("content-security-policy") ?? "";
+  assert.match(
+    policy,
+    /script-src [^;]*https:\/\/static\.cloudflareinsights\.com(?:\s|;)/,
+  );
+  assert.match(
+    policy,
+    /connect-src 'self' https:\/\/cloudflareinsights\.com;/,
+  );
+  assert.doesNotMatch(policy, /script-src [^;]*\*/);
+
+  const html = await response.text();
+  assert.match(html, /<link rel="icon" href="\/favicon\.png"\s*\/?>/);
+  assert.match(
+    html,
+    /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png"\s*\/?>/,
+  );
+  assert.doesNotMatch(
+    html,
+    /href="https:\/\/app\.juro\.uz\/(?:favicon|apple-touch-icon)/,
+  );
+});
+
 test("keeps the legal-source staff inbox hidden while its exact flag is false", async () => {
   const worker = await createWorker();
   const response = await worker.fetch(
@@ -736,7 +770,7 @@ test("serves app-specific legal pages in both languages with noindex", async () 
     const html = await response.text();
     assert.match(html, /JURO/);
     assert.match(html, /Условия|Политика|cookies|AIdan|Shaxsiy|maxfiylik|cookie|qoidalari/);
-    assert.match(html, /2026-07-26\.draft\.1/);
+    assert.match(html, /2026-09-04\.draft\.2/);
     assert.match(html, /SHA-256/);
     assert.match(html, /Проект для юридического утверждения|Yuridik tasdiqlash uchun loyiha/);
   }

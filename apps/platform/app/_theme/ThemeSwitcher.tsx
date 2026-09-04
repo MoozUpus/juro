@@ -5,14 +5,14 @@ import { useEffect, useSyncExternalStore } from "react";
 import { isThemeMode, type ThemeMode } from "./theme";
 
 type Props = {
-  locale: "ru" | "uz";
+  locale: "ru" | "uz" | "en";
   compact?: boolean;
   persistAccount?: boolean;
 };
 
 const options = [
-  ["light", Sun, "Светлая", "Yorug‘"],
-  ["dark", Moon, "Тёмная", "Qorong‘i"],
+  ["light", Sun, "Светлая", "Yorug‘", "Light"],
+  ["dark", Moon, "Тёмная", "Qorong‘i", "Dark"],
 ] as const;
 
 const THEME_CHANGE_EVENT = "juro-theme-change";
@@ -28,9 +28,8 @@ function markThemeInteraction() {
 }
 
 function readThemeMode(): ThemeMode {
-  if (typeof document === "undefined") return "system";
+  if (typeof document === "undefined") return "light";
   const value = document.documentElement.dataset.themeMode;
-  if (value === "system") return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   return isThemeMode(value) ? value : "light";
 }
 
@@ -44,25 +43,31 @@ function announceThemeMode() {
 }
 
 function applyTheme(mode: ThemeMode) {
-  const resolved = mode === "system"
-    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-    : mode;
   document.documentElement.dataset.themeMode = mode;
-  document.documentElement.dataset.theme = resolved;
-  document.documentElement.style.colorScheme = resolved;
+  document.documentElement.dataset.theme = mode;
+  document.documentElement.style.colorScheme = mode;
 }
 
 function writePreference(mode: ThemeMode) {
-  localStorage.setItem("juro-theme", mode);
+  try {
+    localStorage.setItem("juro-theme", mode);
+  } catch {
+    // Storage can be unavailable in privacy-restricted contexts; the live
+    // document theme and cookie still provide a useful fallback.
+  }
   const shared = window.location.hostname === "juro.uz" || window.location.hostname.endsWith(".juro.uz");
-  document.cookie = `juro_theme=${mode}; Path=/; Max-Age=31536000; SameSite=Lax${shared ? "; Domain=.juro.uz; Secure" : ""}`;
+  try {
+    document.cookie = `juro_theme=${mode}; Path=/; Max-Age=31536000; SameSite=Lax${shared ? "; Domain=.juro.uz; Secure" : ""}`;
+  } catch {
+    // Applying the in-page theme must not depend on cookie availability.
+  }
 }
 
 export function ThemeSwitcher({ locale, compact = false, persistAccount = true }: Props) {
   const mode = useSyncExternalStore(
     subscribeThemeMode,
     readThemeMode,
-    () => "system",
+    () => "light",
   );
 
   useEffect(() => {
@@ -80,14 +85,6 @@ export function ThemeSwitcher({ locale, compact = false, persistAccount = true }
       .catch(() => undefined);
     return () => controller.abort();
   }, [persistAccount]);
-
-  useEffect(() => {
-    if (mode !== "system") return;
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-    const update = () => applyTheme("system");
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, [mode]);
 
   async function select(next: ThemeMode) {
     markThemeInteraction();
@@ -107,9 +104,9 @@ export function ThemeSwitcher({ locale, compact = false, persistAccount = true }
   }
 
   return (
-    <div className={`theme-switcher ${compact ? "is-compact" : ""}`} role="group" aria-label={locale === "ru" ? "Тема оформления" : "Ko‘rinish mavzusi"}>
-      {options.map(([value, Icon, ru, uz]) => {
-        const label = locale === "ru" ? ru : uz;
+    <div className={`theme-switcher ${compact ? "is-compact" : ""}`} role="group" aria-label={locale === "ru" ? "Тема оформления" : locale === "uz" ? "Ko‘rinish mavzusi" : "Appearance theme"}>
+      {options.map(([value, Icon, ru, uz, en]) => {
+        const label = locale === "ru" ? ru : locale === "uz" ? uz : en;
         return (
           <button
             type="button"

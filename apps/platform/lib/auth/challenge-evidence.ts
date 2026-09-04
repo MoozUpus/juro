@@ -57,7 +57,7 @@ type StoredEvidence = {
 
 function authOtpCodeValue(input: {
   challengeId: string;
-  purpose: "login" | "register";
+  purpose: "login" | "register" | "password_reset";
   codeSalt: string;
   code: string;
 }): string {
@@ -147,13 +147,17 @@ async function prepareCodeEvidence(
       | "email-change-current-code" | "email-change-new-code";
   },
 ): Promise<PreparedChallengeCodeEvidence> {
-  const [legacyHash, keyed] = await Promise.all([
-    sha256(input.legacyNormalizedValue),
-    prepareKeyedIdentityEvidence(context, {
-      normalizedValue: input.normalizedValue,
-      purpose: input.purpose,
-    }),
-  ]);
+  const keyed = await prepareKeyedIdentityEvidence(context, {
+    normalizedValue: input.normalizedValue,
+    purpose: input.purpose,
+  });
+  // In keyed modes the compatibility column remains NOT NULL for rolling
+  // migrations, but it must not retain an offline-testable digest of a
+  // six-digit code. Hashing the server-keyed digest preserves the column
+  // contract without exposing a verifier that can be brute-forced from D1.
+  const legacyHash = keyed.lookupHash
+    ? await sha256(`keyed-only:${keyed.lookupHash}`)
+    : await sha256(input.legacyNormalizedValue);
   return {
     legacyHash,
     lookupHash: keyed.lookupHash,
@@ -167,7 +171,7 @@ export async function prepareAuthOtpChallengeEvidence(
     challengeId: string;
     email: string;
     requestIp: string | null;
-    purpose: "login" | "register";
+    purpose: "login" | "register" | "password_reset";
     codeSalt: string;
     code: string;
   },
@@ -221,16 +225,19 @@ export async function authOtpCodeMatches(
   context: IdentityProtectionContext,
   input: {
     challengeId: string;
-    purpose: "login" | "register";
+    purpose: "login" | "register" | "password_reset";
     codeSalt: string;
     code: string;
     evidence: StoredEvidence;
   },
 ): Promise<boolean> {
   const legacyNormalizedValue = `${input.codeSalt}:${input.code}`;
+  const hasKeyedEvidence = Boolean(
+    input.evidence.lookupHash && input.evidence.lookupKeyVersion,
+  );
   return identityEvidenceMatches(context, {
     normalizedValue: authOtpCodeValue(input),
-    legacyNormalizedValue,
+    ...(hasKeyedEvidence ? {} : { legacyNormalizedValue }),
     purpose: "auth-otp-code",
     legacyHash: input.evidence.legacyHash,
     lookupHash: input.evidence.lookupHash,
@@ -291,9 +298,12 @@ export async function accountDeletionCodeMatches(
   },
 ): Promise<boolean> {
   const legacyNormalizedValue = `${input.codeSalt}:${input.code}`;
+  const hasKeyedEvidence = Boolean(
+    input.evidence.lookupHash && input.evidence.lookupKeyVersion,
+  );
   return identityEvidenceMatches(context, {
     normalizedValue: accountDeletionCodeValue(input),
-    legacyNormalizedValue,
+    ...(hasKeyedEvidence ? {} : { legacyNormalizedValue }),
     purpose: "account-deletion-code",
     legacyHash: input.evidence.legacyHash,
     lookupHash: input.evidence.lookupHash,
@@ -436,9 +446,12 @@ export async function emailChangeCodeMatches(
   },
 ): Promise<boolean> {
   const legacyNormalizedValue = `${input.codeSalt}:${input.code}`;
+  const hasKeyedEvidence = Boolean(
+    input.evidence.lookupHash && input.evidence.lookupKeyVersion,
+  );
   return identityEvidenceMatches(context, {
     normalizedValue: emailChangeCodeValue(input),
-    legacyNormalizedValue,
+    ...(hasKeyedEvidence ? {} : { legacyNormalizedValue }),
     purpose: input.destination === "current"
       ? "email-change-current-code"
       : "email-change-new-code",

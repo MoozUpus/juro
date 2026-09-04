@@ -5,20 +5,30 @@ import {
   type PolicyLocale,
 } from "./policies";
 
-export async function recordRegistrationAcceptances(
+type RegistrationAcceptanceInput = {
+  userId: string;
+  locale: PolicyLocale;
+  otpChallengeId: string;
+  acceptedMarketing: boolean;
+  acceptedAt: string;
+};
+
+export type RegistrationAcceptanceWrite = {
+  statements: D1PreparedStatement[];
+  mandatoryPolicyIds: string[];
+};
+
+export async function prepareRegistrationAcceptanceWrite(
   db: D1Database,
-  input: {
-    userId: string;
-    locale: PolicyLocale;
-    otpChallengeId: string;
-    acceptedMarketing: boolean;
-    acceptedAt: string;
-  },
-): Promise<void> {
+  input: RegistrationAcceptanceInput,
+): Promise<RegistrationAcceptanceWrite> {
   const [registry, mandatory] = await Promise.all([
     policyRegistry(input.locale),
     registrationPolicies(input.locale),
   ]);
+  if (mandatory.length === 0) {
+    throw new Error("REGISTRATION_ACCEPTANCE_POLICY_SET_EMPTY");
+  }
   const evidenceJson = JSON.stringify({
     otpChallengeId: input.otpChallengeId,
     source: "registration",
@@ -88,21 +98,39 @@ export async function recordRegistrationAcceptances(
       ),
     );
   }
-  await db.batch(statements);
+  return {
+    statements,
+    mandatoryPolicyIds: mandatory.map(({ id }) => id),
+  };
+}
+
+export async function recordRegistrationAcceptances(
+  db: D1Database,
+  input: RegistrationAcceptanceInput,
+): Promise<void> {
+  const write = await prepareRegistrationAcceptanceWrite(db, input);
+  await db.batch(write.statements);
 
   const verified = await db.prepare(
     `SELECT count(*) AS total
      FROM user_acceptances acceptance
      JOIN policy_documents policy ON policy.id=acceptance.policy_document_id
      WHERE acceptance.user_id=?
+       AND acceptance.policy_document_id IN (${
+         write.mandatoryPolicyIds.map(() => "?").join(",")
+       })
        AND acceptance.acceptance_method='registration_checkbox'
        AND acceptance.auth_source='email_otp'
        AND acceptance.locale=?
        AND acceptance.content_sha256=policy.content_sha256
        AND acceptance.document_key=policy.document_key
        AND acceptance.document_version=policy.document_version`,
-  ).bind(input.userId, input.locale).first<{ total: number }>();
-  if (Number(verified?.total ?? 0) !== mandatory.length) {
+  ).bind(
+    input.userId,
+    ...write.mandatoryPolicyIds,
+    input.locale,
+  ).first<{ total: number }>();
+  if (Number(verified?.total ?? 0) !== write.mandatoryPolicyIds.length) {
     throw new Error("POLICY_ACCEPTANCE_EVIDENCE_MISMATCH");
   }
 }

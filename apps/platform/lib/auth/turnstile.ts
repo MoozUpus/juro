@@ -2,7 +2,16 @@ import { z } from "zod";
 
 const TURNSTILE_SITEVERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-const TURNSTILE_ACTION = "auth_otp";
+export const authTurnstileActions = {
+  passwordLogin: "auth_password_login",
+  registration: "auth_registration",
+  registrationResend: "auth_registration_resend",
+  passwordReset: "auth_password_reset",
+  passwordResetResend: "auth_password_reset_resend",
+} as const;
+
+export type AuthTurnstileAction =
+  typeof authTurnstileActions[keyof typeof authTurnstileActions];
 
 const siteverifySchema = z.object({
   success: z.boolean(),
@@ -21,7 +30,7 @@ export async function validateTurnstile(input: {
   token: string;
   remoteIp: string | null;
   expectedHostname: string;
-  expectedAction: string;
+  expectedAction: string | readonly string[];
   fetcher?: typeof fetch;
 }): Promise<TurnstileValidationResult> {
   const secretKey = input.secretKey.trim();
@@ -59,9 +68,14 @@ export async function validateTurnstile(input: {
     return { status: "unavailable" };
   }
   if (!parsed.success) return { status: "invalid" };
+  const expectedActions = typeof input.expectedAction === "string"
+    ? [input.expectedAction]
+    : [...input.expectedAction];
   if (
-    !/^[a-z][a-z0-9_]{2,31}$/.test(input.expectedAction)
-    || parsed.action !== input.expectedAction
+    expectedActions.length === 0
+    || expectedActions.some(action => !/^[a-z][a-z0-9_]{2,31}$/.test(action))
+    || !parsed.action
+    || !expectedActions.includes(parsed.action)
   ) return { status: "invalid" };
   if (parsed.hostname?.toLocaleLowerCase() !== expectedHostname) {
     return { status: "invalid" };
@@ -74,10 +88,16 @@ export function validateAuthTurnstile(input: {
   token: string;
   remoteIp: string | null;
   expectedHostname: string;
+  expectedActions: readonly AuthTurnstileAction[];
   fetcher?: typeof fetch;
 }): Promise<TurnstileValidationResult> {
-  return validateTurnstile({ ...input, expectedAction: TURNSTILE_ACTION });
+  if (input.expectedActions.length === 0) {
+    return Promise.resolve({ status: "invalid" });
+  }
+  return validateTurnstile({
+    ...input,
+    expectedAction: input.expectedActions,
+  });
 }
 
-export const authTurnstileAction = TURNSTILE_ACTION;
 export const guestAiTurnstileAction = "guest_ai";

@@ -4,45 +4,72 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
+  ArrowLeft,
   ArrowRight,
   BriefcaseBusiness,
+  Check,
   CheckCircle2,
+  Eye,
+  EyeOff,
   KeyRound,
   Languages,
   LoaderCircle,
+  LockKeyhole,
   RotateCcw,
   Scale,
   ShieldCheck,
+  Sparkles,
   UserRound,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { TurnstileWidget } from "./TurnstileWidget";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ThemeSwitcher } from "../_theme/ThemeSwitcher";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 type AccountType = "individual" | "entrepreneur" | "lawyer";
-type Locale = "ru" | "uz";
+type Locale = "ru" | "uz" | "en";
+type Step = "details" | "verification" | "mfa" | "recovery-request" | "recovery-code" | "recovery-success";
 
 type Props = {
   mode: "login" | "register";
   initialLocale: Locale;
   initialAccountType?: AccountType;
   returnTo?: string;
-  otpEnabled: boolean;
+  passwordAuthEnabled: boolean;
+  emailAuthEnabled: boolean;
   platformAuthEnabled: boolean;
   developmentAuthEnabled: boolean;
   turnstileSiteKey?: string;
 };
 
-type OtpResponse = {
+type Handoff = {
+  action: string;
+  ticket: string;
+  expiresAt: string;
+};
+
+type AuthResponse = {
   challengeId?: string;
   expiresInSeconds?: number;
   resendAfterSeconds?: number;
   retryAfterSeconds?: number;
   redirectTo?: string;
   requiresTwoFactor?: boolean;
+  handoff?: Handoff | null;
+  message?: string;
   error?: string;
   code?: string;
 };
+
+type Copy = { ru: string; uz: string; en: string };
+
+const AUTH_HANDOFF_ACTIONS = new Set([
+  "https://app.juro.uz/api/auth/session-handoff",
+  "https://lawyer.juro.uz/api/auth/session-handoff",
+]);
+
+function copy(locale: Locale, value: Copy): string {
+  return value[locale];
+}
 
 function safeReturnPath(value?: string): string | null {
   if (!value?.startsWith("/") || value.startsWith("//")) return null;
@@ -50,11 +77,156 @@ function safeReturnPath(value?: string): string | null {
     const url = new URL(value, "https://app.juro.uz");
     if (url.origin !== "https://app.juro.uz") return null;
     if (["/login", "/register", "/signin-with-chatgpt", "/signout-with-chatgpt", "/callback"].includes(url.pathname)) return null;
-    if (/^\/(?:ru|uz)\/auth\/(?:login|register)\/?$/.test(url.pathname)) return null;
+    if (/^\/(?:ru|uz|en)\/auth\/(?:login|register)\/?$/u.test(url.pathname)) return null;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return null;
   }
+}
+
+function normalizeEmailInput(value: string): string {
+  return value.trim().toLocaleLowerCase("en-US");
+}
+
+function passwordScore(password: string): number {
+  if (!password) return 0;
+  let score = password.length >= 8 ? 1 : 0;
+  if (password.length >= 12) score += 1;
+  if (/\p{Ll}/u.test(password) && /\p{Lu}/u.test(password)) score += 1;
+  if (/\d/u.test(password) || /[^\p{L}\d\s]/u.test(password)) score += 1;
+  return Math.min(4, score);
+}
+
+function validHandoff(handoff: Handoff): boolean {
+  if (!/^[A-Za-z0-9_-]{43}$/u.test(handoff.ticket)) return false;
+  const expiresAt = Date.parse(handoff.expiresAt);
+  // The receiving server is authoritative for expiry. Client clocks can be
+  // wrong, so only reject malformed timestamps here.
+  if (!Number.isFinite(expiresAt)) return false;
+  try {
+    const action = new URL(handoff.action);
+    return !action.username
+      && !action.password
+      && !action.search
+      && !action.hash
+      && AUTH_HANDOFF_ACTIONS.has(action.href);
+  } catch {
+    return false;
+  }
+}
+
+function safeAuthenticationDestination(value?: string): string | null {
+  if (!value) return null;
+  try {
+    const destination = new URL(value, window.location.origin);
+    const sameOrigin = destination.origin === window.location.origin;
+    const safeRelativePath = value.startsWith("/") && !value.startsWith("//");
+    const absoluteSameOrigin = /^https?:\/\//u.test(value) && sameOrigin;
+    if (
+      destination.username
+      || destination.password
+      || (!safeRelativePath && !absoluteSameOrigin)
+    ) return null;
+    return safeRelativePath
+      ? `${destination.pathname}${destination.search}${destination.hash}`
+      : destination.href;
+  } catch {
+    return null;
+  }
+}
+
+function submitHandoff(handoff: Handoff): void {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = handoff.action;
+  form.style.display = "none";
+  form.referrerPolicy = "no-referrer";
+  const ticket = document.createElement("input");
+  ticket.type = "hidden";
+  ticket.name = "ticket";
+  ticket.value = handoff.ticket;
+  form.appendChild(ticket);
+  document.body.appendChild(form);
+  form.submit();
+}
+
+function PasswordField({
+  locale,
+  id,
+  name,
+  label,
+  value,
+  onChange,
+  autoComplete,
+  describedBy,
+  invalid = false,
+}: {
+  locale: Locale;
+  id: string;
+  name: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: "current-password" | "new-password";
+  describedBy?: string;
+  invalid?: boolean;
+}) {
+  const [visible, setVisible] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
+  const tooLong = value.length > 256;
+  const trackCapsLock = (event: KeyboardEvent<HTMLInputElement>) => {
+    setCapsLock(event.getModifierState("CapsLock"));
+  };
+  const capsLockId = `${id}-caps-lock`;
+  const tooLongId = `${id}-too-long`;
+  const descriptionIds = [describedBy, capsLock ? capsLockId : null, tooLong ? tooLongId : null]
+    .filter(Boolean)
+    .join(" ") || undefined;
+  const toggleLabel = visible
+    ? copy(locale, { ru: "Скрыть пароль", uz: "Parolni yashirish", en: "Hide password" })
+    : copy(locale, { ru: "Показать пароль", uz: "Parolni ko‘rsatish", en: "Show password" });
+  return (
+    <div className="auth-field">
+      <label htmlFor={id}>{label}</label>
+      <span className="auth-password-control">
+        <input
+          id={id}
+          name={name}
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={trackCapsLock}
+          onKeyUp={trackCapsLock}
+          onBlur={() => setCapsLock(false)}
+          required
+          minLength={8}
+          autoComplete={autoComplete}
+          aria-describedby={descriptionIds}
+          aria-invalid={invalid || tooLong || undefined}
+        />
+        <button
+          type="button"
+          className="auth-password-toggle"
+          onClick={() => setVisible((current) => !current)}
+          aria-controls={id}
+          aria-label={toggleLabel}
+          aria-pressed={visible}
+        >
+          {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+        </button>
+      </span>
+      {capsLock && <small id={capsLockId} className="auth-caps" role="status">{copy(locale, {
+        ru: "Включён Caps Lock",
+        uz: "Caps Lock yoqilgan",
+        en: "Caps Lock is on",
+      })}</small>}
+      {tooLong && <small id={tooLongId} className="auth-field-error" role="alert">{copy(locale, {
+        ru: "Максимум 256 символов. Введённое значение не было обрезано.",
+        uz: "Ko‘pi bilan 256 ta belgi. Kiritilgan qiymat qisqartirilmadi.",
+        en: "Maximum 256 characters. Your value was not truncated.",
+      })}</small>}
+    </div>
+  );
 }
 
 export function AuthForm({
@@ -62,169 +234,311 @@ export function AuthForm({
   initialLocale,
   initialAccountType = "individual",
   returnTo,
-  otpEnabled,
+  passwordAuthEnabled,
+  emailAuthEnabled,
   platformAuthEnabled,
   developmentAuthEnabled,
   turnstileSiteKey,
 }: Props) {
-  // Locale is route-owned. Keeping it in client state makes a Next soft
-  // navigation render the new /ru or /uz URL with the previous language.
   const locale = initialLocale;
+  const tr = (value: Copy) => copy(locale, value);
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const seededEmail = normalizeEmailInput(searchParams.get("email")?.slice(0, 254) ?? "");
   const [accountType, setAccountType] = useState<AccountType>(initialAccountType);
-  const [step, setStep] = useState<"details" | "code" | "mfa">("details");
+  const [step, setStep] = useState<Step>("details");
   const [challengeId, setChallengeId] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(seededEmail);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [acceptPrivacy, setAcceptPrivacy] = useState(false);
-  const [acceptPersonalData, setAcceptPersonalData] = useState(false);
-  const [marketing, setMarketing] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileReset, setTurnstileReset] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const previousStep = useRef(step);
   const emailInput = useRef<HTMLInputElement>(null);
   const otpInput = useRef<HTMLInputElement>(null);
   const mfaInput = useRef<HTMLInputElement>(null);
-  const ru = locale === "ru";
+  const successPanel = useRef<HTMLDivElement>(null);
   const lawyerProduct = initialAccountType === "lawyer";
   const explicitReturnTo = safeReturnPath(returnTo);
   const protectedReturnTo = explicitReturnTo ?? "/";
-  const localeHref = (nextLocale: Locale): string => {
-    const localePath = pathname.replace(/^\/(?:ru|uz)(?=\/|$)/u, `/${nextLocale}`);
-    const targetPath = localePath === pathname ? `/${nextLocale}/auth/${mode}` : localePath;
-    const query = searchParams.toString();
-    return query ? `${targetPath}?${query}` : targetPath;
-  };
+  const strength = passwordScore(password);
+  const passwordsMatch = password === confirmPassword;
+  const passwordValid = password.length >= 8 && password.length <= 256;
+  const legalLocale = locale;
+  const authNotice = authenticationNotice({
+    locale,
+    logout: searchParams.get("logout"),
+    session: searchParams.get("session") ?? searchParams.get("reason"),
+    handoff: searchParams.get("handoff"),
+  });
   const masked = useMemo(() => {
     const [name, domain] = email.split("@");
     return domain ? `${name.slice(0, 2)}•••@${domain}` : email;
   }, [email]);
 
+  const localeHref = (nextLocale: Locale): string => {
+    const localePath = pathname.replace(/^\/(?:ru|uz|en)(?=\/|$)/u, `/${nextLocale}`);
+    const targetPath = localePath === pathname ? `/${nextLocale}/auth/${mode}` : localePath;
+    const query = searchParams.toString();
+    return query ? `${targetPath}?${query}` : targetPath;
+  };
+
   useEffect(() => {
     if (cooldown <= 0) return;
-    const timer = window.setInterval(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
+    const timer = window.setInterval(() => setCooldown((value) => Math.max(0, value - 1)), 1_000);
     return () => window.clearInterval(timer);
   }, [cooldown]);
 
   useEffect(() => {
     if (previousStep.current === step) return;
     previousStep.current = step;
-    const target = step === "details"
+    if (step === "recovery-success") {
+      successPanel.current?.focus();
+      return;
+    }
+    const target = step === "details" || step === "recovery-request"
       ? emailInput.current
-      : step === "code"
+      : step === "verification" || step === "recovery-code"
         ? otpInput.current
-        : mfaInput.current;
+        : step === "mfa"
+          ? mfaInput.current
+          : null;
     target?.focus();
   }, [step]);
 
-  async function sendCode() {
+  function resetTurnstile() {
+    setTurnstileToken("");
+    setTurnstileReset((value) => value + 1);
+  }
+
+  function clearFeedback() {
     setError("");
+    setErrorCode("");
+    setSuccessMessage("");
+  }
+
+  function returnToDetails() {
+    clearFeedback();
+    setStep("details");
+    setChallengeId("");
+    setCode("");
+    setMfaCode("");
+    setCooldown(0);
+    resetTurnstile();
+  }
+
+  function completeAuthentication(data: AuthResponse) {
+    if (data.handoff) {
+      if (!validHandoff(data.handoff)) {
+        throw new Error(tr({
+          ru: "Сервер вернул недействительный маршрут передачи сессии.",
+          uz: "Server sessiyani uzatish uchun yaroqsiz yo‘l qaytardi.",
+          en: "The server returned an invalid session handoff destination.",
+        }));
+      }
+      submitHandoff(data.handoff);
+      return;
+    }
+    const destination = safeAuthenticationDestination(data.redirectTo);
+    if (!destination) {
+      throw new Error(tr({
+        ru: "Сервер не вернул безопасный маршрут продолжения.",
+        uz: "Server xavfsiz davom etish yo‘lini qaytarmadi.",
+        en: "The server did not return a safe destination.",
+      }));
+    }
+    window.location.replace(destination);
+  }
+
+  async function readResponse(response: Response): Promise<AuthResponse> {
+    try {
+      return await response.json() as AuthResponse;
+    } catch {
+      return {};
+    }
+  }
+
+  async function login(event: FormEvent) {
+    event.preventDefault();
+    clearFeedback();
     if (!turnstileToken) {
-      setError(ru
-        ? "Дождитесь завершения проверки безопасности."
-        : "Xavfsizlik tekshiruvi tugashini kuting.");
+      setError(tr({ ru: "Дождитесь завершения проверки безопасности.", uz: "Xavfsizlik tekshiruvi tugashini kuting.", en: "Wait for the security check to finish." }));
       return;
     }
     setPending(true);
+    const normalizedEmail = normalizeEmailInput(email);
+    setEmail(normalizedEmail);
     try {
-      const response = await fetch("/api/auth/request-otp", {
+      const response = await fetch("/api/auth/password-login", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-juro-csrf": "1",
-        },
-        body: JSON.stringify({
-          email,
-          purpose: mode,
-          locale,
-          accountType,
-          turnstileToken,
-        }),
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
+        body: JSON.stringify({ email: normalizedEmail, password, locale, rememberMe, turnstileToken }),
       });
-      const data = await response.json() as OtpResponse;
-      if (!response.ok || !data.challengeId) {
-        if (data.retryAfterSeconds) setCooldown(data.retryAfterSeconds);
-        throw new Error(data.error || (ru ? "Не удалось отправить код." : "Kod yuborilmadi."));
-      }
-      setChallengeId(data.challengeId);
-      setCode("");
-      setStep("code");
-      setCooldown(data.resendAfterSeconds ?? 60);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : String(value));
-    } finally {
-      setTurnstileToken("");
-      setTurnstileReset((value) => value + 1);
-      setPending(false);
-    }
-  }
-
-  async function requestCode(event: FormEvent) {
-    event.preventDefault();
-    await sendCode();
-  }
-
-  async function verifyCode(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    setPending(true);
-    try {
-      const response = await fetch("/api/auth/verify-otp", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-juro-csrf": "1",
-        },
-        body: JSON.stringify({
-          challengeId,
-          email,
-          code,
-          purpose: mode,
-          locale,
-          accountType,
-          firstName,
-          lastName,
-          acceptTerms,
-          acceptPrivacy,
-          acceptPersonalData,
-          marketing,
-          rememberMe,
-        }),
-      });
-      const data = await response.json() as OtpResponse;
+      const data = await readResponse(response);
       if (!response.ok) {
-        if (data.code === "ACCOUNT_NOT_FOUND" || data.code === "OTP_USED") {
-          // A one-time code is intentionally non-retryable. Return to the
-          // email step instead of leaving a stale code form on screen.
-          setChallengeId("");
-          setCode("");
-          setCooldown(0);
-          setTurnstileToken("");
-          setTurnstileReset((value) => value + 1);
-          setStep("details");
-        }
-        throw new Error(data.error || (ru ? "Не удалось подтвердить код." : "Kodni tasdiqlab bo‘lmadi."));
+        setErrorCode(data.code ?? "");
+        throw new Error(data.error || tr({ ru: "Не удалось войти. Проверьте электронную почту и пароль.", uz: "Kirish amalga oshmadi. Email va parolni tekshiring.", en: "We could not sign you in. Check your email and password." }));
       }
       if (data.requiresTwoFactor) {
         setMfaCode("");
         setStep("mfa");
         return;
       }
-      if (!data.redirectTo) {
-        throw new Error(ru
-          ? "Сервер не вернул безопасный маршрут продолжения."
-          : "Server xavfsiz davom etish yo‘lini qaytarmadi.");
+      completeAuthentication(data);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      resetTurnstile();
+      setPending(false);
+    }
+  }
+
+  async function requestEmailCode(purpose: "register" | "password_reset") {
+    clearFeedback();
+    if (!emailAuthEnabled || !turnstileToken) {
+      setError(tr({ ru: "Дождитесь завершения проверки безопасности.", uz: "Xavfsizlik tekshiruvi tugashini kuting.", en: "Wait for the security check to finish." }));
+      return;
+    }
+    if (purpose === "register" && (!passwordValid || !passwordsMatch)) {
+      setError(tr({ ru: "Проверьте пароль и его подтверждение.", uz: "Parol va uning tasdig‘ini tekshiring.", en: "Check the password and its confirmation." }));
+      return;
+    }
+    setPending(true);
+    const normalizedEmail = normalizeEmailInput(email);
+    setEmail(normalizedEmail);
+    try {
+      const body = purpose === "register"
+        ? {
+            purpose,
+            email: normalizedEmail,
+            locale,
+            accountType,
+            password,
+            firstName: firstName.trim(),
+            lastName: lastName.trim() || undefined,
+            acceptTerms,
+            acceptPrivacy,
+            acceptPersonalData: acceptPrivacy,
+            marketing: false,
+            turnstileToken,
+          }
+        : { purpose, email: normalizedEmail, locale, accountType, turnstileToken };
+      const response = await fetch("/api/auth/request-otp", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
+        body: JSON.stringify(body),
+      });
+      const data = await readResponse(response);
+      if (!response.ok || !data.challengeId) {
+        if (data.retryAfterSeconds) setCooldown(data.retryAfterSeconds);
+        setErrorCode(data.code ?? "");
+        throw new Error(data.error || tr({ ru: "Не удалось отправить письмо.", uz: "Xatni yuborib bo‘lmadi.", en: "The email could not be sent." }));
       }
-      window.location.assign(explicitReturnTo ?? data.redirectTo);
+      setChallengeId(data.challengeId);
+      setCode("");
+      setStep(purpose === "register" ? "verification" : "recovery-code");
+      setCooldown(data.resendAfterSeconds ?? 60);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      resetTurnstile();
+      setPending(false);
+    }
+  }
+
+  async function register(event: FormEvent) {
+    event.preventDefault();
+    await requestEmailCode("register");
+  }
+
+  async function requestRecovery(event: FormEvent) {
+    event.preventDefault();
+    await requestEmailCode("password_reset");
+  }
+
+  async function verifyRegistration(event: FormEvent) {
+    event.preventDefault();
+    clearFeedback();
+    setPending(true);
+    try {
+      const response = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
+        body: JSON.stringify({
+          challengeId,
+          email: normalizeEmailInput(email),
+          code,
+          purpose: "register",
+          locale,
+          accountType,
+          acceptTerms: true,
+          acceptPrivacy: true,
+          acceptPersonalData: true,
+          marketing: false,
+          rememberMe,
+        }),
+      });
+      const data = await readResponse(response);
+      if (!response.ok) {
+        setErrorCode(data.code ?? "");
+        if (["OTP_USED", "REGISTRATION_RESTART_REQUIRED"].includes(data.code ?? "")) {
+          setStep("details");
+          setChallengeId("");
+          setCode("");
+          setCooldown(0);
+        }
+        throw new Error(data.error || tr({ ru: "Не удалось подтвердить код.", uz: "Kodni tasdiqlab bo‘lmadi.", en: "The code could not be confirmed." }));
+      }
+      if (data.requiresTwoFactor) {
+        setMfaCode("");
+        setStep("mfa");
+        return;
+      }
+      completeAuthentication(data);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function resetPassword(event: FormEvent) {
+    event.preventDefault();
+    clearFeedback();
+    if (!passwordValid || !passwordsMatch) {
+      setError(tr({ ru: "Проверьте новый пароль и его подтверждение.", uz: "Yangi parol va uning tasdig‘ini tekshiring.", en: "Check the new password and its confirmation." }));
+      return;
+    }
+    setPending(true);
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
+        body: JSON.stringify({ challengeId, email: normalizeEmailInput(email), code, password, locale }),
+      });
+      const data = await readResponse(response);
+      if (!response.ok) {
+        setErrorCode(data.code ?? "");
+        throw new Error(data.error || tr({ ru: "Не удалось обновить пароль.", uz: "Parolni yangilab bo‘lmadi.", en: "The password could not be updated." }));
+      }
+      setSuccessMessage(data.message ?? "");
+      setPassword("");
+      setConfirmPassword("");
+      setCode("");
+      setChallengeId("");
+      setStep("recovery-success");
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
@@ -234,39 +548,21 @@ export function AuthForm({
 
   async function verifySecondFactor(event: FormEvent) {
     event.preventDefault();
-    setError("");
+    clearFeedback();
     setPending(true);
     try {
       const response = await fetch("/api/auth/verify-mfa", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-juro-csrf": "1",
-        },
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify({ code: mfaCode.trim(), locale, rememberMe }),
       });
-      const data = await response.json() as OtpResponse;
-      if (!response.ok || !data.redirectTo) {
-        const message = data.error || (ru
-          ? "Не удалось подтвердить второй фактор."
-          : "Ikkinchi omilni tasdiqlab bo‘lmadi.");
-        if ([
-          "MFA_CHALLENGE_INVALID",
-          "MFA_CHALLENGE_EXPIRED",
-          "MFA_CHALLENGE_USED",
-          "MFA_ATTEMPTS_EXCEEDED",
-        ].includes(data.code ?? "")) {
-          setStep("details");
-          setChallengeId("");
-          setCode("");
-          setMfaCode("");
-          setCooldown(0);
-          setError(message);
-          return;
-        }
-        throw new Error(message);
+      const data = await readResponse(response);
+      if (!response.ok) {
+        const terminal = ["MFA_CHALLENGE_INVALID", "MFA_CHALLENGE_EXPIRED", "MFA_CHALLENGE_USED", "MFA_ATTEMPTS_EXCEEDED", "MFA_RATE_LIMITED"].includes(data.code ?? "");
+        if (terminal) returnToDetails();
+        throw new Error(data.error || tr({ ru: "Не удалось подтвердить второй фактор.", uz: "Ikkinchi omilni tasdiqlab bo‘lmadi.", en: "The second factor could not be confirmed." }));
       }
-      window.location.assign(explicitReturnTo ?? data.redirectTo);
+      completeAuthentication(data);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
@@ -274,27 +570,25 @@ export function AuthForm({
     }
   }
 
-  if (!otpEnabled) {
+  const authAvailable = mode === "login" ? passwordAuthEnabled : emailAuthEnabled;
+  if (!authAvailable) {
     return (
       <main className="auth-page" lang={locale}>
         <BrandPanel locale={locale} mode={mode} lawyerProduct={lawyerProduct} />
-        <section className="auth-card">
-          <div className="auth-theme"><ThemeSwitcher locale={locale} compact persistAccount={false} /></div>
-          <LanguageSwitch locale={locale} hrefFor={localeHref} />
+        <section className="auth-card auth-card-unavailable">
+          <AuthUtilities locale={locale} hrefFor={localeHref} />
           <header className="auth-unavailable">
-            <KeyRound />
+            <LockKeyhole aria-hidden="true" />
             <div>
-              <h2>{ru ? "Защищённый вход" : "Himoyalangan kirish"}</h2>
-              <p>{ru
-                ? "Email-код недоступен, потому что сервер отправки не настроен. Ложное сообщение об отправке не показывается."
-                : "Server yuborish xizmati sozlanmagani uchun email-kod mavjud emas. Yuborildi degan soxta xabar ko‘rsatilmaydi."}</p>
+              <h2>{tr({ ru: "Защищённый вход", uz: "Himoyalangan kirish", en: "Secure sign-in" })}</h2>
+              <p>{tr({ ru: "Сервис авторизации временно недоступен. Мы не показываем ложное подтверждение отправки.", uz: "Avtorizatsiya xizmati vaqtincha mavjud emas. Yuborish haqida noto‘g‘ri tasdiq ko‘rsatilmaydi.", en: "The authentication service is temporarily unavailable. We will not show a false delivery confirmation." })}</p>
             </div>
           </header>
           {developmentAuthEnabled
-            ? <a className="auth-submit" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}</a>
+            ? <a className="auth-submit" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight aria-hidden="true" />{tr({ ru: "Локальный вход разработчика", uz: "Mahalliy dasturchi kirishi", en: "Local developer sign-in" })}</a>
             : platformAuthEnabled
-            ? <a className="auth-submit" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Продолжить защищённый вход" : "Himoyalangan kirishni davom ettirish"}</a>
-            : <p className="auth-error" role="status">{ru ? "Владелец проекта должен подключить Resend и Cloudflare Turnstile через защищённое хранилище." : "Loyiha egasi Resend va Cloudflare Turnstile xizmatlarini himoyalangan saqlash orqali ulashi kerak."}</p>}
+              ? <a className="auth-submit" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight aria-hidden="true" />{tr({ ru: "Продолжить защищённый вход", uz: "Himoyalangan kirishni davom ettirish", en: "Continue secure sign-in" })}</a>
+              : <p className="auth-error" role="status">{tr({ ru: "Повторите попытку позднее или обратитесь в поддержку JURO.", uz: "Keyinroq qayta urinib ko‘ring yoki JURO yordam xizmatiga murojaat qiling.", en: "Try again later or contact JURO support." })}</p>}
         </section>
       </main>
     );
@@ -304,221 +598,253 @@ export function AuthForm({
     <main className="auth-page" lang={locale}>
       <BrandPanel locale={locale} mode={mode} lawyerProduct={lawyerProduct} />
       <section className="auth-card">
-        <div className="auth-theme"><ThemeSwitcher locale={locale} compact persistAccount={false} /></div>
-        <LanguageSwitch locale={locale} hrefFor={localeHref} />
-        {step === "details" ? (
-          <form onSubmit={requestCode}>
-            <header>
-              <KeyRound />
-              <div>
-                <h2>{mode === "register"
-                  ? (ru ? "Регистрация по email" : "Email orqali ro‘yxatdan o‘tish")
-                  : (ru ? "Вход по одноразовому коду" : "Bir martalik kod orqali kirish")}</h2>
-                <p>{ru ? "Код действует 10 минут. Пароль не требуется." : "Kod 10 daqiqa amal qiladi. Parol kerak emas."}</p>
-              </div>
-            </header>
+        <AuthUtilities locale={locale} hrefFor={localeHref} />
+        {authNotice && <AuthNotice {...authNotice} />}
 
-            {mode === "register" && (
-              <>
-                {!lawyerProduct && <div className="auth-account-type" aria-label={ru ? "Тип профиля" : "Profil turi"}>
-                  <button type="button" className={accountType === "individual" ? "active" : ""} aria-pressed={accountType === "individual"} onClick={() => setAccountType("individual")}>
-                    <UserRound />{ru ? "Физлицо" : "Jismoniy shaxs"}
-                  </button>
-                  <button type="button" className={accountType === "entrepreneur" ? "active" : ""} aria-pressed={accountType === "entrepreneur"} onClick={() => setAccountType("entrepreneur")}>
-                    <BriefcaseBusiness />{ru ? "ИП" : "Yakka tartibdagi tadbirkor"}
-                  </button>
-                  <button type="button" className={accountType === "lawyer" ? "active" : ""} aria-pressed={accountType === "lawyer"} onClick={() => setAccountType("lawyer")}>
-                    <Scale />{ru ? "Юрист" : "Yurist"}
-                  </button>
-                </div>}
-                <div className="auth-row">
-                  <label>{ru ? "Имя" : "Ism"}<input value={firstName} onChange={(event) => setFirstName(event.target.value.slice(0, 80))} required autoComplete="given-name" /></label>
-                  <label>{ru ? "Фамилия" : "Familiya"}<input value={lastName} onChange={(event) => setLastName(event.target.value.slice(0, 80))} required autoComplete="family-name" /></label>
-                </div>
-              </>
-            )}
-
-            <label>Email<input ref={emailInput} type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" inputMode="email" placeholder="name@example.com" /></label>
-
-            <label className="auth-remember">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(event) => setRememberMe(event.target.checked)}
-              />
-              <span>{ru
-                ? "Запомнить меня на этом устройстве на 30 дней"
-                : "Meni ushbu qurilmada 30 kun eslab qolish"}</span>
-            </label>
-
-            {mode === "register" && (
-              <div className="auth-consents">
-                <Consent checked={acceptTerms} onChange={setAcceptTerms} required href={`/legal/terms?lang=${locale}`} label={ru ? "Принимаю условия использования приложения" : "Ilovadan foydalanish shartlarini qabul qilaman"} />
-                <Consent checked={acceptPrivacy} onChange={setAcceptPrivacy} required href={`/legal/privacy?lang=${locale}`} label={ru ? "Ознакомлен(а) с политикой конфиденциальности приложения" : "Ilova maxfiylik siyosati bilan tanishdim"} />
-                <Consent checked={acceptPersonalData} onChange={setAcceptPersonalData} required href={`/legal/personal-data?lang=${locale}`} label={ru ? "Согласен(на) с обработкой персональных данных" : "Shaxsiy ma’lumotlarni qayta ishlashga roziman"} />
-                <label><input type="checkbox" checked={marketing} onChange={(event) => setMarketing(event.target.checked)} /><span>{ru ? "Получать полезные новости (необязательно)" : "Foydali yangiliklarni olish (ixtiyoriy)"}</span></label>
-              </div>
-            )}
-
-            {turnstileSiteKey && (
-              <TurnstileWidget
-                siteKey={turnstileSiteKey}
-                locale={locale}
-                resetSignal={turnstileReset}
-                onToken={setTurnstileToken}
-              />
-            )}
-
-            <button className="auth-submit" disabled={pending || !turnstileToken} aria-busy={pending}>
-              {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-              {ru ? "Получить код" : "Kodni olish"}
-            </button>
-          </form>
-        ) : step === "code" ? (
-          <form onSubmit={verifyCode}>
-            <header>
-              <CheckCircle2 />
-              <div>
-                <h2>{ru ? "Введите код из письма" : "Xatdagi kodni kiriting"}</h2>
-                <p>{ru ? `Мы отправили код на ${masked}` : `Kod ${masked} manziliga yuborildi`}</p>
-              </div>
-            </header>
-            <label>{ru ? "Шестизначный код" : "Olti xonali kod"}
-              <input ref={otpInput} className="auth-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} aria-describedby="otp-hint" />
-            </label>
-            <small id="otp-hint" className="auth-hint">{ru ? "Не передавайте этот код другим людям." : "Bu kodni boshqa odamlarga bermang."}</small>
-            <button className="auth-submit" disabled={pending || code.length !== 6} aria-busy={pending}>
-              {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-              {ru ? "Подтвердить" : "Tasdiqlash"}
-            </button>
-            <div className="auth-code-actions">
-              <button type="button" className="auth-back" onClick={() => { setStep("details"); setCode(""); setChallengeId(""); setError(""); }}>
-                {ru ? "Изменить email" : "Emailni o‘zgartirish"}
-              </button>
-              {cooldown <= 0 && turnstileSiteKey && (
-                <TurnstileWidget
-                  siteKey={turnstileSiteKey}
-                  locale={locale}
-                  resetSignal={turnstileReset}
-                  onToken={setTurnstileToken}
-                />
-              )}
-              <button type="button" className="auth-resend" onClick={() => void sendCode()} disabled={pending || cooldown > 0 || !turnstileToken}>
-                <RotateCcw aria-hidden="true" />{cooldown > 0
-                  ? (ru ? `Повторить через ${cooldown} с` : `${cooldown} s dan keyin`)
-                  : (ru ? "Отправить код повторно" : "Kodni qayta yuborish")}
-              </button>
+        {step === "details" && mode === "login" && (
+          <form onSubmit={login}>
+            <AuthHeading icon={<KeyRound aria-hidden="true" />} eyebrow={tr({ ru: "Безопасная сессия", uz: "Xavfsiz sessiya", en: "Secure session" })} title={tr({ ru: "Войдите в JURO", uz: "JURO hisobiga kiring", en: "Sign in to JURO" })} description={tr({ ru: "Используйте email и пароль. Код понадобится только для особых проверок.", uz: "Email va paroldan foydalaning. Kod faqat maxsus tekshiruvlar uchun kerak.", en: "Use your email and password. A code is only needed for special checks." })} />
+            <label htmlFor="auth-email"><span>Email</span><input ref={emailInput} id="auth-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} onBlur={() => setEmail(normalizeEmailInput(email))} required autoComplete="username" autoCapitalize="none" inputMode="email" enterKeyHint="next" placeholder="name@example.com" spellCheck={false} /></label>
+            <PasswordField locale={locale} id="auth-password" name="password" label={tr({ ru: "Пароль", uz: "Parol", en: "Password" })} value={password} onChange={setPassword} autoComplete="current-password" />
+            <div className="auth-form-options">
+              <label className="auth-check auth-remember"><input name="remember-me" type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>{tr({ ru: "Запомнить на 30 дней", uz: "30 kun eslab qolish", en: "Remember for 30 days" })}</span></label>
+              <button type="button" className="auth-text-button" onClick={() => { clearFeedback(); setPassword(""); setConfirmPassword(""); setStep("recovery-request"); resetTurnstile(); }}>{tr({ ru: "Забыли пароль?", uz: "Parolni unutdingizmi?", en: "Forgot password?" })}</button>
             </div>
-          </form>
-        ) : (
-          <form onSubmit={verifySecondFactor}>
-            <header>
-              <ShieldCheck aria-hidden="true" />
-              <div>
-                <h2>{ru
-                  ? "Подтвердите второй фактор"
-                  : "Ikkinchi omilni tasdiqlang"}</h2>
-                <p>{ru
-                  ? "Введите код из приложения-аутентификатора или один резервный код."
-                  : "Autentifikator ilovasidagi kodni yoki bitta zaxira kodni kiriting."}</p>
-              </div>
-            </header>
-            <label>{ru ? "Код подтверждения" : "Tasdiqlash kodi"}
-              <input
-                ref={mfaInput}
-                className="auth-code auth-mfa-code"
-                value={mfaCode}
-                onChange={(event) => setMfaCode(
-                  event.target.value
-                    .toUpperCase()
-                    .replace(/[^A-Z0-9 -]/g, "")
-                    .slice(0, 64),
-                )}
-                required
-                inputMode="text"
-                autoComplete="one-time-code"
-                maxLength={64}
-                aria-describedby="mfa-hint"
-              />
-            </label>
-            <small id="mfa-hint" className="auth-hint">{ru
-              ? "TOTP-код содержит 6 цифр. Резервный код можно вводить с дефисами или без."
-              : "TOTP kodi 6 raqamdan iborat. Zaxira kodni chiziqcha bilan yoki chiziqchasiz kiriting."}</small>
-            <button className="auth-submit" disabled={pending || mfaCode.trim().length < 6} aria-busy={pending}>
-              {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-              {ru ? "Завершить вход" : "Kirishni yakunlash"}
-            </button>
-            <button
-              type="button"
-              className="auth-back"
-              disabled={pending}
-              onClick={() => {
-                setStep("details");
-                setChallengeId("");
-                setCode("");
-                setMfaCode("");
-                setError("");
-              }}
-            >
-              {ru ? "Начать вход заново" : "Kirishni qaytadan boshlash"}
-            </button>
+            {turnstileSiteKey && <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_password_login" />}
+            <SubmitButton pending={pending} disabled={!turnstileToken || !passwordValid} label={tr({ ru: "Войти", uz: "Kirish", en: "Sign in" })} />
+            <p className="auth-migration-note"><ShieldCheck aria-hidden="true" />{tr({ ru: "Раньше входили по коду? Установите пароль через восстановление — аккаунт и данные сохранятся.", uz: "Avval kod bilan kirganmisiz? Tiklash orqali parol o‘rnating — hisob va ma’lumotlar saqlanadi.", en: "Previously signed in by code? Set a password through recovery—your account and data stay intact." })}</p>
           </form>
         )}
 
-        {error && <p className="auth-error" role="alert">{error}</p>}
-        <div className="auth-switch">
+        {step === "details" && mode === "register" && (
+          <form onSubmit={register}>
+            <AuthHeading icon={<Sparkles aria-hidden="true" />} eyebrow={tr({ ru: "Один компактный экран", uz: "Bitta ixcham ekran", en: "One compact screen" })} title={tr({ ru: "Создайте аккаунт", uz: "Hisob yarating", en: "Create your account" })} description={tr({ ru: "Только данные, необходимые для безопасного старта. Остальное — позже в профиле.", uz: "Xavfsiz boshlash uchun zarur ma’lumotlargina. Qolganini keyin profilga qo‘shasiz.", en: "Only what is needed for a secure start. Add everything else later in your profile." })} />
+            {!lawyerProduct && <AccountTypePicker locale={locale} value={accountType} onChange={setAccountType} />}
+            <div className="auth-row">
+              <label htmlFor="first-name"><span>{tr({ ru: "Имя", uz: "Ism", en: "First name" })}</span><input id="first-name" name="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value.slice(0, 80))} required autoComplete="given-name" /></label>
+              <label htmlFor="last-name"><span>{tr({ ru: "Фамилия (необязательно)", uz: "Familiya (ixtiyoriy)", en: "Last name (optional)" })}</span><input id="last-name" name="family-name" value={lastName} onChange={(event) => setLastName(event.target.value.slice(0, 80))} autoComplete="family-name" /></label>
+            </div>
+            <label htmlFor="auth-email"><span>Email</span><input ref={emailInput} id="auth-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} onBlur={() => setEmail(normalizeEmailInput(email))} required autoComplete="username" autoCapitalize="none" inputMode="email" enterKeyHint="next" placeholder="name@example.com" spellCheck={false} /></label>
+            <PasswordField locale={locale} id="new-password" name="password" label={tr({ ru: "Пароль", uz: "Parol", en: "Password" })} value={password} onChange={setPassword} autoComplete="new-password" describedBy="password-strength" />
+            <PasswordStrength locale={locale} password={password} score={strength} />
+            <PasswordField locale={locale} id="confirm-password" name="password-confirmation" label={tr({ ru: "Подтвердите пароль", uz: "Parolni tasdiqlang", en: "Confirm password" })} value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" describedBy="password-match" invalid={Boolean(confirmPassword) && !passwordsMatch} />
+            {confirmPassword && <small id="password-match" className={passwordsMatch ? "auth-valid" : "auth-field-error"}>{passwordsMatch ? tr({ ru: "Пароли совпадают", uz: "Parollar mos", en: "Passwords match" }) : tr({ ru: "Пароли не совпадают", uz: "Parollar mos emas", en: "Passwords do not match" })}</small>}
+            <div className="auth-consents">
+              <Consent name="accept-terms" checked={acceptTerms} onChange={setAcceptTerms}>
+                {tr({ ru: "Принимаю", uz: "", en: "I accept the" })}{locale === "uz" ? null : " "}
+                <a href={`/legal/terms?lang=${legalLocale}`} target="_blank" rel="noreferrer">{tr({ ru: "Условия использования", uz: "Foydalanish shartlarini", en: "Terms of Use" })}</a>{locale === "uz" ? " qabul qilaman" : ""}
+              </Consent>
+              <Consent name="accept-privacy" checked={acceptPrivacy} onChange={setAcceptPrivacy}>
+                {tr({ ru: "Ознакомлен(а) с", uz: "Men", en: "I have read the" })}{" "}
+                <a href={`/legal/privacy?lang=${legalLocale}`} target="_blank" rel="noreferrer">{tr({ ru: "Политикой конфиденциальности", uz: "Maxfiylik siyosati", en: "Privacy Policy" })}</a>{" "}
+                {tr({ ru: "и согласен(на) на", uz: "bilan tanishdim va", en: "and consent to" })}{" "}
+                <a href={`/legal/personal-data?lang=${legalLocale}`} target="_blank" rel="noreferrer">{tr({ ru: "обработку персональных данных", uz: "shaxsiy ma’lumotlarni qayta ishlashga", en: "personal data processing" })}</a>{locale === "uz" ? " roziman" : ""}.
+              </Consent>
+            </div>
+            {turnstileSiteKey && <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_registration" />}
+            <SubmitButton pending={pending} disabled={!turnstileToken || !firstName.trim() || !passwordValid || !passwordsMatch || !acceptTerms || !acceptPrivacy} label={tr({ ru: "Создать аккаунт", uz: "Hisob yaratish", en: "Create account" })} />
+          </form>
+        )}
+
+        {step === "recovery-request" && (
+          <form onSubmit={requestRecovery}>
+            <BackButton onClick={returnToDetails} label={tr({ ru: "Назад ко входу", uz: "Kirishga qaytish", en: "Back to sign in" })} />
+            <AuthHeading icon={<LockKeyhole aria-hidden="true" />} eyebrow={tr({ ru: "Восстановление", uz: "Tiklash", en: "Recovery" })} title={tr({ ru: "Восстановите пароль", uz: "Parolni tiklang", en: "Reset your password" })} description={tr({ ru: "Укажите email. Мы отправим одноразовый код, если он связан с аккаунтом.", uz: "Emailni kiriting. Agar u hisob bilan bog‘langan bo‘lsa, bir martalik kod yuboramiz.", en: "Enter your email. We will send a one-time code if it belongs to an account." })} />
+            <label htmlFor="recovery-email"><span>Email</span><input ref={emailInput} id="recovery-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} onBlur={() => setEmail(normalizeEmailInput(email))} required autoComplete="username" autoCapitalize="none" inputMode="email" enterKeyHint="send" placeholder="name@example.com" spellCheck={false} /></label>
+            {emailAuthEnabled && turnstileSiteKey ? <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_password_reset" /> : <p className="auth-error" role="status">{tr({ ru: "Восстановление временно недоступно.", uz: "Tiklash vaqtincha mavjud emas.", en: "Password recovery is temporarily unavailable." })}</p>}
+            <SubmitButton pending={pending} disabled={!emailAuthEnabled || !turnstileToken} label={tr({ ru: "Отправить код", uz: "Kod yuborish", en: "Send code" })} />
+          </form>
+        )}
+
+        {step === "verification" && (
+          <form onSubmit={verifyRegistration}>
+            <BackButton onClick={returnToDetails} label={tr({ ru: "Изменить данные", uz: "Ma’lumotlarni o‘zgartirish", en: "Edit details" })} />
+            <AuthHeading icon={<CheckCircle2 aria-hidden="true" />} eyebrow={tr({ ru: "Техническое подтверждение", uz: "Texnik tasdiqlash", en: "Technical confirmation" })} title={tr({ ru: "Подтвердите email", uz: "Emailni tasdiqlang", en: "Confirm your email" })} description={tr({ ru: `Код отправлен на ${masked} и действует 10 минут.`, uz: `Kod ${masked} manziliga yuborildi va 10 daqiqa amal qiladi.`, en: `We sent a code to ${masked}. It is valid for 10 minutes.` })} />
+            <OtpField locale={locale} value={code} onChange={setCode} inputRef={otpInput} />
+            <SubmitButton pending={pending} disabled={code.length !== 6} label={tr({ ru: "Подтвердить и продолжить", uz: "Tasdiqlash va davom etish", en: "Confirm and continue" })} />
+            <ResendControl locale={locale} pending={pending} cooldown={cooldown} enabled={Boolean(turnstileToken)} onResend={() => void requestEmailCode("register")} />
+            {cooldown <= 0 && turnstileSiteKey && <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_registration_resend" />}
+          </form>
+        )}
+
+        {step === "recovery-code" && (
+          <form onSubmit={resetPassword}>
+            <BackButton onClick={() => { clearFeedback(); setStep("recovery-request"); setChallengeId(""); setCode(""); setCooldown(0); resetTurnstile(); }} label={tr({ ru: "Изменить email", uz: "Emailni o‘zgartirish", en: "Change email" })} />
+            <AuthHeading icon={<LockKeyhole aria-hidden="true" />} eyebrow={tr({ ru: "Код действует 10 минут", uz: "Kod 10 daqiqa amal qiladi", en: "Code valid for 10 minutes" })} title={tr({ ru: "Установите новый пароль", uz: "Yangi parol o‘rnating", en: "Set a new password" })} description={tr({ ru: `Введите код из письма для ${masked}.`, uz: `${masked} uchun xatdagi kodni kiriting.`, en: `Enter the code from the email sent to ${masked}.` })} />
+            <input className="auth-password-manager-username" name="username" type="email" value={email} readOnly autoComplete="username" tabIndex={-1} aria-hidden="true" />
+            <OtpField locale={locale} value={code} onChange={setCode} inputRef={otpInput} />
+            <PasswordField locale={locale} id="reset-password" name="password" label={tr({ ru: "Новый пароль", uz: "Yangi parol", en: "New password" })} value={password} onChange={setPassword} autoComplete="new-password" describedBy="password-strength" />
+            <PasswordStrength locale={locale} password={password} score={strength} />
+            <PasswordField locale={locale} id="reset-password-confirm" name="password-confirmation" label={tr({ ru: "Подтвердите новый пароль", uz: "Yangi parolni tasdiqlang", en: "Confirm new password" })} value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" describedBy="reset-password-match" invalid={Boolean(confirmPassword) && !passwordsMatch} />
+            {confirmPassword && <small id="reset-password-match" className={passwordsMatch ? "auth-valid" : "auth-field-error"}>{passwordsMatch ? tr({ ru: "Пароли совпадают", uz: "Parollar mos", en: "Passwords match" }) : tr({ ru: "Пароли не совпадают", uz: "Parollar mos emas", en: "Passwords do not match" })}</small>}
+            <SubmitButton pending={pending} disabled={code.length !== 6 || !passwordValid || !passwordsMatch} label={tr({ ru: "Обновить пароль", uz: "Parolni yangilash", en: "Update password" })} />
+            <ResendControl locale={locale} pending={pending} cooldown={cooldown} enabled={Boolean(turnstileToken)} onResend={() => void requestEmailCode("password_reset")} />
+            {cooldown <= 0 && turnstileSiteKey && <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_password_reset_resend" />}
+          </form>
+        )}
+
+        {step === "recovery-success" && (
+          <div ref={successPanel} className="auth-success" role="status" tabIndex={-1}>
+            <span><Check aria-hidden="true" /></span>
+            <h2>{tr({ ru: "Пароль обновлён", uz: "Parol yangilandi", en: "Password updated" })}</h2>
+            <p>{successMessage || tr({ ru: "Теперь можно войти с новым паролем.", uz: "Endi yangi parol bilan kirishingiz mumkin.", en: "You can now sign in with your new password." })}</p>
+            <button type="button" className="auth-submit" onClick={returnToDetails}><ArrowRight aria-hidden="true" />{tr({ ru: "Перейти ко входу", uz: "Kirishga o‘tish", en: "Go to sign in" })}</button>
+          </div>
+        )}
+
+        {step === "mfa" && (
+          <form onSubmit={verifySecondFactor}>
+            <BackButton onClick={returnToDetails} label={tr({ ru: "Начать вход заново", uz: "Kirishni qaytadan boshlash", en: "Start sign-in again" })} />
+            <AuthHeading icon={<ShieldCheck aria-hidden="true" />} eyebrow="2FA" title={tr({ ru: "Подтвердите второй фактор", uz: "Ikkinchi omilni tasdiqlang", en: "Confirm your second factor" })} description={tr({ ru: "Введите код из приложения-аутентификатора или один резервный код.", uz: "Autentifikator ilovasidagi kodni yoki bitta zaxira kodni kiriting.", en: "Enter a code from your authenticator app or one backup code." })} />
+            <label htmlFor="mfa-code"><span>{tr({ ru: "Код подтверждения", uz: "Tasdiqlash kodi", en: "Verification code" })}</span><input ref={mfaInput} id="mfa-code" name="mfa-code" className="auth-code auth-mfa-code" value={mfaCode} onChange={(event) => setMfaCode(event.target.value.toUpperCase().replace(/[^A-Z0-9 -]/gu, "").slice(0, 64))} required inputMode="text" autoComplete="one-time-code" autoCapitalize="characters" maxLength={64} aria-describedby="mfa-hint" /></label>
+            <small id="mfa-hint" className="auth-hint">{tr({ ru: "TOTP-код содержит 6 цифр. Резервный код можно вводить с дефисами или без.", uz: "TOTP kodi 6 raqamdan iborat. Zaxira kodni chiziqcha bilan yoki chiziqchasiz kiriting.", en: "A TOTP code has 6 digits. Enter a backup code with or without hyphens." })}</small>
+            <SubmitButton pending={pending} disabled={mfaCode.trim().length < 6} label={tr({ ru: "Завершить вход", uz: "Kirishni yakunlash", en: "Finish sign-in" })} />
+          </form>
+        )}
+
+        {error && <div className="auth-error" role="alert"><span>{error}</span>{errorCode === "EMAIL_NOT_VERIFIED" && <Link href={`/${locale}/auth/register?accountType=${accountType}&email=${encodeURIComponent(email)}`}>{tr({ ru: "Завершить подтверждение", uz: "Tasdiqlashni yakunlash", en: "Finish verification" })}</Link>}</div>}
+
+        {step === "details" && <div className="auth-switch">
           {mode === "register"
-            ? <>{ru ? "Уже есть аккаунт?" : "Hisobingiz bormi?"} <Link href={`/${locale}/auth/login${lawyerProduct ? "?accountType=lawyer" : ""}`}>{ru ? "Войти" : "Kirish"}</Link></>
-            : <>{ru ? "Нет аккаунта?" : "Hisob yo‘qmi?"} <Link href={`/${locale}/auth/register?accountType=${accountType}`}>{ru ? "Создать" : "Yaratish"}</Link></>}
-        </div>
-        {developmentAuthEnabled
-          ? <a className="auth-siwc" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}>
-              {ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}
-            </a>
-          : platformAuthEnabled && <a className="auth-siwc" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}>
-              {ru ? "Войти через защищённую учётную запись" : "Himoyalangan hisob orqali kirish"}
-            </a>}
+            ? <>{tr({ ru: "Уже есть аккаунт?", uz: "Hisobingiz bormi?", en: "Already have an account?" })} <Link href={`/${locale}/auth/login${lawyerProduct ? "?accountType=lawyer" : ""}`}>{tr({ ru: "Войти", uz: "Kirish", en: "Sign in" })}</Link></>
+            : <>{tr({ ru: "Нет аккаунта?", uz: "Hisob yo‘qmi?", en: "New to JURO?" })} <Link href={`/${locale}/auth/register?accountType=${accountType}`}>{tr({ ru: "Создать аккаунт", uz: "Hisob yaratish", en: "Create account" })}</Link></>}
+        </div>}
+
+        {step === "details" && (developmentAuthEnabled
+          ? <a className="auth-secondary-login" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}>{tr({ ru: "Локальный вход разработчика", uz: "Mahalliy dasturchi kirishi", en: "Local developer sign-in" })}</a>
+          : platformAuthEnabled && <a className="auth-secondary-login" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}>{tr({ ru: "Войти через защищённую учётную запись", uz: "Himoyalangan hisob orqali kirish", en: "Sign in with a secure account" })}</a>)}
       </section>
     </main>
   );
 }
 
+function AuthUtilities({ locale, hrefFor }: { locale: Locale; hrefFor: (locale: Locale) => string }) {
+  return <div className="auth-utilities"><ThemeSwitcher locale={locale} compact persistAccount={false} /><LanguageSwitch locale={locale} hrefFor={hrefFor} /></div>;
+}
+
+function AuthHeading({ icon, eyebrow, title, description }: { icon: React.ReactNode; eyebrow: string; title: string; description: string }) {
+  return <header className="auth-heading"><span className="auth-heading-icon">{icon}</span><div><small>{eyebrow}</small><h2>{title}</h2><p>{description}</p></div></header>;
+}
+
+function SubmitButton({ pending, disabled, label }: { pending: boolean; disabled: boolean; label: string }) {
+  return <button className="auth-submit" disabled={pending || disabled} aria-busy={pending}>{pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}<span>{label}</span></button>;
+}
+
+function BackButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return <button type="button" className="auth-back" onClick={onClick}><ArrowLeft aria-hidden="true" />{label}</button>;
+}
+
+function OtpField({ locale, value, onChange, inputRef }: { locale: Locale; value: string; onChange: (value: string) => void; inputRef: React.RefObject<HTMLInputElement | null> }) {
+  return <label htmlFor="otp-code"><span>{copy(locale, { ru: "Шестизначный код", uz: "Olti xonali kod", en: "Six-digit code" })}</span><input ref={inputRef} id="otp-code" name="one-time-code" className="auth-code" value={value} onChange={(event) => onChange(event.target.value.replace(/\D/gu, "").slice(0, 6))} required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} aria-describedby="otp-hint" /><small id="otp-hint" className="auth-hint">{copy(locale, { ru: "Никому не сообщайте этот код. Сотрудники JURO никогда его не запрашивают.", uz: "Bu kodni hech kimga bermang. JURO xodimlari uni hech qachon so‘ramaydi.", en: "Never share this code. JURO staff will never ask for it." })}</small></label>;
+}
+
+function PasswordStrength({ locale, password, score }: { locale: Locale; password: string; score: number }) {
+  const tooLong = password.length > 256;
+  const labels = [
+    copy(locale, { ru: "Минимум 8 символов", uz: "Kamida 8 ta belgi", en: "At least 8 characters" }),
+    copy(locale, { ru: "Слабый", uz: "Zaif", en: "Weak" }),
+    copy(locale, { ru: "Приемлемый", uz: "Qoniqarli", en: "Fair" }),
+    copy(locale, { ru: "Надёжный", uz: "Ishonchli", en: "Strong" }),
+    copy(locale, { ru: "Очень надёжный", uz: "Juda ishonchli", en: "Very strong" }),
+  ];
+  return <div className="auth-strength" id="password-strength" data-score={tooLong ? 0 : score}><span role="progressbar" aria-label={copy(locale, { ru: "Надёжность пароля", uz: "Parol ishonchliligi", en: "Password strength" })} aria-valuemin={0} aria-valuemax={4} aria-valuenow={tooLong ? 0 : score}><i /></span><small className={tooLong ? "auth-field-error" : undefined}>{tooLong ? copy(locale, { ru: "Пароль не должен превышать 256 символов — значение не было обрезано.", uz: "Parol 256 belgidan oshmasligi kerak — qiymat qisqartirilmadi.", en: "The password must not exceed 256 characters—the value was not truncated." }) : <>{password ? labels[score] : labels[0]}. {copy(locale, { ru: "Длинная фраза лучше сложного короткого пароля.", uz: "Uzun ibora murakkab qisqa paroldan yaxshiroq.", en: "A long passphrase is better than a short complex password." })}</>}</small></div>;
+}
+
+function AccountTypePicker({ locale, value, onChange }: { locale: Locale; value: AccountType; onChange: (value: AccountType) => void }) {
+  const options = [
+    ["individual", UserRound, { ru: "Для себя", uz: "O‘zim uchun", en: "Personal" }],
+    ["entrepreneur", BriefcaseBusiness, { ru: "Предприниматель", uz: "Tadbirkor", en: "Business owner" }],
+    ["lawyer", Scale, { ru: "Юрист", uz: "Yurist", en: "Lawyer" }],
+  ] as const;
+  return <div className="auth-account-type" role="group" aria-label={copy(locale, { ru: "Тип профиля", uz: "Profil turi", en: "Profile type" })}>{options.map(([option, Icon, label]) => <button key={option} type="button" className={value === option ? "active" : ""} aria-pressed={value === option} onClick={() => onChange(option)}><Icon aria-hidden="true" /><span>{copy(locale, label)}</span></button>)}</div>;
+}
+
+function ResendControl({ locale, pending, cooldown, enabled, onResend }: { locale: Locale; pending: boolean; cooldown: number; enabled: boolean; onResend: () => void }) {
+  return <button type="button" className="auth-resend" onClick={onResend} disabled={pending || cooldown > 0 || !enabled}><RotateCcw aria-hidden="true" />{cooldown > 0 ? copy(locale, { ru: `Повторить через ${cooldown} с`, uz: `${cooldown} s dan keyin`, en: `Resend in ${cooldown}s` }) : copy(locale, { ru: "Отправить код повторно", uz: "Kodni qayta yuborish", en: "Resend code" })}</button>;
+}
+
 function BrandPanel({ locale, mode, lawyerProduct }: { locale: Locale; mode: "login" | "register"; lawyerProduct: boolean }) {
-  const ru = locale === "ru";
+  const headline = mode === "register"
+    ? lawyerProduct
+      ? { ru: "Практика начинается с доверия", uz: "Amaliyot ishonchdan boshlanadi", en: "Practice starts with trust" }
+      : { ru: "Юридическая ясность — в одном пространстве", uz: "Huquqiy aniqlik — bitta makonda", en: "Legal clarity, in one workspace" }
+    : lawyerProduct
+      ? { ru: "Вернитесь к своей практике", uz: "Amaliyotingizga qayting", en: "Return to your practice" }
+      : { ru: "Продолжайте с того места, где остановились", uz: "To‘xtagan joyingizdan davom eting", en: "Continue where you left off" };
   return (
     <section className="auth-brand" data-product={lawyerProduct ? "lawyer" : "client"}>
-      <Link href={`https://juro.uz/${locale}`} aria-label="JURO">
-        <Image src="/juro-logo-light.png" alt="JURO" width={1268} height={1240} unoptimized />
-      </Link>
-      <div>
-        <span>{lawyerProduct ? <Scale /> : <ShieldCheck />}{lawyerProduct ? (ru ? "Профессиональная практика JURO" : "JURO professional amaliyoti") : (ru ? "Защищённое юридическое пространство" : "Himoyalangan yuridik makon")}</span>
-        <h1>{mode === "register"
-          ? (lawyerProduct ? (ru ? "Создайте кабинет юриста" : "Yurist kabinetini yarating") : (ru ? "Начните работу в JURO" : "JURO bilan ishlashni boshlang"))
-          : (lawyerProduct ? (ru ? "Вернитесь к своей практике" : "Amaliyotingizga qayting") : (ru ? "С возвращением" : "Qaytganingizdan xursandmiz"))}</h1>
-        <p>{lawyerProduct
-          ? (ru ? "Заявки, консультации и материалы клиентов открываются только после проверки профиля и явного разрешения клиента." : "So‘rovlar, maslahatlar va mijoz materiallari faqat profil tekshiruvi va mijozning aniq ruxsatidan keyin ochiladi.")
-          : (ru ? "Документы, дела и планы связаны с вашей учётной записью и открываются только после серверной проверки сессии." : "Hujjatlar, ishlar va rejalar hisobingizga bog‘langan va faqat server sessiyani tekshirgandan keyin ochiladi.")}</p>
+      <div className="auth-brand-top"><Link href={`https://juro.uz/${locale}`} aria-label="JURO"><Image src="/juro-logo-light.png" alt="JURO" width={1268} height={1240} priority unoptimized /></Link><span>{lawyerProduct ? copy(locale, { ru: "Кабинет юриста", uz: "Yurist kabineti", en: "Lawyer workspace" }) : "AI LegalTech"}</span></div>
+      <div className="auth-brand-content">
+        <span className="auth-brand-kicker"><ShieldCheck aria-hidden="true" />{copy(locale, { ru: "Защищённая платформа JURO", uz: "Himoyalangan JURO platformasi", en: "Secure JURO platform" })}</span>
+        <h1>{copy(locale, headline)}</h1>
+        <p>{lawyerProduct ? copy(locale, { ru: "Заявки, консультации и материалы клиентов доступны только после проверки профиля и явного разрешения клиента.", uz: "So‘rovlar, maslahatlar va mijoz materiallari faqat profil tekshiruvi va mijozning aniq ruxsatidan keyin ochiladi.", en: "Requests, consultations, and client materials open only after profile verification and explicit client permission." }) : copy(locale, { ru: "Документы, дела и AI-инструменты связаны с вашей учётной записью и защищены серверной проверкой сессии.", uz: "Hujjatlar, ishlar va AI vositalari hisobingizga bog‘langan va server sessiya tekshiruvi bilan himoyalangan.", en: "Documents, matters, and AI tools stay connected to your account and protected by server-side session checks." })}</p>
+        <div className="auth-brand-features" aria-label={copy(locale, { ru: "Возможности", uz: "Imkoniyatlar", en: "Capabilities" })}><span><Check aria-hidden="true" />{copy(locale, { ru: "Документы", uz: "Hujjatlar", en: "Documents" })}</span><span><Check aria-hidden="true" />{copy(locale, { ru: "Правовой AI", uz: "Huquqiy AI", en: "Legal AI" })}</span><span><Check aria-hidden="true" />{copy(locale, { ru: "Юристы", uz: "Yuristlar", en: "Counsel" })}</span></div>
       </div>
-      <small>{ru ? "JURO не является государственным органом или нотариусом." : "JURO davlat organi yoki notarius emas."}</small>
+      <div className="auth-orbit" aria-hidden="true"><i /><i /><i /><span>J</span></div>
+      <small>{copy(locale, { ru: "JURO не является государственным органом или нотариусом.", uz: "JURO davlat organi yoki notarius emas.", en: "JURO is not a government authority or notary." })}</small>
     </section>
   );
 }
 
 function LanguageSwitch({ locale, hrefFor }: { locale: Locale; hrefFor: (value: Locale) => string }) {
-  return (
-    <div className="auth-language" aria-label="RU / UZ">
-      <Languages aria-hidden="true" />
-      <Link href={hrefFor("ru")} className={locale === "ru" ? "active" : ""} aria-current={locale === "ru" ? "page" : undefined}>RU</Link>
-      <Link href={hrefFor("uz")} className={locale === "uz" ? "active" : ""} aria-current={locale === "uz" ? "page" : undefined}>UZ</Link>
-    </div>
-  );
+  return <nav className="auth-language" aria-label={copy(locale, { ru: "Язык интерфейса", uz: "Interfeys tili", en: "Interface language" })}><Languages aria-hidden="true" />{(["ru", "uz", "en"] as const).map((value) => <Link key={value} href={hrefFor(value)} className={locale === value ? "active" : ""} aria-current={locale === value ? "page" : undefined} hrefLang={value}>{value.toUpperCase()}</Link>)}</nav>;
 }
 
-function Consent({ checked, onChange, required, href, label }: { checked: boolean; onChange: (value: boolean) => void; required?: boolean; href: string; label: string }) {
-  return (
-    <label>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} required={required} />
-      <span><a href={href} target="_blank" rel="noreferrer">{label}</a></span>
-    </label>
-  );
+function Consent({ name, checked, onChange, children }: { name: string; checked: boolean; onChange: (value: boolean) => void; children: React.ReactNode }) {
+  return <label className="auth-check"><input name={name} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} required /><span>{children}</span></label>;
+}
+
+type AuthNoticeCopy = { title: string; body: string; tone: "info" | "warning" };
+
+function authenticationNotice({
+  locale,
+  logout,
+  session,
+  handoff,
+}: {
+  locale: Locale;
+  logout: string | null;
+  session: string | null;
+  handoff: string | null;
+}): AuthNoticeCopy | null {
+  if (logout === "server-unconfirmed") {
+    return {
+      tone: "warning",
+      title: copy(locale, { ru: "Выход выполнен не полностью", uz: "Chiqish to‘liq tasdiqlanmadi", en: "Sign-out was not fully confirmed" }),
+      body: copy(locale, {
+        ru: "Переход к выходу выполнен, но сервер не подтвердил отзыв локальной сессии. Войдите снова только на доверенном устройстве и проверьте активные сессии в настройках безопасности.",
+        uz: "Chiqish davom ettirildi, ammo server mahalliy sessiya bekor qilinganini tasdiqlamadi. Faqat ishonchli qurilmada qayta kiring va xavfsizlik sozlamalarida faol seanslarni tekshiring.",
+        en: "Sign-out continued, but the server did not confirm local session revocation. Sign in again only on a trusted device and review active sessions in security settings.",
+      }),
+    };
+  }
+  if (["confirmed", "success", "1"].includes(logout ?? "")) {
+    return {
+      tone: "info",
+      title: copy(locale, { ru: "Вы вышли из аккаунта", uz: "Hisobdan chiqdingiz", en: "You are signed out" }),
+      body: copy(locale, { ru: "Сеанс безопасно завершён.", uz: "Seans xavfsiz yakunlandi.", en: "Your session ended securely." }),
+    };
+  }
+  if (["expired", "session-expired"].includes(session ?? "")) {
+    return {
+      tone: "info",
+      title: copy(locale, { ru: "Срок сеанса истёк", uz: "Seans muddati tugadi", en: "Your session expired" }),
+      body: copy(locale, { ru: "Войдите снова, чтобы продолжить работу.", uz: "Ishni davom ettirish uchun qayta kiring.", en: "Sign in again to continue." }),
+    };
+  }
+  if (["invalid", "expired", "unavailable"].includes(handoff ?? "")) {
+    const unavailable = handoff === "unavailable";
+    return {
+      tone: "warning",
+      title: copy(locale, { ru: "Не удалось перенести сеанс", uz: "Seansni ko‘chirib bo‘lmadi", en: "Session handoff did not complete" }),
+      body: unavailable
+        ? copy(locale, { ru: "Сервис временно недоступен. Войдите снова, чтобы продолжить безопасно.", uz: "Xizmat vaqtincha mavjud emas. Xavfsiz davom etish uchun qayta kiring.", en: "The service is temporarily unavailable. Sign in again to continue securely." })
+        : copy(locale, { ru: "Ссылка переноса недействительна или истекла. Войдите снова.", uz: "Seansni ko‘chirish havolasi yaroqsiz yoki muddati tugagan. Qayta kiring.", en: "The session handoff link is invalid or expired. Sign in again." }),
+    };
+  }
+  return null;
+}
+
+function AuthNotice({ title, body, tone }: AuthNoticeCopy) {
+  return <aside className="auth-notice" data-tone={tone} role="status"><strong>{title}</strong><span>{body}</span></aside>;
 }

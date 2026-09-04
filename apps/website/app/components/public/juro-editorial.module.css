@@ -331,3 +331,12 @@
 @media (prefers-reduced-motion: reduce) {
   .trustItem.trustItem::after { transition: none; }
 }
+
+:global(html[data-theme="dark"]) .trustItem[data-primary] > span {
+  background: var(--status-success-surface);
+  color: var(--status-success);
+}
+
+:global(html[data-theme="dark"]) .resourceItem.resourceItem:not([data-primary]) {
+  border-color: var(--border-subtle);
+}

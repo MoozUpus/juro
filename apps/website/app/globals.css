@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --font-primary: "Manrope Variable", Manrope, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-ui: var(--font-primary);
   --font-display: var(--font-primary);
@@ -14,7 +14,7 @@
   --text-inverse: #ffffff;
   --border-subtle: rgba(16, 40, 64, 0.12);
   --border-strong: rgba(16, 40, 64, 0.24);
-  --brand-navy: #061827;
+  --brand-navy: #062844;
   --brand-gold: #be974f;
   --brand-gold-ink: #805d26;
   --interactive-primary: #0d2c47;
@@ -23,10 +23,16 @@
   --status-success: #26755d;
   --status-warning: #99671e;
   --status-danger: #a63d3d;
+  --status-success-surface: #eaf5f0;
+  --status-warning-surface: #fbf2df;
+  --status-danger-surface: #f9e9e7;
+  --accent-subtle: rgba(190, 151, 79, 0.13);
+  --surface-glass: rgba(255, 255, 255, 0.82);
+  --text-on-dark-muted: #b8c6cf;
   --overlay: rgba(4, 20, 34, 0.55);
   --shadow-soft: 0 18px 55px rgba(6, 40, 68, 0.09);
   --motion-theme: 180ms cubic-bezier(.16, 1, .3, 1);
-  --juro-navy-950: #061827;
+  --juro-navy-950: #062844;
   --juro-navy-800: #0d2c47;
   --juro-gold-500: #be974f;
   --juro-warm-50: #fbfaf7;
@@ -49,6 +55,15 @@ html[data-theme="dark"] {
   --overlay: rgba(0, 6, 12, 0.72);
   --shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.36);
   --brand-gold-ink: #d7b56f;
+  --status-success: #8ed0b1;
+  --status-warning: #e2c17f;
+  --status-danger: #f0a29a;
+  --status-success-surface: rgba(73, 153, 116, 0.16);
+  --status-warning-surface: rgba(190, 151, 79, 0.16);
+  --status-danger-surface: rgba(204, 94, 84, 0.16);
+  --accent-subtle: rgba(215, 181, 111, 0.14);
+  --surface-glass: rgba(18, 35, 49, 0.88);
+  --text-on-dark-muted: #b8c6cf;
   --juro-warm-50: var(--surface-canvas);
 }
 
@@ -188,5 +203,11 @@ summary {
   textarea,
   select {
     transition-duration: .01ms;
+  }
+}
+
+@media (max-width: 420px) {
+  .public-theme-switcher button[aria-pressed="true"] {
+    display: none;
   }
 }

@@ -45,6 +45,7 @@ export const userProfiles = sqliteTable(
     emailKeyVersion: text("email_key_version"),
     emailLookupHash: text("email_lookup_hash"),
     emailLookupKeyVersion: text("email_lookup_key_version"),
+    emailVerifiedAt: text("email_verified_at"),
     fullName: text("full_name"),
     birthDate: text("birth_date"),
     idDocumentType: text("id_document_type"),
@@ -87,6 +88,106 @@ export const userProfiles = sqliteTable(
     index("user_profiles_phone_lookup_idx")
       .on(table.phoneLookupKeyVersion, table.phoneLookupHash)
       .where(sql`${table.phoneLookupHash} IS NOT NULL`),
+  ],
+);
+
+export const userPasswordCredentials = sqliteTable(
+  "user_password_credentials",
+  {
+    userId: text("user_id").primaryKey().references(() => userProfiles.id, {
+      onDelete: "cascade",
+    }),
+    algorithm: text("algorithm").notNull().default("PBKDF2-SHA256"),
+    iterations: integer("iterations").notNull().default(600_000),
+    saltBase64url: text("salt_base64url").notNull(),
+    hashBase64url: text("hash_base64url").notNull(),
+    passwordChangedAt: text("password_changed_at").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    check(
+      "user_password_algorithm_check",
+      sql`${table.algorithm} = 'PBKDF2-SHA256'`,
+    ),
+    check(
+      "user_password_iterations_check",
+      sql`${table.iterations} BETWEEN 310000 AND 1000000`,
+    ),
+    check(
+      "user_password_salt_check",
+      sql`length(${table.saltBase64url}) BETWEEN 22 AND 64`,
+    ),
+    check(
+      "user_password_hash_check",
+      sql`length(${table.hashBase64url}) = 43`,
+    ),
+  ],
+);
+
+export const authPendingRegistrations = sqliteTable(
+  "auth_pending_registrations",
+  {
+    userId: text("user_id").primaryKey().references(() => userProfiles.id, {
+      onDelete: "cascade",
+    }),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    check(
+      "auth_pending_registrations_expiry_check",
+      sql`${table.updatedAt} >= ${table.createdAt}
+        AND ${table.expiresAt} > ${table.updatedAt}`,
+    ),
+    index("auth_pending_registrations_expiry_idx").on(
+      table.expiresAt,
+      table.userId,
+    ),
+  ],
+);
+
+export const authPasswordRateLimits = sqliteTable(
+  "auth_password_rate_limits",
+  {
+    scopeKey: text("scope_key").primaryKey(),
+    failureCount: integer("failure_count").notNull().default(0),
+    windowStartedAt: text("window_started_at").notNull(),
+    lockedUntil: text("locked_until"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    check(
+      "auth_password_rate_limit_count_check",
+      sql`${table.failureCount} BETWEEN 0 AND 1000`,
+    ),
+    index("auth_password_rate_limits_updated_idx").on(table.updatedAt),
+  ],
+);
+
+export const authPasswordAttemptReservations = sqliteTable(
+  "auth_password_attempt_reservations",
+  {
+    id: text("id").primaryKey(),
+    scopeKey: text("scope_key").notNull(),
+    scopeKind: text("scope_kind").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    check(
+      "auth_password_attempt_scope_check",
+      sql`${table.scopeKind} IN ('email','ip')`,
+    ),
+    check(
+      "auth_password_attempt_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    index("auth_password_attempt_scope_expiry_idx").on(
+      table.scopeKey,
+      table.expiresAt,
+    ),
+    index("auth_password_attempt_expiry_idx").on(table.expiresAt),
   ],
 );
 
@@ -811,6 +912,64 @@ export const authSessions = sqliteTable("auth_sessions", {
   index("auth_sessions_device_idx").on(table.deviceId, table.expiresAt),
 ]);
 
+export const authSessionHandoffs = sqliteTable(
+  "auth_session_handoffs",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull(),
+    userId: text("user_id").notNull().references(() => userProfiles.id, {
+      onDelete: "cascade",
+    }),
+    sourceSessionId: text("source_session_id").notNull().references(
+      () => authSessions.id,
+      { onDelete: "cascade" },
+    ),
+    sourceHost: text("source_host").notNull(),
+    destinationHost: text("destination_host").notNull(),
+    redirectPath: text("redirect_path").notNull(),
+    rememberMe: integer("remember_me").notNull().default(0),
+    expiresAt: text("expires_at").notNull(),
+    consumedAt: text("consumed_at"),
+    consumedBySessionId: text("consumed_by_session_id"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    check(
+      "auth_session_handoffs_hash_check",
+      sql`length(${table.tokenHash}) = 64 AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "auth_session_handoffs_hosts_check",
+      sql`${table.sourceHost} IN ('app.juro.uz','lawyer.juro.uz')
+        AND ${table.destinationHost} IN ('app.juro.uz','lawyer.juro.uz')
+        AND ${table.sourceHost} <> ${table.destinationHost}`,
+    ),
+    check(
+      "auth_session_handoffs_redirect_check",
+      sql`substr(${table.redirectPath}, 1, 1) = '/'
+        AND substr(${table.redirectPath}, 1, 2) <> '//'`,
+    ),
+    check(
+      "auth_session_handoffs_remember_check",
+      sql`${table.rememberMe} IN (0,1)`,
+    ),
+    check(
+      "auth_session_handoffs_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "auth_session_handoffs_consumed_check",
+      sql`(${table.consumedAt} IS NULL AND ${table.consumedBySessionId} IS NULL)
+        OR (${table.consumedAt} IS NOT NULL AND ${table.consumedBySessionId} IS NOT NULL)`,
+    ),
+    uniqueIndex("auth_session_handoffs_token_uidx").on(table.tokenHash),
+    index("auth_session_handoffs_source_idx").on(
+      table.sourceSessionId,
+      table.expiresAt,
+    ),
+  ],
+);
+
 export const authSessionTokenHistory = sqliteTable(
   "auth_session_token_history",
   {
@@ -963,8 +1122,12 @@ export const securityEmailJobs = sqliteTable(
     workspaceId: text("workspace_id").references(() => workspaces.id, {
       onDelete: "set null",
     }),
-    challengeId: text("challenge_id").notNull().references(
+    challengeId: text("challenge_id").references(
       () => emailChangeChallenges.id,
+      { onDelete: "cascade" },
+    ),
+    authOtpChallengeId: text("auth_otp_challenge_id").references(
+      () => authOtpChallenges.id,
       { onDelete: "cascade" },
     ),
     eventType: text("event_type").notNull(),
@@ -983,11 +1146,18 @@ export const securityEmailJobs = sqliteTable(
   (table) => [
     check(
       "security_email_jobs_event_check",
-      sql`${table.eventType} = 'email_changed_previous_address'`,
+      sql`${table.eventType} IN ('email_changed_previous_address','password_changed')`,
     ),
     check(
       "security_email_jobs_locale_check",
-      sql`${table.locale} IN ('ru','uz')`,
+      sql`${table.locale} IN ('ru','uz','en')`,
+    ),
+    check(
+      "security_email_jobs_context_check",
+      sql`(
+        (${table.eventType} = 'email_changed_previous_address' AND ${table.challengeId} IS NOT NULL AND ${table.authOtpChallengeId} IS NULL)
+        OR (${table.eventType} = 'password_changed' AND ${table.challengeId} IS NULL AND ${table.authOtpChallengeId} IS NOT NULL)
+      )`,
     ),
     check(
       "security_email_jobs_status_check",
@@ -1011,6 +1181,10 @@ export const securityEmailJobs = sqliteTable(
     ),
     uniqueIndex("security_email_jobs_challenge_event_uidx").on(
       table.challengeId,
+      table.eventType,
+    ),
+    uniqueIndex("security_email_jobs_auth_otp_event_uidx").on(
+      table.authOtpChallengeId,
       table.eventType,
     ),
     index("security_email_jobs_status_idx").on(
@@ -1180,6 +1354,7 @@ export const authMfaChallenges = sqliteTable("auth_mfa_challenges", {
   userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
   credentialId: text("credential_id").notNull().references(() => authTotpCredentials.id, { onDelete: "cascade" }),
   emailOtpChallengeId: text("email_otp_challenge_id").notNull().references(() => authOtpChallenges.id, { onDelete: "cascade" }),
+  primaryAuthMethod: text("primary_auth_method").notNull().default("email_otp"),
   purpose: text("purpose").notNull().default("login"),
   attemptCount: integer("attempt_count").notNull().default(0),
   maxAttempts: integer("max_attempts").notNull().default(5),
@@ -1207,6 +1382,47 @@ export const authMfaChallenges = sqliteTable("auth_mfa_challenges", {
     .where(sql`${table.consumedAt} IS NULL AND ${table.invalidatedAt} IS NULL`),
   index("auth_mfa_challenges_expiry_idx").on(table.expiresAt),
 ]);
+
+export const authMfaAttemptReservations = sqliteTable(
+  "auth_mfa_attempt_reservations",
+  {
+    id: text("id").primaryKey(),
+    challengeId: text("challenge_id").notNull().references(
+      () => authMfaChallenges.id,
+      { onDelete: "cascade" },
+    ),
+    userScopeKey: text("user_scope_key").notNull(),
+    ipScopeKey: text("ip_scope_key"),
+    expiresAt: text("expires_at").notNull(),
+    failureClaimNonce: text("failure_claim_nonce"),
+    failureClaimedAt: text("failure_claimed_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    check(
+      "auth_mfa_attempt_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "auth_mfa_attempt_claim_check",
+      sql`(${table.failureClaimNonce} IS NULL AND ${table.failureClaimedAt} IS NULL)
+        OR (${table.failureClaimNonce} IS NOT NULL AND ${table.failureClaimedAt} >= ${table.createdAt})`,
+    ),
+    index("auth_mfa_attempt_challenge_expiry_idx").on(
+      table.challengeId,
+      table.expiresAt,
+    ),
+    index("auth_mfa_attempt_user_expiry_idx").on(
+      table.userScopeKey,
+      table.expiresAt,
+    ),
+    index("auth_mfa_attempt_ip_expiry_idx").on(
+      table.ipScopeKey,
+      table.expiresAt,
+    ),
+    index("auth_mfa_attempt_expiry_idx").on(table.expiresAt),
+  ],
+);
 
 export const authMfaFactorClaims = sqliteTable("auth_mfa_factor_claims", {
   id: text("id").primaryKey(),
@@ -1421,7 +1637,7 @@ export const policyDocuments = sqliteTable("policy_documents", {
   publishedAt: text("published_at"),
   createdAt: text("created_at").notNull(),
 }, (table) => [
-  check("policy_documents_locale_check", sql`${table.locale} IN ('ru','uz')`),
+  check("policy_documents_locale_check", sql`${table.locale} IN ('ru','uz','en')`),
   check(
     "policy_documents_status_check",
     sql`${table.status} IN ('draft','approved','superseded')`,

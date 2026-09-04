@@ -10,6 +10,9 @@ import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
 import { purgeExpiredQuestionIntakes } from "../lib/ai/question-intake";
+import {
+  purgeExpiredPendingRegistrations,
+} from "../lib/auth/registration-retention";
 import { purgeExpiredDocumentAnalysisUploads } from "../lib/document-analysis/resource-retention";
 import { reconcileAnalysisVersionObjectWrites } from "../lib/document-analysis/version-object-write";
 import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/document-version-object-write";
@@ -612,6 +615,11 @@ export async function handleScheduled(
     const queueDlqHealth = await reconcileQueueDlqHealth(env, {
       now: new Date(now),
     });
+    failureCode = "PENDING_REGISTRATION_RETENTION_CLEANUP_FAILED";
+    const pendingRegistrationRetention = await purgeExpiredPendingRegistrations({
+      db: env.DB,
+      now,
+    });
     failureCode = "MEMORY_RETENTION_CLEANUP_FAILED";
     const memoryRetention = await purgeDueDeletedUserMemories({
       db: env.DB,
@@ -698,6 +706,12 @@ export async function handleScheduled(
       lexSourceHealthState: lexSourceHealth.state,
       lexSourceHealthError: lexSourceHealth.alertCode,
       lexMetadataRetryStatus: lexMetadataRetry?.status ?? "not_due",
+      pendingRegistrationRetentionEligible: pendingRegistrationRetention.eligible,
+      pendingRegistrationRetentionPurged: pendingRegistrationRetention.purged,
+      pendingRegistrationRetentionStaleMarkersPurged: pendingRegistrationRetention.staleMarkersPurged,
+      pendingRegistrationRetentionRemainingDue: pendingRegistrationRetention.remainingDue,
+      registrationOtpRetentionEligible: pendingRegistrationRetention.registrationOtpEligible,
+      registrationOtpRetentionPurged: pendingRegistrationRetention.registrationOtpPurged,
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,
       guestAiRetentionEligible: guestAiRetention.eligible,

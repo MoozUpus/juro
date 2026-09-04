@@ -10,3 +10,84 @@
 .documentContent p,.documentContent li{color:#334956}
 @media(max-width:760px){.hero{padding-top:112px}.document{padding-top:96px}.hero h1{font-size:clamp(42px,12vw,58px)}.documentHero h1{font-size:clamp(39px,10.5vw,41px);overflow-wrap:anywhere}}
 @media print{.page{background:var(--surface-raised)!important}.page>header,.page>footer,.header,.footer,.previewNotice,.contactPanel,.related,.mobileToc{display:none!important}.document{max-width:none;padding:0}.breadcrumb{margin-bottom:24px}.documentHero h1{font-size:34pt}.documentLayout{display:block;margin-top:30px}.toc{display:none}.documentContent{max-width:none}.documentContent section{break-inside:avoid}.documentContent p,.documentContent li{font-size:11pt}.tableWrap{overflow:visible}.metadata button{display:none}}
+
+:global(html[data-theme="dark"]) .page {
+  color: var(--text-primary);
+}
+
+:global(html[data-theme="dark"]) .header {
+  border-color: var(--border-subtle);
+}
+
+:global(html[data-theme="dark"]) :is(.header nav a, .hero h1, .documentHero h1, .group > header p, .related > p, .documentContent h2, .documentContent h3, .mobileToc summary, .related a) {
+  color: var(--text-primary);
+}
+
+:global(html[data-theme="dark"]) :is(.hero > p:not(.eyebrow), .documentHero > p:not(.eyebrow), .previewNotice span, .group > header span, .card span, .breadcrumb, .breadcrumb a, .toc a, .mobileToc a, .documentContent p, .documentContent li) {
+  color: var(--text-secondary);
+}
+
+:global(html[data-theme="dark"]) :is(.eyebrow, .previewNotice strong, .card small, .card b, .toc p, .related i) {
+  color: var(--brand-gold-ink);
+}
+
+:global(html[data-theme="dark"]) :is(.group, .documentContent section, .related) {
+  border-color: var(--border-subtle);
+}
+
+:global(html[data-theme="dark"]) .card {
+  background: var(--surface-raised);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :global(html[data-theme="dark"]) .card:hover {
+    border-color: color-mix(in srgb, var(--brand-gold) 58%, transparent);
+    box-shadow: 0 18px 38px rgba(0, 0, 0, .28);
+  }
+}
+
+:global(html[data-theme="dark"]) :is(.metadata span, .metadata button) {
+  background: var(--surface-subtle);
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+:global(html[data-theme="dark"]) .metadata span:last-child {
+  background: var(--status-warning-surface);
+  color: var(--status-warning);
+}
+
+:global(html[data-theme="dark"]) :is(.tableWrap, .mobileToc, .related a) {
+  background: var(--surface-raised);
+  border-color: var(--border-subtle);
+}
+
+:global(html[data-theme="dark"]) :is(.tableWrap th, .tableWrap td) {
+  border-color: var(--border-subtle);
+}
+
+:global(html[data-theme="dark"]) .tableWrap th {
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+:global(html[data-theme="dark"]) :is(.contactPanel, .footer) {
+  background: #061827;
+}
+
+:global(html[data-theme="dark"]) :is(.card, .header a, .toc a, .mobileToc a, .related a, .metadata button):focus-visible {
+  outline-color: var(--focus-ring);
+}
+
+@media print {
+  :global(html[data-theme="dark"]) :is(.page, .tableWrap, .tableWrap th) {
+    background: #fff !important;
+    color: #122a43 !important;
+  }
+
+  :global(html[data-theme="dark"]) :is(.documentHero h1, .documentContent h2, .documentContent h3, .documentContent p, .documentContent li, .tableWrap th, .tableWrap td) {
+    color: #122a43 !important;
+  }
+}

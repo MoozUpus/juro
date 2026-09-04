@@ -313,7 +313,7 @@ is deliberately unreachable.
 
 - all five RU/UZ application policy pages have a server-owned machine version
   and an exact SHA-256 digest over canonical semantic content;
-- the displayed version is `2026-07-26.draft.1` and is visibly marked as a
+- the displayed version is `2026-09-04.draft.2` and is visibly marked as a
   draft because operator identity placeholders and legal approval remain
   unresolved;
 - runtime verification fails closed if content changes without an intentional

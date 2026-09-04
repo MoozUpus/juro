@@ -1,7 +1,10 @@
 import { sha256 } from "./crypto";
 
 const GENESIS_HASH = "0".repeat(64);
-const MAX_CHAIN_RETRIES = 3;
+// A login challenge permits five concurrent, already-reserved MFA attempts.
+// The append-only event chain must therefore tolerate all five settlements
+// racing on the same user's chain head without dropping an auth-state update.
+const MAX_CHAIN_RETRIES = 8;
 
 export type SecurityEventSeverity = "info" | "warning" | "critical";
 

@@ -41,3 +41,78 @@
 .faqSection summary span {
   color: var(--brand-gold-ink);
 }
+
+:global(html[data-theme="dark"]) .page {
+  --gold-400: #e2c784;
+  --warm-50: var(--surface-canvas);
+  --warm-100: var(--surface-subtle);
+  --warm-200: var(--border-subtle);
+}
+
+:global(html[data-theme="dark"]) .heroProduct {
+  border-color: var(--border-strong);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, .42);
+}
+
+:global(html[data-theme="dark"]) :is(.sceneTop small, .scenarioTabs button, .caseOutput article small, .transitionRail svg, .audienceList p, .caseCard p, .continuityVisual li, .resourcesSection a > small, .accessNote) {
+  color: var(--text-secondary);
+}
+
+:global(html[data-theme="dark"]) :is(.sceneTop svg, .dossier small, .dossier p svg) {
+  color: var(--status-success);
+}
+
+:global(html[data-theme="dark"]) :is(.scenarioTabs, .documentToolbar) {
+  border-color: var(--border-subtle);
+}
+
+:global(html[data-theme="dark"]) .scenarioTabs button[aria-selected="true"] {
+  color: var(--text-primary);
+}
+
+:global(html[data-theme="dark"]) :is(.caseInput span, .outputLabel, .transitionRail article > span, .eyebrowDark, .audienceList article > span, .caseCard small, .continuityVisual li span, .dossier p i, .resourcesSection a > span, .faqSection summary span) {
+  color: var(--brand-gold-ink);
+}
+
+:global(html[data-theme="dark"]) .audienceList li {
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+
+:global(html[data-theme="dark"]) .documentToolbar {
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+}
+
+:global(html[data-theme="dark"]) .documentCanvas p:nth-of-type(2) {
+  border-color: #d98b82;
+}
+
+:global(html[data-theme="dark"]) .documentCanvas p:nth-of-type(3) {
+  border-color: #83b69e;
+}
+
+:global(html[data-theme="dark"]) .continuityVisual li::before {
+  background: var(--surface-subtle);
+  border-color: var(--border-strong);
+}
+
+:global(html[data-theme="dark"]) .trustGrid article > span {
+  background: var(--status-success-surface);
+  color: var(--status-success);
+}
+
+:global(html[data-theme="dark"]) .resourcesSection > div > a:hover {
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+:global(html[data-theme="dark"]) .resourcesSection > div > a:hover p {
+  color: var(--text-secondary);
+}
+
+:global(html[data-theme="dark"]) .trustActions a:first-child {
+  background: var(--brand-gold);
+  border-color: var(--brand-gold);
+  color: #071827;
+}
