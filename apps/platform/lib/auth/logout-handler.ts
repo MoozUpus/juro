@@ -5,6 +5,7 @@ import {
   localSessionFromCookie,
   revokeOneSession,
 } from "./session-management";
+import { sessionTokenFromCookie } from "./session-token";
 
 type LogoutDependencies = {
   database: typeof requireD1;
@@ -86,6 +87,15 @@ export async function handleLogout(
   }
   const headers = logoutResponseHeaders(request.url);
   const raw = request.headers.get("cookie") ?? "";
+  // An already signed-out browser has no server session to revoke. Avoid
+  // turning an idempotent logout into a 503 merely because D1 is unavailable
+  // (or its runtime binding cannot be resolved) when no bearer exists.
+  if (!sessionTokenFromCookie(raw)) {
+    if (navigation) {
+      return navigationResponse(request, headers, true);
+    }
+    return new Response(null, { status: 204, headers });
+  }
   try {
     const db = dependencies.database();
     const session = await dependencies.sessionFromCookie(db, raw, {

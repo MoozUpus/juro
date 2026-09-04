@@ -53,6 +53,17 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   assert.equal(login?.pathname, "/uz/auth/login");
   assert.equal(login?.searchParams.get("accountType"), "lawyer");
 
+  const englishLogin = lawyerHostTarget(new URL("https://lawyer.juro.uz/en/login"));
+  assert.equal(englishLogin?.pathname, "/en/auth/login");
+  assert.equal(englishLogin?.searchParams.get("accountType"), "lawyer");
+
+  const englishRegister = lawyerHostTarget(
+    new URL("https://lawyer.juro.uz/en/auth/register?returnTo=%2Fen%2Fdashboard"),
+  );
+  assert.equal(englishRegister?.pathname, "/en/auth/register");
+  assert.equal(englishRegister?.searchParams.get("accountType"), "lawyer");
+  assert.equal(englishRegister?.searchParams.get("returnTo"), "/en/dashboard");
+
   const unprefixedRegister = lawyerHostTarget(new URL("https://lawyer.juro.uz/register"));
   assert.equal(unprefixedRegister?.pathname, "/ru/auth/register");
   assert.equal(unprefixedRegister?.searchParams.get("accountType"), "lawyer");
@@ -75,4 +86,8 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/not-a-module")), null);
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/not-a-module")), null);
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/individual/documents")), null);
+  // English authentication is intentionally available before the protected
+  // product shell is translated. Do not silently serve RU/UZ product copy
+  // under an /en URL.
+  assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/en/dashboard")), null);
 });

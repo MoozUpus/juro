@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { env } from "cloudflare:workers";
 
 import {
   createLogoutAction,
   executeLogout,
   localizedSignOutPath,
 } from "../app/_platform/logout-client";
+import { POST as logoutRoute } from "../app/api/auth/logout/route";
 import { handleLogout } from "../lib/auth/logout-handler";
 import {
   replacementSessionCookies,
@@ -26,6 +28,17 @@ function logoutRequest(host = "app.juro.uz"): Request {
     method: "POST",
     headers: {
       cookie: `juro_session=${"a".repeat(43)}`,
+      origin: `https://${host}`,
+      "sec-fetch-site": "same-origin",
+      "x-juro-csrf": "1",
+    },
+  });
+}
+
+function anonymousLogoutRequest(host = "app.juro.uz"): Request {
+  return new Request(`https://${host}/api/auth/logout?locale=ru`, {
+    method: "POST",
+    headers: {
       origin: `https://${host}`,
       "sec-fetch-site": "same-origin",
       "x-juro-csrf": "1",
@@ -57,6 +70,80 @@ function applySetCookie(jar: Map<string, string>, setCookie: string): void {
 function cookieHeader(jar: Map<string, string>): string {
   return Array.from(jar, ([name, value]) => `${name}=${value}`).join("; ");
 }
+
+test("already signed-out logout is idempotent without touching D1", async () => {
+  let databaseTouched = false;
+  const response = await handleLogout(anonymousLogoutRequest(), {
+    database() {
+      databaseTouched = true;
+      throw new Error("D1 must not be required without a session bearer");
+    },
+    sessionFromCookie: async () => null,
+    revokeSession: async () => ({ revoked: false, revokedCurrent: false }),
+    reportFailure() {
+      assert.fail("idempotent anonymous logout must not report revocation failure");
+    },
+  });
+
+  assert.equal(response.status, 204);
+  assert.equal(databaseTouched, false);
+  assert.equal(response.headers.get("cache-control"), "private, no-store, max-age=0");
+  assert.equal(response.headers.get("clear-site-data"), '"cache"');
+  assert.match(setCookies(response).join("\n"), /juro_session=.*Max-Age=0/u);
+});
+
+test("the Next route context cannot replace logout dependencies", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const workerEnv = env as unknown as Record<string, unknown>;
+  const previousDatabase = workerEnv.DB;
+  const now = new Date();
+  sqlite.prepare(
+    `INSERT INTO user_profiles (id,email,locale,created_at,updated_at)
+     VALUES ('route-user','route@example.test','ru',?,?)`,
+  ).run(now.toISOString(), now.toISOString());
+  const session = await createEmailOtpSession(d1, {
+    userId: "route-user",
+    userAgent: "Browser/route-context",
+    now,
+  });
+  workerEnv.DB = d1;
+
+  try {
+    const request = new Request(
+      "https://app.juro.uz/api/auth/logout?locale=ru",
+      {
+        method: "POST",
+        headers: {
+          cookie: `juro_session=${session.token}`,
+          origin: "https://app.juro.uz",
+          "sec-fetch-site": "same-origin",
+          "x-juro-csrf": "1",
+        },
+      },
+    );
+    const route = logoutRoute as unknown as (
+      request: Request,
+      context: { params: Promise<Record<string, string>> },
+    ) => Promise<Response>;
+    const response = await route(request, { params: Promise.resolve({}) });
+
+    assert.equal(response.status, 204);
+    assert.match(setCookies(response).join("\n"), /juro_session=.*Max-Age=0/u);
+    const persisted = sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_sessions WHERE id=?",
+    ).get(session.sessionId) as { revokedAt: string | null };
+    assert.ok(persisted.revokedAt, "the active server session must be revoked");
+    assert.equal(await localSessionFromCookie(
+      d1,
+      `juro_session=${session.token}`,
+      { touch: false },
+    ), null, "the old bearer must not authenticate after logout");
+  } finally {
+    if (previousDatabase === undefined) delete workerEnv.DB;
+    else workerEnv.DB = previousDatabase;
+    sqlite.close();
+  }
+});
 
 test("logout expires browser auth cookies even when D1 is unavailable", async () => {
   const failures: string[] = [];
