@@ -203,7 +203,7 @@
         "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
-        "IDENTITY_PROTECTION_MODE": "legacy",
+        "IDENTITY_PROTECTION_MODE": "dual_write",
         "JOB_SCHEMA_VERSION": "1",
         "EMBEDDING_MODEL": "text-embedding-3-large",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>",
@@ -561,7 +561,7 @@
         "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
-        "IDENTITY_PROTECTION_MODE": "legacy",
+        "IDENTITY_PROTECTION_MODE": "dual_write",
         "JOB_SCHEMA_VERSION": "1",
         "EMBEDDING_MODEL": "text-embedding-3-large",
         "OPENAI_CHAT_MODEL": "gpt-5.6-terra",
@@ -581,7 +581,7 @@
           "database_name": "juro-production",
           "database_id": "4cce509b-0e02-4ca9-a3ba-a5ce1327aeda",
           "migrations_dir": "./drizzle",
-          "migrations_pattern": "./drizzle/{0121,012[4-9],013[0-9],014[0-9]}_*.sql"
+          "migrations_pattern": "./drizzle/{0121,012[4-9],013[0-9],014[0-9],015[0-2]}_*.sql"
         }
       ],
       "migrations": [

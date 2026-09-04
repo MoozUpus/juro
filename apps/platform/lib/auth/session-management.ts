@@ -6,7 +6,10 @@ import {
   type IdentityProtectionContext,
   type UserIdentityRow,
 } from "./identity-protection";
-import { sessionTokenFromCookie } from "./session-token";
+import {
+  logoutPendingFromCookie,
+  sessionTokenFromCookie,
+} from "./session-token";
 import { revokeReplayedSessionToken } from "./session-rotation";
 import {
   batchWithSecurityEvent,
@@ -388,6 +391,7 @@ export async function createPrimarySessionIfMfaDisabled(
   input: {
     userId: string;
     userAgent: string | null;
+    authMethod?: "email_otp" | "password";
     securityEvidence?: AuthRequestSecurityEvidence | null;
     deviceContinuity?: PreparedDeviceContinuity | null;
     loginSecurityNotification?: LoginSecurityNotificationConfig | null;
@@ -397,7 +401,7 @@ export async function createPrimarySessionIfMfaDisabled(
 ): Promise<CreatedSession | null> {
   const prepared = await prepareLocalSessionCreation(db, {
     ...input,
-    authMethod: "email_otp",
+    authMethod: input.authMethod ?? "email_otp",
     assuranceLevel: "primary",
   });
   const guard = {
@@ -421,7 +425,7 @@ export async function createPrimarySessionIfMfaDisabled(
       ipHash: input.securityEvidence?.ipHash ?? null,
       userAgentHash: input.securityEvidence?.userAgentHash ?? null,
       metadata: {
-        authMethod: "email_otp",
+        authMethod: input.authMethod ?? "email_otp",
         deviceName: prepared.displayName,
         ...deviceContinuityEventMetadata(prepared.deviceContinuity),
         ...requestSecurityEventMetadata(input.securityEvidence),
@@ -443,11 +447,15 @@ export async function localSessionFromCookie(
   db: D1Database,
   cookie: string | null,
   options: {
+    allowLogoutPending?: boolean;
     now?: Date;
     touch?: boolean;
     identity?: IdentityProtectionContext;
   } = {},
 ): Promise<LocalSession | null> {
+  if (!options.allowLogoutPending && logoutPendingFromCookie(cookie)) {
+    return null;
+  }
   const token = sessionTokenFromCookie(cookie);
   if (!token) return null;
   const now = options.now ?? new Date();

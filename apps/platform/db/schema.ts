@@ -963,8 +963,12 @@ export const securityEmailJobs = sqliteTable(
     workspaceId: text("workspace_id").references(() => workspaces.id, {
       onDelete: "set null",
     }),
-    challengeId: text("challenge_id").notNull().references(
+    challengeId: text("challenge_id").references(
       () => emailChangeChallenges.id,
+      { onDelete: "cascade" },
+    ),
+    authOtpChallengeId: text("auth_otp_challenge_id").references(
+      () => authOtpChallenges.id,
       { onDelete: "cascade" },
     ),
     eventType: text("event_type").notNull(),
@@ -983,11 +987,18 @@ export const securityEmailJobs = sqliteTable(
   (table) => [
     check(
       "security_email_jobs_event_check",
-      sql`${table.eventType} = 'email_changed_previous_address'`,
+      sql`${table.eventType} IN ('email_changed_previous_address','password_changed')`,
     ),
     check(
       "security_email_jobs_locale_check",
-      sql`${table.locale} IN ('ru','uz')`,
+      sql`${table.locale} IN ('ru','uz','en')`,
+    ),
+    check(
+      "security_email_jobs_context_check",
+      sql`(
+        (${table.eventType} = 'email_changed_previous_address' AND ${table.challengeId} IS NOT NULL AND ${table.authOtpChallengeId} IS NULL)
+        OR (${table.eventType} = 'password_changed' AND ${table.challengeId} IS NULL AND ${table.authOtpChallengeId} IS NOT NULL)
+      )`,
     ),
     check(
       "security_email_jobs_status_check",
@@ -1011,6 +1022,10 @@ export const securityEmailJobs = sqliteTable(
     ),
     uniqueIndex("security_email_jobs_challenge_event_uidx").on(
       table.challengeId,
+      table.eventType,
+    ),
+    uniqueIndex("security_email_jobs_auth_otp_event_uidx").on(
+      table.authOtpChallengeId,
       table.eventType,
     ),
     index("security_email_jobs_status_idx").on(

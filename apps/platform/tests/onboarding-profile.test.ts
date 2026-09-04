@@ -254,7 +254,7 @@ function insertProfile(
 async function insertPolicyEvidence(
   sqlite: DatabaseSync,
   userId: string,
-  locale: "ru" | "uz",
+  locale: "ru" | "uz" | "en",
   count?: number,
 ): Promise<void> {
   const policies = (await registrationPolicies(locale)).slice(0, count);
@@ -464,6 +464,22 @@ test("UZ onboarding reuses the existing personal workspace", async () => {
     assert.equal((sqlite.prepare(
       "SELECT count(*) AS total FROM workspaces",
     ).get() as { total: number }).total, 1);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("English registration evidence remains valid when onboarding enters the RU/UZ shell", async () => {
+  const { sqlite, d1 } = onboardingDatabase();
+  try {
+    const userId = insertProfile(sqlite);
+    await insertPolicyEvidence(sqlite, userId, "en");
+    const response = await handleOnboardingRequest(
+      request(validInput),
+      dependencies(d1, userId),
+    );
+    assert.equal(response.status, 200);
+    assert.equal((await response.json() as { redirectTo: string }).redirectTo, "/ru/individual/dashboard");
   } finally {
     sqlite.close();
   }

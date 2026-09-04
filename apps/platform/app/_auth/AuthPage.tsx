@@ -11,8 +11,12 @@ import { getChatGPTUser } from "../chatgpt-auth";
 import { AuthForm } from "./AuthForm";
 import "./auth.css";
 
-export type AuthLocale = "ru" | "uz";
+export type AuthLocale = "ru" | "uz" | "en";
 export type RegistrationPersona = "individual" | "entrepreneur" | "lawyer";
+
+export function isAuthLocale(value: string): value is AuthLocale {
+  return value === "ru" || value === "uz" || value === "en";
+}
 
 export function registrationPersona(value?: string): RegistrationPersona {
   return value === "entrepreneur" || value === "lawyer"
@@ -51,11 +55,12 @@ export async function AuthPage({
       initialLocale={locale}
       initialAccountType={registrationPersona(accountType)}
       returnTo={returnTo}
-      otpEnabled={Boolean(
-        env.RESEND_API_KEY
-          && env.EMAIL_FROM
-          && env.TURNSTILE_SECRET_KEY
-          && env.TURNSTILE_SITE_KEY
+      passwordAuthEnabled={Boolean(
+        env.TURNSTILE_SECRET_KEY && env.TURNSTILE_SITE_KEY
+      )}
+      emailAuthEnabled={Boolean(
+        env.RESEND_API_KEY && env.EMAIL_FROM
+          && env.TURNSTILE_SECRET_KEY && env.TURNSTILE_SITE_KEY
       )}
       turnstileSiteKey={env.TURNSTILE_SITE_KEY}
       platformAuthEnabled={env.ALLOW_PLATFORM_AUTH_HEADERS === "true"}

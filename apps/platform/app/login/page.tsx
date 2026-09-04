@@ -8,7 +8,7 @@ export default async function Login({ searchParams }: {
   const query = await searchParams;
   return <AuthPage
     mode="login"
-    locale={query.lang === "ru" ? "ru" : "uz"}
+    locale={query.lang === "en" ? "en" : query.lang === "ru" ? "ru" : "uz"}
     returnTo={query.returnTo}
     reauth={query.reauth === "1"}
   />;

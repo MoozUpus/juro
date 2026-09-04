@@ -12,7 +12,7 @@ export default async function Register({ searchParams }: {
   const query = await searchParams;
   return <AuthPage
     mode="register"
-    locale={query.lang === "ru" ? "ru" : "uz"}
+    locale={query.lang === "en" ? "en" : query.lang === "ru" ? "ru" : "uz"}
     accountType={query.accountType}
     returnTo={query.returnTo}
   />;

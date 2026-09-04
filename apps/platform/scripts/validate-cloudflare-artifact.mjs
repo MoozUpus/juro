@@ -64,8 +64,8 @@ assert.equal(
 );
 assert.equal(
   artifact.vars?.IDENTITY_PROTECTION_MODE,
-  "legacy",
-  "identity protection must remain in expand-safe legacy mode",
+  ["staging", "production"].includes(requestedEnvironment) ? "dual_write" : "legacy",
+  "identity protection mode must match the configured rollout stage",
 );
 assert.equal(
   Object.hasOwn(artifact.vars ?? {}, "ALLOW_PLATFORM_AUTH_HEADERS"),

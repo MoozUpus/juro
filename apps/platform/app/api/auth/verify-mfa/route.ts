@@ -28,6 +28,11 @@ import {
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { isPersonalAccountType } from "../../../../lib/platform/routing";
 import { lawyerLandingDestination } from "../../../../lib/platform/lawyer-entry-routing";
+import { issueSessionHandoff } from "../../../../lib/auth/session-handoff";
+import {
+  resolveThemePreference,
+  themePreferenceCookie,
+} from "../../../../lib/platform/theme-preference";
 
 function terminalMfaError(error: unknown): boolean {
   return error instanceof MfaError
@@ -36,6 +41,7 @@ function terminalMfaError(error: unknown): boolean {
       "MFA_CHALLENGE_EXPIRED",
       "MFA_CHALLENGE_USED",
       "MFA_ATTEMPTS_EXCEEDED",
+      "MFA_RATE_LIMITED",
     ].includes(error.code);
 }
 
@@ -60,7 +66,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
       code: "MFA_CHALLENGE_INVALID",
       error: locale === "ru"
         ? "Проверка входа недействительна. Начните вход заново."
-        : "Kirish tekshiruvi yaroqsiz. Kirishni qaytadan boshlang.",
+        : locale === "uz"
+          ? "Kirish tekshiruvi yaroqsiz. Kirishni qaytadan boshlang."
+          : "The sign-in check is invalid. Start signing in again.",
     }, 401, [clearMfaChallengeCookie()]);
   }
   try {
@@ -75,6 +83,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         deviceToken: deviceContinuityTokenFromCookie(
           request.headers.get("cookie"),
         ),
+        requestIp: request.headers.get("cf-connecting-ip")?.trim() || null,
         rememberMe,
       },
     );
@@ -82,7 +91,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
     const accountType = isPersonalAccountType(result.accountType)
       ? result.accountType
       : "individual";
-    const requestHostname = new URL(request.url).hostname;
+    const themePreference = resolveThemePreference(result.themePreference);
+    const requestUrl = new URL(request.url);
+    const requestHostname = requestUrl.hostname;
     const normalizedHostname = requestHostname.toLowerCase();
     const lawyerHost = normalizedHostname === "lawyer.juro.uz";
     const lawyerProfile = accountType === "lawyer"
@@ -95,7 +106,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
           lawyerMarketplaceStatus: string | null;
         }>()
       : null;
-    const redirectTo = accountType === "lawyer"
+    const accountRedirect = accountType === "lawyer"
       ? lawyerLandingDestination({
           locale: userLocale,
           accountType,
@@ -106,12 +117,28 @@ export const POST = withApiErrors(async function POST(request: Request) {
       : result.onboardingCompletedAt
         ? `/${userLocale}/${accountType}/dashboard`
         : `/${userLocale}/onboarding`;
-    return jsonNoStore({ ok: true, redirectTo }, 200, [
+    const redirectTo = accountType !== "lawyer" && lawyerHost
+      ? `https://app.juro.uz${accountRedirect}`
+      : accountRedirect;
+    const handoff = await issueSessionHandoff(requireD1(), {
+      userId: result.userId,
+      sourceSessionId: result.session.sessionId,
+      sourceHost: normalizedHostname,
+      destinationUrl: redirectTo,
+      rememberMe,
+    });
+    return jsonNoStore({
+      ok: true,
+      redirectTo,
+      handoff,
+      themePreference,
+    }, 200, [
       clearMfaChallengeCookie(),
       ...replacementSessionCookies(result.session.token, rememberMe, requestHostname),
       ...(result.session.deviceContinuityToken
         ? [deviceContinuityCookie(result.session.deviceContinuityToken)]
         : []),
+      themePreferenceCookie(themePreference, requestUrl),
     ]);
   } catch (error) {
     const response = mfaErrorResponse(error, locale);

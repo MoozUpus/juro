@@ -235,7 +235,12 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       config.vars.GUEST_AI_ENABLED,
       "true",
     );
-    assert.equal(config.vars.IDENTITY_PROTECTION_MODE, "legacy");
+    assert.equal(
+      config.vars.IDENTITY_PROTECTION_MODE,
+      environment === "staging" || environment === "production"
+        ? "dual_write"
+        : "legacy",
+    );
     assert.equal(config.vars.JOB_SCHEMA_VERSION, "1");
     assert.deepEqual(
       config.triggers,
@@ -254,7 +259,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     assert.equal(
       config.d1_databases[0]?.migrations_pattern,
       environment === "production"
-        ? "./drizzle/{0121,012[4-9],013[0-9],014[0-9]}_*.sql"
+        ? "./drizzle/{0121,012[4-9],013[0-9],014[0-9],015[0-2]}_*.sql"
         : undefined,
     );
     assert.deepEqual(

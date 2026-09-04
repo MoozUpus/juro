@@ -8,15 +8,19 @@ export type LegalDocument = {
 };
 
 const sharedRu = {
-  operator: "Оператор платформы: {OPERATOR_LEGAL_NAME}, контакты: {OPERATOR_EMAIL}, адрес: {OPERATOR_ADDRESS}. Эти реквизиты должны быть заполнены владельцем проекта до юридического утверждения редакции.",
+  operator: "JURO работает в режиме предварительного запуска до регистрации отдельного оператора. Юридически значимые уведомления принимаются по адресу muzaffarbekmurodoff@gmail.com. Наименование и адрес зарегистрированного оператора будут опубликованы до заключения договоров от его имени.",
   disclaimer: "JURO не является государственным органом, нотариусом или судом. AI-инструменты не заменяют помощь специалиста там, где она обязательна или разумно необходима.",
 };
 const sharedUz = {
-  operator: "Platforma operatori: {OPERATOR_LEGAL_NAME}, aloqa: {OPERATOR_EMAIL}, manzil: {OPERATOR_ADDRESS}. Ushbu rekvizitlar huquqiy tahrir tasdiqlanishidan oldin loyiha egasi tomonidan to‘ldirilishi kerak.",
+  operator: "JURO alohida operator ro‘yxatdan o‘tkazilguniga qadar dastlabki ishga tushirish rejimida ishlaydi. Yuridik ahamiyatga ega xabarlar muzaffarbekmurodoff@gmail.com manzilida qabul qilinadi. Ro‘yxatdan o‘tkazilgan operatorning nomi va manzili uning nomidan shartnomalar tuzilishidan oldin e’lon qilinadi.",
   disclaimer: "JURO davlat organi, notarius yoki sud emas. AI vositalari majburiy yoki oqilona zarur bo‘lgan mutaxassis yordamini almashtirmaydi.",
 };
+const sharedEn = {
+  operator: "JURO is operating in pre-launch mode until a dedicated operator is incorporated. Legally significant notices are accepted at muzaffarbekmurodoff@gmail.com. The registered operator’s name and address will be published before contracts are entered into on its behalf.",
+  disclaimer: "JURO is not a public authority, notary, or court. AI tools do not replace qualified professional assistance where it is required or reasonably necessary.",
+};
 
-export const appLegalContent: Record<"ru" | "uz", Record<AppLegalSlug, LegalDocument>> = {
+export const appLegalContent: Record<"ru" | "uz" | "en", Record<AppLegalSlug, LegalDocument>> = {
   ru: {
     terms: {
       title: "Условия использования личного кабинета JURO",
@@ -124,6 +128,61 @@ export const appLegalContent: Record<"ru" | "uz", Record<AppLegalSlug, LegalDocu
         { heading: "Qayta ishlash", paragraphs: ["JURO hisob, makon va tanlangan funksiyalar uchun zarur ma’lumotlarni qayta ishlaydi. Nozik ma’lumotlar faqat yuridik ssenariy uchun zarur bo‘lsa kiritilishi kerak.", sharedUz.operator] },
         { heading: "Roziliklar", paragraphs: ["Umumiy qoidalar, hujjat tahlili, mutaxassisga uzatish va konsultatsiya yozuvi uchun roziliklar zarur holatlarda alohida qayd etiladi."] },
         { heading: "Saqlash va o‘chirish", paragraphs: ["Har bir toifa uchun saqlash muddati operator tomonidan tasdiqlanishi kerak. O‘chirish so‘rovi sozlamalarda mavjud; arxivlash o‘chirish emas."] },
+      ],
+    },
+  },
+  en: {
+    terms: {
+      title: "JURO account Terms of Use",
+      description: "Rules for registration and for using AI, documents, teams, and professionals within app.juro.uz.",
+      updated: "26 July 2026",
+      sections: [
+        { heading: "1. Scope", paragraphs: ["These terms apply to the private account area at app.juro.uz and supplement the information terms of the public website. By using the account area, a user confirms that they have legal capacity and the right to provide any uploaded materials.", sharedEn.operator] },
+        { heading: "2. Features and limitations", paragraphs: ["JURO helps users structure a matter, store cases, create and review documents, manage action plans, and share selected context with a professional. Availability may depend on the subscription, technical integrations, and applicable restrictions.", sharedEn.disclaimer] },
+        { heading: "3. Account and team", paragraphs: ["Users are responsible for access to their email and for actions performed in an active session. A workspace owner manages member roles, while server-side controls restrict access to workspace data.", "Users must not upload data or documents without a lawful basis, interfere with the service, bypass restrictions, or attempt to access another person's materials."] },
+        { heading: "4. Paid services and termination", paragraphs: ["The price, billing period, limits, additional services, and cancellation terms are shown before payment is confirmed. A payment is not complete without confirmation from the payment provider.", "A user may stop using the service and request account deletion in privacy settings. Archiving a document does not delete the account or its data."] },
+      ],
+    },
+    privacy: {
+      title: "JURO application Privacy Policy",
+      description: "How the private account area processes account data, documents, legal matters, and service logs.",
+      updated: "26 July 2026",
+      sections: [
+        { heading: "1. Data we process", paragraphs: ["JURO processes registration data, workspace settings, facts entered by users, documents, comments, plans, consent records, technical logs, and activity history. The exact data depends on the feature being used.", sharedEn.operator] },
+        { heading: "2. Purposes and access", paragraphs: ["Data is used to provide account features, maintain security, fulfil requests, provide support, calculate limits, and meet legal obligations. Team members and professionals can see only the information permitted by their role, settings, and any specific consent.", "The content of legal questions and documents must not be sent to product analytics."] },
+        { heading: "3. Providers and transfers", paragraphs: ["External processors may be used for email, AI, file storage, monitoring, and payments. Before enabling a provider, the operator must establish the contractual basis, processing location, retention period, and protective measures.", "For a cross-border transfer, the operator must use a basis and notice permitted by applicable law."] },
+        { heading: "4. User rights", paragraphs: ["In settings, users can obtain a portable metadata export, review their consent history, and submit a deletion request. Some information may be retained for a mandatory period or to protect legal claims.", "For a request or complaint, contact {OPERATOR_EMAIL}."] },
+      ],
+    },
+    cookies: {
+      title: "JURO application Cookie Policy",
+      description: "Essential cookies for sessions, language, and user preferences.",
+      updated: "26 July 2026",
+      sections: [
+        { heading: "Essential cookies", paragraphs: ["The application uses a protected session cookie for sign-in, a language cookie, and technical values required for security and preference storage. The private account area may not work correctly without them."] },
+        { heading: "Analytics", paragraphs: ["Optional analytics must be enabled only in accordance with applicable requirements and consent settings. Events must not contain question text, document content, OTP codes, passport information, or payment details."] },
+        { heading: "Controls", paragraphs: ["Users can restrict cookies through their browser and, once a consent platform is connected, manage optional categories in privacy settings. Deleting an essential session cookie signs the user out."] },
+      ],
+    },
+    "ai-rules": {
+      title: "Rules for using AI in JURO",
+      description: "Boundaries for AI analysis, sources, verification, and hand-off to a professional.",
+      updated: "26 July 2026",
+      sections: [
+        { heading: "1. Role of AI", paragraphs: ["AI can help collect facts, identify uncertainty, and prepare a draft plan or document. Its output may be incomplete or incorrect and does not guarantee an outcome.", sharedEn.disclaimer] },
+        { heading: "2. Sources", paragraphs: ["Legal explanations must cite only sources from the controlled server registry and include their verification date. If no suitable source is found, JURO says so and does not invent a legal provision, act number, or link."] },
+        { heading: "3. Data and verification", paragraphs: ["Do not enter unnecessary personal data. Before materials are sent to an external AI provider, the operator must identify that provider in the Privacy Policy and apply data minimisation.", "Before making an important decision, users should verify facts, dates, and details and obtain qualified professional advice where appropriate."] },
+        { heading: "4. Human professional", paragraphs: ["Hand-off to a professional is a separate action. The user can review the materials to be shared and confirms consent; access is not automatically granted to the entire workspace."] },
+      ],
+    },
+    "personal-data": {
+      title: "Personal Data Processing Notice",
+      description: "The categories, purposes, and controls for data processing within JURO.",
+      updated: "26 July 2026",
+      sections: [
+        { heading: "Processing", paragraphs: ["JURO processes the data needed for the account, workspace, and selected features. Sensitive information should be provided only when it is genuinely necessary for the legal matter.", sharedEn.operator] },
+        { heading: "Consent", paragraphs: ["Consent to general terms, document analysis, hand-off to a professional, and consultation recording is captured separately whenever the relevant operation requires it. Consent may be withdrawn for future processing unless the law or an operation already completed requires otherwise."] },
+        { heading: "Retention and deletion", paragraphs: ["The operator must approve a retention period for each data category. A deletion request is available in settings; archiving an item is not deletion."] },
       ],
     },
   },

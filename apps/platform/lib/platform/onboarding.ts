@@ -126,9 +126,10 @@ async function hasCurrentRegistrationPolicyEvidence(
   db: D1Database,
   userId: string,
 ): Promise<boolean> {
-  const [ruPolicies, uzPolicies] = await Promise.all([
+  const [ruPolicies, uzPolicies, enPolicies] = await Promise.all([
     registrationPolicies("ru"),
     registrationPolicies("uz"),
+    registrationPolicies("en"),
   ]);
   const accepted = await db.prepare(
     `SELECT
@@ -148,7 +149,7 @@ async function hasCurrentRegistrationPolicyEvidence(
        AND acceptance.auth_source='email_otp'`,
   ).bind(userId).all<PolicyEvidenceRow>();
   const expected = new Map(
-    [...ruPolicies, ...uzPolicies].map((policy) => [
+    [...ruPolicies, ...uzPolicies, ...enPolicies].map((policy) => [
       [
         policy.documentKey,
         policy.documentVersion,

@@ -195,6 +195,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
               <div className={styles.mobileActions}>
                 <PublicThemeSwitcher locale={locale} />
                 <div aria-label="Language" className={styles.mobileLanguageSet}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={localeHref(target)} key={target} onClick={() => setOpen(false)}>{languageLabels[target]}</Link>)}</div>
+                <a href={`https://app.juro.uz/${platformLocale}/auth/login`}>{t.signIn}</a>
                 <a href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
               </div>
             </div>

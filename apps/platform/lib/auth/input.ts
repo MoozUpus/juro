@@ -2,7 +2,13 @@ import { z } from "zod";
 
 const emailInput = z.string().trim().min(3).max(254);
 const localeInput = z.enum(["ru", "uz"]).default("ru");
-const purposeInput = z.enum(["login", "register"]);
+const authLocaleInput = z.enum(["ru", "uz", "en"]).default("ru");
+const passwordInput = z.string().min(8).max(256);
+// Ordinary authentication is password-first. Public email-code endpoints are
+// limited to registration confirmation and password recovery; an internal
+// OTP row may still be used as a foreign-key bridge for password + MFA.
+const purposeInput = z.literal("register");
+const otpRequestPurposeInput = z.literal("password_reset");
 const accountTypeInput = z.enum([
   "individual",
   "entrepreneur",
@@ -11,20 +17,37 @@ const accountTypeInput = z.enum([
   "individual",
 );
 
-export const requestOtpInputSchema = z.object({
+const otpRequestBase = {
   email: emailInput,
-  purpose: purposeInput,
-  locale: localeInput,
+  locale: authLocaleInput,
   accountType: accountTypeInput,
   turnstileToken: z.string().trim().min(1).max(2_048),
-}).strict();
+};
+
+export const requestOtpInputSchema = z.discriminatedUnion("purpose", [
+  z.object({
+    ...otpRequestBase,
+    purpose: otpRequestPurposeInput,
+  }).strict(),
+  z.object({
+    ...otpRequestBase,
+    purpose: z.literal("register"),
+    password: passwordInput,
+    firstName: z.string().trim().min(1).max(80),
+    lastName: z.string().trim().max(80).optional(),
+    acceptTerms: z.literal(true),
+    acceptPrivacy: z.literal(true),
+    acceptPersonalData: z.literal(true),
+    marketing: z.boolean().default(false),
+  }).strict(),
+]);
 
 export const verifyOtpInputSchema = z.object({
   challengeId: z.string().uuid(),
   email: emailInput,
   code: z.string().regex(/^\d{6}$/),
   purpose: purposeInput,
-  locale: localeInput,
+  locale: authLocaleInput,
   accountType: accountTypeInput.optional(),
   firstName: z.string().max(80).optional(),
   lastName: z.string().max(80).optional(),
@@ -39,8 +62,24 @@ const mfaCodeInput = z.string().trim().min(6).max(64);
 
 export const verifyMfaInputSchema = z.object({
   code: mfaCodeInput,
-  locale: localeInput,
+  locale: authLocaleInput,
   rememberMe: z.boolean().default(false),
+}).strict();
+
+export const passwordLoginInputSchema = z.object({
+  email: emailInput,
+  password: passwordInput,
+  locale: authLocaleInput,
+  rememberMe: z.boolean().default(false),
+  turnstileToken: z.string().trim().min(1).max(2_048),
+}).strict();
+
+export const resetPasswordInputSchema = z.object({
+  challengeId: z.string().uuid(),
+  email: emailInput,
+  code: z.string().regex(/^\d{6}$/),
+  password: passwordInput,
+  locale: authLocaleInput,
 }).strict();
 
 export const confirmTotpEnrollmentInputSchema = z.object({

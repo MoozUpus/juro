@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { AuthPage } from "../../../_auth/AuthPage";
-import { isLocale } from "../../../../lib/platform/routing";
+import { AuthPage, isAuthLocale } from "../../../_auth/AuthPage";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +8,7 @@ export default async function LocalizedRegister({ params, searchParams }: {
   searchParams: Promise<{ accountType?: string; returnTo?: string }>;
 }) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
-  if (!isLocale(locale)) notFound();
+  if (!isAuthLocale(locale)) notFound();
   return <AuthPage
     mode="register"
     locale={locale}

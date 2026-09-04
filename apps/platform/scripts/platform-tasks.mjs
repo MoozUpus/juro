@@ -130,8 +130,10 @@ const coreTestFiles = [
   "tests/document-ocr-processor.test.ts",
   "tests/analysis-report-export.test.ts",
   "tests/auth-otp.test.ts",
+  "tests/password-auth.test.ts",
   "tests/auth-turnstile.test.ts",
   "tests/auth-sessions.test.ts",
+  "tests/session-handoff.test.ts",
   "tests/auth-keyring.test.ts",
   "tests/identity-protection.test.ts",
   "tests/identity-evidence.test.ts",
@@ -1135,7 +1137,7 @@ async function main() {
         args,
         {
           JURO_AGENT_PREVIEW_COMPATIBILITY_DATE: "2026-05-22",
-          LOCAL_AUTH_BYPASS: process.env.LOCAL_AUTH_BYPASS ?? "true",
+          LOCAL_AUTH_BYPASS: process.env.LOCAL_AUTH_BYPASS ?? "false",
           LOCAL_AUTH_EMAIL:
             process.env.LOCAL_AUTH_EMAIL ?? "developer@local.juro.uz",
           LOCAL_AUTH_FULL_NAME:
@@ -1152,7 +1154,7 @@ async function main() {
         {
           JURO_AGENT_PREVIEW_COMPATIBILITY_DATE: "2026-05-22",
           JURO_STAGING_CORPUS_READS: "true",
-          LOCAL_AUTH_BYPASS: process.env.LOCAL_AUTH_BYPASS ?? "true",
+          LOCAL_AUTH_BYPASS: process.env.LOCAL_AUTH_BYPASS ?? "false",
           LOCAL_AUTH_EMAIL:
             process.env.LOCAL_AUTH_EMAIL ?? "developer@local.juro.uz",
           LOCAL_AUTH_FULL_NAME:

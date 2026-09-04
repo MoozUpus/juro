@@ -1,9 +1,5 @@
 import { normalizeEmail, sha256 } from "../../../../lib/auth/crypto";
-import {
-  prepareUserIdentityWrite,
-  userIdByEmail,
-  userIdentityWriteBindings,
-} from "../../../../lib/auth/identity-protection";
+import { userIdByEmail } from "../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
 import {
   consumeOtpChallenge,
@@ -37,6 +33,7 @@ import {
 import {
   createPrimarySessionIfMfaDisabled,
 } from "../../../../lib/auth/session-management";
+import { issueSessionHandoff } from "../../../../lib/auth/session-handoff";
 import {
   deviceContinuityTokenFromCookie,
 } from "../../../../lib/auth/session-token";
@@ -51,6 +48,10 @@ import {
 import { ensureDefaultWorkspace } from "../../../../lib/platform/workspace";
 import { isPersonalAccountType } from "../../../../lib/platform/routing";
 import { lawyerLandingDestination } from "../../../../lib/platform/lawyer-entry-routing";
+import {
+  resolveThemePreference,
+  themePreferenceCookie,
+} from "../../../../lib/platform/theme-preference";
 
 function json(body: unknown, status = 200, cookies?: string | string[]) {
   const headers = new Headers({ "content-type": "application/json", "cache-control": "private, no-store", pragma: "no-cache" });
@@ -60,57 +61,79 @@ function json(body: unknown, status = 200, cookies?: string | string[]) {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
+type AuthLocale = "ru" | "uz" | "en";
+
+function localized(
+  locale: AuthLocale,
+  values: { ru: string; uz: string; en: string },
+): string {
+  return values[locale];
+}
+
 function otpError(
   result: Exclude<OtpChallengeResult, { status: "verified" }>,
-  locale: "ru" | "uz",
+  locale: AuthLocale,
 ): Response {
-  const ru = locale === "ru";
   switch (result.status) {
     case "used":
       return json({
         code: "OTP_USED",
-        error: ru
-          ? "Этот код уже использован. Запросите новый."
-          : "Bu kod allaqachon ishlatilgan. Yangi kod so‘rang.",
+        error: localized(locale, {
+          ru: "Этот код уже использован. Запросите новый.",
+          uz: "Bu kod allaqachon ishlatilgan. Yangi kod so‘rang.",
+          en: "This code has already been used. Request a new one.",
+        }),
       }, 400);
     case "replaced":
       return json({
         code: "OTP_REPLACED",
-        error: ru
-          ? "Код заменён новым. Используйте последнее письмо."
-          : "Kod yangisi bilan almashtirilgan. Oxirgi xatdan foydalaning.",
+        error: localized(locale, {
+          ru: "Код заменён новым. Используйте последнее письмо.",
+          uz: "Kod yangisi bilan almashtirilgan. Oxirgi xatdan foydalaning.",
+          en: "A newer code was issued. Use the most recent email.",
+        }),
       }, 400);
     case "expired":
       return json({
         code: "OTP_EXPIRED",
-        error: ru
-          ? "Срок действия кода истёк. Запросите новый."
-          : "Kod muddati tugagan. Yangi kod so‘rang.",
+        error: localized(locale, {
+          ru: "Срок действия кода истёк. Запросите новый.",
+          uz: "Kod muddati tugagan. Yangi kod so‘rang.",
+          en: "The code has expired. Request a new one.",
+        }),
       }, 400);
     case "attempts_exceeded":
       return json({
         code: "OTP_ATTEMPTS_EXCEEDED",
-        error: ru
-          ? "Попытки закончились. Запросите новый код."
-          : "Urinishlar tugadi. Yangi kod so‘rang.",
+        error: localized(locale, {
+          ru: "Попытки закончились. Запросите новый код.",
+          uz: "Urinishlar tugadi. Yangi kod so‘rang.",
+          en: "There are no attempts left. Request a new code.",
+        }),
       }, 429);
     case "locked":
       return json({
         code: "OTP_VERIFICATION_LOCKED",
         retryAfterSeconds: result.retryAfterSeconds,
-        error: ru
-          ? "Слишком много неверных попыток. Повторите через 15 минут."
-          : "Juda ko‘p noto‘g‘ri urinish. 15 daqiqadan keyin qayta urinib ko‘ring.",
+        error: localized(locale, {
+          ru: "Слишком много неверных попыток. Повторите через 15 минут.",
+          uz: "Juda ko‘p noto‘g‘ri urinish. 15 daqiqadan keyin qayta urinib ko‘ring.",
+          en: "Too many incorrect attempts. Try again in 15 minutes.",
+        }),
       }, 429);
     case "incorrect":
       return json({
         code: "OTP_INCORRECT",
-        error: ru ? "Неверный код." : "Kod noto‘g‘ri.",
+        error: localized(locale, {
+          ru: "Неверный код.", uz: "Kod noto‘g‘ri.", en: "The code is incorrect.",
+        }),
       }, 400);
     default:
       return json({
         code: "OTP_INVALID",
-        error: ru ? "Код недействителен." : "Kod yaroqsiz.",
+        error: localized(locale, {
+          ru: "Код недействителен.", uz: "Kod yaroqsiz.", en: "The code is invalid.",
+        }),
       }, 400);
   }
 }
@@ -133,8 +156,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const email = normalizeEmail(body.email);
   const code = body.code;
   const locale = body.locale;
+  const routeLocale = locale === "en" ? "ru" : locale;
   const purpose = body.purpose;
-  if (purpose === "register" && (!body.acceptTerms || !body.acceptPrivacy || !body.acceptPersonalData)) return json({ error: locale === "ru" ? "Нужно принять обязательные документы." : "Majburiy hujjatlarni qabul qilish kerak." }, 400);
+  if (purpose === "register" && (!body.acceptTerms || !body.acceptPrivacy || !body.acceptPersonalData)) return json({ error: localized(locale, {
+    ru: "Нужно принять обязательные документы.",
+    uz: "Majburiy hujjatlarni qabul qilish kerak.",
+    en: "You need to accept the required legal documents.",
+  }) }, 400);
 
   const db = requireD1();
   const identityContext = runtimeIdentityProtection();
@@ -153,9 +181,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const emailHash = await sha256(email);
 
   const existingUserId = await userIdByEmail(db, identityContext, email);
-  let user = existingUserId
+  const user = existingUserId
     ? await db.prepare(
       `SELECT u.id,u.account_type AS accountType,
+        u.email_verified_at AS emailVerifiedAt,
+        u.theme_preference AS themePreference,
         u.onboarding_completed_at AS onboardingCompletedAt,
         lp.status AS lawyerProfileStatus,
         lp.marketplace_status AS lawyerMarketplaceStatus
@@ -165,93 +195,84 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ).bind(existingUserId).first<{
       id: string;
       accountType: string;
+      emailVerifiedAt: string | null;
+      themePreference: string;
       onboardingCompletedAt: string | null;
       lawyerProfileStatus: string | null;
       lawyerMarketplaceStatus: string | null;
     }>()
     : null;
-  // The caller has already proved control of this email with a valid OTP, so
-  // this response cannot be used for account enumeration. Returning a clear
-  // next step prevents people from repeatedly submitting an already-spent
-  // one-time code on the login screen.
-  if (purpose === "login" && !user) {
-    return json({
-      code: "ACCOUNT_NOT_FOUND",
-      error: locale === "ru"
-        ? "Для этого email ещё нет аккаунта. Выберите «Создать аккаунт» и запросите новый код."
-        : "Bu email uchun hali hisob yaratilmagan. «Yaratish»ni tanlang va yangi kod so‘rang.",
-    }, 404);
-  }
-  if (purpose === "register" && user) {
+  if (purpose === "register" && user?.emailVerifiedAt) {
     return json({
       code: "ACCOUNT_EXISTS",
-      error: locale === "ru"
-        ? "Аккаунт уже существует. Используйте вход."
-        : "Hisob allaqachon mavjud. Kirishdan foydalaning.",
+      error: localized(locale, {
+        ru: "Аккаунт уже существует. Используйте вход.",
+        uz: "Hisob allaqachon mavjud. Kirishdan foydalaning.",
+        en: "An account already exists. Sign in instead.",
+      }),
+    }, 409);
+  }
+  if (purpose === "register" && !user) {
+    return json({
+      code: "REGISTRATION_RESTART_REQUIRED",
+      error: localized(locale, {
+        ru: "Регистрационные данные не найдены. Заполните форму ещё раз.",
+        uz: "Ro‘yxatdan o‘tish ma’lumotlari topilmadi. Shaklni qayta to‘ldiring.",
+        en: "The registration details were not found. Complete the form again.",
+      }),
     }, 409);
   }
   const accountType = user && isPersonalAccountType(user.accountType)
     ? user.accountType
     : verification.accountType;
-  const fullName = [body?.firstName?.trim(), body?.lastName?.trim()].filter(Boolean).join(" ").slice(0, 160) || null;
-  if (!user) {
-    user = {
-      id: crypto.randomUUID(),
-      accountType,
-      onboardingCompletedAt: null,
-      lawyerProfileStatus: null,
-      lawyerMarketplaceStatus: null,
-    };
-    const identity = await prepareUserIdentityWrite(identityContext, {
-      userId: user.id,
-      email,
-      phone: null,
-    });
-    await db.prepare(
-      `INSERT INTO user_profiles (
-         id,email,email_ciphertext,email_iv,email_key_version,
-         email_lookup_hash,email_lookup_key_version,
-         phone,phone_ciphertext,phone_iv,phone_key_version,
-         phone_lookup_hash,phone_lookup_key_version,
-         full_name,locale,account_type,company_name,
-         onboarding_completed_at,created_at,updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?)`,
-    ).bind(
-      user.id,
-      ...userIdentityWriteBindings(identity),
-      fullName,
-      locale,
-      accountType,
-      null,
-      now,
-      now,
-    ).run();
+  if (!user) throw new Error("AUTH_USER_STATE_CONFLICT");
+  const themePreference = resolveThemePreference(user.themePreference);
+  // Persist mandatory legal evidence before making the account eligible for
+  // password login. The evidence writer is idempotent, so a transient failure
+  // leaves the profile unverified and a newly issued registration code can
+  // safely retry without creating an acceptance gap.
+  await recordRegistrationAcceptances(db, {
+    userId: user.id,
+    locale,
+    otpChallengeId: body.challengeId,
+    acceptedMarketing: Boolean(body.marketing),
+    acceptedAt: now,
+  });
+  const verified = await db.prepare(
+    `UPDATE user_profiles
+     SET email_verified_at=?,updated_at=?
+     WHERE id=? AND email_verified_at IS NULL`,
+  ).bind(now, now, user.id).run();
+  if (Number(verified.meta.changes ?? 0) !== 1) {
+    return json({
+      code: "ACCOUNT_EXISTS",
+      error: localized(locale, {
+        ru: "Аккаунт уже подтверждён. Используйте вход.",
+        uz: "Hisob allaqachon tasdiqlangan. Kirishdan foydalaning.",
+        en: "The account is already confirmed. Sign in instead.",
+      }),
+    }, 409);
   }
-  const workspaceId = await ensureDefaultWorkspace(user.id);
-
-  if (purpose === "register") {
-    await recordRegistrationAcceptances(db, {
-      userId: user.id,
-      locale,
-      otpChallengeId: body.challengeId,
-      acceptedMarketing: Boolean(body.marketing),
-      acceptedAt: now,
-    });
-  }
-  const requestHostname = new URL(request.url).hostname;
+  user.emailVerifiedAt = now;
+  await ensureDefaultWorkspace(user.id);
+  const requestUrl = new URL(request.url);
+  const requestHostname = requestUrl.hostname;
   const normalizedHostname = requestHostname.toLowerCase();
   const lawyerHost = normalizedHostname === "lawyer.juro.uz";
-  const redirectTo = accountType === "lawyer"
+  const accountRedirect = accountType === "lawyer"
     ? lawyerLandingDestination({
-        locale,
+        locale: routeLocale,
         accountType,
         onboardingCompleted: Boolean(user.onboardingCompletedAt) && purpose !== "register",
         lawyerProfileStatus: user.lawyerProfileStatus,
         lawyerMarketplaceStatus: user.lawyerMarketplaceStatus,
       }, lawyerHost, requestHostname)
     : purpose === "register" || !user.onboardingCompletedAt
-      ? `/${locale}/onboarding`
-      : `/${locale}/${accountType}/dashboard`;
+      ? `/${routeLocale}/onboarding`
+      : `/${routeLocale}/${accountType}/dashboard`;
+  const redirectTo = accountType !== "lawyer" && lawyerHost
+    ? `https://app.juro.uz${accountRedirect}`
+    : accountRedirect;
   if (await hasActiveMfa(db, user.id)) {
     try {
       const challenge = await createLoginMfaChallenge(
@@ -269,9 +290,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
         ok: true,
         requiresTwoFactor: true,
         expiresInSeconds: 300,
-      }, 200, mfaChallengeCookie(challenge.token));
+        themePreference,
+      }, 200, [
+        mfaChallengeCookie(challenge.token),
+        themePreferenceCookie(themePreference, requestUrl),
+      ]);
     } catch (error) {
-      const response = mfaErrorResponse(error, locale);
+      const response = mfaErrorResponse(error, routeLocale);
       if (response) return response;
       throw error;
     }
@@ -299,14 +324,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     userAgent: request.headers.get("user-agent"),
     securityEvidence,
     deviceContinuity,
-    loginSecurityNotification: purpose === "login" && continuityKeyring
-      ? {
-          keyring: continuityKeyring,
-          recipientEmail: email,
-          locale,
-          workspaceId,
-        }
-      : null,
+    loginSecurityNotification: null,
     rememberMe: body.rememberMe,
     now: new Date(now),
   });
@@ -327,20 +345,35 @@ export const POST = withApiErrors(async function POST(request: Request) {
         ok: true,
         requiresTwoFactor: true,
         expiresInSeconds: 300,
-      }, 200, mfaChallengeCookie(challenge.token));
+        themePreference,
+      }, 200, [
+        mfaChallengeCookie(challenge.token),
+        themePreferenceCookie(themePreference, requestUrl),
+      ]);
     } catch (error) {
-      const response = mfaErrorResponse(error, locale);
+      const response = mfaErrorResponse(error, routeLocale);
       if (response) return response;
       throw error;
     }
   }
+  const handoff = await issueSessionHandoff(db, {
+    userId: user.id,
+    sourceSessionId: session.sessionId,
+    sourceHost: normalizedHostname,
+    destinationUrl: redirectTo,
+    rememberMe: body.rememberMe,
+    now: new Date(now),
+  });
   return json({
     ok: true,
     redirectTo,
+    handoff,
+    themePreference,
   }, 200, [
     ...replacementSessionCookies(session.token, body.rememberMe, requestHostname),
     ...(session.deviceContinuityToken
       ? [deviceContinuityCookie(session.deviceContinuityToken)]
       : []),
+    themePreferenceCookie(themePreference, requestUrl),
   ]);
 });

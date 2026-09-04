@@ -7,6 +7,10 @@ import {
 } from "./keyring";
 import type { SecurityEventGuard } from "./security-events";
 import { SECURITY_NOTIFICATION_RECIPIENT_PURPOSE } from "./security-notification";
+import {
+  renderJuroAuthEmail,
+  type AuthEmailLocale,
+} from "./transactional-email";
 
 const RECIPIENT_PURPOSE = "security-email-recipient";
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
@@ -56,6 +60,7 @@ type SecurityEmailJobRow = {
   occurredAt: string;
   status: string;
   providerMessageId: string | null;
+  authOtpChallengeId: string | null;
 };
 
 function jobTable(row: SecurityEmailJobRow): string {
@@ -76,7 +81,8 @@ async function securityEmailJob(
        recipient_key_version AS recipientKeyVersion,
        device_name AS deviceName,country_code AS countryCode,
        region_code AS regionCode,occurred_at AS occurredAt,status,
-       provider_message_id AS providerMessageId
+       provider_message_id AS providerMessageId,
+       NULL AS authOtpChallengeId
      FROM security_notification_jobs WHERE id=? LIMIT 1`,
   ).bind(jobId).first<SecurityEmailJobRow>();
   if (notification) return notification;
@@ -88,7 +94,8 @@ async function securityEmailJob(
        recipient_key_version AS recipientKeyVersion,
        NULL AS deviceName,NULL AS countryCode,NULL AS regionCode,
        created_at AS occurredAt,status,
-       provider_message_id AS providerMessageId
+       provider_message_id AS providerMessageId,
+       auth_otp_challenge_id AS authOtpChallengeId
      FROM security_email_jobs WHERE id=? LIMIT 1`,
   ).bind(jobId).first<SecurityEmailJobRow>();
 }
@@ -185,62 +192,235 @@ export async function prepareEmailChangedSecurityEmail(
   };
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[character] ?? character);
-}
+export async function preparePasswordChangedSecurityEmailRetry(
+  db: D1Database,
+  input: {
+    keyring: IdentityKeyring;
+    userId: string;
+    authOtpChallengeId: string;
+    email: string;
+    locale: AuthEmailLocale;
+    requiredGuard: SecurityEventGuard;
+    now: string;
+  },
+): Promise<PreparedSecurityEmailJob> {
+  assertGuard(input.requiredGuard);
+  const jobId = crypto.randomUUID();
+  const outboxId = crypto.randomUUID();
+  const recipient = await protectIdentityValue(
+    input.keyring,
+    normalizeEmail(input.email),
+    {
+      purpose: RECIPIENT_PURPOSE,
+      subjectId: input.userId,
+      recordId: jobId,
+    },
+  );
+  const guardSql = input.requiredGuard.selectSql;
+  const guardBindings = input.requiredGuard.bindings;
 
-function loginLocation(row: SecurityEmailJobRow, locale: "ru" | "uz"): string {
-  const location = [row.regionCode, row.countryCode].filter(Boolean).join(", ");
-  return location || (locale === "uz" ? "aniqlanmadi" : "не определён");
-}
-
-function emailCopy(row: SecurityEmailJobRow): { subject: string; html: string } {
-  const locale = row.locale === "uz" ? "uz" : "ru";
-  if (row.eventType === "email_changed_previous_address") {
-    if (locale === "uz") {
-      return {
-        subject: "JURO emailingiz o‘zgartirildi",
-        html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>JURO emailingiz o‘zgartirildi</h2><p>JURO hisobingizga kirish uchun email manzili muvaffaqiyatli o‘zgartirildi.</p><p>Agar bu amalni siz bajarmagan bo‘lsangiz, darhol <a href="mailto:support@juro.uz">support@juro.uz</a> bilan bog‘laning va faol sessiyalaringizni bekor qiling.</p></div>`,
-      };
-    }
-    return {
-      subject: "Email для входа в JURO изменён",
-      html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Email для входа в JURO изменён</h2><p>Адрес для входа в ваш аккаунт JURO был успешно изменён.</p><p>Если это сделали не вы, немедленно напишите на <a href="mailto:support@juro.uz">support@juro.uz</a> и завершите активные сессии.</p></div>`,
-    };
-  }
-
-  const device = escapeHtml(row.deviceName ?? "Unknown device");
-  const location = escapeHtml(loginLocation(row, locale));
-  const occurredAt = escapeHtml(row.occurredAt);
-  const newRegion = row.eventType === "login_new_region";
-  if (locale === "uz") {
-    const subject = newRegion
-      ? "JURO hisobiga yangi hududdan kirish"
-      : "JURO hisobiga yangi qurilmadan kirish";
-    const lead = newRegion
-      ? "Tanish qurilma avvalgi kirishdan boshqa hududdan JURO hisobingizga kirdi."
-      : "JURO hisobingizga yangi qurilmadan kirildi.";
-    return {
-      subject,
-      html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>${subject}</h2><p>${lead}</p><p><strong>Qurilma:</strong> ${device}<br><strong>Hudud:</strong> ${location}<br><strong>Vaqt:</strong> ${occurredAt}</p><p>Agar bu siz bo‘lsangiz, hech narsa qilish shart emas. Aks holda JURO sozlamalarida faol sessiyalarni yakunlang va <a href="mailto:support@juro.uz">support@juro.uz</a> bilan bog‘laning.</p></div>`,
-    };
-  }
-  const subject = newRegion
-    ? "Вход в JURO из нового региона"
-    : "Вход в JURO с нового устройства";
-  const lead = newRegion
-    ? "Знакомое устройство вошло в ваш аккаунт JURO из региона, отличающегося от предыдущего входа."
-    : "В ваш аккаунт JURO выполнен вход с нового устройства.";
   return {
-    subject,
-    html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>${subject}</h2><p>${lead}</p><p><strong>Устройство:</strong> ${device}<br><strong>Регион:</strong> ${location}<br><strong>Время:</strong> ${occurredAt}</p><p>Если это были вы, ничего делать не нужно. В противном случае завершите активные сессии в настройках JURO и напишите на <a href="mailto:support@juro.uz">support@juro.uz</a>.</p></div>`,
+    jobId,
+    outboxId,
+    statements: [
+      db.prepare(
+        `INSERT INTO security_email_jobs (
+           id,user_id,workspace_id,challenge_id,auth_otp_challenge_id,
+           event_type,locale,recipient_ciphertext,recipient_iv,
+           recipient_key_version,status,attempt_count,created_at,updated_at
+         )
+         SELECT ?,?,NULL,NULL,?,'password_changed',?,?,?,?,'pending',0,?,?
+         WHERE EXISTS (${guardSql})`,
+      ).bind(
+        jobId,
+        input.userId,
+        input.authOtpChallengeId,
+        input.locale,
+        recipient.ciphertext,
+        recipient.iv,
+        recipient.keyVersion,
+        input.now,
+        input.now,
+        ...guardBindings,
+      ),
+      db.prepare(
+        `INSERT INTO job_outbox (
+           id,queue_binding,job_type,schema_version,idempotency_key,
+           subject_id,workspace_id,correlation_id,enqueued_at,available_at,
+           status,dispatch_attempts,created_at,updated_at
+         )
+         SELECT ?,'EMAIL_NOTIFICATIONS_QUEUE','email.send',1,?,?,NULL,?,?,?,
+           'pending',0,?,?
+         WHERE EXISTS (
+           SELECT 1 FROM security_email_jobs
+           WHERE id=? AND status='pending'
+         )
+           AND EXISTS (${guardSql})`,
+      ).bind(
+        outboxId,
+        `security_email_password_changed_${input.authOtpChallengeId}`,
+        jobId,
+        `password_reset_${input.authOtpChallengeId}`,
+        input.now,
+        input.now,
+        input.now,
+        input.now,
+        jobId,
+        ...guardBindings,
+      ),
+    ],
   };
+}
+
+export async function notifyPasswordChangedWithRetry(
+  db: D1Database,
+  input: {
+    jobId: string;
+    authOtpChallengeId: string;
+    email: string;
+    locale: AuthEmailLocale;
+    now: string;
+    apiKey?: string;
+    from?: string;
+  },
+): Promise<
+  | { status: "sent"; jobId: null }
+  | { status: "queued"; jobId: string }
+  | { status: "unavailable"; jobId: null }
+> {
+  // The encrypted job and its outbox row already exist transactionally with
+  // the credential mutation. Keep the row pending until the provider has
+  // accepted the message: a Worker interruption or a failed follow-up D1
+  // write therefore still leaves a durable retry target.
+  if (!input.apiKey || !input.from) {
+    return { status: "queued", jobId: input.jobId };
+  }
+  const message = renderJuroAuthEmail({
+    locale: input.locale,
+    purpose: "password_changed",
+  });
+  let response: Response | null = null;
+  let providerMessageId: string | null = null;
+  try {
+    response = await fetch(RESEND_ENDPOINT, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${input.apiKey}`,
+        "content-type": "application/json",
+        "idempotency-key": `juro_password_changed_${input.authOtpChallengeId}`,
+      },
+      body: JSON.stringify({
+        from: input.from,
+        to: [normalizeEmail(input.email)],
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+      }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (response.ok) {
+      const payload = await response.json().catch(() => null) as {
+        id?: unknown;
+      } | null;
+      if (
+        typeof payload?.id === "string"
+        && /^[A-Za-z0-9_-]{1,180}$/.test(payload.id)
+      ) {
+        providerMessageId = payload.id;
+      }
+    } else {
+      await response.body?.cancel();
+    }
+  } catch {
+    try {
+      await response?.body?.cancel();
+    } catch {
+      // The failed provider response has no usable body.
+    }
+  }
+
+  if (providerMessageId) {
+    try {
+      const sent = await db.prepare(
+        `UPDATE security_email_jobs
+         SET status='sent',attempt_count=attempt_count+1,
+           provider_message_id=?,sent_at=?,error_code=NULL,updated_at=?
+         WHERE id=? AND event_type='password_changed'
+           AND status IN ('pending','retrying')`,
+      ).bind(
+        providerMessageId,
+        input.now,
+        input.now,
+        input.jobId,
+      ).run();
+      if (Number(sent.meta.changes ?? 0) === 1) {
+        return { status: "sent", jobId: null };
+      }
+    } catch {
+      // The pre-created pending row remains safe to retry with the same
+      // provider idempotency key.
+    }
+    return { status: "queued", jobId: input.jobId };
+  }
+
+  try {
+    await db.prepare(
+      `UPDATE security_email_jobs
+       SET status='retrying',attempt_count=attempt_count+1,
+         error_code='EMAIL_PROVIDER_UNAVAILABLE',updated_at=?
+       WHERE id=? AND event_type='password_changed'
+         AND status IN ('pending','retrying')`,
+    ).bind(input.now, input.jobId).run();
+  } catch {
+    // A failed follow-up write intentionally leaves the row pending.
+  }
+  return { status: "queued", jobId: input.jobId };
+}
+
+function loginLocation(row: SecurityEmailJobRow, locale: AuthEmailLocale): string {
+  const location = [row.regionCode, row.countryCode].filter(Boolean).join(", ");
+  if (location) return location;
+  if (locale === "uz") return "aniqlanmadi";
+  return locale === "en" ? "Not determined" : "не определён";
+}
+
+function emailCopy(
+  row: SecurityEmailJobRow,
+): { subject: string; html: string; text: string } {
+  const locale: AuthEmailLocale = row.locale === "en"
+    ? "en"
+    : row.locale === "uz"
+      ? "uz"
+      : "ru";
+  if (row.eventType === "email_changed_previous_address") {
+    return renderJuroAuthEmail({ locale, purpose: "email_changed" });
+  }
+  if (row.eventType === "password_changed") {
+    return renderJuroAuthEmail({ locale, purpose: "password_changed" });
+  }
+
+  const newRegion = row.eventType === "login_new_region";
+  return renderJuroAuthEmail({
+    locale,
+    purpose: newRegion ? "new_region" : "new_device",
+    details: locale === "uz"
+      ? [
+          { label: "Qurilma", value: row.deviceName ?? "Aniqlanmadi" },
+          { label: "Hudud", value: loginLocation(row, locale) },
+          { label: "Vaqt", value: row.occurredAt },
+        ]
+      : locale === "en"
+        ? [
+            { label: "Device", value: row.deviceName ?? "Not determined" },
+            { label: "Region", value: loginLocation(row, locale) },
+            { label: "Time", value: row.occurredAt },
+          ]
+        : [
+          { label: "Устройство", value: row.deviceName ?? "Не определено" },
+          { label: "Регион", value: loginLocation(row, locale) },
+          { label: "Время", value: row.occurredAt },
+        ],
+  });
 }
 
 async function updateFailure(
@@ -281,6 +461,7 @@ export async function executeSecurityEmailJob(
     || row.deliveryChannel !== "email"
     || ![
       "email_changed_previous_address",
+      "password_changed",
       "login_new_device",
       "login_new_region",
     ].includes(row.eventType)
@@ -367,13 +548,16 @@ export async function executeSecurityEmailJob(
       headers: {
         authorization: `Bearer ${env.RESEND_API_KEY}`,
         "content-type": "application/json",
-        "idempotency-key": `juro_security_email_${jobId}`,
+        "idempotency-key": row.eventType === "password_changed"
+          ? `juro_password_changed_${row.authOtpChallengeId}`
+          : `juro_security_email_${jobId}`,
       },
       body: JSON.stringify({
         from: env.EMAIL_FROM,
         to: [recipient],
         subject: copy.subject,
         html: copy.html,
+        text: copy.text,
       }),
       signal: AbortSignal.timeout(8_000),
     });

@@ -92,3 +92,22 @@
     transform: none;
   }
 }
+
+:global(html[data-theme="dark"]) .heading > span:last-child,
+:global(html[data-theme="dark"]) .flow li {
+  color: var(--text-secondary);
+}
+
+:global(html[data-theme="dark"]) .flow li {
+  border-color: var(--border-strong);
+}
+
+:global(html[data-theme="dark"]) .flow li[data-current] {
+  background: var(--brand-gold);
+  border-color: var(--brand-gold);
+  color: #071827;
+}
+
+:global(html[data-theme="dark"]) .output article[data-current] {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .28);
+}

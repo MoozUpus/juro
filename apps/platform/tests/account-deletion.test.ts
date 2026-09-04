@@ -12,6 +12,7 @@ import {
   createIdentityProtectionContext,
   IdentityProtectionError,
 } from "../lib/auth/identity-protection";
+import { sha256 } from "../lib/auth/crypto";
 import { createEmailOtpSession } from "../lib/auth/session-management";
 import {
   batchBarrier,
@@ -484,32 +485,58 @@ test("wrong, expired, and foreign-session codes fail closed", async () => {
   }
 });
 
-test("keyed deletion confirmation rejects divergent retained SHA evidence", async () => {
-  for (const column of ["email_hash", "code_hash"] as const) {
-    const { sqlite, d1, session } = await fixture();
-    try {
-      await reserve(d1, session.sessionId);
-      const challengeId = activeChallengeId(sqlite);
-      sqlite.prepare(
-        `UPDATE account_deletion_challenges
-         SET ${column}='divergent' WHERE id=?`,
-      ).run(challengeId);
-      await assert.rejects(
-        confirm(d1, session.sessionId, challengeId),
-        (error: unknown) => error instanceof IdentityProtectionError
-          && error.code === "IDENTITY_VALUE_DIVERGED",
-      );
-      assert.equal(
-        (
-          sqlite.prepare(
-            "SELECT count(*) AS total FROM account_deletion_requests",
-          ).get() as { total: number }
-        ).total,
-        0,
-      );
-    } finally {
-      sqlite.close();
-    }
+test("keyed deletion keeps email divergence checks without storing an offline code verifier", async () => {
+  const emailFixture = await fixture();
+  try {
+    await reserve(emailFixture.d1, emailFixture.session.sessionId);
+    const challengeId = activeChallengeId(emailFixture.sqlite);
+    emailFixture.sqlite.prepare(
+      `UPDATE account_deletion_challenges
+       SET email_hash='divergent' WHERE id=?`,
+    ).run(challengeId);
+    await assert.rejects(
+      confirm(emailFixture.d1, emailFixture.session.sessionId, challengeId),
+      (error: unknown) => error instanceof IdentityProtectionError
+        && error.code === "IDENTITY_VALUE_DIVERGED",
+    );
+    assert.equal(
+      (
+        emailFixture.sqlite.prepare(
+          "SELECT count(*) AS total FROM account_deletion_requests",
+        ).get() as { total: number }
+      ).total,
+      0,
+    );
+  } finally {
+    emailFixture.sqlite.close();
+  }
+
+  const codeFixture = await fixture();
+  try {
+    await reserve(codeFixture.d1, codeFixture.session.sessionId);
+    const challengeId = activeChallengeId(codeFixture.sqlite);
+    const evidence = codeFixture.sqlite.prepare(
+      `SELECT code_salt AS salt,code_hash AS hash,code_hmac AS hmac
+       FROM account_deletion_challenges WHERE id=?`,
+    ).get(challengeId) as { salt: string; hash: string; hmac: string };
+    assert.notEqual(evidence.hash, await sha256(`${evidence.salt}:${CODE}`));
+    assert.ok(evidence.hmac);
+    codeFixture.sqlite.prepare(
+      `UPDATE account_deletion_challenges
+       SET code_hash='compatibility-sentinel' WHERE id=?`,
+    ).run(challengeId);
+    assert.equal(
+      (
+        await confirm(
+          codeFixture.d1,
+          codeFixture.session.sessionId,
+          challengeId,
+        )
+      ).status,
+      "confirmed",
+    );
+  } finally {
+    codeFixture.sqlite.close();
   }
 });
 

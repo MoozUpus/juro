@@ -736,7 +736,7 @@ test("serves app-specific legal pages in both languages with noindex", async () 
     const html = await response.text();
     assert.match(html, /JURO/);
     assert.match(html, /Условия|Политика|cookies|AIdan|Shaxsiy|maxfiylik|cookie|qoidalari/);
-    assert.match(html, /2026-07-26\.draft\.1/);
+    assert.match(html, /2026-09-04\.draft\.2/);
     assert.match(html, /SHA-256/);
     assert.match(html, /Проект для юридического утверждения|Yuridik tasdiqlash uchun loyiha/);
   }

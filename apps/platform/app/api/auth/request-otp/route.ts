@@ -1,11 +1,27 @@
 import { normalizeEmail, randomOtp, randomToken } from "../../../../lib/auth/crypto";
+import {
+  prepareUserIdentityWrite,
+  userIdByEmail,
+  userIdentityWriteBindings,
+} from "../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
 import {
   parseJsonRequest,
   requestOtpInputSchema,
 } from "../../../../lib/auth/input";
 import { reserveOtpChallenge } from "../../../../lib/auth/otp-request";
-import { validateAuthTurnstile } from "../../../../lib/auth/turnstile";
+import {
+  passwordCredentialWriteStatement,
+  preparePasswordCredential,
+} from "../../../../lib/auth/password";
+import {
+  authTurnstileActions,
+  validateAuthTurnstile,
+} from "../../../../lib/auth/turnstile";
+import {
+  renderJuroAuthEmail,
+  sendJuroAuthEmail,
+} from "../../../../lib/auth/transactional-email";
 import {
   assertSafeWrite,
   withApiErrors,
@@ -14,12 +30,17 @@ import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function json(body: unknown, status = 200) {
-  return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
+type AuthLocale = "ru" | "uz" | "en";
+
+function localized(
+  locale: AuthLocale,
+  values: { ru: string; uz: string; en: string },
+): string {
+  return values[locale];
 }
 
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+function json(body: unknown, status = 200) {
+  return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }
 
 export const POST = withApiErrors(async function POST(request: Request) {
@@ -28,7 +49,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (
     !env.RESEND_API_KEY || !env.EMAIL_FROM || !env.TURNSTILE_SECRET_KEY
   ) {
-    return json({ error: "Защищённый вход временно не настроен." }, 503);
+    return json({
+      error: localized("ru", {
+        ru: "Защищённый вход временно не настроен.",
+        uz: "Himoyalangan kirish vaqtincha sozlanmagan.",
+        en: "Secure sign-in is temporarily unavailable.",
+      }),
+    }, 503);
   }
   const parsed = await parseJsonRequest(request, requestOtpInputSchema);
   if (!parsed.ok) {
@@ -44,37 +71,61 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
   const { purpose, locale, accountType } = parsed.data;
   const email = normalizeEmail(parsed.data.email);
-  if (!EMAIL_RE.test(email) || email.length > 254) return json({ error: locale === "ru" ? "Проверьте адрес электронной почты." : "Elektron pochta manzilini tekshiring." }, 400);
+  if (!EMAIL_RE.test(email) || email.length > 254) return json({ error: localized(locale, {
+    ru: "Проверьте адрес электронной почты.",
+    uz: "Elektron pochta manzilini tekshiring.",
+    en: "Check the email address.",
+  }) }, 400);
 
   const db = requireD1();
+  const identityContext = runtimeIdentityProtection();
   const connectingIp = request.headers.get("cf-connecting-ip")?.trim() || null;
   const turnstile = await validateAuthTurnstile({
     secretKey: env.TURNSTILE_SECRET_KEY,
     token: parsed.data.turnstileToken,
     remoteIp: connectingIp,
     expectedHostname: new URL(request.url).hostname,
+    expectedActions: purpose === "register"
+      ? [
+          authTurnstileActions.registration,
+          authTurnstileActions.registrationResend,
+        ]
+      : [
+          authTurnstileActions.passwordReset,
+          authTurnstileActions.passwordResetResend,
+        ],
   });
   if (turnstile.status !== "verified") {
     const unavailable = turnstile.status === "unavailable";
     return json({
       code: unavailable ? "TURNSTILE_UNAVAILABLE" : "TURNSTILE_INVALID",
-      error: locale === "ru"
-        ? (unavailable
-          ? "Проверка безопасности временно недоступна. Повторите позже."
-          : "Подтвердите проверку безопасности и повторите.")
-        : (unavailable
-          ? "Xavfsizlik tekshiruvi vaqtincha mavjud emas. Keyinroq urinib ko‘ring."
-          : "Xavfsizlik tekshiruvini tasdiqlab, qayta urinib ko‘ring."),
+      error: localized(locale, unavailable ? {
+        ru: "Проверка безопасности временно недоступна. Повторите позже.",
+        uz: "Xavfsizlik tekshiruvi vaqtincha mavjud emas. Keyinroq urinib ko‘ring.",
+        en: "The security check is temporarily unavailable. Try again later.",
+      } : {
+        ru: "Подтвердите проверку безопасности и повторите.",
+        uz: "Xavfsizlik tekshiruvini tasdiqlab, qayta urinib ko‘ring.",
+        en: "Complete the security check and try again.",
+      }),
     }, unavailable ? 503 : 400);
   }
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
+  // Run the same slow password work for every registration address. The
+  // resulting credential is persisted only after the OTP reservation wins,
+  // so a cooldown/rate-limited request cannot replace an in-flight user's
+  // chosen password while their earlier code remains valid.
+  const registrationCredential = purpose === "register"
+    ? await preparePasswordCredential(parsed.data.password, new Date(now))
+    : null;
+
   const id = crypto.randomUUID();
   const code = randomOtp();
   const salt = randomToken(16);
-  const nowMs = Date.now();
-  const now = new Date(nowMs).toISOString();
   const expiresAt = new Date(nowMs + 10 * 60 * 1000).toISOString();
   const reservation = await reserveOtpChallenge(db, {
-    identityContext: runtimeIdentityProtection(),
+    identityContext,
     id,
     email,
     requestIp: connectingIp,
@@ -104,9 +155,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return json({
         code: "OTP_VERIFICATION_LOCKED",
         retryAfterSeconds: verificationRetryAfterSeconds,
-        error: locale === "ru"
-          ? "Слишком много неверных попыток. Повторите через 15 минут."
-          : "Juda ko‘p noto‘g‘ri urinish. 15 daqiqadan keyin qayta urinib ko‘ring.",
+        error: localized(locale, {
+          ru: "Слишком много неверных попыток. Повторите через 15 минут.",
+          uz: "Juda ko‘p noto‘g‘ri urinish. 15 daqiqadan keyin qayta urinib ko‘ring.",
+          en: "Too many incorrect attempts. Try again in 15 minutes.",
+        }),
       }, 429);
     }
     const latestTimestamp = reservation.latestActiveCreatedAt
@@ -119,42 +172,118 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return json({
         code: "OTP_COOLDOWN",
         retryAfterSeconds,
-        error: locale === "ru"
-          ? `Новый код можно запросить через ${retryAfterSeconds} сек.`
-          : `Yangi kodni ${retryAfterSeconds} soniyadan keyin so‘rash mumkin.`,
+        error: localized(locale, {
+          ru: `Новый код можно запросить через ${retryAfterSeconds} сек.`,
+          uz: `Yangi kodni ${retryAfterSeconds} soniyadan keyin so‘rash mumkin.`,
+          en: `You can request a new code in ${retryAfterSeconds} seconds.`,
+        }),
       }, 429);
     }
     return json({
       code: "OTP_RATE_LIMIT",
-      error: locale === "ru"
-        ? "Слишком много запросов. Попробуйте позже."
-        : "Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.",
+      error: localized(locale, {
+        ru: "Слишком много запросов. Попробуйте позже.",
+        uz: "Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.",
+        en: "Too many requests. Try again later.",
+      }),
     }, 429);
   }
 
-  const subject = locale === "ru" ? "Код входа в JURO" : "JURO kirish kodi";
-  const safeCode = escapeHtml(code);
-  const html = locale === "ru"
-    ? `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Ваш код JURO</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${safeCode}</p><p>Код действует 10 минут и предназначен только для вас. Никому его не передавайте.</p></div>`
-    : `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>JURO kodingiz</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${safeCode}</p><p>Kod 10 daqiqa amal qiladi va faqat siz uchun. Uni hech kimga bermang.</p></div>`;
-  let sent: Response | null = null;
-  try {
-    sent = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${env.RESEND_API_KEY}`,
-        "content-type": "application/json",
-        "idempotency-key": `juro_otp_${id}`,
-      },
-      body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], subject, html }),
-      signal: AbortSignal.timeout(8_000),
-    });
-  } catch {
-    sent = null;
+  if (purpose === "register" && registrationCredential) {
+    try {
+      const existingUserId = await userIdByEmail(db, identityContext, email);
+      const existing = existingUserId
+        ? await db.prepare(
+          `SELECT id,email_verified_at AS emailVerifiedAt
+           FROM user_profiles WHERE id=? LIMIT 1`,
+        ).bind(existingUserId).first<{
+          id: string;
+          emailVerifiedAt: string | null;
+        }>()
+        : null;
+      if (!existing?.emailVerifiedAt) {
+        const userId = existing?.id ?? crypto.randomUUID();
+        const fullName = [parsed.data.firstName, parsed.data.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim()
+          .slice(0, 160);
+        const unverifiedGuard = {
+          selectSql: `SELECT 1 FROM user_profiles
+            WHERE id=? AND email_verified_at IS NULL`,
+          bindings: [userId],
+        };
+        const statements: D1PreparedStatement[] = [];
+        if (existing) {
+          statements.push(db.prepare(
+            `UPDATE user_profiles
+             SET full_name=?,locale=?,account_type=?,updated_at=?
+             WHERE id=? AND email_verified_at IS NULL`,
+          ).bind(fullName, locale, accountType, now, userId));
+        } else {
+          const identity = await prepareUserIdentityWrite(identityContext, {
+            userId,
+            email,
+            phone: null,
+          });
+          statements.push(db.prepare(
+            `INSERT INTO user_profiles (
+               id,email,email_ciphertext,email_iv,email_key_version,
+               email_lookup_hash,email_lookup_key_version,
+               phone,phone_ciphertext,phone_iv,phone_key_version,
+               phone_lookup_hash,phone_lookup_key_version,
+               full_name,locale,account_type,company_name,
+               onboarding_completed_at,email_verified_at,created_at,updated_at
+             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,?,?)`,
+          ).bind(
+            userId,
+            ...userIdentityWriteBindings(identity),
+            fullName,
+            locale,
+            accountType,
+            null,
+            now,
+            now,
+          ));
+        }
+        statements.push(passwordCredentialWriteStatement(
+          db,
+          userId,
+          registrationCredential,
+          unverifiedGuard,
+        ));
+        await db.batch(statements);
+      }
+    } catch (error) {
+      await db.prepare(
+        `UPDATE auth_otp_challenges SET invalidated_at=?
+         WHERE id=? AND consumed_at IS NULL AND invalidated_at IS NULL`,
+      ).bind(new Date().toISOString(), id).run();
+      throw error;
+    }
   }
-  if (!sent?.ok) {
+
+  const message = renderJuroAuthEmail({
+    locale,
+    purpose: purpose === "register"
+      ? "registration"
+      : "password_reset",
+    code,
+  });
+  const sent = await sendJuroAuthEmail({
+    apiKey: env.RESEND_API_KEY,
+    from: env.EMAIL_FROM,
+    to: email,
+    idempotencyKey: `juro_otp_${id}`,
+    message,
+  });
+  if (!sent) {
     await db.prepare("UPDATE auth_otp_challenges SET invalidated_at = ? WHERE id = ?").bind(new Date().toISOString(), id).run();
-    return json({ code: "EMAIL_PROVIDER_ERROR", error: locale === "ru" ? "Не удалось отправить письмо. Попробуйте позже." : "Xat yuborilmadi. Keyinroq urinib ko‘ring." }, 502);
+    return json({ code: "EMAIL_PROVIDER_ERROR", error: localized(locale, {
+      ru: "Не удалось отправить письмо. Попробуйте позже.",
+      uz: "Xat yuborilmadi. Keyinroq urinib ko‘ring.",
+      en: "The email could not be sent. Try again later.",
+    }) }, 502);
   }
   return json({ ok: true, challengeId: id, expiresInSeconds: 600, resendAfterSeconds: 60 });
 });
