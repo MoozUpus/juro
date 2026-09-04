@@ -93,6 +93,15 @@ test("Ticket 29 worker pins the authorized Cloudflare account", async () => {
   assert.doesNotMatch(config, /OPENAI|provider|embedding|QDRANT|VECTORIZE/iu);
 });
 
+test("Ticket 29 reconstruction budgets enough subrequests to verify its largest lane", async () => {
+  const config = JSON.parse(await readFile(new URL(
+    "../wrangler.legal-complete-corpus.jsonc", import.meta.url,
+  ), "utf8")) as {
+    limits?: { subrequests?: number };
+  };
+  assert.ok((config.limits?.subrequests ?? 0) >= 25_000);
+});
+
 test("Ticket 29 empty-version identities come from cutoff-hashed source objects", async () => {
   const generator = await readFile(new URL(
     "../scripts/generate-ticket29-source-object-manifest.mts", import.meta.url,
