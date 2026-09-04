@@ -259,7 +259,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     assert.equal(
       config.d1_databases[0]?.migrations_pattern,
       environment === "production"
-        ? "./drizzle/{0121,012[4-9],013[0-9],014[0-9],015[0-2]}_*.sql"
+        ? "./drizzle/{0121,012[4-9],013[0-9],014[0-9],015[0-3]}_*.sql"
         : undefined,
     );
     assert.deepEqual(

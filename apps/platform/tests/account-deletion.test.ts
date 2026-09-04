@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { env } from "cloudflare:workers";
+import { POST as requestAccountDeletion } from "../app/api/platform/privacy/deletion-request/route";
 import {
   confirmAccountDeletion,
   reserveAccountDeletionChallenge,
@@ -14,6 +17,7 @@ import {
 } from "../lib/auth/identity-protection";
 import { sha256 } from "../lib/auth/crypto";
 import { createEmailOtpSession } from "../lib/auth/session-management";
+import { renderJuroAuthEmail } from "../lib/auth/transactional-email";
 import {
   batchBarrier,
   sqliteD1Fixture,
@@ -594,6 +598,181 @@ test("audit failure rolls back challenge, request, and revocation", async () => 
       0,
     );
   } finally {
+    sqlite.close();
+  }
+});
+
+test("account-deletion email is branded and fully localized with a plain-text alternative", () => {
+  const expected = {
+    ru: {
+      subject: "Подтвердите удаление аккаунта — JURO",
+      title: "Подтверждение удаления аккаунта",
+      support: "Нужна помощь?",
+      footer: "Ташкент, Республика Узбекистан",
+    },
+    uz: {
+      subject: "Hisobni o‘chirishni tasdiqlang — JURO",
+      title: "Hisobni o‘chirishni tasdiqlash",
+      support: "Yordam kerakmi?",
+      footer: "Toshkent, O‘zbekiston Respublikasi",
+    },
+    en: {
+      subject: "Confirm account deletion — JURO",
+      title: "Confirm account deletion",
+      support: "Need help?",
+      footer: "Tashkent, Republic of Uzbekistan",
+    },
+  } as const;
+
+  for (const locale of ["ru", "uz", "en"] as const) {
+    const message = renderJuroAuthEmail({
+      locale,
+      purpose: "account_deletion",
+      code: CODE,
+    });
+    assert.equal(message.subject, expected[locale].subject);
+    assert.match(message.html, new RegExp(`<html lang="${locale}"`, "u"));
+    assert.match(message.html, /role="presentation"/u);
+    assert.match(message.html, /background:#062844/u);
+    assert.match(message.html, /mailto:admin@juro\.uz/u);
+    assert.match(message.html, new RegExp(expected[locale].title, "u"));
+    assert.match(message.text, new RegExp(expected[locale].support, "u"));
+    assert.match(message.text, new RegExp(expected[locale].footer, "u"));
+    assert.match(message.html, new RegExp(CODE, "u"));
+    assert.match(message.text, new RegExp(CODE, "u"));
+    assert.equal(message.text.includes("<table"), false);
+  }
+});
+
+test("account-deletion email escapes code content in HTML and removes header injection controls", () => {
+  const message = renderJuroAuthEmail({
+    locale: "en",
+    purpose: "account_deletion",
+    code: "12<34&\r\n56",
+  });
+  assert.match(message.html, /12&lt;34&amp; 56/u);
+  assert.equal(message.html.includes("12<34&"), false);
+  assert.match(message.text, /12<34& 56/u);
+  assert.equal(message.text.includes("\r"), false);
+  assert.equal(message.text.includes("\n56"), false);
+});
+
+test("account-deletion route delegates delivery to the shared transactional renderer", () => {
+  const source = readFileSync(
+    new URL(
+      "../app/api/platform/privacy/deletion-request/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /renderJuroAuthEmail\(\{/u);
+  assert.match(source, /purpose: "account_deletion"/u);
+  assert.match(source, /sendJuroAuthEmail\(\{/u);
+  assert.doesNotMatch(source, /api\.resend\.com\/emails/u);
+  assert.doesNotMatch(source, /<div style=/u);
+});
+
+test("account-deletion route sends the branded HTML and text bodies through Resend", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const routeUserId = "deletion-email-route-user";
+  const email = "deletion-route@example.test";
+  const authenticatedAt = new Date(Date.now() - 1_000);
+  sqlite.prepare(
+    `INSERT INTO user_profiles (id,email,locale,created_at,updated_at)
+     VALUES (?,?,'uz',?,?)`,
+  ).run(
+    routeUserId,
+    email,
+    authenticatedAt.toISOString(),
+    authenticatedAt.toISOString(),
+  );
+  const session = await createEmailOtpSession(d1, {
+    userId: routeUserId,
+    userAgent: "Deletion email route test/1.0",
+    now: authenticatedAt,
+  });
+
+  const workerEnv = env as unknown as Record<string, unknown>;
+  const envKeys = [
+    "DB",
+    "IDENTITY_PROTECTION_MODE",
+    "IDENTITY_KEYRING",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+  ];
+  const previousEnv = new Map(
+    envKeys.map(key => [key, workerEnv[key]]),
+  );
+  Object.assign(workerEnv, {
+    DB: d1,
+    IDENTITY_PROTECTION_MODE: "dual_write",
+    IDENTITY_KEYRING: RAW_IDENTITY_KEYRING,
+    RESEND_API_KEY: "synthetic-resend-key",
+    EMAIL_FROM: "JURO <no-reply@juro.uz>",
+  });
+
+  type Delivery = {
+    from: string;
+    to: string[];
+    subject: string;
+    html: string;
+    text: string;
+  };
+  let delivery: Delivery | null = null;
+  let providerHeaders = new Headers();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    assert.equal(String(input), "https://api.resend.com/emails");
+    providerHeaders = new Headers(init?.headers);
+    delivery = JSON.parse(String(init?.body)) as Delivery;
+    return new Response(JSON.stringify({ id: "resend_deletion_test" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await requestAccountDeletion(new Request(
+      "https://app.juro.uz/api/platform/privacy/deletion-request",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `juro_session=${session.token}`,
+          origin: "https://app.juro.uz",
+          "sec-fetch-site": "same-origin",
+          "x-juro-csrf": "1",
+        },
+        body: JSON.stringify({ action: "request_code", locale: "uz" }),
+      },
+    ));
+    assert.equal(response.status, 200);
+    assert.equal((await response.json() as { ok?: boolean }).ok, true);
+    assert.ok(delivery);
+    const sent = delivery as Delivery;
+    assert.equal(sent.from, "JURO <no-reply@juro.uz>");
+    assert.deepEqual(sent.to, [email]);
+    assert.equal(sent.subject, "Hisobni o‘chirishni tasdiqlang — JURO");
+    assert.match(sent.html, /<!doctype html><html lang="uz">/u);
+    assert.match(sent.html, /mailto:admin@juro\.uz/u);
+    assert.match(sent.text, /Hisobni o‘chirishni tasdiqlash/u);
+    assert.match(sent.text, /Yordam kerakmi\?/u);
+    assert.equal(sent.text.includes("<table"), false);
+    assert.match(
+      providerHeaders.get("idempotency-key") ?? "",
+      /^juro_account_deletion_[0-9a-f-]{36}$/u,
+    );
+    assert.deepEqual({ ...sqlite.prepare(
+      `SELECT locale,attempt_count AS attemptCount,max_attempts AS maxAttempts
+       FROM account_deletion_challenges WHERE user_id=?`,
+    ).get(routeUserId) }, { locale: "uz", attemptCount: 0, maxAttempts: 5 });
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const key of envKeys) {
+      const previous = previousEnv.get(key);
+      if (previous === undefined) delete workerEnv[key];
+      else workerEnv[key] = previous;
+    }
     sqlite.close();
   }
 });

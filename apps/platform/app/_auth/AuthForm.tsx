@@ -383,7 +383,7 @@ export function AuthForm({
     try {
       const response = await fetch("/api/auth/password-login", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify({ email: normalizedEmail, password, locale, rememberMe, turnstileToken }),
       });
       const data = await readResponse(response);
@@ -437,7 +437,7 @@ export function AuthForm({
         : { purpose, email: normalizedEmail, locale, accountType, turnstileToken };
       const response = await fetch("/api/auth/request-otp", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify(body),
       });
       const data = await readResponse(response);
@@ -475,7 +475,7 @@ export function AuthForm({
     try {
       const response = await fetch("/api/auth/verify-otp", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify({
           challengeId,
           email: normalizeEmailInput(email),
@@ -525,7 +525,7 @@ export function AuthForm({
     try {
       const response = await fetch("/api/auth/reset-password", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify({ challengeId, email: normalizeEmailInput(email), code, password, locale }),
       });
       const data = await readResponse(response);
@@ -553,7 +553,7 @@ export function AuthForm({
     try {
       const response = await fetch("/api/auth/verify-mfa", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify({ code: mfaCode.trim(), locale, rememberMe }),
       });
       const data = await readResponse(response);

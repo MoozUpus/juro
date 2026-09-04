@@ -12,6 +12,20 @@ import {
 } from "../lib/auth/turnstile";
 
 const authStyles = fs.readFileSync("app/_auth/auth.css", "utf8");
+const turnstileWidget = fs.readFileSync(
+  "app/_auth/TurnstileWidget.tsx",
+  "utf8",
+);
+
+test("Turnstile delegates cross-origin messaging to the official explicit-render client", () => {
+  assert.match(
+    turnstileWidget,
+    /https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit/,
+  );
+  assert.doesNotMatch(turnstileWidget, /\.postMessage\s*\(/);
+  assert.match(turnstileWidget, /turnstileWindow\.turnstile\.render\(/);
+  assert.match(turnstileWidget, /turnstileWindow\.turnstile\.remove\(/);
+});
 
 test("Turnstile reserves its challenge height before the provider renders", () => {
   assert.match(

@@ -5,6 +5,7 @@ import {
   type UserIdentityRow,
 } from "../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
+import { localizedRequestFormatError } from "../../../../lib/auth/request-locale";
 import {
   parseJsonRequest,
   resetPasswordInputSchema,
@@ -116,7 +117,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!parsed.ok) {
     return json({
       code: parsed.error.toLocaleUpperCase(),
-      error: "Проверьте формат запроса.",
+      error: localizedRequestFormatError(request),
     }, parsed.error === "payload_too_large" ? 413 : parsed.error === "invalid_content_type" ? 415 : 400);
   }
   const { challengeId, code, locale, password } = parsed.data;

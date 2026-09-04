@@ -5,6 +5,7 @@ import {
   userIdentityWriteBindings,
 } from "../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
+import { localizedRequestFormatError } from "../../../../lib/auth/request-locale";
 import {
   parseJsonRequest,
   requestOtpInputSchema,
@@ -14,6 +15,9 @@ import {
   passwordCredentialWriteStatement,
   preparePasswordCredential,
 } from "../../../../lib/auth/password";
+import {
+  pendingRegistrationUpsertStatement,
+} from "../../../../lib/auth/registration-retention";
 import {
   authTurnstileActions,
   validateAuthTurnstile,
@@ -45,18 +49,6 @@ function json(body: unknown, status = 200) {
 
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
-  const env = runtimeEnv();
-  if (
-    !env.RESEND_API_KEY || !env.EMAIL_FROM || !env.TURNSTILE_SECRET_KEY
-  ) {
-    return json({
-      error: localized("ru", {
-        ru: "Защищённый вход временно не настроен.",
-        uz: "Himoyalangan kirish vaqtincha sozlanmagan.",
-        en: "Secure sign-in is temporarily unavailable.",
-      }),
-    }, 503);
-  }
   const parsed = await parseJsonRequest(request, requestOtpInputSchema);
   if (!parsed.ok) {
     const status = parsed.error === "payload_too_large"
@@ -66,10 +58,22 @@ export const POST = withApiErrors(async function POST(request: Request) {
         : 400;
     return json({
       code: parsed.error.toLocaleUpperCase(),
-      error: "Проверьте формат запроса.",
+      error: localizedRequestFormatError(request),
     }, status);
   }
   const { purpose, locale, accountType } = parsed.data;
+  const env = runtimeEnv();
+  if (
+    !env.RESEND_API_KEY || !env.EMAIL_FROM || !env.TURNSTILE_SECRET_KEY
+  ) {
+    return json({
+      error: localized(locale, {
+        ru: "Защищённый вход временно не настроен.",
+        uz: "Himoyalangan kirish vaqtincha sozlanmagan.",
+        en: "Secure sign-in is temporarily unavailable.",
+      }),
+    }, 503);
+  }
   const email = normalizeEmail(parsed.data.email);
   if (!EMAIL_RE.test(email) || email.length > 254) return json({ error: localized(locale, {
     ru: "Проверьте адрес электронной почты.",
@@ -252,6 +256,10 @@ export const POST = withApiErrors(async function POST(request: Request) {
           registrationCredential,
           unverifiedGuard,
         ));
+        statements.push(pendingRegistrationUpsertStatement(db, {
+          userId,
+          now,
+        }));
         await db.batch(statements);
       }
     } catch (error) {

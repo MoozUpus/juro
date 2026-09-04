@@ -7,6 +7,7 @@ const localizedPage = fs.readFileSync("app/[locale]/page.tsx", "utf8");
 const globalStyles = fs.readFileSync("app/globals.css", "utf8");
 const rootLayout = fs.readFileSync("app/layout.tsx", "utf8");
 const themeSwitcher = fs.readFileSync("app/components/public/ThemeSwitcher.tsx", "utf8");
+const platformHrefs = fs.readFileSync("app/components/public/platform-hrefs.ts", "utf8");
 const adapter = fs.readFileSync("app/components/cinematic/CinematicLandingPage.tsx", "utf8");
 const homepage = fs.readFileSync("app/components/public/JuroHomepage.tsx", "utf8");
 const homepageStyles = fs.readFileSync("app/components/public/juro-home.module.css", "utf8");
@@ -98,7 +99,7 @@ test("public chrome exposes every primary public destination in all three locale
   assert.match(chrome, /languageHref/);
   assert.match(chrome, /const languages: Locale\[\] = \["ru", "uz", "en"\]/);
   assert.match(chrome, /localeHref\(target\)/);
-  assert.match(chrome, /app\.juro\.uz/);
+  assert.match(chrome + platformHrefs, /app\.juro\.uz/);
   assert.match(sitemap, /\/lawyers/);
   assert.doesNotMatch(sitemap, /prototype/);
 });
@@ -116,8 +117,11 @@ test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
 });
 
 test("mobile chrome keeps both sign-in and registration available", () => {
-  assert.match(chrome, /app\.juro\.uz\/\$\{platformLocale\}\/auth\/login/u);
-  assert.match(chrome, /app\.juro\.uz\/register\?lang=\$\{platformLocale\}/u);
+  assert.match(chrome, /platformAuthHref\(locale, "login"\)/u);
+  assert.match(chrome, /platformRegistrationHref\(locale\)/u);
+  assert.match(platformHrefs, /\$\{PLATFORM_ORIGIN\}\/\$\{locale\}\/auth\/\$\{mode\}/u);
+  assert.match(platformHrefs, /locale === "en"\) return platformAuthHref\(locale, "login"\)/u);
+  assert.doesNotMatch(chrome + platformHrefs, /locale === "en" \? "ru"/u);
 });
 
 test("public theme defaults to explicit light and persists only light or dark", () => {
@@ -129,6 +133,10 @@ test("public theme defaults to explicit light and persists only light or dark", 
   assert.match(rootLayout, /<body>\s*<script dangerouslySetInnerHTML=\{\{ __html: themeBootstrap \}\}/s);
   assert.match(themeSwitcher, /type ThemeMode = "light" \| "dark"/);
   assert.match(themeSwitcher, /const modes = \[\["light", Sun\], \["dark", Moon\]\]/);
+  assert.match(themeSwitcher, /function select\(next: ThemeMode\) \{\s*apply\(next\);/u);
+  assert.match(themeSwitcher, /try \{\s*localStorage\.setItem\("juro-theme", next\);[\s\S]*?catch \{/u);
+  assert.match(themeSwitcher, /try \{[\s\S]*?document\.cookie = `[\s\S]*?catch \{/u);
+  assert.match(themeSwitcher, /catch \{[\s\S]*?announceThemeMode\(\);/u);
   assert.doesNotMatch(themeSwitcher, /Laptop|prefers-color-scheme|matchMedia/);
   assert.match(globalStyles, /:root\s*\{[^}]*color-scheme:\s*light;/s);
   assert.match(globalStyles, /--brand-navy:\s*#062844/);

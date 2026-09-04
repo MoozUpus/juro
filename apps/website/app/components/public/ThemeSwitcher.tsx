@@ -36,18 +36,27 @@ function apply(mode: ThemeMode) {
   document.documentElement.style.colorScheme = mode;
 }
 
-function writeThemeCookie(value: string) {
-  document.cookie = value;
+function persistThemeCookie(mode: ThemeMode) {
+  try {
+    const shared = location.hostname === "juro.uz" || location.hostname.endsWith(".juro.uz");
+    document.cookie = `juro_theme=${mode}; Path=/; Max-Age=31536000; SameSite=Lax${shared ? "; Domain=.juro.uz; Secure" : ""}`;
+  } catch {
+    // A blocked cookie must not prevent the visible theme change.
+  }
 }
 
 export function PublicThemeSwitcher({ locale }: { locale: PublicLanguage }) {
   const mode = useSyncExternalStore(subscribeThemeMode, readThemeMode, () => "light");
 
   function select(next: ThemeMode) {
-    localStorage.setItem("juro-theme", next);
-    const shared = location.hostname === "juro.uz" || location.hostname.endsWith(".juro.uz");
-    writeThemeCookie(`juro_theme=${next}; Path=/; Max-Age=31536000; SameSite=Lax${shared ? "; Domain=.juro.uz; Secure" : ""}`);
     apply(next);
+    try {
+      localStorage.setItem("juro-theme", next);
+    } catch {
+      // Storage can be unavailable in privacy-restricted contexts. The active
+      // document theme remains authoritative for this visit.
+    }
+    persistThemeCookie(next);
     announceThemeMode();
   }
 

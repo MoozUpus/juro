@@ -24,11 +24,6 @@ export const metadata: Metadata = {
   description: "Личный кабинет цифровой юридической платформы JURO.",
   robots: { index: false, follow: false, nocache: true },
   referrer: "strict-origin-when-cross-origin",
-  icons: {
-    icon: "/favicon.png",
-    shortcut: "/favicon.png",
-    apple: "/apple-touch-icon.png",
-  },
 };
 
 export default function RootLayout({
@@ -46,6 +41,11 @@ export default function RootLayout({
       lang="ru"
       suppressHydrationWarning
     >
+      <head>
+        <link rel="icon" href="/favicon.png" />
+        <link rel="shortcut icon" href="/favicon.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+      </head>
       <body className="antialiased">
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: `(function(){var m=location.pathname.match(/^\\/(ru|uz|en)(?:\\/|$)/);var q=new URLSearchParams(location.search).get("lang");document.documentElement.lang=m?m[1]:(q==="uz"?"uz":q==="en"?"en":"ru");})();` }} />

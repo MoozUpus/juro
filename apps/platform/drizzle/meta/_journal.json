@@ -1072,6 +1072,13 @@
       "when": 1788514200000,
       "tag": "0152_password_changed_email_retry",
       "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1788517800000,
+      "tag": "0153_pending_registration_retention",
+      "breakpoints": true
     }
   ]
 }

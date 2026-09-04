@@ -75,13 +75,19 @@ test("English auth routing and supporting controls are complete", () => {
   const register = source("app/register/page.tsx");
   const turnstile = source("app/_auth/TurnstileWidget.tsx");
   const theme = source("app/_theme/ThemeSwitcher.tsx");
+  const form = source("app/_auth/AuthForm.tsx");
+  const localizedLogin = source("app/[locale]/auth/login/page.tsx");
+  const localizedRegister = source("app/[locale]/auth/register/page.tsx");
 
   assert.match(authPage, /value === "ru" \|\| value === "uz" \|\| value === "en"/);
-  assert.match(login, /query\.lang === "en" \? "en"/);
-  assert.match(register, /query\.lang === "en" \? "en"/);
+  assert.match(login, /lang === "en" \? "en"/);
+  assert.match(register, /lang === "en" \? "en"/);
   assert.match(turnstile, /locale: "ru" \| "uz" \| "en"/);
   assert.match(theme, /\["light", Sun, "Светлая", "Yorug‘", "Light"\]/);
   assert.match(theme, /Appearance theme/);
+  assert.equal(form.match(/"x-juro-locale": locale/g)?.length, 5);
+  assert.match(localizedLogin, /generateMetadata[\s\S]*authPageMetadata\(locale, "login"\)/u);
+  assert.match(localizedRegister, /generateMetadata[\s\S]*authPageMetadata\(locale, "register"\)/u);
 });
 
 test("Turnstile follows explicit theme changes without retaining a stale token", () => {

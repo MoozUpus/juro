@@ -1,6 +1,7 @@
 import { normalizeEmail, sha256 } from "../../../../lib/auth/crypto";
 import { userIdByEmail } from "../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
+import { localizedRequestFormatError } from "../../../../lib/auth/request-locale";
 import {
   consumeOtpChallenge,
   type OtpChallengeResult,
@@ -26,6 +27,9 @@ import {
   verifyOtpInputSchema,
 } from "../../../../lib/auth/input";
 import {
+  finalizePendingRegistration,
+} from "../../../../lib/auth/registration-retention";
+import {
   deviceContinuityCookie,
   mfaChallengeCookie,
   replacementSessionCookies,
@@ -43,7 +47,7 @@ import {
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import {
-  recordRegistrationAcceptances,
+  prepareRegistrationAcceptanceWrite,
 } from "../../../../lib/legal/acceptance";
 import { ensureDefaultWorkspace } from "../../../../lib/platform/workspace";
 import { isPersonalAccountType } from "../../../../lib/platform/routing";
@@ -149,7 +153,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         : 400;
     return json({
       code: parsed.error.toLocaleUpperCase(),
-      error: "Проверьте формат запроса.",
+      error: localizedRequestFormatError(request),
     }, status);
   }
   const body = parsed.data;
@@ -227,23 +231,26 @@ export const POST = withApiErrors(async function POST(request: Request) {
     : verification.accountType;
   if (!user) throw new Error("AUTH_USER_STATE_CONFLICT");
   const themePreference = resolveThemePreference(user.themePreference);
-  // Persist mandatory legal evidence before making the account eligible for
-  // password login. The evidence writer is idempotent, so a transient failure
-  // leaves the profile unverified and a newly issued registration code can
-  // safely retry without creating an acceptance gap.
-  await recordRegistrationAcceptances(db, {
+  // Prepare mandatory legal evidence, then commit it in the same D1 batch as
+  // profile verification and marker removal. A Worker interruption or D1
+  // failure therefore cannot create an acceptance-protected registration
+  // orphan that bypasses the retention window.
+  const acceptanceWrite = await prepareRegistrationAcceptanceWrite(db, {
     userId: user.id,
     locale,
     otpChallengeId: body.challengeId,
     acceptedMarketing: Boolean(body.marketing),
     acceptedAt: now,
   });
-  const verified = await db.prepare(
-    `UPDATE user_profiles
-     SET email_verified_at=?,updated_at=?
-     WHERE id=? AND email_verified_at IS NULL`,
-  ).bind(now, now, user.id).run();
-  if (Number(verified.meta.changes ?? 0) !== 1) {
+  const verified = await finalizePendingRegistration(db, {
+    userId: user.id,
+    verifiedAt: now,
+    acceptanceWrite: {
+      ...acceptanceWrite,
+      locale,
+    },
+  });
+  if (!verified) {
     return json({
       code: "ACCOUNT_EXISTS",
       error: localized(locale, {

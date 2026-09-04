@@ -11,6 +11,11 @@ import footerRailStyles from "./footer-rail.module.css";
 import headerTouchStyles from "./header-touch-targets.module.css";
 import styles from "./site-chrome.module.css";
 import { PublicThemeSwitcher } from "./ThemeSwitcher";
+import {
+  platformAuthHref,
+  platformPersonalHref,
+  platformRegistrationHref,
+} from "./platform-hrefs";
 
 type Locale = PublicLanguage;
 
@@ -93,7 +98,8 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
   const scrollSentinelRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const platformLocale = locale === "en" ? "ru" : locale;
+  const loginHref = platformAuthHref(locale, "login");
+  const registrationHref = platformRegistrationHref(locale);
   const localizedSuffix = languageHref?.replace(/^\/(?:ru|uz|en)(?=\/|$)/, "") ?? "";
   const localeHref = (target: Locale) => `/${target}${localizedSuffix}`;
 
@@ -170,8 +176,8 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
           <div className={styles.actions}>
             <PublicThemeSwitcher locale={locale} />
             <div aria-label="Language" className={`${styles.languageSet} ${headerTouchStyles.languageSet}`}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} className={`${styles.language} ${headerTouchStyles.language}`} href={localeHref(target)} key={target}>{languageLabels[target]}</Link>)}</div>
-            <a className={`${styles.login} ${headerTouchStyles.login}`} href={`https://app.juro.uz/${platformLocale}/auth/login`}>{t.signIn}</a>
-            <a className={styles.primary} href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
+            <a className={`${styles.login} ${headerTouchStyles.login}`} href={loginHref}>{t.signIn}</a>
+            <a className={styles.primary} href={registrationHref}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
             <button aria-controls={panelId} aria-expanded={open} aria-label={t.open} className={styles.menuButton} onClick={() => setOpen(true)} ref={triggerRef} type="button"><Menu aria-hidden="true" size={22} /></button>
           </div>
         </div>
@@ -195,8 +201,8 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
               <div className={styles.mobileActions}>
                 <PublicThemeSwitcher locale={locale} />
                 <div aria-label="Language" className={styles.mobileLanguageSet}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={localeHref(target)} key={target} onClick={() => setOpen(false)}>{languageLabels[target]}</Link>)}</div>
-                <a href={`https://app.juro.uz/${platformLocale}/auth/login`}>{t.signIn}</a>
-                <a href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
+                <a href={loginHref}>{t.signIn}</a>
+                <a href={registrationHref}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
               </div>
             </div>
           </div>
@@ -208,12 +214,11 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
 
 export function SiteFooter({ locale }: { locale: Locale }) {
   const t = copy[locale];
-  const platformLocale = locale === "en" ? "ru" : locale;
   const year = new Date().getFullYear();
   const productLinks = [
-    [t.ai, `https://app.juro.uz/${platformLocale}/individual/ai-lawyer/new`],
-    [t.document, `https://app.juro.uz/${platformLocale}/individual/document-analysis`],
-    [t.plan, `https://app.juro.uz/${platformLocale}/individual/cases`],
+    [t.ai, platformPersonalHref(locale, "/ai-lawyer/new")],
+    [t.document, platformPersonalHref(locale, "/document-analysis")],
+    [t.plan, platformPersonalHref(locale, "/cases")],
     [t.lawyers, `/${locale}/lawyers`],
   ] as const;
   return (
@@ -225,7 +230,7 @@ export function SiteFooter({ locale }: { locale: Locale }) {
             <span>JURO</span>
           </Link>
           <p>{t.description}</p>
-          <a className={footerRailStyles.brandCta} href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={16} /></a>
+          <a className={footerRailStyles.brandCta} href={platformRegistrationHref(locale)}>{t.start}<ArrowRight aria-hidden="true" size={16} /></a>
         </div>
         <div className={`${styles.footerColumn} ${footerRailStyles.column}`}><strong>{t.productLabel}</strong>{productLinks.map(([label, href]) => href.startsWith("/") ? <Link href={href} key={href}>{label}</Link> : <a href={href} key={href}>{label}</a>)}</div>
         <div className={`${styles.footerColumn} ${footerRailStyles.column}`}><strong>{t.companyLabel}</strong><Link href={`/${locale}/trust`}>Trust Center</Link><Link href={`/${locale}/video`}>{t.video}</Link><Link href={`/${locale}/knowledge/contract-review-preparation`}>{t.knowledge}</Link></div>

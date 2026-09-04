@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteFooter, SiteHeader } from "../../../components/public/SiteChrome";
+import { platformPersonalHref } from "../../../components/public/platform-hrefs";
 import {
   knowledgeArticles,
   knowledgeSlugs,
@@ -59,7 +60,6 @@ export default async function KnowledgeArticlePage({ params }: Props) {
   const ru = parsed.locale === "ru";
   const en = parsed.locale === "en";
   const labels = en ? { knowledge: "Knowledge base", author: "Author", reviewer: "Reviewer", updated: "Updated", current: "Current as of", language: "Language", languageName: "English", sources: "Applicable official sources", sourceNote: "The specific rules depend on the circumstances. Check the current version before relying on a result.", more: "Read more" } : ru ? { knowledge: "База знаний", author: "Автор", reviewer: "Проверяющий", updated: "Обновлено", current: "Актуально на", language: "Язык", languageName: "Русский", sources: "Применимые официальные источники", sourceNote: "Конкретные нормы зависят от обстоятельств. Перед применением результата проверьте актуальную редакцию.", more: "Читайте также" } : { knowledge: "Bilimlar bazasi", author: "Muallif", reviewer: "Tekshiruvchi", updated: "Yangilangan", current: "Amaldagi sana", language: "Til", languageName: "O‘zbekcha", sources: "Qo‘llaniladigan rasmiy manbalar", sourceNote: "Aniq normalar vaziyatga bog‘liq. Natijani qo‘llashdan oldin amaldagi tahrirni tekshiring.", more: "Shuningdek o‘qing" };
-  const platformLocale = en ? "ru" : parsed.locale;
   const others = knowledgeSlugs.filter((slug) => slug !== parsed.slug);
   const articleSchema = {
     "@context": "https://schema.org",
@@ -107,7 +107,7 @@ export default async function KnowledgeArticlePage({ params }: Props) {
             {article.sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}>{source.title}</a>)}
           </aside>
           <aside className={styles.disclaimer}>{article.disclaimer}</aside>
-          <a className={styles.nextStep} href={`https://app.juro.uz/${platformLocale}/individual${article.relatedTool.path}`}>{article.relatedTool.label}</a>
+          <a className={styles.nextStep} href={platformPersonalHref(parsed.locale, article.relatedTool.path)}>{article.relatedTool.label}</a>
           <aside className={styles.more}>
             <b>{labels.more}</b>
             {others.map((slug) => (

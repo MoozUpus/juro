@@ -72,6 +72,7 @@ const caseLifecycleEvidenceEntry = journal.entries.find(({ idx }) => idx === 93)
 const caseLifecycleHashGuardEntry = journal.entries.find(({ idx }) => idx === 104);
 const englishPolicyEvidenceEntry = journal.entries.find(({ idx }) => idx === 151);
 const passwordChangedEmailRetryEntry = journal.entries.find(({ idx }) => idx === 152);
+const pendingRegistrationRetentionEntry = journal.entries.find(({ idx }) => idx === 153);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -198,6 +199,10 @@ assert.ok(
 assert.ok(
   passwordChangedEmailRetryEntry,
   "Drizzle journal must contain migration 0152",
+);
+assert.ok(
+  pendingRegistrationRetentionEntry,
+  "Drizzle journal must contain migration 0153",
 );
 
 
@@ -4612,6 +4617,181 @@ test("0152 preserves email-change jobs and adds exact password-reset retry evide
          WHERE id='security-email-v0152-password'`,
       ).run("changed"),
       /security email recipient is immutable/u,
+    );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0153 adds a constrained pending-registration marker and strictly backfills only registration-shaped rows", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 153)) {
+      applyMigration(db, entry);
+    }
+    const createdAt = "2026-09-04T10:00:00.000Z";
+    const updatedAt = "2026-09-04T11:00:00.000Z";
+    const profileInsert = db.prepare(`
+      INSERT INTO user_profiles (
+        id,email,email_verified_at,created_at,updated_at
+      ) VALUES (?,?,NULL,?,?)
+    `);
+    for (const [id, email] of [
+      ["pending-v0153-eligible", "eligible-v0153@example.test"],
+      ["pending-v0153-session", "session-v0153@example.test"],
+      ["pending-v0153-no-password", "no-password-v0153@example.test"],
+      ["pending-v0153-no-otp", "no-otp-v0153@example.test"],
+      ["pending-v0153-wrong-purpose", "wrong-purpose-v0153@example.test"],
+      ["pending-v0153-wrong-email", "wrong-email-v0153@example.test"],
+      ["pending-v0153-wrong-timestamp", "wrong-timestamp-v0153@example.test"],
+      ["pending-v0153-workspace-creator", "workspace-creator-v0153@example.test"],
+    ]) {
+      profileInsert.run(id, email, createdAt, updatedAt);
+    }
+    const credentialInsert = db.prepare(`
+      INSERT INTO user_password_credentials (
+        user_id,algorithm,iterations,salt_base64url,hash_base64url,
+        password_changed_at,created_at,updated_at
+      ) VALUES (?,'PBKDF2-SHA256',600000,?,?,?,?,?)
+    `);
+    for (const id of [
+      "pending-v0153-eligible",
+      "pending-v0153-session",
+      "pending-v0153-no-otp",
+      "pending-v0153-wrong-purpose",
+      "pending-v0153-wrong-email",
+      "pending-v0153-wrong-timestamp",
+      "pending-v0153-workspace-creator",
+    ]) {
+      credentialInsert.run(
+        id,
+        "s".repeat(22),
+        "h".repeat(43),
+        createdAt,
+        createdAt,
+        updatedAt,
+      );
+    }
+    db.prepare(`
+      INSERT INTO auth_sessions (
+        id,user_id,token_hash,auth_method,assurance_level,
+        authenticated_at,expires_at,created_at,last_seen_at
+      ) VALUES (
+        'pending-v0153-session-id','pending-v0153-session',?,'email_otp',
+        'primary',?, '2026-09-05T11:00:00.000Z',?,?
+      )
+    `).run("a".repeat(64), updatedAt, createdAt, updatedAt);
+    const registrationOtpInsert = db.prepare(`
+      INSERT INTO auth_otp_challenges (
+        id,email,email_hash,purpose,locale,account_type,code_salt,code_hash,
+        attempt_count,max_attempts,expires_at,created_at
+      ) VALUES (?,?,?,'register','ru','individual','otp-salt','otp-hash',
+        0,5,'2026-09-04T11:10:00.000Z',?)
+    `);
+    registrationOtpInsert.run(
+      "pending-v0153-eligible-otp",
+      "eligible-v0153@example.test",
+      "eligible-v0153-hash",
+      updatedAt,
+    );
+    registrationOtpInsert.run(
+      "pending-v0153-session-otp",
+      "session-v0153@example.test",
+      "session-v0153-hash",
+      updatedAt,
+    );
+    registrationOtpInsert.run(
+      "pending-v0153-no-password-otp",
+      "no-password-v0153@example.test",
+      "no-password-v0153-hash",
+      updatedAt,
+    );
+    registrationOtpInsert.run(
+      "pending-v0153-wrong-purpose-otp",
+      "wrong-purpose-v0153@example.test",
+      "wrong-purpose-v0153-hash",
+      updatedAt,
+    );
+    db.prepare(`
+      UPDATE auth_otp_challenges SET purpose='password_reset'
+      WHERE id='pending-v0153-wrong-purpose-otp'
+    `).run();
+    registrationOtpInsert.run(
+      "pending-v0153-wrong-email-otp",
+      "other-v0153@example.test",
+      "wrong-email-v0153-hash",
+      updatedAt,
+    );
+    registrationOtpInsert.run(
+      "pending-v0153-wrong-timestamp-otp",
+      "wrong-timestamp-v0153@example.test",
+      "wrong-timestamp-v0153-hash",
+      "2026-09-04T10:59:59.000Z",
+    );
+    db.prepare(`
+      UPDATE auth_otp_challenges SET invalidated_at=?
+      WHERE id='pending-v0153-eligible-otp'
+    `).run("2026-09-04T11:01:00.000Z");
+    registrationOtpInsert.run(
+      "pending-v0153-workspace-creator-otp",
+      "workspace-creator-v0153@example.test",
+      "workspace-creator-v0153-hash",
+      updatedAt,
+    );
+    db.prepare(`
+      INSERT INTO workspaces (
+        id,type,name,created_by_user_id,locale,created_at,updated_at
+      ) VALUES (
+        'pending-v0153-created-workspace','individual','Pending workspace',
+        'pending-v0153-workspace-creator','ru',?,?
+      )
+    `).run(createdAt, updatedAt);
+
+    applyMigration(db, pendingRegistrationRetentionEntry);
+
+    assert.deepEqual(
+      db.prepare(`
+        SELECT user_id AS userId,expires_at AS expiresAt,
+          created_at AS createdAt,updated_at AS updatedAt
+        FROM auth_pending_registrations ORDER BY user_id
+      `).all().map((row) => ({ ...row })),
+      [{
+        userId: "pending-v0153-eligible",
+        expiresAt: "2026-09-05T11:00:00.000Z",
+        createdAt,
+        updatedAt,
+      }],
+    );
+    assert.deepEqual(
+      db.prepare("PRAGMA index_info('auth_pending_registrations_expiry_idx')")
+        .all().map((row) => ({ ...row })),
+      [
+        { seqno: 0, cid: 1, name: "expires_at" },
+        { seqno: 1, cid: 0, name: "user_id" },
+      ],
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_pending_registrations (
+          user_id,expires_at,created_at,updated_at
+        ) VALUES ('pending-v0153-no-password',?,?,?)
+      `).run(updatedAt, createdAt, updatedAt),
+      /auth_pending_registrations_expiry_check/u,
+    );
+    db.prepare(
+      "DELETE FROM user_profiles WHERE id='pending-v0153-eligible'",
+    ).run();
+    assert.equal(
+      (db.prepare(
+        "SELECT count(*) AS total FROM auth_pending_registrations",
+      ).get() as { total: number }).total,
+      0,
+    );
+    assert.deepEqual(
+      { ...db.prepare("PRAGMA quick_check").get() },
+      { quick_check: "ok" },
     );
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {

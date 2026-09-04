@@ -29,6 +29,7 @@ import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { isPersonalAccountType } from "../../../../lib/platform/routing";
 import { lawyerLandingDestination } from "../../../../lib/platform/lawyer-entry-routing";
 import { issueSessionHandoff } from "../../../../lib/auth/session-handoff";
+import { localizedRequestFormatError } from "../../../../lib/auth/request-locale";
 import {
   resolveThemePreference,
   themePreferenceCookie,
@@ -56,7 +57,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         : 400;
     return jsonNoStore({
       code: parsed.error.toLocaleUpperCase(),
-      error: "Проверьте формат запроса.",
+      error: localizedRequestFormatError(request),
     }, status);
   }
   const { code, locale, rememberMe } = parsed.data;

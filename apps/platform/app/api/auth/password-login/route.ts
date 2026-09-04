@@ -36,6 +36,7 @@ import { issueSessionHandoff } from "../../../../lib/auth/session-handoff";
 import { deviceContinuityTokenFromCookie } from "../../../../lib/auth/session-token";
 import { userIdByEmail } from "../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
+import { localizedRequestFormatError } from "../../../../lib/auth/request-locale";
 import {
   authTurnstileActions,
   validateAuthTurnstile,
@@ -75,7 +76,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!parsed.ok) {
     return json({
       code: parsed.error.toLocaleUpperCase(),
-      error: "Проверьте формат запроса.",
+      error: localizedRequestFormatError(request),
     }, parsed.error === "payload_too_large" ? 413 : parsed.error === "invalid_content_type" ? 415 : 400);
   }
   const { locale, rememberMe, password } = parsed.data;
