@@ -40,7 +40,7 @@
         "max_retries": 12,
         "retry_delay": 30,
         "dead_letter_queue": "juro-legal-complete-corpus-20260904-dlq",
-        "max_concurrency": 5
+        "max_concurrency": 10
       }
     ]
   },
