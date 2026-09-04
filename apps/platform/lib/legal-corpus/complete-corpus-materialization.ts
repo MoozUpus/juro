@@ -238,7 +238,8 @@ export const TICKET29_FINALIZATION_COUNTS_SQL = `SELECT count(*) AS lanes,
 
 export const TICKET29_SOURCE_PAGE_SIZE = 600;
 export const TICKET29_MATERIALIZATION_PAGE_SIZE = 100;
-export const TICKET29_EVIDENCE_PREFIX = "legal-corpus/complete-v2/";
+export const TICKET29_EVIDENCE_NAMESPACE = "complete-v2";
+export const TICKET29_EVIDENCE_PREFIX = `legal-corpus/${TICKET29_EVIDENCE_NAMESPACE}/`;
 
 export async function ticket29PlanSourcePageInParallel<TSource, TPlan>(
   sourceRows: readonly TSource[],
@@ -294,7 +295,7 @@ export function ticket29EvidenceKey(
   const kind = evidenceKindSchema.parse(rawKind);
   const sha256 = sha256Schema.parse(rawSha256);
   const segment = kind.replaceAll("_", "-");
-  const namespace = kind === "qualification" ? "qualification-v1" : "complete-v2";
+  const namespace = kind === "qualification" ? "qualification-v1" : TICKET29_EVIDENCE_NAMESPACE;
   return `legal-corpus/${namespace}/${segment}/${sha256}.${evidenceExtension(kind, mediaType)}`;
 }
 

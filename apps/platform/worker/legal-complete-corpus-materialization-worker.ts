@@ -1736,8 +1736,9 @@ export class CompleteCorpusFinalizeWorkflow extends WorkflowEntrypoint<Materiali
         gaps: Number(membership?.gaps),
         quarantines: 0,
         distinctBodies: kindCounts.get("provision_rendition") ?? 0,
-        rawObjects: kindCounts.get("raw_capture") ?? 0,
-        normalizedObjects: kindCounts.get("normalized_revision") ?? 0,
+        rawObjects: (kindCounts.get("raw_capture") ?? 0) - Number(quarantineCount?.count),
+        normalizedObjects: (kindCounts.get("normalized_revision") ?? 0)
+          - Number(quarantineCount?.count),
       };
       const firstAttempt = attempts.results.find((attempt) => attempt.attemptId === "ticket29:first");
       const secondAttempt = attempts.results.find((attempt) => attempt.attemptId === "ticket29:second");

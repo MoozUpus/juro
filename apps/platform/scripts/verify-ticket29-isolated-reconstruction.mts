@@ -21,6 +21,8 @@ const SOURCE_DATABASE_ID = "bb716a96-b2fb-4823-90d6-6c228fed181a";
 const SOURCE_INVENTORY_SHA256 = "2105a4d39465ae8e0b923ab89a08dddf2599d57b9e1517490a8d2f1996fe4c00";
 const SOURCE_CANONICAL_SHA256 = "e527fa5221acf6063defa5f944d9ef54ca7e8b2667c47df34ba8135ef879f830";
 const SOURCE_ALIAS_SHA256 = "5ff75e07391b9acd01699d8aca2bbaa32684c402e3470e42660d66fdd064f201";
+// Keep the isolated verifier's run and namespace pins independent from the
+// production Worker so a shared constant cannot make a wrong deployment self-validating.
 const EVIDENCE_PREFIX = "legal-corpus/complete-v2/";
 const REQUEST_INTERVAL_MS = 275;
 let requestGate = Promise.resolve();
@@ -439,6 +441,8 @@ async function main(): Promise<void> {
       row.publisherProvisionToken, textRevisionId, row.language, row.script,
       row.textualAuthority, applicabilityIdentity].join("|"))}`;
     const legacyRevisionId = `revision:${sha256(`${officialExpressionId}\u0000${row.sourceRevisionSha256}`)}`;
+    // Independently reconstruct Ticket 28's natural-key preimage rather than
+    // importing the production helper that this proof is meant to check.
     const legacyProvisionConceptId = `concept:${sha256(
       `${instrumentId}\u0000${row.publisherProvisionToken}`,
     )}`;
