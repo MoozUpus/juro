@@ -9,6 +9,8 @@ import {
   completeCorpusPublisherRevisionToken,
 } from "../lib/legal-corpus/complete-corpus-audit";
 import {
+  TICKET29_CURRENT_LOCATOR_SQL,
+  TICKET29_TARGET_LOCATOR_SQL,
   immutableEvidencePut,
   runTicket29MaterializationPage,
   ticket29EvidenceKey,
@@ -453,29 +455,16 @@ async function targetState(env: MaterializationEnv, rows: readonly SourceRow[]):
   if (requested.some((item) => !item.rawSha256 || !item.normalizedSha256)) {
     throw new Error("TICKET29_SOURCE_R2_METADATA_MISMATCH");
   }
-  const locators = await env.LEGAL_DB.prepare(`SELECT object_kind AS objectKind,r2_key AS r2Key,
-      media_type AS mediaType,byte_count AS byteCount,sha256,
-      source_normalized_sha256 AS sourceNormalizedSha256
-    FROM legal_evidence_locators WHERE
-      (object_kind='raw_capture' AND sha256 IN (SELECT json_extract(value,'$.rawSha256') FROM json_each(?)))
-      OR (object_kind='normalized_revision' AND sha256 IN
-        (SELECT json_extract(value,'$.normalizedSha256') FROM json_each(?)))
-    ORDER BY r2_key`).bind(JSON.stringify(requested), JSON.stringify(requested)).all<TargetLocatorRow>();
+  const requestedJson = JSON.stringify(requested);
+  const locators = await env.LEGAL_DB.prepare(TICKET29_TARGET_LOCATOR_SQL)
+    .bind(requestedJson, requestedJson).all<TargetLocatorRow>();
   const byKindSha = new Map<string, Ticket29RetainedLocator>();
   for (const row of locators.results) {
     const key = `${row.objectKind}:${row.sha256}`;
     if (!byKindSha.has(key)) byKindSha.set(key, retainedLocator(row));
   }
-  const current = await env.LEGAL_DB.prepare(`SELECT json_extract(request.value,'$.sourceId') AS sourceId,
-      locator.object_kind AS objectKind,locator.r2_key AS r2Key,locator.media_type AS mediaType,
-      locator.byte_count AS byteCount,locator.sha256,
-      locator.source_normalized_sha256 AS sourceNormalizedSha256
-    FROM json_each(?) request
-    JOIN legal_search_release_items item ON item.search_release_id=?
-      AND item.provision_rendition_id=json_extract(request.value,'$.legacyCurrentRenditionId')
-    JOIN legal_provision_renditions rendition ON rendition.id=item.provision_rendition_id
-    JOIN legal_evidence_locators locator ON locator.id=rendition.locator_id
-    ORDER BY sourceId`).bind(JSON.stringify(requested), SOURCE_RELEASE_ID)
+  const current = await env.LEGAL_DB.prepare(TICKET29_CURRENT_LOCATOR_SQL)
+    .bind(requestedJson, SOURCE_RELEASE_ID)
     .all<TargetLocatorRow & { sourceId: string }>();
   const currentBySource = new Map(current.results.map((row) => [row.sourceId, retainedLocator(row)]));
   return new Map(requested.map((item) => {

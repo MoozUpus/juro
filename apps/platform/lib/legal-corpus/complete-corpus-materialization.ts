@@ -5,6 +5,37 @@ import { legalLanguageSchema, legalScriptSchema, sha256Schema } from "./target-d
 
 const encoder = new TextEncoder();
 
+export const TICKET29_TARGET_LOCATOR_SQL = `SELECT locator.object_kind AS objectKind,
+    locator.r2_key AS r2Key,locator.media_type AS mediaType,
+    locator.byte_count AS byteCount,locator.sha256,
+    locator.source_normalized_sha256 AS sourceNormalizedSha256
+  FROM json_each(?) request
+  CROSS JOIN legal_evidence_locators locator INDEXED BY legal_evidence_locator_kind_sha_idx
+  WHERE locator.object_kind='raw_capture'
+    AND locator.sha256=json_extract(request.value,'$.rawSha256')
+  UNION ALL
+  SELECT locator.object_kind AS objectKind,locator.r2_key AS r2Key,
+    locator.media_type AS mediaType,locator.byte_count AS byteCount,locator.sha256,
+    locator.source_normalized_sha256 AS sourceNormalizedSha256
+  FROM json_each(?) request
+  CROSS JOIN legal_evidence_locators locator INDEXED BY legal_evidence_locator_kind_sha_idx
+  WHERE locator.object_kind='normalized_revision'
+    AND locator.sha256=json_extract(request.value,'$.normalizedSha256')
+  ORDER BY r2Key`;
+
+export const TICKET29_CURRENT_LOCATOR_SQL = `SELECT
+    json_extract(request.value,'$.sourceId') AS sourceId,
+    locator.object_kind AS objectKind,locator.r2_key AS r2Key,
+    locator.media_type AS mediaType,locator.byte_count AS byteCount,locator.sha256,
+    locator.source_normalized_sha256 AS sourceNormalizedSha256
+  FROM json_each(?) request
+  CROSS JOIN legal_search_release_items item INDEXED BY legal_search_release_item_provision_idx
+  JOIN legal_provision_renditions rendition ON rendition.id=item.provision_rendition_id
+  JOIN legal_evidence_locators locator ON locator.id=rendition.locator_id
+  WHERE item.search_release_id=?
+    AND item.provision_rendition_id=json_extract(request.value,'$.legacyCurrentRenditionId')
+  ORDER BY sourceId`;
+
 const evidenceKindSchema = z.enum([
   "provision_rendition",
   "raw_capture",

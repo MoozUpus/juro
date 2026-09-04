@@ -3,7 +3,48 @@ import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
+import {
+  TICKET29_CURRENT_LOCATOR_SQL,
+  TICKET29_TARGET_LOCATOR_SQL,
+} from "../lib/legal-corpus/complete-corpus-materialization";
 import { assertTicket29BodyFreeSchema } from "../scripts/ticket29-isolated-artifact-paths";
+
+test("Ticket 29 target lookups seek by requested identity instead of scanning retained evidence", async () => {
+  const sql = await readFile(new URL(
+    "../legal-drizzle/0024_ticket29_target_lookup_indexes.sql", import.meta.url,
+  ), "utf8");
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE legal_evidence_locators (
+      id TEXT PRIMARY KEY, object_kind TEXT NOT NULL, r2_key TEXT NOT NULL,
+      media_type TEXT NOT NULL, byte_count INTEGER NOT NULL, sha256 TEXT NOT NULL,
+      source_normalized_sha256 TEXT);
+    CREATE TABLE legal_search_release_items (
+      search_release_id TEXT NOT NULL, provision_rendition_id TEXT NOT NULL);
+    CREATE INDEX legal_search_release_item_provision_idx
+      ON legal_search_release_items(search_release_id, provision_rendition_id);
+    CREATE TABLE legal_provision_renditions (id TEXT PRIMARY KEY, locator_id TEXT NOT NULL);`);
+  for (const statement of sql.split("--> statement-breakpoint")) {
+    if (statement.trim()) database.exec(statement);
+  }
+  const requested = JSON.stringify([{ sourceId: "source", legacyCurrentRenditionId: "rendition",
+    rawSha256: "a".repeat(64), normalizedSha256: "b".repeat(64) }]);
+  const locatorPlan = database.prepare(`EXPLAIN QUERY PLAN ${TICKET29_TARGET_LOCATOR_SQL}`)
+    .all(requested, requested) as Array<{ detail: string }>;
+  const currentPlan = database.prepare(`EXPLAIN QUERY PLAN ${TICKET29_CURRENT_LOCATOR_SQL}`)
+    .all(requested, "release") as Array<{ detail: string }>;
+  assert.equal(locatorPlan.some(({ detail }) =>
+    detail === "SCAN locator" || detail.startsWith("SCAN legal_evidence_locators")), false);
+  assert.equal(locatorPlan.filter(({ detail }) => detail.startsWith("SEARCH locator USING ")
+    && detail.endsWith(
+      "legal_evidence_locator_kind_sha_idx (object_kind=? AND sha256=?)",
+    )).length, 2);
+  assert.equal(currentPlan.some(({ detail }) =>
+    detail === "SCAN item" || detail.startsWith("SCAN legal_search_release_items")), false);
+  assert.equal(currentPlan.some(({ detail }) =>
+    detail.includes("legal_search_release_item_provision_idx")
+      && detail.includes("search_release_id=? AND provision_rendition_id=?")), true);
+  database.close();
+});
 
 test("Ticket 29 migration stores body-free immutable identities and locators", async () => {
   const sql = await readFile(new URL("../legal-drizzle/0023_complete_corpus_materialization.sql", import.meta.url), "utf8");
