@@ -609,7 +609,10 @@ type Ticket29PageDependencies = {
   commitPage(value: Ticket29PageCommit): Promise<void>;
   afterObjectCheckpoint?(checkpoint: { recordCount: number; createdObjectCount: number;
     reusedObjectCount: number; createdByteCount: number; reusedByteCount: number }): Promise<void>;
-  verifyRetainedObject?(locator: Ticket29RetainedLocator): Promise<Uint8Array>;
+  withRetainedObjectBytes?(
+    locator: Ticket29RetainedLocator,
+    verifyBytes: (bytes: Uint8Array) => Promise<void>,
+  ): Promise<void>;
 };
 
 function parsePlanPage(bytes: Uint8Array): Ticket29PlanItem[] {
@@ -733,7 +736,7 @@ export async function runTicket29MaterializationPage(
       sourceRevisionSha256: source.sourceRevisionSha256,
       objectMetadataRevisionSha256: source.objectMetadataRevisionSha256,
     };
-    const additions: Array<[Ticket29EvidenceDescriptor, Uint8Array]> = [
+    const additions: Array<[Ticket29EvidenceDescriptor, Uint8Array | null]> = [
       [{ key: record.rawObjectKey, kind: "raw_capture", mediaType: "application/octet-stream",
         sha256: source.rawSourceSha256, byteCount: source.rawBytes.byteLength }, source.rawBytes],
       [{ key: record.normalizedObjectKey, kind: "normalized_revision",
@@ -752,32 +755,41 @@ export async function runTicket29MaterializationPage(
     ] as const) {
       const retained = source[property];
       if (!retained) continue;
-      if (!dependencies.verifyRetainedObject || retained.kind !== expectedKind
+      if (!dependencies.withRetainedObjectBytes || retained.kind !== expectedKind
         || (expectedSourceSha256 !== null && retained.sha256 !== expectedSourceSha256)
         || (retained.kind === "provision_rendition"
           && retained.sourceNormalizedSha256 !== source.normalizedSourceSha256)) {
         throw new Error("TICKET29_RETAINED_LOCATOR_MISMATCH");
       }
-      const retainedBytes = await dependencies.verifyRetainedObject(retained);
-      if (retainedBytes.byteLength !== retained.byteCount
-        || await ticket29Sha256(retainedBytes) !== retained.sha256) {
-        throw new Error("TICKET29_RETAINED_OBJECT_MISMATCH");
-      }
-      if (retained.kind === "provision_rendition") {
-        let envelope: unknown;
-        try { envelope = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(retainedBytes)); }
-        catch { throw new Error("TICKET29_RETAINED_RENDITION_INVALID"); }
-        const provisionText = envelope && typeof envelope === "object"
-          ? (envelope as Record<string, unknown>).provisionText : null;
-        if (typeof provisionText !== "string"
-          || await ticket29Sha256(provisionText) !== source.contentSha256) {
-          throw new Error("TICKET29_RETAINED_RENDITION_CONTENT_MISMATCH");
+      let verificationCalls = 0;
+      let verificationComplete = false;
+      await dependencies.withRetainedObjectBytes(retained, async (retainedBytes) => {
+        verificationCalls += 1;
+        if (verificationCalls !== 1) throw new Error("TICKET29_RETAINED_OBJECT_UNVERIFIED");
+        if (retainedBytes.byteLength !== retained.byteCount
+          || await ticket29Sha256(retainedBytes) !== retained.sha256) {
+          throw new Error("TICKET29_RETAINED_OBJECT_MISMATCH");
         }
+        if (retained.kind === "provision_rendition") {
+          let envelope: unknown;
+          try { envelope = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(retainedBytes)); }
+          catch { throw new Error("TICKET29_RETAINED_RENDITION_INVALID"); }
+          const provisionText = envelope && typeof envelope === "object"
+            ? (envelope as Record<string, unknown>).provisionText : null;
+          if (typeof provisionText !== "string"
+            || await ticket29Sha256(provisionText) !== source.contentSha256) {
+            throw new Error("TICKET29_RETAINED_RENDITION_CONTENT_MISMATCH");
+          }
+        }
+        verificationComplete = true;
+      });
+      if (verificationCalls !== 1 || !verificationComplete) {
+        throw new Error("TICKET29_RETAINED_OBJECT_UNVERIFIED");
       }
       additions[index] = [{ key: retained.key, kind: retained.kind, mediaType: retained.mediaType,
         sha256: retained.sha256, byteCount: retained.byteCount,
         ...(retained.sourceNormalizedSha256
-          ? { sourceNormalizedSha256: retained.sourceNormalizedSha256 } : {}) }, retainedBytes];
+          ? { sourceNormalizedSha256: retained.sourceNormalizedSha256 } : {}) }, null];
       retainedKeys.add(retained.key);
     }
     record.rawObjectKey = additions[0]![0].key;
@@ -791,7 +803,7 @@ export async function runTicket29MaterializationPage(
         throw new Error("TICKET29_OBJECT_DESCRIPTOR_CONFLICT");
       }
       descriptors.set(descriptor.key, descriptor);
-      bytesByKey.set(descriptor.key, bytes);
+      if (bytes) bytesByKey.set(descriptor.key, bytes);
     }
   }
   let createdObjectCount = 0;

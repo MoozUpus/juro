@@ -27,6 +27,7 @@ import {
   ticket29TargetPublisherRevisionToken,
   type Ticket29BodyFreeRecord,
   type Ticket29EvidenceDescriptor,
+  type Ticket29RetainedLocator,
 } from "../lib/legal-corpus/complete-corpus-materialization";
 import { assertTicket29DistinctArtifactPaths } from "../scripts/ticket29-isolated-artifact-paths";
 
@@ -337,25 +338,40 @@ test("Ticket 29 reuses verified Ticket 12 locators without rewriting accepted ev
   const retainedBytes = new Map([[plan[0]!.retainedRawLocator.key, rawBytes],
     [plan[0]!.retainedNormalizedLocator.key, normalizedBytes],
     [plan[0]!.retainedProvisionLocator.key, renditionBytes]]);
+  let verifiedRetainedObjects = 0;
   let committed: Ticket29BodyFreeRecord | undefined;
-  const result = await runTicket29MaterializationPage({ bucket,
+  const dependencies = { bucket,
     loadPlan: async () => planBytes,
     loadSource: async () => [{ ...plan[0]!, sourceDocumentId: "document", sourceVersionId: "version",
       rawBytes, normalizedBytes, officialBytes, language: "en" as const, script: "Latn" as const,
       ordinal: 1, validFrom: "2026-01-01T00:00:00.000Z", validTo: null,
       currentEligible: true, historicalEligible: true, temporalGap: false }],
     findReceipt: async () => null,
-    verifyRetainedObject: async (locator) => retainedBytes.get(locator.key)!,
-    commitPage: async (value) => { committed = value.records[0]; },
-  }, { schemaVersion: 1, kind: "materialize-page", runId: "run", attemptId: "first",
+    withRetainedObjectBytes: async (locator: Ticket29RetainedLocator,
+      verifyBytes: (bytes: Uint8Array) => Promise<void>) => {
+      verifiedRetainedObjects += 1;
+      await verifyBytes(retainedBytes.get(locator.key)!);
+    },
+    commitPage: async (value: { records: Ticket29BodyFreeRecord[] }) => {
+      committed = value.records[0];
+    },
+  };
+  const message = { schemaVersion: 1 as const, kind: "materialize-page" as const,
+    runId: "run", attemptId: "first",
     planKey: ticket29EvidenceKey("plan", pageSha256, "application/json;charset=utf-8"),
     offset: 0, length: planBytes.byteLength, pageSha256, injectInterruption: false,
-    proofMode: "interrupted" });
+    proofMode: "interrupted" as const };
+  const result = await runTicket29MaterializationPage(dependencies, message);
   assert.equal(bucket.putCalls, 0);
   assert.equal(result.objects.created, 0);
   assert.equal(result.objects.reused, 3);
+  assert.equal(verifiedRetainedObjects, 3);
   assert.equal(committed?.provisionObjectKey, "corpus/provisions/accepted");
   assert.equal(committed?.provisionObjectSha256, renditionSha256);
+  await assert.rejects(() => runTicket29MaterializationPage({
+    ...dependencies,
+    withRetainedObjectBytes: async () => undefined,
+  }, { ...message, runId: "unverified" }), /TICKET29_RETAINED_OBJECT_UNVERIFIED/u);
 });
 
 test("Ticket 29 manifests are deterministic and preserve current, history, and gap membership", async () => {

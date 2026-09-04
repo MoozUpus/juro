@@ -1107,7 +1107,7 @@ async function processMessage(env: MaterializationEnv, rawMessage: unknown) {
       return bytes;
     },
     loadSource: (plan) => loadHydratedSources(env, plan),
-    verifyRetainedObject: async (locator) => {
+    withRetainedObjectBytes: async (locator, verifyBytes) => {
       const object = await env.EVIDENCE.get(locator.key);
       if (!object || object.size !== locator.byteCount
         || object.customMetadata?.sha256 !== locator.sha256
@@ -1115,7 +1115,7 @@ async function processMessage(env: MaterializationEnv, rawMessage: unknown) {
         || object.customMetadata?.objectKind !== locator.kind) {
         throw new Error("TICKET29_RETAINED_OBJECT_MISMATCH");
       }
-      return new Uint8Array(await object.arrayBuffer());
+      await verifyBytes(new Uint8Array(await object.arrayBuffer()));
     },
     findReceipt: async (runId, pageSha256) => {
       const row = await env.LEGAL_DB.prepare(`SELECT receipt_sha256 AS receiptSha256
