@@ -236,6 +236,37 @@ export const TICKET29_FINALIZATION_COUNTS_SQL = `SELECT count(*) AS lanes,
   FROM legal_complete_corpus_lane_reports
   WHERE run_id=? AND report_kind='manifest'`;
 
+export const TICKET29_DISTINCT_BODY_COUNT_SQL = `SELECT count(DISTINCT content_sha256) AS distinctBodies
+  FROM legal_complete_corpus_records WHERE run_id=?`;
+
+export function ticket29FinalObjectSummary(input: {
+  physicalRawObjects: number;
+  physicalNormalizedObjects: number;
+  physicalProvisionObjects: number;
+  quarantineObjectsPerKind: number;
+  distinctBodies: number;
+}): {
+  recordCounts: { rawObjects: number; normalizedObjects: number; distinctBodies: number };
+  physicalObjectCounts: {
+    rawObjects: number; normalizedObjects: number; provisionObjects: number; dataObjects: number;
+  };
+} {
+  return {
+    recordCounts: {
+      rawObjects: input.physicalRawObjects - input.quarantineObjectsPerKind,
+      normalizedObjects: input.physicalNormalizedObjects - input.quarantineObjectsPerKind,
+      distinctBodies: input.distinctBodies,
+    },
+    physicalObjectCounts: {
+      rawObjects: input.physicalRawObjects,
+      normalizedObjects: input.physicalNormalizedObjects,
+      provisionObjects: input.physicalProvisionObjects,
+      dataObjects: input.physicalRawObjects + input.physicalNormalizedObjects
+        + input.physicalProvisionObjects,
+    },
+  };
+}
+
 export const TICKET29_SOURCE_PAGE_SIZE = 600;
 export const TICKET29_MATERIALIZATION_PAGE_SIZE = 100;
 export const TICKET29_EVIDENCE_NAMESPACE = "complete-v2";

@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   TICKET29_FINALIZATION_COUNTS_SQL,
+  TICKET29_DISTINCT_BODY_COUNT_SQL,
   TICKET29_SOURCE_PAGE_SIZE,
   TICKET29_MATERIALIZATION_PAGE_SIZE,
   buildBodyFreeMaterializationRecord,
@@ -18,6 +19,7 @@ import {
   ticket29LifecycleDisposition,
   ticket29LegacyTargetRenditionId,
   ticket29EvidenceKey,
+  ticket29FinalObjectSummary,
   ticket29ManifestRoot,
   ticket29PlanSourcePageInParallel,
   ticket29WritePlanPagesInParallel,
@@ -57,6 +59,36 @@ test("Ticket 29 finalization derives exact membership counts from sealed manifes
     currentRecords: 3,
     historicalRecords: 11,
     gaps: 1,
+  });
+  database.close();
+});
+
+test("Ticket 29 finalization distinguishes distinct bodies from retained physical rendition objects", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE legal_complete_corpus_records (
+    run_id TEXT NOT NULL, content_sha256 TEXT NOT NULL);
+    INSERT INTO legal_complete_corpus_records VALUES
+      ('run','body-a'),('run','body-a'),('run','body-b'),('other','body-c');`);
+  const observed = database.prepare(TICKET29_DISTINCT_BODY_COUNT_SQL)
+    .get("run") as { distinctBodies: number };
+  assert.deepEqual(ticket29FinalObjectSummary({
+    physicalRawObjects: 11_001,
+    physicalNormalizedObjects: 11_001,
+    physicalProvisionObjects: 220_889,
+    quarantineObjectsPerKind: 12,
+    distinctBodies: observed.distinctBodies,
+  }), {
+    recordCounts: {
+      rawObjects: 10_989,
+      normalizedObjects: 10_989,
+      distinctBodies: 2,
+    },
+    physicalObjectCounts: {
+      rawObjects: 11_001,
+      normalizedObjects: 11_001,
+      provisionObjects: 220_889,
+      dataObjects: 242_891,
+    },
   });
   database.close();
 });

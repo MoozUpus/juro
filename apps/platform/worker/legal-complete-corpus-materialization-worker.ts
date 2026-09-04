@@ -11,12 +11,14 @@ import {
 import {
   TICKET29_CURRENT_LOCATOR_SQL,
   TICKET29_EVIDENCE_PREFIX,
+  TICKET29_DISTINCT_BODY_COUNT_SQL,
   TICKET29_FINALIZATION_COUNTS_SQL,
   TICKET29_SOURCE_PAGE_SIZE,
   TICKET29_TARGET_LOCATOR_SQL,
   immutableEvidencePut,
   runTicket29MaterializationPage,
   ticket29EvidenceKey,
+  ticket29FinalObjectSummary,
   ticket29AccountingTotalsMatch,
   ticket29ControlReplayMatches,
   ticket29LifecycleDisposition,
@@ -1722,12 +1724,21 @@ export class CompleteCorpusFinalizeWorkflow extends WorkflowEntrypoint<Materiali
         FROM legal_complete_corpus_objects WHERE run_id=?
           AND object_kind IN ('raw_capture','normalized_revision','provision_rendition')`)
         .bind(RUN_ID).first<{ count: number }>();
+      const distinctBodies = await this.env.LEGAL_DB.prepare(TICKET29_DISTINCT_BODY_COUNT_SQL)
+        .bind(RUN_ID).first<{ distinctBodies: number }>();
       const objectKinds = await this.env.LEGAL_DB.prepare(`SELECT object_kind AS objectKind,count(*) AS count
         FROM legal_complete_corpus_objects WHERE run_id=?
           AND object_kind IN ('raw_capture','normalized_revision','provision_rendition')
         GROUP BY object_kind ORDER BY object_kind`).bind(RUN_ID)
         .all<{ objectKind: string; count: number }>();
       const kindCounts = new Map(objectKinds.results.map((item) => [item.objectKind, Number(item.count)]));
+      const objectSummary = ticket29FinalObjectSummary({
+        physicalRawObjects: kindCounts.get("raw_capture") ?? 0,
+        physicalNormalizedObjects: kindCounts.get("normalized_revision") ?? 0,
+        physicalProvisionObjects: kindCounts.get("provision_rendition") ?? 0,
+        quarantineObjectsPerKind: Number(quarantineCount?.count),
+        distinctBodies: Number(distinctBodies?.distinctBodies),
+      });
       const row = {
         records: Number(membership?.records),
         currentRecords: Number(membership?.currentRecords),
@@ -1735,10 +1746,8 @@ export class CompleteCorpusFinalizeWorkflow extends WorkflowEntrypoint<Materiali
         overlapRecords: Number(membership?.currentRecords),
         gaps: Number(membership?.gaps),
         quarantines: 0,
-        distinctBodies: kindCounts.get("provision_rendition") ?? 0,
-        rawObjects: (kindCounts.get("raw_capture") ?? 0) - Number(quarantineCount?.count),
-        normalizedObjects: (kindCounts.get("normalized_revision") ?? 0)
-          - Number(quarantineCount?.count),
+        ...objectSummary.recordCounts,
+        physicalObjectCounts: objectSummary.physicalObjectCounts,
       };
       const firstAttempt = attempts.results.find((attempt) => attempt.attemptId === "ticket29:first");
       const secondAttempt = attempts.results.find((attempt) => attempt.attemptId === "ticket29:second");
@@ -1772,8 +1781,9 @@ export class CompleteCorpusFinalizeWorkflow extends WorkflowEntrypoint<Materiali
         || firstQuarantine.rootSha256 !== secondQuarantine.rootSha256
         || kindCounts.get("raw_capture") !== 11_001
         || kindCounts.get("normalized_revision") !== 11_001
-        || kindCounts.get("provision_rendition") !== 166_754
-        || Number(dataObjects?.count) !== 188_756) {
+        || kindCounts.get("provision_rendition") !== 220_889
+        || Number(dataObjects?.count) !== 242_891
+        || Number(row.physicalObjectCounts.dataObjects) !== 242_891) {
         throw new Error("TICKET29_EXACT_RECONCILIATION_FAILED");
       }
       return { ...row, planPages: Number(pages?.pages), planPageRecords: Number(pages?.pageRecords),
