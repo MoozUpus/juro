@@ -92,6 +92,7 @@ const installInheritedEnvironmentKeys = new Set([
 ]);
 
 const coreTestFiles = [
+  "tests/legal-complete-corpus-materialization.test.ts",
   "tests/document-builder.test.ts",
   "tests/pinfl-validation.test.ts",
   "tests/document-comparison.test.ts",
@@ -275,6 +276,7 @@ const coreTestFiles = [
 ];
 
 const cloudflareTestFiles = [
+  "tests/legal-complete-corpus-materialization-schema.test.ts",
   "tests/cloudflare-config.test.ts",
   "tests/migration-safety.test.ts",
   "tests/migration-0042-file-extractions.test.ts",
