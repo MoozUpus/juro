@@ -207,6 +207,7 @@ export async function ticket29Sha256(value: string | Uint8Array): Promise<string
 }
 
 export const TICKET29_SOURCE_PAGE_SIZE = 600;
+export const TICKET29_MATERIALIZATION_PAGE_SIZE = 100;
 
 export async function ticket29PlanSourcePageInParallel<TSource, TPlan>(
   sourceRows: readonly TSource[],
@@ -216,6 +217,23 @@ export async function ticket29PlanSourcePageInParallel<TSource, TPlan>(
     throw new Error("TICKET29_SOURCE_PAGE_LIMIT_EXCEEDED");
   }
   return Promise.all(sourceRows.map((sourceRow) => plan(sourceRow)));
+}
+
+export async function ticket29WritePlanPagesInParallel<TPlan, TWritten>(
+  planItems: readonly TPlan[],
+  write: (page: readonly TPlan[], offset: number) => Promise<TWritten>,
+): Promise<TWritten[]> {
+  if (planItems.length > TICKET29_SOURCE_PAGE_SIZE) {
+    throw new Error("TICKET29_SOURCE_PAGE_LIMIT_EXCEEDED");
+  }
+  const pages: Array<{ items: readonly TPlan[]; offset: number }> = [];
+  for (let offset = 0; offset < planItems.length; offset += TICKET29_MATERIALIZATION_PAGE_SIZE) {
+    pages.push({
+      items: planItems.slice(offset, offset + TICKET29_MATERIALIZATION_PAGE_SIZE),
+      offset,
+    });
+  }
+  return Promise.all(pages.map(({ items, offset }) => write(items, offset)));
 }
 
 /** Ticket 12's persisted publisher token; target-migration canonicalizes this exact natural key. */

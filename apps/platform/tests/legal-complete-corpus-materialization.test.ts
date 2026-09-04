@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   TICKET29_SOURCE_PAGE_SIZE,
+  TICKET29_MATERIALIZATION_PAGE_SIZE,
   buildBodyFreeMaterializationRecord,
   immutableEvidencePut,
   reconstructMaterializedCorpus,
@@ -16,6 +17,7 @@ import {
   ticket29EvidenceKey,
   ticket29ManifestRoot,
   ticket29PlanSourcePageInParallel,
+  ticket29WritePlanPagesInParallel,
   ticket29QueueMessageSchema,
   ticket29Sha256,
   ticket29StageDecision,
@@ -43,6 +45,32 @@ test("Ticket 29 plans one bounded source page concurrently in source order", asy
     ticket29PlanSourcePageInParallel(
       Array.from({ length: TICKET29_SOURCE_PAGE_SIZE + 1 }, (_, index) => index),
       async (value) => value,
+    ),
+    /TICKET29_SOURCE_PAGE_LIMIT_EXCEEDED/,
+  );
+});
+
+test("Ticket 29 writes bounded materialization pages concurrently in source order", async () => {
+  const started: number[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const result = ticket29WritePlanPagesInParallel(
+    Array.from({ length: TICKET29_MATERIALIZATION_PAGE_SIZE * 3 }, (_, index) => index),
+    async (page, offset) => {
+      started.push(offset);
+      await gate;
+      return page[0];
+    },
+  );
+
+  await new Promise<void>((resolve) => { setImmediate(resolve); });
+  assert.deepEqual(started, [0, 100, 200]);
+  release();
+  assert.deepEqual(await result, [0, 100, 200]);
+  await assert.rejects(
+    ticket29WritePlanPagesInParallel(
+      Array.from({ length: TICKET29_SOURCE_PAGE_SIZE + 1 }, (_, index) => index),
+      async () => undefined,
     ),
     /TICKET29_SOURCE_PAGE_LIMIT_EXCEEDED/,
   );

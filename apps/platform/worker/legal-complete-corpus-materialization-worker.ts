@@ -22,6 +22,7 @@ import {
   ticket29Sha256,
   ticket29ManifestRoot,
   ticket29PlanSourcePageInParallel,
+  ticket29WritePlanPagesInParallel,
   ticket29TargetPublisherRevisionToken,
   ticket29StageDecision,
   type Ticket29BodyFreeRecord,
@@ -50,7 +51,6 @@ const SOURCE_ALIAS_SHA256 = "5ff75e07391b9acd01699d8aca2bbaa32684c402e3470e42660
 const EXPECTED_RECORDS = 1_299_828;
 // The largest source lane has 523,265 rows; 600 keeps the durable workflow
 // below its 1,024-step ceiling while each queue page remains bounded at 100.
-const MATERIALIZATION_PAGE_SIZE = 100;
 const SOURCE_RELEASE_ID = "release:staging:current:source-snapshot-v1";
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const sourceObjectManifest = new Map(TICKET29_SOURCE_OBJECT_MANIFEST.map((entry) => [entry[0], {
@@ -558,16 +558,16 @@ export class CompleteCorpusMaterializationWorkflow extends WorkflowEntrypoint<Ma
           rows,
           async (row) => planItem(row, retained.get(row.id)!),
         );
-        const planned: Array<{ message: MaterializeMessage; evidence: StoredEvidence }> = [];
-        for (let offset = 0; offset < rows.length; offset += MATERIALIZATION_PAGE_SIZE) {
-          planned.push(await writePlanPage(
+        const planned = await ticket29WritePlanPagesInParallel(
+          items,
+          async (page, offset) => writePlanPage(
             this.env,
-            items.slice(offset, offset + MATERIALIZATION_PAGE_SIZE),
+            page,
             payload.proofMode === "interrupted" && payload.lane === "1"
               && sourcePage === 0 && offset === 0,
             payload.proofMode,
-          ));
-        }
+          ),
+        );
         for (let offset = 0; offset < planned.length; offset += 100) {
           await this.env.MATERIALIZATION_QUEUE.sendBatch(
             planned.slice(offset, offset + 100).map(({ message: body }) => ({ body })),
