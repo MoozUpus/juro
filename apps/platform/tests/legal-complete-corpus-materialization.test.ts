@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 
 import {
+  TICKET29_SOURCE_PAGE_SIZE,
   buildBodyFreeMaterializationRecord,
   immutableEvidencePut,
   reconstructMaterializedCorpus,
@@ -14,6 +15,7 @@ import {
   ticket29LifecycleDisposition,
   ticket29EvidenceKey,
   ticket29ManifestRoot,
+  ticket29PlanSourcePageInParallel,
   ticket29QueueMessageSchema,
   ticket29Sha256,
   ticket29StageDecision,
@@ -22,6 +24,29 @@ import {
   type Ticket29EvidenceDescriptor,
 } from "../lib/legal-corpus/complete-corpus-materialization";
 import { assertTicket29DistinctArtifactPaths } from "../scripts/ticket29-isolated-artifact-paths";
+
+test("Ticket 29 plans one bounded source page concurrently in source order", async () => {
+  const started: number[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const result = ticket29PlanSourcePageInParallel([1, 2, 3], async (value) => {
+    started.push(value);
+    await gate;
+    return `planned-${value}`;
+  });
+
+  await new Promise<void>((resolve) => { setImmediate(resolve); });
+  assert.deepEqual(started, [1, 2, 3]);
+  release();
+  assert.deepEqual(await result, ["planned-1", "planned-2", "planned-3"]);
+  await assert.rejects(
+    ticket29PlanSourcePageInParallel(
+      Array.from({ length: TICKET29_SOURCE_PAGE_SIZE + 1 }, (_, index) => index),
+      async (value) => value,
+    ),
+    /TICKET29_SOURCE_PAGE_LIMIT_EXCEEDED/,
+  );
+});
 
 const completeIdentity = {
   instrumentId: "instrument:test",

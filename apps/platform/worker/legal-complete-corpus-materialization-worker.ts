@@ -10,6 +10,7 @@ import {
 } from "../lib/legal-corpus/complete-corpus-audit";
 import {
   TICKET29_CURRENT_LOCATOR_SQL,
+  TICKET29_SOURCE_PAGE_SIZE,
   TICKET29_TARGET_LOCATOR_SQL,
   immutableEvidencePut,
   runTicket29MaterializationPage,
@@ -20,6 +21,7 @@ import {
   ticket29QueueMessageSchema,
   ticket29Sha256,
   ticket29ManifestRoot,
+  ticket29PlanSourcePageInParallel,
   ticket29TargetPublisherRevisionToken,
   ticket29StageDecision,
   type Ticket29BodyFreeRecord,
@@ -48,7 +50,6 @@ const SOURCE_ALIAS_SHA256 = "5ff75e07391b9acd01699d8aca2bbaa32684c402e3470e42660
 const EXPECTED_RECORDS = 1_299_828;
 // The largest source lane has 523,265 rows; 600 keeps the durable workflow
 // below its 1,024-step ceiling while each queue page remains bounded at 100.
-const SOURCE_PAGE_SIZE = 600;
 const MATERIALIZATION_PAGE_SIZE = 100;
 const SOURCE_RELEASE_ID = "release:staging:current:source-snapshot-v1";
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -547,19 +548,21 @@ export class CompleteCorpusMaterializationWorkflow extends WorkflowEntrypoint<Ma
         timeout: "10 minutes",
       }, async () => {
         const queried = await this.env.SOURCE_DB.prepare(sourcePlanSql).bind(
-          cursor, bounds.lower, bounds.upper, CUTOFF, CUTOFF, SOURCE_PAGE_SIZE,
+          cursor, bounds.lower, bounds.upper, CUTOFF, CUTOFF, TICKET29_SOURCE_PAGE_SIZE,
         ).all<SourceRow>();
         const rows = queried.results;
         if (rows.length === 0) return { done: true as const, cursor, sourceCount: 0,
           planPageCount: 0, pages: [], writes: [] };
         const retained = await targetState(this.env, rows);
+        const items = await ticket29PlanSourcePageInParallel(
+          rows,
+          async (row) => planItem(row, retained.get(row.id)!),
+        );
         const planned: Array<{ message: MaterializeMessage; evidence: StoredEvidence }> = [];
         for (let offset = 0; offset < rows.length; offset += MATERIALIZATION_PAGE_SIZE) {
-          const slice = rows.slice(offset, offset + MATERIALIZATION_PAGE_SIZE);
-          const items = await Promise.all(slice.map((row) => planItem(row, retained.get(row.id)!)));
           planned.push(await writePlanPage(
             this.env,
-            items,
+            items.slice(offset, offset + MATERIALIZATION_PAGE_SIZE),
             payload.proofMode === "interrupted" && payload.lane === "1"
               && sourcePage === 0 && offset === 0,
             payload.proofMode,

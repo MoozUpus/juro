@@ -206,6 +206,18 @@ export async function ticket29Sha256(value: string | Uint8Array): Promise<string
     .join("");
 }
 
+export const TICKET29_SOURCE_PAGE_SIZE = 600;
+
+export async function ticket29PlanSourcePageInParallel<TSource, TPlan>(
+  sourceRows: readonly TSource[],
+  plan: (sourceRow: TSource) => Promise<TPlan>,
+): Promise<TPlan[]> {
+  if (sourceRows.length > TICKET29_SOURCE_PAGE_SIZE) {
+    throw new Error("TICKET29_SOURCE_PAGE_LIMIT_EXCEEDED");
+  }
+  return Promise.all(sourceRows.map((sourceRow) => plan(sourceRow)));
+}
+
 /** Ticket 12's persisted publisher token; target-migration canonicalizes this exact natural key. */
 export function ticket29TargetPublisherRevisionToken(input: {
   versionNumber: number;
