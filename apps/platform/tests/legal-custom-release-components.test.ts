@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { recordCustomReleaseGovernance, type CustomReleaseGovernance } from "../lib/legal-corpus/custom-release-governance";
 import { createReleaseLifecycle } from "../lib/legal-corpus/target-release";
+import { recordReleaseObservation } from "../lib/legal-corpus/target-governance";
 
 import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
 
@@ -228,4 +229,40 @@ test("custom governance rejects changed roots, missing checks, unsafe privacy, a
       assert.equal((await recordCustomReleaseGovernance({ db: d1 }, input)).passed, false);
     } finally { sqlite.close(); }
   }
+});
+
+test("a failure observed after accepted custom smoke blocks reactivation", async () => {
+  const { sqlite, d1 } = customGovernanceFixture();
+  try {
+    await recordCustomReleaseGovernance({ db: d1 }, boundedGovernance());
+    const lifecycle = createReleaseLifecycle({ db: d1 });
+    await lifecycle.sealCustomSearchRelease({ releaseId: RELEASE_ID,
+      environment: "staging", createdAt: "2026-09-06T00:02:00.000Z" });
+    await recordReleaseObservation({ db: d1 }, { id: "later-failure", releaseId: RELEASE_ID,
+      environment: "staging", phase: "staging_soak", observedAt: "2026-09-06T00:03:00.000Z",
+      requestCount: 1, green: false, gateBreachCount: 1 });
+    await assert.rejects(() => lifecycle.activateCurrent({ currentReleaseId: RELEASE_ID,
+      environment: "staging", actor: "test", reason: "Do not activate a known failing release.",
+      createdAt: "2026-09-06T00:04:00.000Z" }), /ACTIVATION_REJECTED/u);
+  } finally { sqlite.close(); }
+});
+
+test("a later failed governance receipt wins across equivalent timestamp offsets", async () => {
+  const { sqlite, d1 } = customGovernanceFixture();
+  try {
+    const accepted = boundedGovernance();
+    accepted.recordedAt = "2026-09-06T09:01:00+09:00";
+    await recordCustomReleaseGovernance({ db: d1 }, accepted);
+    const lifecycle = createReleaseLifecycle({ db: d1 });
+    await lifecycle.sealCustomSearchRelease({ releaseId: RELEASE_ID,
+      environment: "staging", createdAt: "2026-09-06T00:01:30.000Z" });
+    const failed = boundedGovernance();
+    failed.id = "later-failed-governance";
+    failed.recordedAt = "2026-09-06T00:02:00.000Z";
+    failed.rollbackHealthy = false;
+    await recordCustomReleaseGovernance({ db: d1 }, failed);
+    await assert.rejects(() => lifecycle.activateCurrent({ currentReleaseId: RELEASE_ID,
+      environment: "staging", actor: "test", reason: "Do not hide the later failed governance.",
+      createdAt: "2026-09-06T00:03:00.000Z" }), /ACTIVATION_REJECTED/u);
+  } finally { sqlite.close(); }
 });

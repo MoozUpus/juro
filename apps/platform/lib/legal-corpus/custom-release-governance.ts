@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const identity = z.string().min(1).max(300).regex(/^[A-Za-z0-9._:-]+$/u);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
-const instant = z.string().datetime({ offset: true });
+const instant = z.string().datetime({ offset: true }).transform(value => new Date(value).toISOString());
 const reference = z.object({ key: z.string().min(1).max(1024), sha256: hash }).strict();
 
 export const customReleaseGovernanceSchema = z.object({

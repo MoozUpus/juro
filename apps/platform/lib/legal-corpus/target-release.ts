@@ -286,7 +286,13 @@ async function assertObservationWindows(
   const phase = environment === "staging" ? "staging_soak" : "production_canary";
   const windows = await Promise.all(releaseIds.map(async (releaseId) => {
     const governance = await assertSearchReleaseGovernanceReady(db, releaseId, asOf);
-    if (governance.boundedVerification) return { eligible: true };
+    if (governance.boundedVerification) {
+      const failure = await db.prepare(`SELECT id FROM legal_release_observations
+        WHERE release_id=? AND environment=? AND observed_at>=? AND observed_at<=?
+          AND (green=0 OR gate_breach_count>0) LIMIT 1`)
+        .bind(releaseId, environment, governance.observedThrough, asOf).first();
+      return { eligible: failure === null };
+    }
     return evaluatePersistedObservationWindow({ db }, { releaseId, environment, phase, asOf });
   }));
   if (windows.some((window) => !window.eligible)) {

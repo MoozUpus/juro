@@ -613,7 +613,8 @@ export async function assertSearchReleaseGovernanceReady(
   db: D1Database,
   releaseId: string,
   asOf?: string,
-): Promise<{ governanceId: string; reconciliationRunId: string; boundedVerification: boolean }> {
+): Promise<{ governanceId: string; reconciliationRunId: string; boundedVerification: boolean;
+  observedThrough: string }> {
   const row = await db.prepare(`SELECT id,reconciliation_run_id AS reconciliationRunId,
       status,failures_json AS failures,recorded_at AS recordedAt,evidence_json AS evidenceJson
     FROM legal_search_release_governance WHERE search_release_id=?
@@ -632,7 +633,8 @@ export async function assertSearchReleaseGovernanceReady(
       throw new Error("SEARCH_RELEASE_GOVERNANCE_STALE");
     }
   }
-  return { governanceId: row.id, reconciliationRunId: row.reconciliationRunId, boundedVerification };
+  return { governanceId: row.id, reconciliationRunId: row.reconciliationRunId, boundedVerification,
+    observedThrough: custom.success ? custom.data.smoke.completedAt : row.recordedAt };
 }
 
 const observationSchema = z.object({
