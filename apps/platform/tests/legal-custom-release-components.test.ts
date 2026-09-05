@@ -231,6 +231,34 @@ test("custom governance rejects changed roots, missing checks, unsafe privacy, a
   }
 });
 
+test("custom runtime mappings are body-free, immutable, and query spend is capped before dispatch", () => {
+  const sqlite = fixture();
+  const itemKey = `${RELEASE_ID}/retrieval-chunk-v1:${"b".repeat(64)}`;
+  sqlite.prepare(`INSERT INTO legal_custom_search_runtime_items
+    (search_release_id,item_key,retrieval_chunk_id,item_ordinal,legal_identity_sha256)
+    VALUES (?,?,?,?,?)`).run(RELEASE_ID, itemKey,
+    `retrieval-chunk-v1:${"b".repeat(64)}`, 1_000, HASH);
+  const columns = sqlite.prepare("PRAGMA table_info(legal_custom_search_runtime_items)")
+    .all().map((row) => String((row as { name: string }).name));
+  assert.equal(columns.some((column) => /(?:body|text|quotation|embedding)/iu.test(column)), false);
+  assert.throws(() => sqlite.prepare(`UPDATE legal_custom_search_runtime_items
+    SET item_ordinal=2 WHERE search_release_id=?`).run(RELEASE_ID),
+  /LEGAL_CUSTOM_SEARCH_RUNTIME_IMMUTABLE/u);
+
+  sqlite.prepare(`INSERT INTO legal_custom_query_budget_periods
+    (environment,period,authorized_usd_micros,reserved_usd_micros,reserved_requests,created_at)
+    VALUES ('staging','evaluation',1065,0,0,?)`).run("2026-09-06T00:00:00.000Z");
+  const reserved = sqlite.prepare(`UPDATE legal_custom_query_budget_periods
+    SET reserved_usd_micros=reserved_usd_micros+1065,reserved_requests=reserved_requests+1
+    WHERE environment='staging' AND period='evaluation'
+      AND reserved_usd_micros+1065<=authorized_usd_micros RETURNING reserved_usd_micros`).get();
+  assert.deepEqual({ ...reserved as Record<string, unknown> }, { reserved_usd_micros: 1065 });
+  assert.equal(sqlite.prepare(`UPDATE legal_custom_query_budget_periods
+    SET reserved_usd_micros=reserved_usd_micros+1065,reserved_requests=reserved_requests+1
+    WHERE environment='staging' AND period='evaluation'
+      AND reserved_usd_micros+1065<=authorized_usd_micros`).run().changes, 0);
+});
+
 test("a failure observed after accepted custom smoke blocks reactivation", async () => {
   const { sqlite, d1 } = customGovernanceFixture();
   try {

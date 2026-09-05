@@ -144,8 +144,8 @@
         },
         {
           "binding": "LEGAL_DB",
-          "database_name": "juro-legal-catalog-staging-green2-20260831",
-          "database_id": "23863e4f-6a11-4c25-888a-63abf695248b",
+          "database_name": "juro-legal-catalog-staging-green3-20260905",
+          "database_id": "10c71209-7cf6-47c3-a74e-9697e32d7c29",
           "migrations_dir": "./legal-drizzle"
         }
       ],
@@ -185,6 +185,10 @@
         {
           "binding": "LEGAL_CORPUS_REASONING_SERVICE",
           "service": "juro-platform-staging"
+        },
+        {
+          "binding": "LEGAL_CUSTOM_SEARCH_SERVICE",
+          "service": "juro-legal-current-custom-20260903"
         }
       ]
     },

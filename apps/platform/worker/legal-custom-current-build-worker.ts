@@ -38,6 +38,8 @@ import {
   type CustomReleasePageReceipt,
 } from "../lib/legal-corpus/custom-release-manifest";
 import { stableSourceSnapshotJson } from "../lib/legal-corpus/source-snapshot";
+import { CUSTOM_SEARCH_PATH, handleCustomSearchRequest }
+  from "../lib/legal-corpus/custom-search-service";
 import { CUSTOM_CURRENT_REDUCER_PROGRAM } from "./legal-custom-bm25-reducer-program";
 
 const RELEASE_ID = "release:staging:current:custom-v2:2026-09-05";
@@ -95,6 +97,12 @@ type CurrentBuildEnv = Pick<CustomCurrentBindings, "AI" | "AI_GATEWAY_ID" | "DOC
   BUILD_QUEUE: Queue<MaterializeMessage>;
   BUILD_WORKFLOW: Workflow<BuildWorkflowPayload>;
   REDUCE_WORKFLOW: Workflow<ReduceWorkflowPayload>;
+  CATALOG_DB: D1Database;
+  CUSTOM_SEARCH_RELEASE_ID: string;
+  CUSTOM_SEARCH_INSTANCE_ID: string;
+  CUSTOM_SEARCH_SHARD_ID: string;
+  CUSTOM_RUNTIME_DESCRIPTOR_KEY: string;
+  CUSTOM_RUNTIME_DESCRIPTOR_SHA256: string;
 };
 
 function requireBuildEnabled(env: CurrentBuildEnv): void {
@@ -1218,7 +1226,10 @@ export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuild
 }
 
 export default {
-  async fetch(): Promise<Response> {
+  async fetch(request: Request, env: CurrentBuildEnv): Promise<Response> {
+    if (new URL(request.url).pathname === CUSTOM_SEARCH_PATH) {
+      return handleCustomSearchRequest(request, env);
+    }
     return new Response(null, { status: 404, headers: { "cache-control": "private, no-store" } });
   },
   async queue(batch: MessageBatch<unknown>, env: CurrentBuildEnv): Promise<void> {

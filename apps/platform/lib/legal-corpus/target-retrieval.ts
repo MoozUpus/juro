@@ -214,6 +214,7 @@ export type TargetLegalAnswerRetriever = {
 
 type Dependencies = {
   environment: z.infer<typeof legalEnvironmentSchema>;
+  now?: () => number;
   interpreter: {
     interpret(question: string): Promise<QuestionInterpretationPlan>;
   };
@@ -226,12 +227,14 @@ type Dependencies = {
       packet: CandidatePacket,
       endpoint: TemporalEndpoint,
       release: PinnedCandidateRelease,
+      currentAt: string,
     ): Promise<RevalidatedCandidate[]>;
   };
   evidenceResolver: {
     resolveControlling(
       provisionRenditionId: string,
       endpoint: TemporalEndpoint,
+      context: { release: PinnedCandidateRelease; currentAt: string },
     ): Promise<ControllingEvidenceResolution>;
   };
   provisionSelector: {
@@ -392,6 +395,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
   const environment = legalEnvironmentSchema.parse(dependencies.environment);
   return {
     async answer(untrustedInput) {
+      const currentAt = new Date((dependencies.now ?? Date.now)()).toISOString();
       const request = questionSchema.parse(untrustedInput);
       let plan: QuestionInterpretationPlan;
       try {
@@ -415,6 +419,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         void temporalEndpoint;
         const runEndpoint = async (endpoint: TemporalEndpoint) => createTargetLegalAnswerRetriever({
           ...dependencies,
+          now: () => Date.parse(currentAt),
           interpreter: {
             interpret: async () => ({ ...sharedPlan, temporalEndpoint: endpoint }),
           },
@@ -490,6 +495,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
           candidateInterpretation(plan, plan.formulations),
           endpoint,
           release,
+          { currentAt },
         );
       } catch {
         return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
@@ -502,6 +508,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
           initialPacket,
           endpoint,
           release,
+          currentAt,
         ));
       } catch {
         return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
@@ -536,6 +543,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
             candidateInterpretation(plan, [decision.repairFormulation]),
             endpoint,
             release,
+            { currentAt },
           );
           if (repairPacket.availability !== "available") {
             return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
@@ -544,6 +552,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
             repairPacket,
             endpoint,
             release,
+            currentAt,
           ));
         } catch {
           return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
@@ -598,7 +607,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       try {
         evidenceByRendition = new Map(await Promise.all(uniqueRenditions.map(async (id) => [
           id,
-          await dependencies.evidenceResolver.resolveControlling(id, endpoint),
+          await dependencies.evidenceResolver.resolveControlling(id, endpoint, { release, currentAt }),
         ] as const)));
       } catch {
         return sourceUnavailable("INDEXED_EVIDENCE_UNAVAILABLE");

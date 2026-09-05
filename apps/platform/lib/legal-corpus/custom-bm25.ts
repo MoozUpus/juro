@@ -177,7 +177,7 @@ const fieldWeights: Record<FieldName, number> = {
   text: 1,
 };
 
-function termScore(input: {
+export function scoreCustomBm25Term(input: {
   termFrequency: number;
   documentFrequency: number;
   documentCount: number;
@@ -285,7 +285,7 @@ export async function buildCustomBm25Artifacts(
       });
       const blockMaximum = Math.max(...postings.map((posting) => {
         const document = manifestDocuments[posting.ordinal]!;
-        return fieldNames.reduce((sum, field) => sum + termScore({
+        return fieldNames.reduce((sum, field) => sum + scoreCustomBm25Term({
           termFrequency: posting.termFrequencies[field],
           documentFrequency,
           documentCount: documents.length,
@@ -456,7 +456,7 @@ export async function queryCustomBm25(
       if (!document || document.segmentId !== segmentId) {
         throw new TypeError("CUSTOM_BM25_ORDINAL_SEGMENT_MISMATCH");
       }
-      const score = fieldNames.reduce((sum, field) => sum + termScore({
+      const score = fieldNames.reduce((sum, field) => sum + scoreCustomBm25Term({
         termFrequency: posting.termFrequencies[field],
         documentFrequency: block.documentFrequency,
         documentCount: manifest.statistics.documentCount,

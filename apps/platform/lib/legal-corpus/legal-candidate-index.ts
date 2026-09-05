@@ -159,6 +159,7 @@ export interface LegalCandidateIndex {
     interpretation: QuestionInterpretation,
     endpoint: TemporalEndpoint,
     searchRelease: PinnedCandidateRelease,
+    context?: { currentAt: string },
   ): Promise<CandidatePacket>;
 }
 
@@ -266,8 +267,10 @@ type AiSearchHit = Omit<NormalizedCandidateInput, "instanceId" | "shardId"> & {
   candidateText?: string;
 };
 export type AiSearchProvider = {
-  attest(instanceId: string): Promise<CandidateConfiguration>;
+  attest(instanceId: string, releaseId?: string): Promise<CandidateConfiguration>;
   search(input: {
+    releaseId?: string;
+    currentAt?: string;
     instanceIds: string[];
     query: string;
     endpoint: TemporalEndpoint;
@@ -585,7 +588,7 @@ export function createAiSearchCandidateIndex(
   options: CandidateIndexOptions,
 ): LegalCandidateIndex {
   return {
-    async retrieve(rawInterpretation, rawEndpoint, rawRelease) {
+    async retrieve(rawInterpretation, rawEndpoint, rawRelease, context) {
       const interpretation = interpretationSchema.parse(rawInterpretation);
       const endpoint = endpointSchema.parse(rawEndpoint);
       const release = pinnedReleaseSchema.parse(rawRelease);
@@ -677,7 +680,7 @@ export function createAiSearchCandidateIndex(
       try {
         const attestations = await Promise.all(requiredInstanceIds.map(async (instanceId) => ({
           instanceId,
-          configuration: candidateConfigurationSchema.parse(await provider.attest(instanceId)),
+          configuration: candidateConfigurationSchema.parse(await provider.attest(instanceId, release.id)),
         })));
         const drift = attestations.find(({ configuration }) =>
           JSON.stringify(configuration) !== JSON.stringify(release.configuration));
@@ -695,6 +698,8 @@ export function createAiSearchCandidateIndex(
             formulation,
             instanceIds,
             response: await provider.search({
+              releaseId: release.id,
+              currentAt: context?.currentAt ?? new Date(startedAt).toISOString(),
               instanceIds,
               query: transformedFormulations.get(formulation.id)!,
               endpoint,

@@ -249,6 +249,9 @@ test("domain-general questions return hash-verified Legal Answers through the pr
 
 test("every Plausible Reading gets a formulation before repair and the six-formulation budget is enforced", async () => {
   const formulationOrder: string[] = [];
+  const requestInstant = "2026-09-06T00:00:00.000Z";
+  let clock = Date.parse(requestInstant);
+  const observedInstants: string[] = [];
   let selectionCalls = 0;
   const plan: QuestionInterpretationPlan = {
     id: "plan-two-readings",
@@ -289,17 +292,29 @@ test("every Plausible Reading gets a formulation before repair and the six-formu
   });
   const retriever = createTargetLegalAnswerRetriever({
     environment: "development",
+    now: () => clock,
     interpreter: { interpret: async () => plan },
     releaseResolver: { resolve: async () => release },
-    candidateIndex: index,
+    candidateIndex: { async retrieve(interpretation, endpoint, pinned, context) {
+      assert.equal(pinned.id, release.id);
+      observedInstants.push(context!.currentAt);
+      clock += 60_000;
+      return index.retrieve(interpretation, endpoint, pinned, context);
+    } },
     candidateCatalog: {
-      revalidate: async (packet) => packet.candidates.map((entry) => ({
+      revalidate: async (packet, _endpoint, pinned, currentAt) => {
+        assert.equal(pinned.id, release.id);
+        observedInstants.push(currentAt);
+        return packet.candidates.map((entry) => ({
         candidate: entry,
         ...stableIdentity(entry.itemKey === repairKey ? "rendition-b" : "rendition-a"),
-      })),
+      })); },
     },
     evidenceResolver: {
-      resolveControlling: async (id) => parseControllingEvidenceResolution({
+      resolveControlling: async (id, _endpoint, context) => {
+        assert.equal(context.release.id, release.id);
+        observedInstants.push(context.currentAt);
+        return parseControllingEvidenceResolution({
         controlling: {
           legalInstrumentId: "instrument",
           officialExpressionId: "expression",
@@ -321,7 +336,7 @@ test("every Plausible Reading gets a formulation before repair and the six-formu
           },
         },
         materialCitation: { label: `Act — Article ${id}`, url: "https://lex.uz/docs/900" },
-      }),
+      }); },
     },
     provisionSelector: {
       select: async ({ candidates }) => {
@@ -357,6 +372,8 @@ test("every Plausible Reading gets a formulation before repair and the six-formu
   assert.equal(result.kind, "legal_answer");
   assert.deepEqual(formulationOrder, ["formulation-a", "formulation-b", "repair-b"]);
   assert.equal(selectionCalls, 2);
+  assert.equal(observedInstants.length, 6);
+  assert.deepEqual([...new Set(observedInstants)], [requestInstant]);
   if (result.kind === "legal_answer") assert.equal(result.whatTheLawSays.length, 2);
 
   const overBudget = createTargetLegalAnswerRetriever({

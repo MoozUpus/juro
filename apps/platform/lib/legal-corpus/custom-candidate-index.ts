@@ -42,8 +42,12 @@ const denseMetadataSchema = z.object({
   valid_to_epoch: z.number().int(),
 }).passthrough();
 
+export type CustomVectorSearchIndex = {
+  query(vector: number[], options: VectorizeQueryOptions): Promise<VectorizeMatches>;
+};
+
 export async function queryCustomDenseLane(
-  index: VectorizeIndex,
+  index: CustomVectorSearchIndex,
   input: {
     releaseId: string;
     vector: readonly number[];

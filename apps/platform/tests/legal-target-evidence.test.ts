@@ -7,6 +7,7 @@ import {
   handleOfficialEvidenceRequest,
   importProvisionRendition,
   importProvisionRevision,
+  resolveCompleteCorpusCurrentEvidence,
 } from "../lib/legal-corpus/target-evidence";
 import { recordProvisionTemporalEvidence } from "../lib/legal-corpus/target-temporal";
 import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
@@ -142,6 +143,95 @@ test("one provision imports idempotently and resolves only from hash-verified R2
     assert.deepEqual(bodyColumns, []);
   } finally {
     sqlite.close();
+  }
+});
+
+test("complete-corpus evidence binds migrated identities to the sealed legacy provision object", async () => {
+  const bucket = new MemoryEvidenceBucket();
+  const provisionObject = {
+    schemaVersion: 1 as const,
+    legalInstrumentId: representativeProvision.legalInstrumentId,
+    publisherInstrumentToken: representativeProvision.publisherInstrumentToken,
+    officialExpressionId: representativeProvision.officialExpressionId,
+    textRevisionId: representativeProvision.textRevisionId,
+    provisionConceptId: representativeProvision.provisionConceptId,
+    publisherProvisionToken: representativeProvision.publisherProvisionToken,
+    provisionRenditionId: representativeProvision.provisionRenditionId,
+    languageTag: representativeProvision.languageTag,
+    script: representativeProvision.script,
+    textualAuthority: representativeProvision.textualAuthority,
+    actTitle: representativeProvision.actTitle,
+    documentType: representativeProvision.documentType,
+    articleNumber: representativeProvision.articleNumber,
+    articleTitle: representativeProvision.articleTitle,
+    provisionSequence: representativeProvision.provisionSequence,
+    provisionText: representativeProvision.provisionText,
+    renditionStatus: "active" as const,
+    sourceUrl: representativeProvision.sourceUrl,
+    capturedAt: representativeProvision.capturedAt,
+    sourceNormalizedSha256: sha256(representativeProvision.normalizedRevision),
+  };
+  const bytes = new TextEncoder().encode(`${JSON.stringify(provisionObject)}\n`);
+  const objectSha256 = sha256(bytes);
+  const key = "corpus/provisions/legacy/representative.json";
+  await bucket.put(key, bytes, { onlyIf: { etagDoesNotMatch: "*" }, customMetadata: {
+    sha256: objectSha256, schemaVersion: "1",
+  } });
+  const target = {
+    legalInstrumentId: "instrument:migrated",
+    officialExpressionId: "expression:migrated",
+    textRevisionId: "revision:migrated",
+    provisionConceptId: "concept:migrated",
+    provisionRenditionId: "rendition:migrated",
+  };
+  const releaseId = "release:staging:current:pinned";
+  const currentAt = "2026-09-06T00:00:00.000Z";
+  let interval: { validFrom: string | null; validTo: string | null } = {
+    validFrom: "2026-01-01T00:00:00.000Z", validTo: null,
+  };
+  const db = {
+    prepare(sql: string) {
+      assert.equal(sql.includes("legal_custom_search_runtime_items"), false,
+        "one evidence lookup must not multiply a rendition by its retrieval chunks");
+      assert.equal(sql.includes("legal_active_activation_sets"), false,
+        "hydration must follow the pinned release when activation changes");
+      return { bind(...values: string[]) {
+        assert.deepEqual(values, ["staging", releaseId, target.provisionRenditionId]);
+        return { async all() { return { results: [{
+        ...target,
+        ...interval,
+        legacyCurrentRenditionId: representativeProvision.provisionRenditionId,
+        languageTag: representativeProvision.languageTag,
+        script: representativeProvision.script,
+        textualAuthority: representativeProvision.textualAuthority,
+        sourceUrl: representativeProvision.sourceUrl,
+        provisionKey: key,
+        provisionBytes: bytes.byteLength,
+        provisionSha256: objectSha256,
+        sourceNormalizedSha256: provisionObject.sourceNormalizedSha256,
+      }] }; } }; },
+      };
+    },
+  } as unknown as D1Database;
+
+  const resolved = await resolveCompleteCorpusCurrentEvidence(
+    { db, bucket, environment: "staging", releaseId, currentAt },
+    target.provisionRenditionId,
+    { kind: "current" },
+  );
+  assert.equal(resolved.controlling.provisionRenditionId, target.provisionRenditionId);
+  assert.equal(resolved.controlling.legalInstrumentId, target.legalInstrumentId);
+  assert.equal(resolved.controlling.provisionText, representativeProvision.provisionText);
+  for (const invalid of [
+    { validFrom: "2026-09-07T00:00:00.000Z", validTo: null },
+    { validFrom: "2026-01-01T00:00:00.000Z", validTo: currentAt },
+    { validFrom: null, validTo: null },
+  ]) {
+    interval = invalid;
+    await assert.rejects(() => resolveCompleteCorpusCurrentEvidence(
+      { db, bucket, environment: "staging", releaseId, currentAt },
+      target.provisionRenditionId, { kind: "current" },
+    ), /SOURCE_UNAVAILABILITY/u);
   }
 });
 

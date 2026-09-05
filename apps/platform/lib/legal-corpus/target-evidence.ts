@@ -16,6 +16,7 @@ import {
   officialExpressionIdSchema,
   provisionConceptIdSchema,
   provisionRenditionIdSchema,
+  searchReleaseIdSchema,
   sha256Schema,
   textRevisionIdSchema,
   utcInstantSchema,
@@ -1177,6 +1178,22 @@ type EvidenceRow = {
   normalizedSha256: string;
 };
 
+type CompleteCorpusEvidenceRow = Pick<EvidenceRow,
+  | "legalInstrumentId"
+  | "officialExpressionId"
+  | "textRevisionId"
+  | "provisionConceptId"
+  | "provisionRenditionId"
+  | "languageTag"
+  | "script"
+  | "textualAuthority"
+  | "sourceUrl"
+  | "provisionKey"
+  | "provisionBytes"
+  | "provisionSha256"
+  | "sourceNormalizedSha256"
+> & { legacyCurrentRenditionId: string; validFrom: string | null; validTo: string | null };
+
 export async function resolveProvisionRendition(
   dependencies: { db: D1Database; bucket: Pick<LegalEvidenceBucket, "get"> },
   provisionRenditionId: string,
@@ -1379,6 +1396,97 @@ export async function resolveControllingEvidence(
     ...(translation ? { translation, translationLabel: "Official Translation" } : {}),
     materialCitation: controlling.officialCitation,
   });
+}
+
+/** Resolves current evidence from the accepted complete-corpus projection used by a custom release. */
+export function assertCompleteCorpusCurrentInterval(
+  record: { validFrom: string | null; validTo: string | null },
+  currentAt: string,
+): void {
+  const at = Date.parse(utcInstantSchema.parse(currentAt));
+  const from = record.validFrom === null ? NaN : Date.parse(record.validFrom);
+  const to = record.validTo === null ? Infinity : Date.parse(record.validTo);
+  if (!Number.isFinite(from) || Number.isNaN(to) || from > at || at >= to) {
+    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  }
+}
+
+export async function resolveCompleteCorpusCurrentEvidence(
+  dependencies: { db: D1Database; bucket: Pick<LegalEvidenceBucket, "get">;
+    environment: z.infer<typeof legalEnvironmentSchema>; releaseId: string; currentAt: string },
+  provisionRenditionId: string,
+  untrustedEndpoint: TemporalEndpoint,
+): Promise<ControllingEvidenceResolution> {
+  const id = provisionRenditionIdSchema.parse(provisionRenditionId);
+  const releaseId = searchReleaseIdSchema.parse(dependencies.releaseId);
+  const endpoint = temporalEndpointSchema.parse(untrustedEndpoint);
+  if (endpoint.kind !== "current") throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  const row = await dependencies.db.prepare(`SELECT
+      record.instrument_id AS legalInstrumentId,
+      record.official_expression_id AS officialExpressionId,
+      record.text_revision_id AS textRevisionId,
+      record.provision_concept_id AS provisionConceptId,
+      record.provision_rendition_id AS provisionRenditionId,
+      record.legacy_current_rendition_id AS legacyCurrentRenditionId,
+      record.language AS languageTag,record.script,record.textual_authority AS textualAuthority,
+      record.provision_source_url AS sourceUrl,
+      record.provision_object_r2_key AS provisionKey,
+      record.provision_object_sha256 AS provisionSha256,
+      record.normalized_source_sha256 AS sourceNormalizedSha256,
+      record.valid_from AS validFrom,record.valid_to AS validTo,
+      object.byte_count AS provisionBytes
+    FROM legal_search_releases release
+    JOIN legal_custom_search_runtime_components runtime
+      ON runtime.search_release_id=release.id
+    JOIN legal_complete_corpus_records record
+      ON record.run_id=runtime.complete_corpus_run_id
+    JOIN legal_complete_corpus_objects object
+      ON object.run_id=record.run_id AND object.object_kind='provision_rendition'
+      AND object.r2_key=record.provision_object_r2_key
+      AND object.sha256=record.provision_object_sha256
+    WHERE release.environment=? AND release.id=? AND release.status='sealed'
+      AND record.provision_rendition_id=?
+      AND record.current_eligible=1 AND record.quarantined=0
+    LIMIT 2`).bind(dependencies.environment, releaseId, id).all<CompleteCorpusEvidenceRow>();
+  if (row.results.length !== 1) throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  const record = row.results[0]!;
+  assertCompleteCorpusCurrentInterval(record, dependencies.currentAt);
+  const provisionBytes = await readAndVerifyObject(dependencies.bucket, {
+    r2Key: record.provisionKey,
+    byteCount: Number(record.provisionBytes),
+    sha256: record.provisionSha256,
+  });
+  let provision: z.infer<typeof provisionObjectSchema>;
+  try {
+    provision = provisionObjectSchema.parse(JSON.parse(new TextDecoder().decode(provisionBytes)) as unknown);
+  } catch {
+    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  }
+  if (provision.provisionRenditionId !== record.legacyCurrentRenditionId
+    || provision.languageTag !== record.languageTag || provision.script !== record.script
+    || provision.sourceNormalizedSha256 !== record.sourceNormalizedSha256
+    || provision.sourceUrl !== record.sourceUrl) {
+    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  }
+  const evidence = resolvedEvidenceSchema.parse({
+    legalInstrumentId: record.legalInstrumentId,
+    officialExpressionId: record.officialExpressionId,
+    textRevisionId: record.textRevisionId,
+    provisionConceptId: record.provisionConceptId,
+    provisionRenditionId: record.provisionRenditionId,
+    languageTag: record.languageTag,
+    script: record.script,
+    textualAuthority: record.textualAuthority,
+    provisionText: provision.provisionText,
+    officialCitation: { label: `${provision.actTitle} — Article ${provision.articleNumber}`,
+      url: provision.sourceUrl },
+    evidence: { provisionRenditionId: record.provisionRenditionId,
+      r2Key: record.provisionKey, byteCount: Number(record.provisionBytes),
+      sha256: record.provisionSha256, sourceNormalizedSha256: record.sourceNormalizedSha256,
+      schemaVersion: 1 },
+  });
+  return controllingResolutionSchema.parse({ controlling: evidence,
+    materialCitation: evidence.officialCitation });
 }
 
 export async function handleOfficialEvidenceRequest(

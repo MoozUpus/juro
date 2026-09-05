@@ -17,6 +17,13 @@ test("OpenAI schema adapter keeps structure while removing incompatible annotati
         maxItems: 4,
         items: { type: "string", pattern: "^[A-Z]+$" },
       },
+      optionalChoice: {
+        oneOf: [{ type: "string" }, { type: "null" }],
+      },
+      timestamp: {
+        type: "string",
+        allOf: [{ pattern: "Z$" }],
+      },
     },
   };
 
@@ -29,4 +36,8 @@ test("OpenAI schema adapter keeps structure while removing incompatible annotati
   assert.deepEqual(result.properties.status, { type: "string", enum: ["ok", "failed"] });
   assert.deepEqual(result.properties.url, { type: "string" });
   assert.deepEqual(result.properties.items, { type: "array", items: { type: "string" } });
+  assert.deepEqual(result.properties.optionalChoice, {
+    anyOf: [{ type: "string" }, { type: "null" }],
+  });
+  assert.deepEqual(result.properties.timestamp, { type: "string" });
 });

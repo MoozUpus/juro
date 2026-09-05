@@ -209,6 +209,20 @@ function serializeNormalizedEmbedding(values: readonly number[]): Uint8Array {
   return bytes;
 }
 
+export function normalizeCustomEmbedding(values: readonly number[]): number[] {
+  if (values.length !== CUSTOM_EMBEDDING_DIMENSIONS) {
+    throw new TypeError("CUSTOM_EMBEDDING_DIMENSION_MISMATCH");
+  }
+  if (!values.every(Number.isFinite)) throw new TypeError("CUSTOM_EMBEDDING_NONFINITE");
+  const float32 = values.map((value) => Math.fround(value));
+  const squaredNorm = float32.reduce((sum, value) => sum + value * value, 0);
+  if (!Number.isFinite(squaredNorm) || squaredNorm <= 0) {
+    throw new TypeError("CUSTOM_EMBEDDING_ZERO_NORM");
+  }
+  const norm = Math.sqrt(squaredNorm);
+  return float32.map((value) => Math.fround(value / norm));
+}
+
 export function deserializeNormalizedEmbedding(bytes: Uint8Array): Float32Array {
   if (bytes.byteLength !== CUSTOM_EMBEDDING_DIMENSIONS * 4) {
     throw new TypeError("CUSTOM_EMBEDDING_ARTIFACT_SIZE_MISMATCH");
@@ -227,19 +241,7 @@ export async function createCustomEmbeddingArtifact(
   chunk: CustomRetrievalChunk,
   providerVector: readonly number[],
 ): Promise<CustomEmbeddingArtifact> {
-  if (providerVector.length !== CUSTOM_EMBEDDING_DIMENSIONS) {
-    throw new TypeError("CUSTOM_EMBEDDING_DIMENSION_MISMATCH");
-  }
-  if (!providerVector.every(Number.isFinite)) {
-    throw new TypeError("CUSTOM_EMBEDDING_NONFINITE");
-  }
-  const float32 = providerVector.map((value) => Math.fround(value));
-  const squaredNorm = float32.reduce((sum, value) => sum + value * value, 0);
-  if (!Number.isFinite(squaredNorm) || squaredNorm <= 0) {
-    throw new TypeError("CUSTOM_EMBEDDING_ZERO_NORM");
-  }
-  const norm = Math.sqrt(squaredNorm);
-  const normalized = float32.map((value) => Math.fround(value / norm));
+  const normalized = normalizeCustomEmbedding(providerVector);
   const bytes = serializeNormalizedEmbedding(normalized);
   const inputSha256 = await sha256Hex(serializeCustomEmbeddingInput(chunk));
   const vectorSha256 = await sha256Hex(bytes);

@@ -1,13 +1,46 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { openAiCompatibleJsonSchema } from "../lib/ai/openai-schema";
 import {
   classifyTargetPrivateNames,
   handleTargetReasoningServiceRequest,
+  parseTargetInterpretationProviderOutput,
   selectTargetProvisions,
+  targetInterpretationJsonSchema,
   TARGET_PRIVATE_NAME_CLASSIFICATION_PATH,
   TARGET_PROVISION_SELECTION_PATH,
 } from "../lib/legal-corpus/target-reasoning-service";
+
+test("question interpretation uses the strict provider schema subset and normalizes nullable optionals", () => {
+  const providerSchema = openAiCompatibleJsonSchema(targetInterpretationJsonSchema);
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) return value.forEach(visit);
+    if (!value || typeof value !== "object") return;
+    const object = value as Record<string, unknown>;
+    assert.equal("oneOf" in object, false);
+    assert.equal("allOf" in object, false);
+    if (object.type === "object" && object.properties && typeof object.properties === "object") {
+      assert.deepEqual(new Set(object.required as string[]),
+        new Set(Object.keys(object.properties as Record<string, unknown>)));
+    }
+    Object.values(object).forEach(visit);
+  };
+  visit(providerSchema);
+  const parsed = parseTargetInterpretationProviderOutput({
+    id: "plan-provider",
+    originalLanguage: "ru",
+    answerLanguage: "ru",
+    readings: [{ id: "reading", statement: "Трудовой договор",
+      requirements: [{ id: "requirement", statement: "Порядок заключения" }] }],
+    formulations: [{ id: "formulation", text: "порядок заключения трудового договора",
+      legalTitleSpans: [], privateNameSpans: [], readingIds: ["reading"],
+      requirementIds: ["requirement"], kind: "legal_register" }],
+    missingCaseFacts: [], temporalEndpoint: null, comparison: null,
+  });
+  assert.equal("temporalEndpoint" in parsed, false);
+  assert.equal("comparison" in parsed, false);
+});
 
 async function computeFormulationSha256(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode([
