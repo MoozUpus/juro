@@ -4,6 +4,12 @@ Date: 2026-09-04
 
 Status: research note; not an architecture decision or authorization to upload corpus text
 
+Historical research: the owner selected the regular OpenAI embeddings API on
+2026-09-05 under [ADR 0006](../adr/0006-own-hybrid-official-corpus-retrieval.md).
+The Batch comparisons and proposed bake-off below retain their original dated
+context; neither is a prerequisite for the accepted OpenAI build. The complete
+corpus audit supersedes the sample-extrapolated token/cost figures below.
+
 ## Recommendation
 
 Do not select a provider from vendor benchmarks alone. Run a sealed JURO bake-off

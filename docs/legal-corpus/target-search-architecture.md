@@ -28,7 +28,7 @@ flowchart LR
     D --> C
     C --> X[(Derivative-index R2)]
     X --> S[BM25 artifact builder]
-    X --> O[Deduplicated OpenAI Batch through private Gateway]
+    X --> O[Deduplicated regular OpenAI API through private Gateway]
     O --> X
     X --> V[(Off-side Vectorize)]
     S --> G[Release gate]
@@ -137,28 +137,32 @@ Queues provide the bounded at-least-once data plane. Messages contain release/la
 
 A Container may perform deterministic external sort/reduce only if the prototype proves Worker CPU, memory or sort constraints inadequate. Container disk is ephemeral: every input, checkpoint and output is R2-backed, and a fresh retry must reproduce the same roots.
 
-Offline document embedding is Batch-only for current and historical builds. The
-builder first reuses every exact hash-verified R2 artifact and deduplicates the
-remaining deterministic structured inputs by model, dimensions, transform and
-input hash. It writes immutable private-R2 JSONL manifests with unique
-content-free `custom_id` values, one model per file, at most 50,000 embedding
-inputs and at most 200 MB per file. It records the exact missing token count and
-accepted Batch price before upload.
+Current and historical document builds use the regular OpenAI
+`/v1/embeddings` API. Before dispatch, the builder verifies the cutoff-pinned
+source/chunk/input/token manifests, reuses every exact hash-verified R2 artifact,
+and deduplicates the remaining structured inputs by their full embedding
+identity. All chunk-to-input aliases and provenance remain reconstructible.
+One durable work identity owns each unique missing input across Queue pages,
+concurrent deliveries and restarts.
 
-Files upload, Batch create/status/cancel, output/error download and File deletion
-must all traverse the environment-specific provider-native authenticated AI
-Gateway with cache and log collection disabled. A private Workflow checkpoints
-every provider state and polls without a laptop. Result order is not trusted:
-the builder reconciles exact expected IDs, errors, model, dimensions, finite
-vectors and usage, stores normalized embeddings content-addressably in R2, and
-only then upserts Vectorize. Failed or expired jobs retain completed results and
-resubmit only the exact missing set. Provider input/output/error Files are
-deleted and deletion is verified after durable R2 reconciliation. If this full
-Gateway path is unavailable, construction blocks; direct or synchronous
-document-embedding calls are not a fallback.
+Bounded multi-input requests traverse the environment-specific authenticated AI
+Gateway with logging and caching disabled. The builder enforces per-input,
+aggregate-token and input-count limits plus measured account request/token
+limits. Durable reservations authorize exact missing tokens at the accepted
+standard rate plus 25% before dispatch. Credit exhaustion stops dispatch;
+rate-limit retries use bounded backoff. An uncertain provider outcome keeps its
+cost reservation pending reconciliation; retries do not assume exactly-once
+provider billing.
 
-Synchronous embeddings are restricted to privacy-transformed live query
-formulations and their latency evaluation. Safe formulations are embedded
+Responses reconcile by index against the immutable input mapping, with exact
+count, model, dimension, finite-vector and usage validation. Verified normalized
+embeddings are persisted immutably and read back from R2 before Vectorize
+upsert. Completed artifacts are reused after restart. Workflow/Queue checkpoints
+retain only identities, locators, hashes, counts, safe states and accounting.
+OpenAI Batch and its Files lifecycle are outside this build contract.
+
+Live query formulations also use the regular API, with the existing privacy
+transform and separate query/evaluation circuits. Safe formulations are embedded
 together when limits permit and reused across comparison endpoints within the
 request; query vectors are never persisted as document artifacts.
 
@@ -200,7 +204,7 @@ The existing 314 scenarios remain a locked final suite. BM25 parameters, boosts,
 - 30 green production-canary days before complete activation; and
 - 90 green post-activation days plus isolated restore before legacy retirement.
 
-Cost circuits remain USD 50 current build, USD 450 complete migration and USD 25 monthly production query embeddings. The offline authorization is exact unique missing input tokens multiplied by the accepted Batch rate plus 25%; reused and duplicate inputs authorize zero. The representative 512-token sample projection is about USD 39.245 at the currently verified 50%-discounted Batch rate, or USD 49.05625 with margin, but exact post-dedup measurement controls every build. Current releases remain due within 24 hours of a validated change. The four-hour emergency path may use an already matching embedding or mark indexed retrieval unavailable and continue Live Official Search; it never uses synchronous document embedding or activates an incomplete sparse-only release. History reconciles at least weekly.
+Cost circuits remain USD 50 current build, USD 450 complete migration and USD 25 monthly production query embeddings. Document-build authorization is the exact unique missing token inventory multiplied by the dated accepted standard rate plus 25%; reused and duplicate inputs authorize zero. Exact corpus-wide measurement and any post-cutoff delta control each build, never sample extrapolation. Current releases remain due within 24 hours of a validated change. The four-hour emergency path may reuse matching embeddings or build changed inputs within the same authorization and integrity gates; if a complete release cannot be ready, indexed retrieval becomes unavailable and continues Live Official Search. History reconciles at least weekly.
 
 ## Restore contract
 
@@ -229,14 +233,8 @@ An isolated restore imports the exact legal D1 export, verifies both R2 inventor
 - [Workflows limits](https://developers.cloudflare.com/workflows/reference/limits/) require batched work rather than one step per chunk.
 - [Queues delivery guarantees](https://developers.cloudflare.com/queues/reference/delivery-guarantees/) require idempotent consumers.
 - [OpenAI embeddings API](https://developers.openai.com/api/reference/ruby/resources/embeddings/methods/create) supports explicit dimensions and bounded multi-input requests.
-- [OpenAI Batch](https://developers.openai.com/api/docs/guides/batch) supports
-  `/v1/embeddings`, a completion-within-24-hours window, discounted pricing,
-  content-free request IDs and JSONL limits used by the build contract.
-- [OpenAI Files](https://developers.openai.com/api/reference/typescript/resources/files/methods/create)
-  accepts purpose-`batch` JSONL files up to 200 MB; JURO deletes them earlier
-  than the provider's default expiry after durable reconciliation.
 - [Cloudflare's OpenAI provider-native endpoint](https://developers.cloudflare.com/ai-gateway/usage/providers/openai/)
   replaces the OpenAI base URL, while [AI Gateway authentication](https://developers.cloudflare.com/ai-gateway/configuration/authentication/)
-  protects the path. The provider preflight must still prove every required Files/Batch
-  operation end to end before any corpus upload.
+  protects the path. The provider preflight must prove authenticated regular embedding
+  requests with payload logging and caching disabled before corpus construction.
 - [`text-embedding-3-large`](https://developers.openai.com/api/docs/models/text-embedding-3-large) is the selected multilingual model.

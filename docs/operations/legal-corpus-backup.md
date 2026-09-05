@@ -15,10 +15,10 @@ A sealed custom release backup includes its Retrieval Chunk inventory; every
 BM25 analyzer/base/delta/lexicon/posting/statistics manifest and SHA-256; every
 content-addressed embedding manifest and vector hash; the Vectorize full-list
 snapshot identity and final processed mutation; D1 release/gate/activation roots;
-the deduplicated Batch JSONL manifest hashes; content-free provider File/Batch
-IDs and terminal counts; actual usage/cost; output/error reconciliation; verified
-provider-File deletion receipts; and cost/privacy/evaluation evidence. Never
-back up JSONL bodies or provider output/error bodies. Backup succeeds only after an isolated
+the deduplicated structured-input manifest hashes; content-free regular API
+request/attempt receipts and terminal counts; actual usage/cost; response-index
+reconciliation and outstanding budget reservations; and cost/privacy/evaluation
+evidence. Provider request/response bodies are not backup evidence. Backup succeeds only after an isolated
 reader opens the exact BM25 artifacts and a fresh Vectorize index is reconstructed
 solely from R2 embeddings without an OpenAI call, then representative hybrid
 queries pass.

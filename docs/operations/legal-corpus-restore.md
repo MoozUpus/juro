@@ -16,11 +16,11 @@ hybrid, temporal and declared-lane failure probes. A restore based only on vecto
 count, provider-local disk, cache state or components from different Search
 Releases fails.
 
-No provider Batch input, output or error File is restore authority. Before a
-release backup is accepted, its content-free Batch receipts must prove exact
-output reconciliation and verified File cleanup. Restoration uses the immutable
-deduplicated input-manifest hashes and content-addressed R2 embeddings only; it
-must neither recreate a Batch nor make a synchronous OpenAI call.
+Provider responses are not restore authority. Before a release backup is
+accepted, its content-free regular API receipts must prove exact input/output
+and usage reconciliation with no unresolved provider attempt. Restoration uses
+the immutable deduplicated input-manifest hashes and content-addressed R2
+embeddings only; it must make no OpenAI call.
 
 The retained Qdrant steps below are legacy-only. When no full-corpus snapshot
 exists, record the exact incomplete inventory and test snapshot mechanics
