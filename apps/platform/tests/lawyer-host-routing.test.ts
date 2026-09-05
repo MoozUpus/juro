@@ -21,6 +21,11 @@ test("lawyer host maps every clean professional route for RU, UZ, and EN", () =>
   ] as const;
 
   for (const locale of ["ru", "uz", "en"] as const) {
+    const localeRoot = lawyerHostTarget(
+      new URL(`https://lawyer.juro.uz/${locale}`),
+    );
+    assert.equal(localeRoot?.pathname, `/${locale}/lawyer/dashboard`);
+
     for (const [path, module, view] of routes) {
       const target = lawyerHostTarget(
         new URL(`https://lawyer.juro.uz/${locale}/${path}`),
