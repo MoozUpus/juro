@@ -27,6 +27,7 @@ import {
 import {
   CustomIndexPipelineError,
   contentFreePipelineTelemetry,
+  type CustomMaterializationStage,
 } from "../lib/legal-corpus/custom-index-pipeline";
 import {
   reconcileCustomReleasePages,
@@ -645,6 +646,7 @@ async function embedAndUpsert(
   env: CurrentBuildEnv,
   denseItems: CustomCurrentDenseItem[],
   ownerId: string,
+  reportStage: (stage: CustomMaterializationStage) => void,
 ): Promise<{
   inventory: Array<{
     vectorId: string;
@@ -669,10 +671,12 @@ async function embedAndUpsert(
   }> = [];
   for (let offset = 0; offset < denseItems.length; offset += 64) {
     const group = denseItems.slice(offset, offset + 64);
+    reportStage("embeddings");
     const result = await coordinator(env).embed({ ownerId,
       items: group.map(item => ({ chunk: item.chunk, inputSha256: item.structuredInputSha256, inputTokens: item.inputTokens })) });
     providerInputTokens = result.providerInputTokens;
     reusedEmbeddingCount += result.reusedEmbeddingCount;
+    reportStage("embedding_artifacts");
     const prepared = await Promise.all(group.map(async (item) => ({
       item,
       pointer: await readDocumentEmbedding(env.ARTIFACTS, item.structuredInputSha256),
@@ -703,6 +707,7 @@ async function embedAndUpsert(
         },
       } satisfies VectorizeVector;
     }));
+    reportStage("vectorize");
     const mutation = await env.DENSE.upsert(vectors);
     finalMutationId = mutation.mutationId;
     mutationCount += 1;
@@ -714,14 +719,17 @@ async function embedAndUpsert(
 async function processMaterializeMessage(
   env: CurrentBuildEnv,
   raw: unknown,
+  reportStage: (stage: CustomMaterializationStage) => void,
 ): Promise<{ duplicate: boolean; receipt: CustomReleasePageReceipt; mutationCount: number }> {
   requireBuildEnabled(env);
   const message = parseMessage(raw);
   const prior = await existingReceipt(env, message);
   if (prior) {
+    reportStage("coordinator");
     await coordinator(env).completePage(prior, receiptKey(message.batchId));
     return { duplicate: true, receipt: prior, mutationCount: 0 };
   }
+  reportStage("plan");
   const page = await verifiedJson<SourcePlanPage>(env.ARTIFACTS, message.planPageKey, message.planPageSha256);
   if (page.schemaVersion !== 1 || page.releaseId !== RELEASE_ID
     || page.acceptedInputManifestSha256 !== env.ACCEPTED_INPUT_MANIFEST_SHA256
@@ -734,6 +742,7 @@ async function processMaterializeMessage(
     || planItems.some((item, index) => item.sourceOrdinal !== message.sourceOrdinalStart + index)) {
     throw new CustomIndexPipelineError("CUSTOM_CURRENT_PLAN_PAGE_RANGE_INVALID");
   }
+  reportStage("evidence");
   const materialized = [];
   for (const planItem of planItems) {
     if (!planItem.accepted) throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_SOURCE_MISSING");
@@ -753,6 +762,7 @@ async function processMaterializeMessage(
     || new Set(denseItems.map(({ vectorId }) => vectorId)).size !== denseItems.length) {
     throw new CustomIndexPipelineError("CUSTOM_CURRENT_BATCH_DUPLICATE_IDENTITY");
   }
+  reportStage("chunks");
   const chunkInventory = [];
   for (const [index, chunk] of chunks.entries()) {
     const source = materialized.find((item) => item.chunks.includes(chunk))?.source;
@@ -796,6 +806,7 @@ async function processMaterializeMessage(
     contentType: "application/json", customMetadata: { kind: "chunk-inventory-page" },
   });
 
+  reportStage("sparse");
   const sparseDocuments = documentFieldLengths.map((fieldLengths, index) => {
     const chunk = chunks[index];
     if (!chunk || chunk.id !== fieldLengths.itemKey) {
@@ -857,7 +868,8 @@ async function processMaterializeMessage(
     contentType: "application/json", customMetadata: { kind: "word-bm25-input-manifest" },
   });
 
-  const dense = await embedAndUpsert(env, denseItems, message.batchId);
+  const dense = await embedAndUpsert(env, denseItems, message.batchId, reportStage);
+  reportStage("dense_inventory");
   const denseBytes = serializeCustomCurrentArtifact({
     schemaVersion: 1,
     releaseId: RELEASE_ID,
@@ -900,9 +912,11 @@ async function processMaterializeMessage(
     receipts: [{ ...receipt, sourceOrdinalStart: 0 }],
   });
   const receiptBytes = serializeCustomCurrentArtifact(receipt);
+  reportStage("receipt");
   await putImmutableCustomArtifact(env.ARTIFACTS, receiptKey(message.batchId), receiptBytes, {
     contentType: "application/json", customMetadata: { kind: "materialize-receipt" },
   });
+  reportStage("coordinator");
   await coordinator(env).completePage(receipt, receiptKey(message.batchId));
   return { duplicate: false, receipt, mutationCount: dense.mutationCount };
 }
@@ -1183,14 +1197,18 @@ export default {
   async queue(batch: MessageBatch<unknown>, env: CurrentBuildEnv): Promise<void> {
     for (const message of batch.messages) {
       let releaseId = RELEASE_ID;
+      let sourceOrdinalStart: number | undefined;
+      let failureStage: CustomMaterializationStage = "receipt";
       try {
         const parsed = parseMessage(message.body);
         releaseId = parsed.releaseId;
-        const result = await processMaterializeMessage(env, parsed);
+        sourceOrdinalStart = parsed.sourceOrdinalStart;
+        const result = await processMaterializeMessage(env, parsed, (stage) => { failureStage = stage; });
         console.log(JSON.stringify(contentFreePipelineTelemetry({
           environment: "staging",
           releaseId,
           component: "materialize",
+          sourceOrdinalStart,
           status: result.duplicate ? "duplicate" : "complete",
           providerTokens: result.receipt.providerInputTokens,
           vectorizeMutations: result.duplicate ? 0 : result.mutationCount,
@@ -1198,17 +1216,14 @@ export default {
         })));
         message.ack();
       } catch (error) {
-        const failureCode = error instanceof CustomIndexPipelineError
-          ? error.code
-          : error instanceof Error && /^CUSTOM_[A-Z0-9_]+$/u.test(error.message)
-            ? error.message
-            : "CUSTOM_CURRENT_UNEXPECTED";
         console.error(JSON.stringify(contentFreePipelineTelemetry({
           environment: "staging",
           releaseId,
           component: "materialize",
           status: "failed",
-          failureCode,
+          sourceOrdinalStart,
+          failureStage,
+          error,
         })));
         message.retry({ delaySeconds: 60 });
       }

@@ -343,7 +343,26 @@ const TELEMETRY_FIELDS = new Set([
   "providerRetryAfterSeconds", "providerRateLimitRequests", "providerRateRemainingRequests",
   "providerRateLimitTokens", "providerRateRemainingTokens",
   "providerErrorType", "providerErrorCode",
+  "sourceOrdinalStart", "failureStage", "error",
 ]);
+
+const MATERIALIZATION_STAGES = ["receipt", "plan", "evidence", "chunks", "sparse",
+  "embeddings", "embedding_artifacts", "vectorize", "dense_inventory", "coordinator"] as const;
+export type CustomMaterializationStage = (typeof MATERIALIZATION_STAGES)[number];
+
+function buildFailureCode(error: unknown): string {
+  if (error instanceof CustomIndexPipelineError) return error.code;
+  if (!(error instanceof Error)) return "CUSTOM_CURRENT_UNEXPECTED";
+  if (/^CUSTOM_[A-Z0-9_]+$/u.test(error.message)) return error.message;
+  if (/too many subrequests|subrequest limit/iu.test(error.message)) return "CUSTOM_CURRENT_SUBREQUEST_LIMIT";
+  if (/memory limit|out of memory/iu.test(error.message)) return "CUSTOM_CURRENT_MEMORY_LIMIT";
+  if (/^R2\b/iu.test(error.message)) return "CUSTOM_CURRENT_R2_UNAVAILABLE";
+  if (/^D1(?:_|\b)/iu.test(error.message)) return "CUSTOM_CURRENT_D1_UNAVAILABLE";
+  if (/overloaded|disconnected|connection (?:lost|reset)|network/iu.test(error.message)) return "CUSTOM_CURRENT_RPC_UNAVAILABLE";
+  if (/timeout|timed out|time limit/iu.test(error.message)) return "CUSTOM_CURRENT_TIMEOUT";
+  if (error.name === "ZodError") return "CUSTOM_CURRENT_SCHEMA_INVALID";
+  return "CUSTOM_CURRENT_UNEXPECTED";
+}
 
 export function contentFreePipelineTelemetry(input: {
   environment: CustomIndexEnvironment;
@@ -365,6 +384,9 @@ export function contentFreePipelineTelemetry(input: {
   providerRateRemainingTokens?: number | null;
   providerErrorType?: string | null;
   providerErrorCode?: string | null;
+  sourceOrdinalStart?: number;
+  failureStage?: CustomMaterializationStage;
+  error?: unknown;
 }): Record<string, string | number | null> {
   if (Object.keys(input).some((key) => !TELEMETRY_FIELDS.has(key))) {
     throw new CustomIndexPipelineError("CUSTOM_INDEX_TELEMETRY_FIELD_REJECTED");
@@ -372,5 +394,14 @@ export function contentFreePipelineTelemetry(input: {
   if (!isEnvironment(input.environment) || !SAFE_RELEASE_ID.test(input.releaseId)) {
     throw new CustomIndexPipelineError("CUSTOM_INDEX_TELEMETRY_INVALID");
   }
-  return { service: "legal-custom-index", ...input };
+  if (input.sourceOrdinalStart !== undefined
+    && (!Number.isSafeInteger(input.sourceOrdinalStart) || input.sourceOrdinalStart < 0)) {
+    throw new CustomIndexPipelineError("CUSTOM_INDEX_TELEMETRY_INVALID");
+  }
+  if (input.failureStage !== undefined && !MATERIALIZATION_STAGES.includes(input.failureStage)) {
+    throw new CustomIndexPipelineError("CUSTOM_INDEX_TELEMETRY_INVALID");
+  }
+  const { error, ...fields } = input;
+  return { service: "legal-custom-index", ...fields,
+    ...(error === undefined ? {} : { failureCode: buildFailureCode(error) }) };
 }

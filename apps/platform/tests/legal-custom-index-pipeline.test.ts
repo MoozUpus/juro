@@ -292,3 +292,28 @@ test("telemetry allowlists content-free counters and rejects sensitive fields", 
     failureCode: "CUSTOM_CURRENT_PROVIDER_FAILED",
   }).releaseId, "release:staging:current:custom-v1:2026-09-03");
 });
+
+test("failed build telemetry identifies the work unit and classifies runtime errors without their messages", () => {
+  const event = contentFreePipelineTelemetry({
+    environment: "staging", releaseId, component: "materialize", status: "failed",
+    sourceOrdinalStart: 120,
+    failureStage: "embeddings",
+    error: new Error("R2 put failed: Internal Error; sensitive object contents"),
+  });
+  assert.equal(event.failureCode, "CUSTOM_CURRENT_R2_UNAVAILABLE");
+  assert.equal(event.sourceOrdinalStart, 120);
+  assert.equal(event.failureStage, "embeddings");
+  assert.ok(!JSON.stringify(event).includes("sensitive"));
+  assert.ok(!("error" in event));
+  assert.equal(contentFreePipelineTelemetry({
+    environment: "staging", releaseId,
+    error: new Error("Too many subrequests."),
+  }).failureCode, "CUSTOM_CURRENT_SUBREQUEST_LIMIT");
+  assert.equal(contentFreePipelineTelemetry({
+    environment: "staging", releaseId,
+    error: new Error("sensitive unknown failure"),
+  }).failureCode, "CUSTOM_CURRENT_UNEXPECTED");
+  assert.throws(() => contentFreePipelineTelemetry({
+    environment: "staging", releaseId, sourceOrdinalStart: -1,
+  }));
+});
