@@ -2,6 +2,7 @@ import { z } from "zod";
 import { workspaceEntitlements } from "../billing/entitlements";
 import { sanitizeFileName } from "../document-builder/storage/file-validation";
 import { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
+import { DOCUMENT_ANALYSIS_ABANDONED_AFTER_MS } from "./upload-pipeline";
 
 export const builderAnalysisRequestSchema = z.object({
   mode: z.enum(["quick", "full", "expert"]),
@@ -20,6 +21,7 @@ export class BuilderAnalysisError extends Error {
       | "BUILDER_ANALYSIS_INVALID_DOCUMENT"
       | "BUILDER_ANALYSIS_TOO_LARGE"
       | "BUILDER_ANALYSIS_PLAN_LIMIT"
+      | "BUILDER_ANALYSIS_CAPACITY_UNAVAILABLE"
       | "BUILDER_ANALYSIS_IDEMPOTENCY_CONFLICT"
       | "BUILDER_ANALYSIS_STORAGE_FAILED"
       | "BUILDER_ANALYSIS_PERSISTENCE_FAILED",
@@ -111,6 +113,7 @@ export async function startBuilderDocumentAnalysis(input: {
   const fileId = crypto.randomUUID();
   const handoffId = crypto.randomUUID();
   const now = new Date().toISOString();
+  const abandonedAfter = new Date(Date.parse(now) + DOCUMENT_ANALYSIS_ABANDONED_AFTER_MS).toISOString();
   const r2Key = `builder-analysis-snapshots/${input.workspaceId}/${document.id}/${analysisId}/${fileId}-r${document.revision}-${contentSha256}.md`;
   const fileName = snapshotFileName(document.title, Number(document.revision));
   const summaryJson = JSON.stringify({
@@ -145,9 +148,9 @@ export async function startBuilderDocumentAnalysis(input: {
     ).bind(fileId, input.workspaceId, document.id, input.userId, r2Key, fileName, bytes.byteLength, contentSha256, now, now),
     input.db.prepare(
       `INSERT INTO document_analyses
-       (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,created_at,updated_at)
-       VALUES (?,?,?,?,'initiated',?,NULL,'2026-08-05',?,?)`,
-    ).bind(analysisId, input.workspaceId, input.userId, fileId, summaryJson, now, now),
+       (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,resource_scope,abandoned_after,created_at,updated_at)
+       VALUES (?,?,?,?,'initiated',?,NULL,'2026-08-05','interactive_analysis',?,?,?)`,
+    ).bind(analysisId, input.workspaceId, input.userId, fileId, summaryJson, abandonedAfter, now, now),
     input.db.prepare(
       `INSERT INTO builder_document_analysis_handoffs
        (id,workspace_id,user_id,document_id,document_revision,document_content_sha256,file_id,analysis_id,
@@ -191,9 +194,19 @@ export async function startBuilderDocumentAnalysis(input: {
       if (concurrent.status === "ready") return publicResult(concurrent, true);
       return finalizeSnapshot(input.db, input.bucket, concurrent, bytes, true);
     }
+    if (isDocumentAnalysisQuotaError(error)) {
+      throw withCause(new BuilderAnalysisError("BUILDER_ANALYSIS_CAPACITY_UNAVAILABLE", 429), error);
+    }
     throw withCause(new BuilderAnalysisError("BUILDER_ANALYSIS_PERSISTENCE_FAILED", 503), error);
   }
   return finalizeSnapshot(input.db, input.bucket, handoff, bytes, false);
+}
+
+function isDocumentAnalysisQuotaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("DOCUMENT_ANALYSIS_COUNT_QUOTA_EXCEEDED")
+    || message.includes("DOCUMENT_ANALYSIS_BYTE_QUOTA_EXCEEDED")
+    || message.includes("DOCUMENT_ANALYSIS_RETENTION_REQUIRED");
 }
 
 async function finalizeSnapshot(

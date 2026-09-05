@@ -4,6 +4,7 @@ import test from "node:test";
 
 const rootPage = fs.readFileSync("app/page.tsx", "utf8");
 const localizedPage = fs.readFileSync("app/[locale]/page.tsx", "utf8");
+const globalStyles = fs.readFileSync("app/globals.css", "utf8");
 const adapter = fs.readFileSync("app/components/cinematic/CinematicLandingPage.tsx", "utf8");
 const homepage = fs.readFileSync("app/components/public/JuroHomepage.tsx", "utf8");
 const homepageStyles = fs.readFileSync("app/components/public/juro-home.module.css", "utf8");
@@ -63,6 +64,21 @@ test("production interactions have complete keyboard and reduced-motion contract
   assert.doesNotMatch(homepageStyles + motionStyles + editorialStyles + decisionStyles + laptopStyles + chromeStyles, /ease-in(?:\s|;|,|\))/);
 });
 
+test("initial scroll geometry waits until paint and public chrome avoids synchronous scroll reads", () => {
+  assert.match(
+    motionDirector,
+    /scrollFrame = requestAnimationFrame\(\(\) => \{[\s\S]*?scrollFrame = requestAnimationFrame\(\(\) => \{[\s\S]*?refreshGeometry\(\);[\s\S]*?updateScrollStory\(\);/,
+  );
+  assert.doesNotMatch(
+    motionDirector,
+    /\n\s*refreshGeometry\(\);\s*\n\s*root\.dataset\.motionReady = "true";/,
+  );
+  assert.match(chrome, /new IntersectionObserver\([\s\S]*?rootMargin: "18px 0px 0px"/);
+  assert.match(chrome, /observer\.observe\(sentinel\)/);
+  assert.doesNotMatch(chrome, /window\.scrollY/);
+  assert.match(chrome, /style=\{\{[^}]*position: "absolute"[^}]*top: 0/);
+});
+
 test("document review opens on the first clause and changes only by direct selection", () => {
   assert.match(homepage, /const \[clause, setClause\] = useState\(0\)/);
   assert.match(homepage, /const selectClause = \(index: number\) => \{\s*setClause\(index\);\s*\}/);
@@ -89,6 +105,7 @@ test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(chrome, /headerTouchStyles\.language/);
   assert.match(headerTouchStyles, /min-height: 44px/);
   assert.match(headerTouchStyles, /aria-current="page"/);
+  assert.match(globalStyles, /\.public-theme-switcher button\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/s);
 });
 
 test("Jurobek uses a lightweight, reduced-motion-safe ambient treatment", () => {
@@ -121,9 +138,9 @@ test("story progress rail ends at the active row without shifting its marker", (
   assert.match(motionStyles, /\.storyRail[\s\S]*?align-self: start/);
   assert.match(motionStyles, /\.storyRail[\s\S]*?position: sticky[\s\S]*?top: clamp\(6rem, 12vh, 9rem\)/);
   assert.match(motionStyles, /@media \(max-width: 980px\)[\s\S]*?\.storyRail \{ position: relative; top: auto; \}/);
-  assert.match(motionDirector, /const storyProgress = sectionRect \? clamp\(\(stickyOffset - sectionRect\.top\) \/ storyRange\) : 0/);
+  assert.match(motionDirector, /const storyProgress = section \? clamp\(\(stickyOffset - \(section\.top - scrollY\)\) \/ storyRange\) : 0/);
   assert.match(motionStyles, /\.storyStep\[data-active="true"\][\s\S]*?transform: none/);
-  assert.match(motionDirector, /step\.dataset\.complete = index < active/);
+  assert.match(motionDirector, /step\.dataset\.complete = index < storyState\.active/);
   assert.match(motionStyles, /\.storyStep\[data-complete="true"\]::after/);
   assert.match(motionStyles, /\.storyStep::after[\s\S]*?height: 12px[\s\S]*?opacity: 1/);
   assert.match(motionStyles, /\.storyStep\.storyStep[\s\S]*?padding-inline: clamp\(\.9rem, 2vw, 1\.35rem\)/);
@@ -145,7 +162,7 @@ test("case continuity timeline keeps active and pending segments on one axis", (
   assert.match(homepage, /aria-current=\{index === continuityStep \? "step"/);
   assert.match(homepage, /--continuity-stage-progress/);
   assert.match(motionDirector, /juro:continuity-step/);
-  assert.match(motionDirector, /const progress = clamp\(\(stickyOffset - rect\.top\) \/ Math\.max\(1, rect\.height - viewport\)\)/);
+  assert.match(motionDirector, /const continuityProgress = geometry\.continuity[\s\S]*?Math\.min\(56, viewport \* \.06\) - \(geometry\.continuity\.top - scrollY\)/);
   assert.match(motionStyles, /\.continuitySteps::after[\s\S]*?scaleY\(var\(--continuity-stage-progress\)\)/);
   assert.match(motionStyles, /\.continuitySteps button[\s\S]*?grid-template-columns: 2\.5rem 1fr/);
   assert.match(homepage, /<div className=\{styles\.nextCard\}><span>\{t\.continuity\.next\}<\/span><strong>\{t\.continuity\.nextBody\}<\/strong><\/div>/);
@@ -216,6 +233,13 @@ test("laptop layouts prevent large headline and product-grid clipping", () => {
   assert.match(laptopStyles, /\.transitionTitle\.transitionTitle[\s\S]*?max-width: 100%/);
   assert.match(motionStyles, /\[data-reveal\]\[data-reveal-state="visible"\]\) \{\s*clip-path: none/);
   assert.match(motionStyles, /\[data-reveal="mask"\]\[data-reveal-state="visible"\]\) \{\s*clip-path: inset/);
+});
+
+test("public header language links keep a 44px touch target at every viewport", () => {
+  assert.match(
+    headerTouchStyles,
+    /\.language\s*\{[^}]*min-height:\s*44px;[^}]*min-width:\s*44px;/,
+  );
 });
 
 test("brand mark uses a dedicated symbol asset and keeps one intentional wordmark", () => {

@@ -10,6 +10,7 @@ import {
 } from "../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { canManageTeam } from "../../../../lib/platform/role-policy";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
@@ -188,16 +189,19 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
       now,
       user.id,
     );
+  const workspaceUpdates = canManageTeam(workspace.role)
+    ? [db.prepare(`UPDATE workspaces SET locale=?,
+        name=CASE WHEN type='business' AND ? IS NOT NULL THEN ? ELSE name END,
+        full_name=CASE WHEN type='business' AND ? IS NOT NULL THEN ? ELSE full_name END,
+        updated_at=? WHERE id=?`)
+        .bind(locale, companyName, companyName, companyName, companyName, now, workspace.id)]
+    : [];
   await db.batch([
     profileUpdate,
-    db.prepare(`UPDATE workspaces SET locale=?,
-      name=CASE WHEN type='business' AND ? IS NOT NULL THEN ? ELSE name END,
-      full_name=CASE WHEN type='business' AND ? IS NOT NULL THEN ? ELSE full_name END,
-      updated_at=? WHERE id=?`)
-      .bind(locale, companyName, companyName, companyName, companyName, now, workspace.id),
+    ...workspaceUpdates,
     db.prepare(
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'user',?,'profile_updated',?,?)",
-    ).bind(crypto.randomUUID(), workspace.id, user.id, user.id, JSON.stringify({ locale, timezone }), now),
+    ).bind(crypto.randomUUID(), workspace.id, user.id, user.id, JSON.stringify({ locale, timezone, workspaceSettingsChanged: workspaceUpdates.length === 1 }), now),
   ]);
   return response({ ok: true, locale });
 });

@@ -1103,6 +1103,7 @@ export async function verifyLoginMfa(
   },
 ): Promise<{
   session: CreatedSession;
+  userId: string;
   locale: string;
   accountType: string;
   onboardingCompletedAt: string | null;
@@ -1310,6 +1311,7 @@ export async function verifyLoginMfa(
   }
   return {
     session: prepared.session,
+    userId: challenge.userId,
     locale: challenge.locale,
     accountType: challenge.accountType,
     onboardingCompletedAt: challenge.onboardingCompletedAt,

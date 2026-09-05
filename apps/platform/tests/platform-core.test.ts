@@ -16,7 +16,7 @@ import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
 import { canEditWorkspaceContent, canManageTeam, isWorkspaceRole } from "../lib/platform/role-policy";
-import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath, workspaceForAccountRoute } from "../lib/platform/routing";
+import { INTERNAL_REQUEST_PATH_HEADER, isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath, safeWorkspaceReturnPath, workspaceForAccountRoute } from "../lib/platform/routing";
 import { actionPlanStepPatchSchema } from "../lib/platform/action-plan";
 import { taskStatusForPlanStep, taskStatusIsTerminal } from "../lib/platform/task-status";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
@@ -43,7 +43,7 @@ test("lawyer directory projects only moderation-approved review aggregates", () 
     ],
   );
   assert.deepEqual(directory, [{
-    id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика",
+    id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", consultationDurationMinutes: 60, additionalServices: [], availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика",
     rating: { reviewCount: 3, overallAverage: 4.67, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 },
     reviews: [
       { id: "review-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z", reply: { body: "Одобренный ответ", createdAt: "2026-08-03T00:00:00.000Z" } },
@@ -63,7 +63,7 @@ test("public lawyer rating waits for the minimum approved-review threshold", () 
 });
 
 test("lawyer professional profile accepts only bounded self-declared directory data", async () => {
-  const valid = { displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика", locale: "ru" };
+  const valid = { displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", consultationDurationMinutes: 60, additionalServices: ["Письменное заключение"], availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика", locale: "ru" };
   assert.equal(lawyerProfileCreateSchema.safeParse(valid).success, true);
   assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, advocateStatus: "verified" }).success, false);
   assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, experienceYears: 100 }).success, false);
@@ -77,7 +77,8 @@ test("lawyer professional profile accepts only bounded self-declared directory d
   ]);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "development", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
-  for (const environment of [undefined, "production", "preview"]) assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: environment, LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), false);
+  assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "production", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
+  for (const environment of [undefined, "preview"]) assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: environment, LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), false);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "false", DB: {} }), false);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true" }), false);
   assert.match(route, /account_type='lawyer'/); assert.match(route, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_draft_saved/); assert.match(route, /meta\.changes/); assert.match(route, /WHERE EXISTS/);
@@ -400,7 +401,8 @@ test("production identity prefers OTP sessions and gates trusted edge headers", 
   const source = await readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
   assert.ok(source.indexOf("const sessionUser = await getSessionUser(request)") < source.indexOf("const requestHeaders = request?.headers ?? await headers()"));
   assert.match(source, /ALLOW_PLATFORM_AUTH_HEADERS/);
-  assert.match(source, /NODE_ENV !== "production"/);
+  assert.match(source, /APP_ENV !== "production"/);
+  assert.doesNotMatch(source, /NODE_ENV !== "production" \|\|/);
   assert.match(source, /authSource: "platform_header"/);
   assert.match(source, /assuranceLevel: "upstream"/);
   assert.match(source, /sessionId: null/);
@@ -875,6 +877,26 @@ test("canonical platform route classifier is stable", () => {
   assert.ok(isWorkspaceId("ws_business_1"));
   assert.ok(!isWorkspaceId("workspace/escape"));
   assert.throws(() => platformBasePath("ru", "business", "workspace/escape"), /INVALID_WORKSPACE_ID/);
+  assert.equal(INTERNAL_REQUEST_PATH_HEADER, "x-juro-request-path");
+  assert.equal(
+    safeWorkspaceReturnPath(
+      "/ru/individual/settings/security?section=mfa",
+      "/ru/individual",
+      "/ru/individual/dashboard",
+    ),
+    "/ru/individual/settings/security?section=mfa",
+  );
+  for (const unsafe of [
+    "https://attacker.example/ru/individual/settings/security",
+    "//attacker.example/ru/individual/settings/security",
+    "/ru/admin/console",
+    "/uz/individual/settings/security",
+  ]) {
+    assert.equal(
+      safeWorkspaceReturnPath(unsafe, "/ru/individual", "/ru/individual/dashboard"),
+      "/ru/individual/dashboard",
+    );
+  }
 });
 
 test("legacy builder routing preserves every supported profile persona", async () => {
@@ -1166,7 +1188,9 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shellComponent, /"Все инструменты"/);
   assert.match(shellComponent, /href=\{`\$\{base\}\/profile`\}/);
   assert.match(shellComponent, /useSearchParams/);
-  assert.match(shellComponent, /const query = searchParams\.toString\(\)/);
+  assert.match(shellComponent, /const nextParams = new URLSearchParams\(searchParams\.toString\(\)\)/);
+  assert.match(shellComponent, /nextParams\.delete\("prompt"\)/);
+  assert.doesNotMatch(shellComponent, /nextParams\.delete\("intake"\)/);
   assert.match(shellComponent, /router\.push\(query \? `\$\{nextPath\}\?\$\{query\}` : nextPath\)/);
   assert.match(shellComponent, /window\.matchMedia\("\(max-width: 900px\)"\)/);
   assert.match(shell, /min-width:801px\) and \(max-width:900px/);
@@ -1178,7 +1202,7 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shell, /platform-account select\{width:100%;min-height:44px/);
   const aiClient = await readFile(new URL("../app/_platform/AiLawyerClient.tsx", import.meta.url), "utf8");
   assert.match(aiClient, /href=\{aiLocation\(new URLSearchParams\(\{ conversationId: item\.id \}\)\)\}/);
-  assert.match(aiClient, /router\.replace\(aiLocation\(nextParams\), \{ scroll: false \}\)/);
+  assert.match(aiClient, /router\.replace\(aiLocation\(nextParams, !intakeFinalized\), \{ scroll: false \}\)/);
   assert.doesNotMatch(shellComponent, /MoreHorizontal/);
   assert.match(dashboard, /max-width:\s*820px/);
   assert.match(dashboard, /max-width:\s*460px/);
@@ -1234,11 +1258,15 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
     caseId,
     lawyerProfileId,
     anonymizedSummary: "Нужна проверка договорного спора без раскрытия персональных данных.",
+    serviceCode: "document_review",
+    preferredFormat: "video",
+    proposedStartsAt: "2026-08-24T10:00:00+05:00",
     consent: true,
     locale: "ru",
   }).success, true);
   assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "слишком коротко", consent: true, locale: "ru" }).success, false);
   assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "Достаточно длинное нейтральное описание ситуации для проверки конфликта.", consent: false, locale: "ru" }).success, false);
+  assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "Достаточно длинное нейтральное описание ситуации для проверки конфликта.", serviceCode: "invented", consent: true, locale: "ru" }).success, false);
   assert.equal(conflictCheckDecisionSchema.safeParse({ decision: "clear", locale: "uz" }).success, true);
   assert.equal(conflictCheckDecisionSchema.safeParse({ decision: "approve", locale: "uz" }).success, false);
   assert.equal(lawyerAccessGrantSchema.safeParse({ consent: true, locale: "ru" }).success, true);
@@ -1252,6 +1280,8 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
   assert.match(requestRoute, /workspaceEntitlements\(db, workspace\.id\)/);
   assert.match(requestRoute, /WHERE id=\? AND workspace_id=\? AND archived_at IS NULL/);
   assert.match(requestRoute, /anonymized_summary/);
+  assert.match(requestRoute, /serviceCode: parsed\.data\.serviceCode/);
+  assert.match(requestRoute, /json_extract\(r\.requested_scope_json,'\$\.preferredFormat'\)/);
   assert.match(conflictRoute, /anonymized summary/);
   assert.match(conflictRoute, /p\.user_id=\? AND p\.status='public_approved'/);
   assert.match(grantRoute, /c\.status='clear'/);
@@ -1289,6 +1319,27 @@ test("document upload progress is byte-based and remains accessible", async () =
   assert.match(client, /aria-valuetext=\{uploadStatus\}/);
   assert.match(client, /Передаём файл/);
   assert.match(client, /Fayl yuborilmoqda/);
+});
+
+test("workspace content mutations require an editor role at the route boundary", async () => {
+  const routes = await Promise.all([
+    "../app/api/platform/cases/route.ts",
+    "../app/api/platform/cases/[caseId]/route.ts",
+    "../app/api/platform/cases/[caseId]/tasks/route.ts",
+    "../app/api/platform/cases/[caseId]/plan/route.ts",
+    "../app/api/platform/cases/[caseId]/steps/[stepId]/route.ts",
+    "../app/api/platform/document-analysis/uploads/route.ts",
+    "../app/api/platform/document-analysis/uploads/[analysisId]/route.ts",
+    "../app/api/platform/document-analysis/uploads/[analysisId]/finalize/route.ts",
+    "../app/api/platform/document-comparisons/route.ts",
+    "../app/api/platform/document-comparisons/[comparisonId]/route.ts",
+    "../app/api/platform/document-comparisons/[comparisonId]/process/route.ts",
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")));
+  for (const route of routes) assert.match(route, /workspaceForContentEditor\(user\)/);
+  const workspace = await readFile(new URL("../lib/platform/workspace.ts", import.meta.url), "utf8");
+  const permissions = await readFile(new URL("../lib/platform/permissions.ts", import.meta.url), "utf8");
+  assert.match(workspace, /requireWorkspaceContentEditor\(workspace\.role\)/);
+  assert.match(permissions, /if \(!canEditWorkspaceContent\(role\)\)/);
 });
 
 test("optional email preferences are strict, consent-backed, audited, and localized", async () => {
@@ -1438,7 +1489,7 @@ test("confirmed action-plan changes are validated, scoped, and saved as one vers
   assert.match(schema, /confirmedActionPlanPatchSchema/);
   assert.match(schema, /A step may be changed only once/);
   assert.match(route, /assertSafeWrite\(request\)/);
-  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /workspaceForContentEditor\(user\)/);
   assert.match(route, /plan_changes_confirmed/);
   assert.match(route, /current_revision=current_revision\+1/);
   assert.match(route, /INSERT INTO action_plan_versions/);

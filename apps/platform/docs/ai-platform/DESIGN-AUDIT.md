@@ -104,7 +104,15 @@ Required behavior:
 
 ### Sensitive question in URL
 
-The dashboard links to AI with `?prompt=...`.
+Status: implemented. The dashboard sends the bounded question through a
+same-origin, CSRF-protected POST and navigates with a random opaque handle.
+Only the handle digest is stored; the question is encrypted at rest, bound to
+the authenticated user and the server-rendered workspace, and expires after
+15 minutes. Opening is retry-safe across response loss, reload, language, and
+text/voice transitions; a successful AI submission finalizes the handoff and
+clears its ciphertext. The per-user/workspace cap counts every unexpired row,
+including finalized rows. Legacy `prompt` parameters are discarded rather
+than imported into the composer.
 
 Required behavior:
 

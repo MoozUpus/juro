@@ -1,6 +1,15 @@
-import PizZip from "pizzip";
+import {
+  verifyArchiveBytes,
+  type ArchiveInspectionOptions,
+} from "../../document-analysis/archive-inspector";
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
+export const DOCX_UPLOAD_LIMITS = {
+  timeoutMs: 8_000,
+  maxEntries: 500,
+  maxUncompressedBytes: 25 * 1024 * 1024,
+  maxExpansionRatio: 40,
+} as const satisfies ArchiveInspectionOptions;
 export const ALLOWED_ATTACHMENT_TYPES = new Map([
   ["application/pdf", ["pdf"]],
   ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", ["docx"]],
@@ -36,7 +45,11 @@ export type UploadInspection = {
   message: string;
 };
 
-export function validateUploadBytes(file: File, bytes: Uint8Array): UploadInspection | null {
+export async function validateUploadBytes(
+  file: File,
+  bytes: Uint8Array,
+  docxLimits: ArchiveInspectionOptions = DOCX_UPLOAD_LIMITS,
+): Promise<UploadInspection | null> {
   const basicError = validateUpload(file);
   if (basicError) {
     const code: UploadInspectionCode = file.size <= 0
@@ -61,14 +74,7 @@ export function validateUploadBytes(file: File, bytes: Uint8Array): UploadInspec
     if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
       return { code: "CONTENT_TYPE_MISMATCH", message: "Содержимое файла не соответствует формату DOCX." };
     }
-    try {
-      const zip = new PizZip(bytes);
-      if (!zip.file("[Content_Types].xml") || !zip.file("word/document.xml")) {
-        return { code: "CORRUPT_DOCX", message: "DOCX повреждён или не содержит основного документа." };
-      }
-    } catch {
-      return { code: "CORRUPT_DOCX", message: "DOCX повреждён и не может быть открыт." };
-    }
+    await verifyArchiveBytes(bytes, file.type, docxLimits);
   }
   return null;
 }

@@ -2,7 +2,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../.
 import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
 import { AnalysisExportError, deleteAnalysisExport } from "../../../../../../lib/document-analysis/exporter";
 import { deleteAnalysisReportExport } from "../../../../../../lib/document-analysis/report-exporter";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../../lib/platform/workspace";
 
 const response = (body: unknown, status = 200) => Response.json(body, {
   status,
@@ -15,7 +15,7 @@ export const DELETE = withApiErrors(async function DELETE(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { exportId } = await context.params;
   try {
     const env = { DB: requireD1(), BUCKET: requireR2() };

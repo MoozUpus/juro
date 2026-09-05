@@ -1,7 +1,12 @@
 import { generateDocx } from "../document-builder/generation/docx";
 import { generatePdf } from "../document-builder/generation/pdf";
 import { correctedVersionParagraphs, type AppliedRevisionForExport, type CorrectedExportVariant } from "./corrected-export";
-import { AnalysisExportError } from "./exporter";
+import {
+  AnalysisExportError,
+  assertExportIdempotencyAvailable,
+  isAnalysisExportCapacityError,
+  isAnalysisExportIdempotencyConflictError,
+} from "./exporter";
 import { analysisReportParagraphs } from "./report";
 import { analysisVersionForDownload, verifiedAnalysisVersionObject } from "./revisions";
 import { documentAnalysisResultSchema } from "./schema";
@@ -88,6 +93,13 @@ export async function requestAnalysisReportExport(input: {
     }
     return { record: existing, replay: true };
   }
+  const idempotencyKeySha256 = await assertExportIdempotencyAvailable(
+    input.db,
+    input.idempotencyKey,
+    input.workspaceId,
+    input.userId,
+    "report",
+  );
   const source = await input.db.prepare(
     `SELECT analysis.id FROM document_analyses analysis
      WHERE analysis.id=? AND analysis.workspace_id=? AND analysis.owner_user_id=? AND analysis.status='completed'
@@ -111,6 +123,10 @@ export async function requestAnalysisReportExport(input: {
   const fileName = `juro-${variantName}-${input.analysisId}.${info.extension}`;
   try {
     await input.db.batch([
+      input.db.prepare(
+        `INSERT INTO analysis_export_idempotency_registry
+         (idempotency_key,analysis_id,export_kind,created_at) VALUES (?,?,'report',?)`,
+      ).bind(input.idempotencyKey, input.analysisId, now),
       input.db.prepare(
         `INSERT INTO analysis_report_exports
          (id,analysis_id,workspace_id,owner_user_id,format,variant,source_version_id,status,r2_key,file_name,mime_type,
@@ -156,7 +172,13 @@ export async function requestAnalysisReportExport(input: {
         input.workspaceId,
         input.userId,
         id,
-        JSON.stringify({ analysisId: input.analysisId, format: input.format, variant, sourceVersionId }),
+        JSON.stringify({
+          analysisId: input.analysisId,
+          format: input.format,
+          variant,
+          sourceVersionId,
+          idempotencyKeySha256,
+        }),
         now,
       ),
     ]);
@@ -169,6 +191,12 @@ export async function requestAnalysisReportExport(input: {
     );
     if (raced?.analysisId === input.analysisId && raced.format === input.format && raced.variant === variant && raced.sourceVersionId === sourceVersionId) {
       return { record: raced, replay: true };
+    }
+    if (isAnalysisExportCapacityError(error)) {
+      throw new AnalysisExportError("ANALYSIS_EXPORT_CAPACITY_UNAVAILABLE", false, 429);
+    }
+    if (isAnalysisExportIdempotencyConflictError(error)) {
+      throw new AnalysisExportError("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT", false, 409);
     }
     if (error instanceof Error && /unique constraint/i.test(error.message)) {
       throw new AnalysisExportError("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT", false, 409);

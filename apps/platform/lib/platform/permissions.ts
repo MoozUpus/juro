@@ -1,5 +1,5 @@
 import { ApiAuthError } from "../document-builder/auth/api";
-import { canManageTeam } from "./role-policy";
+import { canEditWorkspaceContent, canManageTeam } from "./role-policy";
 
 export {
   canEditWorkspaceContent,
@@ -12,5 +12,11 @@ export {
 export function requireTeamManager(role: string): void {
   if (!canManageTeam(role)) {
     throw new ApiAuthError("У вас нет права управлять участниками этого пространства.", 403);
+  }
+}
+
+export function requireWorkspaceContentEditor(role: string): void {
+  if (!canEditWorkspaceContent(role)) {
+    throw new ApiAuthError("У вас нет права изменять содержимое этого пространства.", 403);
   }
 }

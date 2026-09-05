@@ -3385,3 +3385,48 @@ the Sites runtime bindings and server-only configuration, save a version from
 the exact pushed source, retain the current Sites version for rollback, and
 then deploy through the Sites workflow. Direct D1 changes or DNS/route swaps
 are not permitted as a substitute for that release.
+
+## D-164 — interactive document analysis uses a durable resource allocation
+
+Status: accepted for implementation and release verification
+Date: 2026-09-01
+
+Every direct upload, public-URL import, and Builder snapshot created for an
+interactive document analysis consumes one tenant-and-owner-scoped allocation.
+The database, rather than a preflight application count, enforces at most 20
+retained analyses and 1 GiB of declared source bytes. Idempotent replay does
+not allocate again, including after the registry's nominal 24-hour expiry while
+the retained analysis still exists. Each analysis may retain at most 20 JSON,
+PDF, or DOCX exports across both export tables; terminal exports remain
+individually deletable. The export operation cap is lifetime-audited so
+create/delete churn cannot produce an unbounded outbox or audit stream, and an
+idempotency key is single-use across JSON, PDF, and DOCX even after its export
+row is retired. A durable cross-format registry owns this constraint for new
+requests and is backfilled from both legacy export tables before either kind
+can be created under migration `0148`. Quota is released only after the source
+and every derived R2 object are verified absent, user-document vectors are
+confirmed absent by ID when required, and the D1 parent is durably removed.
+
+Upload allocations left in `initiated`, `upload_failed`, or `uploaded` for 24
+hours are operationally abandoned and become eligible for bounded scheduled
+purge. A retryable deletion tombstone hides content immediately and survives
+R2, Vectorize, or D1 finalization failure. Immutable owner-corpus upload
+evidence and files referenced by comparisons are excluded from this lifecycle.
+Database guards prevent either reference from being attached after a deletion
+tombstone is created, and purge waits for active export, revision-object, and
+vector-index writers before it inventories external objects. Binary upload
+uses an explicit `uploading` lease and verifies both affected D1 rows after the
+external R2 write; a lost lease deletes the exact object instead of publishing
+an orphan. Owner deletion conditionally changes only a non-writer state, so an
+upload lease acquired after the eligibility read cannot be overwritten. An
+expired lease first receives a separate recovery window so its D1 allocation
+remains available to retry exact-object cleanup before scheduled purge can
+remove the parent. Clean malware promotion derives the original quarantine key
+from immutable tenant/analysis/file identities and retries verified deletion
+of that exact source without rescanning or losing the cleanup reference.
+
+Completed analyses, case-linked work, lawyer verification evidence, and their
+exports do not receive a hidden age-based TTL. Consistent with D-089, they are
+retained until the owner explicitly deletes the analysis or the owning account
+is purged, subject to a later approved legal-retention policy. The RU/UZ review
+surface exposes the destructive owner action with confirmation.

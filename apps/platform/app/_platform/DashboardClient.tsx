@@ -1,6 +1,6 @@
 "use client";
 
-import { usePlatformBasePath } from "./PlatformRouteContext";
+import { usePlatformBasePath, usePlatformWorkspaceId } from "./PlatformRouteContext";
 
 /* eslint-disable react-hooks/set-state-in-effect -- private dashboard data is loaded after authentication */
 
@@ -69,6 +69,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
   const copy = dashboardCopy(locale);
   const ru = locale === "ru";
   const base = usePlatformBasePath();
+  const workspaceId = usePlatformWorkspaceId();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -81,7 +82,10 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
   const load = useCallback(async () => {
     setError("");
     try {
-      const response = await fetch("/api/platform/dashboard", { cache: "no-store" });
+      const response = await fetch("/api/platform/dashboard", {
+        cache: "no-store",
+        headers: { "x-juro-workspace-id": workspaceId },
+      });
       const body = await response.json() as DashboardData & { error?: string };
       if (!response.ok) throw new Error(body.error || copy.loadError);
       setData(body);
@@ -90,7 +94,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
     } finally {
       setLoading(false);
     }
-  }, [copy.loadError]);
+  }, [copy.loadError, workspaceId]);
 
   useEffect(() => {
     void load();
@@ -116,7 +120,31 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
       }
       return;
     }
-    router.push(`${base}/ai-chat?prompt=${encodeURIComponent(prompt.trim())}`);
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await fetch("/api/platform/ai/intake", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+          "x-juro-locale": locale,
+        },
+        body: JSON.stringify({ question: prompt.trim(), workspaceId }),
+      });
+      const body = await response.json() as { handle?: string; error?: string };
+      if (!response.ok || !body.handle) {
+        throw new Error(body.error || (ru
+          ? "Не удалось защищённо передать вопрос."
+          : "Savolni himoyalangan tarzda uzatib bo‘lmadi."));
+      }
+      setPrompt("");
+      router.push(`${base}/ai-chat?intake=${encodeURIComponent(body.handle)}`);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function chooseFile(next: File | null) {
@@ -262,6 +290,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
               onChange={(event) => setPrompt(event.target.value)}
               placeholder={copy.prompt}
               rows={2}
+              maxLength={4_000}
             />
             <input
               ref={fileInputRef}
@@ -326,7 +355,14 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
         <div className="dashboard-section-heading"><h2>{copy.quickTitle}</h2></div>
         <div className="dashboard-quick-grid">
           {quickActions.map(({ href, icon: Icon, copy: item }) => (
-            <Link href={href} key={href}>
+            <Link
+              href={href}
+              key={href}
+              onFocus={(event) => event.currentTarget.scrollIntoView({
+                block: "nearest",
+                inline: "nearest",
+              })}
+            >
               <span className="dashboard-action-icon"><Icon /></span>
               <span><strong>{item.title}</strong><small>{item.description}</small></span>
               <ArrowRight aria-hidden="true" />

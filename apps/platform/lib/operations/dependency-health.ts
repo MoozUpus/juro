@@ -45,6 +45,7 @@ export const dependencyHealthEvidenceKinds = [
 // cannot persist arbitrary provider messages, paths, e-mail addresses or IDs.
 export const dependencyHealthSafeErrorCodes = [
   "PROBE_TIMEOUT",
+  "PROBE_LATENCY_HIGH",
   "PROBE_NETWORK_ERROR",
   "PROBE_HTTP_ERROR",
   "PROBE_AUTH_ERROR",
@@ -60,6 +61,11 @@ export const dependencyHealthSafeErrorCodes = [
   "SCANNER_TIMEOUT",
   "PROVIDER_UNAVAILABLE",
   "PROVIDER_TIMEOUT",
+  "PROVIDER_CREDIT_BALANCE_LOW",
+  "PROVIDER_SPEND_LIMIT_REACHED",
+  "PROVIDER_BILLING_CONFIGURATION",
+  "PROVIDER_WORKSPACE_CONFIGURATION",
+  "PROVIDER_REQUEST_CONFIGURATION",
   "EMAIL_DELIVERY_FAILED",
   "LEGAL_SYNC_FAILED",
   "LEGAL_SYNC_STALE",
@@ -101,7 +107,9 @@ export const dependencyKeysByComponent = {
     "queues",
     "queue_dlq",
     "malware_scanner",
-    "anthropic",
+    // Provider availability is an OR condition implemented by the routed
+    // feature probe below. Requiring one named provider here would mark the
+    // feature degraded even when its bounded fallback completed successfully.
     "document_analysis",
   ],
   upload: ["d1", "private_r2", "malware_scanner"],

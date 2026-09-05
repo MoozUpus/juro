@@ -21,7 +21,7 @@ import {
   publicDocumentUrlImportDisabledMessage,
   publicDocumentUrlImportEnabled,
 } from "../../../../../lib/document-analysis/public-url-import-feature";
-import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../lib/platform/workspace";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -50,7 +50,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       error: publicDocumentUrlImportDisabledMessage(operationalLocaleFromRequest(request)),
     }, 503);
   }
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const parsed = await parseJsonRequest(request, publicDocumentUrlIntentSchema, 4_096);
   if (!parsed.ok) return invalidRequestResponse(parsed.error);
   const db = requireD1();
@@ -99,6 +99,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       idempotencyKey,
       requestHash,
       intent: uploadIntent,
+      storageZone: "primary",
     });
     if (initialized.replay && !["initiated", "upload_failed"].includes(initialized.record.status)) {
       await bucket.delete(remote.temporaryKey);

@@ -1,7 +1,8 @@
 import { requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 import { readAiRunStatus } from "../../../../../../lib/ai/run-store";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForUser, workspaceForUserById } from "../../../../../../lib/platform/workspace";
+import { isWorkspaceId } from "../../../../../../lib/platform/routing";
 
 type Context = { params: Promise<{ idempotencyKey: string }> };
 
@@ -12,9 +13,15 @@ function privateJson(body: unknown, status = 200) {
   });
 }
 
-export const GET = withApiErrors(async function GET(_request: Request, context: Context) {
-  const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+export const GET = withApiErrors(async function GET(request: Request, context: Context) {
+  const user = await requireApiUser(request);
+  const requestedWorkspaceId = request.headers.get("x-juro-workspace-id");
+  const workspace = requestedWorkspaceId
+    ? (isWorkspaceId(requestedWorkspaceId)
+      ? await workspaceForUserById(user.id, requestedWorkspaceId)
+      : null)
+    : await workspaceForUser(user);
+  if (!workspace) return privateJson({ code: "WORKSPACE_UNAVAILABLE" }, 404);
   const { idempotencyKey } = await context.params;
   if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
     return privateJson({ code: "INVALID_IDEMPOTENCY_KEY" }, 400);

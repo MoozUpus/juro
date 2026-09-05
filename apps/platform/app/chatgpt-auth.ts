@@ -34,8 +34,9 @@ export async function getAuthPrincipal(request?: Request): Promise<AuthPrincipal
   const sessionUser = await getSessionUser(request);
   if (sessionUser) return sessionUser;
 
-  const allowPlatformHeaders = process.env.NODE_ENV !== "production"
-    || runtimeEnv().ALLOW_PLATFORM_AUTH_HEADERS === "true";
+  const env = runtimeEnv();
+  const allowPlatformHeaders = env.ALLOW_PLATFORM_AUTH_HEADERS === "true"
+    && env.APP_ENV !== "production";
   if (!allowPlatformHeaders) return null;
 
   const requestHeaders = request?.headers ?? await headers();

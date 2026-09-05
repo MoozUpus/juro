@@ -9,7 +9,7 @@ import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { comparisonForUser } from "../../../../lib/document-comparison/storage";
 import { consultationBookingSchema } from "../../../../lib/platform/consultation";
-import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -41,7 +41,7 @@ export const GET = withApiErrors(async function GET() {
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const parsed = await parseJsonRequest(request, consultationBookingSchema, 4_096);
   if (!parsed.ok) {
     return response({

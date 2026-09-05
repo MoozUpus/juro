@@ -204,5 +204,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ok: true,
     marketplaceStatus: "pending_review",
     missingRequiredFields: [],
+    updatedAt: now,
   });
 });

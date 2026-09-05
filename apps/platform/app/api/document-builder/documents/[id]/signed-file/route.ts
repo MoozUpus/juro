@@ -3,8 +3,10 @@ import { apiError, badRequest, forbidden, jsonResponse } from "../../../../../..
 import { createDocumentVersion } from "../../../../../../lib/document-builder/document-versions";
 import { requireOwner } from "../../../../../../lib/document-builder/permissions";
 import { addActivity, isoNow } from "../../../../../../lib/document-builder/storage/db";
-import { putPrivateObject, sanitizeFileName, validateUpload } from "../../../../../../lib/document-builder/storage/files";
+import { MAX_FILE_SIZE, sanitizeFileName, validateUpload, validateUploadBytes } from "../../../../../../lib/document-builder/storage/files";
+import { QuarantinedUploadError, quarantineScanAndStorePrivateObject } from "../../../../../../lib/document-builder/storage/quarantined-upload";
 import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
+import { MULTIPART_OVERHEAD_BYTES, requiredContentLength } from "../../../../../../lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +20,21 @@ export async function POST(request: Request, context: Context): Promise<Response
     const access = await requireOwner(id, user.id);
     if (!access?.workspaceId) return forbidden();
     if (access.document.signedFileId) return jsonResponse({ error: "Подписанный PDF уже загружен и не может быть заменён.", code: "SIGNED_FILE_EXISTS" }, { status: 409 });
+    const bodyLength = requiredContentLength(request, MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES);
+    if (!bodyLength.ok) {
+      return jsonResponse({
+        error: bodyLength.reason === "too_large" ? "Размер PDF превышает 10 МБ." : "Для загрузки требуется точный размер запроса.",
+        code: bodyLength.reason === "too_large" ? "UPLOAD_PAYLOAD_TOO_LARGE" : "CONTENT_LENGTH_REQUIRED",
+      }, { status: bodyLength.reason === "too_large" ? 413 : 411 });
+    }
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return badRequest("PDF-файл не выбран.");
     const validationError = validateUpload(file, true);
     if (validationError) return badRequest(validationError, "INVALID_SIGNED_FILE");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const inspection = await validateUploadBytes(file, bytes);
+    if (inspection) return badRequest(inspection.message, inspection.code);
     const db = requireD1();
     const bucket = requireR2();
     await createDocumentVersion({
@@ -40,10 +52,15 @@ export async function POST(request: Request, context: Context): Promise<Response
     const key = `users/${user.id}/documents/${id}/signed/${fileId}.pdf`;
     const now = isoNow();
     try {
-      await putPrivateObject(key, await file.arrayBuffer(), "application/pdf", { documentId: id, kind: "signed_pdf" });
+      const evidence = await quarantineScanAndStorePrivateObject({
+        key,
+        bytes,
+        mimeType: "application/pdf",
+        metadata: { documentId: id, kind: "signed_pdf" },
+      });
       await db.batch([
-        db.prepare("INSERT INTO document_files (id, workspace_id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'signed_pdf', ?, ?, 'application/pdf', ?, NULL, ?, ?)")
-          .bind(fileId, access.workspaceId, id, user.id, key, safeName, file.size, now, now),
+        db.prepare("INSERT INTO document_files (id, workspace_id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, sha256, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'signed_pdf', ?, ?, 'application/pdf', ?, ?, NULL, ?, ?)")
+          .bind(fileId, access.workspaceId, id, user.id, key, safeName, file.size, evidence.sha256, now, now),
         db.prepare("UPDATE documents SET signed_file_id = ?, status = 'Подписан', revision = revision + 1, updated_at = ? WHERE id = ?").bind(fileId, now, id),
       ]);
     } catch (error) {
@@ -53,6 +70,15 @@ export async function POST(request: Request, context: Context): Promise<Response
     await addActivity(id, user.id, "signed_pdf_uploaded");
     return jsonResponse({ file: { id: fileId, fileName: safeName, mimeType: "application/pdf", sizeBytes: file.size, url: `/api/document-builder/documents/${id}/files/${fileId}?inline=1` }, status: "Подписан" }, { status: 201 });
   } catch (error) {
+    if (error instanceof QuarantinedUploadError) {
+      const status = error.code === "FILE_UNSAFE" ? 422 : 503;
+      return jsonResponse({
+        code: error.code,
+        error: error.code === "FILE_UNSAFE"
+          ? "PDF не прошёл проверку безопасности."
+          : "Проверка безопасности PDF временно недоступна.",
+      }, { status });
+    }
     return apiError(error);
   }
 }

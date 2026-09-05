@@ -1,10 +1,11 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { documentVisibilityScope } from "../../../../lib/document-builder/permissions/document-visibility";
 import { parseJsonRequest } from "../../../../lib/auth/input";
 import { z } from "zod";
 import { CaseLifecycleError, caseLifecycleIdempotencyKeySchema, executeCaseLifecycle } from "../../../../lib/platform/case-lifecycle";
-import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
 
 const archiveRestoreSchema = z.object({ type: z.enum(["document", "case"]), id: z.string().min(1).max(180) }).strict();
 
@@ -16,14 +17,15 @@ export const GET = withApiErrors(async function GET() {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const db = requireD1();
+  const documentVisibility = documentVisibilityScope(user.id, workspace.id);
   const [documents, cases] = await db.batch([
     db.prepare(
       `SELECT DISTINCT d.id,d.title,d.category,d.status,d.archived_at AS archivedAt,d.updated_at AS updatedAt,
         CASE WHEN d.owner_user_id=? THEN 1 ELSE 0 END AS canRestore
-       FROM documents d LEFT JOIN document_collaborators c ON c.document_id=d.id AND c.user_id=? AND c.status<>'revoked'
-       WHERE d.workspace_id=? AND d.status='Архив' AND (d.owner_user_id=? OR c.user_id=?)
+       FROM documents d
+       WHERE ${documentVisibility.sql} AND d.status='Архив'
        ORDER BY d.archived_at DESC`,
-    ).bind(user.id, user.id, workspace.id, user.id, user.id),
+    ).bind(user.id, ...documentVisibility.bindings),
     db.prepare("SELECT id,title,legal_area AS legalArea,status,archived_at AS archivedAt,updated_at AS updatedAt FROM cases WHERE workspace_id=? AND archived_at IS NOT NULL ORDER BY archived_at DESC").bind(workspace.id),
   ]);
   return response({ documents: documents.results, cases: cases.results });
@@ -46,11 +48,12 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     await db.prepare("INSERT INTO activity_events (id,document_id,actor_user_id,type,metadata_json,created_at) VALUES (?,?,?,'document_restored',?,?)")
       .bind(crypto.randomUUID(), body.id, user.id, JSON.stringify({ shareLinksReactivated: false }), now).run();
   } else {
+    const editableWorkspace = await workspaceForContentEditor(user);
     const idempotency = caseLifecycleIdempotencyKeySchema.safeParse(request.headers.get("idempotency-key")?.trim() ?? "");
     if (!idempotency.success) return response({ error: "Некорректный ключ операции.", code: "INVALID_IDEMPOTENCY_KEY" }, 400);
     try {
       await executeCaseLifecycle({
-        db, caseId: body.id, workspaceId: workspace.id, actorUserId: user.id,
+        db, caseId: body.id, workspaceId: editableWorkspace.id, actorUserId: user.id,
         action: "restore", idempotencyKey: idempotency.data, now,
       });
     } catch (error) {

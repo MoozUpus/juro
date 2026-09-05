@@ -27,6 +27,7 @@ function packageName(location) {
 }
 
 function approvedException(name, license) {
+  if (name === "@fontsource-variable/manrope" && license === "OFL-1.1") return true;
   if (name === "pizzip" && license === "(MIT OR GPL-3.0)") return true;
   if (name.startsWith("@img/sharp-libvips-") && license === "LGPL-3.0-or-later") return true;
   if (name.startsWith("@img/sharp-") && [

@@ -10,6 +10,7 @@ import {
 } from "../../../../../../lib/ai/voice-recording";
 import { publicVoiceRecording, voiceErrorResponse, voiceLocale, voiceProblem, voiceResponse } from "../../../../../../lib/ai/voice-http";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { requiredContentLength } from "../../../../../../lib/request-body";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -39,12 +40,12 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
       key: "voice_mode",
     });
     const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-    const declaredLength = request.headers.get("content-length");
-    const contentLength = declaredLength === null ? null : Number(declaredLength);
+    const contentLength = requiredContentLength(request, state.recording.sizeBytes);
     const sha256 = request.headers.get("x-juro-file-sha256")?.trim().toLowerCase();
     if (
       contentType !== state.recording.mimeType
-      || (contentLength !== null && (!Number.isSafeInteger(contentLength) || contentLength !== state.recording.sizeBytes))
+      || !contentLength.ok
+      || contentLength.bytes !== state.recording.sizeBytes
       || sha256 !== state.recording.sha256
       || !request.body
     ) {

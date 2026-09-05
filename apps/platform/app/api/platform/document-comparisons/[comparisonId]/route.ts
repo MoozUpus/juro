@@ -8,7 +8,9 @@ import {
   parsedSummary,
   verifiedSourcesForChanges,
 } from "../../../../../lib/document-comparison/storage";
-import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import { assertComparisonSourceFilesClean } from "../../../../../lib/document-comparison/scan-evidence";
+import { ComparisonProcessingError } from "../../../../../lib/document-comparison/types";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -27,6 +29,19 @@ export const GET = withApiErrors(async function GET(
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
   if (!comparison) return response({ error: "Сравнение не найдено." }, 404);
+  try {
+    await assertComparisonSourceFilesClean(db, {
+      versionOneFileId: comparison.versionOneFileId,
+      versionTwoFileId: comparison.versionTwoFileId,
+      workspaceId: workspace.id,
+      ownerUserId: user.id,
+    });
+  } catch (error) {
+    if (error instanceof ComparisonProcessingError) {
+      return response({ code: error.code, error: error.message }, 422);
+    }
+    throw error;
+  }
   const changes = await comparisonChanges(db, comparisonId);
   const [versionOne, versionTwo, sources, exportsResult] = await Promise.all([
     loadExtractedDocument(comparison.versionOneJsonKey),
@@ -66,11 +81,24 @@ export const PATCH = withApiErrors(async function PATCH(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { comparisonId } = await context.params;
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
   if (!comparison) return response({ error: "Сравнение не найдено." }, 404);
+  try {
+    await assertComparisonSourceFilesClean(db, {
+      versionOneFileId: comparison.versionOneFileId,
+      versionTwoFileId: comparison.versionTwoFileId,
+      workspaceId: workspace.id,
+      ownerUserId: user.id,
+    });
+  } catch (error) {
+    if (error instanceof ComparisonProcessingError) {
+      return response({ code: error.code, error: error.message }, 422);
+    }
+    throw error;
+  }
   const body = await request.json() as { changeId?: string; reviewed?: boolean; caseId?: string | null };
   if (body.changeId) {
     const result = await db.prepare(
@@ -104,7 +132,7 @@ export const DELETE = withApiErrors(async function DELETE(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { comparisonId } = await context.params;
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);

@@ -9,10 +9,13 @@ export async function sha256(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function fourDigitCode(): string {
+export function sixDigitCode(): string {
   const data = new Uint32Array(1);
-  crypto.getRandomValues(data);
-  return String(data[0] % 10_000).padStart(4, "0");
+  const space = 1_000_000;
+  const unbiasedLimit = 2 ** 32 - ((2 ** 32) % space);
+  do crypto.getRandomValues(data);
+  while (data[0] >= unbiasedLimit);
+  return String(data[0] % space).padStart(6, "0");
 }
 
 export function addHours(iso: string, hours: number): string {

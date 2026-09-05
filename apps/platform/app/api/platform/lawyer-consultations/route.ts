@@ -81,6 +81,13 @@ export const GET = withApiErrors(async function GET(request: Request) {
     .bind(user.id)
     .first<{ accountType: string }>();
   const isLawyer = account?.accountType === "lawyer";
+  if (isLawyer) {
+    const operational = await requireD1().prepare(
+      `SELECT id FROM lawyer_profiles WHERE user_id=?
+        AND status='public_approved' AND marketplace_status='public_approved' LIMIT 1`,
+    ).bind(user.id).first();
+    if (!operational) return response({ code: "OPERATIONAL_LAWYER_REQUIRED" }, 403);
+  }
   const rows = await requireD1()
     .prepare(
       `SELECT c.id,c.lawyer_request_id AS requestId,c.case_id AS caseId,c.starts_at AS startsAt,
@@ -146,6 +153,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
       },
       404,
     );
+  if (
+    isLawyer
+    && (handoff.profileStatus !== "public_approved" || handoff.marketplaceStatus !== "public_approved")
+  ) {
+    return response({ code: "OPERATIONAL_LAWYER_REQUIRED" }, 403);
+  }
 
   const now = new Date().toISOString();
   const db = requireD1();

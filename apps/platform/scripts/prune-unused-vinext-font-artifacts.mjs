@@ -1,5 +1,6 @@
-import { readdir, readFile, rm, stat } from "node:fs/promises";
+import { access, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { extname, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const GENERATED_FAMILY_DIRECTORY = /^[a-z0-9][a-z0-9-]*-[a-f0-9]{8,}$/iu;
 const REFERENCE_EXTENSIONS = new Set([
@@ -67,6 +68,66 @@ async function referenceCorpus(artifactRoot, excludedRoots) {
     }
   }
   return { text: chunks.join("\n"), scannedFiles };
+}
+
+/**
+ * Vinext's Windows font loader can leave absolute build-machine paths in the
+ * server-side CSS it inlines into HTML. Rewrite only references rooted in this
+ * build's own font cache, and fail closed if any other cache path survives.
+ */
+export async function normalizeVinextFontArtifactReferences({
+  artifactRoot,
+  fontCacheRoot,
+}) {
+  const resolvedArtifactRoot = resolve(artifactRoot);
+  const resolvedFontCacheRoot = resolve(fontCacheRoot);
+  const normalizedFontCacheRoot = resolvedFontCacheRoot.split(sep).join("/");
+  const fontCacheUrl = pathToFileURL(resolvedFontCacheRoot).href.replace(/\/$/u, "");
+  const publicFontRoot = "/assets/_vinext_fonts/";
+  const rewrittenFiles = [];
+  const referencedAssets = new Set();
+  const stack = [resolvedArtifactRoot];
+
+  while (stack.length > 0) {
+    const directory = stack.pop();
+    if (!directory) continue;
+    for (const entry of await entriesOrEmpty(directory)) {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(path);
+        continue;
+      }
+      if (!entry.isFile() || !REFERENCE_EXTENSIONS.has(extname(entry.name).toLocaleLowerCase())) continue;
+      const metadata = await stat(path);
+      if (metadata.size > MAX_REFERENCE_FILE_BYTES) continue;
+
+      const original = await readFile(path, "utf8");
+      let normalized = original
+        .split(`${fontCacheUrl}/`).join(publicFontRoot)
+        .split(`${normalizedFontCacheRoot}/`).join(publicFontRoot);
+      if (normalized.includes(".vinext/fonts/")) {
+        throw new Error(
+          `Refusing artifact with an unresolved Vinext font-cache path: ${relative(resolvedArtifactRoot, path)}`,
+        );
+      }
+      for (const match of normalized.matchAll(/\/assets\/_vinext_fonts\/([a-z0-9][a-z0-9-]*-[a-f0-9]{8,})\/([a-z0-9][a-z0-9-]*\.woff2)/giu)) {
+        referencedAssets.add(`${match[1]}/${match[2]}`);
+      }
+      if (normalized !== original) {
+        await writeFile(path, normalized, "utf8");
+        rewrittenFiles.push(relative(resolvedArtifactRoot, path).split(sep).join("/"));
+      }
+    }
+  }
+
+  for (const asset of referencedAssets) {
+    await access(resolve(resolvedArtifactRoot, "client", "assets", "_vinext_fonts", asset));
+  }
+
+  return {
+    rewrittenFiles,
+    referencedAssets: [...referencedAssets].sort(),
+  };
 }
 
 /**

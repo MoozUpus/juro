@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import { getOrCreateUserProfile } from "../../lib/document-builder/storage/db";
@@ -12,13 +13,20 @@ import type {
   PlatformLocale,
 } from "../../lib/platform/routing";
 import {
+  INTERNAL_REQUEST_PATH_HEADER,
+  platformBasePath,
   platformPath,
+  safeWorkspaceReturnPath,
   workspaceForAccountRoute,
   workspaceTypeForAccountType,
 } from "../../lib/platform/routing";
 import { requireChatGPTUser } from "../chatgpt-auth";
 import { PlatformShell } from "./PlatformShell";
 import { safeDisplayName } from "../../lib/platform/display-name";
+import {
+  isLawyerHostRequest,
+  lawyerLandingDestination,
+} from "../../lib/platform/lawyer-entry-routing";
 
 export async function WorkspaceShellLayout({
   children,
@@ -31,17 +39,49 @@ export async function WorkspaceShellLayout({
   accountType: AccountType;
   requestedWorkspaceId?: string;
 }) {
-  const returnTo = platformPath(
+  const fallbackReturnTo = platformPath(
     locale,
     accountType,
     "dashboard",
     requestedWorkspaceId,
   );
+  const incomingHeaders = await headers();
+  const returnTo = safeWorkspaceReturnPath(
+    incomingHeaders.get(INTERNAL_REQUEST_PATH_HEADER),
+    platformBasePath(locale, accountType, requestedWorkspaceId),
+    fallbackReturnTo,
+  );
   const user = await requireChatGPTUser(returnTo);
   const userProfile = await getOrCreateUserProfile(user);
   const profile = await workspaceProfile(user.email);
+  const requestHeaders = await headers();
+  const lawyerHost = isLawyerHostRequest(requestHeaders);
   if (profile && !profile.onboardingCompleted) {
-    redirect(`/${profile.locale}/onboarding`);
+    redirect(profile.accountType === "lawyer"
+      ? lawyerLandingDestination(
+          profile,
+          lawyerHost,
+          requestHeaders.get("host"),
+        )
+      : `/${profile.locale}/onboarding`);
+  }
+  if (accountType === "lawyer" && profile?.accountType !== "lawyer") {
+    if (lawyerHost) {
+      const query = new URLSearchParams({
+        accountType: "lawyer",
+        reauth: "1",
+        returnTo: `/${locale}/dashboard`,
+      });
+      redirect(`/${locale}/auth/login?${query}`);
+    }
+    redirect(`/${profile?.locale ?? locale}/${profile?.accountType ?? "individual"}/dashboard`);
+  }
+  if (profile?.accountType === "lawyer" && accountType !== "lawyer") {
+    redirect(lawyerLandingDestination(
+      profile,
+      lawyerHost,
+      requestHeaders.get("host"),
+    ));
   }
 
   const defaultWorkspace = requestedWorkspaceId

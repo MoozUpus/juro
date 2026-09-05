@@ -254,7 +254,9 @@ export function PlatformShell({
     // selected case) instead of sending a user back to an empty screen after
     // changing language. Route-level authorization still validates every ID.
     const nextPath = pathname.replace(`/${locale}/`, `/${next}/`);
-    const query = searchParams.toString();
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("prompt");
+    const query = nextParams.toString();
     router.push(query ? `${nextPath}?${query}` : nextPath);
   };
   const toggleCollapsed = () => {
@@ -296,7 +298,7 @@ export function PlatformShell({
     }
   };
   return (
-    <PlatformRouteProvider basePath={base}>
+    <PlatformRouteProvider basePath={base} workspaceId={activeWorkspaceId}>
       <div className={`platform-shell ${collapsed ? "is-collapsed" : ""}`}>
         <a className="platform-skip-link" href="#main-content">
           {locale === "ru" ? "Перейти к содержанию" : "Asosiy mazmunga o‘tish"}

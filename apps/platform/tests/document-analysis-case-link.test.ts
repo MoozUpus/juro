@@ -172,7 +172,7 @@ test("case-link route and clients require auth, CSRF, strict input and server-re
   ]);
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.match(route, /requireApiUser\(\)/);
-  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /workspaceForContentEditor\(user\)/);
   assert.match(route, /analysisCaseLinkInputSchema\.safeParse/);
   assert.match(route, /request\.headers\.get\("idempotency-key"\)/);
   assert.doesNotMatch(route, /workspaceId:\s*parsed\.data|ownerUserId:\s*parsed\.data/);

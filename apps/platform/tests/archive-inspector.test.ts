@@ -99,6 +99,45 @@ test("streaming ZIP data descriptors are matched to their central-directory evid
   assert.equal(result.fileCount, 1);
 });
 
+test("callers can tighten DOCX expansion, entry and expanded-byte limits without loosening defaults", async () => {
+  const docx = zipSync({
+    "[Content_Types].xml": strToU8("<Types/>"),
+    "_rels/.rels": strToU8("<Relationships/>"),
+    "word/document.xml": strToU8(`<w:document>${"bounded text ".repeat(200)}</w:document>`),
+  }, { level: 6 });
+  await assert.rejects(
+    () => verifyArchiveBytes(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", { maxExpansionRatio: 2 }),
+    (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_RATIO_LIMIT",
+  );
+  await assert.rejects(
+    () => verifyArchiveBytes(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", { maxEntries: 2 }),
+    (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_ENTRY_LIMIT",
+  );
+  await assert.rejects(
+    () => verifyArchiveBytes(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", { maxUncompressedBytes: 32 }),
+    (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_EXPANDED_SIZE_LIMIT",
+  );
+  await assert.rejects(
+    () => verifyArchiveBytes(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", { maxExpansionRatio: 101 }),
+    (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_RATIO_LIMIT",
+  );
+
+  const manyEntries = Object.fromEntries([
+    ["[Content_Types].xml", strToU8("<Types/>")],
+    ["_rels/.rels", strToU8("<Relationships/>")],
+    ["word/document.xml", strToU8("<w:document/>")],
+    ...Array.from({ length: 498 }, (_, index) => [`word/media/item-${index}.txt`, strToU8("x")] as const),
+  ]);
+  await assert.rejects(
+    () => verifyArchiveBytes(
+      zipSync(manyEntries),
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      { maxEntries: 500 },
+    ),
+    (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_ENTRY_LIMIT",
+  );
+});
+
 function streamingZip(name: string, payload: Uint8Array): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const chunks: Uint8Array[] = [];

@@ -9,6 +9,8 @@ import { runDirectLegalSourceHealthCheck } from "../lib/legal/direct-source-heal
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
+import { purgeExpiredQuestionIntakes } from "../lib/ai/question-intake";
+import { purgeExpiredDocumentAnalysisUploads } from "../lib/document-analysis/resource-retention";
 import { reconcileAnalysisVersionObjectWrites } from "../lib/document-analysis/version-object-write";
 import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/document-version-object-write";
 import { taskReminderSubjectId } from "../lib/notifications/task-reminder-dispatch";
@@ -17,7 +19,10 @@ import {
   expectedQueueName,
   type PlatformJobEnv,
 } from "./platform-jobs";
-import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
+import {
+  recordDependencyHealthEvidence,
+  recordScheduledD1HealthEvidence,
+} from "./dependency-health-evidence";
 import { reconcileQueueDlqHealth } from "./queue-dlq-health-reconciliation";
 
 const OUTBOX_CRON = "*/5 * * * *";
@@ -538,7 +543,6 @@ export async function handleScheduled(
     controller.noRetry();
     return;
   }
-  const startedAt = Date.now();
   let failureCode = "OUTBOX_DISPATCH_FAILED";
   try {
     failureCode = "TASK_REMINDER_ENQUEUE_FAILED";
@@ -618,11 +622,26 @@ export async function handleScheduled(
       db: env.DB,
       now,
     });
+    failureCode = "AI_QUESTION_INTAKE_RETENTION_CLEANUP_FAILED";
+    const questionIntakeRetention = await purgeExpiredQuestionIntakes({
+      db: env.DB,
+      now,
+    });
     failureCode = "VOICE_RETENTION_CLEANUP_FAILED";
     const voiceRetention = await purgeExpiredVoiceRecordings({
       db: env.DB,
       bucket: env.BUCKET,
       quarantineBucket: env.QUARANTINE_BUCKET,
+      now,
+    });
+    failureCode = "DOCUMENT_ANALYSIS_RETENTION_CLEANUP_FAILED";
+    const documentAnalysisRetention = await purgeExpiredDocumentAnalysisUploads({
+      env: {
+        DB: env.DB,
+        BUCKET: env.BUCKET,
+        QUARANTINE_BUCKET: env.QUARANTINE_BUCKET,
+        USER_DOCUMENTS_INDEX: env.USER_DOCUMENTS_INDEX,
+      },
       now,
     });
     failureCode = "ANALYSIS_VERSION_OBJECT_RECONCILIATION_FAILED";
@@ -651,15 +670,10 @@ export async function handleScheduled(
     }
     failureCode = "PRODUCTION_DEPENDENCY_PROBES_FAILED";
     const productionDependencyProbes = await maybeRunProductionDependencyProbes(env);
-    // `scheduled_runs` makes this completion idempotent per cron slot. This
-    // must be a heartbeat, not a throttled product event, otherwise cron
-    // jitter can suppress a real D1 success immediately before its age limit.
-    await recordDependencyHealthEvidence(env, {
-      key: "d1",
-      state: "operational",
-      evidenceKind: "scheduled_job",
-      startedAt,
-    });
+    // Measure D1 directly. The surrounding cron can include R2, queues,
+    // provider calls and retention work, so its total duration is not D1
+    // latency and must never be published as such.
+    await recordScheduledD1HealthEvidence(env);
     failureCode = "SCHEDULE_COMPLETION_FAILED";
     await finishSchedule(env, run, "completed", null);
     logScheduled("info", {
@@ -689,8 +703,14 @@ export async function handleScheduled(
       guestAiRetentionEligible: guestAiRetention.eligible,
       guestAiRetentionPurged: guestAiRetention.purged,
       guestAiReservationsReleased: guestAiRetention.reservationsReleased,
+      questionIntakeRetentionEligible: questionIntakeRetention.eligible,
+      questionIntakeRetentionPurged: questionIntakeRetention.purged,
       voiceRetentionEligible: voiceRetention.eligible,
       voiceRetentionPurged: voiceRetention.purged,
+      documentAnalysisRetentionEligible: documentAnalysisRetention.eligible,
+      documentAnalysisRetentionPurged: documentAnalysisRetention.purged,
+      documentAnalysisRetentionRetrying: documentAnalysisRetention.retrying,
+      documentAnalysisIdempotencyPurged: documentAnalysisRetention.idempotencyPurged,
       analysisVersionObjectsEligible: analysisVersionObjects.eligible,
       analysisVersionObjectsClaimed: analysisVersionObjects.claimed,
       analysisVersionObjectsAttached: analysisVersionObjects.attached,

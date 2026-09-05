@@ -41,6 +41,16 @@ export const DELETE = withApiErrors(async function DELETE(request: Request, { pa
   const now = isoNow();
   await db.batch([
     db.prepare("UPDATE workspace_members SET status='removed',updated_at=? WHERE id=? AND workspace_id=?").bind(now, memberId, workspace.id),
+    db.prepare(
+      `UPDATE lawyer_access_grants SET revoked_at=?,revoke_reason='requester_removed'
+       WHERE revoked_at IS NULL AND lawyer_request_id IN (
+         SELECT id FROM lawyer_requests WHERE workspace_id=? AND requester_user_id=?
+       )`,
+    ).bind(now, workspace.id, member.userId),
+    db.prepare(
+      `UPDATE lawyer_requests SET status='access_revoked',updated_at=?
+       WHERE workspace_id=? AND requester_user_id=? AND status='access_granted'`,
+    ).bind(now, workspace.id, member.userId),
     db.prepare("INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,created_at) VALUES (?,?,?,'member',?,'member_removed',?)").bind(crypto.randomUUID(), workspace.id, user.id, memberId, now),
   ]);
   return response({ ok: true });

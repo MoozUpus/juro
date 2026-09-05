@@ -273,6 +273,48 @@ test("analysis export deletion is tenant-scoped, R2-first, retryable and idempot
   }
 });
 
+test("analysis export capacity is bounded while an existing key remains replayable", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seedCompletedAnalysis(sqlite);
+    let lastId = "";
+    for (let index = 0; index < 20; index += 1) {
+      const requested = await requestAnalysisExport({
+        db: d1,
+        analysisId: "analysis-a",
+        workspaceId: "workspace-a",
+        userId: "user-a",
+        idempotencyKey: `analysis-export-capacity-${index.toString().padStart(4, "0")}`,
+      });
+      lastId = requested.record.id;
+    }
+    const replay = await requestAnalysisExport({
+      db: d1,
+      analysisId: "analysis-a",
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      idempotencyKey: "analysis-export-capacity-0019",
+    });
+    assert.equal(replay.replay, true);
+    assert.equal(replay.record.id, lastId);
+    await assert.rejects(
+      requestAnalysisExport({
+        db: d1,
+        analysisId: "analysis-a",
+        workspaceId: "workspace-a",
+        userId: "user-a",
+        idempotencyKey: "analysis-export-capacity-blocked",
+      }),
+      (error: unknown) => error instanceof AnalysisExportError
+        && error.code === "ANALYSIS_EXPORT_CAPACITY_UNAVAILABLE"
+        && error.status === 429,
+    );
+    assert.equal((sqlite.prepare("SELECT count(*) AS total FROM analysis_exports").get() as { total: number }).total, 20);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("document export queue completes the private R2 artifact and acknowledges exactly once", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();

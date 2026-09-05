@@ -13,6 +13,7 @@ import {
 const AMOUNT_RE = /\d[\d\s.,]*\s*(?:сум|so['‘’ʻʼ]?m|uzs|usd|eur|руб(?:лей)?|доллар(?:ов)?|%)(?=$|[^\p{L}\p{N}_])/giu;
 const TERM_RE = /\d+\s*(?:(?:календарн[\p{L}\p{N}_]*|рабоч[\p{L}\p{N}_]*)\s+)?(?:день|дня|дней|месяц[\p{L}\p{N}_]*|лет|год[\p{L}\p{N}_]*|kun|oy|yil)(?=$|[^\p{L}\p{N}_])/giu;
 const DATE_RE = /\b(?:\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/gu;
+export const MAX_FUZZY_SECTION_COMPARISONS = 50_000;
 
 function tokenSet(value: string): Set<string> {
   return new Set(value.toLocaleLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []);
@@ -20,12 +21,43 @@ function tokenSet(value: string): Set<string> {
 
 function similarity(left: string, right: string): number {
   if (left === right) return 1;
-  const a = tokenSet(left);
-  const b = tokenSet(right);
+  return tokenSetSimilarity(tokenSet(left), tokenSet(right));
+}
+
+function tokenSetSimilarity(a: Set<string>, b: Set<string>): number {
   if (!a.size || !b.size) return 0;
   let overlap = 0;
   for (const token of a) if (b.has(token)) overlap += 1;
   return (2 * overlap) / (a.size + b.size);
+}
+
+function indexesBy(
+  sections: ExtractedSection[],
+  value: (section: ExtractedSection) => string | null,
+): Map<string, number[]> {
+  const result = new Map<string, number[]>();
+  for (const section of sections) {
+    const key = value(section);
+    if (!key) continue;
+    const indexes = result.get(key);
+    if (indexes) indexes.push(section.index);
+    else result.set(key, [section.index]);
+  }
+  return result;
+}
+
+function takeUnusedIndex(
+  candidates: Map<string, number[]>,
+  cursors: Map<string, number>,
+  used: Set<number>,
+  key: string,
+): number | null {
+  const indexes = candidates.get(key);
+  if (!indexes) return null;
+  let cursor = cursors.get(key) ?? 0;
+  while (cursor < indexes.length && used.has(indexes[cursor])) cursor += 1;
+  cursors.set(key, cursor + 1);
+  return cursor < indexes.length ? indexes[cursor] : null;
 }
 
 function compact(values: RegExpMatchArray | null): string[] {
@@ -200,29 +232,40 @@ function baseChange(
 function findMatches(before: ExtractedSection[], after: ExtractedSection[]): Map<number, number> {
   const matches = new Map<number, number>();
   const usedAfter = new Set<number>();
+  const labels = indexesBy(after, (section) => section.label);
+  const labelCursors = new Map<string, number>();
 
   for (const left of before) {
     if (!left.label) continue;
-    const exact = after.find((right) => !usedAfter.has(right.index) && right.label === left.label);
-    if (exact) {
-      matches.set(left.index, exact.index);
-      usedAfter.add(exact.index);
+    const exactIndex = takeUnusedIndex(labels, labelCursors, usedAfter, left.label);
+    if (exactIndex !== null) {
+      matches.set(left.index, exactIndex);
+      usedAfter.add(exactIndex);
     }
   }
+  const semanticTexts = indexesBy(after, (section) => section.semanticText || null);
+  const semanticCursors = new Map<string, number>();
   for (const left of before) {
     if (matches.has(left.index)) continue;
-    const exactText = after.find((right) => !usedAfter.has(right.index) && right.semanticText && right.semanticText === left.semanticText);
-    if (exactText) {
-      matches.set(left.index, exactText.index);
-      usedAfter.add(exactText.index);
+    if (!left.semanticText) continue;
+    const exactIndex = takeUnusedIndex(semanticTexts, semanticCursors, usedAfter, left.semanticText);
+    if (exactIndex !== null) {
+      matches.set(left.index, exactIndex);
+      usedAfter.add(exactIndex);
     }
   }
-  for (const left of before) {
-    if (matches.has(left.index)) continue;
+  const unmatchedBefore = before.filter((section) => !matches.has(section.index));
+  const unmatchedAfter = after.filter((section) => !usedAfter.has(section.index));
+  if (unmatchedBefore.length * unmatchedAfter.length > MAX_FUZZY_SECTION_COMPARISONS) {
+    return matches;
+  }
+  const afterTokens = new Map(unmatchedAfter.map((section) => [section.index, tokenSet(section.semanticText)]));
+  for (const left of unmatchedBefore) {
     let best: { index: number; score: number } | null = null;
-    for (const right of after) {
+    const leftTokens = tokenSet(left.semanticText);
+    for (const right of unmatchedAfter) {
       if (usedAfter.has(right.index)) continue;
-      const score = similarity(left.semanticText, right.semanticText);
+      const score = tokenSetSimilarity(leftTokens, afterTokens.get(right.index) ?? new Set());
       const positionPenalty = Math.min(Math.abs(left.index - right.index) / Math.max(before.length, after.length, 1), 0.2);
       const adjusted = score - positionPenalty;
       if (adjusted >= 0.46 && (!best || adjusted > best.score)) best = { index: right.index, score: adjusted };

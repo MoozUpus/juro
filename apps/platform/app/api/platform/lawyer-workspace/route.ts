@@ -82,6 +82,7 @@ export const GET = withApiErrors(async function GET() {
       `SELECT DISTINCT d.id,d.title,d.category,d.status,d.updated_at AS updatedAt,d.case_id AS caseId,r.id AS requestId
        FROM documents d JOIN lawyer_access_grants g ON g.case_id=d.case_id
        JOIN lawyer_requests r ON r.id=g.lawyer_request_id AND r.lawyer_profile_id=?
+         AND r.case_id=d.case_id AND r.workspace_id=d.workspace_id AND r.requester_user_id=d.owner_user_id
        WHERE g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
        ORDER BY d.updated_at DESC LIMIT 100`,
     ).bind(profile.id, user.id, now).all(),

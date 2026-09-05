@@ -14,6 +14,7 @@ import {
   providerFailureEvidence,
   recordDependencyHealthEvidence,
 } from "./dependency-health-evidence";
+import type { ProviderDiagnosticSafeErrorCode } from "./dependency-health-evidence";
 
 const R2_PROBE_INTERVAL_MS = 8 * 60_000;
 const MALWARE_PROBE_INTERVAL_MS = 10 * 60_000;
@@ -23,6 +24,12 @@ const DOCUMENT_ANALYSIS_PROBE_INTERVAL_MS = 25 * 60_000;
 const LAWYER_AREA_PROBE_INTERVAL_MS = 25 * 60_000;
 const EMAIL_PROBE_INTERVAL_MS = 23 * 60 * 60_000;
 const MAX_PROVIDER_RESPONSE_BYTES = 4_096;
+export const PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS = 55_000;
+export const PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS = 20_000;
+export const PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS = 3_000;
+export const PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS = 5_000;
+export const PRODUCTION_DOCUMENT_ANALYSIS_PROVIDER_TIMEOUT_MS = 25_000;
+export const PRODUCTION_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS = 55_000;
 
 const r2Payload = new TextEncoder().encode(
   "JURO production private R2 synthetic dependency probe v1\n",
@@ -48,11 +55,16 @@ export type ProductionDependencyProbeSummary = {
   lawyerArea: ProbeOutcome;
 };
 
-type ProviderProbeResult = {
+export type ProviderProbeResult = {
   provider: "openai" | "anthropic";
   fallbackFromProvider: "openai" | "anthropic" | null;
   responseKind: string;
 };
+
+export type AnthropicProductionProbeStage =
+  | "anthropic_model_access"
+  | "anthropic_connectivity"
+  | "anthropic_legal_chat_contract";
 
 export type ProductionDependencyProbeHooks = {
   fetchImpl?: typeof fetch;
@@ -75,13 +87,16 @@ async function probeDue(
   now = new Date(),
 ): Promise<boolean> {
   const row = await env.DB.prepare(
-    `SELECT state,checked_at AS checkedAt
+    `SELECT checked_at AS checkedAt
        FROM dependency_health_checks
       WHERE environment=? AND dependency_key=?
       ORDER BY checked_at DESC,id DESC
       LIMIT 1`,
-  ).bind(env.APP_ENV, key).first<{ state: string; checkedAt: string }>();
-  if (!row || row.state !== "operational") return true;
+  ).bind(env.APP_ENV, key).first<{ checkedAt: string }>();
+  if (!row) return true;
+  // A failure is still a completed observation. Ignoring its timestamp makes
+  // every degraded dependency run on the five-minute scheduler heartbeat,
+  // bypassing the per-probe cost and ledger-growth intervals above.
   const checkedAt = Date.parse(row.checkedAt);
   return !Number.isFinite(checkedAt) || now.getTime() - checkedAt >= intervalMs;
 }
@@ -284,13 +299,169 @@ function safeProviderCode(error: unknown): string {
   return "PROVIDER_UNAVAILABLE";
 }
 
+export type SafeProviderFailureReason =
+  | "openai_credit_balance_exhausted"
+  | "anthropic_organization_spend_limit"
+  | "anthropic_workspace_spend_limit"
+  | "anthropic_workspace_header_required"
+  | "anthropic_workspace_header_invalid"
+  | "anthropic_enforced_spend_limit"
+  | "anthropic_credit_balance_low"
+  | "anthropic_billing_configuration"
+  | "anthropic_workspace_policy"
+  | "anthropic_organization_policy"
+  | "anthropic_request_model"
+  | "anthropic_request_max_tokens"
+  | "anthropic_request_messages"
+  | null;
+
+export function safeProviderFailureReason(
+  provider: "openai" | "anthropic",
+  error: unknown,
+): SafeProviderFailureReason {
+  if (!(error instanceof Error)) return null;
+  const candidate = error as Error & {
+    providerStatus?: unknown;
+    providerErrorType?: unknown;
+    providerFailureReason?: unknown;
+  };
+  if (provider === "openai") {
+    return candidate.providerStatus === 429
+      && candidate.providerErrorType === "credit_balance_exhausted"
+      ? "openai_credit_balance_exhausted"
+      : null;
+  }
+  const safeReasons = new Set<Exclude<SafeProviderFailureReason, null>>([
+    "anthropic_organization_spend_limit",
+    "anthropic_workspace_spend_limit",
+    "anthropic_workspace_header_required",
+    "anthropic_workspace_header_invalid",
+    "anthropic_enforced_spend_limit",
+    "anthropic_credit_balance_low",
+    "anthropic_billing_configuration",
+    "anthropic_workspace_policy",
+    "anthropic_organization_policy",
+    "anthropic_request_model",
+    "anthropic_request_max_tokens",
+    "anthropic_request_messages",
+  ]);
+  if (typeof candidate.providerFailureReason !== "string"
+      || !safeReasons.has(candidate.providerFailureReason as Exclude<SafeProviderFailureReason, null>)) {
+    return null;
+  }
+  if (candidate.providerFailureReason === "anthropic_enforced_spend_limit") {
+    return candidate.providerStatus === 429 && candidate.providerErrorType === "rate_limit_error"
+      ? candidate.providerFailureReason
+      : null;
+  }
+  if (candidate.providerFailureReason === "anthropic_billing_configuration"
+      && candidate.providerStatus === 402 && candidate.providerErrorType === "billing_error") {
+    return candidate.providerFailureReason;
+  }
+  return candidate.providerStatus === 400 && candidate.providerErrorType === "invalid_request_error"
+    ? candidate.providerFailureReason as Exclude<SafeProviderFailureReason, null>
+    : null;
+}
+
+export function providerDiagnosticSafeErrorCode(
+  reason: SafeProviderFailureReason,
+): ProviderDiagnosticSafeErrorCode | null {
+  if (reason === "openai_credit_balance_exhausted" || reason === "anthropic_credit_balance_low") {
+    return "PROVIDER_CREDIT_BALANCE_LOW";
+  }
+  if (
+    reason === "anthropic_organization_spend_limit"
+    || reason === "anthropic_workspace_spend_limit"
+    || reason === "anthropic_enforced_spend_limit"
+  ) {
+    return "PROVIDER_SPEND_LIMIT_REACHED";
+  }
+  if (reason === "anthropic_billing_configuration") {
+    return "PROVIDER_BILLING_CONFIGURATION";
+  }
+  if (
+    reason === "anthropic_workspace_header_required"
+    || reason === "anthropic_workspace_header_invalid"
+    || reason === "anthropic_workspace_policy"
+    || reason === "anthropic_organization_policy"
+  ) {
+    return "PROVIDER_WORKSPACE_CONFIGURATION";
+  }
+  if (
+    reason === "anthropic_request_model"
+    || reason === "anthropic_request_max_tokens"
+    || reason === "anthropic_request_messages"
+  ) {
+    return "PROVIDER_REQUEST_CONFIGURATION";
+  }
+  return null;
+}
+
+function safeProviderFailureDetails(error: unknown): {
+  errorName: string;
+  providerStatus: number | null;
+  providerErrorType: string | null;
+  providerRequestId: string | null;
+  providerProbeStage: AnthropicProductionProbeStage | null;
+} {
+  if (typeof error !== "object" || error === null) {
+    return {
+      errorName: "UnknownError",
+      providerStatus: null,
+      providerErrorType: null,
+      providerRequestId: null,
+      providerProbeStage: null,
+    };
+  }
+  const candidate = error as {
+    name?: unknown;
+    providerStatus?: unknown;
+    providerErrorType?: unknown;
+    providerRequestId?: unknown;
+    providerProbeStage?: unknown;
+  };
+  const errorName = typeof candidate.name === "string"
+    && /^[A-Za-z][A-Za-z0-9]{0,63}$/u.test(candidate.name)
+    ? candidate.name
+    : "UnknownError";
+  const providerStatus = typeof candidate.providerStatus === "number"
+    && Number.isInteger(candidate.providerStatus)
+    && candidate.providerStatus >= 400
+    && candidate.providerStatus <= 599
+    ? candidate.providerStatus
+    : null;
+  const providerErrorType = typeof candidate.providerErrorType === "string"
+    && /^[A-Za-z0-9_-]{1,96}$/u.test(candidate.providerErrorType)
+    ? candidate.providerErrorType
+    : null;
+  // Anthropic documents `request-id` as the support correlation identifier.
+  // Keep only its bounded opaque form; never persist or log the response body.
+  const providerRequestId = typeof candidate.providerRequestId === "string"
+    && /^req_[A-Za-z0-9]{8,128}$/u.test(candidate.providerRequestId)
+    ? candidate.providerRequestId
+    : null;
+  const providerProbeStage = candidate.providerProbeStage === "anthropic_model_access"
+    || candidate.providerProbeStage === "anthropic_connectivity"
+    || candidate.providerProbeStage === "anthropic_legal_chat_contract"
+    ? candidate.providerProbeStage
+    : null;
+  return { errorName, providerStatus, providerErrorType, providerRequestId, providerProbeStage };
+}
+
+export function productionOpenAiProbeOptions() {
+  return {
+    providerTimeoutMs: PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
+    // This probe measures OpenAI only. A fallback result or failure must never
+    // be attributed to the OpenAI dependency-health row.
+    fallbackEnabled: false,
+  } as const;
+}
+
 async function defaultOpenAiProbe(): Promise<ProviderProbeResult> {
   const { legalAiProvider } = await import("../lib/ai/provider");
   const provider = legalAiProvider();
   if (!provider) throw Object.assign(new Error("OPENAI_NOT_CONFIGURED"), { code: "PROBE_CONFIGURATION_ERROR" });
-  const result = await provider.runLegalChat(providerRequest(), {
-    providerTimeoutMs: 20_000,
-  });
+  const result = await provider.runLegalChat(providerRequest(), productionOpenAiProbeOptions());
   return {
     provider: result.provider,
     fallbackFromProvider: result.fallbackFromProvider,
@@ -298,17 +469,73 @@ async function defaultOpenAiProbe(): Promise<ProviderProbeResult> {
   };
 }
 
-async function defaultAnthropicProbe(): Promise<ProviderProbeResult> {
-  const { runAnthropicLegalChat } = await import("../lib/ai/anthropic-provider");
-  const result = await runAnthropicLegalChat(providerRequest(), {
-    providerTimeoutMs: 20_000,
-    nonStreamingResponseStartTimeoutMs: 20_000,
+function withAnthropicProbeStage(
+  error: unknown,
+  providerProbeStage: AnthropicProductionProbeStage,
+): Error & { providerProbeStage: AnthropicProductionProbeStage } {
+  if (error instanceof Error) return Object.assign(error, { providerProbeStage });
+  return Object.assign(new Error("PROVIDER_UNAVAILABLE"), {
+    code: "PROVIDER_UNAVAILABLE",
+    providerProbeStage,
   });
-  return {
-    provider: result.provider,
-    fallbackFromProvider: result.fallbackFromProvider,
-    responseKind: result.data.responseKind,
-  };
+}
+
+export async function runAnthropicProductionProbe(hooks: {
+  modelAccess?: () => Promise<void>;
+  connectivity?: () => Promise<void>;
+  legalChat?: () => Promise<ProviderProbeResult>;
+} = {}): Promise<ProviderProbeResult> {
+  const deadlineAt = Date.now() + PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS;
+  try {
+    if (hooks.modelAccess) {
+      await hooks.modelAccess();
+    } else {
+      const { probeAnthropicModelAccess } = await import("../lib/document-builder/ai/anthropic");
+      await probeAnthropicModelAccess({
+        timeoutMs: Math.max(1, Math.min(
+          PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS,
+          deadlineAt - Date.now(),
+        )),
+        deadlineAt,
+      });
+    }
+  } catch (error) {
+    throw withAnthropicProbeStage(error, "anthropic_model_access");
+  }
+
+  try {
+    if (hooks.connectivity) {
+      await hooks.connectivity();
+    } else {
+      const { probeAnthropicConnectivity } = await import("../lib/document-builder/ai/anthropic");
+      await probeAnthropicConnectivity({
+        timeoutMs: Math.max(1, Math.min(
+          PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS,
+          deadlineAt - Date.now(),
+        )),
+        deadlineAt,
+      });
+    }
+  } catch (error) {
+    throw withAnthropicProbeStage(error, "anthropic_connectivity");
+  }
+
+  try {
+    if (hooks.legalChat) return await hooks.legalChat();
+    const remainingMs = Math.max(1, deadlineAt - Date.now());
+    const { runAnthropicLegalChat } = await import("../lib/ai/anthropic-provider");
+    const result = await runAnthropicLegalChat(providerRequest(), {
+      providerTimeoutMs: remainingMs,
+      nonStreamingResponseStartTimeoutMs: remainingMs,
+    });
+    return {
+      provider: result.provider,
+      fallbackFromProvider: result.fallbackFromProvider,
+      responseKind: result.data.responseKind,
+    };
+  } catch (error) {
+    throw withAnthropicProbeStage(error, "anthropic_legal_chat_contract");
+  }
 }
 
 async function runOneProviderProbe(
@@ -319,7 +546,7 @@ async function runOneProviderProbe(
   if (!(await probeDue(env, provider, PROVIDER_PROBE_INTERVAL_MS))) return "skipped";
   const startedAt = Date.now();
   try {
-    const result = await (hook ?? (provider === "openai" ? defaultOpenAiProbe : defaultAnthropicProbe))();
+    const result = await (hook ?? (provider === "openai" ? defaultOpenAiProbe : runAnthropicProductionProbe))();
     if (result.provider !== provider || result.fallbackFromProvider !== null
       || result.responseKind !== "clarification_required") {
       throw Object.assign(new Error("PROVIDER_PROBE_BOUNDARY_FAILED"), { code: "PROVIDER_UNAVAILABLE" });
@@ -327,8 +554,18 @@ async function runOneProviderProbe(
     await recordOperational(env, provider, startedAt);
     return "succeeded";
   } catch (error) {
+    const safeCode = safeProviderCode(error);
+    const providerFailureReason = safeProviderFailureReason(provider, error);
+    console.error(JSON.stringify({
+      event: "production_dependency_probe.provider_failed",
+      provider,
+      safeCode,
+      ...safeProviderFailureDetails(error),
+      providerFailureReason,
+      elapsedMs: Math.max(0, Date.now() - startedAt),
+    }));
     await recordDependencyHealthEvidence(env, {
-      ...providerFailureEvidence(provider, safeProviderCode(error)),
+      ...providerFailureEvidence(provider, safeCode, providerDiagnosticSafeErrorCode(providerFailureReason)),
       evidenceKind: "synthetic_probe",
       startedAt,
     });
@@ -336,27 +573,97 @@ async function runOneProviderProbe(
   }
 }
 
+export function productionDocumentAnalysisProbeOptions(now = Date.now()) {
+  return {
+    providerTimeoutMs: PRODUCTION_DOCUMENT_ANALYSIS_PROVIDER_TIMEOUT_MS,
+    providerMaxAttempts: 1,
+    deadlineAt: now + PRODUCTION_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS,
+  } as const;
+}
+
+type DocumentAnalysisProbeProvider = "openai" | "anthropic";
+
+function withDocumentAnalysisProbeProvider(
+  error: unknown,
+  provider: DocumentAnalysisProbeProvider | null,
+): Error & { documentAnalysisProbeProvider: DocumentAnalysisProbeProvider | null } {
+  if (error instanceof Error) return Object.assign(error, { documentAnalysisProbeProvider: provider });
+  return Object.assign(new Error("DOCUMENT_ANALYSIS_PROBE_FAILED"), {
+    code: "ANALYSIS_JOB_FAILED",
+    documentAnalysisProbeProvider: provider,
+  });
+}
+
+function documentAnalysisProbeProvider(error: unknown): DocumentAnalysisProbeProvider | null {
+  if (typeof error !== "object" || error === null || !("documentAnalysisProbeProvider" in error)) return null;
+  const provider = (error as { documentAnalysisProbeProvider?: unknown }).documentAnalysisProbeProvider;
+  return provider === "openai" || provider === "anthropic" ? provider : null;
+}
+
+export function documentAnalysisProbeFailureCode(error: unknown): DependencyHealthSafeErrorCode {
+  const provider = documentAnalysisProbeProvider(error);
+  const safeCode = safeProviderCode(error);
+  if (!provider) return "ANALYSIS_JOB_FAILED";
+  const diagnosticCode = providerDiagnosticSafeErrorCode(safeProviderFailureReason(provider, error));
+  if (diagnosticCode) return diagnosticCode;
+  if (safeCode === "PROBE_CONFIGURATION_ERROR") return "PROBE_CONFIGURATION_ERROR";
+  if (safeCode === "PROVIDER_TIMEOUT") return "PROVIDER_TIMEOUT";
+  if (
+    safeCode === "PROVIDER_UNAVAILABLE"
+    || safeCode === "PROVIDER_CIRCUIT_OPEN"
+    || safeCode === "ANTHROPIC_PREFLIGHT_FAILED"
+    || safeCode === "ANTHROPIC_REQUEST_FAILED"
+  ) {
+    return "PROVIDER_UNAVAILABLE";
+  }
+  return "ANALYSIS_JOB_FAILED";
+}
+
+function logDocumentAnalysisProbeFailure(
+  error: unknown,
+  safeErrorCode: DependencyHealthSafeErrorCode,
+  startedAt: number,
+): void {
+  const provider = documentAnalysisProbeProvider(error);
+  console.error(JSON.stringify({
+    event: "production_dependency_probe.document_analysis_failed",
+    provider,
+    safeCode: safeProviderCode(error),
+    safeErrorCode,
+    ...safeProviderFailureDetails(error),
+    providerFailureReason: provider ? safeProviderFailureReason(provider, error) : null,
+    elapsedMs: Math.max(0, Date.now() - startedAt),
+  }));
+}
+
 async function defaultDocumentAnalysisProbe(): Promise<void> {
   const { runDocumentAnalysis } = await import("../lib/document-analysis/provider");
-  await runDocumentAnalysis({
-    fileName: "juro-production-synthetic-probe.txt",
-    mimeType: "text/plain",
-    extractedText: "Synthetic technical health-check document. It contains no user data and no legal claim.",
-    detectedLanguage: "en",
-    extractionWarnings: [],
-    packageContext: null,
-    locale: "ru",
-    mode: "quick",
-    userSide: null,
-    sources: [],
-    legalDatabaseAsOf: "unavailable",
-    requestId: crypto.randomUUID(),
-  }, {
-    providerTimeoutMs: 50_000,
-    providerMaxAttempts: 1,
-    deadlineAt: Date.now() + 55_000,
-    fallbackEnabled: false,
-  });
+  let lastProvider: DocumentAnalysisProbeProvider | null = null;
+  try {
+    await runDocumentAnalysis({
+      fileName: "juro-production-synthetic-probe.txt",
+      mimeType: "text/plain",
+      extractedText: "Synthetic technical health-check document. It contains no user data and no legal claim.",
+      detectedLanguage: "en",
+      extractionWarnings: [],
+      packageContext: null,
+      locale: "ru",
+      mode: "quick",
+      userSide: null,
+      sources: [],
+      legalDatabaseAsOf: "unavailable",
+      requestId: crypto.randomUUID(),
+    }, {
+      ...productionDocumentAnalysisProbeOptions(),
+      // This is a feature probe, not a provider probe. Follow the same quick
+      // OpenAI -> Anthropic route as a user analysis so one healthy provider
+      // keeps the feature operational. The dedicated provider probes above
+      // continue to isolate and report each provider independently.
+      beforeProviderCall: ({ provider }) => { lastProvider = provider; },
+    });
+  } catch (error) {
+    throw withDocumentAnalysisProbeProvider(error, lastProvider);
+  }
 }
 
 async function runDocumentAnalysisProbe(
@@ -369,8 +676,10 @@ async function runDocumentAnalysisProbe(
     await (hook ?? defaultDocumentAnalysisProbe)();
     await recordOperational(env, "document_analysis", startedAt);
     return "succeeded";
-  } catch {
-    await recordFailure(env, "document_analysis", "ANALYSIS_JOB_FAILED", startedAt);
+  } catch (error) {
+    const safeErrorCode = documentAnalysisProbeFailureCode(error);
+    logDocumentAnalysisProbeFailure(error, safeErrorCode, startedAt);
+    await recordFailure(env, "document_analysis", safeErrorCode, startedAt);
     return "failed";
   }
 }
@@ -392,7 +701,11 @@ async function runMalwareScannerProbe(env: PlatformJobEnv): Promise<ProbeOutcome
         "x-juro-scan-schema": "1",
       },
       body: eicarBytes,
-      signal: AbortSignal.timeout(30_000),
+      // The private ClamAV container scales to zero between sparse requests.
+      // Production evidence shows a clean cold scan can take nearly 30 seconds,
+      // so keep the probe bounded without classifying a healthy cold start as
+      // an outage. This remains far below the Cron invocation wall-time.
+      signal: AbortSignal.timeout(PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS),
     });
     if (!response.ok) {
       await response.body?.cancel();

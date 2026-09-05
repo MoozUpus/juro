@@ -127,6 +127,8 @@ export type LegalAiRunOptions = {
   signal?: AbortSignal;
   /** A single request budget shared by primary, fallback and finalization. */
   budget?: AiExecutionBudget;
+  /** Disable cross-provider fallback for provider-isolated health checks. */
+  fallbackEnabled?: boolean;
   /** Internal fallback cap derived from the same request budget. */
   providerTimeoutMs?: number;
   /**
@@ -363,6 +365,12 @@ export function isAnthropicFallbackEligible(error: unknown): boolean {
     && shouldUseAnthropicFallback(error);
 }
 
+export function providerFallbackEnabled(
+  options: Pick<LegalAiRunOptions, "fallbackEnabled">,
+): boolean {
+  return options.fallbackEnabled !== false;
+}
+
 class ResilientLegalProvider implements LegalAiProvider {
   readonly name: string;
 
@@ -378,7 +386,9 @@ class ResilientLegalProvider implements LegalAiProvider {
     try {
       return await new OpenAiLegalProvider().runLegalChat(input, options);
     } catch (error) {
-      if (!hasAnthropicConfiguration() || !isAnthropicFallbackEligible(error)) throw error;
+      if (!providerFallbackEnabled(options)
+        || !hasAnthropicConfiguration()
+        || !isAnthropicFallbackEligible(error)) throw error;
       await assertAiProviderEnabled("anthropic");
       const explicitRemainingMs = options.providerTimeoutMs === undefined
         ? null

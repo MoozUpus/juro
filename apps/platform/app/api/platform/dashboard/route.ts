@@ -1,32 +1,48 @@
 import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
+import { documentVisibilityScope } from "../../../../lib/document-builder/permissions/document-visibility";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
-import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { workspaceForUser, workspaceForUserById } from "../../../../lib/platform/workspace";
+import { isWorkspaceId } from "../../../../lib/platform/routing";
 
 function response(body: unknown) {
   return Response.json(body, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }
 
-export const GET = withApiErrors(async function GET() {
-  const user = await requireApiUser();
+export const GET = withApiErrors(async function GET(request: Request) {
+  const user = await requireApiUser(request);
   const db = requireD1();
-  const workspace = await workspaceForUser(user);
+  const requestedWorkspaceId = request.headers.get("x-juro-workspace-id");
+  const workspace = requestedWorkspaceId
+    ? (isWorkspaceId(requestedWorkspaceId)
+      ? await workspaceForUserById(user.id, requestedWorkspaceId)
+      : null)
+    : await workspaceForUser(user);
+  if (!workspace) {
+    return Response.json(
+      { code: "WORKSPACE_UNAVAILABLE" },
+      { status: 404, headers: { "cache-control": "private, no-store", pragma: "no-cache" } },
+    );
+  }
+  const documentVisibility = documentVisibilityScope(user.id, workspace.id);
   const [counts, cases, documents, deadlines, consultations, notifications, analyses, comparisons] = await db.batch([
     db.prepare(
       `SELECT
         (SELECT count(*) FROM cases WHERE workspace_id = ? AND archived_at IS NULL) AS activeCases,
-        (SELECT count(*) FROM documents WHERE workspace_id = ? AND archived_at IS NULL) AS documents,
+        (SELECT count(*) FROM documents d WHERE ${documentVisibility.sql} AND d.archived_at IS NULL) AS documents,
         (SELECT count(*) FROM consultation_bookings WHERE workspace_id = ? AND status NOT IN ('completed','cancelled')) AS consultations,
         (SELECT count(*) FROM notifications WHERE user_id = ? AND workspace_id = ? AND read_at IS NULL) AS unreadNotifications`,
-    ).bind(workspace.id, workspace.id, workspace.id, user.id, workspace.id),
+    ).bind(workspace.id, ...documentVisibility.bindings, workspace.id, user.id, workspace.id),
     db.prepare(
       `SELECT c.id,c.title,c.status,c.updated_at AS updatedAt,p.progress_percent AS progressPercent
        FROM cases c LEFT JOIN action_plans p ON p.case_id=c.id
        WHERE c.workspace_id=? AND c.archived_at IS NULL ORDER BY c.updated_at DESC LIMIT 4`,
     ).bind(workspace.id),
     db.prepare(
-      `SELECT id,title,status,category,updated_at AS updatedAt
-       FROM documents WHERE workspace_id=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 4`,
-    ).bind(workspace.id),
+      `SELECT d.id,d.title,d.status,d.category,d.updated_at AS updatedAt
+       FROM documents d
+       WHERE ${documentVisibility.sql} AND d.archived_at IS NULL
+       ORDER BY d.updated_at DESC LIMIT 4`,
+    ).bind(...documentVisibility.bindings),
     db.prepare(
       `SELECT s.id,s.title,s.due_at AS dueAt,c.id AS caseId,c.title AS caseTitle
        FROM action_plan_steps s

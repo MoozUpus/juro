@@ -5,6 +5,8 @@ export type PublicLawyerDirectoryRow = {
   languagesJson: unknown;
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes?: number;
+  additionalServicesJson?: unknown;
   availabilityStatus: string;
   nextAvailableAt: string | null;
   advocateStatus: string;
@@ -92,6 +94,8 @@ export function projectPublicLawyerDirectory(
       languages: stringList(lawyer.languagesJson),
       experienceYears: lawyer.experienceYears,
       priceDescription: lawyer.priceDescription,
+      consultationDurationMinutes: lawyer.consultationDurationMinutes ?? 60,
+      additionalServices: stringList(lawyer.additionalServicesJson),
       availabilityStatus: lawyer.availabilityStatus,
       nextAvailableAt: lawyer.nextAvailableAt,
       advocateStatus: lawyer.advocateStatus,

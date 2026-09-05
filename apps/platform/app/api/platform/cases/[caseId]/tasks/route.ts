@@ -2,7 +2,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../.
 import { isoNow, parseJson } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 import { taskStatusForPlanStep, taskStatusIsTerminal } from "../../../../../../lib/platform/task-status";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
@@ -58,7 +58,7 @@ export const POST = withApiErrors(async function POST(
   assertSafeWrite(request);
   const user = await requireApiUser();
   const { caseId } = await params;
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const db = requireD1();
   const owned = await db.prepare("SELECT id FROM cases WHERE id=? AND workspace_id=? AND archived_at IS NULL LIMIT 1").bind(caseId, workspace.id).first();
   if (!owned) return response({ error: "Дело недоступно.", code: "CASE_UNAVAILABLE" }, 404);

@@ -13,6 +13,8 @@ type Lawyer = {
   languages: string[];
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes: number;
+  additionalServices: string[];
   availabilityStatus: "unknown" | "available" | "limited" | "unavailable";
   nextAvailableAt: string | null;
   advocateStatus: "not_declared" | "declared" | "verified";
@@ -88,7 +90,7 @@ export function LawyerDirectoryClient({ locale, accountType, workspaceId }: { lo
       </div>
       {underReview && <p className="lawyer-pending-review" role="status">{ru ? "Профиль на проверке JURO · запись пока недоступна" : "Profil JURO tekshiruvida · hozircha so‘rov yuborib bo‘lmaydi"}</p>}
       <p className="lawyer-directory-specialties">{lawyer.specialties.join(" · ") || (ru ? "Специализация уточняется" : "Mutaxassislik aniqlashtirilmoqda")}</p>
-      <dl><div><dt>{ru ? "Языки" : "Tillar"}</dt><dd>{lawyer.languages.join(", ") || "—"}</dd></div>{lawyer.city && <div><dt>{ru ? "Город" : "Shahar"}</dt><dd>{[lawyer.city, lawyer.region].filter(Boolean).join(", ")}</dd></div>}<div><dt>{ru ? "Доступность" : "Mavjudlik"}</dt><dd>{availability[lawyer.availabilityStatus][ru ? 0 : 1]}</dd></div>{lawyer.experienceYears !== null && <div><dt>{ru ? "Опыт" : "Tajriba"}</dt><dd>{ru ? `${lawyer.experienceYears} лет` : `${lawyer.experienceYears} yil`}</dd></div>}{lawyer.priceDescription && <div><dt>{ru ? "Цена" : "Narx"}</dt><dd>{lawyer.priceDescription}</dd></div>}</dl>
+      <dl><div><dt>{ru ? "Языки" : "Tillar"}</dt><dd>{lawyer.languages.join(", ") || "—"}</dd></div>{lawyer.city && <div><dt>{ru ? "Город" : "Shahar"}</dt><dd>{[lawyer.city, lawyer.region].filter(Boolean).join(", ")}</dd></div>}<div><dt>{ru ? "Доступность" : "Mavjudlik"}</dt><dd>{availability[lawyer.availabilityStatus][ru ? 0 : 1]}</dd></div>{lawyer.experienceYears !== null && <div><dt>{ru ? "Опыт" : "Tajriba"}</dt><dd>{ru ? `${lawyer.experienceYears} лет` : `${lawyer.experienceYears} yil`}</dd></div>}{lawyer.priceDescription && <div><dt>{ru ? "Цена" : "Narx"}</dt><dd>{lawyer.priceDescription}</dd></div>}<div><dt>{ru ? "Длительность" : "Davomiyligi"}</dt><dd>{lawyer.consultationDurationMinutes} {ru ? "мин." : "daq."}</dd></div></dl>
       <p className="lawyer-rating"><Star aria-hidden="true" />{lawyer.rating.reviewCount && lawyer.rating.overallAverage !== null ? `${lawyer.rating.overallAverage.toFixed(1)}/5 · ${lawyer.rating.reviewCount}` : (ru ? "Нет одобренных отзывов" : "Tasdiqlangan fikrlar yo‘q")}</p>
       {lawyer.topLawyer && lawyer.topLawyerCriteria && <p className="lawyer-top-criteria">{lawyer.topLawyerCriteria}</p>}
       <div className="lawyer-directory-actions"><Link href={`${base}/lawyers/${encodeURIComponent(lawyer.id)}`}>{ru ? "Профиль" : "Profil"}</Link>{underReview ? <span aria-disabled="true">{ru ? "Запись после проверки" : "Tekshiruvdan keyin"}</span> : <Link className="primary" href={`${base}/consultations?lawyer=${encodeURIComponent(lawyer.id)}`}>{ru ? "Выбрать для заявки" : "So‘rov uchun tanlash"}</Link>}</div>

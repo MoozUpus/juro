@@ -206,7 +206,8 @@ test("Builder version routes and RU/UZ UI retain owner, CSRF and recovery contra
   assert.match(collaboration, /applyProjectedDocumentContentVersion/);
   assert.match(collaboration, /source: "suggestion"/);
   assert.doesNotMatch(collaboration, /UPDATE document_current_content SET final_content = \?, manually_edited = 1/);
-  assert.ok(signedFile.indexOf('source: "signature"') < signedFile.indexOf("await putPrivateObject"));
+  assert.ok(signedFile.indexOf('source: "signature"') < signedFile.indexOf("await quarantineScanAndStorePrivateObject"));
+  assert.match(signedFile, /quarantineScanAndStorePrivateObject/);
   assert.ok(signedFile.indexOf('source: "signature"') < signedFile.indexOf("SET signed_file_id"));
   assert.match(signedFile, /await bucket\.delete\(key\)\.catch/);
   assert.match(responses, /VERSION_STORAGE_FAILED/);

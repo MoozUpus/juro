@@ -1,4 +1,5 @@
 import { requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
+import { documentVisibilityScope } from "../../../../../../lib/document-builder/permissions/document-visibility";
 import { parseJson } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
@@ -19,14 +20,26 @@ export const GET = withApiErrors(async function GET(
     "SELECT id FROM cases WHERE id=? AND workspace_id=? AND archived_at IS NULL LIMIT 1",
   ).bind(caseId, workspace.id).first<{ id: string }>();
   if (!owned) return response({ error: "Дело недоступно.", code: "CASE_UNAVAILABLE" }, 404);
+  const documentVisibility = documentVisibilityScope(user.id, workspace.id);
+  const eventDocumentId = "json_extract(CASE WHEN json_valid(e.metadata_json) THEN e.metadata_json ELSE '{}' END, '$.documentId')";
 
   const [documents, events, conversations, analyses, comparisons, sources, bookmarks, participants, lawyerRequests] = await db.batch([
     db.prepare(
-      "SELECT id,title,status,language,plan_step_id AS planStepId,updated_at AS updatedAt FROM documents WHERE workspace_id=? AND case_id=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 20",
-    ).bind(workspace.id, caseId),
+      `SELECT d.id,d.title,d.status,d.language,d.plan_step_id AS planStepId,d.updated_at AS updatedAt
+       FROM documents d
+       WHERE ${documentVisibility.sql} AND d.case_id=? AND d.archived_at IS NULL
+       ORDER BY d.updated_at DESC LIMIT 20`,
+    ).bind(...documentVisibility.bindings, caseId),
     db.prepare(
-      "SELECT event_type AS eventType,metadata_json AS metadataJson,created_at AS createdAt FROM case_events WHERE case_id=? ORDER BY created_at DESC LIMIT 50",
-    ).bind(caseId),
+      `SELECT e.event_type AS eventType,e.metadata_json AS metadataJson,e.created_at AS createdAt
+       FROM case_events e
+       WHERE e.case_id=?
+         AND (${eventDocumentId} IS NULL OR EXISTS (
+           SELECT 1 FROM documents d
+           WHERE d.id=${eventDocumentId} AND ${documentVisibility.sql}
+         ))
+       ORDER BY e.created_at DESC LIMIT 50`,
+    ).bind(caseId, ...documentVisibility.bindings),
     db.prepare(
       `SELECT id,title,status,locale,updated_at AS updatedAt
        FROM conversations

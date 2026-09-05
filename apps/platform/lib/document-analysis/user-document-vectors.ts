@@ -417,6 +417,22 @@ export async function executeUserDocumentIndexJob(
     const chunks = chunkUserDocument(text);
     if (chunks.length === 0) throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_OBJECT_INVALID", false);
     const vectorIds = await Promise.all(chunks.map((chunk) => vectorId(env, row, chunk.index)));
+    // Persist every deterministic vector ID before the first external write.
+    // A failed/aborted upsert therefore remains discoverable by account and
+    // analysis retention instead of becoming an untracked Vectorize orphan.
+    await env.DB.batch(chunks.map((chunk, index) => env.DB.prepare(
+      `INSERT OR IGNORE INTO user_document_vector_chunks
+       (id,job_id,vector_id,chunk_index,char_start,char_end,page,status,mutation_id,submitted_at,deleted_at)
+       VALUES (?,?,?,?,?,?,0,'submitted',NULL,?,NULL)`,
+    ).bind(
+      `${jobId}:${chunk.index}`,
+      jobId,
+      vectorIds[index],
+      chunk.index,
+      chunk.start,
+      chunk.end,
+      now,
+    )));
     let latestMutationId: string | null = null;
     for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
       const batch = chunks.slice(start, start + EMBEDDING_BATCH_SIZE);
@@ -451,18 +467,16 @@ export async function executeUserDocumentIndexJob(
     }
 
     const statements: D1PreparedStatement[] = chunks.map((chunk, index) => env.DB.prepare(
-      `INSERT INTO user_document_vector_chunks
-       (id,job_id,vector_id,chunk_index,char_start,char_end,page,status,mutation_id,submitted_at,deleted_at)
-       VALUES (?,?,?,?,?,?,0,'submitted',?,?,NULL)`,
+      `UPDATE user_document_vector_chunks
+       SET mutation_id=?,submitted_at=?,deleted_at=NULL
+       WHERE id=? AND job_id=? AND vector_id=? AND chunk_index=? AND status='submitted'`,
     ).bind(
+      latestMutationId,
+      now,
       `${jobId}:${chunk.index}`,
       jobId,
       vectorIds[index],
       chunk.index,
-      chunk.start,
-      chunk.end,
-      latestMutationId,
-      now,
     ));
     statements.push(env.DB.prepare(
       `UPDATE user_document_index_jobs SET status='submitted',chunk_count=?,mutation_id=?,
@@ -689,6 +703,49 @@ export async function deleteUserDocumentVectorsForOwner(
         rows.results.slice(start, start + VECTOR_BATCH_SIZE).map((item) => item.vectorId),
       );
       latestMutationId = mutationId(mutation) ?? latestMutationId;
+    } catch {
+      throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_MUTATION_FAILED", true);
+    }
+  }
+  const jobIds = [...new Set(rows.results.map((item) => item.jobId))];
+  await env.DB.batch([
+    ...rows.results.map((item) => env.DB.prepare(
+      "UPDATE user_document_vector_chunks SET status='delete_submitted',mutation_id=?,deleted_at=? WHERE vector_id=?",
+    ).bind(latestMutationId, now, item.vectorId)),
+    ...jobIds.map((jobId) => env.DB.prepare(
+      "UPDATE user_document_index_jobs SET status='delete_submitted',mutation_id=?,deleted_at=?,updated_at=? WHERE id=?",
+    ).bind(latestMutationId, now, now, jobId)),
+  ]);
+  return rows.results.length;
+}
+
+export async function deleteUserDocumentVectorsForAnalysis(
+  env: { DB: D1Database; USER_DOCUMENTS_INDEX?: VectorizeIndex },
+  input: { analysisId: string; workspaceId: string; userId: string },
+  now = new Date().toISOString(),
+): Promise<number> {
+  const rows = await env.DB.prepare(
+    `SELECT chunk.vector_id AS vectorId,job.id AS jobId
+     FROM user_document_index_jobs job
+     JOIN user_document_vector_chunks chunk ON chunk.job_id=job.id
+     WHERE job.analysis_id=? AND job.workspace_id=? AND job.owner_user_id=?
+       AND chunk.status IN ('submitted','delete_submitted')
+     ORDER BY job.id,chunk.chunk_index`,
+  ).bind(input.analysisId, input.workspaceId, input.userId).all<{ vectorId: string; jobId: string }>();
+  if (rows.results.length === 0) return 0;
+  if (!env.USER_DOCUMENTS_INDEX) {
+    throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_CONFIGURATION_UNAVAILABLE", true);
+  }
+  let latestMutationId: string | null = null;
+  for (let start = 0; start < rows.results.length; start += VECTOR_BATCH_SIZE) {
+    const batchIds = rows.results.slice(start, start + VECTOR_BATCH_SIZE).map((item) => item.vectorId);
+    try {
+      const mutation = await env.USER_DOCUMENTS_INDEX.deleteByIds(batchIds);
+      latestMutationId = mutationId(mutation) ?? latestMutationId;
+      const remaining = await env.USER_DOCUMENTS_INDEX.getByIds(batchIds);
+      if (remaining.length > 0) {
+        throw new Error("VECTOR_DELETE_NOT_VISIBLE");
+      }
     } catch {
       throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_MUTATION_FAILED", true);
     }

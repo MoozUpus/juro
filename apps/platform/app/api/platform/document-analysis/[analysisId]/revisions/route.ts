@@ -6,7 +6,7 @@ import {
   applySuggestedRevisions,
   listAnalysisRevisionState,
 } from "../../../../../../lib/document-analysis/revisions";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../../../lib/platform/workspace";
 
 const applySchema = z.object({
   mode: z.enum(["selected", "all"]),
@@ -64,7 +64,7 @@ export const POST = withApiErrors(async function POST(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { analysisId } = await context.params;
   const parsed = applySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return response({ code: "ANALYSIS_REVISION_INVALID_SELECTION", error: "Некорректный список исправлений." }, 400);

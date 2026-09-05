@@ -176,6 +176,32 @@ test("archive и restore следуют утвержденным статуса�
 test("удаление требует решения только для подписанного PDF", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/route.ts", root), "utf8"); assert.match(source, /SIGNED_FILE_DECISION_REQUIRED/); });
 test("подписанный файл ограничен PDF и 10 МБ", async () => { const source = await readFile(new URL("lib/document-builder/storage/file-validation.ts", root), "utf8"); assert.match(source, /10 \* 1024 \* 1024/); assert.match(source, /signedPdfOnly/); });
 
+test("builder uploads pass byte validation and checksum-bound malware quarantine before private storage", async () => {
+  const [attachment, signed, pipeline] = await Promise.all([
+    readFile(new URL("app/api/document-builder/documents/[id]/attachments/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/[id]/signed-file/route.ts", root), "utf8"),
+    readFile(new URL("lib/document-builder/storage/quarantined-upload.ts", root), "utf8"),
+  ]);
+  for (const route of [attachment, signed]) {
+    assert.match(route, /validateUploadBytes\(file, bytes\)/);
+    assert.match(route, /quarantineScanAndStorePrivateObject/);
+    assert.ok(route.indexOf("quarantineScanAndStorePrivateObject") < route.indexOf("INSERT INTO document_files"));
+  }
+  assert.match(pipeline, /requireQuarantineR2\(\)/);
+  assert.match(pipeline, /malwareScannerResponseSchema\.safeParse/);
+  assert.match(pipeline, /parsed\.data\.sourceSha256 !== checksum/);
+  assert.match(pipeline, /parsed\.data\.verdict !== "clean"/);
+  assert.match(pipeline, /scanStatus: "clean"/);
+  assert.match(pipeline, /destination\.delete\(input\.key\)/);
+});
+
+test("hidden collaborator attachments stay hidden for inline and download responses", async () => {
+  const route = await readFile(new URL("app/api/document-builder/documents/[id]/files/[fileId]/route.ts", root), "utf8");
+  assert.match(route, /file\.kind === "attachment" && access\.role === "collaborator"/);
+  assert.doesNotMatch(route, /file\.kind === "attachment" && access\.role === "collaborator" && requestedInline/);
+  assert.match(route, /visible_to_collaborator = 1/);
+});
+
 test("collaboration проверяет owner и collaborator", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(source, /hasDocumentPermission\(access, "invite_participant"\)/); assert.match(source, /access\.role === "collaborator"/); assert.match(source, /ALREADY_COLLABORATOR/); });
 test("collaboration назначает роль, вторую или третью сторону и проверяет server-side permissions", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(source, /partyNumber/); assert.match(source, /requestedRole/); assert.match(source, /hasDocumentPermission/); });
 test("приглашение использует случайный token, hash, срок действия и привязку к пользователю", async () => { const invitation = await readFile(new URL("app/api/document-builder/invitations/[token]/route.ts", root), "utf8"); const collaboration = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(collaboration, /randomToken\(\)/); assert.match(collaboration, /sha256\(token\)/); assert.match(collaboration, /addDays\(now, 7\)/); assert.match(invitation, /targetIdentifierHash/); assert.match(invitation, /assertSafeWrite/); });
@@ -184,7 +210,8 @@ test("AI-рекомендация применима только после я�
 
 test("основная публичная ссылка имеет срок 7 дней", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/share/route.ts", root), "utf8"); assert.match(source, /addDays\(now, 7\)/); assert.match(source, /token_hash/); });
 test("самостоятельная PDF-ссылка имеет срок 24 часа", async () => { const source = await readFile(new URL("app/api/document-builder/standalone-files/[id]/share/route.ts", root), "utf8"); assert.match(source, /addHours\(now, 24\)/); });
-test("код доступа состоит из четырех цифр и хранится как hash", async () => { const route = await readFile(new URL("app/api/document-builder/standalone-files/[id]/share/route.ts", root), "utf8"); const cryptoSource = await readFile(new URL("lib/document-builder/share-links/crypto.ts", root), "utf8"); assert.match(cryptoSource, /padStart\(4/); assert.match(route, /code_hash/); });
+test("новый код доступа состоит из шести цифр, хранится только как hash и ротируется вместе со ссылкой", async () => { const route = await readFile(new URL("app/api/document-builder/standalone-files/[id]/share/route.ts", root), "utf8"); const cryptoSource = await readFile(new URL("lib/document-builder/share-links/crypto.ts", root), "utf8"); assert.match(cryptoSource, /padStart\(6/); assert.match(route, /access_code_hash/); assert.match(route, /access_code_digits/); assert.match(route, /VALUES \(\?, \?, \?, \?, \?, '', \?, 6/); assert.doesNotMatch(route, /reuseCode/); });
+test("проверка публичной PDF-ссылки атомарно ограничивает попытки и число сессий", async () => { const route = await readFile(new URL("app/api/document-builder/standalone-signed-shares/[token]/verify/route.ts", root), "utf8"); const attempts = await readFile(new URL("lib/document-builder/share-links/verification-attempts.ts", root), "utf8"); assert.match(attempts, /UPDATE standalone_signed_pdf_shares/); assert.match(attempts, /verification_locked_until/); assert.match(attempts, /RETURNING verification_attempt_count/); assert.match(route, /LIMIT -1 OFFSET 4/); assert.match(route, /DELETE FROM signed_share_sessions WHERE share_id=\? AND expires_at<=\?/); });
 test("истекшая ссылка возвращает точное сообщение", async () => { const source = await readFile(new URL("app/_document-builder/signed-share/[token]/page.tsx", root), "utf8"); assert.match(source, /Срок действия ссылки истёк/); });
 test("новая активная ссылка деактивирует предыдущую", async () => { const source = await readFile(new URL("app/api/document-builder/standalone-files/[id]/share/route.ts", root), "utf8"); assert.match(source, /deactivated_at/); });
 test("mobile preview имеет fullscreen режим без overflow", async () => { const css = await readFile(new URL("app/_document-builder/document-builder.css", root), "utf8"); assert.match(css, /dbt-mobile-preview-button/); assert.match(css, /position:\s*fixed/); assert.match(css, /overflow-x:\s*hidden/); });

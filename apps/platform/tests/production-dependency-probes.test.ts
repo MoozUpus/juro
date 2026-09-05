@@ -5,8 +5,20 @@ import type { DependencyHealthKey } from "../lib/operations/dependency-health";
 import { recordDependencyHealthEvidence } from "../worker/dependency-health-evidence";
 import type { PlatformJobEnv } from "../worker/platform-jobs";
 import {
+  PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS,
+  PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS,
+  PRODUCTION_DOCUMENT_ANALYSIS_PROVIDER_TIMEOUT_MS,
+  PRODUCTION_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS,
+  PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS,
+  PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS,
+  documentAnalysisProbeFailureCode,
   productionDependencyProbesEnabled,
+  productionDocumentAnalysisProbeOptions,
+  productionOpenAiProbeOptions,
+  providerDiagnosticSafeErrorCode,
+  runAnthropicProductionProbe,
   runProductionDependencyProbes,
+  safeProviderFailureReason,
 } from "../worker/production-dependency-probes";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -108,6 +120,179 @@ test("production dependency probes are impossible outside explicitly enabled pro
   }), true);
 });
 
+test("the production malware probe allows a bounded ClamAV cold start", () => {
+  assert.equal(PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS, 55_000);
+  assert.ok(PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS > 30_000);
+  assert.ok(PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS < 60_000);
+});
+
+test("production provider probes stay bounded and isolate OpenAI from fallback", () => {
+  assert.equal(PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS, 20_000);
+  assert.equal(PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS, 3_000);
+  assert.equal(PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS, 5_000);
+  assert.ok(PRODUCTION_ANTHROPIC_MODEL_ACCESS_TIMEOUT_MS < PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS);
+  assert.ok(PRODUCTION_ANTHROPIC_CONNECTIVITY_TIMEOUT_MS < PRODUCTION_PROVIDER_PROBE_TIMEOUT_MS);
+  assert.deepEqual(productionOpenAiProbeOptions(), {
+    providerTimeoutMs: 20_000,
+    fallbackEnabled: false,
+  });
+});
+
+test("the document-analysis feature probe reserves time for real provider fallback", () => {
+  assert.equal(PRODUCTION_DOCUMENT_ANALYSIS_PROVIDER_TIMEOUT_MS, 25_000);
+  assert.equal(PRODUCTION_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS, 55_000);
+  assert.ok(PRODUCTION_DOCUMENT_ANALYSIS_PROVIDER_TIMEOUT_MS * 2 < PRODUCTION_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS);
+  const options = productionDocumentAnalysisProbeOptions(1_000);
+  assert.deepEqual(options, {
+    providerTimeoutMs: 25_000,
+    providerMaxAttempts: 1,
+    deadlineAt: 56_000,
+  });
+  assert.equal("fallbackEnabled" in options, false);
+});
+
+test("document-analysis probe failures preserve only exact safe provider causes", () => {
+  assert.equal(documentAnalysisProbeFailureCode(Object.assign(new Error("private response"), {
+    code: "PROVIDER_UNAVAILABLE",
+    providerStatus: 429,
+    providerErrorType: "credit_balance_exhausted",
+    documentAnalysisProbeProvider: "openai",
+  })), "PROVIDER_CREDIT_BALANCE_LOW");
+  assert.equal(documentAnalysisProbeFailureCode(Object.assign(new Error("private response"), {
+    code: "PROVIDER_UNAVAILABLE",
+    providerStatus: 400,
+    providerErrorType: "invalid_request_error",
+    providerFailureReason: "anthropic_workspace_spend_limit",
+    documentAnalysisProbeProvider: "anthropic",
+  })), "PROVIDER_SPEND_LIMIT_REACHED");
+  assert.equal(documentAnalysisProbeFailureCode(Object.assign(new Error("private response"), {
+    code: "INVALID_AI_OUTPUT",
+    documentAnalysisProbeProvider: "anthropic",
+  })), "ANALYSIS_JOB_FAILED");
+  assert.equal(documentAnalysisProbeFailureCode(new Error("private response")), "ANALYSIS_JOB_FAILED");
+});
+
+test("Anthropic production probe runs model access, connectivity, then the legal-chat contract", async () => {
+  const calls: string[] = [];
+  const result = await runAnthropicProductionProbe({
+    modelAccess: async () => { calls.push("model-access"); },
+    connectivity: async () => { calls.push("connectivity"); },
+    legalChat: async () => {
+      calls.push("legal-chat");
+      return {
+        provider: "anthropic",
+        fallbackFromProvider: null,
+        responseKind: "clarification_required",
+      };
+    },
+  });
+  assert.deepEqual(calls, ["model-access", "connectivity", "legal-chat"]);
+  assert.deepEqual(result, {
+    provider: "anthropic",
+    fallbackFromProvider: null,
+    responseKind: "clarification_required",
+  });
+});
+
+test("Anthropic production probe stops at model-access failure and tags the stage", async () => {
+  let connectivityCalled = false;
+  let legalChatCalled = false;
+  await assert.rejects(() => runAnthropicProductionProbe({
+    modelAccess: async () => { throw new Error("private model-access detail"); },
+    connectivity: async () => { connectivityCalled = true; },
+    legalChat: async () => {
+      legalChatCalled = true;
+      throw new Error("must not run");
+    },
+  }), (error: unknown) => error instanceof Error
+    && (error as Error & { providerProbeStage?: unknown }).providerProbeStage === "anthropic_model_access");
+  assert.equal(connectivityCalled, false);
+  assert.equal(legalChatCalled, false);
+});
+
+test("Anthropic production probe stops at connectivity failure and tags the stage", async () => {
+  let legalChatCalled = false;
+  await assert.rejects(() => runAnthropicProductionProbe({
+    modelAccess: async () => undefined,
+    connectivity: async () => { throw new Error("private connectivity detail"); },
+    legalChat: async () => {
+      legalChatCalled = true;
+      throw new Error("must not run");
+    },
+  }), (error: unknown) => error instanceof Error
+    && (error as Error & { providerProbeStage?: unknown }).providerProbeStage === "anthropic_connectivity");
+  assert.equal(legalChatCalled, false);
+});
+
+test("Anthropic production probe tags a legal-chat contract failure after connectivity succeeds", async () => {
+  await assert.rejects(() => runAnthropicProductionProbe({
+    modelAccess: async () => undefined,
+    connectivity: async () => undefined,
+    legalChat: async () => { throw new Error("private legal-chat detail"); },
+  }), (error: unknown) => error instanceof Error
+    && (error as Error & { providerProbeStage?: unknown }).providerProbeStage === "anthropic_legal_chat_contract");
+});
+
+test("Anthropic probe diagnostics classify only documented content-free 400 causes", () => {
+  const failure = (providerFailureReason: string) => Object.assign(new Error(
+    "Резервный AI-провайдер не прошёл проверку соединения.",
+  ), {
+    providerStatus: 400,
+    providerErrorType: "invalid_request_error",
+    providerFailureReason,
+  });
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "anthropic_workspace_spend_limit",
+  )), "anthropic_workspace_spend_limit");
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "anthropic_organization_spend_limit",
+  )), "anthropic_organization_spend_limit");
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "anthropic_workspace_header_required",
+  )), "anthropic_workspace_header_required");
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "anthropic_workspace_header_invalid",
+  )), "anthropic_workspace_header_invalid");
+  assert.equal(safeProviderFailureReason("anthropic", failure(
+    "private_provider_reason_must_not_be_logged",
+  )), null);
+  assert.equal(safeProviderFailureReason("openai", failure(
+    "You have reached your specified API usage limits.",
+  )), null);
+  assert.equal(safeProviderFailureReason("openai", Object.assign(new Error("safe"), {
+    providerStatus: 429,
+    providerErrorType: "credit_balance_exhausted",
+  })), "openai_credit_balance_exhausted");
+  assert.equal(safeProviderFailureReason("openai", Object.assign(new Error("safe"), {
+    providerStatus: 400,
+    providerErrorType: "credit_balance_exhausted",
+  })), null);
+  assert.equal(safeProviderFailureReason("openai", Object.assign(new Error("safe"), {
+    providerStatus: 429,
+    providerErrorType: "private_provider_reason_must_not_be_logged",
+  })), null);
+  assert.equal(safeProviderFailureReason("anthropic", Object.assign(new Error("safe"), {
+    providerStatus: 429,
+    providerErrorType: "rate_limit_error",
+    providerFailureReason: "anthropic_enforced_spend_limit",
+  })), "anthropic_enforced_spend_limit");
+  assert.equal(safeProviderFailureReason("anthropic", Object.assign(new Error("safe"), {
+    providerStatus: 400,
+    providerErrorType: "invalid_request_error",
+    providerFailureReason: "anthropic_enforced_spend_limit",
+  })), null);
+  assert.equal(safeProviderFailureReason("anthropic", Object.assign(new Error("safe"), {
+    providerStatus: 400,
+    providerErrorType: "invalid_request_error",
+    providerFailureReason: "private_provider_reason_must_not_be_logged",
+  })), null);
+  assert.equal(providerDiagnosticSafeErrorCode("openai_credit_balance_exhausted"), "PROVIDER_CREDIT_BALANCE_LOW");
+  assert.equal(providerDiagnosticSafeErrorCode("anthropic_workspace_spend_limit"), "PROVIDER_SPEND_LIMIT_REACHED");
+  assert.equal(providerDiagnosticSafeErrorCode("anthropic_billing_configuration"), "PROVIDER_BILLING_CONFIGURATION");
+  assert.equal(providerDiagnosticSafeErrorCode("anthropic_workspace_policy"), "PROVIDER_WORKSPACE_CONFIGURATION");
+  assert.equal(providerDiagnosticSafeErrorCode("anthropic_request_model"), "PROVIDER_REQUEST_CONFIGURATION");
+});
+
 test("fresh operational evidence skips every production dependency probe", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
@@ -132,6 +317,73 @@ test("fresh operational evidence skips every production dependency probe", async
       lawyerArea: "skipped",
     });
   } finally {
+    sqlite.close();
+  }
+});
+
+test("fresh degraded evidence also respects each production probe cooldown", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const env = probeEnv(d1);
+    await seedOperational(env, ["openai", "anthropic", "document_analysis"]);
+    const now = new Date();
+    for (const key of ["openai", "anthropic", "document_analysis"] as const) {
+      await recordDependencyHealthEvidence(env, {
+        key,
+        state: "degraded",
+        safeErrorCode: key === "document_analysis" ? "ANALYSIS_JOB_FAILED" : "PROVIDER_UNAVAILABLE",
+        evidenceKind: "synthetic_probe",
+        startedAt: now.getTime() - 10,
+      }, now);
+    }
+    let providerCalls = 0;
+    const unexpected = async () => {
+      providerCalls += 1;
+      throw new Error("A fresh failure must stay inside its configured cooldown.");
+    };
+    const summary = await runProductionDependencyProbes(env, {
+      openai: unexpected,
+      anthropic: unexpected,
+      documentAnalysis: unexpected,
+    });
+    assert.equal(summary?.openai, "skipped");
+    assert.equal(summary?.anthropic, "skipped");
+    assert.equal(summary?.documentAnalysis, "skipped");
+    assert.equal(providerCalls, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("document-analysis probe persists a safe provider diagnostic without upstream text", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const originalConsoleError = console.error;
+  const errors: string[] = [];
+  console.error = (...values: unknown[]) => { errors.push(values.join(" ")); };
+  try {
+    const env = probeEnv(d1);
+    await seedOperational(env, ["document_analysis"]);
+    const summary = await runProductionDependencyProbes(env, {
+      documentAnalysis: async () => {
+        throw Object.assign(new Error("private upstream billing response"), {
+          code: "PROVIDER_UNAVAILABLE",
+          providerStatus: 429,
+          providerErrorType: "credit_balance_exhausted",
+          documentAnalysisProbeProvider: "openai",
+        });
+      },
+    });
+    assert.equal(summary?.documentAnalysis, "failed");
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].includes("private upstream billing response"), false);
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='document_analysis'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "degraded",
+      safeErrorCode: "PROVIDER_CREDIT_BALANCE_LOW",
+    });
+  } finally {
+    console.error = originalConsoleError;
     sqlite.close();
   }
 });
@@ -168,6 +420,132 @@ test("provider probes publish operational evidence only for exact non-fallback r
       { dependencyKey: "openai", state: "operational", evidenceKind: "synthetic_probe" },
     ]);
   } finally {
+    sqlite.close();
+  }
+});
+
+test("provider probe failures log only bounded diagnostic fields", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const originalConsoleError = console.error;
+  const errors: string[] = [];
+  console.error = (...values: unknown[]) => { errors.push(values.join(" ")); };
+  try {
+    const env = probeEnv(d1);
+    await seedOperational(env, ["openai"]);
+    const failure = Object.assign(new Error("raw provider message must stay private"), {
+      code: "PROVIDER_TIMEOUT",
+      providerStatus: 429,
+      providerErrorType: "first_byte_timeout",
+      providerRequestId: "untrusted request id with spaces",
+    });
+    const summary = await runProductionDependencyProbes(env, {
+      openai: async () => { throw failure; },
+    });
+    assert.equal(summary?.openai, "failed");
+    assert.equal(errors.length, 1);
+    const log = JSON.parse(errors[0]) as Record<string, unknown>;
+    assert.deepEqual({ ...log, elapsedMs: 0 }, {
+      event: "production_dependency_probe.provider_failed",
+      provider: "openai",
+      safeCode: "PROVIDER_TIMEOUT",
+      errorName: "Error",
+      providerStatus: 429,
+      providerErrorType: "first_byte_timeout",
+      providerRequestId: null,
+      providerProbeStage: null,
+      providerFailureReason: null,
+      elapsedMs: 0,
+    });
+    assert.equal(errors[0].includes("raw provider message"), false);
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='openai'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "degraded",
+      safeErrorCode: "PROVIDER_TIMEOUT",
+    });
+  } finally {
+    console.error = originalConsoleError;
+    sqlite.close();
+  }
+});
+
+test("Anthropic probe logs a fixed spend-limit reason without the upstream message", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const originalConsoleError = console.error;
+  const errors: string[] = [];
+  console.error = (...values: unknown[]) => { errors.push(values.join(" ")); };
+  try {
+    const env = probeEnv(d1);
+    await seedOperational(env, ["anthropic"]);
+    const failure = Object.assign(new Error(
+      "Резервный AI-провайдер не прошёл проверку соединения.",
+    ), {
+      code: "PROVIDER_UNAVAILABLE",
+      providerStatus: 400,
+      providerErrorType: "invalid_request_error",
+      providerRequestId: "req_anthropicprobe1234",
+      providerProbeStage: "anthropic_connectivity",
+      providerFailureReason: "anthropic_workspace_spend_limit",
+    });
+    const summary = await runProductionDependencyProbes(env, {
+      anthropic: async () => { throw failure; },
+    });
+    assert.equal(summary?.anthropic, "failed");
+    assert.equal(errors.length, 1);
+    const log = JSON.parse(errors[0]) as Record<string, unknown>;
+    assert.deepEqual({ ...log, elapsedMs: 0 }, {
+      event: "production_dependency_probe.provider_failed",
+      provider: "anthropic",
+      safeCode: "PROVIDER_UNAVAILABLE",
+      errorName: "Error",
+      providerStatus: 400,
+      providerErrorType: "invalid_request_error",
+      providerRequestId: "req_anthropicprobe1234",
+      providerProbeStage: "anthropic_connectivity",
+      providerFailureReason: "anthropic_workspace_spend_limit",
+      elapsedMs: 0,
+    });
+    assert.equal(errors[0].includes("private-upstream-marker"), false);
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='anthropic'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "degraded",
+      safeErrorCode: "PROVIDER_SPEND_LIMIT_REACHED",
+    });
+  } finally {
+    console.error = originalConsoleError;
+    sqlite.close();
+  }
+});
+
+test("OpenAI probe persists only the fixed low-credit diagnostic for an exact 429 code", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const originalConsoleError = console.error;
+  const errors: string[] = [];
+  console.error = (...values: unknown[]) => { errors.push(values.join(" ")); };
+  try {
+    const env = probeEnv(d1);
+    await seedOperational(env, ["openai"]);
+    const failure = Object.assign(new Error("private provider response"), {
+      code: "PROVIDER_UNAVAILABLE",
+      providerStatus: 429,
+      providerErrorType: "credit_balance_exhausted",
+    });
+    const summary = await runProductionDependencyProbes(env, {
+      openai: async () => { throw failure; },
+    });
+    assert.equal(summary?.openai, "failed");
+    const log = JSON.parse(errors[0]) as Record<string, unknown>;
+    assert.equal(log.providerFailureReason, "openai_credit_balance_exhausted");
+    assert.equal(errors[0].includes("private provider response"), false);
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='openai'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "degraded",
+      safeErrorCode: "PROVIDER_CREDIT_BALANCE_LOW",
+    });
+  } finally {
+    console.error = originalConsoleError;
     sqlite.close();
   }
 });

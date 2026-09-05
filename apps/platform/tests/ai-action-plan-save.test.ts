@@ -284,7 +284,7 @@ test("AI-plan route and chat require server-side ownership and explicit confirma
   const client = source("app/_platform/AiLawyerClient.tsx");
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.match(route, /requireApiUser\(\)/);
-  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /workspaceForContentEditor\(user\)/);
   assert.match(route, /saveAiActionPlanToCase/);
   assert.match(service, /conversation\.workspace_id=\? AND conversation\.owner_user_id=\?/);
   assert.match(service, /c\.id=\? AND c\.workspace_id=\? AND c\.archived_at IS NULL/);

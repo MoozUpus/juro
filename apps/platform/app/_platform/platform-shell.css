@@ -159,3 +159,6 @@ html[data-theme=dark] .platform-sidebar nav::-webkit-scrollbar-thumb{background:
 html[data-theme=dark] .platform-brand button{border-color:rgba(255,255,255,.15);color:#fff}
 html[data-theme=dark] .platform-sidebar-logout{color:#b9c5d0}
 @media(hover:hover) and (pointer:fine){html[data-theme=dark] .platform-nav-documents summary:hover,html[data-theme=dark] .platform-nav-more summary:hover{background:rgba(255,255,255,.1);color:#fff}}
+/* Keep high-frequency plan controls comfortably touchable on compact screens. */
+.scenario-pills button{min-height:44px}
+.plan-section-title button{width:44px;height:44px}

@@ -31,6 +31,7 @@ function message(locale: "ru" | "uz", code: BuilderAnalysisError["code"]): strin
   if (code === "BUILDER_ANALYSIS_INVALID_DOCUMENT") return ru ? "В документе недостаточно текста для анализа." : "Hujjatda tahlil uchun yetarli matn yo‘q.";
   if (code === "BUILDER_ANALYSIS_TOO_LARGE") return ru ? "Текст документа слишком большой для текущего режима анализа." : "Hujjat matni joriy tahlil rejimi uchun juda katta.";
   if (code === "BUILDER_ANALYSIS_PLAN_LIMIT") return ru ? "Полный и экспертный анализ доступны на подходящем тарифе. Быстрый анализ доступен сейчас." : "To‘liq va ekspert tahlili mos tarifda mavjud. Tezkor tahlil hozir mavjud.";
+  if (code === "BUILDER_ANALYSIS_CAPACITY_UNAVAILABLE") return ru ? "Можно хранить не более 20 анализов общим объёмом до 1 ГБ. Удалите ненужный анализ." : "20 tagacha, jami 1 GB hajmdagi tahlilni saqlash mumkin. Keraksiz tahlilni o‘chiring.";
   if (code === "BUILDER_ANALYSIS_IDEMPOTENCY_CONFLICT") return ru ? "Документ изменился после запуска. Повторите анализ текущей версии." : "Tahlil boshlanganidan keyin hujjat o‘zgardi. Joriy nusxani qayta tahlil qiling.";
   if (code === "BUILDER_ANALYSIS_STORAGE_FAILED") return ru ? "Приватный снимок документа не сохранён. Анализ не запущен." : "Hujjatning maxfiy nusxasi saqlanmadi. Tahlil boshlanmadi.";
   return ru ? "Анализ не поставлен в очередь. Попробуйте ещё раз." : "Tahlil navbatga qo‘yilmadi. Qayta urinib ko‘ring.";

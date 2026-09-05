@@ -4,24 +4,26 @@ import { projectPublicLawyerDirectory } from "../../../../../lib/platform/lawyer
 
 type Context = { params: Promise<{ profileId: string }> };
 
-/** A strict public-detail allowlist. Pending profiles remain visible, never bookable. */
+/** A strict public-detail allowlist for fully approved profiles only. */
 export async function GET(_request: Request, context: Context) {
   const parsedId = z.string().uuid().safeParse((await context.params).profileId);
   if (!parsedId.success) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
   const db = requireD1();
   const lawyers = await db.prepare(
     `SELECT id,display_name AS displayName,specialties_json AS specialtiesJson,languages_json AS languagesJson,
-       experience_years AS experienceYears,price_description AS priceDescription,availability_status AS availabilityStatus,
+       experience_years AS experienceYears,price_description AS priceDescription,
+       consultation_duration_minutes AS consultationDurationMinutes,
+       additional_services_json AS additionalServicesJson,availability_status AS availabilityStatus,
        next_available_at AS nextAvailableAt,advocate_status AS advocateStatus,firm_name AS firmName,bio,
        marketplace_status AS marketplaceStatus,city,region,education,
        consultation_formats_json AS consultationFormatsJson,
        juro_approval_status AS juroApprovalStatus,top_lawyer_status AS topLawyerStatus,
        top_lawyer_criteria AS topLawyerCriteria,
        CASE WHEN profile_photo_key IS NOT NULL THEN '/api/public/lawyers/' || id || '/photo' ELSE NULL END AS profilePhotoUrl
-     FROM lawyer_profiles WHERE id=?
-       AND ((status='public_approved' AND marketplace_status='public_approved' AND public_approved_at IS NOT NULL)
-         OR (marketplace_status='pending_review' AND status='pending')) LIMIT 1`,
-  ).bind(parsedId.data).all<{ id: string; displayName: string; specialtiesJson: unknown; languagesJson: unknown; experienceYears: number | null; priceDescription: string | null; availabilityStatus: string; nextAvailableAt: string | null; advocateStatus: string; firmName: string | null; bio: string | null; marketplaceStatus: string; city: string | null; region: string | null; education: string | null; consultationFormatsJson: unknown; profilePhotoUrl: string | null; juroApprovalStatus: string; topLawyerStatus: string; topLawyerCriteria: string | null }>();
+     FROM lawyer_profiles WHERE id=? AND status='public_approved'
+       AND marketplace_status='public_approved'
+       AND public_approved_at IS NOT NULL LIMIT 1`,
+  ).bind(parsedId.data).all<{ id: string; displayName: string; specialtiesJson: unknown; languagesJson: unknown; experienceYears: number | null; priceDescription: string | null; consultationDurationMinutes: number; additionalServicesJson: unknown; availabilityStatus: string; nextAvailableAt: string | null; advocateStatus: string; firmName: string | null; bio: string | null; marketplaceStatus: string; city: string | null; region: string | null; education: string | null; consultationFormatsJson: unknown; profilePhotoUrl: string | null; juroApprovalStatus: string; topLawyerStatus: string; topLawyerCriteria: string | null }>();
   if (!lawyers.results.length) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
   const aggregates = await db.prepare(
     `SELECT r.lawyer_profile_id AS lawyerProfileId,COUNT(*) AS reviewCount,AVG(r.overall_rating) AS overallAverage,

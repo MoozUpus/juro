@@ -9,7 +9,7 @@ import { requireD1 } from "../../../../../../../lib/document-builder/storage/run
 import { actionPlanStepPatchSchema } from "../../../../../../../lib/platform/action-plan";
 import { calculateDeadline } from "../../../../../../../lib/platform/deadline-calculator";
 import { taskStatusForPlanStep, taskStatusIsTerminal } from "../../../../../../../lib/platform/task-status";
-import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -40,7 +40,7 @@ export const PATCH = withApiErrors(async function PATCH(
   }
 
   const db = requireD1();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const owned = await db.prepare(
     "SELECT s.plan_id AS planId,s.due_at AS dueAt,p.current_revision AS planRevision FROM action_plan_steps s JOIN action_plans p ON p.id=s.plan_id JOIN cases c ON c.id=p.case_id WHERE s.id=? AND c.id=? AND c.workspace_id=? LIMIT 1",
   ).bind(stepId, caseId, workspace.id).first<{

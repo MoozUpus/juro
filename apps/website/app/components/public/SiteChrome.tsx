@@ -90,6 +90,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const panelId = useId();
+  const scrollSentinelRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const platformLocale = locale === "en" ? "ru" : locale;
@@ -97,10 +98,14 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
   const localeHref = (target: Locale) => `/${target}${localizedSuffix}`;
 
   useEffect(() => {
-    const update = () => setScrolled(window.scrollY > 18);
-    update();
-    window.addEventListener("scroll", update, { passive: true });
-    return () => window.removeEventListener("scroll", update);
+    const sentinel = scrollSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setScrolled(!entry?.isIntersecting),
+      { rootMargin: "18px 0px 0px", threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -146,50 +151,57 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
   ] as const;
 
   return (
-    <header className={styles.header} data-scrolled={scrolled || undefined} data-tone={tone}>
-      <a className={styles.skipLink} href="#main-content">{t.skip}</a>
-      <div className={styles.headerInner}>
-        <Link aria-label="JURO" className={`${styles.logo} ${brandStyles.logo}`} href={`/${locale}`}>
-          <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={1024} priority src={tone === "dark" && !scrolled ? "/juro-mark-light.png" : "/juro-mark.png"} unoptimized width={1024} /></span>
-          <span className={brandStyles.wordmark}>JURO</span>
-        </Link>
-        <nav aria-label={t.nav} className={styles.desktopNav}>
-          {nav.map(([label, href]) => onSectionNavigation && href.startsWith("#") ? <a href={href} key={href} onClick={onSectionNavigation}>{label}</a> : <Link href={href} key={href}>{label}</Link>)}
-        </nav>
-        <div className={styles.actions}>
-          <PublicThemeSwitcher locale={locale} />
-          <div aria-label="Language" className={`${styles.languageSet} ${headerTouchStyles.languageSet}`}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} className={`${styles.language} ${headerTouchStyles.language}`} href={localeHref(target)} key={target}>{languageLabels[target]}</Link>)}</div>
-          <a className={`${styles.login} ${headerTouchStyles.login}`} href={`https://app.juro.uz/${platformLocale}/auth/login`}>{t.signIn}</a>
-          <a className={styles.primary} href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
-          <button aria-controls={panelId} aria-expanded={open} aria-label={t.open} className={styles.menuButton} onClick={() => setOpen(true)} ref={triggerRef} type="button"><Menu aria-hidden="true" size={22} /></button>
-        </div>
-      </div>
-      {open ? (
-        <div className={styles.mobileLayer}>
-          <button aria-label={t.close} className={styles.scrim} onClick={() => setOpen(false)} type="button" />
-          <div aria-label={t.nav} aria-modal="true" className={styles.mobilePanel} id={panelId} ref={panelRef} role="dialog">
-            <div className={styles.mobileTop}>
-              <div className={brandStyles.mobileBrand}>
-                <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={1024} src="/juro-mark.png" unoptimized width={1024} /></span>
-                <span>JURO</span>
-              </div>
-              <button aria-label={t.close} className={styles.closeButton} onClick={() => setOpen(false)} type="button"><X aria-hidden="true" size={22} /></button>
-            </div>
-            <nav>
-              {nav.map(([label, href], index) => onSectionNavigation && href.startsWith("#") ? <a href={href} key={href} onClick={(event) => { onSectionNavigation(event); setOpen(false); }}><span>0{index + 1}</span>{label}<ArrowRight aria-hidden="true" size={18} /></a> : <Link href={href} key={href} onClick={() => setOpen(false)}><span>0{index + 1}</span>{label}<ArrowRight aria-hidden="true" size={18} /></Link>)}
-              <Link href={`/${locale}/lawyers`} onClick={() => setOpen(false)}><span>05</span>{t.lawyers}<ArrowRight aria-hidden="true" size={18} /></Link>
-              <Link href={`/${locale}/video`} onClick={() => setOpen(false)}><span>06</span>{t.video}<ArrowRight aria-hidden="true" size={18} /></Link>
-              <Link href={`/${locale}/legal`} onClick={() => setOpen(false)}><span>07</span>{t.legal}<ArrowRight aria-hidden="true" size={18} /></Link>
-            </nav>
-            <div className={styles.mobileActions}>
-              <PublicThemeSwitcher locale={locale} />
-              <div aria-label="Language" className={styles.mobileLanguageSet}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={localeHref(target)} key={target} onClick={() => setOpen(false)}>{languageLabels[target]}</Link>)}</div>
-              <a href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
-            </div>
+    <>
+      <span
+        aria-hidden="true"
+        ref={scrollSentinelRef}
+        style={{ height: 1, left: 0, pointerEvents: "none", position: "absolute", top: 0, width: 1 }}
+      />
+      <header className={styles.header} data-scrolled={scrolled || undefined} data-tone={tone}>
+        <a className={styles.skipLink} href="#main-content">{t.skip}</a>
+        <div className={styles.headerInner}>
+          <Link aria-label="JURO" className={`${styles.logo} ${brandStyles.logo}`} href={`/${locale}`}>
+            <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={1024} priority src={tone === "dark" && !scrolled ? "/juro-mark-light.png" : "/juro-mark.png"} unoptimized width={1024} /></span>
+            <span className={brandStyles.wordmark}>JURO</span>
+          </Link>
+          <nav aria-label={t.nav} className={styles.desktopNav}>
+            {nav.map(([label, href]) => onSectionNavigation && href.startsWith("#") ? <a href={href} key={href} onClick={onSectionNavigation}>{label}</a> : <Link href={href} key={href}>{label}</Link>)}
+          </nav>
+          <div className={styles.actions}>
+            <PublicThemeSwitcher locale={locale} />
+            <div aria-label="Language" className={`${styles.languageSet} ${headerTouchStyles.languageSet}`}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} className={`${styles.language} ${headerTouchStyles.language}`} href={localeHref(target)} key={target}>{languageLabels[target]}</Link>)}</div>
+            <a className={`${styles.login} ${headerTouchStyles.login}`} href={`https://app.juro.uz/${platformLocale}/auth/login`}>{t.signIn}</a>
+            <a className={styles.primary} href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
+            <button aria-controls={panelId} aria-expanded={open} aria-label={t.open} className={styles.menuButton} onClick={() => setOpen(true)} ref={triggerRef} type="button"><Menu aria-hidden="true" size={22} /></button>
           </div>
         </div>
-      ) : null}
-    </header>
+        {open ? (
+          <div className={styles.mobileLayer}>
+            <button aria-label={t.close} className={styles.scrim} onClick={() => setOpen(false)} type="button" />
+            <div aria-label={t.nav} aria-modal="true" className={styles.mobilePanel} id={panelId} ref={panelRef} role="dialog">
+              <div className={styles.mobileTop}>
+                <div className={brandStyles.mobileBrand}>
+                  <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={1024} src="/juro-mark.png" unoptimized width={1024} /></span>
+                  <span>JURO</span>
+                </div>
+                <button aria-label={t.close} className={styles.closeButton} onClick={() => setOpen(false)} type="button"><X aria-hidden="true" size={22} /></button>
+              </div>
+              <nav>
+                {nav.map(([label, href], index) => onSectionNavigation && href.startsWith("#") ? <a href={href} key={href} onClick={(event) => { onSectionNavigation(event); setOpen(false); }}><span>0{index + 1}</span>{label}<ArrowRight aria-hidden="true" size={18} /></a> : <Link href={href} key={href} onClick={() => setOpen(false)}><span>0{index + 1}</span>{label}<ArrowRight aria-hidden="true" size={18} /></Link>)}
+                <Link href={`/${locale}/lawyers`} onClick={() => setOpen(false)}><span>05</span>{t.lawyers}<ArrowRight aria-hidden="true" size={18} /></Link>
+                <Link href={`/${locale}/video`} onClick={() => setOpen(false)}><span>06</span>{t.video}<ArrowRight aria-hidden="true" size={18} /></Link>
+                <Link href={`/${locale}/legal`} onClick={() => setOpen(false)}><span>07</span>{t.legal}<ArrowRight aria-hidden="true" size={18} /></Link>
+              </nav>
+              <div className={styles.mobileActions}>
+                <PublicThemeSwitcher locale={locale} />
+                <div aria-label="Language" className={styles.mobileLanguageSet}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={localeHref(target)} key={target} onClick={() => setOpen(false)}>{languageLabels[target]}</Link>)}</div>
+                <a href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </header>
+    </>
   );
 }
 

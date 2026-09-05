@@ -43,6 +43,7 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   const root = lawyerHostTarget(new URL("https://lawyer.juro.uz/"));
   assert.equal(root?.pathname, "/ru/auth/login");
   assert.equal(root?.searchParams.get("accountType"), "lawyer");
+  assert.equal(root?.searchParams.get("reauth"), null);
 
   const register = lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/register"));
   assert.equal(register?.pathname, "/ru/auth/register");
@@ -63,6 +64,15 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   const onboarding = lawyerHostTarget(new URL("https://lawyer.juro.uz/onboarding"));
   assert.equal(onboarding?.pathname, "/ru/onboarding");
 
+  for (const locale of ["ru", "uz"] as const) {
+    const staleIndividualDashboard = lawyerHostTarget(
+      new URL(`https://lawyer.juro.uz/${locale}/individual/dashboard?source=legacy-link`),
+    );
+    assert.equal(staleIndividualDashboard?.pathname, `/${locale}/lawyer/dashboard`);
+    assert.equal(staleIndividualDashboard?.searchParams.get("source"), "legacy-link");
+  }
+
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/not-a-module")), null);
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/not-a-module")), null);
+  assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/individual/documents")), null);
 });

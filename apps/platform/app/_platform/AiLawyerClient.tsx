@@ -11,7 +11,7 @@ import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, ty
 import { formatPlatformDate, formatPlatformLongDate, formatPlatformMonth } from "../../lib/platform/date-time";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import { uzbekistanCalendarDate } from "../../lib/legal/applicability-date";
-import { usePlatformBasePath } from "./PlatformRouteContext";
+import { usePlatformBasePath, usePlatformWorkspaceId } from "./PlatformRouteContext";
 import { AiSelect } from "./AiSelect";
 import { LegalAnswerView } from "./LegalAnswerView";
 import { AssistantSpeechControls, VoiceMessageControls } from "./VoiceMessageControls";
@@ -143,12 +143,14 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const selectedConversationId = searchParams.get("conversationId") || "";
   const selectedBranchId = searchParams.get("branchId") || "";
   const voiceMode = searchParams.get("mode") === "voice";
+  const intakeHandle = searchParams.get("intake") || "";
   const base = usePlatformBasePath();
+  const workspaceId = usePlatformWorkspaceId();
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [cases, setCases] = useState<CaseOption[]>([]);
-  const [question, setQuestion] = useState(() => (searchParams.get("prompt") || "").slice(0, 4_000));
+  const [question, setQuestion] = useState("");
   const [answerMode, setAnswerMode] = useState<"short" | "detailed">("detailed");
   const [reasoningMode, setReasoningMode] = useState<"fast" | "deep">("fast");
   const [legalContextDate, setLegalContextDate] = useState("");
@@ -165,6 +167,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const latestAnswerRef = useRef<HTMLDivElement | null>(null);
   const transcriptPinnedRef = useRef(true);
   const pendingAiRequestRef = useRef<AiRetryRequest<AiRequestPayload> | null>(null);
+  const intakeHandledRef = useRef(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [evidenceCollapsed, setEvidenceCollapsed] = useState(false);
@@ -199,7 +202,13 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [deletingConversationId, setDeletingConversationId] = useState("");
   const [conversationDeleteError, setConversationDeleteError] = useState("");
 
-  function aiLocation(params = new URLSearchParams()): string {
+  function aiLocation(params = new URLSearchParams(), preserveIntake = false): string {
+    params.delete("prompt");
+    if (preserveIntake && /^[A-Za-z0-9_-]{43}$/.test(intakeHandle)) {
+      params.set("intake", intakeHandle);
+    } else {
+      params.delete("intake");
+    }
     if (voiceMode) params.set("mode", "voice");
     const serialized = params.toString();
     return serialized ? `${pathname}?${serialized}` : pathname;
@@ -207,9 +216,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
 
   function setComposerMode(next: "text" | "voice") {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("prompt");
     if (next === "voice") params.set("mode", "voice");
     else params.delete("mode");
-    window.location.assign(params.size ? `${pathname}?${params}` : pathname);
+    router.replace(params.size ? `${pathname}?${params}` : pathname, { scroll: false });
   }
 
   const openMobileContext = useCallback((tab: "facts" | "sources") => {
@@ -238,7 +248,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       const params = new URLSearchParams();
       if (selectedConversationId) params.set("conversationId", selectedConversationId);
       if (selectedBranchId) params.set("branchId", selectedBranchId);
-      const response = await fetch(`/api/platform/ai${params.size ? `?${params}` : ""}`, { cache: "no-store" });
+      const response = await fetch(`/api/platform/ai${params.size ? `?${params}` : ""}`, {
+        cache: "no-store",
+        headers: { "x-juro-workspace-id": workspaceId },
+      });
       const body = await response.json() as { status?: ProviderStatus; usage?: Usage; conversations?: Conversation[]; cases?: CaseOption[]; selected?: Answer | null; error?: string };
       if (!response.ok) throw new Error(body.error || (ru ? "AI-модуль не загрузился." : "AI moduli yuklanmadi."));
       setStatus(body.status ?? null);
@@ -251,9 +264,64 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     } finally {
       setLoading(false);
     }
-  }, [ru, selectedBranchId, selectedConversationId]);
+  }, [ru, selectedBranchId, selectedConversationId, workspaceId]);
+
+  async function finalizeIntake(): Promise<boolean> {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(intakeHandle)) return true;
+    try {
+      const response = await fetch("/api/platform/ai/intake/finalize", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+          "x-juro-locale": locale,
+        },
+        body: JSON.stringify({ handle: intakeHandle, workspaceId }),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    const hadSensitiveLegacyPrompt = params.has("prompt");
+    const handle = params.get("intake") || "";
+    params.delete("prompt");
+    if (hadSensitiveLegacyPrompt) {
+      const sanitized = params.size ? `${pathname}?${params}` : pathname;
+      window.history.replaceState(window.history.state, "", sanitized);
+    }
+    if (selectedConversationId || intakeHandledRef.current || !handle) return;
+    intakeHandledRef.current = true;
+    if (!/^[A-Za-z0-9_-]{43}$/.test(handle)) {
+      setError(ru ? "Черновик вопроса недоступен." : "Savol qoralamasi mavjud emas.");
+      return;
+    }
+    void fetch("/api/platform/ai/intake/consume", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-juro-csrf": "1",
+        "x-juro-locale": locale,
+      },
+      body: JSON.stringify({ handle, workspaceId }),
+    }).then(async (response) => ({
+      response,
+      body: await response.json() as { question?: string; error?: string },
+    })).then(({ response, body }) => {
+      if (!response.ok || !body.question) {
+        throw new Error(body.error || (ru ? "Черновик вопроса недоступен." : "Savol qoralamasi mavjud emas."));
+      }
+      setQuestion((current) => current || body.question!);
+      requestAnimationFrame(() => composerRef.current?.focus());
+    }).catch((value) => {
+      setError(value instanceof Error ? value.message : String(value));
+    });
+  }, [locale, pathname, ru, searchParams, selectedConversationId, workspaceId]);
 
   useEffect(() => {
     if (!mobileContextOpen) return;
@@ -332,7 +400,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       await abortableDelay(wait, signal);
       const statusResponse = await fetch(
         `/api/platform/ai/runs/${encodeURIComponent(pending.idempotencyKey)}`,
-        { cache: "no-store", signal },
+        { cache: "no-store", signal, headers: { "x-juro-workspace-id": workspaceId } },
       );
       if (statusResponse.status === 404) continue;
       const statusBody = await statusResponse.json().catch(() => null) as AiRunRecoveryStatus | null;
@@ -344,7 +412,11 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
 
       const params = new URLSearchParams({ conversationId: statusBody.conversationId });
       if (statusBody.branchId) params.set("branchId", statusBody.branchId);
-      const resultResponse = await fetch(`/api/platform/ai?${params}`, { cache: "no-store", signal });
+      const resultResponse = await fetch(`/api/platform/ai?${params}`, {
+        cache: "no-store",
+        signal,
+        headers: { "x-juro-workspace-id": workspaceId },
+      });
       const resultBody = await resultResponse.json().catch(() => null) as {
         selected?: Answer | null;
         usage?: Usage;
@@ -362,7 +434,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       setCanRetry(false);
       const nextParams = new URLSearchParams({ conversationId: statusBody.conversationId });
       if (statusBody.branchId) nextParams.set("branchId", statusBody.branchId);
-      router.replace(aiLocation(nextParams), { scroll: false });
+      const intakeFinalized = await finalizeIntake();
+      router.replace(aiLocation(nextParams, !intakeFinalized), { scroll: false });
       return { kind: "completed" as const };
     }
     return { kind: "uncertain" as const };
@@ -410,6 +483,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           accept: "text/event-stream",
           "content-type": "application/json",
           "x-juro-csrf": "1",
+          "x-juro-workspace-id": workspaceId,
           "idempotency-key": pending.idempotencyKey,
         },
         body: JSON.stringify(pending.payload),
@@ -465,7 +539,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       setCanRetry(false);
       const nextParams = new URLSearchParams({ conversationId: body.conversationId });
       if (body.branchId) nextParams.set("branchId", body.branchId);
-      router.replace(aiLocation(nextParams), { scroll: false });
+      const intakeFinalized = await finalizeIntake();
+      router.replace(aiLocation(nextParams, !intakeFinalized), { scroll: false });
     } catch (value) {
       // A preliminary finding is useful only while the authoritative run is
       // still able to finish. Never leave it looking like a completed answer
@@ -543,7 +618,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     try {
       const response = await fetch(`/api/platform/ai?conversationId=${encodeURIComponent(conversationId)}`, {
         method: "DELETE",
-        headers: { "x-juro-csrf": "1" },
+        headers: { "x-juro-csrf": "1", "x-juro-workspace-id": workspaceId },
       });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || (ru ? "Диалог не удалён." : "Suhbat o‘chirilmadi."));

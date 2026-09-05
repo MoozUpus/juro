@@ -30,6 +30,12 @@ import {
 } from "./legal-corpus-private-services";
 import { handleTargetReasoningServiceRequest } from "../lib/legal-corpus/target-reasoning-service";
 import { lawyerHostTarget } from "./lawyer-host-router";
+import { INTERNAL_REQUEST_PATH_HEADER } from "../lib/platform/routing";
+import { STATUS_ORIGIN_HEADER } from "../lib/operations/status-metadata";
+import {
+  publicApiRequestBodyLimit,
+  requestWithBoundedBody,
+} from "../lib/request-body";
 
 export { MalwareScannerContainer, LegalCorpusQdrantContainer };
 
@@ -138,7 +144,7 @@ const worker = {
     let routedUrl = url;
 
     const hostname = url.hostname.toLowerCase();
-    const isLawyerHost = hostname === "lawyer.juro.uz" || hostname === "lawyer.staging.juro.uz";
+    const isLawyerHost = hostname === "lawyer.juro.uz";
     const lawyerPassthrough = url.pathname.startsWith("/_next/")
       || url.pathname.startsWith("/api/")
       || url.pathname.startsWith("/legal/")
@@ -201,7 +207,36 @@ const worker = {
     const internalAdminResponse = await handleInternalAdminRequest(routedRequest, env);
     if (internalAdminResponse) return withSecurityHeaders(internalAdminResponse, url);
 
-    const response = await handler.fetch(routedRequest, env, ctx);
+    const bodyLimit = publicApiRequestBodyLimit(routedUrl.pathname, routedRequest.method);
+    if (bodyLimit !== null) {
+      const boundedRequest = await requestWithBoundedBody(routedRequest, bodyLimit);
+      if (!boundedRequest.ok) {
+        return withSecurityHeaders(Response.json(
+          { code: "PAYLOAD_TOO_LARGE" },
+          {
+            status: 413,
+            headers: {
+              "cache-control": "private, no-store, max-age=0",
+              pragma: "no-cache",
+            },
+          },
+        ), url);
+      }
+      routedRequest = boundedRequest.request;
+    }
+
+    const appHeaders = new Headers(routedRequest.headers);
+    appHeaders.delete(STATUS_ORIGIN_HEADER);
+    if (isStatusHost) appHeaders.set(STATUS_ORIGIN_HEADER, url.origin);
+    appHeaders.set(
+      INTERNAL_REQUEST_PATH_HEADER,
+      `${routedUrl.pathname}${routedUrl.search}`,
+    );
+    const response = await handler.fetch(
+      new Request(routedRequest, { headers: appHeaders }),
+      env,
+      ctx,
+    );
     const isPrivateApi = routedUrl.pathname.startsWith("/api/document-builder/") || routedUrl.pathname.startsWith("/api/auth/") || routedUrl.pathname.startsWith("/api/platform/");
     const isPrivateShare = routedUrl.pathname.startsWith("/document-builder/share/")
       || routedUrl.pathname.startsWith("/document-builder/signed-share/");

@@ -47,7 +47,7 @@ test("case workspace aggregation scopes every private domain before returning re
   assert.match(route, /requireApiUser\(\)/);
   assert.match(route, /workspaceForUser\(user\)/);
   assert.match(route, /cases WHERE id=\? AND workspace_id=\?/);
-  assert.match(route, /FROM documents WHERE workspace_id=\? AND case_id=\?/);
+  assert.match(route, /FROM documents d[\s\S]*WHERE \$\{documentVisibility\.sql\} AND d\.case_id=\?/);
   assert.match(route, /FROM conversations[\s\S]*workspace_id=\? AND owner_user_id=\? AND case_id=\?/);
   assert.match(route, /FROM document_comparisons[\s\S]*workspace_id=\? AND owner_user_id=\? AND case_id=\?/);
   assert.match(route, /FROM document_analyses[\s\S]*a\.workspace_id=\? AND a\.owner_user_id=\? AND a\.case_id=\?/);

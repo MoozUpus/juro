@@ -3,9 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("protects the application root without demo-only metadata", async () => {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+  const worker = await createWorker();
 
   const response = await worker.fetch(
     new Request("http://localhost/", {
@@ -28,7 +26,9 @@ test("protects the application root without demo-only metadata", async () => {
 
 async function createWorker() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${Math.random()}`);
+  // React 19 permits one RSC renderer implementation per process. Reuse the
+  // built Worker module just as a warm production isolate reuses its module.
+  workerUrl.searchParams.set("test", "rendered-html");
   return (await import(workerUrl.href)).default;
 }
 
@@ -149,6 +149,27 @@ test("protects My Documents and preserves return_to", async () => {
   const canonical = await worker.fetch(new Request("http://localhost/ru/individual/documents", { headers: { accept: "text/html" }, redirect: "manual" }), runtime, context);
   assert.equal(canonical.status, 307);
   assert.match(canonical.headers.get("location") ?? "", /\/login/);
+});
+
+test("protected workspace deep links preserve the exact return path", async () => {
+  const worker = await createWorker();
+  for (const route of [
+    "/ru/individual/settings/security?section=mfa",
+    "/uz/entrepreneur/cases",
+    "/ru/business/ws_business_1/settings/privacy",
+  ]) {
+    const response = await worker.fetch(new Request(`http://localhost${route}`, {
+      headers: {
+        accept: "text/html",
+        "x-juro-request-path": "/ru/individual/dashboard?spoofed=1",
+      },
+      redirect: "manual",
+    }), runtime, context);
+    assert.equal(response.status, 307, route);
+    const location = new URL(response.headers.get("location") ?? "", "http://localhost");
+    assert.equal(location.pathname, `/${route.split("/")[1]}/auth/login`, route);
+    assert.equal(location.searchParams.get("returnTo"), route, route);
+  }
 });
 
 test("serves public login and registration routes", async () => {

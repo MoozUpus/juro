@@ -2,7 +2,7 @@ import { z } from "zod";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../../../lib/document-builder/storage/runtime";
 import { AnalysisRevisionError, decideSuggestedRevision } from "../../../../../../../lib/document-analysis/revisions";
-import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor } from "../../../../../../../lib/platform/workspace";
 
 const decisionSchema = z.object({ decision: z.enum(["accepted", "rejected"]) }).strict();
 const response = (body: unknown, status = 200) => Response.json(body, {
@@ -16,7 +16,7 @@ export const PATCH = withApiErrors(async function PATCH(
 ) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { analysisId, revisionId } = await context.params;
   const parsed = decisionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return response({ code: "ANALYSIS_REVISION_INVALID_DECISION", error: "Некорректное решение." }, 400);

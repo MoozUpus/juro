@@ -60,7 +60,8 @@ import {
   workspaceEntitlements,
   type AiAnswerCycleLimit,
 } from "../../../../lib/billing/entitlements";
-import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { workspaceForUser, workspaceForUserById } from "../../../../lib/platform/workspace";
+import { isWorkspaceId } from "../../../../lib/platform/routing";
 import {
   listUserMemories,
   memoryKeyring,
@@ -181,9 +182,20 @@ function waitForStage<T>(operation: Promise<T>, signal: AbortSignal): Promise<T>
   });
 }
 
+async function workspaceForAiRequest(
+  request: Request,
+  user: Awaited<ReturnType<typeof requireApiUser>>,
+) {
+  const requestedWorkspaceId = request.headers.get("x-juro-workspace-id");
+  if (!requestedWorkspaceId) return workspaceForUser(user);
+  if (!isWorkspaceId(requestedWorkspaceId)) return null;
+  return workspaceForUserById(user.id, requestedWorkspaceId);
+}
+
 export const GET = withApiErrors(async function GET(request: Request) {
   const user = await requireApiUser(request);
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForAiRequest(request, user);
+  if (!workspace) return response({ code: "WORKSPACE_UNAVAILABLE" }, 404);
   const db = requireD1();
   const entitlements = await workspaceEntitlements(db, workspace.id);
   const answerCycleLimit = resolveAiAnswerCycleLimit(
@@ -224,7 +236,8 @@ export const GET = withApiErrors(async function GET(request: Request) {
 export const DELETE = withApiErrors(async function DELETE(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser(request);
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForAiRequest(request, user);
+  if (!workspace) return response({ code: "WORKSPACE_UNAVAILABLE" }, 404);
   const conversationId = new URL(request.url).searchParams.get("conversationId") || "";
   if (!/^[0-9a-z_-]{1,128}$/i.test(conversationId)) {
     return response({ code: "INVALID_CONVERSATION_ID", error: "Некорректный идентификатор диалога." }, 400);
@@ -305,10 +318,15 @@ async function executePostWithinBudget(
   assertSafeWrite(request);
   const authStage = budget.beginStage("auth");
   let user: Awaited<ReturnType<typeof requireApiUser>>;
-  let workspace: Awaited<ReturnType<typeof workspaceForUser>>;
+  let workspace: NonNullable<Awaited<ReturnType<typeof workspaceForAiRequest>>>;
   try {
     user = await requireApiUser(request);
-    workspace = await workspaceForUser(user);
+    const resolvedWorkspace = await workspaceForAiRequest(request, user);
+    if (!resolvedWorkspace) {
+      authStage.complete();
+      return response({ code: "WORKSPACE_UNAVAILABLE" }, 404);
+    }
+    workspace = resolvedWorkspace;
     authStage.complete();
   } catch (error) {
     authStage.fail();

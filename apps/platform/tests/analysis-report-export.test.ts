@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { unzipSync, strFromU8 } from "fflate";
 import type { DocumentAnalysisResult } from "../lib/document-analysis/schema";
-import { AnalysisExportError } from "../lib/document-analysis/exporter";
+import { AnalysisExportError, requestAnalysisExport } from "../lib/document-analysis/exporter";
 import {
   deleteAnalysisReportExport,
   executeAnalysisReportExportJob,
@@ -186,6 +186,57 @@ for (const format of ["pdf", "docx"] as const) {
     }
   });
 }
+
+test("one idempotency key cannot create both JSON and report exports, including after row retirement", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    const liveKey = "analysis-export-cross-format-live-0001";
+    await requestAnalysisExport({
+      db: d1,
+      analysisId: "analysis-report-a",
+      workspaceId: "workspace-report-a",
+      userId: "user-report-a",
+      idempotencyKey: liveKey,
+    });
+    await assert.rejects(
+      requestAnalysisReportExport({
+        db: d1,
+        analysisId: "analysis-report-a",
+        workspaceId: "workspace-report-a",
+        userId: "user-report-a",
+        format: "pdf",
+        idempotencyKey: liveKey,
+      }),
+      (error: unknown) => error instanceof AnalysisExportError
+        && error.code === "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT",
+    );
+
+    const retiredKey = "analysis-export-cross-format-retired-0001";
+    const retired = await requestAnalysisExport({
+      db: d1,
+      analysisId: "analysis-report-a",
+      workspaceId: "workspace-report-a",
+      userId: "user-report-a",
+      idempotencyKey: retiredKey,
+    });
+    sqlite.prepare("DELETE FROM analysis_exports WHERE id=?").run(retired.record.id);
+    await assert.rejects(
+      requestAnalysisReportExport({
+        db: d1,
+        analysisId: "analysis-report-a",
+        workspaceId: "workspace-report-a",
+        userId: "user-report-a",
+        format: "pdf",
+        idempotencyKey: retiredKey,
+      }),
+      (error: unknown) => error instanceof AnalysisExportError
+        && error.code === "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
 
 test("document export queue routes report jobs through the real PDF generator", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();

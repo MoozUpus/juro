@@ -24,3 +24,11 @@ Qdrant is Copyright (c) 2020-2026 Qdrant Solutions GmbH and contributors and
 is licensed under the Apache License 2.0. The complete license text is in
 `third_party/licenses/qdrant-Apache-2.0.txt`. JURO does not copy Qdrant source
 code and does not expose the ephemeral CI service to application traffic.
+
+## Manrope
+
+The public website embeds Manrope through `@fontsource-variable/manrope` 5.3.0.
+Copyright 2019 The Manrope Project Authors. The font is licensed under the SIL
+Open Font License 1.1; the complete notice and license text are in
+`third_party/licenses/manrope-OFL-1.1.txt`. JURO distributes the unmodified font
+files as part of the website and does not sell them separately.

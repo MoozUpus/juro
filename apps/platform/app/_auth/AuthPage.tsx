@@ -1,6 +1,12 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { localDevelopmentAuthEnabled } from "../../lib/auth/development-auth";
 import { runtimeEnv } from "../../lib/document-builder/storage/runtime";
+import {
+  authenticatedAuthRedirect,
+  isLawyerHostRequest,
+} from "../../lib/platform/lawyer-entry-routing";
+import { workspaceProfile } from "../../lib/platform/profile";
 import { getChatGPTUser } from "../chatgpt-auth";
 import { AuthForm } from "./AuthForm";
 import "./auth.css";
@@ -28,7 +34,16 @@ export async function AuthPage({
   reauth?: boolean;
 }) {
   const authenticated = await getChatGPTUser();
-  if (authenticated && !(mode === "login" && reauth)) redirect("/");
+  if (authenticated) {
+    const requestHeaders = await headers();
+    const destination = authenticatedAuthRedirect({
+      mode,
+      reauth,
+      lawyerHost: isLawyerHostRequest(requestHeaders),
+      profile: await workspaceProfile(authenticated.email),
+    });
+    if (destination) redirect(destination);
+  }
   const env = runtimeEnv();
   return (
     <AuthForm

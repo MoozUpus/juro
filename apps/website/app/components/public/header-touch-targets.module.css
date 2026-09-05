@@ -9,6 +9,7 @@
   display: inline-flex;
   justify-content: center;
   min-height: 44px;
+  min-width: 44px;
   padding-block: 0;
 }
 
@@ -23,9 +24,5 @@
 @media (max-width: 620px) {
   .language:not([aria-current="page"]) {
     display: none;
-  }
-
-  .language {
-    min-width: 44px;
   }
 }

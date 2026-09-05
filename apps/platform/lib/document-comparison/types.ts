@@ -169,6 +169,7 @@ export class ComparisonProcessingError extends Error {
   constructor(
     readonly code:
       | "CORRUPT_FILE"
+      | "FILE_SCAN_REQUIRED"
       | "PASSWORD_PROTECTED"
       | "NO_READABLE_TEXT"
       | "OCR_REQUIRED"

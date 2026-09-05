@@ -2,7 +2,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../.
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 import { AnalysisExportError, requestAnalysisExport } from "../../../../../../lib/document-analysis/exporter";
 import { requestAnalysisReportExport, type AnalysisReportFormat } from "../../../../../../lib/document-analysis/report-exporter";
-import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { workspaceForContentEditor, workspaceForUser } from "../../../../../../lib/platform/workspace";
 import { z } from "zod";
 
 const exportRequestSchema = z.object({
@@ -38,7 +38,7 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
 export const POST = withApiErrors(async function POST(request: Request, context: { params: Promise<{ analysisId: string }> }) {
   assertSafeWrite(request);
   const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const workspace = await workspaceForContentEditor(user);
   const { analysisId } = await context.params;
   const parsed = exportRequestSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
@@ -64,5 +64,6 @@ function message(code: string) {
   if (code === "ANALYSIS_EXPORT_FORMAT_INVALID") return "Проверьте формат, вариант и идентификатор исправленной версии.";
   if (code === "ANALYSIS_EXPORT_NOT_READY") return "Экспорт доступен только после завершения анализа.";
   if (code === "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT") return "Idempotency-Key некорректен или уже относится к другому экспорту.";
+  if (code === "ANALYSIS_EXPORT_CAPACITY_UNAVAILABLE") return "Для одного анализа доступно не больше 20 операций экспорта.";
   return "Экспорт не удалось создать.";
 }

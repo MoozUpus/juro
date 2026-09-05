@@ -6,12 +6,17 @@ const shellSource = new URL("../app/_platform/PlatformShell.tsx", import.meta.ur
 const searchStylesheet = new URL("../app/_platform/global-search.css", import.meta.url);
 const shellStylesheet = new URL("../app/_platform/platform-shell.css", import.meta.url);
 const profileStylesheet = new URL("../app/_platform/profile-settings.css", import.meta.url);
+const casesStylesheet = new URL("../app/_platform/cases.css", import.meta.url);
 const lawyerStylesheet = new URL("../app/_platform/lawyer-workspace.css", import.meta.url);
+const dashboardSource = new URL("../app/_platform/DashboardClient.tsx", import.meta.url);
 const dashboardStylesheet = new URL("../app/_platform/dashboard.css", import.meta.url);
 const calendarStylesheet = new URL("../app/_platform/calendar.css", import.meta.url);
+const aiStylesheet = new URL("../app/_platform/ai-lawyer.css", import.meta.url);
 const documentBuilderStylesheet = new URL("../app/_document-builder/document-builder.css", import.meta.url);
 const accountDocumentsLayout = new URL("../app/[locale]/[accountType]/documents/layout.tsx", import.meta.url);
 const businessDocumentsLayout = new URL("../app/[locale]/business/[workspaceId]/documents/layout.tsx", import.meta.url);
+const accountNotificationsLayout = new URL("../app/[locale]/[accountType]/notifications/layout.tsx", import.meta.url);
+const businessNotificationsLayout = new URL("../app/[locale]/business/[workspaceId]/notifications/layout.tsx", import.meta.url);
 
 test("skip link moves focus to the platform main landmark", async () => {
   const shell = await readFile(shellSource, "utf8");
@@ -63,6 +68,29 @@ test("mid-width profile controls shrink inside the platform content column", asy
   assert.match(css, /\.profile-form input,\.profile-form select,\.profile-form textarea\{width:100%;max-width:100%;min-width:0\}/);
 });
 
+test("individual case links and settings tabs retain 44px touch targets", async () => {
+  const [cases, profile] = await Promise.all([
+    readFile(casesStylesheet, "utf8"),
+    readFile(profileStylesheet, "utf8"),
+  ]);
+
+  assert.match(cases, /\.cases-live-list article>a\{display:inline-flex;min-height:44px;align-items:center/);
+  assert.match(profile, /\.profile-workspace>nav a\{min-height:44px/);
+});
+
+test("case filters expose focus and plan and session actions retain 44px targets", async () => {
+  const [cases, shell, profile] = await Promise.all([
+    readFile(casesStylesheet, "utf8"),
+    readFile(shellStylesheet, "utf8"),
+    readFile(profileStylesheet, "utf8"),
+  ]);
+
+  assert.match(cases, /\.cases-live-tools label:focus-within\{outline:3px solid var\(--focus-ring,#87631f\);outline-offset:2px\}/);
+  assert.match(shell, /\.scenario-pills button\{min-height:44px\}/);
+  assert.match(shell, /\.plan-section-title button\{width:44px;height:44px\}/);
+  assert.match(profile, /\.session-actions button \{ min-height: 44px; \}/);
+});
+
 test("lawyer calendar actions retain a 44px touch target", async () => {
   const css = await readFile(lawyerStylesheet, "utf8");
 
@@ -81,6 +109,17 @@ test("client dashboard and calendar actions retain 44px touch targets", async ()
   assert.match(calendar, /@media \(max-width:430px\)\{[\s\S]*?\.calendar-range button\{width:44px;height:44px\}/);
 });
 
+test("dashboard keyboard focus stays visible in the composer and mobile action scroller", async () => {
+  const [dashboard, css] = await Promise.all([
+    readFile(dashboardSource, "utf8"),
+    readFile(dashboardStylesheet, "utf8"),
+  ]);
+
+  assert.match(css, /\.dashboard-command-form:focus-within\s*\{\s*outline:\s*3px solid var\(--focus-ring, #87631f\);\s*outline-offset:\s*3px;/);
+  assert.match(css, /\.dashboard-quick-grid > a:focus-visible\s*\{\s*outline:\s*3px solid var\(--focus-ring, #87631f\);\s*outline-offset:\s*3px;/);
+  assert.match(dashboard, /onFocus=\{\(event\) => event\.currentTarget\.scrollIntoView\(\{\s*block: "nearest",\s*inline: "nearest",\s*\}\)\}/);
+});
+
 test("canonical document routes load the builder styles and keep folder controls touchable", async () => {
   const [css, accountLayout, businessLayout] = await Promise.all([
     readFile(documentBuilderStylesheet, "utf8"),
@@ -93,4 +132,22 @@ test("canonical document routes load the builder styles and keep folder controls
   assert.match(css, /\.platform-shell \.dbt-doc-filters \{ grid-template-columns: 1fr 1fr; \}/);
   assert.match(accountLayout, /import "\.\.\/\.\.\/\.\.\/_document-builder\/document-builder\.css";/);
   assert.match(businessLayout, /import "\.\.\/\.\.\/\.\.\/\.\.\/_document-builder\/document-builder\.css";/);
+});
+
+test("mobile AI, notification, and privacy actions retain 44px touch targets", async () => {
+  const [ai, documents, profile, accountNotifications, businessNotifications] = await Promise.all([
+    readFile(aiStylesheet, "utf8"),
+    readFile(documentBuilderStylesheet, "utf8"),
+    readFile(profileStylesheet, "utf8"),
+    readFile(accountNotificationsLayout, "utf8"),
+    readFile(businessNotificationsLayout, "utf8"),
+  ]);
+
+  assert.match(ai, /\.ai-composer-options > summary \{[\s\S]*?min-height: 44px;/);
+  assert.match(ai, /@media \(max-width: 520px\) \{[\s\S]*?\.ai-composer-mode button \{ width: 44px; min-width: 44px;/);
+  assert.match(documents, /\.dbt-notification-list article > a, \.dbt-notification-list article > button \{ min-width: 44px; min-height: 44px;/);
+  assert.match(documents, /\.dbt-notification-list article > a, \.dbt-notification-list article > button \{ grid-column: 2; justify-self: start; \}/);
+  assert.match(accountNotifications, /import "\.\.\/\.\.\/\.\.\/_document-builder\/document-builder\.css";/);
+  assert.match(businessNotifications, /import "\.\.\/\.\.\/\.\.\/\.\.\/_document-builder\/document-builder\.css";/);
+  assert.match(profile, /\.delete-request button \{ min-height: 44px; \}/);
 });

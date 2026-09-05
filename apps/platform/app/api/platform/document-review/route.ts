@@ -37,7 +37,8 @@ export const GET = withApiErrors(async function GET() {
        (SELECT json_group_array(json_object('id',v.id,'documentVersionId',v.document_version_id,'lawyerUserId',v.lawyer_user_id,'status',v.status,'comment',v.comment,'verifiedAt',v.verified_at,'invalidatedAt',v.invalidated_at))
           FROM document_analysis_lawyer_verifications v WHERE v.analysis_id=a.id) AS lawyerVerificationsJson
      FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id
-     WHERE a.workspace_id=? AND a.owner_user_id=? ORDER BY a.created_at DESC LIMIT 50`,
+     WHERE a.workspace_id=? AND a.owner_user_id=? AND a.deletion_requested_at IS NULL
+     ORDER BY a.created_at DESC LIMIT 50`,
     ).bind(workspace.id, user.id),
     db.prepare(
       `SELECT id,title,status,updated_at AS updatedAt

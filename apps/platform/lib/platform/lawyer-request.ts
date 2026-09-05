@@ -7,6 +7,15 @@ export const lawyerRequestSchema = z.object({
   caseId: uuid,
   lawyerProfileId: uuid.optional(),
   anonymizedSummary: z.string().trim().min(20).max(2_000),
+  serviceCode: z.enum([
+    "initial_consultation",
+    "document_review",
+    "case_strategy",
+    "representation",
+    "other",
+  ]).optional(),
+  preferredFormat: z.enum(["chat", "video", "phone", "office"]).optional(),
+  proposedStartsAt: z.string().datetime({ offset: true }).optional(),
   consent: z.literal(true),
   locale: localizedLocale,
 }).strict();

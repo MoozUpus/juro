@@ -21,11 +21,250 @@ interface AnthropicMessagesPayload {
     output_tokens?: number;
     cache_read_input_tokens?: number;
   };
-  error?: { type?: string; message?: string };
+  error?: {
+    type?: string;
+    message?: string;
+    details?: { error_code?: string };
+  };
+  request_id?: string;
+}
+
+export type AnthropicSafeFailureReason =
+  | "anthropic_organization_spend_limit"
+  | "anthropic_workspace_spend_limit"
+  | "anthropic_workspace_header_required"
+  | "anthropic_workspace_header_invalid"
+  | "anthropic_enforced_spend_limit"
+  | "anthropic_credit_balance_low"
+  | "anthropic_billing_configuration"
+  | "anthropic_workspace_policy"
+  | "anthropic_organization_policy"
+  | "anthropic_request_model"
+  | "anthropic_request_max_tokens"
+  | "anthropic_request_messages";
+
+export function safeAnthropicFailureReason(
+  status: number,
+  payload: AnthropicMessagesPayload,
+): AnthropicSafeFailureReason | null {
+  if (status === 429
+      && payload.error?.type === "rate_limit_error"
+      && payload.error.details?.error_code === "enforced_spend_limit_reached") {
+    return "anthropic_enforced_spend_limit";
+  }
+  if (status === 402 && payload.error?.type === "billing_error") {
+    return "anthropic_billing_configuration";
+  }
+  if (status !== 400 || payload.error?.type !== "invalid_request_error") return null;
+  const message = payload.error.message;
+  if (typeof message !== "string") return null;
+
+  // Anthropic documents these content-free HTTP 400 failure classes. Convert
+  // the upstream message to a fixed enum at the provider boundary so callers
+  // never need to retain, log, or persist arbitrary provider response text.
+  if (message.startsWith("You have reached your specified workspace API usage limits")) {
+    return "anthropic_workspace_spend_limit";
+  }
+  if (message.startsWith("You have reached your specified API usage limits")) {
+    return "anthropic_organization_spend_limit";
+  }
+  if (message.startsWith(
+    "anthropic-workspace-id is required when authenticating with an identity-linked API key",
+  )) {
+    return "anthropic_workspace_header_required";
+  }
+  if (message === "anthropic-workspace-id header must be a valid workspace ID.") {
+    return "anthropic_workspace_header_invalid";
+  }
+  const normalized = message.toLowerCase();
+  if (normalized.includes("credit balance") && normalized.includes("too low")) {
+    return "anthropic_credit_balance_low";
+  }
+  if (normalized.includes("billing") || normalized.includes("payment")) {
+    return "anthropic_billing_configuration";
+  }
+  if (normalized.includes("anthropic-workspace-id") || normalized.includes("workspace")) {
+    return "anthropic_workspace_policy";
+  }
+  if (normalized.includes("organization") || normalized.includes("organisation")) {
+    return "anthropic_organization_policy";
+  }
+  if (normalized.includes("max_tokens") || normalized.includes("maximum number of tokens")) {
+    return "anthropic_request_max_tokens";
+  }
+  if (normalized.includes("model")) {
+    return "anthropic_request_model";
+  }
+  if (normalized.includes("messages") || normalized.includes("content") || normalized.includes("role")) {
+    return "anthropic_request_messages";
+  }
+  return null;
+}
+
+function anthropicProviderRequestId(response: Response, payload: AnthropicMessagesPayload): string | null {
+  const candidate = response.headers.get("request-id") || payload.request_id;
+  return candidate && /^req_[A-Za-z0-9]{8,128}$/u.test(candidate) ? candidate : null;
 }
 
 export function hasAnthropicConfiguration(): boolean {
   return Boolean(runtimeEnv().ANTHROPIC_API_KEY);
+}
+
+export async function probeAnthropicModelAccess(options: {
+  model?: string;
+  timeoutMs?: number;
+  deadlineAt?: number;
+  signal?: AbortSignal;
+} = {}): Promise<{ model: string; providerRequestId: string | null }> {
+  const configuration = runtimeEnv();
+  const apiKey = configuration.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new AiUnavailableError("Резервный AI-провайдер не подключён: отсутствует серверный ключ.");
+  }
+  const model = options.model || (await resolveAiRuntimeSettings({
+    db: configuration.DB,
+    env: configuration,
+  })).anthropicChatFallbackModel;
+  const timeoutMs = options.timeoutMs ?? 3_000;
+
+  try {
+    const { response } = await runProviderRequestWithTimeouts({
+      firstByteTimeoutMs: timeoutMs,
+      totalResponseTimeoutMs: timeoutMs,
+      deadlineAt: options.deadlineAt,
+      callerSignal: options.signal,
+      start: (signal) => fetch(`https://api.anthropic.com/v1/models/${encodeURIComponent(model)}`, {
+        method: "GET",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        signal,
+      }),
+      consume: async (response) => {
+        if (response.body) await response.body.cancel();
+        return { response };
+      },
+    });
+    const providerRequestId = anthropicProviderRequestId(response, {});
+    if (!response.ok) {
+      const retryable = response.status === 408 || response.status === 409
+        || response.status === 429 || response.status >= 500;
+      throw new AiUnavailableError(
+        "Резервный AI-провайдер не подтвердил доступ к настроенной модели.",
+        "PROVIDER_UNAVAILABLE",
+        retryable,
+        response.status,
+        null,
+        providerRequestId,
+      );
+    }
+    return { model, providerRequestId };
+  } catch (error) {
+    if (error instanceof AiUnavailableError) throw error;
+    if (error instanceof ProviderRequestAbortError) {
+      if (error.reason === "caller") {
+        throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
+      }
+      throw new AiUnavailableError(
+        error.reason === "first_byte_timeout"
+          ? "Резервный AI-провайдер не начал проверку модели в допустимое время."
+          : "Проверка доступа к модели резервного AI-провайдера превысила допустимое время.",
+        "PROVIDER_TIMEOUT",
+        true,
+        null,
+        error.reason,
+      );
+    }
+    throw new AiUnavailableError(
+      "Резервный AI-провайдер временно недоступен.",
+      "PROVIDER_UNAVAILABLE",
+      true,
+    );
+  }
+}
+
+export async function probeAnthropicConnectivity(options: {
+  model?: string;
+  timeoutMs?: number;
+  deadlineAt?: number;
+  signal?: AbortSignal;
+} = {}): Promise<{ providerResponseId: string | null }> {
+  const configuration = runtimeEnv();
+  const apiKey = configuration.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new AiUnavailableError("Резервный AI-провайдер не подключён: отсутствует серверный ключ.");
+  }
+  const model = options.model || (await resolveAiRuntimeSettings({
+    db: configuration.DB,
+    env: configuration,
+  })).anthropicChatFallbackModel;
+  const timeoutMs = options.timeoutMs ?? 5_000;
+
+  try {
+    const { response, payload } = await runProviderRequestWithTimeouts({
+      firstByteTimeoutMs: timeoutMs,
+      totalResponseTimeoutMs: timeoutMs,
+      deadlineAt: options.deadlineAt,
+      callerSignal: options.signal,
+      start: (signal) => fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1,
+          messages: [{ role: "user", content: "Reply OK." }],
+        }),
+        signal,
+      }),
+      consume: async (response) => ({
+        response,
+        payload: await response.json().catch(() => ({})) as AnthropicMessagesPayload,
+      }),
+    });
+    if (!response.ok) {
+      const retryable = response.status === 408 || response.status === 409
+        || response.status === 429 || response.status >= 500;
+      throw Object.assign(new AiUnavailableError(
+        "Резервный AI-провайдер не прошёл проверку соединения.",
+        "PROVIDER_UNAVAILABLE",
+        retryable,
+        response.status,
+        payload.error?.type ?? null,
+        anthropicProviderRequestId(response, payload),
+      ), {
+        providerFailureReason: safeAnthropicFailureReason(response.status, payload),
+      });
+    }
+    return {
+      providerResponseId: payload.id || anthropicProviderRequestId(response, payload),
+    };
+  } catch (error) {
+    if (error instanceof AiUnavailableError) throw error;
+    if (error instanceof ProviderRequestAbortError) {
+      if (error.reason === "caller") {
+        throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
+      }
+      throw new AiUnavailableError(
+        error.reason === "first_byte_timeout"
+          ? "Резервный AI-провайдер не начал проверочный ответ в допустимое время."
+          : "Проверка соединения с резервным AI-провайдером превысила допустимое время.",
+        "PROVIDER_TIMEOUT",
+        true,
+        null,
+        error.reason,
+      );
+    }
+    throw new AiUnavailableError(
+      "Резервный AI-провайдер временно недоступен.",
+      "PROVIDER_UNAVAILABLE",
+      true,
+    );
+  }
 }
 
 const anthropicJsonEnvelopeSchema = {
@@ -105,7 +344,6 @@ export async function callAnthropicStructured<T>(options: {
             "x-api-key": apiKey,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
-            ...(options.requestId ? { "x-client-request-id": options.requestId } : {}),
           },
           body: JSON.stringify({
             model,
@@ -149,6 +387,7 @@ export async function callAnthropicStructured<T>(options: {
           retryable,
           response.status,
           payload.error?.type ?? null,
+          anthropicProviderRequestId(response, payload),
         );
       }
       if (payload.stop_reason === "refusal") {

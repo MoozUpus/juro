@@ -4,7 +4,7 @@
   "main": "./src/worker.ts",
   "compatibility_date": "2026-08-06",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "keep_vars": true,
+  "keep_vars": false,
   "workers_dev": false,
   "vars": {
     "APP_ENV": "development",

@@ -28,6 +28,8 @@ const editableFields = {
   languages: draftStringList(10),
   experienceYears: z.number().int().min(0).max(99).nullable().optional(),
   priceDescription: optionalText(280),
+  consultationDurationMinutes: z.number().int().min(15).max(480),
+  additionalServices: draftStringList(20).optional(),
   availabilityStatus: lawyerAvailabilitySchema,
   nextAvailableAt: z.string().datetime({ offset: true }).nullable().optional(),
   advocateStatus: lawyerAdvocateStatusSchema,

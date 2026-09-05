@@ -13,6 +13,11 @@ import { LawyerDocumentRequests } from "./LawyerDocumentRequests";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { WorkspaceEntitlements } from "../../lib/billing/entitlements";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
+import {
+  formatLawyerRequestDate as formatRequestDate,
+  lawyerRequestFormatLabel as formatLabel,
+  lawyerRequestServiceLabel as serviceLabel,
+} from "../../lib/platform/lawyer-request-presentation";
 
 type CaseOption = { id: string; title: string };
 type HandoffRequest = {
@@ -28,6 +33,9 @@ type HandoffRequest = {
   offerScopeDescription?: string | null;
   offerPriceDescription?: string | null;
   offerDurationDescription?: string | null;
+  serviceCode?: string | null;
+  preferredFormat?: string | null;
+  proposedStartsAt?: string | null;
 };
 type PublicLawyer = {
   id: string;
@@ -83,6 +91,9 @@ export function LawyerHandoffClient({
     useState<WorkspaceEntitlements | null>(null);
   const [caseId, setCaseId] = useState("");
   const [summary, setSummary] = useState("");
+  const [serviceCode, setServiceCode] = useState("initial_consultation");
+  const [preferredFormat, setPreferredFormat] = useState("video");
+  const [proposedStartsAt, setProposedStartsAt] = useState("");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [accessActionId, setAccessActionId] = useState("");
@@ -167,6 +178,11 @@ export function LawyerHandoffClient({
           caseId,
           lawyerProfileId: lawyerProfileId || undefined,
           anonymizedSummary: summary,
+          serviceCode,
+          preferredFormat,
+          proposedStartsAt: proposedStartsAt
+            ? new Date(proposedStartsAt).toISOString()
+            : undefined,
           consent: true,
           locale,
         }),
@@ -174,6 +190,7 @@ export function LawyerHandoffClient({
       const body = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(body.error || "Ошибка");
       setSummary("");
+      setProposedStartsAt("");
       setConsent(false);
       setMessage(
         ru
@@ -459,6 +476,44 @@ export function LawyerHandoffClient({
           </small>
         </label>
         <label>
+          {ru ? "Услуга" : "Xizmat"}
+          <select
+            required
+            value={serviceCode}
+            onChange={(event) => setServiceCode(event.target.value)}
+            disabled={!entitlements?.lawyerHandoff || busy}
+          >
+            <option value="initial_consultation">{ru ? "Первичная консультация" : "Dastlabki maslahat"}</option>
+            <option value="document_review">{ru ? "Проверка документа" : "Hujjatni tekshirish"}</option>
+            <option value="case_strategy">{ru ? "Стратегия по делу" : "Ish strategiyasi"}</option>
+            <option value="representation">{ru ? "Представительство" : "Vakillik"}</option>
+            <option value="other">{ru ? "Другая юридическая помощь" : "Boshqa yuridik yordam"}</option>
+          </select>
+        </label>
+        <label>
+          {ru ? "Предпочтительный формат" : "Afzal format"}
+          <select
+            required
+            value={preferredFormat}
+            onChange={(event) => setPreferredFormat(event.target.value)}
+            disabled={!entitlements?.lawyerHandoff || busy}
+          >
+            <option value="video">{ru ? "Видеоконсультация" : "Video maslahat"}</option>
+            <option value="phone">{ru ? "Телефон" : "Telefon"}</option>
+            <option value="office">{ru ? "Очно" : "Ofisda"}</option>
+            <option value="chat">{ru ? "Чат" : "Chat"}</option>
+          </select>
+        </label>
+        <label>
+          {ru ? "Предложить дату и время" : "Sana va vaqtni taklif qilish"}
+          <input
+            type="datetime-local"
+            value={proposedStartsAt}
+            onChange={(event) => setProposedStartsAt(event.target.value)}
+            disabled={!entitlements?.lawyerHandoff || busy}
+          />
+        </label>
+        <label>
           {ru
             ? "Анонимизированное описание для conflict check"
             : "Manfaatlar to‘qnashuvi tekshiruvi uchun anonimlashtirilgan tavsif"}
@@ -523,6 +578,11 @@ export function LawyerHandoffClient({
                   timeZone: "Asia/Tashkent",
                 }).format(new Date(item.createdAt))}
               </time>
+              <div className="lawyer-request-intake">
+                <span>{serviceLabel(item.serviceCode, ru)}</span>
+                <span>{formatLabel(item.preferredFormat, ru)}</span>
+                {item.proposedStartsAt && <time dateTime={item.proposedStartsAt}>{formatRequestDate(item.proposedStartsAt, ru)}</time>}
+              </div>
               {item.status === "awaiting_user_consent" && (
                 <div className="lawyer-access-action">
                   <label className="consult-consent">

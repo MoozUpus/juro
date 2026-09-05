@@ -188,6 +188,24 @@ export type StatusIncidentAdminView = IncidentRow & {
   updates: UpdateRow[];
 };
 
+export type StatusIncidentAdminDashboard = {
+  incidents: StatusIncidentAdminView[];
+  dependencies: DependencyHealthSnapshot[];
+  generatedAt: string;
+};
+
+const privateProviderDiagnosticCodes = new Set([
+  "PROVIDER_CREDIT_BALANCE_LOW",
+  "PROVIDER_SPEND_LIMIT_REACHED",
+  "PROVIDER_BILLING_CONFIGURATION",
+  "PROVIDER_WORKSPACE_CONFIGURATION",
+  "PROVIDER_REQUEST_CONFIGURATION",
+]);
+
+function publicSafeErrorCode(code: string | null): string | null {
+  return code && privateProviderDiagnosticCodes.has(code) ? "PROVIDER_UNAVAILABLE" : code;
+}
+
 export class SystemStatusError extends Error {
   constructor(readonly code:
     | "SYSTEM_STATUS_INVALID"
@@ -280,10 +298,16 @@ async function readRows(db: D1Database): Promise<{
   };
 }
 
-export async function readStatusIncidentAdminDashboard(db: D1Database): Promise<{
-  incidents: StatusIncidentAdminView[];
-}> {
-  const rows = await readRows(db);
+export async function readStatusIncidentAdminDashboard(input: {
+  db: D1Database;
+  environment: DependencyHealthEnvironment;
+  now?: Date;
+}): Promise<StatusIncidentAdminDashboard> {
+  const now = input.now ?? new Date();
+  const [rows, dependencies] = await Promise.all([
+    readRows(input.db),
+    readDependencyHealth({ db: input.db, environment: input.environment, now }),
+  ]);
   return {
     incidents: rows.incidents.map((incident) => ({
       ...incident,
@@ -292,6 +316,8 @@ export async function readStatusIncidentAdminDashboard(db: D1Database): Promise<
         .map(({ key, impact }) => ({ key, impact })),
       updates: rows.updates.filter((update) => update.incidentId === incident.id),
     })),
+    dependencies,
+    generatedAt: now.toISOString(),
   };
 }
 
@@ -374,7 +400,7 @@ export async function readPublicStatus(input: {
         checkedAt: dependency.checkedAt,
         checkAgeMs: dependency.checkAgeMs,
         latencyMs: dependency.latencyMs,
-        safeErrorCode: dependency.safeErrorCode,
+        safeErrorCode: publicSafeErrorCode(dependency.safeErrorCode),
         evidenceKind: dependency.evidenceKind,
       };
     });

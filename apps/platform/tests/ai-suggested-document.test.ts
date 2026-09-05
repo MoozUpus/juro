@@ -57,16 +57,25 @@ function structuredAnswer(templateCode: string | null = PUBLISHED_TEMPLATE.code)
   };
 }
 
-function seed(templateCode?: string | null) {
+function seed(
+  templateCode?: string | null,
+  options: { role?: string; caseId?: string | null } = {},
+) {
   const fixture = sqliteD1Fixture();
   fixture.sqlite.prepare("INSERT INTO workspaces (id,type,name,full_name,short_name,locale,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)")
     .run(WORKSPACE_ID, "individual", "AI document", null, null, "ru", NOW, NOW);
   fixture.sqlite.prepare("INSERT INTO user_profiles (id,email,full_name,locale,account_type,default_workspace_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)")
     .run(USER_ID, "ai-document@example.invalid", "AI Document User", "ru", "individual", WORKSPACE_ID, NOW, NOW);
   fixture.sqlite.prepare("INSERT INTO workspace_members (id,workspace_id,user_id,role,status,joined_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)")
-    .run("member_ai_document", WORKSPACE_ID, USER_ID, "owner", "active", NOW, NOW, NOW);
+    .run("member_ai_document", WORKSPACE_ID, USER_ID, options.role ?? "owner", "active", NOW, NOW, NOW);
+  if (options.caseId) {
+    fixture.sqlite.prepare(`INSERT INTO cases
+      (id,workspace_id,owner_user_id,account_type,locale,title,legal_area,status,current_revision,created_at,updated_at)
+      VALUES (?,?,?,'individual','ru','AI document case','contracts','open',1,?,?)`)
+      .run(options.caseId, WORKSPACE_ID, USER_ID, NOW, NOW);
+  }
   fixture.sqlite.prepare("INSERT INTO conversations (id,workspace_id,owner_user_id,case_id,title,locale,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)")
-    .run(CONVERSATION_ID, WORKSPACE_ID, USER_ID, null, "Документ", "ru", "active", NOW, NOW);
+    .run(CONVERSATION_ID, WORKSPACE_ID, USER_ID, options.caseId ?? null, "Документ", "ru", "active", NOW, NOW);
   fixture.sqlite.prepare("INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at) VALUES (?,?,?,?,?,?)")
     .run(ASSISTANT_MESSAGE_ID, CONVERSATION_ID, "assistant", "Ответ", JSON.stringify(structuredAnswer(templateCode)), NOW);
   return fixture;
@@ -95,7 +104,7 @@ test("AI document preview and confirmation persist only reviewed tenant-owned va
     const candidate = preview.candidates.find((item) => item.source === "profile") ?? preview.candidates[0]!;
     const reviewedValue = "Отредактировано пользователем перед созданием";
     const input = {
-      db: d1, workspaceId: WORKSPACE_ID, user: USER,
+      db: d1, workspaceId: WORKSPACE_ID, workspaceRole: "owner", user: USER,
       assistantMessageId: ASSISTANT_MESSAGE_ID, locale: "ru" as const,
       fields: [{ fieldId: candidate.fieldId, value: reviewedValue }],
       idempotencyKey: "ai-document-test-request-0001",
@@ -140,7 +149,7 @@ test("AI document confirmation rejects fields not offered by the server without 
   try {
     await assert.rejects(
       () => createAiSuggestedDocumentDraft({
-        db: d1, workspaceId: WORKSPACE_ID, user: USER,
+        db: d1, workspaceId: WORKSPACE_ID, workspaceRole: "owner", user: USER,
         assistantMessageId: ASSISTANT_MESSAGE_ID, locale: "ru",
         fields: [{ fieldId: "attacker.injectedField", value: "untrusted" }],
         idempotencyKey: "ai-document-test-request-0002",
@@ -157,7 +166,7 @@ test("AI document confirmation requires a separate consent for selected sensitiv
     const preview = await previewAiSuggestedDocument({ db: d1, workspaceId: WORKSPACE_ID, user: USER, assistantMessageId: ASSISTANT_MESSAGE_ID, locale: "ru" });
     const sensitive = preview.candidates.find((candidate) => candidate.sensitive);
     if (!sensitive) throw new Error("Expected a sensitive prefill candidate");
-    const input = { db: d1, workspaceId: WORKSPACE_ID, user: USER, assistantMessageId: ASSISTANT_MESSAGE_ID, locale: "ru" as const, fields: [{ fieldId: sensitive.fieldId, value: sensitive.value }], idempotencyKey: "ai-document-sensitive-consent-0001" };
+    const input = { db: d1, workspaceId: WORKSPACE_ID, workspaceRole: "owner", user: USER, assistantMessageId: ASSISTANT_MESSAGE_ID, locale: "ru" as const, fields: [{ fieldId: sensitive.fieldId, value: sensitive.value }], idempotencyKey: "ai-document-sensitive-consent-0001" };
     await assert.rejects(
       () => createAiSuggestedDocumentDraft(input),
       (error: unknown) => error instanceof AiSuggestedDocumentError && error.code === "AI_SUGGESTED_DOCUMENT_SENSITIVE_CONSENT_REQUIRED",
@@ -184,6 +193,58 @@ test("AI document handoff rejects foreign workspaces and unavailable model templ
   } finally { unavailable.sqlite.close(); }
 });
 
+test("read-only members keep private AI drafts but cannot create case-linked drafts", async () => {
+  const privateDraft = seed(PREFILL_TEMPLATE.code, { role: "viewer" });
+  try {
+    const created = await createAiSuggestedDocumentDraft({
+      db: privateDraft.d1,
+      workspaceId: WORKSPACE_ID,
+      workspaceRole: "viewer",
+      user: USER,
+      assistantMessageId: ASSISTANT_MESSAGE_ID,
+      locale: "ru",
+      fields: [],
+      idempotencyKey: "ai-document-viewer-private-0001",
+    });
+    const document = privateDraft.sqlite.prepare(
+      "SELECT case_id AS caseId FROM documents WHERE id=?",
+    ).get(created.documentId) as { caseId: string | null };
+    assert.equal(document.caseId, null);
+  } finally {
+    privateDraft.sqlite.close();
+  }
+
+  const caseLinked = seed(PREFILL_TEMPLATE.code, {
+    role: "viewer",
+    caseId: "case_ai_document",
+  });
+  try {
+    await assert.rejects(
+      () => createAiSuggestedDocumentDraft({
+        db: caseLinked.d1,
+        workspaceId: WORKSPACE_ID,
+        workspaceRole: "viewer",
+        user: USER,
+        assistantMessageId: ASSISTANT_MESSAGE_ID,
+        locale: "ru",
+        fields: [],
+        idempotencyKey: "ai-document-viewer-case-0001",
+      }),
+      (error: unknown) => error instanceof Error
+        && "status" in error
+        && error.status === 403,
+    );
+    assert.equal(
+      (caseLinked.sqlite.prepare(
+        "SELECT count(*) AS count FROM documents WHERE workspace_id=?",
+      ).get(WORKSPACE_ID) as { count: number }).count,
+      0,
+    );
+  } finally {
+    caseLinked.sqlite.close();
+  }
+});
+
 test("AI document route and client never accept a client-selected template", () => {
   const route = source("app/api/platform/ai/suggested-document/route.ts");
   const service = source("lib/ai/suggested-document.ts");
@@ -191,11 +252,13 @@ test("AI document route and client never accept a client-selected template", () 
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.match(route, /requireApiUser\(\)/);
   assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /workspaceRole: workspace\.role/);
   assert.match(route, /parseJsonRequest\(request, z\.unknown\(\), 64_000\)/);
   assert.match(route, /idempotency-key/);
   assert.match(service, /conversation\.workspace_id=\? AND conversation\.owner_user_id=\?/);
   assert.match(service, /getDocumentByCode\(suggested\.templateCode\)/);
   assert.match(service, /idempotencyKeySha256 = await sha256\(input\.idempotencyKey\)/);
+  assert.match(service, /if \(preview\.caseId\) requireWorkspaceContentEditor\(input\.workspaceRole\)/);
   assert.match(client, /\/api\/platform\/ai\/suggested-document/);
   assert.match(client, /assistantMessageId: documentPrefillMessageId/);
   assert.doesNotMatch(client, /templateCode: answer\.result\.suggestedDocument/);
