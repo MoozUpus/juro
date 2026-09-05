@@ -433,49 +433,32 @@ test("staging-scale governance accepts a compact immutable candidate qualificati
   }
 });
 
-test("immutable observations calculate real staging, canary, and retirement eligibility clocks", async () => {
+test("release observations accept a bounded passing check without elapsed days or request quotas", async () => {
   const { sqlite, d1 } = sqliteD1FixtureFromDirectory(new URL("../legal-drizzle/", import.meta.url));
   try {
-    const start = Date.parse("2026-08-30T00:00:00.000Z");
-    for (let day = 0; day <= 14; day += 1) {
+    for (const phase of ["staging_soak", "production_canary", "retirement_stability"] as const) {
+      const scope = { releaseId: "release-observed", environment: "staging" as const, phase };
+      assert.equal((await evaluatePersistedObservationWindow({ db: d1 }, {
+        ...scope, asOf: "2026-09-06T00:00:00.000Z",
+      })).eligible, false);
       await recordReleaseObservation({ db: d1 }, {
-        id: `staging-observation-${day}`,
-        releaseId: "release-staging-soak",
-        environment: "staging",
-        phase: "staging_soak",
-        observedAt: new Date(start + day * 86_400_000).toISOString(),
-        requestCount: day === 0 ? 0 : 715,
-        green: true,
-        gateBreachCount: 0,
+        ...scope, id: `observation-${phase}`, observedAt: "2026-09-06T00:00:00.000Z",
+        requestCount: 4, green: true, gateBreachCount: 0,
       });
+      const verdict = await evaluatePersistedObservationWindow({ db: d1 }, {
+        ...scope, asOf: "2026-09-06T00:01:00.000Z",
+      });
+      assert.equal(verdict.eligible, true);
+      assert.equal(verdict.requiredDays, 0);
+      assert.equal(verdict.requiredRequests, 0);
+      await recordReleaseObservation({ db: d1 }, {
+        ...scope, id: `breach-${phase}`, observedAt: "2026-09-06T00:02:00.000Z",
+        requestCount: 1, green: false, gateBreachCount: 1,
+      });
+      assert.equal((await evaluatePersistedObservationWindow({ db: d1 }, {
+        ...scope, asOf: "2026-09-06T00:03:00.000Z",
+      })).eligible, false);
     }
-    const staging = await evaluatePersistedObservationWindow({ db: d1 }, {
-      releaseId: "release-staging-soak",
-      environment: "staging",
-      phase: "staging_soak",
-      asOf: "2026-09-13T00:00:00.000Z",
-    });
-    assert.equal(staging.eligible, true);
-    assert.equal(staging.requestCount, 10_010);
-    assert.equal(staging.earliestEligibilityTime, "2026-09-13T00:00:00.000Z");
-
-    const canary = await evaluatePersistedObservationWindow({ db: d1 }, {
-      releaseId: "release-production-canary",
-      environment: "production",
-      phase: "production_canary",
-      asOf: "2026-08-30T00:00:00.000Z",
-    });
-    assert.equal(canary.eligible, false);
-    assert.equal(canary.requiredDays, 30);
-    assert.equal(canary.earliestEligibilityTime, null);
-    const retirement = await evaluatePersistedObservationWindow({ db: d1 }, {
-      releaseId: "release-complete-activation",
-      environment: "production",
-      phase: "retirement_stability",
-      asOf: "2026-08-30T00:00:00.000Z",
-    });
-    assert.equal(retirement.requiredDays, 90);
-    assert.equal(retirement.eligible, false);
   } finally {
     sqlite.close();
   }

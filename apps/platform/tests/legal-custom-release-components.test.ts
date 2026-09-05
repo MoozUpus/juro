@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { recordCustomReleaseGovernance, type CustomReleaseGovernance } from "../lib/legal-corpus/custom-release-governance";
+import { createReleaseLifecycle } from "../lib/legal-corpus/target-release";
+
 import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
 
 const RELEASE_ID = "release:staging:current:custom-v1:2026-09-03";
 const HASH = "a".repeat(64);
 
-function fixture() {
-  const { sqlite } = sqliteD1FixtureFromDirectory(new URL("../legal-drizzle/", import.meta.url));
+function fixture(sqlite = sqliteD1FixtureFromDirectory(new URL("../legal-drizzle/", import.meta.url)).sqlite) {
   sqlite.prepare(`INSERT INTO legal_corpus_snapshots
     (id,environment,corpus_hash,member_count,status,frozen_at,created_at)
     VALUES (?,?,?,?,?,?,?)`).run(
@@ -144,4 +146,86 @@ test("custom source planning has a release-and-rendition lookup index", () => {
   assert.ok(indexedColumns.some((columns) => (
     columns[0] === "search_release_id" && columns[1] === "provision_rendition_id"
   )));
+});
+
+function boundedGovernance(): CustomReleaseGovernance {
+  const ref = { key: "recovery/accepted.json", sha256: HASH };
+  return {
+    policy: "legal-corpus-verification-20260905", id: "governance-current", releaseId: RELEASE_ID,
+    environment: "staging", capability: "current", reconciliationRunId: "build-current",
+    recordedAt: "2026-09-06T00:01:00.000Z",
+    build: { result: ref, sourceRootSha256: HASH, sparseManifestSha256: HASH,
+      vectorInventorySha256: HASH, vectorizeIndexName: "juro-legal-current-custom-20260903",
+      finalMutationId: "mutation-1", chunkCount: 1, materializationComplete: true,
+      sparseReductionComplete: true, vectorizeFullListReconciled: true },
+    configuration: { identity: "configuration:custom-hybrid-v1", sha256: HASH,
+      gatewayIdentity: "juro-ai-search-staging", gatewayAuthenticated: true,
+      gatewayPayloadLogging: false, gatewayCaching: false, model: "text-embedding-3-large",
+      dimensions: 1536, fusionPolicy: "equal-rrf-k60-v1" },
+    privacy: { attestationSha256: HASH, deterministicTransformAttested: true,
+      contentFreeTelemetryAttested: true, productionDisclosureAccepted: false,
+      productionEmbeddingDataControlsApproved: false, stagingQueriesSyntheticOrNonPersonal: true },
+    capacity: { databaseId: "10c71209-7cf6-47c3-a74e-9697e32d7c29", projectedBytes: 6_400_000_000 },
+    cost: { authorizedCostUsd: 16, reservedCostUsd: 13, migrationBudgetKind: "current",
+      completeMigrationCostUsd: 13, monthlyProductionQueryCostUsd: 0, evaluationCostUsd: 0.01,
+      unpricedRequests: 0 },
+    recovery: ref, rollbackHealthy: true,
+    smoke: { result: ref, startedAt: "2026-09-06T00:00:00.000Z",
+      completedAt: "2026-09-06T00:01:00.000Z", requestCount: 6,
+      checks: ["russian", "uzbek_latin", "uzbek_cyrillic", "english", "exact_citation",
+        "general_question", "source_ladder_failure"].map(name => ({
+          name: name as CustomReleaseGovernance["smoke"]["checks"][number]["name"], passed: true,
+        })) },
+  };
+}
+
+function customGovernanceFixture() {
+  const database = sqliteD1FixtureFromDirectory(new URL("../legal-drizzle/", import.meta.url));
+  fixture(database.sqlite);
+  insertComponent(database.sqlite);
+  database.sqlite.prepare(`INSERT INTO legal_migration_reconciliation_reports
+    (run_id,environment,release_id,capability,input_sha256,report_sha256,status,report_json,created_at)
+    VALUES (?,?,?,?,?,?,'clean','{}',?)`).run("build-current", "staging", RELEASE_ID, "current",
+    HASH, HASH, "2026-09-03T00:00:00.000Z");
+  return database;
+}
+
+test("custom release seals and activates from accepted build roots and bounded smoke without duplicate proofs", async () => {
+  const { sqlite, d1 } = customGovernanceFixture();
+  try {
+    assert.deepEqual(await recordCustomReleaseGovernance({ db: d1 }, boundedGovernance()), {
+      passed: true, failures: [],
+    });
+    const lifecycle = createReleaseLifecycle({ db: d1 });
+    await lifecycle.sealCustomSearchRelease({ releaseId: RELEASE_ID,
+      environment: "staging", createdAt: "2026-09-06T00:02:00.000Z" });
+    const active = await lifecycle.activateCurrent({ currentReleaseId: RELEASE_ID,
+      environment: "staging", actor: "test", reason: "Accept the recorded capability smoke.",
+      createdAt: "2026-09-08T00:00:00.000Z" });
+    assert.equal(active.currentReleaseId, RELEASE_ID);
+    assert.equal(active.asOfReleaseId, null);
+    assert.equal(active.comparisonHistoryReleaseId, null);
+  } finally { sqlite.close(); }
+});
+
+test("custom governance rejects changed roots, missing checks, unsafe privacy, and spend or capacity excess", async () => {
+  const mutations: Array<(input: CustomReleaseGovernance) => void> = [
+    input => { input.build.finalMutationId = "changed"; },
+    input => { input.build.result.sha256 = "b".repeat(64); },
+    input => { input.build.vectorizeFullListReconciled = false; },
+    input => { input.smoke.checks.pop(); },
+    input => { input.smoke.checks[0]!.passed = false; },
+    input => { input.smoke.completedAt = "2026-09-06T00:11:00.000Z"; },
+    input => { input.configuration.gatewayPayloadLogging = true; },
+    input => { input.privacy.deterministicTransformAttested = false; },
+    input => { input.cost.reservedCostUsd = 17; },
+    input => { input.capacity.projectedBytes = 7_000_000_000; },
+  ];
+  for (const mutate of mutations) {
+    const { sqlite, d1 } = customGovernanceFixture();
+    try {
+      const input = boundedGovernance(); mutate(input);
+      assert.equal((await recordCustomReleaseGovernance({ db: d1 }, input)).passed, false);
+    } finally { sqlite.close(); }
+  }
 });

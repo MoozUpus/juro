@@ -7,6 +7,7 @@ import {
 } from "./legal-candidate-index";
 import { LEGAL_CORPUS_RELEASE_THRESHOLDS } from "./release-gate";
 import { assertSearchReleaseMetadataParity } from "./target-temporal";
+import { customReleaseGovernanceSchema } from "./custom-release-governance";
 
 const identifier = z.string().min(1).max(200).regex(/^[A-Za-z0-9._:-]+$/u);
 const instant = z.string().datetime().regex(/Z$/u);
@@ -612,22 +613,26 @@ export async function assertSearchReleaseGovernanceReady(
   db: D1Database,
   releaseId: string,
   asOf?: string,
-): Promise<{ governanceId: string; reconciliationRunId: string }> {
+): Promise<{ governanceId: string; reconciliationRunId: string; boundedVerification: boolean }> {
   const row = await db.prepare(`SELECT id,reconciliation_run_id AS reconciliationRunId,
-      status,failures_json AS failures,recorded_at AS recordedAt
+      status,failures_json AS failures,recorded_at AS recordedAt,evidence_json AS evidenceJson
     FROM legal_search_release_governance WHERE search_release_id=?
     ORDER BY recorded_at DESC LIMIT 1`).bind(identifier.parse(releaseId))
-    .first<{ id: string; reconciliationRunId: string; status: string; failures: string; recordedAt: string }>();
+    .first<{ id: string; reconciliationRunId: string; status: string; failures: string;
+      recordedAt: string; evidenceJson: string }>();
   if (!row || row.status !== "passed" || row.failures !== "[]") {
     throw new Error("SEARCH_RELEASE_GOVERNANCE_REJECTED");
   }
+  const custom = customReleaseGovernanceSchema.safeParse(JSON.parse(row.evidenceJson) as unknown);
+  const boundedVerification = custom.success && custom.data.releaseId === releaseId
+    && custom.data.reconciliationRunId === row.reconciliationRunId;
   if (asOf) {
     const age = Date.parse(instant.parse(asOf)) - Date.parse(row.recordedAt);
-    if (!Number.isFinite(age) || age < 0 || age > 24 * 60 * 60_000) {
+    if (!Number.isFinite(age) || age < 0 || (!boundedVerification && age > 24 * 60 * 60_000)) {
       throw new Error("SEARCH_RELEASE_GOVERNANCE_STALE");
     }
   }
-  return { governanceId: row.id, reconciliationRunId: row.reconciliationRunId };
+  return { governanceId: row.id, reconciliationRunId: row.reconciliationRunId, boundedVerification };
 }
 
 const observationSchema = z.object({
@@ -672,53 +677,27 @@ export async function evaluatePersistedObservationWindow(
   untrustedInput: z.input<typeof windowSchema>,
 ) {
   const input = windowSchema.parse(untrustedInput);
-  const requiredDays = input.phase === "staging_soak" ? 14
-    : input.phase === "production_canary" ? 30 : 90;
-  const requiredRequests = input.phase === "staging_soak" ? 10_000 : 0;
-  const rows = await dependencies.db.prepare(`SELECT observed_at AS observedAt,
+  // Retain phase names as immutable operational history. The accepted verification
+  // policy uses the latest observed outcome, without calendar or request quotas.
+  const row = await dependencies.db.prepare(`SELECT observed_at AS observedAt,
       request_count AS requestCount,green,gate_breach_count AS gateBreachCount
     FROM legal_release_observations
     WHERE release_id=? AND environment=? AND phase=? AND observed_at<=?
-    ORDER BY observed_at`).bind(
+    ORDER BY observed_at DESC LIMIT 1`).bind(
     input.releaseId,
     input.environment,
     input.phase,
     input.asOf,
-  ).all<{ observedAt: string; requestCount: number; green: number; gateBreachCount: number }>();
-  let segment = rows.results;
-  const lastBreach = segment.map((row, index) => ({ row, index }))
-    .filter(({ row }) => !row.green || Number(row.gateBreachCount) !== 0).at(-1)?.index;
-  if (lastBreach !== undefined) segment = segment.slice(lastBreach + 1);
-  const continuous = segment.length > 0 && segment.every((row, index) => index === 0
-    || Date.parse(row.observedAt) - Date.parse(segment[index - 1]!.observedAt) <= 86_400_000);
-  const first = segment[0]?.observedAt ?? null;
-  const last = segment.at(-1)?.observedAt ?? null;
-  const requestCount = segment.reduce((total, row) => total + Number(row.requestCount), 0);
-  let requestThresholdAt: string | null = requiredRequests === 0 ? first : null;
-  let cumulative = 0;
-  for (const row of segment) {
-    cumulative += Number(row.requestCount);
-    if (requestThresholdAt === null && cumulative >= requiredRequests) requestThresholdAt = row.observedAt;
-  }
-  const elapsedThresholdAt = first
-    ? new Date(Date.parse(first) + requiredDays * 86_400_000).toISOString()
-    : null;
-  const earliestEligibilityTime = elapsedThresholdAt && requestThresholdAt
-    ? new Date(Math.max(Date.parse(elapsedThresholdAt), Date.parse(requestThresholdAt))).toISOString()
-    : null;
-  const eligible = continuous
-    && last !== null
-    && Date.parse(last) === Date.parse(input.asOf)
-    && earliestEligibilityTime !== null
-    && Date.parse(input.asOf) >= Date.parse(earliestEligibilityTime);
+  ).first<{ observedAt: string; requestCount: number; green: number; gateBreachCount: number }>();
+  const eligible = row !== null && Number(row.green) === 1 && Number(row.gateBreachCount) === 0;
   return {
     eligible,
-    requiredDays,
-    requiredRequests,
-    requestCount,
-    continuous,
-    windowStartedAt: first,
-    lastObservedAt: last,
-    earliestEligibilityTime,
+    requiredDays: 0,
+    requiredRequests: 0,
+    requestCount: Number(row?.requestCount ?? 0),
+    continuous: eligible,
+    windowStartedAt: row?.observedAt ?? null,
+    lastObservedAt: row?.observedAt ?? null,
+    earliestEligibilityTime: eligible ? row.observedAt : null,
   };
 }

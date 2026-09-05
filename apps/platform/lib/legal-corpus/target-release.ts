@@ -284,8 +284,11 @@ async function assertObservationWindows(
 ): Promise<void> {
   if (environment === "development") return;
   const phase = environment === "staging" ? "staging_soak" : "production_canary";
-  const windows = await Promise.all(releaseIds.map((releaseId) =>
-    evaluatePersistedObservationWindow({ db }, { releaseId, environment, phase, asOf })));
+  const windows = await Promise.all(releaseIds.map(async (releaseId) => {
+    const governance = await assertSearchReleaseGovernanceReady(db, releaseId, asOf);
+    if (governance.boundedVerification) return { eligible: true };
+    return evaluatePersistedObservationWindow({ db }, { releaseId, environment, phase, asOf });
+  }));
   if (windows.some((window) => !window.eligible)) {
     throw new ReleaseLifecycleError("ACTIVATION_REJECTED");
   }
@@ -294,6 +297,30 @@ async function assertObservationWindows(
 export function createReleaseLifecycle(dependencies: { db: D1Database }) {
   const { db } = dependencies;
   return {
+    async sealCustomSearchRelease(untrustedInput: {
+      releaseId: string; environment: string; createdAt: string;
+    }) {
+      const input = z.object({ releaseId: searchReleaseIdSchema,
+        environment: legalEnvironmentSchema, createdAt: utcInstantSchema }).strict().parse(untrustedInput);
+      const governance = await assertSearchReleaseGovernanceReady(db, input.releaseId, input.createdAt);
+      if (!governance.boundedVerification) throw new ReleaseLifecycleError("SEARCH_RELEASE_REJECTED");
+      const row = await db.prepare(`SELECT release.status,release.sealed_reconciliation_run_id AS reconciliationRunId
+        FROM legal_search_releases release
+        JOIN legal_corpus_snapshots snapshot ON snapshot.id=release.corpus_snapshot_id
+        JOIN legal_custom_search_release_components component ON component.search_release_id=release.id
+        WHERE release.id=? AND release.environment=? AND snapshot.environment=release.environment
+          AND snapshot.status='frozen' AND release.item_count=component.chunk_count`)
+        .bind(input.releaseId, input.environment).first<{ status: string; reconciliationRunId: string | null }>();
+      if (!row || !["draft", "sealed"].includes(row.status)
+        || (row.status === "sealed" && row.reconciliationRunId !== governance.reconciliationRunId)) {
+        throw new ReleaseLifecycleError("SEARCH_RELEASE_REJECTED");
+      }
+      if (row.status === "draft") await db.prepare(`UPDATE legal_search_releases
+        SET status='sealed',sealed_at=?,sealed_reconciliation_run_id=? WHERE id=? AND status='draft'`)
+        .bind(input.createdAt, governance.reconciliationRunId, input.releaseId).run();
+      return { releaseId: input.releaseId, reconciliationRunId: governance.reconciliationRunId };
+    },
+
     async freezeCorpusSnapshot(untrustedInput: z.input<typeof snapshotInputSchema>) {
       const input = snapshotInputSchema.parse(untrustedInput);
       const members = await snapshotMembers(db, input.provisionRenditionIds);

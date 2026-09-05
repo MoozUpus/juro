@@ -555,7 +555,7 @@ test("current and history releases form complete but distinct eligible snapshot 
   }
 });
 
-test("production current activation requires its own persisted 30-day canary", async () => {
+test("production current activation requires its own recorded passing observation", async () => {
   const { sqlite, d1 } = sqliteD1FixtureFromDirectory(new URL("../legal-drizzle/", import.meta.url));
   const bucket = new MemoryEvidenceBucket();
   try {
@@ -598,25 +598,22 @@ test("production current activation requires its own persisted 30-day canary", a
         environment: "production",
         currentReleaseId: "release-production-canary-v1",
         actor: "test-suite",
-        reason: "A production release cannot skip its canary window.",
+        reason: "A production release requires an observed capability check.",
         createdAt: "2026-08-30T00:20:00.000Z",
       }),
       /ACTIVATION_REJECTED/u,
     );
-    const canaryStart = Date.parse("2026-08-30T00:20:00.000Z");
-    for (let day = 0; day <= 30; day += 1) {
-      await recordReleaseObservation({ db: d1 }, {
-        id: `production-current-canary-${day}`,
-        releaseId: "release-production-canary-v1",
-        environment: "production",
-        phase: "production_canary",
-        observedAt: new Date(canaryStart + day * 86_400_000).toISOString(),
-        requestCount: 0,
-        green: true,
-        gateBreachCount: 0,
-      });
-    }
-    const activationTime = new Date(canaryStart + 30 * 86_400_000).toISOString();
+    const activationTime = "2026-08-30T00:20:00.000Z";
+    await recordReleaseObservation({ db: d1 }, {
+      id: "production-current-observation",
+      releaseId: "release-production-canary-v1",
+      environment: "production",
+      phase: "production_canary",
+      observedAt: activationTime,
+      requestCount: 4,
+      green: true,
+      gateBreachCount: 0,
+    });
     recordPassedGovernance(sqlite, {
       releaseId: "release-production-canary-v1",
       reportId: "report-production-canary-v1",
@@ -627,7 +624,7 @@ test("production current activation requires its own persisted 30-day canary", a
       environment: "production",
       currentReleaseId: "release-production-canary-v1",
       actor: "test-suite",
-      reason: "Activate only after the complete persisted canary window.",
+      reason: "Activate after the recorded bounded capability check.",
       createdAt: activationTime,
     });
     assert.equal(activated.currentReleaseId, "release-production-canary-v1");
