@@ -16,6 +16,18 @@ import { legalLanguageSchema } from "./target-domain-schemas";
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const instantSchema = z.string().datetime({ offset: true });
+export const acceptedCurrentSourceSchema = z.object({
+  legacyRenditionId: z.string().min(1), sourceId: z.string().min(1),
+  legalIdentitySha256: sha256Schema, contentSha256: sha256Schema,
+  provision: z.object({ key: z.string().min(1), sha256: sha256Schema,
+    sizeBytes: z.number().int().positive(), envelope: z.boolean() }).strict(),
+  normalized: z.object({ key: z.string().min(1), sha256: sha256Schema,
+    sizeBytes: z.number().int().positive() }).strict(),
+  chunks: z.array(z.object({ ordinal: z.number().int().nonnegative(),
+    officialTextSha256: sha256Schema, inputSha256: sha256Schema,
+    inputTokens: z.number().int().min(1).max(8192) }).strict()).min(1).max(999),
+}).strict();
+export type AcceptedCurrentSource = z.infer<typeof acceptedCurrentSourceSchema>;
 const provisionObjectSchema = z.object({
   schemaVersion: z.literal(1),
   provisionRenditionId: z.string(),
@@ -43,6 +55,7 @@ const sourcePlanItemSchema = z.object({
   documentType: z.string().min(1).max(300),
   validFrom: instantSchema,
   validTo: instantSchema.nullable(),
+  accepted: acceptedCurrentSourceSchema.optional(),
 }).strict();
 
 export type CustomCurrentSourcePlanItem = z.infer<typeof sourcePlanItemSchema>;
@@ -121,16 +134,37 @@ export async function materializeCustomCurrentItem(input: {
   releaseId: string;
   planItem: CustomCurrentSourcePlanItem;
   evidenceBytes: Uint8Array;
+  acceptedMetadata?: { documentTitle: string; articleNumber: string;
+    articleTitle: string | null; hierarchy: string[] };
 }): Promise<CustomCurrentMaterializedItem> {
   const source = sourcePlanItemSchema.parse(input.planItem);
   if (input.evidenceBytes.byteLength !== source.evidenceByteCount
     || await customCurrentSha256(input.evidenceBytes) !== source.evidenceSha256) {
     throw new TypeError("CUSTOM_CURRENT_EVIDENCE_INTEGRITY_FAILED");
   }
-  let object: z.infer<typeof provisionObjectSchema>;
+  let object: Pick<z.infer<typeof provisionObjectSchema>, "provisionRenditionId" | "languageTag"
+    | "documentType" | "actTitle" | "articleNumber" | "articleTitle" | "provisionText">;
   try {
-    object = provisionObjectSchema.parse(JSON.parse(new TextDecoder("utf-8", { fatal: true })
-      .decode(input.evidenceBytes)) as unknown);
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(input.evidenceBytes);
+    if (source.accepted) {
+      const accepted = source.accepted;
+      if (!input.acceptedMetadata || accepted.legacyRenditionId !== source.provisionRenditionId
+        || source.evidenceR2Key !== accepted.provision.key || source.evidenceSha256 !== accepted.provision.sha256
+        || source.evidenceByteCount !== accepted.provision.sizeBytes || source.documentType !== "unknown") {
+        throw new TypeError("CUSTOM_CURRENT_ACCEPTED_IDENTITY_FAILED");
+      }
+      const provisionText = accepted.provision.envelope
+        ? z.object({ provisionText: z.string().min(1) }).parse(JSON.parse(text)).provisionText : text;
+      if (await customCurrentSha256(provisionText) !== accepted.contentSha256) {
+        throw new TypeError("CUSTOM_CURRENT_ACCEPTED_CONTENT_FAILED");
+      }
+      object = { provisionRenditionId: source.provisionRenditionId, languageTag: source.language,
+        documentType: "unknown", actTitle: input.acceptedMetadata.documentTitle,
+        articleNumber: input.acceptedMetadata.articleNumber, articleTitle: input.acceptedMetadata.articleTitle,
+        provisionText };
+    } else {
+      object = provisionObjectSchema.parse(JSON.parse(text) as unknown);
+    }
   } catch {
     throw new TypeError("CUSTOM_CURRENT_EVIDENCE_SCHEMA_FAILED");
   }
@@ -147,7 +181,7 @@ export async function materializeCustomCurrentItem(input: {
     documentType: object.documentType,
     articleNumber: object.articleNumber,
     articleTitle: object.articleTitle,
-    hierarchy: [],
+    hierarchy: input.acceptedMetadata?.hierarchy ?? [],
     language: object.languageTag,
     script: object.languageTag === "uz-Latn" || object.languageTag === "en" ? "Latn" : "Cyrl",
     officialText: object.provisionText,
@@ -155,6 +189,15 @@ export async function materializeCustomCurrentItem(input: {
     validToEpoch,
   }, { targetTokens: 512 });
   if (chunks.length >= 1_000) throw new TypeError("CUSTOM_CURRENT_PROVISION_CHUNK_LIMIT");
+  if (source.accepted) {
+    if (chunks.length !== source.accepted.chunks.length) throw new TypeError("CUSTOM_CURRENT_ACCEPTED_CHUNK_MISMATCH");
+    for (const [index, chunk] of chunks.entries()) {
+      const expected = source.accepted.chunks[index]!;
+      if (chunk.ordinal !== expected.ordinal || await customCurrentSha256(chunk.officialText) !== expected.officialTextSha256
+        || await customCurrentSha256(serializeCustomEmbeddingInput(chunk)) !== expected.inputSha256
+        || chunk.embeddingTokenCount !== expected.inputTokens) throw new TypeError("CUSTOM_CURRENT_ACCEPTED_CHUNK_MISMATCH");
+    }
+  }
 
   const denseItems: CustomCurrentDenseItem[] = [];
   const sparseRecords: CustomBm25IntermediateRecord[] = [];

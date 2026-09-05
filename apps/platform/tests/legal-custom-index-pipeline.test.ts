@@ -7,7 +7,6 @@ import {
   EmbeddingBudget,
   ReleaseCheckpointLedger,
   assertContentAddressedArtifact,
-  assertOfflineEmbeddingArtifactsAvailable,
   assertPlanNotExpired,
   assertReleaseSealable,
   authorizeProviderRateWindow,
@@ -119,28 +118,15 @@ test("embedding budget enforces provider ceilings, rate and authorized cost", ()
   });
 });
 
-test("offline document indexing requires Batch-materialized embedding artifacts", () => {
-  assert.doesNotThrow(() => assertOfflineEmbeddingArtifactsAvailable(0));
-  assert.throws(
-    () => assertOfflineEmbeddingArtifactsAvailable(1),
-    (error) => error instanceof CustomIndexPipelineError
-      && error.code === "CUSTOM_INDEX_BATCH_EMBEDDING_REQUIRED",
-  );
-  assert.throws(
-    () => assertOfflineEmbeddingArtifactsAvailable(-1),
-    (error) => error instanceof CustomIndexPipelineError
-      && error.code === "CUSTOM_INDEX_BATCH_EMBEDDING_REQUIRED",
-  );
-});
-
-test("offline worker cannot synchronously call a document-embedding provider", async () => {
+test("document worker uses only the privacy-configured regular Gateway transport", async () => {
   const worker = await readFile(
     new URL("../worker/legal-custom-current-build-worker.ts", import.meta.url),
     "utf8",
   );
-  assert.match(worker, /assertOfflineEmbeddingArtifactsAvailable\(missing\.length\)/u);
-  assert.doesNotMatch(worker, /endpoint:\s*["']embeddings["']/u);
-  assert.doesNotMatch(worker, /\.gateway\(/u);
+  assert.match(worker, /\.gateway\(/u);
+  assert.match(worker, /requestGatewayDocumentEmbeddings/u);
+  assert.match(worker, /DOCUMENT_EMBEDDINGS_ENABLED !== "true"/u);
+  assert.doesNotMatch(worker, /api\.openai\.com|\/batches|assertOfflineEmbeddingArtifactsAvailable/u);
 });
 
 test("seal requires all lanes, terminal Vectorize mutations and exact inventory", () => {

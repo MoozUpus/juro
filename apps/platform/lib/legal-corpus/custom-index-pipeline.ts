@@ -53,12 +53,6 @@ export function assertPlanNotExpired(expiresAtEpochMs: number, nowEpochMs: numbe
   }
 }
 
-export function assertOfflineEmbeddingArtifactsAvailable(missingArtifactCount: number): void {
-  if (!Number.isSafeInteger(missingArtifactCount) || missingArtifactCount !== 0) {
-    throw new CustomIndexPipelineError("CUSTOM_INDEX_BATCH_EMBEDDING_REQUIRED");
-  }
-}
-
 export function authorizeProviderRateWindow(input: {
   priorRequestEpochMs: readonly number[];
   nowEpochMs: number;

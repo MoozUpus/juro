@@ -1,0 +1,256 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { DocumentEmbeddingLedger, ensureDocumentEmbeddings, type EmbeddingStore, type EmbeddingValues } from "../lib/legal-corpus/document-embedding-build";
+import { buildRetrievalChunks, serializeCustomEmbeddingInput } from "../lib/legal-corpus/custom-hybrid-index";
+import { customCurrentSha256 } from "../lib/legal-corpus/custom-current-build";
+import { requestGatewayDocumentEmbeddings } from "../lib/legal-corpus/document-embedding-build";
+
+class MemoryStore implements EmbeddingStore {
+  values = new Map<string, unknown>();
+  private tail: Promise<unknown> = Promise.resolve();
+  async get<T>(key: string): Promise<T | undefined> { return structuredClone(this.values.get(key)) as T | undefined; }
+  async put(values: Record<string, unknown>) {
+    assert.ok(Object.keys(values).length <= 128, "Durable storage put limit");
+    for (const [key, value] of Object.entries(values)) this.values.set(key, structuredClone(value));
+  }
+  transaction<T>(callback: (store: EmbeddingValues) => Promise<T>): Promise<T> {
+    const result = this.tail.then(() => callback(this));
+    this.tail = result.catch(() => undefined);
+    return result;
+  }
+}
+
+class MemoryR2 {
+  objects = new Map<string, { bytes: Uint8Array; customMetadata: Record<string, string> }>();
+  async head(key: string) { return this.objects.has(key) ? { key } : null; }
+  async get(key: string) {
+    const item = this.objects.get(key);
+    return item ? { size: item.bytes.length, customMetadata: item.customMetadata,
+      arrayBuffer: async () => item.bytes.slice().buffer } : null;
+  }
+  async put(key: string, bytes: Uint8Array, options: { customMetadata: Record<string, string> }) {
+    if (this.objects.has(key)) return null;
+    this.objects.set(key, { bytes: bytes.slice(), customMetadata: options.customMetadata });
+    return { key };
+  }
+  binding() { return this as unknown as R2Bucket; }
+}
+
+const configuration = {
+  environment: "staging" as const, releaseId: "release:staging:current:fixture",
+  manifestSha256: "a".repeat(64), authorizedTokens: 10000,
+  requestsPerMinute: 60, tokensPerMinute: 10000, enabled: true,
+};
+
+test("Gateway dispatch disables content logging, caching and hidden retries", async () => {
+  const request = { model: "text-embedding-3-large" as const, dimensions: 1536 as const,
+    encoding_format: "float" as const, input: ["fixture"] };
+  let called = false;
+  const response = await requestGatewayDocumentEmbeddings({ run: async (data, options) => {
+    called = true;
+    assert.deepEqual(data, { provider: "openai", endpoint: "embeddings",
+      headers: { "Content-Type": "application/json", "cf-aig-skip-cache": true,
+        "cf-aig-collect-log": false, "cf-aig-max-attempts": 1 }, query: request });
+    assert.deepEqual(options?.gateway, { id: "fixture-gateway", skipCache: true, collectLog: false,
+      requestTimeoutMs: 55000, retries: { maxAttempts: 1 } });
+    assert.ok(options?.signal instanceof AbortSignal);
+    return new Response("fixture");
+  } }, "fixture-gateway", request);
+  assert.ok(called);
+  assert.equal(await response.text(), "fixture");
+});
+
+async function input(text: string) {
+  const [chunk] = await buildRetrievalChunks({ snapshotProvisionId: "provision:fixture",
+    sourceDocumentTitle: "Fixture law", documentType: "unknown", articleNumber: "1",
+    articleTitle: null, hierarchy: [], language: "en", script: "Latn", officialText: text,
+    validFromEpoch: 0, validToEpoch: null }, { targetTokens: 512 });
+  assert.ok(chunk);
+  return { chunk, inputSha256: await customCurrentSha256(serializeCustomEmbeddingInput(chunk)),
+    inputTokens: chunk.embeddingTokenCount };
+}
+
+test("document build uses regular requests, validates reordered results and reuses duplicate inputs after restart", async () => {
+  const inputs = [await input("One supported provision."), await input("A different provision.")];
+  const storage = new MemoryStore();
+  const bucket = new MemoryR2();
+  const providerRequests: unknown[] = [];
+  const provider = async (request: { input: string[] }) => {
+    providerRequests.push(request);
+    return Response.json({ model: "text-embedding-3-large", data: [1, 0].map(index => ({
+      index, embedding: Array.from({ length: 1536 }, (_, i) => i === index ? 1 : 0),
+    })), usage: { prompt_tokens: inputs.reduce((sum, item) => sum + item.inputTokens, 0),
+      total_tokens: inputs.reduce((sum, item) => sum + item.inputTokens, 0) } });
+  };
+  const run = () => ensureDocumentEmbeddings({ configuration,
+    ledger: new DocumentEmbeddingLedger(storage), bucket: bucket.binding(),
+    inputs: [...inputs, inputs[0]!], ownerId: "page-1", provider, now: () => 1000 });
+  const first = await run();
+  assert.equal(first.artifacts.length, 3);
+  assert.equal(first.artifacts[0]?.vectorSha256, first.artifacts[2]?.vectorSha256);
+  assert.notEqual(first.artifacts[0]?.vectorSha256, first.artifacts[1]?.vectorSha256);
+  assert.equal(providerRequests.length, 1);
+  assert.deepEqual(providerRequests[0], { model: "text-embedding-3-large", dimensions: 1536,
+    encoding_format: "float", input: inputs.map(item => serializeCustomEmbeddingInput(item.chunk)) });
+  const second = await run();
+  assert.deepEqual(second.artifacts, first.artifacts);
+  assert.equal(second.providerInputTokens, first.providerInputTokens);
+  assert.equal(providerRequests.length, 1);
+});
+
+test("unknown provider outcomes retain the reservation and cannot be dispatched twice", async () => {
+  const item = await input("Unknown outcome.");
+  const storage = new MemoryStore();
+  const bucket = new MemoryR2();
+  let requests = 0;
+  const run = () => ensureDocumentEmbeddings({ configuration, ledger: new DocumentEmbeddingLedger(storage),
+    bucket: bucket.binding(), inputs: [item], ownerId: "unknown", provider: async () => { requests++; throw Error("network"); } });
+  await assert.rejects(run(), /network/);
+  await assert.rejects(run(), /OUTCOME_UNRESOLVED/);
+  assert.equal(requests, 1);
+  assert.equal((await new DocumentEmbeddingLedger(storage).status()).reservedTokens, item.inputTokens);
+  assert.equal(bucket.objects.size, 0);
+});
+
+test("disabled and over-budget configurations never dispatch", async () => {
+  const item = await input("Budget guard.");
+  for (const config of [{ ...configuration, enabled: false }, { ...configuration, authorizedTokens: item.inputTokens - 1 }]) {
+    let requests = 0;
+    await assert.rejects(ensureDocumentEmbeddings({ configuration: config, ledger: new DocumentEmbeddingLedger(new MemoryStore()),
+      bucket: new MemoryR2().binding(), inputs: [item], ownerId: "budget",
+      provider: async () => { requests++; throw Error("unexpected"); } }), /DISABLED|COST_STOP/);
+    assert.equal(requests, 0);
+  }
+});
+
+test("malformed successful responses produce no artifacts and keep the unknown-outcome fence", async () => {
+  const item = await input("Response checks.");
+  const valid = { model: "text-embedding-3-large", data: [{ index: 0, embedding: Array(1536).fill(1) }],
+    usage: { prompt_tokens: item.inputTokens, total_tokens: item.inputTokens } };
+  for (const payload of [
+    { ...valid, model: "another-model" }, { ...valid, data: [{ index: 1, embedding: Array(1536).fill(1) }] },
+    { ...valid, data: [valid.data[0], valid.data[0]] },
+    { ...valid, data: [{ index: 0, embedding: Array(1535).fill(1) }] },
+    { ...valid, data: [{ index: 0, embedding: Array(1536).fill(0) }] },
+    { ...valid, data: [{ index: 0, embedding: Array(1536).fill(null) }] },
+    { ...valid, usage: { prompt_tokens: item.inputTokens + 1, total_tokens: item.inputTokens + 1 } },
+  ]) {
+    const storage = new MemoryStore();
+    const bucket = new MemoryR2();
+    let requests = 0;
+    const run = () => ensureDocumentEmbeddings({ configuration, ledger: new DocumentEmbeddingLedger(storage),
+      bucket: bucket.binding(), inputs: [item], ownerId: "malformed",
+      provider: async () => { requests++; return Response.json(payload); } });
+    await assert.rejects(run());
+    assert.equal(bucket.objects.size, 0);
+    await assert.rejects(run(), /OUTCOME_UNRESOLVED/);
+    assert.equal(requests, 1);
+  }
+});
+
+test("concurrent duplicate delivery makes only one provider request", async () => {
+  const item = await input("Concurrent delivery.");
+  const storage = new MemoryStore();
+  const bucket = new MemoryR2();
+  let requests = 0;
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  let entered!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const run = () => ensureDocumentEmbeddings({ configuration, ledger: new DocumentEmbeddingLedger(storage),
+    bucket: bucket.binding(), inputs: [item], ownerId: "duplicate", provider: async () => {
+      requests++; entered(); await pending;
+      return Response.json({ model: "text-embedding-3-large", data: [{ index: 0, embedding: Array(1536).fill(1) }],
+        usage: { prompt_tokens: item.inputTokens, total_tokens: item.inputTokens } });
+    } });
+  const first = run();
+  await started;
+  await assert.rejects(run(), /OUTCOME_UNRESOLVED/);
+  release();
+  await first;
+  assert.equal(requests, 1);
+});
+
+test("restart after vector persistence finishes pointers and accounting without another charge", async () => {
+  const item = await input("Recover persisted response.");
+  const storage = new MemoryStore();
+  const bucket = new MemoryR2();
+  const originalPut = bucket.put.bind(bucket);
+  let failPointer = true;
+  bucket.put = async (key, bytes, options) => {
+    if (failPointer && key.includes('/verified/')) throw Error("R2 interruption");
+    return originalPut(key, bytes, options);
+  };
+  let requests = 0;
+  const run = () => ensureDocumentEmbeddings({ configuration, ledger: new DocumentEmbeddingLedger(storage),
+    bucket: bucket.binding(), inputs: [item], ownerId: "restart", provider: async () => {
+      requests++;
+      return Response.json({ model: "text-embedding-3-large", data: [{ index: 0, embedding: Array(1536).fill(1) }],
+        usage: { prompt_tokens: item.inputTokens, total_tokens: item.inputTokens } });
+    } });
+  await assert.rejects(run(), /R2 interruption/);
+  failPointer = false;
+  const result = await run();
+  assert.equal(requests, 1);
+  assert.equal(result.providerInputTokens, item.inputTokens);
+  assert.equal(result.artifacts.length, 1);
+});
+
+test("credit exhaustion stops later dispatch and does not retry unrelated inputs", async () => {
+  const storage = new MemoryStore();
+  const bucket = new MemoryR2();
+  let requests = 0;
+  const run = (inputs: Awaited<ReturnType<typeof input>>[]) => ensureDocumentEmbeddings({
+    configuration, ledger: new DocumentEmbeddingLedger(storage), bucket: bucket.binding(), inputs,
+    ownerId: "quota-page", provider: async () => { requests++;
+      return Response.json({ error: { code: "credit_balance_exhausted", type: "insufficient_quota" } }, { status: 429 });
+    }, now: () => 1000,
+  });
+  await assert.rejects(run([await input("First provision.")]), /CUSTOM_EMBEDDING_CREDIT_STOP/);
+  await assert.rejects(run([await input("Another provision.")]), /CUSTOM_EMBEDDING_CREDIT_STOP/);
+  assert.equal(requests, 1);
+  assert.equal(bucket.objects.size, 0);
+});
+
+test("a full request reserves atomically within durable storage call limits", async () => {
+  const inputs = await Promise.all(Array.from({ length: 64 }, (_, index) => input(`Provision ${index}.`)));
+  const tokens = inputs.reduce((sum, item) => sum + item.inputTokens, 0);
+  let requests = 0;
+  const storage = new MemoryStore();
+  const result = await ensureDocumentEmbeddings({ configuration, ledger: new DocumentEmbeddingLedger(storage),
+    bucket: new MemoryR2().binding(), inputs, ownerId: "full-request", provider: async request => {
+      requests++;
+      assert.equal(request.input.length, 64);
+      return Response.json({ model: "text-embedding-3-large", data: inputs.map((_, index) => ({ index, embedding: Array(1536).fill(1) })),
+        usage: { prompt_tokens: tokens, total_tokens: tokens } });
+    } });
+  assert.equal(requests, 1);
+  assert.equal(result.providerInputTokens, tokens);
+  assert.equal((await new DocumentEmbeddingLedger(storage).status()).reservedTokens, tokens);
+});
+
+test("a known rate-limit rejection can retry once the durable cooldown ends", async () => {
+  const item = await input("Retryable provision.");
+  const storage = new MemoryStore();
+  const bucket = new MemoryR2();
+  let requests = 0;
+  let now = 1000;
+  const run = () => ensureDocumentEmbeddings({ configuration, ledger: new DocumentEmbeddingLedger(storage),
+    bucket: bucket.binding(), inputs: [item], ownerId: "rate-page", now: () => now,
+    provider: async () => {
+      requests++;
+      if (requests === 1) return Response.json({ error: { type: "rate_limit_error", code: "rate_limit_exceeded" } },
+        { status: 429, headers: { "retry-after": "90" } });
+      return Response.json({ model: "text-embedding-3-large", data: [{ index: 0, embedding: Array(1536).fill(1) }],
+        usage: { prompt_tokens: item.inputTokens, total_tokens: item.inputTokens } });
+    },
+  });
+  await assert.rejects(run(), /CUSTOM_EMBEDDING_RATE_LIMIT/);
+  now = 61000;
+  await assert.rejects(run(), /CUSTOM_EMBEDDING_RATE_LIMIT/);
+  assert.equal(requests, 1);
+  now = 91001;
+  const result = await run();
+  assert.equal(result.providerInputTokens, item.inputTokens);
+  assert.equal(requests, 2);
+});

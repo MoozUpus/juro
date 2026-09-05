@@ -7,6 +7,7 @@ import {
   partitionCustomBm25IntermediateRecords,
   serializeCustomCurrentArtifact,
 } from "../lib/legal-corpus/custom-current-build";
+import { buildRetrievalChunks, serializeCustomEmbeddingInput } from "../lib/legal-corpus/custom-hybrid-index";
 
 const releaseId = "release:staging:current:custom-v1:2026-09-03";
 const provision = {
@@ -81,4 +82,39 @@ test("materialization rejects evidence byte, identity and metadata drift", async
   await assert.rejects(materializeCustomCurrentItem({
     releaseId, planItem: { ...base, language: "en" }, evidenceBytes: bytes,
   }), /CUSTOM_CURRENT_EVIDENCE_IDENTITY_FAILED/u);
+});
+
+test("accepted complete-corpus locators preserve audited metadata and stop input drift before embedding", async () => {
+  const acceptedMetadata = { documentTitle: "Accepted title", articleNumber: "1",
+    articleTitle: null, hierarchy: ["Part one", "Chapter two"] };
+  const chunks = await buildRetrievalChunks({ snapshotProvisionId: "audit:fixture",
+    sourceDocumentTitle: acceptedMetadata.documentTitle, documentType: "unknown",
+    articleNumber: "1", articleTitle: null, hierarchy: acceptedMetadata.hierarchy,
+    language: "en", script: "Latn", officialText: "Audited official provision.", validFromEpoch: 0, validToEpoch: null },
+  { targetTokens: 512 });
+  const expected = await Promise.all(chunks.map(async chunk => ({ ordinal: chunk.ordinal,
+    officialTextSha256: await customCurrentSha256(chunk.officialText),
+    inputSha256: await customCurrentSha256(serializeCustomEmbeddingInput(chunk)), inputTokens: chunk.embeddingTokenCount })));
+  for (const envelope of [false, true]) {
+    const bytes = new TextEncoder().encode(envelope
+      ? JSON.stringify({ provisionText: "Audited official provision.", actTitle: "Old title is not used" })
+      : "Audited official provision.");
+    const digest = await customCurrentSha256(bytes);
+    const key = "legal-corpus/complete-v2/provision/fixture";
+    const planItem = { sourceOrdinal: 0, snapshotProvisionId: "snapshot-provision:fixture", provisionRenditionId: "rendition:fixture",
+      evidenceR2Key: key, evidenceByteCount: bytes.length, evidenceSha256: digest, language: "en" as const,
+      documentType: "unknown", validFrom: "1970-01-01T00:00:00.000Z", validTo: null,
+      accepted: { legacyRenditionId: "rendition:fixture", sourceId: "source:fixture", legalIdentitySha256: "a".repeat(64),
+        contentSha256: await customCurrentSha256("Audited official provision."),
+        provision: { key, sha256: digest, sizeBytes: bytes.length, envelope },
+        normalized: { key: "normalized", sha256: "b".repeat(64), sizeBytes: 100 }, chunks: expected } };
+    const materialize = (metadata = acceptedMetadata) => materializeCustomCurrentItem({ releaseId, planItem,
+      evidenceBytes: bytes, acceptedMetadata: metadata });
+    const result = await materialize();
+    assert.deepEqual(result.chunks[0]?.hierarchy, acceptedMetadata.hierarchy);
+    assert.equal(result.denseItems[0]?.structuredInputSha256, expected[0]?.inputSha256);
+    assert.equal(result.denseItems[0]?.inputTokens, expected[0]?.inputTokens);
+    await assert.rejects(materialize({ ...acceptedMetadata, documentTitle: "Changed title" }), /ACCEPTED_CHUNK_MISMATCH/);
+    await assert.rejects(materialize({ ...acceptedMetadata, hierarchy: [] }), /ACCEPTED_CHUNK_MISMATCH/);
+  }
 });

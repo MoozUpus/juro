@@ -5,6 +5,12 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import { Container, getContainer } from "@cloudflare/containers";
+import type { CustomCurrentBindings } from "./legal-custom-current-env";
+import { acceptedCurrentManifestSchema, acceptedCurrentPageSchema, readAcceptedObject,
+  readAcceptedCurrentMetadata } from "../lib/legal-corpus/accepted-current-inputs";
+import { DocumentEmbeddingLedger, ensureDocumentEmbeddings, importDocumentEmbedding,
+  readDocumentEmbedding, type DocumentEmbeddingInput } from "../lib/legal-corpus/document-embedding-build";
+import { requestGatewayDocumentEmbeddings } from "../lib/legal-corpus/document-embedding-build";
 
 import {
   customCurrentSha256,
@@ -15,15 +21,11 @@ import {
   type CustomCurrentSourcePlanItem,
 } from "../lib/legal-corpus/custom-current-build";
 import {
-  CUSTOM_EMBEDDING_DIMENSIONS,
-  CUSTOM_EMBEDDING_MODEL,
   deserializeNormalizedEmbedding,
   putImmutableCustomArtifact,
 } from "../lib/legal-corpus/custom-hybrid-index";
 import {
   CustomIndexPipelineError,
-  assertOfflineEmbeddingArtifactsAvailable,
-  authorizeProviderRateWindow,
   contentFreePipelineTelemetry,
 } from "../lib/legal-corpus/custom-index-pipeline";
 import {
@@ -33,7 +35,7 @@ import {
 import { stableSourceSnapshotJson } from "../lib/legal-corpus/source-snapshot";
 import { CUSTOM_CURRENT_REDUCER_PROGRAM } from "./legal-custom-bm25-reducer-program";
 
-const RELEASE_ID = "release:staging:current:custom-v1:2026-09-03";
+const RELEASE_ID = "release:staging:current:custom-v2:2026-09-05";
 const SOURCE_SNAPSHOT_ID = "snapshot:staging:current:source-snapshot-v1";
 const SOURCE_RELEASE_ID = "release:staging:current:source-snapshot-v1";
 const SOURCE_BUILD_ID = "build:staging:current:source-snapshot-qualification-v2";
@@ -74,30 +76,39 @@ type SourcePlanPage = {
   releaseId: typeof RELEASE_ID;
   sourceSnapshotId: typeof SOURCE_SNAPSHOT_ID;
   sourceOrdinalStart: number;
+  acceptedInputManifestSha256: string;
   items: CustomCurrentSourcePlanItem[];
 };
 
-type ReusePointer = {
-  schemaVersion: 1;
-  inputSha256: string;
-  artifactKey: string;
-  vectorSha256: string;
-  sizeBytes: number;
-};
-
-type CurrentBuildEnv = {
+type CurrentBuildEnv = Pick<CustomCurrentBindings, "AI" | "AI_GATEWAY_ID" | "DOCUMENT_EMBEDDINGS_ENABLED"
+  | "ACCEPTED_INPUT_MANIFEST_KEY" | "ACCEPTED_INPUT_MANIFEST_SHA256" | "OPENAI_REQUESTS_PER_MINUTE"
+  | "OPENAI_TOKENS_PER_MINUTE" | "AUTHORIZED_PROVIDER_TOKENS" | "SOURCE_DB" | "REUSABLE_ARTIFACTS"
+  | "LEGAL_DB" | "EVIDENCE" | "ARTIFACTS" | "COORDINATOR" | "REDUCER"> & {
   APP_ENV: "staging";
-  AUTHORIZED_PROVIDER_TOKENS: string;
-  LEGAL_DB: D1Database;
-  EVIDENCE: R2Bucket;
-  ARTIFACTS: R2Bucket;
+  // The shared runtime declarations retain the legacy VectorizeIndex name; this index uses asynchronous V2 mutations.
   DENSE: Vectorize;
   BUILD_QUEUE: Queue<MaterializeMessage>;
   BUILD_WORKFLOW: Workflow<BuildWorkflowPayload>;
   REDUCE_WORKFLOW: Workflow<ReduceWorkflowPayload>;
-  COORDINATOR: DurableObjectNamespace<CustomCurrentBuildCoordinator>;
-  REDUCER: DurableObjectNamespace<CustomCurrentBm25ReducerContainer>;
 };
+
+function requireBuildEnabled(env: CurrentBuildEnv): void {
+  if (env.DOCUMENT_EMBEDDINGS_ENABLED !== "true" || env.APP_ENV !== "staging"
+    || env.AI_GATEWAY_ID !== "juro-ai-search-staging") throw new CustomIndexPipelineError("CUSTOM_EMBEDDING_DISABLED");
+}
+
+async function acceptedManifest(env: CurrentBuildEnv) {
+  const bytes = await readAcceptedObject(env.ARTIFACTS,
+    { key: env.ACCEPTED_INPUT_MANIFEST_KEY, sha256: env.ACCEPTED_INPUT_MANIFEST_SHA256 }, 1024 * 1024);
+  const manifest = acceptedCurrentManifestSchema.parse(JSON.parse(decoder.decode(bytes)));
+  if (manifest.sourceRootSha256 !== SOURCE_ROOT_SHA256 || manifest.sourceCount !== EXPECTED_SOURCE_COUNT
+    || manifest.auditReportSha256 !== "96fdd22c289d9ff0f35eb380dcfbb1bb94cf54b9b43b9db0dc0bbb6d2ea6ef4d"
+    || manifest.inputInventorySha256 !== "a7e317302c0221e200f73b65a11506e781eae3e782e939d31b96554a19bae90f"
+    || manifest.mappingSha256 !== "78b50ad87998cb8b6ccda6dcde28cf17f6a6a3542afd918f7a485edf0d619905"
+    || manifest.reconstructionSha256 !== "01a5603aea2b3b20272c53bf72affc5127bf8d63a845be08bd572078b60c09b7"
+    || manifest.missingTokens !== 94508602) throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_ROOT_MISMATCH");
+  return manifest;
+}
 
 function planPageKey(sourceOrdinalStart: number): string {
   return `search-releases/${RELEASE_ID}/plan/pages/${String(sourceOrdinalStart).padStart(6, "0")}.json`;
@@ -286,6 +297,29 @@ function coordinator(env: CurrentBuildEnv): DurableObjectStub<CustomCurrentBuild
 }
 
 export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv> {
+  async embed(input: { ownerId: string; items: DocumentEmbeddingInput[] }) {
+    requireBuildEnabled(this.env);
+    if (!SAFE_ID.test(input.ownerId) || input.items.length < 1 || input.items.length > 64) {
+      throw new CustomIndexPipelineError("CUSTOM_EMBEDDING_REQUEST_INVALID");
+    }
+    const manifest = await acceptedManifest(this.env);
+    const authorizedTokens = parsePositiveInteger(this.env.AUTHORIZED_PROVIDER_TOKENS, "CUSTOM_EMBEDDING_COST_STOP");
+    if (authorizedTokens > manifest.missingTokens) throw new CustomIndexPipelineError("CUSTOM_EMBEDDING_COST_STOP");
+    for (const reference of manifest.reuse) {
+      if (input.items.some(item => item.inputSha256 === reference.inputSha256)) {
+        await importDocumentEmbedding(this.env.ARTIFACTS, this.env.REUSABLE_ARTIFACTS, reference);
+      }
+    }
+    return ensureDocumentEmbeddings({ configuration: {
+      environment: this.env.APP_ENV, releaseId: RELEASE_ID, manifestSha256: this.env.ACCEPTED_INPUT_MANIFEST_SHA256,
+      enabled: true, authorizedTokens,
+      requestsPerMinute: parsePositiveInteger(this.env.OPENAI_REQUESTS_PER_MINUTE, "CUSTOM_EMBEDDING_RATE_INVALID"),
+      tokensPerMinute: parsePositiveInteger(this.env.OPENAI_TOKENS_PER_MINUTE, "CUSTOM_EMBEDDING_RATE_INVALID"),
+    }, ledger: new DocumentEmbeddingLedger(this.ctx.storage), bucket: this.env.ARTIFACTS,
+    inputs: input.items, ownerId: input.ownerId, provider: request => requestGatewayDocumentEmbeddings(
+      this.env.AI.gateway(this.env.AI_GATEWAY_ID), this.env.AI_GATEWAY_ID, request) });
+  }
+
   async initialize(input: {
     releaseId: string;
     sourceRootSha256: string;
@@ -319,43 +353,6 @@ export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv
     await this.scheduleReductionIfReady();
   }
 
-  async reserveProviderTokens(input: {
-    batchId: string;
-    attempt: number;
-    requestOrdinal: number;
-    inputTokens: number;
-  }): Promise<{ duplicate: boolean; reservedTokens: number }> {
-    if (!SAFE_ID.test(input.batchId) || !Number.isSafeInteger(input.attempt) || input.attempt < 1
-      || !Number.isSafeInteger(input.requestOrdinal) || input.requestOrdinal < 0
-      || !Number.isSafeInteger(input.inputTokens) || input.inputTokens < 1) {
-      throw new CustomIndexPipelineError("CUSTOM_CURRENT_PROVIDER_RESERVATION_INVALID");
-    }
-    const configuration = await this.ctx.storage.get<{ authorizedProviderTokens: number }>("configuration");
-    if (!configuration) throw new CustomIndexPipelineError("CUSTOM_CURRENT_COORDINATOR_NOT_INITIALIZED");
-    const key = `reservation:${input.batchId}:${input.attempt}:${input.requestOrdinal}`;
-    return this.ctx.storage.transaction(async (transaction) => {
-      const prior = await transaction.get<number>(key);
-      const reserved = await transaction.get<number>("reservedProviderTokens") ?? 0;
-      if (prior !== undefined) {
-        if (prior !== input.inputTokens) {
-          throw new CustomIndexPipelineError("CUSTOM_CURRENT_PROVIDER_RESERVATION_CONFLICT");
-        }
-        return { duplicate: true, reservedTokens: reserved };
-      }
-      if (reserved + input.inputTokens > configuration.authorizedProviderTokens) {
-        throw new CustomIndexPipelineError("CUSTOM_INDEX_COST_STOP");
-      }
-      const next = reserved + input.inputTokens;
-      await transaction.put({ [key]: input.inputTokens, reservedProviderTokens: next });
-      return { duplicate: false, reservedTokens: next };
-    });
-  }
-
-  async acquireProviderRequest(nowEpochMs: number, maximumRequestsPerMinute: number): Promise<void> {
-    const prior = await this.ctx.storage.get<number[]>("providerRequestEpochMs") ?? [];
-    const next = authorizeProviderRateWindow({ priorRequestEpochMs: prior, nowEpochMs, maximumRequestsPerMinute });
-    await this.ctx.storage.put("providerRequestEpochMs", next);
-  }
 
   async completePage(receipt: CustomReleasePageReceipt, key: string): Promise<{ completed: number }> {
     if (receipt.releaseId !== RELEASE_ID || key !== receiptKey(receipt.batchId)) {
@@ -384,17 +381,17 @@ export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv
   }
 
   async status(): Promise<Record<string, unknown>> {
-    const [configuration, plan, completedPages, reservedProviderTokens, reductionStarted,
+    const [configuration, plan, completedPages, reductionStarted,
       lastVectorizeMutationId] = await Promise.all([
       this.ctx.storage.get("configuration"),
       this.ctx.storage.get("plan"),
       this.ctx.storage.get<number>("completedPages"),
-      this.ctx.storage.get<number>("reservedProviderTokens"),
       this.ctx.storage.get<boolean>("reductionStarted"),
       this.ctx.storage.get<string>("lastVectorizeMutationId"),
     ]);
-    return { configuration, plan, completedPages: completedPages ?? 0,
-      reservedProviderTokens: reservedProviderTokens ?? 0, reductionStarted: reductionStarted ?? false,
+    const embeddings = await new DocumentEmbeddingLedger(this.ctx.storage).status();
+    return { configuration, plan, embeddings, completedPages: completedPages ?? 0,
+      reservedProviderTokens: embeddings.reservedTokens, reductionStarted: reductionStarted ?? false,
       lastVectorizeMutationId: lastVectorizeMutationId ?? null };
   }
 
@@ -410,6 +407,7 @@ export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv
   }
 
   override async alarm(): Promise<void> {
+    requireBuildEnabled(this.env);
     const [configuration, plan, completedPages, started] = await Promise.all([
       this.ctx.storage.get<{ expectedPageCount: number }>("configuration"),
       this.ctx.storage.get<{ pageCount: number; planInventorySha256: string }>("plan"),
@@ -489,6 +487,7 @@ async function sourcePlanRows(env: CurrentBuildEnv, cursor: string): Promise<Sou
 
 export class CustomCurrentBuildWorkflow extends WorkflowEntrypoint<CurrentBuildEnv, BuildWorkflowPayload> {
   override async run(event: Readonly<WorkflowEvent<BuildWorkflowPayload>>, step: WorkflowStep): Promise<unknown> {
+    requireBuildEnabled(this.env);
     const payload = typeof event.payload === "string"
       ? JSON.parse(event.payload) as BuildWorkflowPayload
       : event.payload;
@@ -524,29 +523,43 @@ export class CustomCurrentBuildWorkflow extends WorkflowEntrypoint<CurrentBuildE
       retries: { limit: 5, delay: "1 minute", backoff: "exponential" },
       timeout: "30 minutes",
     }, async () => {
+      requireBuildEnabled(this.env);
+      const accepted = await acceptedManifest(this.env);
       let cursor = "";
       let sourceOrdinal = 0;
       const pageReferences: Array<{ key: string; sha256: string; count: number; start: number }> = [];
       for (;;) {
         const rows = await sourcePlanRows(this.env, cursor);
         if (rows.length === 0) break;
+        const reference = accepted.pages[pageReferences.length];
+        if (!reference || reference.start !== sourceOrdinal || reference.count !== rows.length) {
+          throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_PAGE_MISMATCH");
+        }
+        const acceptedPage = acceptedCurrentPageSchema.parse(JSON.parse(decoder.decode(
+          await readAcceptedObject(this.env.ARTIFACTS, reference, 8 * 1024 * 1024))));
+        if (acceptedPage.start !== sourceOrdinal || acceptedPage.items.length !== rows.length
+          || rows.some((row, index) => row.provisionRenditionId !== acceptedPage.items[index]?.legacyRenditionId)) {
+          throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_PAGE_MISMATCH");
+        }
         const items = rows.map((row, index): CustomCurrentSourcePlanItem => ({
           sourceOrdinal: sourceOrdinal + index,
           snapshotProvisionId: row.snapshotProvisionId,
           provisionRenditionId: row.provisionRenditionId,
-          evidenceR2Key: row.evidenceR2Key,
-          evidenceByteCount: Number(row.evidenceByteCount),
-          evidenceSha256: row.evidenceSha256,
+          evidenceR2Key: acceptedPage.items[index]!.provision.key,
+          evidenceByteCount: acceptedPage.items[index]!.provision.sizeBytes,
+          evidenceSha256: acceptedPage.items[index]!.provision.sha256,
           language: row.language,
-          documentType: row.documentType,
+          documentType: "unknown",
           validFrom: row.validFrom,
           validTo: row.validTo,
+          accepted: acceptedPage.items[index]!,
         }));
         const page: SourcePlanPage = {
           schemaVersion: 1,
           releaseId: RELEASE_ID,
           sourceSnapshotId: SOURCE_SNAPSHOT_ID,
           sourceOrdinalStart: sourceOrdinal,
+          acceptedInputManifestSha256: this.env.ACCEPTED_INPUT_MANIFEST_SHA256,
           items,
         };
         const bytes = serializeCustomCurrentArtifact(page);
@@ -627,36 +640,11 @@ async function existingReceipt(env: CurrentBuildEnv, message: MaterializeMessage
   return receipt;
 }
 
-async function embeddingPointer(
-  env: CurrentBuildEnv,
-  item: CustomCurrentDenseItem,
-): Promise<{ pointer: ReusePointer; bytes: Uint8Array } | null> {
-  const key = `embeddings/${CUSTOM_EMBEDDING_MODEL}/${CUSTOM_EMBEDDING_DIMENSIONS}/float32-l2-v1/${item.structuredInputSha256}.json`;
-  const object = await env.ARTIFACTS.get(key);
-  if (!object) return null;
-  const pointerBytes = new Uint8Array(await object.arrayBuffer());
-  const pointerSha256 = await customCurrentSha256(pointerBytes);
-  if (object.customMetadata?.sha256 !== pointerSha256) {
-    throw new CustomIndexPipelineError("CUSTOM_CURRENT_REUSE_POINTER_CORRUPT");
-  }
-  const pointer = JSON.parse(decoder.decode(pointerBytes)) as ReusePointer;
-  if (pointer.schemaVersion !== 1 || pointer.inputSha256 !== item.structuredInputSha256
-    || !SHA256.test(pointer.vectorSha256)) {
-    throw new CustomIndexPipelineError("CUSTOM_CURRENT_REUSE_POINTER_CORRUPT");
-  }
-  const artifact = await env.ARTIFACTS.get(pointer.artifactKey);
-  if (!artifact) throw new CustomIndexPipelineError("CUSTOM_CURRENT_REUSE_ARTIFACT_MISSING");
-  const bytes = new Uint8Array(await artifact.arrayBuffer());
-  if (bytes.byteLength !== pointer.sizeBytes || artifact.customMetadata?.sha256 !== pointer.vectorSha256
-    || await customCurrentSha256(bytes) !== pointer.vectorSha256) {
-    throw new CustomIndexPipelineError("CUSTOM_CURRENT_REUSE_ARTIFACT_CORRUPT");
-  }
-  return { pointer, bytes };
-}
 
 async function embedAndUpsert(
   env: CurrentBuildEnv,
   denseItems: CustomCurrentDenseItem[],
+  ownerId: string,
 ): Promise<{
   inventory: Array<{
     vectorId: string;
@@ -669,7 +657,7 @@ async function embedAndUpsert(
   providerInputTokens: number;
   reusedEmbeddingCount: number;
 }> {
-  const providerInputTokens = 0;
+  let providerInputTokens = 0;
   let reusedEmbeddingCount = 0;
   let finalMutationId = "";
   let mutationCount = 0;
@@ -681,31 +669,40 @@ async function embedAndUpsert(
   }> = [];
   for (let offset = 0; offset < denseItems.length; offset += 64) {
     const group = denseItems.slice(offset, offset + 64);
+    const result = await coordinator(env).embed({ ownerId,
+      items: group.map(item => ({ chunk: item.chunk, inputSha256: item.structuredInputSha256, inputTokens: item.inputTokens })) });
+    providerInputTokens = result.providerInputTokens;
+    reusedEmbeddingCount += result.reusedEmbeddingCount;
     const prepared = await Promise.all(group.map(async (item) => ({
       item,
-      existing: await embeddingPointer(env, item),
+      pointer: await readDocumentEmbedding(env.ARTIFACTS, item.structuredInputSha256),
     })));
-    const missing = prepared.filter(({ existing }) => !existing);
-    reusedEmbeddingCount += prepared.length - missing.length;
-    assertOfflineEmbeddingArtifactsAvailable(missing.length);
-    const vectors = prepared.map(({ item, existing }) => {
-      if (!existing) throw new CustomIndexPipelineError("CUSTOM_CURRENT_EMBEDDING_MISSING");
+    // Promise.all preserves input order; build the immutable inventory before asynchronous vector reads.
+    for (const { item, pointer } of prepared) {
+      if (!pointer) throw new CustomIndexPipelineError("CUSTOM_CURRENT_EMBEDDING_MISSING");
       inventory.push({
         vectorId: item.vectorId,
         metadataSha256: item.metadataSha256,
-        embeddingArtifactKey: existing.pointer.artifactKey,
-        embeddingSha256: existing.pointer.vectorSha256,
+        embeddingArtifactKey: pointer.artifactKey,
+        embeddingSha256: pointer.vectorSha256,
       });
+    }
+    const vectors = await Promise.all(prepared.map(async ({ item, pointer }) => {
+      if (!pointer) throw new CustomIndexPipelineError("CUSTOM_CURRENT_EMBEDDING_MISSING");
+      const artifact = await env.ARTIFACTS.get(pointer.artifactKey);
+      if (!artifact) throw new CustomIndexPipelineError("CUSTOM_CURRENT_EMBEDDING_MISSING");
+      const bytes = new Uint8Array(await artifact.arrayBuffer());
+      if (await customCurrentSha256(bytes) !== pointer.vectorSha256) throw new CustomIndexPipelineError("CUSTOM_CURRENT_EMBEDDING_CORRUPT");
       return {
         id: item.vectorId,
-        values: [...deserializeNormalizedEmbedding(existing.bytes)],
+        values: [...deserializeNormalizedEmbedding(bytes)],
         metadata: {
           ...item.metadata,
           metadata_sha256: item.metadataSha256,
-          embedding_r2_key: existing.pointer.artifactKey,
+          embedding_r2_key: pointer.artifactKey,
         },
       } satisfies VectorizeVector;
-    });
+    }));
     const mutation = await env.DENSE.upsert(vectors);
     finalMutationId = mutation.mutationId;
     mutationCount += 1;
@@ -718,6 +715,7 @@ async function processMaterializeMessage(
   env: CurrentBuildEnv,
   raw: unknown,
 ): Promise<{ duplicate: boolean; receipt: CustomReleasePageReceipt; mutationCount: number }> {
+  requireBuildEnabled(env);
   const message = parseMessage(raw);
   const prior = await existingReceipt(env, message);
   if (prior) {
@@ -726,6 +724,7 @@ async function processMaterializeMessage(
   }
   const page = await verifiedJson<SourcePlanPage>(env.ARTIFACTS, message.planPageKey, message.planPageSha256);
   if (page.schemaVersion !== 1 || page.releaseId !== RELEASE_ID
+    || page.acceptedInputManifestSha256 !== env.ACCEPTED_INPUT_MANIFEST_SHA256
     || page.sourceSnapshotId !== SOURCE_SNAPSHOT_ID
     || page.sourceOrdinalStart + message.planPageOffset !== message.sourceOrdinalStart) {
     throw new CustomIndexPipelineError("CUSTOM_CURRENT_PLAN_PAGE_IDENTITY_INVALID");
@@ -737,12 +736,13 @@ async function processMaterializeMessage(
   }
   const materialized = [];
   for (const planItem of planItems) {
-    const object = await env.EVIDENCE.get(planItem.evidenceR2Key);
-    if (!object) throw new CustomIndexPipelineError("CUSTOM_CURRENT_EVIDENCE_MISSING");
+    if (!planItem.accepted) throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_SOURCE_MISSING");
+    const evidenceBytes = await readAcceptedObject(env.EVIDENCE, planItem.accepted.provision, 8 * 1024 * 1024);
     materialized.push(await materializeCustomCurrentItem({
       releaseId: RELEASE_ID,
       planItem,
-      evidenceBytes: new Uint8Array(await object.arrayBuffer()),
+      evidenceBytes,
+      acceptedMetadata: await readAcceptedCurrentMetadata(planItem.accepted, env.EVIDENCE, env.SOURCE_DB),
     }));
   }
   const chunks = materialized.flatMap((item) => item.chunks);
@@ -857,7 +857,7 @@ async function processMaterializeMessage(
     contentType: "application/json", customMetadata: { kind: "word-bm25-input-manifest" },
   });
 
-  const dense = await embedAndUpsert(env, denseItems);
+  const dense = await embedAndUpsert(env, denseItems, message.batchId);
   const denseBytes = serializeCustomCurrentArtifact({
     schemaVersion: 1,
     releaseId: RELEASE_ID,
@@ -1029,6 +1029,7 @@ async function invokeSparseReducer(
 
 export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuildEnv, ReduceWorkflowPayload> {
   override async run(event: Readonly<WorkflowEvent<ReduceWorkflowPayload>>, step: WorkflowStep): Promise<unknown> {
+    requireBuildEnabled(this.env);
     const payload = typeof event.payload === "string"
       ? JSON.parse(event.payload) as ReduceWorkflowPayload
       : event.payload;
@@ -1170,7 +1171,7 @@ export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuild
       sparseManifest: manifest.artifact,
       sparseReconciliation,
       activationAuthorized: false,
-      next: "fresh-vectorize-full-list-and-restore-preflight",
+      next: "fresh-vectorize-full-list",
     };
   }
 }
