@@ -276,6 +276,31 @@ test("character n-grams remain a separate challenger and rank fusion is determin
   assert.equal(fused[1]?.score, fused[2]?.score);
 });
 
+test("BM25 resolves durable source ordinals independently of manifest array positions", async () => {
+  const bucket = new MemoryR2();
+  const termHash = await customBm25TermHash("work");
+  const store = (key: string, value: unknown) => {
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    bucket.objects.set(key, bytes);
+    return { key, sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+  };
+  const fieldLengths = { title: 0, hierarchy: 0, article: 0, text: 1 };
+  const posting = store("postings", { termHash, documentFrequency: 1, blockMaximum: 1, skip: [],
+    postings: [{ ordinal: 1000, termFrequencies: fieldLengths }] });
+  const lexicon = store("lexicon", { [termHash]: { ...posting, offset: 0, length: posting.sizeBytes,
+    documentFrequency: 1, blockMaximum: 1 } });
+  const manifest = {
+    schemaVersion: "custom-bm25-manifest-v1" as const, analyzer: "word-v1" as const,
+    statistics: { documentCount: 1, averageFieldLengths: fieldLengths },
+    documents: [{ ordinal: 1000, itemKey: "durable-chunk", segmentId: "base", language: "en" as const,
+      documentType: "law", validFromEpoch: 1, validToEpoch: null, fieldLengths }],
+    segments: [{ id: "base", postings: { [termHash[0]!]: posting }, lexicons: { [termHash[0]!]: lexicon } }],
+  };
+  const hits = await queryCustomBm25(bucket as unknown as R2Bucket, manifest,
+    { text: "work", atEpoch: 2, topK: 1 });
+  assert.deepEqual(hits.map(hit => hit.itemKey), ["durable-chunk"]);
+});
+
 test("dense filtering precedes top-K and D1 catalog revalidation fails closed", async () => {
   let observedOptions: VectorizeQueryOptions | undefined;
   const vectorize = {

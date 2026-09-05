@@ -387,6 +387,22 @@ export async function queryCustomBm25(
     throw new TypeError("CUSTOM_BM25_TOP_K_INVALID");
   }
   const queryTerms = [...new Set(analyze(input.text, manifest.analyzer))].sort();
+  const documentAtOrdinal = (ordinal: number) => {
+    let low = 0;
+    let high = manifest.documents.length - 1;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const document = manifest.documents[middle]!;
+      if (document.ordinal === ordinal) return document;
+      if (document.ordinal < ordinal) low = middle + 1;
+      else high = middle - 1;
+    }
+    return undefined;
+  };
+  if (manifest.documents.some((document, index) => !Number.isSafeInteger(document.ordinal)
+    || document.ordinal < 0 || (index > 0 && document.ordinal <= manifest.documents[index - 1]!.ordinal))) {
+    throw new TypeError("CUSTOM_BM25_DOCUMENT_ORDINALS_INVALID");
+  }
   const scores = new Map<number, number>();
   const allowedTypes = input.documentTypes ? new Set(input.documentTypes) : null;
   const eligible = new Set(manifest.documents.filter((document) =>
@@ -436,7 +452,7 @@ export async function queryCustomBm25(
     ) throw new TypeError("CUSTOM_BM25_POSTING_LOCATOR_MISMATCH");
     for (const posting of block.postings) {
       if (!eligible.has(posting.ordinal)) continue;
-      const document = manifest.documents[posting.ordinal];
+      const document = documentAtOrdinal(posting.ordinal);
       if (!document || document.segmentId !== segmentId) {
         throw new TypeError("CUSTOM_BM25_ORDINAL_SEGMENT_MISMATCH");
       }
@@ -452,7 +468,7 @@ export async function queryCustomBm25(
     }
   }
   return [...scores.entries()].map(([ordinal, score]) => ({
-    itemKey: manifest.documents[ordinal]!.itemKey,
+    itemKey: documentAtOrdinal(ordinal)!.itemKey,
     score,
   })).sort((left, right) => right.score - left.score
     || left.itemKey.localeCompare(right.itemKey)).slice(0, input.topK);
