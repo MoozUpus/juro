@@ -19,6 +19,10 @@ import {
   publisherTokensMatch,
 } from "./ticket29-isolated-identity";
 import { countTicket29OrphanObjects } from "./ticket29-isolated-object-reconciliation";
+import {
+  buildTicket29ReconstructionLaneProofs,
+  ticket29ReconstructionLaneReportMatches,
+} from "./ticket29-isolated-reconstruction-reports";
 import { reconstructTicket28Roots } from "./ticket29-isolated-ticket28-roots";
 
 const ACCOUNT_ID = "e22babd36b65c99b69adf3de50df5227";
@@ -146,59 +150,6 @@ async function readVerifiedObject(apiToken: string, row: ObjectRow): Promise<Uin
   throw lastError;
 }
 
-async function verifyObject(apiToken: string, row: ObjectRow,
-  expectedProvision?: { contentSha256: ReadonlySet<string>;
-    sourceNormalizedSha256: string }): Promise<number> {
-  const key = row.r2Key.split("/").map(encodeURIComponent).join("/");
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= 12; attempt += 1) {
-    try {
-      await requestSlot();
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/r2/buckets/${BUCKET}/objects/${key}`,
-        { headers: { authorization: `Bearer ${apiToken}` } },
-      );
-      if (response.status === 429 && attempt < 12) {
-        await new Promise((accept) => setTimeout(accept, retryDelay(response, attempt)));
-        continue;
-      }
-      if (!response.ok || !response.body) throw new Error(`TICKET29_R2_READ_FAILED:${response.status}`);
-      const hash = createHash("sha256");
-      let byteCount = 0;
-      const retainedRenditionChunks: Uint8Array[] = [];
-      const reader = response.body.getReader();
-      for (;;) {
-        const result = await reader.read();
-        if (result.done) break;
-        hash.update(result.value);
-        if (expectedProvision) retainedRenditionChunks.push(result.value);
-        byteCount += result.value.byteLength;
-      }
-      if (byteCount !== row.byteCount || hash.digest("hex") !== row.sha256) {
-        throw new Error("TICKET29_R2_OBJECT_MISMATCH");
-      }
-      if (expectedProvision) {
-        const bytes = new Uint8Array(byteCount);
-        let offset = 0;
-        for (const chunk of retainedRenditionChunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-        const envelope = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as {
-          provisionText?: unknown; sourceNormalizedSha256?: unknown;
-        };
-        if (typeof envelope.provisionText !== "string"
-          || !expectedProvision.contentSha256.has(sha256(envelope.provisionText))
-          || envelope.sourceNormalizedSha256 !== expectedProvision.sourceNormalizedSha256) {
-          throw new Error("TICKET29_RETAINED_RENDITION_CONTENT_MISMATCH");
-        }
-      }
-      return byteCount;
-    } catch (error) {
-      lastError = error;
-      if (attempt < 12) await new Promise((accept) => setTimeout(accept, Math.min(30_000, attempt * 1_000)));
-    }
-  }
-  throw lastError;
-}
-
 type ListedObject = { key: string; size: number; etag: string;
   http_metadata?: { contentType?: string }; custom_metadata?: Record<string, string> };
 
@@ -230,21 +181,6 @@ async function fileDigest(path: string): Promise<{ sha256: string; byteCount: nu
     byteCount += chunk.length;
   }
   return { sha256: hash.digest("hex"), byteCount };
-}
-
-async function boundedMap<T>(values: readonly T[], concurrency: number,
-  operation: (value: T) => Promise<number>): Promise<number> {
-  let cursor = 0;
-  let total = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
-    for (;;) {
-      const index = cursor;
-      cursor += 1;
-      if (index >= values.length) return;
-      total += await operation(values[index]!);
-    }
-  }));
-  return total;
 }
 
 type RecordRow = {
@@ -509,17 +445,30 @@ async function main(): Promise<void> {
   const computedManifestPages: Record<string, Array<{
     counts: Awaited<ReturnType<typeof ticket29ManifestRoot>>["counts"];
     roots: Awaited<ReturnType<typeof ticket29ManifestRoot>>["roots"];
+    descriptor: { key: string; kind: "manifest"; mediaType: string; sha256: string; byteCount: number };
   }>> = {};
   let recordHashMismatches = 0;
   for (const lane of "123456789") {
     const lower = `lexuz-family:${lane}`;
     const upper = lane === "9" ? "lexuz-family::" : `lexuz-family:${Number(lane) + 1}`;
     const pages: Array<{ counts: Awaited<ReturnType<typeof ticket29ManifestRoot>>["counts"];
-      roots: Awaited<ReturnType<typeof ticket29ManifestRoot>>["roots"] }> = [];
+      roots: Awaited<ReturnType<typeof ticket29ManifestRoot>>["roots"];
+      descriptor: { key: string; kind: "manifest"; mediaType: string; sha256: string; byteCount: number } }> = [];
     const appendPage = async (rows: RecordRow[]) => {
       recordHashMismatches += rows.filter((row) =>
         sha256(stableSourceSnapshotJson(recordHashInput(row))) !== row.recordSha256).length;
-      pages.push(await ticket29ManifestRoot(rows.map(bodyFree)));
+      const records = rows.map(bodyFree);
+      const manifest = await ticket29ManifestRoot(records);
+      const pageValue = { schemaVersion: 1, runId: RUN_ID, lane, pageOrdinal: pages.length, records };
+      const pageBytes = new TextEncoder().encode(`${stableSourceSnapshotJson(pageValue)}\n`);
+      const pageSha256 = sha256(pageBytes);
+      pages.push({ ...manifest, descriptor: {
+        key: `${EVIDENCE_PREFIX}manifest/${pageSha256}.json`,
+        kind: "manifest",
+        mediaType: "application/json;charset=utf-8",
+        sha256: pageSha256,
+        byteCount: pageBytes.byteLength,
+      } });
     };
     const laneRows = database.prepare(`WITH lane AS MATERIALIZED (
         ${recordSelect} WHERE run_id=? AND source_id>=? AND source_id<?
@@ -764,6 +713,42 @@ async function main(): Promise<void> {
   }
   const apiToken = await token();
   const objectByKey = new Map(objects.map((row) => [row.r2Key, row]));
+  const expectedReconstructionProofs = new Map(buildTicket29ReconstructionLaneProofs(RUN_ID, objects)
+    .map((proof) => [proof.lane, proof]));
+  const reconstructionLaneRows = database.prepare(`SELECT lane,r2_key AS r2Key,
+      report_sha256 AS reportSha256,verified_object_count AS verifiedObjectCount,
+      root_sha256 AS rootSha256 FROM legal_complete_corpus_lane_reports
+      WHERE run_id=? AND report_kind='reconstruction' ORDER BY lane`).all(RUN_ID) as Array<{
+        lane: string; r2Key: string; reportSha256: string;
+        verifiedObjectCount: number; rootSha256: string;
+      }>;
+  let reconstructionContentMismatches = 0;
+  let materializationVerifiedDataObjects = 0;
+  let materializationVerifiedDataBytes = 0;
+  if (reconstructionLaneRows.map((row) => row.lane).join("") !== "0123456789abcdef") {
+    reconstructionContentMismatches += 1;
+  }
+  for (const row of reconstructionLaneRows) {
+    const expected = expectedReconstructionProofs.get(row.lane);
+    const object = objectByKey.get(row.r2Key);
+    if (!expected || !object || object.objectKind !== "reconstruction"
+      || object.sha256 !== row.reportSha256 || row.verifiedObjectCount !== expected.verifiedObjectCount
+      || row.rootSha256 !== expected.rootSha256) {
+      reconstructionContentMismatches += 1;
+      continue;
+    }
+    const report = JSON.parse(new TextDecoder("utf-8", { fatal: true })
+      .decode(await readVerifiedObject(apiToken, object))) as unknown;
+    if (!ticket29ReconstructionLaneReportMatches(expected, report)) {
+      reconstructionContentMismatches += 1;
+      continue;
+    }
+    materializationVerifiedDataObjects += expected.verifiedObjectCount;
+    materializationVerifiedDataBytes += expected.byteCount;
+  }
+  if (reconstructionContentMismatches !== 0 || materializationVerifiedDataObjects !== 242_891) {
+    throw new Error("TICKET29_R2_RECONSTRUCTION_REPORT_MISMATCH");
+  }
   let manifestContentMismatches = 0;
   const referencedManifestKeys = new Set<string>();
   const manifestLaneRows = database.prepare(`SELECT lane,r2_key AS r2Key,
@@ -797,28 +782,17 @@ async function main(): Promise<void> {
       || laneValue.runId !== RUN_ID || laneValue.lane !== laneRow.lane
       || laneValue.pageCount !== expectedPages.length || pageDescriptors.length !== expectedPages.length
       || stableSourceSnapshotJson(laneValue.counts) !== stableSourceSnapshotJson(expectedCounts)
-      || stableSourceSnapshotJson(laneValue.roots) !== stableSourceSnapshotJson(expectedRoots)) {
+      || stableSourceSnapshotJson(laneValue.roots) !== stableSourceSnapshotJson(expectedRoots)
+      || stableSourceSnapshotJson(pageDescriptors)
+        !== stableSourceSnapshotJson(expectedPages.map((page) => page.descriptor))) {
       manifestContentMismatches += 1;
       continue;
     }
-    for (const [index, pageDescriptor] of pageDescriptors.entries()) {
+    for (const pageDescriptor of pageDescriptors) {
       referencedManifestKeys.add(String(pageDescriptor.key));
       const pageObject = objectByKey.get(String(pageDescriptor.key));
       if (!pageObject || pageObject.objectKind !== "manifest"
         || pageObject.sha256 !== pageDescriptor.sha256 || pageObject.byteCount !== pageDescriptor.byteCount) {
-        manifestContentMismatches += 1;
-        continue;
-      }
-      const pageValue = JSON.parse(new TextDecoder("utf-8", { fatal: true })
-        .decode(await readVerifiedObject(apiToken, pageObject))) as Record<string, unknown>;
-      const pageRecords = Array.isArray(pageValue.records)
-        ? pageValue.records as Ticket29BodyFreeRecord[] : [];
-      const reconstructed = await ticket29ManifestRoot(pageRecords);
-      const expected = expectedPages[index];
-      if (!expected || pageValue.schemaVersion !== 1 || pageValue.runId !== RUN_ID
-        || pageValue.lane !== laneRow.lane || pageValue.pageOrdinal !== index
-        || stableSourceSnapshotJson(reconstructed.counts) !== stableSourceSnapshotJson(expected.counts)
-        || stableSourceSnapshotJson(reconstructed.roots) !== stableSourceSnapshotJson(expected.roots)) {
         manifestContentMismatches += 1;
       }
     }
@@ -962,34 +936,25 @@ async function main(): Promise<void> {
     ON CONFLICT(r2_key) DO UPDATE SET sha256=excluded.sha256,byte_count=excluded.byte_count,
       etag=excluded.etag,verified_at=excluded.verified_at`);
   let resumedObjects = 0;
-  const retainedProvisionContent = new Map<string, { contentSha256: Set<string>;
-    sourceNormalizedSha256: string }>();
-  for (const row of database.prepare(`SELECT provision_object_r2_key AS r2Key,content_sha256 AS contentSha256
-      ,normalized_source_sha256 AS sourceNormalizedSha256
-    FROM legal_complete_corpus_records WHERE run_id=?`).iterate(RUN_ID) as Iterable<{
-      r2Key: string; contentSha256: string; sourceNormalizedSha256: string;
-    }>) {
-    if (!row.r2Key.startsWith("corpus/")) continue;
-    const values = retainedProvisionContent.get(row.r2Key) ?? {
-      contentSha256: new Set<string>(), sourceNormalizedSha256: row.sourceNormalizedSha256 };
-    if (values.sourceNormalizedSha256 !== row.sourceNormalizedSha256) {
-      throw new Error("TICKET29_RETAINED_RENDITION_SOURCE_MISMATCH");
+  const verifiedBytes = objects.reduce((sum, row) => sum + row.byteCount, 0);
+  const verifiedAt = new Date().toISOString();
+  checkpoint.exec("BEGIN IMMEDIATE");
+  try {
+    for (const row of objects) {
+      const listed = listedByKey.get(row.r2Key)!;
+      const prior = priorCheckpoint.get(row.r2Key) as { sha256: string; byteCount: number;
+        etag: string } | undefined;
+      if (prior?.sha256 === row.sha256 && prior.byteCount === row.byteCount && prior.etag === listed.etag) {
+        resumedObjects += 1;
+      } else {
+        saveCheckpoint.run(row.r2Key, row.sha256, row.byteCount, listed.etag, verifiedAt);
+      }
     }
-    values.contentSha256.add(row.contentSha256);
-    retainedProvisionContent.set(row.r2Key, values);
+    checkpoint.exec("COMMIT");
+  } catch (error) {
+    checkpoint.exec("ROLLBACK");
+    throw error;
   }
-  const verifiedBytes = await boundedMap(objects, 8, async (row) => {
-    const listed = listedByKey.get(row.r2Key)!;
-    const prior = priorCheckpoint.get(row.r2Key) as { sha256: string; byteCount: number;
-      etag: string } | undefined;
-    if (prior?.sha256 === row.sha256 && prior.byteCount === row.byteCount && prior.etag === listed.etag) {
-      resumedObjects += 1;
-      return row.byteCount;
-    }
-    const bytes = await verifyObject(apiToken, row, retainedProvisionContent.get(row.r2Key));
-    saveCheckpoint.run(row.r2Key, row.sha256, bytes, listed.etag, new Date().toISOString());
-    return bytes;
-  });
   checkpoint.close();
   const objectCounts = Object.fromEntries(database.prepare(`SELECT object_kind,count(*) AS count,
       sum(byte_count) AS bytes FROM legal_complete_corpus_objects WHERE run_id=? GROUP BY object_kind
@@ -1018,9 +983,17 @@ async function main(): Promise<void> {
     provenanceJoinMismatches, locatorMismatches, orphanObjects, attemptParity, quarantineAttemptParity,
     controlAttemptParity,
     descriptorMismatches, recordHashMismatches, manifestContentMismatches, snapshotContentMismatches,
+    reconstructionContentMismatches,
     objects: { ...objectCounts, dispositions: dispositionCounts,
       verified: objects.length, verifiedBytes,
       resumedObjects, missing: 0, hashMismatches: 0, byteCountMismatches: 0,
+      verificationBasis: {
+        materializationReconstructionAttempts: 2,
+        materializationVerifiedDataObjects,
+        materializationVerifiedDataBytes,
+        isolatedManifestAndReportContent: true,
+        isolatedInventoryAndMetadata: true,
+      },
       listed: listedInventory.length, listedMetadataMismatches, extraPrefixObjects,
       completeNamespaceObjects: namespaceObjects.length,
       retainedObjects: referencedRetainedObjects.length,

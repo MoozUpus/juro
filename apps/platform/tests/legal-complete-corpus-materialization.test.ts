@@ -35,6 +35,10 @@ import {
 import { assertTicket29DistinctArtifactPaths } from "../scripts/ticket29-isolated-artifact-paths";
 import { countTicket29IdentityMismatches } from "../scripts/ticket29-isolated-identity";
 import { countTicket29OrphanObjects } from "../scripts/ticket29-isolated-object-reconciliation";
+import {
+  buildTicket29ReconstructionLaneProofs,
+  ticket29ReconstructionLaneReportMatches,
+} from "../scripts/ticket29-isolated-reconstruction-reports";
 import { reconstructTicket28Roots } from "../scripts/ticket29-isolated-ticket28-roots";
 import { stableSourceSnapshotJson } from "../lib/legal-corpus/source-snapshot";
 
@@ -702,6 +706,33 @@ test("isolated reconstruction uses only body-free mappings and evidence objects"
   assert.equal(reconstructed.missingObjects, 0);
   assert.equal(reconstructed.hashMismatches, 0);
   assert.equal(reconstructed.manifest.roots.union, (await ticket29ManifestRoot(records)).roots.union);
+});
+
+test("isolated reconstruction verifies persisted whole-object reports without downloading bodies again", () => {
+  const objects = Array.from({ length: 101 }, (_, index) => ({
+    objectKind: index % 2 === 0 ? "provision_rendition" : "raw_capture",
+    sha256: `a${index.toString(16).padStart(63, "0")}`,
+    r2Key: `corpus/${index}`,
+    byteCount: index + 1,
+  }));
+  objects.push({
+    objectKind: "manifest",
+    sha256: "b".repeat(64),
+    r2Key: "legal-corpus/complete-v2/manifests/control.json",
+    byteCount: 10,
+  });
+
+  const proofs = buildTicket29ReconstructionLaneProofs("run", objects);
+  const lane = proofs.find((proof) => proof.lane === "a")!;
+  assert.equal(lane.pageCount, 2);
+  assert.equal(lane.verifiedObjectCount, 101);
+  assert.equal(lane.byteCount, 5_151);
+  assert.equal(proofs.find((proof) => proof.lane === "b")!.verifiedObjectCount, 0);
+  assert.equal(ticket29ReconstructionLaneReportMatches(lane, lane), true);
+  assert.equal(ticket29ReconstructionLaneReportMatches(lane, {
+    ...lane,
+    missingObjects: 1,
+  }), false);
 });
 
 test("Ticket 29 queue messages are identifiers-only", () => {
