@@ -34,8 +34,18 @@ import {
 } from "../lib/legal-corpus/complete-corpus-materialization";
 import { assertTicket29DistinctArtifactPaths } from "../scripts/ticket29-isolated-artifact-paths";
 import { countTicket29IdentityMismatches } from "../scripts/ticket29-isolated-identity";
+import { reconstructTicket28Roots } from "../scripts/ticket29-isolated-ticket28-roots";
+import { stableSourceSnapshotJson } from "../lib/legal-corpus/source-snapshot";
 
 const testSha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+const testManifestRoot = (rows: readonly Record<string, unknown>[]) => {
+  const hash = createHash("sha256");
+  for (const row of rows) {
+    hash.update(stableSourceSnapshotJson(row));
+    hash.update("\n");
+  }
+  return hash.digest("hex");
+};
 
 test("Ticket 29 retained-current identity matches Ticket 28's target natural key", async () => {
   assert.equal(await ticket29LegacyTargetRenditionId({
@@ -112,6 +122,42 @@ test("Ticket 29 isolated identity proof reads the source-version token owner", (
     publisherRevisionToken, publisherProvisionToken, applicabilityIdentity,
   );
   assert.equal(countTicket29IdentityMismatches(database, "run"), 0);
+  database.close();
+});
+
+test("Ticket 29 isolated proof reconstructs Ticket 28's exact manifest projections", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE legal_complete_corpus_records (
+    run_id TEXT, source_id TEXT, legal_identity_sha256 TEXT, material_sha256 TEXT,
+    content_sha256 TEXT, raw_source_r2_key TEXT, normalized_source_r2_key TEXT,
+    current_eligible INTEGER, historical_eligible INTEGER, temporal_gap INTEGER,
+    source_revision_sha256 TEXT, object_metadata_revision_sha256 TEXT);
+    INSERT INTO legal_complete_corpus_records VALUES
+      ('run','source:b','identity:a','material:b','content:b','source/raw-b','source/norm-b',0,1,0,'${"b".repeat(64)}','${"b".repeat(64)}'),
+      ('run','source:a','identity:b','material:a','content:a','source/raw-a','source/norm-a',1,1,1,'${"a".repeat(64)}','${"c".repeat(64)}');`);
+  const expected = {
+    inventorySha256: testManifestRoot([
+      { sourceId: "source:a", legalIdentitySha256: "identity:b", materialSha256: "material:a",
+        contentSha256: "content:a", rawObjectKey: "source/raw-a",
+        normalizedObjectKey: "source/norm-a", currentEligible: 1, historicalEligible: 1,
+        temporalGap: 1 },
+      { sourceId: "source:b", legalIdentitySha256: "identity:a", materialSha256: "material:b",
+        contentSha256: "content:b", rawObjectKey: "source/raw-b",
+        normalizedObjectKey: "source/norm-b", currentEligible: 0, historicalEligible: 1,
+        temporalGap: 0 },
+    ]),
+    canonicalSha256: testManifestRoot([
+      { legalIdentitySha256: "identity:a", materialSha256: "material:b",
+        contentSha256: "content:b", currentEligible: 0, historicalEligible: 1, temporalGap: 0 },
+      { legalIdentitySha256: "identity:b", materialSha256: "material:a",
+        contentSha256: "content:a", currentEligible: 1, historicalEligible: 1, temporalGap: 1 },
+    ]),
+    aliasSha256: testManifestRoot([
+      { sourceId: "source:a", normalizedObjectKey: "source/norm-a",
+        revisionVersionSha256: "a".repeat(64), objectMetadataVersionSha256: "c".repeat(64) },
+    ]),
+  };
+  assert.deepEqual(reconstructTicket28Roots(database, "run"), expected);
   database.close();
 });
 

@@ -18,11 +18,11 @@ import {
   countTicket29IdentityMismatches,
   publisherTokensMatch,
 } from "./ticket29-isolated-identity";
+import { reconstructTicket28Roots } from "./ticket29-isolated-ticket28-roots";
 
 const ACCOUNT_ID = "e22babd36b65c99b69adf3de50df5227";
 const BUCKET = "juro-legal-evidence-staging-green2-20260831";
 const RUN_ID = "ticket29:cutoff-20260831:complete-corpus-v2";
-const SOURCE_DATABASE_ID = "bb716a96-b2fb-4823-90d6-6c228fed181a";
 const SOURCE_INVENTORY_SHA256 = "2105a4d39465ae8e0b923ab89a08dddf2599d57b9e1517490a8d2f1996fe4c00";
 const SOURCE_CANONICAL_SHA256 = "e527fa5221acf6063defa5f944d9ef54ca7e8b2667c47df34ba8135ef879f830";
 const SOURCE_ALIAS_SHA256 = "5ff75e07391b9acd01699d8aca2bbaa32684c402e3470e42660d66fdd064f201";
@@ -499,37 +499,8 @@ async function main(): Promise<void> {
   if (provenanceJoinMismatches !== 0 || actualAliasCount !== expectedAliasCount
     || actualLineageCount !== sourceVersionCount) throw new Error("TICKET29_PROVENANCE_JOIN_MISMATCH");
 
-  const inventoryRoot = stableArrayRoot((function* () {
-    const rows = database.prepare(`SELECT source_id AS sourceId,legal_identity_sha256 AS legalIdentitySha256,
-      content_sha256 AS contentSha256,temporal_gap AS temporalGap FROM legal_complete_corpus_records
-      WHERE run_id=? ORDER BY legal_identity_sha256`).iterate(RUN_ID) as Iterable<{
-        sourceId: string; legalIdentitySha256: string; contentSha256: string; temporalGap: number;
-      }>;
-    for (const row of rows) yield { legalIdentitySha256: row.legalIdentitySha256,
-      sourceDatabaseId: SOURCE_DATABASE_ID, sourceProvisionIdentitySha256: sha256(row.sourceId),
-      officialTextSha256: row.contentSha256, temporalGap: row.temporalGap === 1 };
-  })());
-  const canonicalRoot = stableArrayRoot((function* () {
-    const rows = database.prepare(`SELECT legal_identity_sha256 AS legalIdentitySha256,
-      content_sha256 AS contentSha256,current_eligible AS currentEligible,
-      historical_eligible AS historicalEligible,temporal_gap AS temporalGap
-      FROM legal_complete_corpus_records WHERE run_id=? ORDER BY legal_identity_sha256`).iterate(RUN_ID) as Iterable<{
-        legalIdentitySha256: string; contentSha256: string; currentEligible: number;
-        historicalEligible: number; temporalGap: number;
-      }>;
-    for (const row of rows) yield { legalIdentitySha256: row.legalIdentitySha256,
-      officialTextSha256: row.contentSha256, sourceCount: 1,
-      currentEligible: row.currentEligible === 1, historicalEligible: row.historicalEligible === 1,
-      temporalGap: row.temporalGap === 1 };
-  })());
-  const aliasRoot = stableArrayRoot((function* () {
-    const rows = database.prepare(`SELECT source_id AS sourceId,
-      normalized_source_r2_key AS normalizedObjectKey,source_revision_sha256 AS revisionVersionSha256,
-      object_metadata_revision_sha256 AS objectMetadataVersionSha256
-      FROM legal_complete_corpus_records WHERE run_id=?
-        AND source_revision_sha256<>object_metadata_revision_sha256 ORDER BY source_id`).iterate(RUN_ID);
-    yield* rows;
-  })());
+  const { inventorySha256: inventoryRoot, canonicalSha256: canonicalRoot,
+    aliasSha256: aliasRoot } = reconstructTicket28Roots(database, RUN_ID);
   if (inventoryRoot !== SOURCE_INVENTORY_SHA256 || canonicalRoot !== SOURCE_CANONICAL_SHA256
     || aliasRoot !== SOURCE_ALIAS_SHA256) throw new Error("TICKET29_TICKET28_ROOT_PARITY_FAILED");
 
