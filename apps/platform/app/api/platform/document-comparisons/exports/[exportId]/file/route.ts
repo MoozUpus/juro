@@ -1,15 +1,21 @@
 import { requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
+import { authLocaleFromRequest } from "../../../../../../../lib/auth/request-locale";
 import { requireD1, requireR2 } from "../../../../../../../lib/document-builder/storage/runtime";
 import { AnalysisExportError } from "../../../../../../../lib/document-analysis/exporter";
 import { comparisonExportForDownload, recordComparisonExportDownload, verifyComparisonExportObject } from "../../../../../../../lib/document-comparison/exporter";
+import {
+  comparisonExportErrorMessage,
+  comparisonProcessingErrorMessage,
+} from "../../../../../../../lib/document-comparison/localization";
 import { assertComparisonSourceFilesCleanById } from "../../../../../../../lib/document-comparison/scan-evidence";
 import { ComparisonProcessingError } from "../../../../../../../lib/document-comparison/types";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
 
 export const GET = withApiErrors(async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ exportId: string }> },
 ) {
+  const locale = authLocaleFromRequest(request);
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const { exportId } = await context.params;
@@ -33,13 +39,22 @@ export const GET = withApiErrors(async function GET(
     } });
   } catch (error) {
     if (error instanceof ComparisonProcessingError) {
-      return Response.json({ code: error.code, error: error.message }, {
+      return Response.json({
+        code: error.code,
+        error: comparisonProcessingErrorMessage(error.code, locale),
+      }, {
         status: 422,
         headers: { "cache-control": "private, no-store" },
       });
     }
     if (error instanceof AnalysisExportError) {
-      return Response.json({ code: error.code, error: "Экспорт недоступен." }, { status: error.status, headers: { "cache-control": "private, no-store" } });
+      return Response.json({
+        code: error.code,
+        error: comparisonExportErrorMessage(error.code, locale),
+      }, {
+        status: error.status,
+        headers: { "cache-control": "private, no-store" },
+      });
     }
     throw error;
   }

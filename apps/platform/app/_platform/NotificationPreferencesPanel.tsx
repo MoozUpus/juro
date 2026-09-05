@@ -25,7 +25,7 @@ const emptyPreferences: Preferences = {
   lawyer_request_updates: false,
 };
 
-const copy: Record<PlatformLocale, Record<PreferenceKey, { title: string; description: string }>> = {
+const preferenceCopy = {
   ru: {
     marketing_email: { title: "Новости и предложения", description: "Обновления продукта, юридические материалы и специальные предложения." },
     weekly_case_summary: { title: "Еженедельная сводка по делам", description: "Напоминание об открытых делах, задачах и ближайших сроках." },
@@ -40,10 +40,23 @@ const copy: Record<PlatformLocale, Record<PreferenceKey, { title: string; descri
     comments: { title: "Izohlar va takliflar", description: "Umumiy hujjatlardagi yangi izoh va takliflar haqida email xabarlari." },
     lawyer_request_updates: { title: "Yuristga so‘rovlar", description: "So‘rov holati, takliflar va tanlangan yurist xabarlari o‘zgarishi." },
   },
-};
+  en: {
+    marketing_email: { title: "News and offers", description: "Product updates, legal materials and occasional special offers." },
+    weekly_case_summary: { title: "Weekly matter summary", description: "A digest of open matters, tasks and approaching deadlines." },
+    unfinished_document: { title: "Unfinished documents", description: "Reminders about drafts that have not yet been sent or signed." },
+    comments: { title: "Comments and suggestions", description: "Email updates about new comments and suggestions in shared documents." },
+    lawyer_request_updates: { title: "Lawyer requests", description: "Status changes, proposals and messages from your selected lawyer." },
+  },
+} as const;
+
+const panelCopy = {
+  ru: { loadFailed: "Не удалось загрузить настройки уведомлений.", saveFailed: "Настройки не сохранены.", saved: "Настройки уведомлений сохранены.", title: "Email-уведомления", description: "Выберите только необязательные письма. Коды входа, сообщения о безопасности, доступе юриста, анализе и критических сроках остаются включёнными.", loading: "Загрузка настроек…", legend: "Необязательные email-уведомления", save: "Сохранить уведомления" },
+  uz: { loadFailed: "Bildirishnoma sozlamalarini yuklab bo‘lmadi.", saveFailed: "Sozlamalar saqlanmadi.", saved: "Bildirishnoma sozlamalari saqlandi.", title: "Email bildirishnomalari", description: "Faqat ixtiyoriy xatlarni tanlang. Kirish kodlari, xavfsizlik, yurist ruxsati, tahlil va muhim muddatlar haqidagi xatlar yoqilgan holda qoladi.", loading: "Sozlamalar yuklanmoqda…", legend: "Ixtiyoriy email bildirishnomalari", save: "Bildirishnomalarni saqlash" },
+  en: { loadFailed: "We could not load your notification settings.", saveFailed: "We could not save your notification settings.", saved: "Notification settings saved.", title: "Email notifications", description: "Choose only optional emails. Sign-in codes and essential security, lawyer-access, analysis and critical-deadline messages always remain enabled.", loading: "Loading notification settings…", legend: "Optional email notifications", save: "Save notifications" },
+} as const;
 
 export function NotificationPreferencesPanel({ locale }: { locale: PlatformLocale }) {
-  const ru = locale === "ru";
+  const copy = panelCopy[locale];
   const [preferences, setPreferences] = useState<Preferences>(emptyPreferences);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,16 +67,19 @@ export function NotificationPreferencesPanel({ locale }: { locale: PlatformLocal
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/platform/notification-preferences", { cache: "no-store" });
+      const response = await fetch("/api/platform/notification-preferences", {
+        cache: "no-store",
+        headers: { "x-juro-locale": locale },
+      });
       const body = await response.json() as { preferences?: Preferences; error?: string };
-      if (!response.ok || !body.preferences) throw new Error(body.error || (ru ? "Не удалось загрузить настройки уведомлений." : "Bildirishnoma sozlamalarini yuklab bo‘lmadi."));
+      if (!response.ok || !body.preferences) throw new Error(body.error || copy.loadFailed);
       setPreferences(body.preferences);
     } catch (value) {
-      setError(value instanceof Error ? value.message : (ru ? "Не удалось загрузить настройки уведомлений." : "Bildirishnoma sozlamalarini yuklab bo‘lmadi."));
+      setError(value instanceof Error ? value.message : copy.loadFailed);
     } finally {
       setLoading(false);
     }
-  }, [ru]);
+  }, [copy.loadFailed, locale]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -74,34 +90,36 @@ export function NotificationPreferencesPanel({ locale }: { locale: PlatformLocal
     try {
       const response = await fetch("/api/platform/notification-preferences", {
         method: "PUT",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+          "x-juro-locale": locale,
+        },
         body: JSON.stringify({ preferences }),
       });
       const body = await response.json() as { preferences?: Preferences; error?: string };
-      if (!response.ok || !body.preferences) throw new Error(body.error || (ru ? "Настройки не сохранены." : "Sozlamalar saqlanmadi."));
+      if (!response.ok || !body.preferences) throw new Error(body.error || copy.saveFailed);
       setPreferences(body.preferences);
-      setMessage(ru ? "Настройки уведомлений сохранены." : "Bildirishnoma sozlamalari saqlandi.");
+      setMessage(copy.saved);
     } catch (value) {
-      setError(value instanceof Error ? value.message : (ru ? "Настройки не сохранены." : "Sozlamalar saqlanmadi."));
+      setError(value instanceof Error ? value.message : copy.saveFailed);
     } finally {
       setSaving(false);
     }
   }
 
   return <section className="notification-preferences-panel" aria-busy={loading || saving}>
-    <h2><BellRing aria-hidden="true" />{ru ? "Email-уведомления" : "Email bildirishnomalari"}</h2>
-    <p>{ru
-      ? "Выберите только необязательные письма. Коды входа, сообщения о безопасности, доступе юриста, анализе и критических сроках остаются включёнными."
-      : "Faqat ixtiyoriy xatlarni tanlang. Kirish kodlari, xavfsizlik, yurist ruxsati, tahlil va muhim muddatlar haqidagi xatlar yoqilgan holda qoladi."}</p>
-    {loading ? <p className="notification-preferences-state" role="status"><LoaderCircle className="spin" aria-hidden="true" />{ru ? "Загрузка настроек…" : "Sozlamalar yuklanmoqda…"}</p> : <fieldset className="notification-preferences-list">
-      <legend className="sr-only">{ru ? "Необязательные email-уведомления" : "Ixtiyoriy email bildirishnomalari"}</legend>
+    <h2><BellRing aria-hidden="true" />{copy.title}</h2>
+    <p>{copy.description}</p>
+    {loading ? <p className="notification-preferences-state" role="status"><LoaderCircle className="spin" aria-hidden="true" />{copy.loading}</p> : <fieldset className="notification-preferences-list">
+      <legend className="sr-only">{copy.legend}</legend>
       {keys.map((key) => <label key={key}>
         <input type="checkbox" checked={preferences[key]} onChange={(event) => setPreferences(current => ({ ...current, [key]: event.target.checked }))} disabled={saving} />
-        <span><strong>{copy[locale][key].title}</strong><small>{copy[locale][key].description}</small></span>
+        <span><strong>{preferenceCopy[locale][key].title}</strong><small>{preferenceCopy[locale][key].description}</small></span>
       </label>)}
     </fieldset>}
     {error && <p className="notification-preferences-state error" role="alert">{error}</p>}
     {message && <p className="notification-preferences-state success" role="status">{message}</p>}
-    <button type="button" onClick={() => void save()} disabled={loading || saving} aria-busy={saving}>{saving ? <LoaderCircle className="spin" aria-hidden="true" /> : <Save aria-hidden="true" />}{ru ? "Сохранить уведомления" : "Bildirishnomalarni saqlash"}</button>
+    <button type="button" onClick={() => void save()} disabled={loading || saving} aria-busy={saving}>{saving ? <LoaderCircle className="spin" aria-hidden="true" /> : <Save aria-hidden="true" />}{copy.save}</button>
   </section>;
 }

@@ -4,6 +4,7 @@ import type { PlatformStaffAccess } from "../auth/staff-access";
 import type { BuilderRuntimeEnv } from "../document-builder/storage/runtime";
 import { runtimeEnv } from "../document-builder/storage/runtime";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider-models";
+import { aiText, type AiOutputLocale } from "./localization";
 
 const zeroHash = "0".repeat(64);
 const modelSchema = z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9._:-]+$/);
@@ -212,16 +213,10 @@ export async function createAiRuntimeSettingsVersion(input: {
   };
 }
 
-export function aiResponseToneInstruction(tone: AiResponseTone, locale: "ru" | "uz"): string {
-  if (tone === "formal") return locale === "ru"
-    ? "Используй формальный, точный и профессиональный тон без канцелярской перегрузки."
-    : "Rasmiy, aniq va professional ohangdan foydalan, ortiqcha idoraviy uslubdan qoch.";
-  if (tone === "concise") return locale === "ru"
-    ? "Пиши максимально кратко, но не опускай правовые основания, риски и необходимые действия."
-    : "Juda qisqa yoz, ammo huquqiy asoslar, xavflar va zarur harakatlarni qoldirma.";
-  return locale === "ru"
-    ? "Пиши ясным профессиональным языком, объясняя юридические термины простыми словами."
-    : "Huquqiy atamalarni sodda so‘zlar bilan tushuntirib, aniq professional tilda yoz.";
+export function aiResponseToneInstruction(tone: AiResponseTone, locale: AiOutputLocale): string {
+  if (tone === "formal") return aiText(locale, "Используй формальный, точный и профессиональный тон без канцелярской перегрузки.", "Rasmiy, aniq va professional ohangdan foydalan, ortiqcha idoraviy uslubdan qoch.", "Use a formal, precise and professional tone without unnecessary legalese.");
+  if (tone === "concise") return aiText(locale, "Пиши максимально кратко, но не опускай правовые основания, риски и необходимые действия.", "Juda qisqa yoz, ammo huquqiy asoslar, xavflar va zarur harakatlarni qoldirma.", "Be as concise as possible without omitting the legal basis, risks or required actions.");
+  return aiText(locale, "Пиши ясным профессиональным языком, объясняя юридические термины простыми словами.", "Huquqiy atamalarni sodda so‘zlar bilan tushuntirib, aniq professional tilda yoz.", "Use clear professional English and explain legal terms in plain language.");
 }
 
 async function defaultSettings(env: BuilderRuntimeEnv, environment: AiRuntimeSettings["environment"]): Promise<AiRuntimeSettings> {

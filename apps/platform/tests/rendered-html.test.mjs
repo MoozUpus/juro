@@ -215,6 +215,47 @@ test("lawyer auth uses same-origin icons and permits the injected Cloudflare ana
   );
 });
 
+test("lawyer-host GET and HEAD rewrites never forward a transport body", async () => {
+  const worker = await createWorker();
+  for (const method of ["GET", "HEAD"]) {
+    const request = new Request("https://lawyer.juro.uz/ru/auth/login", {
+      method,
+      headers: {
+        accept: "text/html",
+        "content-length": "0",
+      },
+    });
+    Object.defineProperty(request, "body", {
+      configurable: true,
+      get() {
+        throw new Error(`${method}_BODY_MUST_NOT_BE_READ`);
+      },
+    });
+
+    const response = await worker.fetch(request, runtime, context);
+    assert.equal(response.status, 200, method);
+    assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/u, method);
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff", method);
+    assert.match(response.headers.get("cache-control") ?? "", /no-store/u, method);
+    if (method === "HEAD") assert.equal(response.body, null);
+  }
+});
+
+test("lawyer-host localized roots resolve to their protected dashboards", async () => {
+  const worker = await createWorker();
+  for (const locale of ["ru", "uz", "en"]) {
+    const response = await worker.fetch(
+      new Request(`https://lawyer.juro.uz/${locale}`, { redirect: "manual" }),
+      runtime,
+      context,
+    );
+    assert.equal(response.status, 307, locale);
+    const location = new URL(response.headers.get("location") ?? "", "https://lawyer.juro.uz");
+    assert.equal(location.pathname, `/${locale}/auth/login`, locale);
+    assert.equal(location.searchParams.get("returnTo"), `/${locale}/lawyer/dashboard`, locale);
+  }
+});
+
 test("keeps the legal-source staff inbox hidden while its exact flag is false", async () => {
   const worker = await createWorker();
   const response = await worker.fetch(
@@ -236,6 +277,8 @@ test("localized legacy auth routes redirect to the canonical auth surface", asyn
   for (const [source, target] of [
     ["/ru/login?returnTo=%2Fru%2Flawyer%2Fmain", "/ru/auth/login?returnTo=%2Fru%2Flawyer%2Fmain"],
     ["/uz/register?accountType=entrepreneur", "/uz/auth/register?accountType=entrepreneur"],
+    ["/en/login?returnTo=%2Fen%2Findividual%2Fdashboard", "/en/auth/login?returnTo=%2Fen%2Findividual%2Fdashboard"],
+    ["/en/register?accountType=lawyer&returnTo=%2Fen%2Flawyer%2Fmain", "/en/auth/register?accountType=lawyer&returnTo=%2Fen%2Flawyer%2Fmain"],
   ]) {
     const response = await worker.fetch(new Request(`http://localhost${source}`, { redirect: "manual" }), runtime, context);
     assert.equal(response.status, 308, source);

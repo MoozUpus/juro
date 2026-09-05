@@ -7,6 +7,7 @@ import {
   questionIntakeConsumeSchema,
   QuestionIntakeError,
 } from "../../../../../../lib/ai/question-intake";
+import { aiText, parseAiOutputLocale } from "../../../../../../lib/ai/localization";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -19,18 +20,14 @@ function response(body: unknown, status = 200) {
   });
 }
 
-function locale(request: Request): "ru" | "uz" {
-  return request.headers.get("x-juro-locale") === "uz" ? "uz" : "ru";
-}
-
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
-  const language = locale(request);
+  const language = parseAiOutputLocale(request.headers.get("x-juro-locale"));
   const parsed = await parseJsonRequest(request, questionIntakeConsumeSchema, 512);
   if (!parsed.ok) {
     return response({
       code: "AI_QUESTION_INTAKE_UNAVAILABLE",
-      error: language === "ru" ? "Черновик вопроса недоступен." : "Savol qoralamasi mavjud emas.",
+      error: aiText(language, "Черновик вопроса недоступен.", "Savol qoralamasi mavjud emas.", "The question draft is unavailable."),
     }, 404);
   }
   const user = await requireApiUser(request);
@@ -38,7 +35,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!workspace) {
     return response({
       code: "AI_QUESTION_INTAKE_UNAVAILABLE",
-      error: language === "ru" ? "Черновик вопроса недоступен." : "Savol qoralamasi mavjud emas.",
+      error: aiText(language, "Черновик вопроса недоступен.", "Savol qoralamasi mavjud emas.", "The question draft is unavailable."),
     }, 404);
   }
   try {
@@ -53,7 +50,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     if (!(error instanceof QuestionIntakeError)) throw error;
     return response({
       code: error.code,
-      error: language === "ru" ? "Черновик вопроса недоступен." : "Savol qoralamasi mavjud emas.",
+      error: aiText(language, "Черновик вопроса недоступен.", "Savol qoralamasi mavjud emas.", "The question draft is unavailable."),
     }, error.code === "AI_QUESTION_INTAKE_UNAVAILABLE" ? 404 : 503);
   }
 });

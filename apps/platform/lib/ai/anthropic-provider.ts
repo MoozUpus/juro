@@ -16,6 +16,7 @@ import {
   LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
   LEGAL_ANSWER_MARKDOWN_RULE,
 } from "./legal-answer-prompt-rules";
+import { aiText } from "./localization";
 
 export function anthropicModel(): string {
   return runtimeEnv().ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
@@ -50,16 +51,14 @@ export function normalizeAnthropicLegalChatResponse(
   const text = (key: string, fallback: string) =>
     typeof record[key] === "string" && record[key].trim() ? record[key] as string : fallback;
   const list = (key: string) => Array.isArray(record[key]) ? record[key] : [];
-  const defaultQuestion = input.locale === "ru"
-    ? "Какие обстоятельства, документы и даты можно уточнить?"
-    : "Qaysi holatlar, hujjatlar va sanalarni aniqlashtirish mumkin?";
+  const defaultQuestion = aiText(input.locale, "Какие обстоятельства, документы и даты можно уточнить?", "Qaysi holatlar, hujjatlar va sanalarni aniqlashtirish mumkin?", "Which circumstances, documents and dates can you clarify?");
   const responseKind = record.responseKind === "answer" || record.responseKind === "clarification_required"
     ? record.responseKind
     : "clarification_required";
   return parseLegalChatResponse({
     responseKind,
-    summary: text("summary", input.locale === "ru" ? "Для ответа нужны уточнения." : "Javob uchun aniqlik kiritish kerak."),
-    answer: text("answer", input.locale === "ru" ? "Уточните обстоятельства, чтобы JURO мог проверить применимые нормы." : "JURO tegishli normalarni tekshirishi uchun holatlarni aniqlashtiring."),
+    summary: text("summary", aiText(input.locale, "Для ответа нужны уточнения.", "Javob uchun aniqlik kiritish kerak.", "The answer requires clarification.")),
+    answer: text("answer", aiText(input.locale, "Уточните обстоятельства, чтобы JURO мог проверить применимые нормы.", "JURO tegishli normalarni tekshirishi uchun holatlarni aniqlashtiring.", "Clarify the circumstances so JURO can verify the applicable law.")),
     language: input.locale,
     jurisdiction: "UZ",
     answerMode: input.answerMode,
@@ -172,7 +171,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
         "Если intent=calculation, правовой срок, сумма и формула допустимы как подтверждённые только при точном покрытии verifiedSources.sourceSpans с sourceClass=OFFICIAL_LEGISLATION. Числа из USER_TRUSTED_PRIVATE допустимы только как факт содержания документа.",
         "Заверши ответ вызовом emit_result и заполни все обязательные поля его схемы. Не возвращай результат обычным текстом.",
         aiResponseToneInstruction(responseTone, input.locale),
-        input.locale === "uz" ? "O‘zbek tilida lotin yozuvida javob ber." : "Отвечай полностью на русском языке.",
+        aiText(input.locale, "Отвечай полностью на русском языке.", "O‘zbek tilida lotin yozuvida javob ber.", "Answer entirely in professional English."),
       ].join(" "),
       input: {
         jurisdiction: "UZ",

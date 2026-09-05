@@ -11,8 +11,10 @@ import {
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import type { AiCostDashboard } from "../../lib/ai/provider-usage";
+import { platformIntlLocale } from "../../lib/platform/date-time";
+import type { PlatformLocale } from "../../lib/platform/routing";
 
-type Locale = "ru" | "uz";
+type Locale = PlatformLocale;
 type Provider = "openai" | "anthropic";
 
 const copy = {
@@ -105,6 +107,51 @@ const copy = {
     alerts: "Operatsion bildirishnomalar",
     status: "Holat",
     reason: "Sabab",
+  },
+  en: {
+    title: "AI cost and safeguards",
+    eyebrow: "Operational observability",
+    secure: "Secure workspace",
+    fresh: "Recent 2FA",
+    refresh: "Refresh",
+    unpriced: "Unpriced calls",
+    prices: "Price versions",
+    usage: "Daily usage",
+    addPrice: "Add price version",
+    provider: "Provider",
+    model: "Model",
+    operation: "Operation",
+    inputRate: "Input, µUSD / 1M tokens",
+    outputRate: "Output, µUSD / 1M tokens",
+    cachedRate: "Cached input, µUSD / 1M",
+    effective: "Effective from",
+    source: "Official pricing URL",
+    savePrice: "Save immutable price",
+    date: "Date",
+    feature: "Feature",
+    requests: "Requests",
+    failures: "Failures",
+    tokens: "Tokens",
+    cost: "Estimate, USD",
+    noData: "No data yet",
+    priceSuccess: "Price version added",
+    protection: "Circuit breaker",
+    policy: "New threshold version",
+    dailyLimit: "Daily limit, USD",
+    failureLimit: "Failures per window",
+    window: "Window, minutes",
+    enabled: "Automatic protection enabled",
+    savePolicy: "Save threshold version",
+    policySuccess: "Threshold version added",
+    open: "Open — calls are blocked",
+    closed: "Closed — calls are allowed",
+    openAction: "Stop provider",
+    closeAction: "Resume after review",
+    circuitSuccess: "Circuit state updated",
+    latestPolicy: "Current threshold",
+    alerts: "Operational alerts",
+    status: "Status",
+    reason: "Reason",
   },
 } as const;
 
@@ -279,7 +326,7 @@ export function CostConsole({
 
       <section className="cost-prices" aria-labelledby="cost-prices-title">
         <h2 id="cost-prices-title">{t.prices}</h2>
-        {data.prices.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.provider}</th><th>{t.model}</th><th>{t.operation}</th><th>{t.inputRate}</th><th>{t.effective}</th></tr></thead><tbody>{data.prices.map((price) => <tr key={price.id}><td>{price.provider}</td><td><code>{price.model}</code></td><td>{price.operation}</td><td>{price.inputMicrousdPerMillionTokens.toLocaleString("en-US")}</td><td><time dateTime={price.effectiveFrom}>{new Date(price.effectiveFrom).toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ")}</time></td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
+        {data.prices.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.provider}</th><th>{t.model}</th><th>{t.operation}</th><th>{t.inputRate}</th><th>{t.effective}</th></tr></thead><tbody>{data.prices.map((price) => <tr key={price.id}><td>{price.provider}</td><td><code>{price.model}</code></td><td>{price.operation}</td><td>{price.inputMicrousdPerMillionTokens.toLocaleString("en-US")}</td><td><time dateTime={price.effectiveFrom}>{new Date(price.effectiveFrom).toLocaleString(platformIntlLocale(locale))}</time></td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
       </section>
 
       <section className="cost-usage" aria-labelledby="cost-usage-title">
@@ -289,7 +336,7 @@ export function CostConsole({
 
       <section className="cost-usage" aria-labelledby="cost-alerts-title">
         <h2 id="cost-alerts-title">{t.alerts}</h2>
-        {data.alerts.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.date}</th><th>{t.provider}</th><th>{t.reason}</th><th>{t.status}</th></tr></thead><tbody>{data.alerts.map((alert) => <tr key={alert.id}><td><time dateTime={alert.createdAt}>{new Date(alert.createdAt).toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ")}</time></td><td>{alert.provider}</td><td>{alert.reason}</td><td>{alert.status}{alert.errorCode ? ` · ${alert.errorCode}` : ""}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
+        {data.alerts.length ? <div className="cost-table-wrap"><table><thead><tr><th>{t.date}</th><th>{t.provider}</th><th>{t.reason}</th><th>{t.status}</th></tr></thead><tbody>{data.alerts.map((alert) => <tr key={alert.id}><td><time dateTime={alert.createdAt}>{new Date(alert.createdAt).toLocaleString(platformIntlLocale(locale))}</time></td><td>{alert.provider}</td><td>{alert.reason}</td><td>{alert.status}{alert.errorCode ? ` · ${alert.errorCode}` : ""}</td></tr>)}</tbody></table></div> : <p className="staff-empty">{t.noData}</p>}
       </section>
     </main>
   </div>;

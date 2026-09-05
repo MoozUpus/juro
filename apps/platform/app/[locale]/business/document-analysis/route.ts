@@ -5,6 +5,7 @@ import {
   isLocale,
   isPersonalAccountType,
   platformBasePath,
+  type PlatformLocale,
 } from "../../../../lib/platform/routing";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
@@ -27,7 +28,7 @@ function documentReviewTarget(
 
 function loginTarget(
   request: Request,
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
   returnTo: URL,
 ): URL {
   const login = new URL(`/${locale}/auth/login`, request.url);

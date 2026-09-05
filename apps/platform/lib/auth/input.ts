@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const emailInput = z.string().trim().min(3).max(254);
-const localeInput = z.enum(["ru", "uz"]).default("ru");
+const localeInput = z.enum(["ru", "uz", "en"]).default("ru");
 const authLocaleInput = z.enum(["ru", "uz", "en"]).default("ru");
 const passwordInput = z.string().min(8).max(256);
 // Ordinary authentication is password-first. Public email-code endpoints are

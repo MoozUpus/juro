@@ -4,7 +4,7 @@ import { AnalysisExportError } from "../document-analysis/exporter";
 import { comparisonReportParagraphs } from "./report";
 import { assertComparisonSourceFilesClean } from "./scan-evidence";
 import { comparisonChanges, parsedSummary, verifiedSourcesForChanges } from "./storage";
-import { ComparisonProcessingError } from "./types";
+import { ComparisonProcessingError, type ComparisonLocale } from "./types";
 
 export type ComparisonExportFormat = "pdf" | "docx";
 
@@ -61,6 +61,54 @@ const formatInfo = {
   pdf: { extension: "pdf", mimeType: "application/pdf" },
   docx: { extension: "docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
 } as const;
+
+const exportCopy: Record<ComparisonLocale, {
+  title: string;
+  footerLabel: string;
+  pageLabel: string;
+  totalLabel: string;
+  documentLanguage: "ru-RU" | "uz-Latn-UZ" | "en-GB";
+  templatePath: string;
+  subject: string;
+  keywords: string;
+}> = {
+  ru: {
+    title: "JURO — отчёт о сравнении документов",
+    footerLabel: "Создано в JURO",
+    pageLabel: "Страница",
+    totalLabel: "из",
+    documentLanguage: "ru-RU",
+    templatePath: "/document-templates/receipt-ru.docx",
+    subject: "Отчёт JURO о сравнении документов",
+    keywords: "JURO, сравнение документов, юридический отчёт",
+  },
+  uz: {
+    title: "JURO — hujjatlarni taqqoslash hisoboti",
+    footerLabel: "JURO’da yaratildi",
+    pageLabel: "Sahifa",
+    totalLabel: "/",
+    documentLanguage: "uz-Latn-UZ",
+    templatePath: "/document-templates/receipt-uz-cyrl.docx",
+    subject: "JURO hujjatlarni taqqoslash hisoboti",
+    keywords: "JURO, hujjatlarni taqqoslash, yuridik hisobot",
+  },
+  en: {
+    title: "JURO — Document Comparison Report",
+    footerLabel: "Created in JURO",
+    pageLabel: "Page",
+    totalLabel: "of",
+    documentLanguage: "en-GB",
+    // The generator replaces the body, footer and metadata; this asset supplies only the approved OOXML structure and JURO mark.
+    templatePath: "/document-templates/receipt-ru.docx",
+    subject: "JURO document comparison report",
+    keywords: "JURO, document comparison, legal report",
+  },
+};
+
+function comparisonExportLocale(value: string): ComparisonLocale {
+  if (value === "uz" || value === "en") return value;
+  return "ru";
+}
 
 export async function requestComparisonExport(input: {
   db: D1Database;
@@ -161,18 +209,26 @@ export async function executeComparisonExportJob(
   const changes = await comparisonChanges(env.DB, row.comparisonId);
   const sources = await verifiedSourcesForChanges(env.DB, changes);
   const paragraphs = comparisonReportParagraphs({ comparison: row, summary: parsedSummary(row.summaryJson), changes, sources });
-  const ru = row.locale !== "uz";
+  const locale = comparisonExportLocale(row.locale);
+  const copy = exportCopy[locale];
   const bytes = row.format === "pdf"
     ? await generatePdf(
       paragraphs,
       await asset(env.ASSETS, "/document-templates/DejaVuSans-JURO.ttf"),
       await asset(env.ASSETS, "/document-templates/DejaVuSans-Bold-JURO.ttf"),
       await asset(env.ASSETS, "/document-templates/juro-mark-footer.png"),
-      { title: ru ? "JURO — отчёт о сравнении документов" : "JURO — hujjatlarni taqqoslash hisoboti", producer: "JURO Document Comparison", footerLabel: ru ? "Сформировано в JURO" : "JURO’da yaratildi", pageLabel: ru ? "Страница" : "Sahifa" },
+      { title: copy.title, producer: "JURO Document Comparison", footerLabel: copy.footerLabel, pageLabel: copy.pageLabel },
     )
     : generateDocx(
-      await asset(env.ASSETS, ru ? "/document-templates/receipt-ru.docx" : "/document-templates/receipt-uz-cyrl.docx"),
+      await asset(env.ASSETS, copy.templatePath),
       paragraphs,
+      {
+        documentLanguage: copy.documentLanguage,
+        title: copy.title,
+        subject: copy.subject,
+        keywords: copy.keywords,
+        footer: { createdLabel: copy.footerLabel, pageLabel: copy.pageLabel, totalLabel: copy.totalLabel },
+      },
     );
   const sha256 = await sha256Hex(bytes);
   const r2Key = `comparison-exports/${row.workspaceId}/${row.comparisonId}/${row.id}.${row.format}`;

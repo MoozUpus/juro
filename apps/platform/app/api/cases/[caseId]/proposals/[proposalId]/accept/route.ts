@@ -10,7 +10,7 @@ const body = z.object({
   workspaceId: z.string().min(3).max(128).optional(),
   agreementVersion: z.string().min(1).max(100),
   accepted: z.literal(true),
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
 }).strict();
 
 type Ctx = { params: Promise<{ caseId: string; proposalId: string }> };
@@ -55,8 +55,9 @@ export const POST = withApiErrors(async (request: Request, context: Ctx) => {
   }
 
   const now = new Date().toISOString();
-  const proposal = await db.prepare(`SELECT id,title_ru AS titleRu,title_uz AS titleUz,
-    scope_ru AS scopeRu,scope_uz AS scopeUz,duration_description AS durationDescription,
+  const proposal = await db.prepare(`SELECT id,title_ru AS titleRu,title_uz AS titleUz,title_en AS titleEn,
+    scope_ru AS scopeRu,scope_uz AS scopeUz,scope_en AS scopeEn,
+    duration_description AS durationDescription,duration_description_en AS durationDescriptionEn,
     lawyer_base_amount_minor AS lawyerBaseAmountMinor
     FROM legal_service_proposals
     WHERE id=? AND case_id=? AND workspace_id=? AND client_user_id=? AND status='PROPOSED'
@@ -64,6 +65,12 @@ export const POST = withApiErrors(async (request: Request, context: Ctx) => {
     .bind(proposalId, caseId, workspace.id, user.id, now)
     .first<Record<string, unknown>>();
   if (!proposal) return unavailable();
+  if (
+    parsed.data.locale === "en"
+    && (!proposal.titleEn || !proposal.scopeEn || !proposal.durationDescriptionEn)
+  ) {
+    return Response.json({ code: "PROPOSAL_TRANSLATION_UNAVAILABLE" }, { status: 409 });
+  }
 
   const agreement = JSON.stringify({
     proposal,

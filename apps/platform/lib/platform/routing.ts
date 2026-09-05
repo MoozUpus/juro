@@ -1,4 +1,9 @@
-export type PlatformLocale = "ru" | "uz";
+export const PLATFORM_LOCALES = ["ru", "uz", "en"] as const;
+export type PlatformLocale = typeof PLATFORM_LOCALES[number];
+
+export const AUTHENTICATED_PLATFORM_UI_LOCALES = ["ru", "uz", "en"] as const;
+export type AuthenticatedPlatformUiLocale =
+  typeof AUTHENTICATED_PLATFORM_UI_LOCALES[number];
 export type PersonalAccountType = "individual" | "entrepreneur" | "lawyer";
 export type AccountType = PersonalAccountType | "business";
 
@@ -43,7 +48,28 @@ export type PlatformModule = typeof PLATFORM_MODULES[number];
 const WORKSPACE_ID_PATTERN = /^[A-Za-z0-9_-]{3,128}$/;
 
 export function isLocale(value: string): value is PlatformLocale {
-  return value === "ru" || value === "uz";
+  return PLATFORM_LOCALES.includes(value as PlatformLocale);
+}
+
+/**
+ * Keep authenticated-locale readiness explicit so a future locale cannot enter
+ * the protected product shell before its complete UI and API copy is available.
+ */
+export function isAuthenticatedPlatformLocaleReady(
+  value: string,
+): value is AuthenticatedPlatformUiLocale {
+  return AUTHENTICATED_PLATFORM_UI_LOCALES.includes(
+    value as AuthenticatedPlatformUiLocale,
+  );
+}
+
+const AUTHENTICATED_PLATFORM_ROUTE =
+  /^\/(?:ru|uz|en)\/(?:admin|business|entrepreneur|individual|lawyer|onboarding)(?:\/|$)/u;
+
+export function isAuthenticatedPlatformPathReady(pathname: string): boolean {
+  if (!AUTHENTICATED_PLATFORM_ROUTE.test(pathname)) return true;
+  const locale = pathname.split("/", 3)[1] ?? "";
+  return isAuthenticatedPlatformLocaleReady(locale);
 }
 
 export function isPersonalAccountType(

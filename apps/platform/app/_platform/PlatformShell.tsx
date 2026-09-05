@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
+  AUTHENTICATED_PLATFORM_UI_LOCALES,
   platformBasePath,
   type AccountType,
   type PlatformLocale,
@@ -46,6 +47,7 @@ import { PlatformRouteProvider } from "./PlatformRouteContext";
 import { useSessionRefresh } from "./useSessionRefresh";
 import { ThemeSwitcher } from "../_theme/ThemeSwitcher";
 import { SidebarSectionLabel } from "./SidebarSectionLabel";
+import { platformApiError, platformLocaleValue } from "../../content/platform-ui";
 
 type Props = {
   locale: PlatformLocale;
@@ -57,69 +59,72 @@ type Props = {
 };
 
 const primaryNav = [
-  ["ai-chat", Bot, "Спросить AI", "AI’dan so‘rash"],
-  ["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"],
-  ["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish"],
-  ["cases", BriefcaseBusiness, "Мои дела", "Mening ishlarim"],
+  ["ai-chat", Bot, "Спросить AI", "AI’dan so‘rash", "Ask AI"],
+  ["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish", "Create a document"],
+  ["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish", "Review a document"],
+  ["cases", BriefcaseBusiness, "Мои дела", "Mening ishlarim", "My matters"],
 ] as const;
 
 const lawyerPrimaryNav = [
-  ["dashboard", Home, "Главная", "Bosh sahifa"],
-  ["consultations?view=requests", Bell, "Заявки", "So‘rovlar"],
+  ["dashboard", Home, "Главная", "Bosh sahifa", "Home"],
+  ["consultations?view=requests", Bell, "Заявки", "So‘rovlar", "Requests"],
   [
     "consultations?view=schedule",
     CalendarCheck2,
     "Консультации",
     "Maslahatlar",
+    "Consultations",
   ],
-  ["consultations?view=matters", BriefcaseBusiness, "Дела", "Ishlar"],
+  ["consultations?view=matters", BriefcaseBusiness, "Дела", "Ishlar", "Matters"],
 ] as const;
 
 const lawyerClientNav = [
-  ["consultations?view=clients", UsersRound, "Клиенты", "Mijozlar"],
-  ["consultations?view=messages", MessageSquareText, "Сообщения", "Xabarlar"],
-  ["consultations?view=documents", Files, "Документы", "Hujjatlar"],
-  ["consultations?view=tasks", CalendarCheck2, "Задачи", "Vazifalar"],
+  ["consultations?view=clients", UsersRound, "Клиенты", "Mijozlar", "Clients"],
+  ["consultations?view=messages", MessageSquareText, "Сообщения", "Xabarlar", "Messages"],
+  ["consultations?view=documents", Files, "Документы", "Hujjatlar", "Documents"],
+  ["consultations?view=tasks", CalendarCheck2, "Задачи", "Vazifalar", "Tasks"],
 ] as const;
 
 const lawyerPracticeNav = [
-  ["calendar", CalendarDays, "Календарь", "Kalendar"],
-  ["profile", UserRound, "Публичный профиль", "Ommaviy profil"],
-  ["settings", ShieldCheck, "Настройки", "Sozlamalar"],
+  ["calendar", CalendarDays, "Календарь", "Kalendar", "Calendar"],
+  ["profile", UserRound, "Публичный профиль", "Ommaviy profil", "Public profile"],
+  ["settings", ShieldCheck, "Настройки", "Sozlamalar", "Settings"],
 ] as const;
 
 const documentNav = [
-  ["documents", Files, "Мои документы", "Mening hujjatlarim"],
+  ["documents", Files, "Мои документы", "Mening hujjatlarim", "My documents"],
   [
     "document-review?mode=compare",
     Files,
     "Сравнить версии",
     "Versiyalarni solishtirish",
+    "Compare versions",
   ],
 ] as const;
 
 const caseworkNav = [
-  ["action-plan", CalendarCheck2, "Планы действий", "Harakatlar rejalari"],
-  ["calendar", CalendarDays, "Календарь", "Kalendar"],
-  ["archive", Archive, "Архив", "Arxiv"],
-  ["history", History, "История", "Tarix"],
+  ["action-plan", CalendarCheck2, "Планы действий", "Harakatlar rejalari", "Action plans"],
+  ["calendar", CalendarDays, "Календарь", "Kalendar", "Calendar"],
+  ["archive", Archive, "Архив", "Arxiv", "Archive"],
+  ["history", History, "История", "Tarix", "History"],
 ] as const;
 
 const helpNav = [
-  ["consultations", ReceiptText, "Консультации", "Maslahatlar"],
-  ["lawyers", UsersRound, "Юристы", "Yuristlar"],
+  ["consultations", ReceiptText, "Консультации", "Maslahatlar", "Consultations"],
+  ["lawyers", UsersRound, "Юристы", "Yuristlar", "Lawyers"],
   [
     "monitoring",
     Scale,
     "Мониторинг законодательства",
     "Qonunchilik monitoringi",
+    "Legal monitoring",
   ],
 ] as const;
 
 const managementNav = [
-  ["team", UsersRound, "Команда", "Jamoa"],
-  ["notifications", Bell, "Уведомления", "Bildirishnomalar"],
-  ["billing", CreditCard, "Тариф", "Tarif"],
+  ["team", UsersRound, "Команда", "Jamoa", "Team"],
+  ["notifications", Bell, "Уведомления", "Bildirishnomalar", "Notifications"],
+  ["billing", CreditCard, "Тариф", "Tarif", "Plan"],
 ] as const;
 
 export function PlatformShell({
@@ -146,6 +151,12 @@ export function PlatformShell({
   const base = platformBasePath(locale, accountType, activeWorkspaceId);
   const business = accountType === "business";
   const lawyer = accountType === "lawyer";
+  const text = (value: { ru: string; uz: string; en: string }) =>
+    platformLocaleValue(locale, value);
+  const readyLocaleIndex = AUTHENTICATED_PLATFORM_UI_LOCALES.findIndex((candidate) => candidate === locale);
+  const nextLocale: PlatformLocale = AUTHENTICATED_PLATFORM_UI_LOCALES[
+    (Math.max(readyLocaleIndex, 0) + 1) % AUTHENTICATED_PLATFORM_UI_LOCALES.length
+  ] ?? "ru";
   const primaryItems = lawyer ? lawyerPrimaryNav : primaryNav;
   const toolGroups = lawyer
     ? ([
@@ -153,12 +164,14 @@ export function PlatformShell({
           key: "clients",
           ru: "Клиенты и работа",
           uz: "Mijozlar va ish",
+          en: "Clients and work",
           items: lawyerClientNav,
         },
         {
           key: "practice",
           ru: "Практика",
           uz: "Amaliyot",
+          en: "Practice",
           items: lawyerPracticeNav,
         },
       ] as const)
@@ -167,14 +180,16 @@ export function PlatformShell({
           key: "documents",
           ru: "Документы",
           uz: "Hujjatlar",
+          en: "Documents",
           items: documentNav,
         },
-        { key: "casework", ru: "Дела", uz: "Ishlar", items: caseworkNav },
-        { key: "help", ru: "Помощь", uz: "Yordam", items: helpNav },
+        { key: "casework", ru: "Дела", uz: "Ishlar", en: "Matters", items: caseworkNav },
+        { key: "help", ru: "Помощь", uz: "Yordam", en: "Support", items: helpNav },
         {
           key: "management",
           ru: "Управление",
           uz: "Boshqaruv",
+          en: "Management",
           items: managementNav.filter(([slug]) => slug !== "team" || business),
         },
       ] as const);
@@ -247,13 +262,12 @@ export function PlatformShell({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open]);
   const switchLanguage = () => {
-    const next = locale === "ru" ? "uz" : "ru";
-    document.documentElement.lang = next;
-    document.cookie = `juro_locale=${next}; Path=/; Max-Age=31536000; SameSite=Lax; Secure`;
+    document.documentElement.lang = nextLocale;
+    document.cookie = `juro_locale=${nextLocale}; Path=/; Max-Age=31536000; SameSite=Lax; Secure`;
     // Preserve the concrete object state (conversation, branch, comparison,
     // selected case) instead of sending a user back to an empty screen after
     // changing language. Route-level authorization still validates every ID.
-    const nextPath = pathname.replace(`/${locale}/`, `/${next}/`);
+    const nextPath = pathname.replace(`/${locale}/`, `/${nextLocale}/`);
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("prompt");
     const query = nextParams.toString();
@@ -284,12 +298,11 @@ export function PlatformShell({
         error?: string;
       };
       if (!response.ok || !body.redirectTo) {
-        throw new Error(
-          body.error ||
-            (locale === "ru"
-              ? "Не удалось переключить пространство."
-              : "Makonni almashtirib bo‘lmadi."),
-        );
+        throw new Error(platformApiError(locale, body.error, text({
+          ru: "Не удалось переключить пространство.",
+          uz: "Makonni almashtirib bo‘lmadi.",
+          en: "We could not switch workspaces.",
+        })));
       }
       window.location.assign(body.redirectTo);
     } catch (value) {
@@ -301,14 +314,14 @@ export function PlatformShell({
     <PlatformRouteProvider basePath={base} workspaceId={activeWorkspaceId}>
       <div className={`platform-shell ${collapsed ? "is-collapsed" : ""}`}>
         <a className="platform-skip-link" href="#main-content">
-          {locale === "ru" ? "Перейти к содержанию" : "Asosiy mazmunga o‘tish"}
+          {text({ ru: "Перейти к содержанию", uz: "Asosiy mazmunga o‘tish", en: "Skip to main content" })}
         </a>
         <aside
           ref={sidebarRef}
           id="platform-navigation"
           className={`platform-sidebar ${open ? "open" : ""}`}
           aria-label={
-            locale === "ru" ? "Основная навигация" : "Asosiy navigatsiya"
+            text({ ru: "Основная навигация", uz: "Asosiy navigatsiya", en: "Main navigation" })
           }
           aria-hidden={mobile && !open ? true : undefined}
           inert={mobile && !open ? true : undefined}
@@ -329,7 +342,7 @@ export function PlatformShell({
               className="platform-mobile-close"
               ref={closeButtonRef}
               onClick={closeMobileMenu}
-              aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"}
+              aria-label={text({ ru: "Закрыть меню", uz: "Menyuni yopish", en: "Close menu" })}
             >
               <X />
             </button>
@@ -339,27 +352,25 @@ export function PlatformShell({
           >
             <span>{business ? <BriefcaseBusiness /> : <UserRound />}</span>
             <div>
-              <small>{locale === "ru" ? "Пространство" : "Makon"}</small>
+              <small>{text({ ru: "Пространство", uz: "Makon", en: "Workspace" })}</small>
               {!lawyer && workspaces.length > 1 ? (
                 <select
                   value={activeWorkspaceId}
                   disabled={switchingWorkspace}
                   onChange={(event) => void switchWorkspace(event.target.value)}
                   aria-label={
-                    locale === "ru"
-                      ? "Выбрать личное или бизнес-пространство"
-                      : "Shaxsiy yoki biznes makonini tanlash"
+                    text({
+                      ru: "Выбрать личное или бизнес-пространство",
+                      uz: "Shaxsiy yoki biznes makonini tanlash",
+                      en: "Choose a personal or business workspace",
+                    })
                   }
                 >
                   {workspaces.map((workspace) => (
                     <option value={workspace.id} key={workspace.id}>
                       {workspace.type === "business"
-                        ? locale === "ru"
-                          ? "Бизнес"
-                          : "Biznes"
-                        : locale === "ru"
-                          ? "Личное"
-                          : "Shaxsiy"}{" "}
+                        ? text({ ru: "Бизнес", uz: "Biznes", en: "Business" })
+                        : text({ ru: "Личное", uz: "Shaxsiy", en: "Personal" })}{" "}
                       · {workspace.name}
                     </option>
                   ))}
@@ -367,16 +378,10 @@ export function PlatformShell({
               ) : (
                 <b>
                   {lawyer
-                    ? locale === "ru"
-                      ? "Кабинет юриста"
-                      : "Yurist kabineti"
+                    ? text({ ru: "Кабинет юриста", uz: "Yurist kabineti", en: "Lawyer workspace" })
                     : business
-                      ? locale === "ru"
-                        ? "Бизнес"
-                        : "Biznes"
-                      : locale === "ru"
-                        ? "Личное"
-                        : "Shaxsiy"}
+                      ? text({ ru: "Бизнес", uz: "Biznes", en: "Business" })
+                      : text({ ru: "Личное", uz: "Shaxsiy", en: "Personal" })}
                 </b>
               )}
             </div>
@@ -388,10 +393,10 @@ export function PlatformShell({
           )}
           <nav>
             <div className="platform-nav-group">
-              {primaryItems.map(([slug, Icon, ru, uz]) => {
+              {primaryItems.map(([slug, Icon, ru, uz, en]) => {
                 const href = `${base}/${slug}`;
                 const active = routeIsActive(slug);
-                const label = locale === "ru" ? ru : uz;
+                const label = platformLocaleValue(locale, { ru, uz, en });
                 return (
                   <Link
                     key={slug}
@@ -415,15 +420,13 @@ export function PlatformShell({
               <summary
                 title={
                   collapsed
-                    ? locale === "ru"
-                      ? "Все инструменты"
-                      : "Barcha vositalar"
+                    ? text({ ru: "Все инструменты", uz: "Barcha vositalar", en: "All tools" })
                     : undefined
                 }
               >
                 <Ellipsis />
                 <span>
-                  {locale === "ru" ? "Все инструменты" : "Barcha vositalar"}
+                  {text({ ru: "Все инструменты", uz: "Barcha vositalar", en: "All tools" })}
                 </span>
                 <ChevronDown
                   className="platform-nav-more-chevron"
@@ -435,17 +438,18 @@ export function PlatformShell({
                   <section
                     className="platform-nav-tool-group"
                     key={group.key}
-                    aria-label={locale === "ru" ? group.ru : group.uz}
+                    aria-label={platformLocaleValue(locale, group)}
                   >
                     <SidebarSectionLabel
                       locale={locale}
                       ru={group.ru}
                       uz={group.uz}
+                      en={group.en}
                     />
-                    {group.items.map(([slug, Icon, ru, uz]) => {
+                    {group.items.map(([slug, Icon, ru, uz, en]) => {
                       const href = `${base}/${slug}`;
                       const active = documentRouteIsActive(slug);
-                      const label = locale === "ru" ? ru : uz;
+                      const label = platformLocaleValue(locale, { ru, uz, en });
                       return (
                         <Link
                           key={slug}
@@ -468,16 +472,16 @@ export function PlatformShell({
           <div className="platform-sidebar-bottom">
             <Link href={`${base}/security`}>
               <ShieldCheck />
-              <span>{locale === "ru" ? "Безопасность" : "Xavfsizlik"}</span>
+              <span>{text({ ru: "Безопасность", uz: "Xavfsizlik", en: "Security" })}</span>
             </Link>
             <Link href={`${base}/help`}>
               <HelpCircle />
-              <span>{locale === "ru" ? "Помощь" : "Yordam"}</span>
+              <span>{text({ ru: "Помощь", uz: "Yordam", en: "Help" })}</span>
             </Link>
             <LogoutButton
               className="platform-sidebar-logout"
               locale={locale}
-              label={locale === "ru" ? "Выйти" : "Chiqish"}
+              label={text({ ru: "Выйти", uz: "Chiqish", en: "Sign out" })}
             />
           </div>
           <button
@@ -485,24 +489,20 @@ export function PlatformShell({
             onClick={toggleCollapsed}
             aria-label={
               collapsed
-                ? locale === "ru"
-                  ? "Развернуть меню"
-                  : "Menyuni kengaytirish"
-                : locale === "ru"
-                  ? "Свернуть меню"
-                  : "Menyuni yig‘ish"
+                ? text({ ru: "Развернуть меню", uz: "Menyuni kengaytirish", en: "Expand menu" })
+                : text({ ru: "Свернуть меню", uz: "Menyuni yig‘ish", en: "Collapse menu" })
             }
             aria-expanded={!collapsed}
           >
             {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-            <span>{locale === "ru" ? "Свернуть" : "Yig‘ish"}</span>
+            <span>{text({ ru: "Свернуть", uz: "Yig‘ish", en: "Collapse" })}</span>
           </button>
         </aside>
         {open && (
           <button
             type="button"
             className="platform-backdrop"
-            aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"}
+            aria-label={text({ ru: "Закрыть меню", uz: "Menyuni yopish", en: "Close menu" })}
             onClick={closeMobileMenu}
           />
         )}
@@ -511,12 +511,8 @@ export function PlatformShell({
             <div>
               <small>
                 {lawyer
-                  ? locale === "ru"
-                    ? "JURO · практика юриста"
-                    : "JURO · yurist amaliyoti"
-                  : locale === "ru"
-                    ? "JURO · защищённое пространство"
-                    : "JURO · himoyalangan makon"}
+                  ? text({ ru: "JURO · практика юриста", uz: "JURO · yurist amaliyoti", en: "JURO · legal practice" })
+                  : text({ ru: "JURO · защищённое пространство", uz: "JURO · himoyalangan makon", en: "JURO · secure workspace" })}
               </small>
               {userName ? <strong>{userName}</strong> : null}
             </div>
@@ -527,9 +523,11 @@ export function PlatformShell({
                 className="platform-language-switcher"
                 onClick={switchLanguage}
                 aria-label={
-                  locale === "ru"
-                    ? "Переключить на узбекский"
-                    : "Rus tiliga o‘tish"
+                  {
+                    ru: { ru: "Переключить на русский", uz: "Переключить на узбекский", en: "Переключить на английский" },
+                    uz: { ru: "Rus tiliga o‘tish", uz: "O‘zbek tiliga o‘tish", en: "Ingliz tiliga o‘tish" },
+                    en: { ru: "Switch to Russian", uz: "Switch to Uzbek", en: "Switch to English" },
+                  }[locale][nextLocale]
                 }
               >
                 <Languages />
@@ -537,14 +535,14 @@ export function PlatformShell({
               </button>
               <Link
                 href={`${base}/profile`}
-                aria-label={locale === "ru" ? "Профиль" : "Profil"}
+                aria-label={text({ ru: "Профиль", uz: "Profil", en: "Profile" })}
               >
                 <UserRound />
               </Link>
               <LogoutButton
                 className="platform-topbar-logout"
                 locale={locale}
-                label={locale === "ru" ? "Выйти" : "Chiqish"}
+                label={text({ ru: "Выйти", uz: "Chiqish", en: "Sign out" })}
               />
             </div>
           </header>
@@ -554,44 +552,44 @@ export function PlatformShell({
           <nav
             className="platform-mobile-nav"
             aria-label={
-              locale === "ru" ? "Мобильная навигация" : "Mobil navigatsiya"
+              text({ ru: "Мобильная навигация", uz: "Mobil navigatsiya", en: "Mobile navigation" })
             }
           >
             {(lawyer
               ? [
-                  ["dashboard", Home, locale === "ru" ? "Главная" : "Bosh"],
+                  ["dashboard", Home, text({ ru: "Главная", uz: "Bosh", en: "Home" })],
                   [
                     "consultations?view=requests",
                     Bell,
-                    locale === "ru" ? "Заявки" : "So‘rov",
+                    text({ ru: "Заявки", uz: "So‘rov", en: "Requests" }),
                   ],
                   [
                     "consultations?view=schedule",
                     CalendarCheck2,
-                    locale === "ru" ? "Приёмы" : "Qabul",
+                    text({ ru: "Приёмы", uz: "Qabul", en: "Meetings" }),
                   ],
                   [
                     "consultations?view=matters",
                     BriefcaseBusiness,
-                    locale === "ru" ? "Дела" : "Ishlar",
+                    text({ ru: "Дела", uz: "Ishlar", en: "Matters" }),
                   ],
                 ]
               : [
-                  ["ai-chat", Bot, locale === "ru" ? "AI" : "AI"],
+                  ["ai-chat", Bot, "AI"],
                   [
                     "document-builder",
                     FilePenLine,
-                    locale === "ru" ? "Создать" : "Yaratish",
+                    text({ ru: "Создать", uz: "Yaratish", en: "Create" }),
                   ],
                   [
                     "document-review",
                     FileCheck2,
-                    locale === "ru" ? "Проверить" : "Tekshirish",
+                    text({ ru: "Проверить", uz: "Tekshirish", en: "Review" }),
                   ],
                   [
                     "cases",
                     BriefcaseBusiness,
-                    locale === "ru" ? "Дела" : "Ishlar",
+                    text({ ru: "Дела", uz: "Ishlar", en: "Matters" }),
                   ],
                 ]
             ).map(([slug, Icon, label]) => {
@@ -614,12 +612,12 @@ export function PlatformShell({
               ref={openButtonRef}
               type="button"
               onClick={() => setOpen(true)}
-              aria-label={locale === "ru" ? "Открыть меню" : "Menyuni ochish"}
+              aria-label={text({ ru: "Открыть меню", uz: "Menyuni ochish", en: "Open menu" })}
               aria-expanded={open}
               aria-controls="platform-navigation"
             >
               <Menu />
-              <span>{locale === "ru" ? "Ещё" : "Yana"}</span>
+              <span>{text({ ru: "Ещё", uz: "Yana", en: "More" })}</span>
             </button>
           </nav>
         </div>

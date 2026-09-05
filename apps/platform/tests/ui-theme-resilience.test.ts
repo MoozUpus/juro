@@ -113,6 +113,9 @@ test("account theme sync accepts only explicit choices and normalizes legacy sys
 
   assert.match(route, /z\.enum\(\["light", "dark"\]\)/);
   assert.match(route, /resolveThemePreference\(row\?\.theme\)/);
+  assert.match(route, /authLocaleFromRequest\(request\)/);
+  assert.match(route, /Choose the light or dark theme\./);
+  assert.doesNotMatch(route, /Проверьте тему \/ Mavzuni tekshiring/);
   assert.match(preference, /return value === "dark" \? "dark" : "light"/);
   assert.doesNotMatch(route, /z\.enum\(\["system"/);
 });

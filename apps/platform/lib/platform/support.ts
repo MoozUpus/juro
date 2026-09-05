@@ -5,7 +5,7 @@ export const supportTicketSchema = z.object({
   severity: z.enum(["low", "normal", "high", "critical"]),
   subject: z.string().trim().min(4).max(180),
   message: z.string().trim().min(10).max(8_000),
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
 }).strict();
 
 export const supportTicketReplySchema = z.object({

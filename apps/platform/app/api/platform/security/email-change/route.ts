@@ -36,18 +36,27 @@ import {
   assertSafeWrite,
   withApiErrors,
 } from "../../../../../lib/document-builder/auth/api";
+import { localizedRequestFormatError } from "../../../../../lib/auth/request-locale";
 import {
   requireD1,
   runtimeEnv,
 } from "../../../../../lib/document-builder/storage/runtime";
 import { renderJuroAuthEmail } from "../../../../../lib/auth/transactional-email";
 import { ensureDefaultWorkspace } from "../../../../../lib/platform/workspace";
+import type { PlatformLocale } from "../../../../../lib/platform/routing";
 import { dispatchOutbox } from "../../../../../worker/platform-outbox";
 import type { PlatformJobEnv } from "../../../../../worker/platform-jobs";
 
 const CHALLENGE_TTL_MS = 10 * 60 * 1_000;
 const RECENT_SESSION_MS = 10 * 60 * 1_000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function localized(
+  locale: PlatformLocale,
+  values: Record<PlatformLocale, string>,
+): string {
+  return values[locale];
+}
 
 function maskedEmail(email: string): string {
   const [local, domain] = email.split("@");
@@ -64,6 +73,7 @@ function randomDistinctOtpPair(): [currentCode: string, newCode: string] {
 }
 
 function invalidInputResponse(
+  request: Request,
   error:
     | "invalid_content_type"
     | "invalid_json"
@@ -77,30 +87,33 @@ function invalidInputResponse(
       : 400;
   return jsonNoStore({
     code: error.toLocaleUpperCase(),
-    error: "Проверьте формат запроса.",
+    error: localizedRequestFormatError(request),
   }, status);
 }
 
 function authErrorResponse(
   error: unknown,
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
 ): Response | null {
   if (!(error instanceof MfaError)) return null;
-  const ru = locale === "ru";
   if (error.code === "LOCAL_SESSION_REQUIRED") {
     return jsonNoStore({
       code: error.code,
-      error: ru
-        ? "Смена email доступна только из JURO email-сессии."
-        : "Emailni almashtirish faqat JURO email sessiyasida mavjud.",
+      error: localized(locale, {
+        ru: "Смена email доступна только из локальной сессии JURO.",
+        uz: "Emailni almashtirish faqat mahalliy JURO sessiyasida mavjud.",
+        en: "You can change your email address only from a local JURO session.",
+      }),
     }, 401);
   }
   if (error.code === "SESSION_NOT_RECENT") {
     return jsonNoStore({
       code: error.code,
-      error: ru
-        ? "Для смены email войдите в JURO заново. При включённой 2FA завершите вход вторым фактором."
-        : "Emailni almashtirish uchun JURO hisobiga qayta kiring. 2FA yoqilgan bo‘lsa, kirishni ikkinchi omil bilan yakunlang.",
+      error: localized(locale, {
+        ru: "Для смены email войдите в JURO заново. При включённой 2FA завершите вход вторым фактором.",
+        uz: "Emailni almashtirish uchun JURO hisobiga qayta kiring. 2FA yoqilgan bo‘lsa, kirishni ikkinchi omil bilan yakunlang.",
+        en: "Sign in to JURO again to change your email. If 2FA is enabled, complete sign-in with your second factor.",
+      }),
     }, 401);
   }
   return null;
@@ -126,10 +139,9 @@ async function recentEmailChangeSession(
 
 function reservationError(
   reservation: Extract<EmailChangeReservation, { status: "blocked" }>,
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
   nowMs: number,
 ): Response {
-  const ru = locale === "ru";
   if (reservation.reason === "cooldown") {
     const latest = reservation.latestActiveCreatedAt
       ? Date.parse(reservation.latestActiveCreatedAt)
@@ -140,17 +152,21 @@ function reservationError(
     return jsonNoStore({
       code: "EMAIL_CHANGE_COOLDOWN",
       retryAfterSeconds,
-      error: ru
-        ? `Новые коды можно запросить через ${retryAfterSeconds} сек.`
-        : `Yangi kodlarni ${retryAfterSeconds} soniyadan keyin so‘rash mumkin.`,
+      error: localized(locale, {
+        ru: `Новые коды можно запросить через ${retryAfterSeconds} сек.`,
+        uz: `Yangi kodlarni ${retryAfterSeconds} soniyadan keyin so‘rash mumkin.`,
+        en: `You can request new codes in ${retryAfterSeconds} seconds.`,
+      }),
     }, 429);
   }
   if (reservation.reason === "rate_limit") {
     return jsonNoStore({
       code: "EMAIL_CHANGE_RATE_LIMIT",
-      error: ru
-        ? "Слишком много запросов. Попробуйте позже."
-        : "Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.",
+      error: localized(locale, {
+        ru: "Слишком много запросов. Попробуйте позже.",
+        uz: "Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.",
+        en: "Too many requests. Try again later.",
+      }),
     }, 429);
   }
   return jsonNoStore({
@@ -158,49 +174,54 @@ function reservationError(
       ? "EMAIL_CHANGE_STATE_CHANGED"
       : "EMAIL_CHANGE_ADDRESS_UNAVAILABLE",
     error: reservation.reason === "state_changed"
-      ? (ru
-        ? "Состояние аккаунта изменилось. Обновите страницу и повторите."
-        : "Hisob holati o‘zgardi. Sahifani yangilab, qayta urinib ko‘ring.")
-      : (ru
-        ? "Этот адрес нельзя использовать для смены email."
-        : "Bu manzildan emailni almashtirish uchun foydalanib bo‘lmaydi."),
+      ? localized(locale, {
+          ru: "Состояние аккаунта изменилось. Обновите страницу и повторите.",
+          uz: "Hisob holati o‘zgardi. Sahifani yangilab, qayta urinib ko‘ring.",
+          en: "Your account state changed. Refresh the page and try again.",
+        })
+      : localized(locale, {
+          ru: "Этот адрес нельзя использовать для смены email.",
+          uz: "Bu manzildan emailni almashtirish uchun foydalanib bo‘lmaydi.",
+          en: "This address cannot be used as your new email.",
+        }),
   }, 409);
 }
 
 function confirmationError(
   result: Exclude<EmailChangeConfirmation, { status: "confirmed" }>,
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
 ): Response {
-  const ru = locale === "ru";
   const values: Record<
     Exclude<typeof result.status, "incorrect">,
-    [number, string, string, string]
+    [number, string, string, string, string]
   > = {
-    invalid: [400, "EMAIL_CHANGE_INVALID", "Проверка недействительна.", "Tekshiruv yaroqsiz."],
-    not_queued: [409, "EMAIL_CHANGE_NOT_QUEUED", "Письма ещё не приняты почтовым провайдером.", "Xatlar hali pochta provayderi tomonidan qabul qilinmagan."],
-    used: [409, "EMAIL_CHANGE_USED", "Эта проверка уже использована.", "Bu tekshiruv allaqachon ishlatilgan."],
-    replaced: [409, "EMAIL_CHANGE_REPLACED", "Проверка заменена новой. Используйте последние письма.", "Tekshiruv yangisi bilan almashtirilgan. Oxirgi xatlardan foydalaning."],
-    expired: [410, "EMAIL_CHANGE_EXPIRED", "Срок действия кодов истёк.", "Kodlarning amal qilish muddati tugagan."],
-    attempts_exceeded: [429, "EMAIL_CHANGE_ATTEMPTS_EXCEEDED", "Попытки закончились. Запросите новые коды.", "Urinishlar tugadi. Yangi kodlarni so‘rang."],
-    target_unavailable: [409, "EMAIL_CHANGE_ADDRESS_UNAVAILABLE", "Этот адрес больше нельзя использовать.", "Bu manzildan endi foydalanib bo‘lmaydi."],
-    state_conflict: [409, "EMAIL_CHANGE_STATE_CHANGED", "Состояние аккаунта изменилось. Обновите страницу и повторите.", "Hisob holati o‘zgardi. Sahifani yangilab, qayta urinib ko‘ring."],
+    invalid: [400, "EMAIL_CHANGE_INVALID", "Проверка недействительна.", "Tekshiruv yaroqsiz.", "The verification is invalid."],
+    not_queued: [409, "EMAIL_CHANGE_NOT_QUEUED", "Письма ещё не приняты почтовым провайдером.", "Xatlar hali pochta provayderi tomonidan qabul qilinmagan.", "The email provider has not accepted the messages yet."],
+    used: [409, "EMAIL_CHANGE_USED", "Эта проверка уже использована.", "Bu tekshiruv allaqachon ishlatilgan.", "This verification has already been used."],
+    replaced: [409, "EMAIL_CHANGE_REPLACED", "Проверка заменена новой. Используйте последние письма.", "Tekshiruv yangisi bilan almashtirilgan. Oxirgi xatlardan foydalaning.", "A newer verification has been issued. Use the most recent emails."],
+    expired: [410, "EMAIL_CHANGE_EXPIRED", "Срок действия кодов истёк.", "Kodlarning amal qilish muddati tugagan.", "The codes have expired."],
+    attempts_exceeded: [429, "EMAIL_CHANGE_ATTEMPTS_EXCEEDED", "Попытки закончились. Запросите новые коды.", "Urinishlar tugadi. Yangi kodlarni so‘rang.", "No attempts remain. Request new codes."],
+    target_unavailable: [409, "EMAIL_CHANGE_ADDRESS_UNAVAILABLE", "Этот адрес больше нельзя использовать.", "Bu manzildan endi foydalanib bo‘lmaydi.", "This address can no longer be used."],
+    state_conflict: [409, "EMAIL_CHANGE_STATE_CHANGED", "Состояние аккаунта изменилось. Обновите страницу и повторите.", "Hisob holati o‘zgardi. Sahifani yangilab, qayta urinib ko‘ring.", "Your account state changed. Refresh the page and try again."],
   };
   if (result.status === "incorrect") {
     return jsonNoStore({
       code: "EMAIL_CHANGE_CODE_INCORRECT",
-      error: ru
-        ? "Один или оба кода неверны."
-        : "Kodlardan biri yoki ikkalasi noto‘g‘ri.",
+      error: localized(locale, {
+        ru: "Один или оба кода неверны.",
+        uz: "Kodlardan biri yoki ikkalasi noto‘g‘ri.",
+        en: "One or both codes are incorrect.",
+      }),
       attemptsRemaining: Math.max(
         0,
         result.maxAttempts - result.attemptCount,
       ),
     }, 400);
   }
-  const [status, code, ruMessage, uzMessage] = values[result.status];
+  const [status, code, ruMessage, uzMessage, enMessage] = values[result.status];
   return jsonNoStore({
     code,
-    error: ru ? ruMessage : uzMessage,
+    error: localized(locale, { ru: ruMessage, uz: uzMessage, en: enMessage }),
   }, status);
 }
 
@@ -212,7 +233,7 @@ async function queueVerificationEmails(input: {
   newEmail: string;
   currentCode: string;
   newCode: string;
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
 }): Promise<boolean> {
   const current = renderJuroAuthEmail({
     locale: input.locale,
@@ -310,7 +331,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const parsed = await parseJsonRequest(request, emailChangeInputSchema);
-  if (!parsed.ok) return invalidInputResponse(parsed.error);
+  if (!parsed.ok) return invalidInputResponse(request, parsed.error);
   const body = parsed.data;
   const locale = body.locale;
   if (body.action === "cancel") {
@@ -354,18 +375,22 @@ export const POST = withApiErrors(async function POST(request: Request) {
     if (!EMAIL_RE.test(newEmail) || newEmail.length > 254) {
       return jsonNoStore({
         code: "EMAIL_CHANGE_ADDRESS_INVALID",
-        error: locale === "ru"
-          ? "Проверьте новый адрес электронной почты."
-          : "Yangi elektron pochta manzilini tekshiring.",
+        error: localized(locale, {
+          ru: "Проверьте новый адрес электронной почты.",
+          uz: "Yangi elektron pochta manzilini tekshiring.",
+          en: "Check the new email address.",
+        }),
       }, 400);
     }
     const env = runtimeEnv();
     if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
       return jsonNoStore({
         code: "EMAIL_NOT_CONFIGURED",
-        error: locale === "ru"
-          ? "Отправка кодов временно не настроена."
-          : "Kod yuborish vaqtincha sozlanmagan.",
+        error: localized(locale, {
+          ru: "Отправка кодов временно не настроена.",
+          uz: "Kod yuborish vaqtincha sozlanmagan.",
+          en: "Code delivery is temporarily unavailable.",
+        }),
       }, 503);
     }
     const challengeId = crypto.randomUUID();
@@ -412,9 +437,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       });
       return jsonNoStore({
         code: "EMAIL_PROVIDER_ERROR",
-        error: locale === "ru"
-          ? "Не удалось отправить оба письма. Попробуйте позже."
-          : "Ikkala xatni yuborib bo‘lmadi. Keyinroq urinib ko‘ring.",
+        error: localized(locale, {
+          ru: "Не удалось отправить оба письма. Попробуйте позже.",
+          uz: "Ikkala xatni yuborib bo‘lmadi. Keyinroq urinib ko‘ring.",
+          en: "We could not send both emails. Try again later.",
+        }),
       }, 502);
     }
     const queuedAt = new Date().toISOString();
@@ -432,9 +459,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       });
       return jsonNoStore({
         code: "EMAIL_CHANGE_STATE_CHANGED",
-        error: locale === "ru"
-          ? "Состояние аккаунта изменилось. Запросите новые коды."
-          : "Hisob holati o‘zgardi. Yangi kodlarni so‘rang.",
+        error: localized(locale, {
+          ru: "Состояние аккаунта изменилось. Запросите новые коды.",
+          uz: "Hisob holati o‘zgardi. Yangi kodlarni so‘rang.",
+          en: "Your account state changed. Request new codes.",
+        }),
       }, 409);
     }
     return jsonNoStore({

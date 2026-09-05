@@ -9,6 +9,14 @@ const deployedStatusHostnames = new Set([
 
 export const STATUS_ORIGIN_HEADER = "x-juro-status-origin";
 
+type StatusMetadataLocale = "ru" | "uz" | "en";
+
+const statusTitles: Record<StatusMetadataLocale, string> = {
+  ru: "Статус платформы",
+  uz: "Platforma holati",
+  en: "Platform status",
+};
+
 function trustedStatusOrigin(originHeader: string | null): URL | null {
   if (!originHeader?.trim()) return null;
   try {
@@ -34,12 +42,15 @@ function trustedStatusOrigin(originHeader: string | null): URL | null {
   }
 }
 
-export function publicStatusMetadata(statusOriginHeader: string | null) {
+export function publicStatusMetadata(
+  statusOriginHeader: string | null,
+  locale: StatusMetadataLocale = "ru",
+) {
   const metadataBase = trustedStatusOrigin(statusOriginHeader) ?? new URL(applicationOrigin);
 
   return {
     metadataBase,
-    title: "Статус платформы",
+    title: statusTitles[locale],
     robots: { index: false, follow: false, nocache: true },
     icons: {
       icon: new URL("/favicon.png", metadataBase),

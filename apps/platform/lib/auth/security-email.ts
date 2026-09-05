@@ -114,7 +114,7 @@ export async function prepareEmailChangedSecurityEmail(
     workspaceId: string;
     challengeId: string;
     previousEmail: string;
-    locale: "ru" | "uz";
+    locale: AuthEmailLocale;
     requiredGuard: SecurityEventGuard;
     now: string;
   },

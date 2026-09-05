@@ -17,7 +17,8 @@ const NOW = "2026-08-04T16:00:00.000Z";
 
 test("knowledge base validates bounded public queries and tenant-free feedback input", () => {
   assert.equal(knowledgeBaseQuerySchema.safeParse({ locale: "ru", q: "источники", category: "ai" }).success, true);
-  assert.equal(knowledgeBaseQuerySchema.safeParse({ locale: "en", q: "", category: "" }).success, false);
+  assert.equal(knowledgeBaseQuerySchema.safeParse({ locale: "en", q: "", category: "" }).success, true);
+  assert.equal(knowledgeBaseQuerySchema.safeParse({ locale: "de", q: "", category: "" }).success, false);
   assert.equal(knowledgeBaseQuerySchema.safeParse({ locale: "uz", q: "x".repeat(121), category: "" }).success, false);
   assert.equal(knowledgeBaseFeedbackSchema.safeParse({ versionId: "kbv-ai-sources-1", helpful: true }).success, true);
   assert.equal(knowledgeBaseFeedbackSchema.safeParse({ versionId: "kbv-ai-sources-1", helpful: true, workspaceId: "foreign" }).success, false);
@@ -28,8 +29,74 @@ test("published RU/UZ articles support search, related content and immutable ver
   try {
     const allRu = await listKnowledgeBaseArticles({ db: d1, locale: "ru" });
     const allUz = await listKnowledgeBaseArticles({ db: d1, locale: "uz" });
+    const allEn = await listKnowledgeBaseArticles({ db: d1, locale: "en" });
     assert.equal(allRu.length, 4);
     assert.equal(allUz.length, 4);
+    assert.deepEqual(allEn, []);
+    assert.equal(
+      await getKnowledgeBaseArticle({ db: d1, locale: "en", slug: "account-security" }),
+      null,
+    );
+    seedTenant(sqlite, "kb-author", "kb-author-workspace");
+    const englishBody = [{
+      heading: "Keep your account secure",
+      paragraphs: ["Use a unique password and never share a verification code."],
+    }];
+    const englishHash = createHash("sha256").update(JSON.stringify({
+      ru: [],
+      uz: [],
+      related: [],
+    })).digest("hex");
+    sqlite.prepare(`
+      INSERT INTO knowledge_base_articles (
+        id,slug,category,status,created_at,updated_at,published_at,
+        created_by_user_id,updated_by_user_id,status_changed_by_user_id,
+        status_changed_at
+      ) VALUES ('english-ready','english-ready','security','published',?,?,?,?,?,?,?)
+    `).run(
+      NOW,
+      NOW,
+      NOW,
+      "kb-author",
+      "kb-author",
+      "kb-author",
+      NOW,
+    );
+    sqlite.prepare(`
+      INSERT INTO knowledge_base_article_versions (
+        id,article_id,version_number,title_ru,title_uz,title_en,
+        summary_ru,summary_uz,summary_en,body_ru_json,body_uz_json,
+        body_en_json,related_slugs_json,content_sha256,content_hash_version,
+        created_at,published_at,created_by_user_id,updated_by_user_id,
+        published_by_user_id,updated_at
+      ) VALUES (
+        'english-ready-v1','english-ready',1,'English only','English only',
+        'Account security','English only','English only',
+        'Practical steps to secure your JURO account.','[]','[]',?,'[]',?,
+        'full-v2',?,?,?,?,?,?
+      )
+    `).run(
+      JSON.stringify(englishBody),
+      englishHash,
+      NOW,
+      NOW,
+      "kb-author",
+      "kb-author",
+      "kb-author",
+      NOW,
+    );
+    const englishArticles = await listKnowledgeBaseArticles({
+      db: d1,
+      locale: "en",
+    });
+    assert.equal(englishArticles.length, 1);
+    assert.equal(englishArticles[0]?.title, "Account security");
+    const englishArticle = await getKnowledgeBaseArticle({
+      db: d1,
+      locale: "en",
+      slug: "english-ready",
+    });
+    assert.equal(englishArticle?.sections[0]?.heading, "Keep your account secure");
     assert.equal(allRu.find((article) => article.slug === "account-security")?.title, "Как защитить аккаунт JURO");
     assert.equal(allUz.find((article) => article.slug === "account-security")?.title, "JURO hisobini qanday himoya qilish kerak");
 
@@ -51,7 +118,6 @@ test("published RU/UZ articles support search, related content and immutable ver
       assert.equal(version.hash, createHash("sha256").update(canonical).digest("hex"));
     }
 
-    seedTenant(sqlite, "kb-author", "kb-author-workspace");
     sqlite.prepare("INSERT INTO knowledge_base_articles(id,slug,category,status,created_at,updated_at,created_by_user_id,updated_by_user_id) VALUES ('draft','draft-help','ai','draft',?,?,?,?)").run(NOW, NOW, "kb-author", "kb-author");
     sqlite.prepare(`INSERT INTO knowledge_base_article_versions
       (id,article_id,version_number,title_ru,title_uz,summary_ru,summary_uz,body_ru_json,body_uz_json,related_slugs_json,content_sha256,content_hash_version,created_at,created_by_user_id,updated_by_user_id,updated_at)

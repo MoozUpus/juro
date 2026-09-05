@@ -4,11 +4,32 @@ import test from "node:test";
 import {
   accountModuleRedirect,
   authenticatedAuthRedirect,
+  canonicalLawyerHostRequestHeaders,
+  isLawyerHostRequest,
   lawyerLandingDestination,
   lawyerPublicOrigin,
   operationalLawyer,
   type LawyerEntryProfile,
 } from "../lib/platform/lawyer-entry-routing";
+
+test("lawyer-host provenance is canonicalized at the Worker boundary", () => {
+  const supplied = new Headers({
+    "x-juro-lawyer-host": "1",
+    "x-request-id": "request-1",
+  });
+
+  const appHeaders = canonicalLawyerHostRequestHeaders(supplied, false);
+  assert.equal(isLawyerHostRequest(appHeaders), false);
+  assert.equal(appHeaders.get("x-juro-lawyer-host"), null);
+  assert.equal(appHeaders.get("x-request-id"), "request-1");
+
+  const lawyerHeaders = canonicalLawyerHostRequestHeaders(
+    new Headers({ "x-juro-lawyer-host": "untrusted" }),
+    true,
+  );
+  assert.equal(isLawyerHostRequest(lawyerHeaders), true);
+  assert.equal(lawyerHeaders.get("x-juro-lawyer-host"), "1");
+});
 
 const approvedLawyer: LawyerEntryProfile = {
   locale: "ru",

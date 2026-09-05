@@ -7,6 +7,7 @@ import {
   localSessionFromCookie,
   revokeOneSession,
 } from "../../../../../../lib/auth/session-management";
+import { authLocaleFromRequest } from "../../../../../../lib/auth/request-locale";
 import {
   assertSafeWrite,
   requireApiUser,
@@ -28,7 +29,8 @@ export const DELETE = withApiErrors(async function DELETE(
   context: { params: Promise<{ sessionId: string }> },
 ) {
   assertSafeWrite(request);
-  const user = await requireApiUser();
+  const locale = authLocaleFromRequest(request);
+  const user = await requireApiUser(request);
   const { sessionId } = await context.params;
   if (
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -38,7 +40,11 @@ export const DELETE = withApiErrors(async function DELETE(
     return response(
       {
         code: "INVALID_SESSION_ID",
-        error: "Некорректный идентификатор сессии.",
+        error: {
+          ru: "Некорректный идентификатор сессии.",
+          uz: "Sessiya identifikatori noto‘g‘ri.",
+          en: "The session identifier is invalid.",
+        }[locale],
       },
       400,
     );
@@ -77,7 +83,11 @@ export const DELETE = withApiErrors(async function DELETE(
       return response(
         {
           code: "SESSION_NOT_FOUND",
-          error: "Сессия не найдена.",
+          error: {
+            ru: "Сессия не найдена.",
+            uz: "Sessiya topilmadi.",
+            en: "Session not found.",
+          }[locale],
         },
         404,
       );

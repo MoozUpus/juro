@@ -12,7 +12,7 @@ export const GET = withApiErrors(async function GET() {
     "SELECT account_type AS accountType FROM user_profiles WHERE id=? LIMIT 1",
   ).bind(user.id).first<{ accountType: string }>();
   if (account?.accountType !== "lawyer") {
-    return response({ code: "LAWYER_ACCOUNT_REQUIRED", error: "Доступно только профилю юриста." }, 403);
+    return response({ code: "LAWYER_ACCOUNT_REQUIRED" }, 403);
   }
   const profile = await db.prepare(
     `SELECT id,display_name AS displayName,status,marketplace_status AS marketplaceStatus,

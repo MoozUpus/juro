@@ -14,6 +14,8 @@ import {
 } from "../../../../lib/document-builder/storage/quarantined-upload";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { ArchiveInspectionError } from "../../../../lib/document-analysis/archive-inspector";
+import type { ComparisonLocale } from "../../../../lib/document-comparison/types";
+import { isLocale } from "../../../../lib/platform/routing";
 import { workspaceForContentEditor, workspaceForUser } from "../../../../lib/platform/workspace";
 import { MULTIPART_OVERHEAD_BYTES, requiredContentLength } from "../../../../lib/request-body";
 
@@ -38,6 +40,15 @@ function response(body: unknown, status = 200) {
     status,
     headers: { "cache-control": "private, no-store", pragma: "no-cache" },
   });
+}
+
+function requestLocale(request: Request): ComparisonLocale {
+  const requested = request.headers.get("x-juro-locale")?.trim().toLowerCase() ?? "";
+  return isLocale(requested) ? requested : "ru";
+}
+
+function localized(locale: ComparisonLocale, ru: string, uz: string, en: string): string {
+  return { ru, uz, en }[locale];
 }
 
 async function prepareFile(input: {
@@ -143,24 +154,24 @@ export const GET = withApiErrors(async function GET() {
 
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
+  let locale = requestLocale(request);
   const user = await requireApiUser();
   const workspace = await workspaceForContentEditor(user);
   const bodyLength = requiredContentLength(request, (2 * MAX_FILE_SIZE) + MULTIPART_OVERHEAD_BYTES);
   if (!bodyLength.ok) {
     return response({
       error: bodyLength.reason === "too_large"
-        ? "Общий размер двух файлов превышает допустимый предел."
-        : "Для загрузки требуется точный размер запроса.",
+        ? localized(locale, "Общий размер двух файлов превышает допустимый предел.", "Ikki faylning umumiy hajmi ruxsat etilgan chegaradan oshadi.", "The combined size of the two files exceeds the allowed limit.")
+        : localized(locale, "Для загрузки требуется точный размер запроса.", "Yuklash uchun so‘rovning aniq hajmi talab qilinadi.", "An exact request size is required for this upload."),
       code: bodyLength.reason === "too_large" ? "PAYLOAD_TOO_LARGE" : "CONTENT_LENGTH_REQUIRED",
     }, bodyLength.reason === "too_large" ? 413 : 411);
   }
   const form = await request.formData();
-  const locale = form.get("locale") === "uz" ? "uz" : "ru";
+  const formLocale = String(form.get("locale") || "").trim().toLowerCase();
+  if (isLocale(formLocale)) locale = formLocale;
   if (form.get("consent") !== "true") {
     return response({
-      error: locale === "ru"
-        ? "Подтвердите согласие на приватное сохранение и сравнение двух файлов."
-        : "Ikki faylni maxfiy saqlash va taqqoslashga rozilikni tasdiqlang.",
+      error: localized(locale, "Подтвердите согласие на приватное сохранение и сравнение двух файлов.", "Ikki faylni maxfiy saqlash va taqqoslashga rozilikni tasdiqlang.", "Confirm your consent to the private storage and automated comparison of both files."),
     }, 400);
   }
 
@@ -185,7 +196,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       )
     ) {
       return response({
-        error: locale === "ru" ? "Выберите два независимых файла или версии." : "Ikki mustaqil fayl yoki versiyani tanlang.",
+        error: localized(locale, "Выберите два независимых файла или версии.", "Ikki mustaqil fayl yoki versiyani tanlang.", "Select two separate files or document versions."),
         code: "SAME_FILE_REFERENCE",
       }, 400);
     }
@@ -254,7 +265,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         versionTwoName: versionTwo.fileName,
       },
       warning: versionOne.sha256 && versionOne.sha256 === versionTwo.sha256
-        ? (locale === "ru" ? "Файлы идентичны по SHA-256. Сравнение всё равно будет выполнено." : "Fayllar SHA-256 bo‘yicha bir xil. Taqqoslash baribir bajariladi.")
+        ? localized(locale, "Файлы идентичны по SHA-256. Сравнение всё равно будет выполнено.", "Fayllar SHA-256 bo‘yicha bir xil. Taqqoslash baribir bajariladi.", "The files have identical SHA-256 hashes. JURO will still run the comparison.")
         : null,
     }, 201);
   } catch (error) {
@@ -263,9 +274,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       .map((file) => deletePrivateObject(file.r2Key).catch(() => undefined)));
     if (error instanceof ArchiveInspectionError) {
       return response({
-        error: locale === "ru"
-          ? "DOCX не прошёл безопасную проверку структуры и распаковки."
-          : "DOCX tuzilma va ochish xavfsizligi tekshiruvidan o‘tmadi.",
+        error: localized(locale, "DOCX не прошёл безопасную проверку структуры и распаковки.", "DOCX tuzilma va ochish xavfsizligi tekshiruvidan o‘tmadi.", "The DOCX file failed secure structure and extraction validation."),
         code: error.code,
       }, 400);
     }
@@ -274,8 +283,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return response({
         code: error.code,
         error: unsafe
-          ? (locale === "ru" ? "Файл не прошёл проверку безопасности." : "Fayl xavfsizlik tekshiruvidan o‘tmadi.")
-          : (locale === "ru" ? "Проверка безопасности файла временно недоступна." : "Fayl xavfsizligini tekshirish vaqtincha mavjud emas."),
+          ? localized(locale, "Файл не прошёл проверку безопасности.", "Fayl xavfsizlik tekshiruvidan o‘tmadi.", "The file failed security validation.")
+          : localized(locale, "Проверка безопасности файла временно недоступна.", "Fayl xavfsizligini tekshirish vaqtincha mavjud emas.", "File security validation is temporarily unavailable."),
       }, unsafe ? 422 : 503);
     }
     const message = error instanceof Error ? error.message : String(error);
@@ -285,7 +294,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
       "CORRUPT_DOCX", "COMPARISON_ONE_FILE_REQUIRED", "COMPARISON_TWO_FILE_REQUIRED",
       "COMPARISON_FILE_ACCESS_DENIED",
     ].includes(code)) {
-      return response({ error: detail || (locale === "ru" ? "Проверьте выбранные файлы." : "Tanlangan fayllarni tekshiring."), code }, 400);
+      const fallback = localized(locale, "Проверьте выбранные файлы.", "Tanlangan fayllarni tekshiring.", "Check the selected files and try again.");
+      return response({ error: locale === "en" ? fallback : detail || fallback, code }, 400);
     }
     throw error;
   }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { LegalDatabaseFreshness } from "../legal/verified-retrieval";
+import { aiText, type AiOutputLocale } from "./localization";
 import {
   nonRepeatingLegalDetail,
   sanitizeClarificationQuestions,
@@ -115,7 +116,7 @@ export const legalChatResponseSchema = z.object({
   summary: z.string().min(1).max(1_500),
   answer: z.string().min(1).max(20_000),
   conditionalBranches: legalConditionalBranchListSchema.optional(),
-  language: z.enum(["ru", "uz"]),
+  language: z.enum(["ru", "uz", "en"]),
   jurisdiction: z.literal("UZ"),
   answerMode: z.enum(["short", "detailed"]),
   reasoningMode: z.enum(["fast", "deep"]),
@@ -180,7 +181,7 @@ export function parseLegalChatResponse(value: unknown): LegalChatResponse {
 export function forceClarificationWithoutVerifiedSources(
   result: LegalChatResponse,
   options: {
-    locale: "ru" | "uz";
+    locale: AiOutputLocale;
     answerMode: "short" | "detailed";
     reasoningMode: "fast" | "deep";
     legalDatabaseAsOf: string;
@@ -199,19 +200,18 @@ export function forceClarificationWithoutVerifiedSources(
     options.locale,
   );
   if (clarificationQuestions.length === 0) {
-    clarificationQuestions.push(options.locale === "ru"
-      ? "Какие ключевые даты, документы и действия сторон уже известны?"
-      : "Qaysi asosiy sanalar, hujjatlar va tomonlarning harakatlari ma’lum?");
+    clarificationQuestions.push(aiText(
+      options.locale,
+      "Какие ключевые даты, документы и действия сторон уже известны?",
+      "Qaysi asosiy sanalar, hujjatlar va tomonlarning harakatlari ma’lum?",
+      "Which key dates, documents and actions by the parties are already known?",
+    ));
   }
   return {
     ...result,
     responseKind: "clarification_required",
-    summary: options.locale === "ru"
-      ? "Для надёжного ответа нужны дополнительные факты и проверенный правовой источник."
-      : "Ishonchli javob uchun qo‘shimcha faktlar va tekshirilgan huquqiy manba kerak.",
-    answer: options.locale === "ru"
-      ? "JURO пока не сформировал правовой вывод: релевантный фрагмент не удалось получить напрямую из доступных официальных источников. Ответьте на уточняющие вопросы или попробуйте позже — этот шаг не списывает лимит ответа."
-      : "JURO hozircha huquqiy xulosa tuzmadi: tegishli parcha mavjud rasmiy manbalardan bevosita olinmadi. Aniqlashtiruvchi savollarga javob bering yoki keyinroq urinib ko‘ring — bu bosqich javob limitidan yechilmaydi.",
+    summary: aiText(options.locale, "Для надёжного ответа нужны дополнительные факты и проверенный правовой источник.", "Ishonchli javob uchun qo‘shimcha faktlar va tekshirilgan huquqiy manba kerak.", "A reliable answer requires more facts and a verified legal source."),
+    answer: aiText(options.locale, "JURO пока не сформировал правовой вывод: релевантный фрагмент не удалось получить напрямую из доступных официальных источников. Ответьте на уточняющие вопросы или попробуйте позже — этот шаг не списывает лимит ответа.", "JURO hozircha huquqiy xulosa tuzmadi: tegishli parcha mavjud rasmiy manbalardan bevosita olinmadi. Aniqlashtiruvchi savollarga javob bering yoki keyinroq urinib ko‘ring — bu bosqich javob limitidan yechilmaydi.", "JURO has not formed a legal conclusion because a relevant passage could not be retrieved directly from available official sources. Answer the clarification questions or try again later; this step does not use your answer allowance."),
     conditionalBranches: [],
     language: options.locale,
     jurisdiction: "UZ",
@@ -238,7 +238,7 @@ export function enforceLegalDatabaseFreshness(
   result: LegalChatResponse,
   freshness: LegalDatabaseFreshness,
   options: {
-    locale: "ru" | "uz";
+    locale: AiOutputLocale;
     answerMode: "short" | "detailed";
     reasoningMode: "fast" | "deep";
   },
@@ -250,15 +250,11 @@ export function enforceLegalDatabaseFreshness(
         || source.sourceClass === "SECONDARY_REFERENCE"
       );
     if (nonLegislativeFactsOnly) {
-      const warning = options.locale === "ru"
-        ? "Факты ниже опираются только на ваши документы и/или справочные интернет-материалы. Достаточная норма Lex.uz не найдена; каждый такой материал не является официальным источником законодательства."
-        : "Quyidagi faktlar faqat hujjatlaringiz va/yoki internetdagi ma’lumotnoma materiallariga tayangan. Yetarli Lex.uz normasi topilmadi; bu materiallar qonunchilik tasdig‘i emas.";
+      const warning = aiText(options.locale, "Факты ниже опираются только на ваши документы и/или справочные интернет-материалы. Достаточная норма Lex.uz не найдена; каждый такой материал не является официальным источником законодательства.", "Quyidagi faktlar faqat hujjatlaringiz va/yoki internetdagi ma’lumotnoma materiallariga tayangan. Yetarli Lex.uz normasi topilmadi; bu materiallar qonunchilik tasdig‘i emas.", "The facts below rely only on your documents and/or public reference materials. No sufficient legal provision was found in Lex.uz; these materials are not official sources of law.");
       return {
         ...result,
         assumptions: [{
-          statement: options.locale === "ru"
-            ? "Правовое основание требует отдельной проверки"
-            : "Huquqiy asos alohida tekshirilishi kerak",
+          statement: aiText(options.locale, "Правовое основание требует отдельной проверки", "Huquqiy asos alohida tekshirilishi kerak", "The legal basis requires separate verification"),
           impact: warning,
         }, ...result.assumptions].slice(0, 16),
         conditionalBranches: [],
@@ -277,20 +273,14 @@ export function enforceLegalDatabaseFreshness(
     return { ...result, legalDatabaseAsOf: freshness.asOf };
   }
 
-  const warning = options.locale === "ru"
-    ? `Правовая база JURO не обновлялась более ${freshness.maxAgeDays} дней (последняя полная синхронизация: ${freshness.asOf}). Выводы ниже предварительные и требуют проверки по актуальной редакции или юристом.`
-    : `JURO huquqiy bazasi ${freshness.maxAgeDays} kundan ortiq yangilanmagan (oxirgi to‘liq sinxronlash: ${freshness.asOf}). Quyidagi xulosalar dastlabki bo‘lib, amaldagi tahrir yoki yurist tomonidan tekshirilishi kerak.`;
+  const warning = aiText(options.locale, `Правовая база JURO не обновлялась более ${freshness.maxAgeDays} дней (последняя полная синхронизация: ${freshness.asOf}). Выводы ниже предварительные и требуют проверки по актуальной редакции или юристом.`, `JURO huquqiy bazasi ${freshness.maxAgeDays} kundan ortiq yangilanmagan (oxirgi to‘liq sinxronlash: ${freshness.asOf}). Quyidagi xulosalar dastlabki bo‘lib, amaldagi tahrir yoki yurist tomonidan tekshirilishi kerak.`, `The JURO legal database has not been updated for more than ${freshness.maxAgeDays} days (last full sync: ${freshness.asOf}). The findings below are preliminary and must be checked against the current version or by a lawyer.`);
   const staleAssumption = {
-    statement: options.locale === "ru"
-      ? "Актуальность правовой базы требует подтверждения"
-      : "Huquqiy bazaning dolzarbligi tasdiqlanishi kerak",
+    statement: aiText(options.locale, "Актуальность правовой базы требует подтверждения", "Huquqiy bazaning dolzarbligi tasdiqlanishi kerak", "The currency of the legal database must be verified"),
     impact: warning.slice(0, 2_000),
   };
   const formerFindings = result.confirmedFindings.map((finding) => {
     const uniqueDetail = nonRepeatingLegalDetail(finding.title, finding.explanation);
-    const prefix = options.locale === "ru"
-      ? "Ранее подтверждённый вывод переведён в предварительный до обновления базы"
-      : "Oldin tasdiqlangan xulosa baza yangilanguncha dastlabki deb ko‘rsatiladi";
+    const prefix = aiText(options.locale, "Ранее подтверждённый вывод переведён в предварительный до обновления базы", "Oldin tasdiqlangan xulosa baza yangilanguncha dastlabki deb ko‘rsatiladi", "A previously verified finding is marked preliminary until the database is updated");
     return {
       statement: finding.title.slice(0, 1_000),
       impact: (uniqueDetail ? `${prefix}: ${uniqueDetail}` : `${prefix}.`).slice(0, 2_000),

@@ -1,4 +1,4 @@
-export type ComparisonLocale = "ru" | "uz";
+export type ComparisonLocale = "ru" | "uz" | "en";
 
 export type ComparisonStage =
   | "uploaded"

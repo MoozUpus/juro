@@ -20,7 +20,9 @@ import {
   formatPlatformLongDate,
   formatPlatformMonth,
 } from "../../lib/platform/date-time";
+import { platformApiError } from "../../content/platform-ui";
 import { usePlatformBasePath } from "./PlatformRouteContext";
+import type { PlatformLocale } from "../../lib/platform/routing";
 
 type View = "month" | "week" | "day" | "list" | "cases" | "overdue";
 type CalendarItem = {
@@ -64,8 +66,12 @@ const labels = {
     task: "Задача",
     step: "Шаг плана",
     consultation: "Консультация",
+    phoneConsultation: "Телефонная консультация",
+    officeConsultation: "Очная консультация",
+    videoConsultation: "Видеоконсультация",
     more: "ещё",
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+    unavailable: "Календарь временно недоступен.",
   },
   uz: {
     title: "Kalendar",
@@ -85,8 +91,37 @@ const labels = {
     task: "Vazifa",
     step: "Reja qadami",
     consultation: "Konsultatsiya",
+    phoneConsultation: "Telefon orqali konsultatsiya",
+    officeConsultation: "Ofisdagi konsultatsiya",
+    videoConsultation: "Videokonsultatsiya",
     more: "yana",
     weekdays: ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"],
+    unavailable: "Kalendar vaqtincha mavjud emas.",
+  },
+  en: {
+    title: "Calendar",
+    subtitle: "Deadlines from plans, confirmed tasks and consultations.",
+    month: "Month",
+    week: "Week",
+    day: "Day",
+    list: "List",
+    cases: "By matter",
+    overdue: "Overdue",
+    previous: "Previous",
+    next: "Next",
+    loading: "Loading deadlines…",
+    empty: "There are no active deadlines in this period.",
+    overdueEmpty: "There are no overdue deadlines.",
+    open: "Open event",
+    task: "Task",
+    step: "Plan step",
+    consultation: "Consultation",
+    phoneConsultation: "Phone consultation",
+    officeConsultation: "In-person consultation",
+    videoConsultation: "Video consultation",
+    more: "more",
+    weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    unavailable: "The calendar is temporarily unavailable.",
   },
 } as const;
 
@@ -94,14 +129,14 @@ function startOfWeek(value: string) {
   const weekday = new Date(`${value}T00:00:00.000Z`).getUTCDay() || 7;
   return addCalendarDays(value, 1 - weekday);
 }
-function displayDate(value: string, locale: "ru" | "uz") {
+function displayDate(value: string, locale: PlatformLocale) {
   return formatPlatformLongDate(value, locale);
 }
-function monthLabel(value: string, locale: "ru" | "uz") {
+function monthLabel(value: string, locale: PlatformLocale) {
   return formatPlatformMonth(value, locale);
 }
 
-export function CalendarClient({ locale }: { locale: "ru" | "uz" }) {
+export function CalendarClient({ locale }: { locale: PlatformLocale }) {
   const t = labels[locale];
   const base = usePlatformBasePath();
   const [view, setView] = useState<View>("month");
@@ -131,7 +166,7 @@ export function CalendarClient({ locale }: { locale: "ru" | "uz" }) {
         const body = (await response.json()) as CalendarResponse & {
           error?: string;
         };
-        if (!response.ok) throw new Error(body.error || "CALENDAR_UNAVAILABLE");
+        if (!response.ok) throw new Error(platformApiError(locale, body.error, t.unavailable));
         return body;
       })
       .then((body) => {
@@ -143,7 +178,7 @@ export function CalendarClient({ locale }: { locale: "ru" | "uz" }) {
           setError(cause instanceof Error ? cause.message : String(cause));
       });
     return () => controller.abort();
-  }, [range.from, range.to]);
+  }, [locale, range.from, range.to, t.unavailable]);
   const currentData =
     data?.from === range.from && data.to === range.to ? data : null;
   const items =
@@ -269,6 +304,7 @@ export function CalendarClient({ locale }: { locale: "ru" | "uz" }) {
                     item={item}
                     base={base}
                     label={t.open}
+                    locale={locale}
                   />
                 ))}
                 {dayItems.length > 3 && (
@@ -341,17 +377,19 @@ function CalendarLink({
   item,
   base,
   label,
+  locale,
 }: {
   item: CalendarItem;
   base: string;
   label: string;
+  locale: PlatformLocale;
 }) {
   return (
-    <Link href={itemHref(item, base)} aria-label={`${label}: ${item.title}`}>
+    <Link href={itemHref(item, base)} aria-label={`${label}: ${calendarItemTitle(item, locale)}`}>
       <span>
-        {item.title}
+        {calendarItemTitle(item, locale)}
         {item.source === "consultation" && item.startsAt
-          ? ` · ${formatCalendarTime(item.startsAt)}`
+          ? ` · ${formatCalendarTime(item.startsAt, locale)}`
           : ""}
       </span>
     </Link>
@@ -369,7 +407,7 @@ function CalendarRow({
   item: CalendarItem;
   base: string;
   label: string;
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
   task: string;
   step: string;
   consultation: string;
@@ -377,7 +415,7 @@ function CalendarRow({
   return (
     <Link className="calendar-row" href={itemHref(item, base)}>
       <div>
-        <strong>{item.title}</strong>
+        <strong>{calendarItemTitle(item, locale)}</strong>
         <span>
           {item.caseTitle} ·{" "}
           {item.source === "consultation"
@@ -389,19 +427,43 @@ function CalendarRow({
       </div>
       <time dateTime={item.startsAt || item.dueAt}>
         {displayDate(item.dueAt, locale)}
-        {item.startsAt ? ` · ${formatCalendarTime(item.startsAt)}` : ""}
+        {item.startsAt ? ` · ${formatCalendarTime(item.startsAt, locale)}` : ""}
       </time>
       <span className={`calendar-status status-${item.status}`}>
-        {item.status}
+        {calendarStatusLabel(item.status, locale)}
       </span>
       <span className="sr-only">{label}</span>
     </Link>
   );
 }
-function formatCalendarTime(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
+function formatCalendarTime(value: string, locale: PlatformLocale) {
+  return new Intl.DateTimeFormat({ ru: "ru-RU", uz: "uz-UZ", en: "en-GB" }[locale], {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Asia/Tashkent",
   }).format(new Date(value));
+}
+
+function calendarItemTitle(item: CalendarItem, locale: PlatformLocale) {
+  if (item.source !== "consultation") return item.title;
+  const copy = labels[locale];
+  if (item.format === "phone") return copy.phoneConsultation;
+  if (item.format === "office") return copy.officeConsultation;
+  return copy.videoConsultation;
+}
+
+function calendarStatusLabel(status: string, locale: PlatformLocale) {
+  const statuses: Record<string, Record<PlatformLocale, string>> = {
+    not_started: { ru: "Не начато", uz: "Boshlanmagan", en: "Not started" },
+    planned: { ru: "Запланировано", uz: "Rejalashtirilgan", en: "Planned" },
+    in_progress: { ru: "В работе", uz: "Jarayonda", en: "In progress" },
+    waiting_user: { ru: "Ожидает пользователя", uz: "Foydalanuvchi kutilmoqda", en: "Awaiting user" },
+    waiting_response: { ru: "Ожидает ответа", uz: "Javob kutilmoqda", en: "Awaiting response" },
+    waiting_information: { ru: "Ожидает данных", uz: "Ma’lumot kutilmoqda", en: "Awaiting information" },
+    waiting_counterparty: { ru: "Ожидает контрагента", uz: "Qarshi tomon kutilmoqda", en: "Awaiting counterparty" },
+    overdue: { ru: "Просрочено", uz: "Muddati o‘tgan", en: "Overdue" },
+    proposed: { ru: "Предложено", uz: "Taklif qilingan", en: "Proposed" },
+    confirmed: { ru: "Подтверждено", uz: "Tasdiqlangan", en: "Confirmed" },
+  };
+  return statuses[status]?.[locale] ?? status.replaceAll("_", " ");
 }

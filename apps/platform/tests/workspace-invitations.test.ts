@@ -357,9 +357,10 @@ test("claim guard rejects stale identity evidence and partial acceptance", async
   }
 });
 
-test("invite route and UI keep canonical bilingual states", async () => {
+test("invite route and UI keep canonical trilingual states", async () => {
   assert.equal(workspaceInvitationRedirect("ru", "business", "ws_business_1"), "/ru/business/ws_business_1/dashboard");
   assert.equal(workspaceInvitationRedirect("uz", "business", "ws_business_1"), "/uz/business/ws_business_1/dashboard");
+  assert.equal(workspaceInvitationRedirect("en", "business", "ws_business_1"), "/en/business/ws_business_1/dashboard");
   assert.equal(workspaceInvitationRedirect("uz", "individual", "ws_individual_1"), "/uz/individual/dashboard");
 
   const [route, page, client, invitationEmail] = await Promise.all([
@@ -377,9 +378,12 @@ test("invite route and UI keep canonical bilingual states", async () => {
   assert.match(route, /workspaceInvitationAcceptInputSchema/);
   assert.match(route, /parseJsonRequest\([\s\S]*4_096/);
   assert.doesNotMatch(route, /UPDATE user_profiles[\s\S]*account_type/);
-  assert.match(page, /query\.lang === "uz"/);
+  assert.match(page, /isLocale\(requestedLocale\)/);
   assert.match(client, /Ish makoniga qo‘shilish/);
   assert.match(client, /Присоединиться к рабочему пространству/);
+  assert.match(client, /Join a workspace/);
   assert.match(client, /aria-live="polite"/);
   assert.match(invitationEmail, /\?lang=\$\{locale\}/);
+  assert.match(invitationEmail, /Invitation to a JURO workspace/);
+  assert.match(invitationEmail, /text/);
 });

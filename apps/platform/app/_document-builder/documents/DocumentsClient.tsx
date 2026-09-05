@@ -14,6 +14,7 @@ import { useDebouncedEffect } from "../_hooks/useDebouncedEffect";
 import { useModalFocus } from "../_hooks/useModalFocus";
 import { builderNavigationPaths } from "../../../lib/platform/builder-paths";
 import { localizedDocumentStatus, workspaceCopy } from "../../../lib/platform/builder-workspace-copy";
+import { builderError, builderIntlLocale, builderUiLocale } from "../builder-localization";
 
 type Folder = "all" | "created" | "shared" | "favorite" | "archive";
 type StandaloneShare = { id: string; url: string; code: string | null; status: "active" | "expired" | "inactive" };
@@ -31,8 +32,10 @@ export function DocumentsClient({
   embedded?: boolean;
 }) {
   const paths = builderNavigationPaths(usePathname());
-  const copy = workspaceCopy(paths.locale).documents;
-  const dateLocale = paths.locale === "uz" ? "uz-UZ" : "ru-RU";
+  const locale = builderUiLocale(paths.locale);
+  const copy = workspaceCopy(locale).documents;
+  const loadError = copy.loadError;
+  const dateLocale = builderIntlLocale(locale);
   const [documents, setDocuments] = useState<ListedDocument[]>([]);
   const [cases, setCases] = useState<CaseOption[]>([]);
   const [standalone, setStandalone] = useState<FileRecord[]>([]);
@@ -72,9 +75,11 @@ export function DocumentsClient({
       if (from) params.set("from", from);
       const result = await apiFetch<{ documents: ListedDocument[]; cases: CaseOption[]; standaloneFiles: FileRecord[]; total: number }>(`/api/document-builder/documents?${params}`);
       setDocuments(result.documents); setCases(result.cases); setStandalone(result.standaloneFiles); setTotal(result.total);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось загрузить документы."); }
+    } catch (caught) { setError(builderError(locale, caught, loadError)); }
     finally { setLoading(false); }
-  }, [folder, debouncedSearch, status, sort, from]);
+  // Locale changes remount this canonical route; only query controls must refresh the list in place.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, folder, from, sort, status]);
   useEffect(() => { void load(); }, [load]);
   useDebouncedEffect(() => { setDebouncedSearch(search); }, [search], 350);
 
@@ -92,13 +97,13 @@ export function DocumentsClient({
       setDeleteDecision(null); setToast(copy.deleted); window.setTimeout(() => setToast(""), 2_500); await load();
     } catch (caught) {
       if (caught instanceof ApiClientError && caught.code === "SIGNED_FILE_DECISION_REQUIRED") { setDeleteDecision(document); return; }
-      setError(caught instanceof Error ? caught.message : copy.deleteError);
+      setError(builderError(locale, caught, copy.deleteError));
     }
   };
   const uploadSigned = async (document: DocumentRecord, file: File) => {
     const form = new FormData(); form.set("file", file);
     try { await apiFetch(`/api/document-builder/documents/${document.id}/signed-file`, { method: "POST", body: form }); await load(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : copy.uploadError); }
+    catch (caught) { setError(builderError(locale, caught, copy.uploadError)); }
   };
   const patchStandalone = async (id: string, body: Record<string, unknown>) => { await apiFetch(`/api/document-builder/standalone-files/${id}`, { method: "PATCH", body: JSON.stringify(body) }); await load(); };
   const beginRename = (decision: RenameDecision) => {
@@ -124,7 +129,7 @@ export function DocumentsClient({
       setToast(copy.renamed);
       window.setTimeout(() => setToast(""), 2_500);
     } catch (caught) {
-      setRenameError(caught instanceof Error ? caught.message : copy.renameError);
+      setRenameError(builderError(locale, caught, copy.renameError));
     } finally {
       renamingRef.current = false;
       setRenaming(false);
@@ -138,7 +143,7 @@ export function DocumentsClient({
     try {
       const result = await apiFetch<{ share: StandaloneShare }>(`/api/document-builder/standalone-files/${id}/share`, { method: "POST", body: JSON.stringify({ action: "create" }) });
       setStandaloneShare((value) => ({ ...value, [id]: result.share }));
-    } catch (caught) { setError(caught instanceof Error ? caught.message : copy.shareError); await loadStandaloneShare(id); }
+    } catch (caught) { setError(builderError(locale, caught, copy.shareError)); await loadStandaloneShare(id); }
   };
   const deleteExpiredShare = async (id: string) => {
     await apiFetch(`/api/document-builder/standalone-files/${id}/share`, { method: "POST", body: JSON.stringify({ action: "delete_expired" }) }); setStandaloneShare((value) => ({ ...value, [id]: null }));
@@ -164,7 +169,7 @@ export function DocumentsClient({
       window.setTimeout(() => setToast(""), 2_500);
     } catch (caught) {
       setDocuments((current) => current.map((item) => item.id === document.id ? { ...item, caseId: previousCaseId } : item));
-      setError(caught instanceof Error ? caught.message : copy.caseLinkError);
+      setError(builderError(locale, caught, copy.caseLinkError));
     } finally {
       setLinkingDocumentId("");
     }
@@ -172,6 +177,7 @@ export function DocumentsClient({
 
   return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath} variant={embedded ? "embedded" : "standalone"}/><div className="dbt-documents-page">
     <header className="dbt-page-title"><div><span><Files size={22}/></span><div><h1>{copy.title}</h1><p>{total} {total === 1 ? copy.countOne : copy.countMany}</p></div></div><Link href={paths.library}><FilePlus2 size={18}/>{copy.create}</Link></header>
+    {locale === "en" && <p className="dbt-inline-note">{copy.languageNote}</p>}
     {toast && <div className="dbt-toast" role="status">{toast}</div>}
     {error && <div className="dbt-global-error" role="alert"><span>{error}</span><button type="button" aria-label={copy.close} title={copy.close} onClick={() => setError("")}>×</button></div>}
     <div className="dbt-docs-layout"><aside className="dbt-folders">{([{ id: "all", label: copy.folders.all, icon: Files }, { id: "created", label: copy.folders.created, icon: FileCheck2 }, { id: "shared", label: copy.folders.shared, icon: Link2 }, { id: "favorite", label: copy.folders.favorite, icon: Star }, { id: "archive", label: copy.folders.archive, icon: FolderArchive }] as const).map(({ id, label, icon: Icon }) => <button type="button" className={folder === id ? "active" : ""} onClick={() => setFolder(id)} key={id}><Icon size={18}/>{label}</button>)}</aside><section className="dbt-docs-content"><div className="dbt-doc-filters"><label className="dbt-doc-search"><Search size={18}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search}/></label><select value={status} onChange={(event) => setStatus(event.target.value)} aria-label={copy.statusFilter}><option value="">{copy.allStatuses}</option><option value="Черновик">{copy.statuses.draft}</option><option value="Готов">{copy.statuses.ready}</option><option value="Согласован">{copy.statuses.approved}</option><option value="Подписан">{copy.statuses.signed}</option></select><input type="date" value={from} onChange={(event) => setFrom(event.target.value)} aria-label={copy.createdAfter}/><select value={sort} onChange={(event) => setSort(event.target.value)} aria-label={copy.sort}><option value="newest">{copy.newest}</option><option value="oldest">{copy.oldest}</option><option value="title">{copy.byTitle}</option></select></div>

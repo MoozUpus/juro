@@ -16,7 +16,19 @@ import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
 import { canEditWorkspaceContent, canManageTeam, isWorkspaceRole } from "../lib/platform/role-policy";
-import { INTERNAL_REQUEST_PATH_HEADER, isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath, safeWorkspaceReturnPath, workspaceForAccountRoute } from "../lib/platform/routing";
+import {
+  INTERNAL_REQUEST_PATH_HEADER,
+  isAccountType,
+  isAuthenticatedPlatformLocaleReady,
+  isAuthenticatedPlatformPathReady,
+  isLocale,
+  isPlatformModule,
+  isWorkspaceId,
+  platformBasePath,
+  platformPath,
+  safeWorkspaceReturnPath,
+  workspaceForAccountRoute,
+} from "../lib/platform/routing";
 import { actionPlanStepPatchSchema } from "../lib/platform/action-plan";
 import { taskStatusForPlanStep, taskStatusIsTerminal } from "../lib/platform/task-status";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
@@ -630,7 +642,8 @@ test("session management distinguishes the current local device and audits revoc
   assert.match(singleRoute, /assertSafeWrite\(request\)/);
   assert.match(sessionRoute, /clearDeviceContinuityCookie/);
   assert.match(singleRoute, /clearDeviceContinuityCookie/);
-  assert.match(settings, /JURO email-сессии/);
+  assert.match(settings, /Локальные сессии JURO/);
+  assert.match(settings, /Local JURO sessions/);
   assert.match(settings, /внешнего защищённого провайдера/);
   assert.match(settings, /2FA включена/);
   assert.match(settings, /резервн/);
@@ -898,13 +911,23 @@ test("staff role lifecycle is internal, fresh-MFA-gated, and atomically audited"
 });
 
 test("canonical platform route classifier is stable", () => {
-  assert.ok(isLocale("ru"));assert.ok(isLocale("uz"));assert.ok(!isLocale("en"));
+  assert.ok(isLocale("ru"));assert.ok(isLocale("uz"));assert.ok(isLocale("en"));assert.ok(!isLocale("de"));
+  assert.ok(isAuthenticatedPlatformLocaleReady("ru"));
+  assert.ok(isAuthenticatedPlatformLocaleReady("uz"));
+  assert.ok(isAuthenticatedPlatformLocaleReady("en"));
+  assert.ok(isAuthenticatedPlatformPathReady("/en/auth/login"));
+  assert.ok(isAuthenticatedPlatformPathReady("/en/help"));
+  assert.ok(isAuthenticatedPlatformPathReady("/en/individual/dashboard"));
+  assert.ok(isAuthenticatedPlatformPathReady("/en/business/workspace-1/dashboard"));
+  assert.ok(isAuthenticatedPlatformPathReady("/ru/individual/dashboard"));
+  assert.ok(isAuthenticatedPlatformPathReady("/uz/lawyer/dashboard"));
   assert.ok(isAccountType("individual"));assert.ok(isAccountType("entrepreneur"));assert.ok(isAccountType("lawyer"));assert.ok(isAccountType("business"));assert.ok(!isAccountType("admin"));
   assert.ok(isPlatformModule("dashboard"));assert.ok(isPlatformModule("action-plan"));assert.ok(!isPlatformModule("main"));assert.ok(!isPlatformModule("document-builder-test"));
   assert.equal(platformPath("uz","business","document-builder"),"/uz/business/document-builder");
   assert.equal(platformPath("uz","business","dashboard","ws_business_1"),"/uz/business/ws_business_1/dashboard");
   assert.equal(platformBasePath("ru","business","ws_business_1"),"/ru/business/ws_business_1");
   assert.equal(platformPath("ru","lawyer","dashboard"),"/ru/lawyer/dashboard");
+  assert.equal(platformPath("en","individual","dashboard"),"/en/individual/dashboard");
   assert.ok(isWorkspaceId("ws_business_1"));
   assert.ok(!isWorkspaceId("workspace/escape"));
   assert.throws(() => platformBasePath("ru", "business", "workspace/escape"), /INVALID_WORKSPACE_ID/);
@@ -1149,8 +1172,8 @@ test("monitoring keeps delivery disabled until a fresh Lex metadata run is avail
     readFile(new URL("../app/_platform/PlatformShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/MonitoringClient.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(shell, /\[\s*"monitoring",\s*Scale,\s*"Мониторинг законодательства",\s*"Qonunchilik monitoringi",?\s*\]/);
-  assert.match(shell, /key: "help", ru: "Помощь", uz: "Yordam"/);
+  assert.match(shell, /\[\s*"monitoring",\s*Scale,\s*"Мониторинг законодательства",\s*"Qonunchilik monitoringi",\s*"Legal monitoring",?\s*\]/);
+  assert.match(shell, /key: "help", ru: "Помощь", uz: "Yordam", en: "Support"/);
   assert.match(client, /normalizeMonitoringAudience\(accountType\)/);
   assert.match(client, /normalizeMonitoringAudience\(body\.preference\.audience\)/);
   assert.match(client, /monitoringPreferencesAreInformationalOnly\(\{/);
@@ -1318,9 +1341,10 @@ test("notification reads use strict bounded input and expose resilient UI states
 });
 
 test("document upload progress is byte-based and remains accessible", async () => {
-  const [upload, client] = await Promise.all([
+  const [upload, client, reviewCopy] = await Promise.all([
     readFile(new URL("../lib/document-analysis/client-upload.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/DocumentReviewClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/document-review-localization.ts", import.meta.url), "utf8"),
   ]);
   assert.match(upload, /type SecureDocumentUploadProgress/);
   assert.match(upload, /new XMLHttpRequest\(\)/);
@@ -1329,8 +1353,9 @@ test("document upload progress is byte-based and remains accessible", async () =
   assert.match(upload, /onProgress\?\.\(\{ phase: "finalizing"/);
   assert.match(client, /role="progressbar"/);
   assert.match(client, /aria-valuetext=\{uploadStatus\}/);
-  assert.match(client, /Передаём файл/);
-  assert.match(client, /Fayl yuborilmoqda/);
+  assert.match(reviewCopy, /Передаём файл/);
+  assert.match(reviewCopy, /Fayl yuborilmoqda/);
+  assert.match(reviewCopy, /Uploading file/);
 });
 
 test("workspace content mutations require an editor role at the route boundary", async () => {
@@ -1659,7 +1684,9 @@ test("lawyer request messages require active participant access and are workspac
     readFile(new URL("../drizzle/0053_dashing_eddie_brock.sql", import.meta.url), "utf8"),
   ]);
   assert.match(route, /requester_user_id=\?/);
-  assert.match(route, /p\.user_id=\?\s+AND p\.status='public_approved'/);
+  assert.match(route, /p\.id=r\.lawyer_profile_id AND p\.user_id=\?/);
+  assert.match(route, /p\.status='public_approved'/);
+  assert.match(route, /p\.marketplace_status='public_approved'/);
   assert.match(route, /g\.revoked_at IS NULL/);
   assert.match(route, /lawyer_request_message_sent/);
   assert.match(route, /ORDER BY m\.created_at ASC,m\.id ASC LIMIT 200/);
@@ -1716,7 +1743,7 @@ test("completed lawyer services gate private owner reviews and moderation", asyn
   assert.match(completion, /r\.status='offer_accepted'/); assert.match(completion, /g\.revoked_at IS NULL/); assert.match(completion, /lawyer_request_completed/);
   assert.match(review, /workspace_id=\? AND requester_user_id=\? AND status='completed'/); assert.match(review, /lawyer_review_submitted/); assert.match(review, /'pending'/);
   assert.match(review, /SELECT id,status FROM lawyer_reviews WHERE lawyer_request_id=\? AND workspace_id=\? AND requester_user_id=\?/);
-  assert.match(review, /replayed:true/);
+  assert.match(review, /replayed:\s*true/);
   assert.match(lawyerClient, /completion/); assert.match(ownerClient, /\/review/); assert.match(migration, /CREATE TABLE `lawyer_reviews`/);
   assert.match(ownerClient, /speedRating/); assert.match(ownerClient, /qualityRating/); assert.match(ownerClient, /communicationRating/);
   const [moderation, moderationService, moderationRoutes, moderationMigration] = await Promise.all([

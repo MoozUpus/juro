@@ -314,12 +314,13 @@ test("corrected Claude analysis version returns to its unchanged Builder revisio
 
 test("builder analysis route and UI retain security, idempotency and compatibility contracts", async () => {
   const root = new URL("../", import.meta.url);
-  const [route, applyRoute, launcher, builder, reviewUi, legacy] = await Promise.all([
+  const [route, applyRoute, launcher, builder, reviewUi, reviewCopy, legacy] = await Promise.all([
     readFile(new URL("app/api/document-builder/documents/[id]/analysis/route.ts", root), "utf8"),
     readFile(new URL("app/api/platform/document-analysis/[analysisId]/versions/[versionId]/apply-builder/route.ts", root), "utf8"),
     readFile(new URL("app/_document-builder/_components/BuilderAnalysisLauncher.tsx", root), "utf8"),
     readFile(new URL("app/_document-builder/_components/ConfigurableDocumentBuilder.tsx", root), "utf8"),
     readFile(new URL("app/_platform/DocumentReviewClient.tsx", root), "utf8"),
+    readFile(new URL("app/_platform/document-review-localization.ts", root), "utf8"),
     readFile(new URL("app/api/document-builder/ai-review/route.ts", root), "utf8"),
   ]);
   assert.match(route, /assertSafeWrite/);
@@ -333,7 +334,8 @@ test("builder analysis route and UI retain security, idempotency and compatibili
   assert.match(applyRoute, /applyProjectedDocumentContentVersion/);
   assert.match(applyRoute, /source: "analysis_correction"/);
   assert.match(reviewUi, /applyVersionToBuilder/);
-  assert.match(reviewUi, /В конструктор/);
+  assert.match(reviewCopy, /В конструктор/);
+  assert.match(reviewCopy, /Apply in builder/);
   assert.match(launcher, /busyRef/);
   assert.match(launcher, /crypto\.randomUUID/);
   assert.match(launcher, /aria-live="polite"/);

@@ -3,6 +3,7 @@ import { parseJsonRequest } from "../../../../lib/auth/input";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { addNotification, isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { lawyerText } from "../../../../lib/platform/lawyer-localization";
 import { activeLawyerWorkspaceParticipant } from "../../../../lib/platform/lawyer-workspace-access";
 import { lawyerDocumentRequestOperationSchema, lawyerWorkspaceOperationError } from "../../../../lib/platform/lawyer-workspace-operations";
 
@@ -13,10 +14,10 @@ function response(body: unknown, status = 200) {
 export const GET = withApiErrors(async function GET(request: Request) {
   const user = await requireApiUser();
   const requestId = new URL(request.url).searchParams.get("requestId")?.trim() || "";
-  if (!z.string().uuid().safeParse(requestId).success) return response({ code: "INVALID_INPUT", error: lawyerWorkspaceOperationError("ru", "INVALID_INPUT") }, 400);
+  if (!z.string().uuid().safeParse(requestId).success) return response({ code: "INVALID_INPUT" }, 400);
   const db = requireD1();
   const participant = await activeLawyerWorkspaceParticipant(db, user.id, requestId);
-  if (!participant) return response({ code: "REQUEST_UNAVAILABLE", error: lawyerWorkspaceOperationError("ru", "REQUEST_UNAVAILABLE") }, 404);
+  if (!participant) return response({ code: "REQUEST_UNAVAILABLE" }, 404);
   const [requests, documents] = await Promise.all([
     db.prepare(
       `SELECT r.id,r.title,r.description,r.status,r.provided_document_id AS providedDocumentId,
@@ -62,7 +63,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         "INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'lawyer_document_requested',?,?)",
       ).bind(crypto.randomUUID(), participant.caseId, user.id, JSON.stringify({ requestId: participant.requestId, documentRequestId: id, title: parsed.data.title }), now),
     ]);
-    await addNotification(participant.clientUserId, null, "lawyer_document_requested", locale === "ru" ? "Юрист запросил документ" : "Yurist hujjat so‘radi", parsed.data.title);
+    await addNotification(participant.clientUserId, null, "lawyer_document_requested", lawyerText(participant.clientLocale, "Юрист запросил документ", "Yurist hujjat so‘radi", "A lawyer requested a document"), parsed.data.title);
     return response({ ok: true, documentRequest: { id, status: "requested", createdAt: now } }, 201);
   }
 
@@ -92,7 +93,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         "INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'lawyer_document_provided',?,?)",
       ).bind(crypto.randomUUID(), participant.caseId, user.id, JSON.stringify({ requestId: participant.requestId, documentRequestId: documentRequest.id, documentId: document.id }), now),
     ]);
-    await addNotification(participant.lawyerUserId, document.id, "lawyer_document_provided", locale === "ru" ? "Клиент предоставил документ" : "Mijoz hujjat taqdim etdi", document.title);
+    await addNotification(participant.lawyerUserId, document.id, "lawyer_document_provided", lawyerText(participant.lawyerLocale, "Клиент предоставил документ", "Mijoz hujjat taqdim etdi", "A client shared a document"), document.title);
     return response({ ok: true, status: "provided", document: { id: document.id, title: document.title } });
   }
 

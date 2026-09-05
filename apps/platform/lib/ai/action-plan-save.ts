@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { parseLegalChatResponse } from "./legal-chat-schema";
+import { aiText } from "./localization";
 
 export const saveAiActionPlanInputSchema = z.object({
   assistantMessageId: z.string().uuid(),
   targetCaseId: z.string().uuid().optional(),
-  locale: z.enum(["ru", "uz"]).default("uz"),
+  locale: z.enum(["ru", "uz", "en"]).default("uz"),
 }).strict();
 
 export type SaveAiActionPlanInput = z.infer<typeof saveAiActionPlanInputSchema>;
@@ -139,7 +140,7 @@ export async function saveAiActionPlanToCase(input: {
     version: 1,
     source: "persisted_ai_answer",
     assistantMessageId: input.assistantMessageId,
-    title: result.language === "ru" ? `План: ${caseTitle}` : `Reja: ${caseTitle}`,
+    title: aiText(result.language, `План: ${caseTitle}`, `Reja: ${caseTitle}`, `Plan: ${caseTitle}`),
     status: "in_progress",
     progressPercent: 0,
     steps: steps.map(({ id, ordinal, title, description, sourceIds }) => ({ id, ordinal, title, description, sourceIds })),
@@ -151,7 +152,7 @@ export async function saveAiActionPlanToCase(input: {
       ).bind(caseId, input.workspaceId, input.userId, caseAccountType(stored.accountType), result.language, caseTitle, description, now, now),
       input.db.prepare(
         "INSERT INTO action_plans (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at) VALUES (?,?,?,?,'in_progress',0,1,?,?)",
-      ).bind(planId, caseId, input.userId, result.language === "ru" ? `План: ${caseTitle}` : `Reja: ${caseTitle}`, now, now),
+      ).bind(planId, caseId, input.userId, aiText(result.language, `План: ${caseTitle}`, `Reja: ${caseTitle}`, `Plan: ${caseTitle}`), now, now),
       ...steps.flatMap((step) => [
         input.db.prepare(
           "INSERT INTO action_plan_steps (id,plan_id,ordinal,title,description,status,deadline_type,action_type,revision,created_at,updated_at) VALUES (?,?,?,?,?,'not_started','calendar_days','ai_proposed',1,?,?)",
@@ -254,7 +255,7 @@ async function appendAiActionPlanToCase(
     sourceIds: step.sourceIds,
   }));
   const planTitle = target.planTitle
-    ?? (result.language === "ru" ? `План: ${target.caseTitle}` : `Reja: ${target.caseTitle}`);
+    ?? aiText(result.language, `План: ${target.caseTitle}`, `Reja: ${target.caseTitle}`, `Plan: ${target.caseTitle}`);
   const completedStepCount = existingSteps.filter((step) => step.status === "completed").length;
   const nextProgressPercent = Math.round(100 * completedStepCount / (existingSteps.length + addedSteps.length));
   const snapshot = JSON.stringify({

@@ -1,11 +1,12 @@
 import { z } from "zod";
+import type { PlatformLocale } from "./routing";
 
 export const workspaceInvitationAcceptInputSchema = z.object({
   token: z.string().min(1).max(256),
-  locale: z.enum(["ru", "uz"]).default("ru"),
+  locale: z.enum(["ru", "uz", "en"]).default("ru"),
 }).strict();
 
-export type WorkspaceInvitationLocale = "ru" | "uz";
+export type WorkspaceInvitationLocale = PlatformLocale;
 
 export type WorkspaceInvitationRecord = {
   id: string;

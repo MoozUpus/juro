@@ -282,7 +282,7 @@ export async function reserveEmailChangeChallenge(
     currentCode: string;
     newCodeSalt: string;
     newCode: string;
-    locale: "ru" | "uz";
+    locale: "ru" | "uz" | "en";
     expiresAt: string;
     now: string;
     recentSince: string;
@@ -746,7 +746,7 @@ export async function confirmEmailChange(
     currentCode: string;
     newCode: string;
     assuranceLevel: "primary" | "mfa";
-    locale: "ru" | "uz";
+    locale: "ru" | "uz" | "en";
     securityEmailKeyring: IdentityKeyring;
     now: string;
     recentSince: string;

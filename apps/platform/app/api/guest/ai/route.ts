@@ -74,6 +74,12 @@ import {
 } from "../../../../lib/ai/guest-session";
 import { resolveAiRuntimeSettings } from "../../../../lib/ai/runtime-settings";
 import {
+  aiDiscoveryLocale,
+  aiText,
+  parseAiOutputLocale,
+  type AiOutputLocale,
+} from "../../../../lib/ai/localization";
+import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
   OperationalFeatureError,
@@ -83,7 +89,7 @@ import {
 const GUEST_INSTRUCTION_VERSION = "juro-guest-legal-chat-v1";
 const requestSchema = z.object({
   question: z.string().trim().min(5).max(4_000),
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
   turnstileToken: z.string().trim().max(2_048).optional(),
   legalContextDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 }).strict();
@@ -97,10 +103,6 @@ function json(
   headers.set("cache-control", "private, no-store, max-age=0");
   headers.set("pragma", "no-cache");
   return Response.json(body, { status, headers });
-}
-
-function copy(locale: "ru" | "uz", ru: string, uz: string): string {
-  return locale === "ru" ? ru : uz;
 }
 
 function rethrowGuestCancellation(error: unknown, signal: AbortSignal): void {
@@ -212,27 +214,27 @@ async function recordGuestAiSlo(input: {
 
 function publicError(
   error: unknown,
-  locale: "ru" | "uz",
+  locale: AiOutputLocale,
   requestUrl: string,
 ): Response {
   if (error instanceof GuestAiError) {
-    const map: Record<GuestAiError["code"], { status: number; ru: string; uz: string; clear?: boolean }> = {
-      GUEST_AI_DISABLED: { status: 404, ru: "Гостевой AI-режим недоступен.", uz: "Mehmon AI rejimi mavjud emas." },
-      GUEST_CONFIGURATION_UNAVAILABLE: { status: 503, ru: "Гостевой AI временно недоступен.", uz: "Mehmon AI vaqtincha mavjud emas." },
-      GUEST_SESSION_REQUIRED: { status: 401, ru: "Пройдите проверку перед отправкой вопроса.", uz: "Savol yuborishdan oldin tekshiruvdan o‘ting.", clear: true },
-      GUEST_SESSION_INVALID: { status: 401, ru: "Гостевая сессия недействительна. Пройдите проверку ещё раз.", uz: "Mehmon sessiyasi yaroqsiz. Tekshiruvdan qayta o‘ting.", clear: true },
-      GUEST_SESSION_EXPIRED: { status: 401, ru: "Гостевая сессия истекла. Пройдите проверку ещё раз.", uz: "Mehmon sessiyasi tugadi. Tekshiruvdan qayta o‘ting.", clear: true },
-      GUEST_SESSION_CONSUMED: { status: 429, ru: "Гостевой ответ уже использован. Зарегистрируйтесь, чтобы продолжить.", uz: "Mehmon javobi ishlatildi. Davom etish uchun ro‘yxatdan o‘ting." },
-      GUEST_RATE_LIMIT: { status: 429, ru: "Слишком много гостевых сессий. Попробуйте позже.", uz: "Mehmon sessiyalari juda ko‘p. Keyinroq urinib ko‘ring." },
-      GUEST_REQUEST_LIMIT: { status: 429, ru: "Лимит уточняющих попыток исчерпан. Зарегистрируйтесь, чтобы продолжить.", uz: "Aniqlashtirish urinishlari limiti tugadi. Davom etish uchun ro‘yxatdan o‘ting." },
-      GUEST_RUN_CONFLICT: { status: 409, ru: "Идентификатор запроса уже использован иначе.", uz: "So‘rov identifikatori boshqa so‘rov uchun ishlatilgan." },
-      GUEST_RUN_PROCESSING: { status: 202, ru: "Ответ уже формируется.", uz: "Javob tayyorlanmoqda." },
-      GUEST_RUN_FAILED: { status: 409, ru: "Предыдущая попытка завершилась ошибкой. Создайте новый запрос.", uz: "Oldingi urinish xato bilan tugadi. Yangi so‘rov yarating." },
-      GUEST_RESERVATION_LOST: { status: 409, ru: "Сессия изменилась во время ответа. Повторите запрос.", uz: "Javob vaqtida sessiya o‘zgardi. So‘rovni takrorlang." },
+    const map: Record<GuestAiError["code"], { status: number; ru: string; uz: string; en: string; clear?: boolean }> = {
+      GUEST_AI_DISABLED: { status: 404, ru: "Гостевой AI-режим недоступен.", uz: "Mehmon AI rejimi mavjud emas.", en: "Guest AI is unavailable." },
+      GUEST_CONFIGURATION_UNAVAILABLE: { status: 503, ru: "Гостевой AI временно недоступен.", uz: "Mehmon AI vaqtincha mavjud emas.", en: "Guest AI is temporarily unavailable." },
+      GUEST_SESSION_REQUIRED: { status: 401, ru: "Пройдите проверку перед отправкой вопроса.", uz: "Savol yuborishdan oldin tekshiruvdan o‘ting.", en: "Complete the security check before sending your question.", clear: true },
+      GUEST_SESSION_INVALID: { status: 401, ru: "Гостевая сессия недействительна. Пройдите проверку ещё раз.", uz: "Mehmon sessiyasi yaroqsiz. Tekshiruvdan qayta o‘ting.", en: "Your guest session is invalid. Complete the security check again.", clear: true },
+      GUEST_SESSION_EXPIRED: { status: 401, ru: "Гостевая сессия истекла. Пройдите проверку ещё раз.", uz: "Mehmon sessiyasi tugadi. Tekshiruvdan qayta o‘ting.", en: "Your guest session has expired. Complete the security check again.", clear: true },
+      GUEST_SESSION_CONSUMED: { status: 429, ru: "Гостевой ответ уже использован. Зарегистрируйтесь, чтобы продолжить.", uz: "Mehmon javobi ishlatildi. Davom etish uchun ro‘yxatdan o‘ting.", en: "Your guest answer has been used. Create an account to continue." },
+      GUEST_RATE_LIMIT: { status: 429, ru: "Слишком много гостевых сессий. Попробуйте позже.", uz: "Mehmon sessiyalari juda ko‘p. Keyinroq urinib ko‘ring.", en: "Too many guest sessions have been requested. Try again later." },
+      GUEST_REQUEST_LIMIT: { status: 429, ru: "Лимит уточняющих попыток исчерпан. Зарегистрируйтесь, чтобы продолжить.", uz: "Aniqlashtirish urinishlari limiti tugadi. Davom etish uchun ro‘yxatdan o‘ting.", en: "The clarification limit has been reached. Create an account to continue." },
+      GUEST_RUN_CONFLICT: { status: 409, ru: "Идентификатор запроса уже использован иначе.", uz: "So‘rov identifikatori boshqa so‘rov uchun ishlatilgan.", en: "This request identifier has already been used for a different request." },
+      GUEST_RUN_PROCESSING: { status: 202, ru: "Ответ уже формируется.", uz: "Javob tayyorlanmoqda.", en: "Your answer is already being prepared." },
+      GUEST_RUN_FAILED: { status: 409, ru: "Предыдущая попытка завершилась ошибкой. Создайте новый запрос.", uz: "Oldingi urinish xato bilan tugadi. Yangi so‘rov yarating.", en: "The previous attempt failed. Create a new request." },
+      GUEST_RESERVATION_LOST: { status: 409, ru: "Сессия изменилась во время ответа. Повторите запрос.", uz: "Javob vaqtida sessiya o‘zgardi. So‘rovni takrorlang.", en: "The session changed while the answer was being prepared. Send the request again." },
     };
     const entry = map[error.code];
     return json(
-      { code: error.code, error: copy(locale, entry.ru, entry.uz) },
+      { code: error.code, error: aiText(locale, entry.ru, entry.uz, entry.en) },
       entry.status,
       entry.clear ? { "set-cookie": clearGuestSessionCookie(requestUrl) } : undefined,
     );
@@ -240,7 +242,7 @@ function publicError(
   if (error instanceof IdentityKeyringError) {
     return json({
       code: "GUEST_CONFIGURATION_UNAVAILABLE",
-      error: copy(locale, "Гостевой AI временно недоступен.", "Mehmon AI vaqtincha mavjud emas."),
+      error: aiText(locale, "Гостевой AI временно недоступен.", "Mehmon AI vaqtincha mavjud emas.", "Guest AI is temporarily unavailable."),
     }, 503);
   }
   if (error instanceof OperationalFeatureError) {
@@ -252,12 +254,12 @@ function publicError(
   if (error instanceof ApiAuthError) {
     return json({
       code: "REQUEST_REJECTED",
-      error: copy(locale, "Запрос отклонён проверкой безопасности.", "So‘rov xavfsizlik tekshiruvi tomonidan rad etildi."),
+      error: aiText(locale, "Запрос отклонён проверкой безопасности.", "So‘rov xavfsizlik tekshiruvi tomonidan rad etildi.", "The request was rejected by a security check."),
     }, error.status);
   }
   return json({
     code: "GUEST_AI_FAILED",
-    error: copy(locale, "Не удалось обработать запрос.", "So‘rovni qayta ishlash imkoni bo‘lmadi."),
+    error: aiText(locale, "Не удалось обработать запрос.", "So‘rovni qayta ishlash imkoni bo‘lmadi.", "The request could not be processed."),
   }, 500);
 }
 
@@ -278,7 +280,7 @@ async function sessionForRequest(input: {
   request: Request;
   db: D1Database;
   keyring: ReturnType<typeof parseIdentityKeyring>;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   turnstileToken?: string;
 }): Promise<{ session: GuestAiSession; setCookie?: string }> {
   try {
@@ -339,7 +341,7 @@ async function guestQuestionWithClarificationContext(input: {
   keyring: ReturnType<typeof parseIdentityKeyring>;
   sessionId: string;
   question: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
 }): Promise<string> {
   const previous = await latestGuestAiClarificationRun(input.db, input.sessionId);
   if (!previous) return input.question;
@@ -348,14 +350,17 @@ async function guestQuestionWithClarificationContext(input: {
     completedResult(input.keyring, previous),
   ]);
   const questions = previousResult.clarificationQuestions.join("; ");
-  return input.locale === "ru"
-    ? `${previousQuestion}\n\nJURO запросил уточнение: ${questions}\nОтвет пользователя на уточнение: ${input.question}`
-    : `${previousQuestion}\n\nJURO quyidagilarni aniqlashtirishni so‘radi: ${questions}\nFoydalanuvchining aniqlashtirishga javobi: ${input.question}`;
+  return aiText(
+    input.locale,
+    `${previousQuestion}\n\nJURO запросил уточнение: ${questions}\nОтвет пользователя на уточнение: ${input.question}`,
+    `${previousQuestion}\n\nJURO quyidagilarni aniqlashtirishni so‘radi: ${questions}\nFoydalanuvchining aniqlashtirishga javobi: ${input.question}`,
+    `${previousQuestion}\n\nJURO asked for clarification: ${questions}\nThe user replied: ${input.question}`,
+  );
 }
 
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const locale = url.searchParams.get("locale") === "uz" ? "uz" : "ru";
+  const locale = parseAiOutputLocale(url.searchParams.get("locale"));
   try {
     const { env, db, keyring } = configuration();
     let session: GuestAiSession | null = null;
@@ -391,7 +396,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  let locale: "ru" | "uz" = "ru";
+  let locale: AiOutputLocale = parseAiOutputLocale(request.headers.get("x-juro-locale"));
   let budget: ReturnType<typeof createAiExecutionBudget> | null = null;
   let telemetry: GuestAiSloContext | null = null;
   try {
@@ -403,8 +408,8 @@ export async function POST(request: Request): Promise<Response> {
           ? "GUEST_AI_PAYLOAD_TOO_LARGE"
           : "INVALID_GUEST_AI_REQUEST",
         error: parsed.error === "payload_too_large"
-          ? "Размер запроса превышает допустимый предел."
-          : "Введите вопрос длиной от 5 до 4 000 символов.",
+          ? aiText(locale, "Размер запроса превышает допустимый предел.", "So‘rov hajmi ruxsat etilgan chegaradan oshdi.", "The request exceeds the permitted size limit.")
+          : aiText(locale, "Введите вопрос длиной от 5 до 4 000 символов.", "5 dan 4 000 tagacha belgidan iborat savol kiriting.", "Enter a question between 5 and 4,000 characters."),
       }, parsed.error === "payload_too_large" ? 413 : 400);
     }
     locale = parsed.data.locale;
@@ -412,9 +417,10 @@ export async function POST(request: Request): Promise<Response> {
       ? parseLegalApplicabilityDate(parsed.data.legalContextDate)
       : null;
     if (parsed.data.legalContextDate && !applicableAt) {
-      return json({ code: "INVALID_LEGAL_CONTEXT_DATE", error: copy(locale,
+      return json({ code: "INVALID_LEGAL_CONTEXT_DATE", error: aiText(locale,
         "Укажите существующую дату события не позднее сегодняшнего дня.",
         "Bugungi kundan kech bo‘lmagan haqiqiy voqea sanasini kiriting.",
+        "Enter a valid event date that is not later than today.",
       ) }, 400);
     }
     const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
@@ -441,7 +447,7 @@ export async function POST(request: Request): Promise<Response> {
     if (!provider || !providerStatus.model) {
       return json({
         code: "AI_PROVIDER_UNAVAILABLE",
-        error: copy(locale, "AI-провайдер временно недоступен.", "AI-provayder vaqtincha mavjud emas."),
+        error: aiText(locale, "AI-провайдер временно недоступен.", "AI-provayder vaqtincha mavjud emas.", "The AI provider is temporarily unavailable."),
       }, 503, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
     }
 
@@ -456,6 +462,7 @@ export async function POST(request: Request): Promise<Response> {
       scope: "guest-openai-safety-v1",
       sessionId: sessionContext.session.id,
     });
+    const discoveryLocale = aiDiscoveryLocale(locale);
     // Guest chat uses the same public source ladder as authenticated chat:
     // indexed corpus -> live Lex.uz -> secondary internet only when combined
     // official coverage remains weak. It intentionally has no private context.
@@ -503,7 +510,7 @@ export async function POST(request: Request): Promise<Response> {
       retrieval = await retrieveCorpusAwareLegalSources({
         env: { ...runtimeEnv(), DB: db },
         query: effectiveQuestion,
-        locale,
+        locale: discoveryLocale,
         indexQueries: retrievalUnderstanding.corpusQueries,
         rerankingQuestion: retrievalUnderstanding.standaloneQuestion,
         requiredConcepts: retrievalUnderstanding.requiredConcepts,
@@ -539,7 +546,7 @@ export async function POST(request: Request): Promise<Response> {
       retrievalStage.fail();
       rethrowGuestCancellation(error, budget.signal);
       retrieval = await retrieveCorpusAwareLegalSources({
-        env: { ...runtimeEnv(), DB: db }, query: "", locale, limit: 1, budgetMs: 1,
+        env: { ...runtimeEnv(), DB: db }, query: "", locale: discoveryLocale, limit: 1, budgetMs: 1,
       });
     }
     const secondaryInternet: SecondaryInternetRetrieval = !applicableAt
@@ -550,7 +557,7 @@ export async function POST(request: Request): Promise<Response> {
           const secondary = await retrieveSecondaryInternetSources({
             db,
             query: retrievalUnderstanding.webSearchQuery,
-            locale,
+            locale: discoveryLocale,
             requestId: `${idempotencyKey}:secondary`,
             safetyIdentifier,
             signal: secondaryStage.signal,
@@ -712,10 +719,11 @@ export async function POST(request: Request): Promise<Response> {
       return json({
         code,
         correlationId: reservation.run.correlationId,
-        error: copy(
+        error: aiText(
           locale,
           "AI-провайдер временно недоступен. Гостевой ответ не использован.",
           "AI-provayder vaqtincha mavjud emas. Mehmon javobi ishlatilmadi.",
+          "The AI provider is temporarily unavailable. Your guest answer was not used.",
         ),
       }, code === "AI_REFUSED" || code === "INVALID_AI_OUTPUT" ? 422 : 503,
       sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
@@ -788,10 +796,11 @@ export async function POST(request: Request): Promise<Response> {
       });
       return json({
         code: "INVALID_AI_OUTPUT",
-        error: copy(
+        error: aiText(
           locale,
           "AI-ответ не прошёл проверку. Гостевой ответ не использован.",
           "AI javobi tekshiruvdan o‘tmadi. Mehmon javobi ishlatilmadi.",
+          "The AI answer did not pass validation. Your guest answer was not used.",
         ),
       }, 422, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
     }
@@ -862,10 +871,11 @@ export async function POST(request: Request): Promise<Response> {
       return json({
         code: "PROVIDER_TIMEOUT",
         correlationId: reservation.run.correlationId,
-        error: copy(
+        error: aiText(
           locale,
           "AI не успел безопасно сохранить ответ. Гостевой ответ не использован; попробуйте ещё раз.",
           "AI javobni xavfsiz saqlashga ulgurmadi. Mehmon javobi ishlatilmadi; qayta urinib ko‘ring.",
+          "The AI could not save the answer safely in time. Your guest answer was not used; try again.",
         ),
       }, 503, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
     }

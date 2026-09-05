@@ -12,6 +12,9 @@ import { LawyerConsultationPanel } from "./LawyerConsultationPanel";
 import { LawyerDocumentRequests } from "./LawyerDocumentRequests";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { WorkspaceEntitlements } from "../../lib/billing/entitlements";
+import { lawyerIntlLocale, lawyerText } from "../../lib/platform/lawyer-localization";
+import { lawyerOfferError } from "../../lib/platform/lawyer-offer";
+import { localizedHandoffError } from "../../lib/platform/lawyer-request";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import {
   formatLawyerRequestDate as formatRequestDate,
@@ -74,7 +77,10 @@ export function LawyerHandoffClient({
   accountType: AccountType;
   workspaceId?: string;
 }) {
-  const ru = locale === "ru";
+  const text = useCallback(
+    (russian: string, uzbek: string, english: string) => lawyerText(locale, russian, uzbek, english),
+    [locale],
+  );
   const selectedLawyerId = useSearchParams().get("lawyer") || "";
   const [cases, setCases] = useState<CaseOption[]>([]);
   const [requests, setRequests] = useState<HandoffRequest[]>([]);
@@ -117,19 +123,15 @@ export function LawyerHandoffClient({
     ]);
     const requestBody = (await requestResponse.json()) as {
       requests?: HandoffRequest[];
-      error?: string;
     };
     const caseBody = (await caseResponse.json()) as {
       cases?: CaseOption[];
-      error?: string;
     };
     const consultationBody = (await consultationResponse.json()) as {
       entitlements?: WorkspaceEntitlements;
-      error?: string;
     };
     const lawyerBody = (await lawyerResponse.json()) as {
       lawyers?: PublicLawyer[];
-      error?: string;
     };
     if (
       !requestResponse.ok ||
@@ -138,11 +140,7 @@ export function LawyerHandoffClient({
       !lawyerResponse.ok
     )
       throw new Error(
-        requestBody.error ||
-          caseBody.error ||
-          consultationBody.error ||
-          lawyerBody.error ||
-          "Ошибка",
+        text("Не удалось загрузить данные передачи дела.", "Ishni topshirish ma’lumotlarini yuklab bo‘lmadi.", "We could not load the lawyer handoff information."),
       );
     const nextCases = caseBody.cases || [];
     setCases(nextCases);
@@ -156,7 +154,7 @@ export function LawyerHandoffClient({
       directory.some((lawyer) => lawyer.id === selectedLawyerId)
     )
       setLawyerProfileId(selectedLawyerId);
-  }, [selectedLawyerId]);
+  }, [selectedLawyerId, text]);
 
   useEffect(() => {
     void load().catch((value) =>
@@ -187,15 +185,13 @@ export function LawyerHandoffClient({
           locale,
         }),
       });
-      const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error || "Ошибка");
+      const body = (await response.json()) as { code?: string };
+      if (!response.ok) throw new Error(localizedHandoffError(locale, body.code || "INVALID_INPUT"));
       setSummary("");
       setProposedStartsAt("");
       setConsent(false);
       setMessage(
-        ru
-          ? "Заявка сохранена. До назначения юриста материалы дела не раскрываются."
-          : "So‘rov saqlandi. Yurist tayinlanmaguncha ish materiallari oshkor qilinmaydi.",
+        text("Заявка сохранена. До назначения юриста материалы дела не раскрываются.", "So‘rov saqlandi. Yurist tayinlanmaguncha ish materiallari oshkor qilinmaydi.", "Request saved. Case materials remain private until a lawyer is assigned."),
       );
       await load();
     } catch (value) {
@@ -222,16 +218,12 @@ export function LawyerHandoffClient({
           body: JSON.stringify({ decision, locale }),
         },
       );
-      const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error || "Ошибка");
+      const body = (await response.json()) as { code?: string };
+      if (!response.ok) throw new Error(lawyerOfferError(locale, body.code || "INVALID_INPUT"));
       setMessage(
         decision === "accepted"
-          ? ru
-            ? "Условия юриста приняты. Оплата в платформе пока не выполняется."
-            : "Yurist shartlari qabul qilindi. Platformada to‘lov hozircha amalga oshirilmaydi."
-          : ru
-            ? "Условия отклонены. Юрист сможет направить обновлённое предложение."
-            : "Shartlar rad etildi. Yurist yangilangan taklif yuborishi mumkin.",
+          ? text("Условия юриста приняты. Оплата в платформе пока не выполняется.", "Yurist shartlari qabul qilindi. Platformada to‘lov hozircha amalga oshirilmaydi.", "The lawyer’s terms have been accepted. Payment is not processed through the platform yet.")
+          : text("Условия отклонены. Юрист сможет направить обновлённое предложение.", "Shartlar rad etildi. Yurist yangilangan taklif yuborishi mumkin.", "The terms have been declined. The lawyer may send a revised offer."),
       );
       await load();
     } catch (value) {
@@ -259,17 +251,13 @@ export function LawyerHandoffClient({
             : {}),
         },
       );
-      const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error || "Ошибка");
+      const body = (await response.json()) as { code?: string };
+      if (!response.ok) throw new Error(localizedHandoffError(locale, body.code || "INVALID_INPUT"));
       setAccessConsents((current) => ({ ...current, [item.id]: false }));
       setMessage(
         action === "grant"
-          ? ru
-            ? "Доступ юристу предоставлен. Это действие зафиксировано в журнале дела."
-            : "Yuristga ruxsat berildi. Bu harakat ish jurnalida qayd etildi."
-          : ru
-            ? "Доступ юриста к делу отозван. Это действие зафиксировано в журнале дела."
-            : "Yuristning ishga ruxsati bekor qilindi. Bu harakat ish jurnalida qayd etildi.",
+          ? text("Доступ юристу предоставлен. Это действие зафиксировано в журнале дела.", "Yuristga ruxsat berildi. Bu harakat ish jurnalida qayd etildi.", "The lawyer now has access. This action has been recorded in the case audit log.")
+          : text("Доступ юриста к делу отозван. Это действие зафиксировано в журнале дела.", "Yuristning ishga ruxsati bekor qilindi. Bu harakat ish jurnalida qayd etildi.", "The lawyer’s access has been revoked. This action has been recorded in the case audit log."),
       );
       await load();
     } catch (value) {
@@ -312,12 +300,10 @@ export function LawyerHandoffClient({
         <UserRoundCheck aria-hidden="true" />
         <div>
           <h2 id="lawyer-handoff-heading">
-            {ru ? "Передать дело юристу" : "Ishni yuristga topshirish"}
+            {text("Передать дело юристу", "Ishni yuristga topshirish", "Share a case with a lawyer")}
           </h2>
           <p>
-            {ru
-              ? "Сначала создаётся только анонимизированная заявка. Полный доступ к делу возможен лишь после conflict check и вашего отдельного подтверждения."
-              : "Avval faqat anonimlashtirilgan so‘rov yaratiladi. Ishga to‘liq ruxsat faqat manfaatlar to‘qnashuvi tekshiruvi va sizning alohida tasdiqingizdan keyin beriladi."}
+            {text("Сначала создаётся только анонимизированная заявка. Полный доступ к делу возможен лишь после conflict check и вашего отдельного подтверждения.", "Avval faqat anonimlashtirilgan so‘rov yaratiladi. Ishga to‘liq ruxsat faqat manfaatlar to‘qnashuvi tekshiruvi va sizning alohida tasdiqingizdan keyin beriladi.", "JURO first creates an anonymised request. Full case access is available only after a conflict-of-interest check and your separate confirmation.")}
           </p>
         </div>
       </div>
@@ -334,7 +320,7 @@ export function LawyerHandoffClient({
       )}
       <form onSubmit={(event) => void submit(event)}>
         <label>
-          {ru ? "Дело" : "Ish"}
+          {text("Дело", "Ish", "Case")}
           <select
             value={caseId}
             onChange={(event) => setCaseId(event.target.value)}
@@ -348,22 +334,22 @@ export function LawyerHandoffClient({
               ))
             ) : (
               <option value="">
-                {ru ? "Нет доступных дел" : "Mavjud ish yo‘q"}
+                {text("Нет доступных дел", "Mavjud ish yo‘q", "No cases available")}
               </option>
             )}
           </select>
         </label>
         <fieldset className="lawyer-directory-filters">
           <legend>
-            {ru ? "Фильтры каталога юристов" : "Yuristlar katalogi filtrlari"}
+            {text("Фильтры каталога юристов", "Yuristlar katalogi filtrlari", "Lawyer directory filters")}
           </legend>
           <label>
-            {ru ? "Специализация" : "Mutaxassislik"}
+            {text("Специализация", "Mutaxassislik", "Practice area")}
             <select
               value={specialtyFilter}
               onChange={(event) => setSpecialtyFilter(event.target.value)}
             >
-              <option value="">{ru ? "Все" : "Barchasi"}</option>
+              <option value="">{text("Все", "Barchasi", "All")}</option>
               {specialties.map((value) => (
                 <option key={value} value={value}>
                   {value}
@@ -372,12 +358,12 @@ export function LawyerHandoffClient({
             </select>
           </label>
           <label>
-            {ru ? "Язык" : "Til"}
+            {text("Язык", "Til", "Language")}
             <select
               value={languageFilter}
               onChange={(event) => setLanguageFilter(event.target.value)}
             >
-              <option value="">{ru ? "Все" : "Barchasi"}</option>
+              <option value="">{text("Все", "Barchasi", "All")}</option>
               {languages.map((value) => (
                 <option key={value} value={value}>
                   {value}
@@ -386,12 +372,12 @@ export function LawyerHandoffClient({
             </select>
           </label>
           <label>
-            {ru ? "Стаж от" : "Tajriba, kamida"}
+            {text("Стаж от", "Tajriba, kamida", "Minimum experience")}
             <select
               value={minimumExperience}
               onChange={(event) => setMinimumExperience(event.target.value)}
             >
-              <option value="">{ru ? "Любой" : "Istalgan"}</option>
+              <option value="">{text("Любой", "Istalgan", "Any")}</option>
               <option value="1">1</option>
               <option value="3">3</option>
               <option value="5">5</option>
@@ -399,47 +385,47 @@ export function LawyerHandoffClient({
             </select>
           </label>
           <label>
-            {ru ? "Рейтинг от" : "Reyting, kamida"}
+            {text("Рейтинг от", "Reyting, kamida", "Minimum rating")}
             <select
               value={minimumRating}
               onChange={(event) => setMinimumRating(event.target.value)}
             >
-              <option value="">{ru ? "Любой" : "Istalgan"}</option>
+              <option value="">{text("Любой", "Istalgan", "Any")}</option>
               <option value="4">4/5</option>
               <option value="4.5">4.5/5</option>
             </select>
           </label>
           <label>
-            {ru ? "Доступность" : "Mavjudlik"}
+            {text("Доступность", "Mavjudlik", "Availability")}
             <select
               value={availabilityFilter}
               onChange={(event) => setAvailabilityFilter(event.target.value)}
             >
-              <option value="">{ru ? "Любая" : "Istalgan"}</option>
-              <option value="available">{ru ? "Доступен" : "Mavjud"}</option>
+              <option value="">{text("Любая", "Istalgan", "Any")}</option>
+              <option value="available">{text("Доступен", "Mavjud", "Available")}</option>
               <option value="limited">
-                {ru ? "Ограниченная" : "Cheklangan"}
+                {text("Ограниченная", "Cheklangan", "Limited")}
               </option>
               <option value="unavailable">
-                {ru ? "Недоступен" : "Mavjud emas"}
+                {text("Недоступен", "Mavjud emas", "Unavailable")}
               </option>
             </select>
           </label>
           <label>
-            {ru ? "Статус адвоката" : "Advokat maqomi"}
+            {text("Статус адвоката", "Advokat maqomi", "Advocate status")}
             <select
               value={advocateFilter}
               onChange={(event) => setAdvocateFilter(event.target.value)}
             >
-              <option value="">{ru ? "Любой" : "Istalgan"}</option>
+              <option value="">{text("Любой", "Istalgan", "Any")}</option>
               <option value="verified">
-                {ru ? "Подтверждён JURO" : "JURO tasdiqlagan"}
+                {text("Подтверждён JURO", "JURO tasdiqlagan", "Verified by JURO")}
               </option>
-              <option value="declared">{ru ? "Заявлен" : "Bildirilgan"}</option>
+              <option value="declared">{text("Заявлен", "Bildirilgan", "Declared")}</option>
             </select>
           </label>
           <label>
-            {ru ? "Фирма" : "Firma"}
+            {text("Фирма", "Firma", "Firm")}
             <input
               value={firmFilter}
               maxLength={180}
@@ -448,14 +434,14 @@ export function LawyerHandoffClient({
           </label>
         </fieldset>
         <label>
-          {ru ? "Юрист" : "Yurist"}
+          {text("Юрист", "Yurist", "Lawyer")}
           <select
             value={lawyerProfileId}
             onChange={(event) => setLawyerProfileId(event.target.value)}
             disabled={!entitlements?.lawyerHandoff || busy}
           >
             <option value="">
-              {ru ? "Назначить через JURO" : "JURO orqali tayinlash"}
+              {text("Назначить через JURO", "JURO orqali tayinlash", "Let JURO assign a lawyer")}
             </option>
             {filteredLawyers.map((lawyer) => (
               <option key={lawyer.id} value={lawyer.id}>
@@ -470,42 +456,40 @@ export function LawyerHandoffClient({
             ))}
           </select>
           <small>
-            {ru
-              ? `Найдено: ${filteredLawyers.length}`
-              : `Topildi: ${filteredLawyers.length}`}
+            {text(`Найдено: ${filteredLawyers.length}`, `Topildi: ${filteredLawyers.length}`, `Found: ${filteredLawyers.length}`)}
           </small>
         </label>
         <label>
-          {ru ? "Услуга" : "Xizmat"}
+          {text("Услуга", "Xizmat", "Service")}
           <select
             required
             value={serviceCode}
             onChange={(event) => setServiceCode(event.target.value)}
             disabled={!entitlements?.lawyerHandoff || busy}
           >
-            <option value="initial_consultation">{ru ? "Первичная консультация" : "Dastlabki maslahat"}</option>
-            <option value="document_review">{ru ? "Проверка документа" : "Hujjatni tekshirish"}</option>
-            <option value="case_strategy">{ru ? "Стратегия по делу" : "Ish strategiyasi"}</option>
-            <option value="representation">{ru ? "Представительство" : "Vakillik"}</option>
-            <option value="other">{ru ? "Другая юридическая помощь" : "Boshqa yuridik yordam"}</option>
+            <option value="initial_consultation">{text("Первичная консультация", "Dastlabki maslahat", "Initial consultation")}</option>
+            <option value="document_review">{text("Проверка документа", "Hujjatni tekshirish", "Document review")}</option>
+            <option value="case_strategy">{text("Стратегия по делу", "Ish strategiyasi", "Case strategy")}</option>
+            <option value="representation">{text("Представительство", "Vakillik", "Representation")}</option>
+            <option value="other">{text("Другая юридическая помощь", "Boshqa yuridik yordam", "Other legal assistance")}</option>
           </select>
         </label>
         <label>
-          {ru ? "Предпочтительный формат" : "Afzal format"}
+          {text("Предпочтительный формат", "Afzal format", "Preferred format")}
           <select
             required
             value={preferredFormat}
             onChange={(event) => setPreferredFormat(event.target.value)}
             disabled={!entitlements?.lawyerHandoff || busy}
           >
-            <option value="video">{ru ? "Видеоконсультация" : "Video maslahat"}</option>
-            <option value="phone">{ru ? "Телефон" : "Telefon"}</option>
-            <option value="office">{ru ? "Очно" : "Ofisda"}</option>
-            <option value="chat">{ru ? "Чат" : "Chat"}</option>
+            <option value="video">{text("Видеоконсультация", "Video maslahat", "Video consultation")}</option>
+            <option value="phone">{text("Телефон", "Telefon", "Phone")}</option>
+            <option value="office">{text("Очно", "Ofisda", "In person")}</option>
+            <option value="chat">{text("Чат", "Chat", "Chat")}</option>
           </select>
         </label>
         <label>
-          {ru ? "Предложить дату и время" : "Sana va vaqtni taklif qilish"}
+          {text("Предложить дату и время", "Sana va vaqtni taklif qilish", "Propose a date and time")}
           <input
             type="datetime-local"
             value={proposedStartsAt}
@@ -514,9 +498,7 @@ export function LawyerHandoffClient({
           />
         </label>
         <label>
-          {ru
-            ? "Анонимизированное описание для conflict check"
-            : "Manfaatlar to‘qnashuvi tekshiruvi uchun anonimlashtirilgan tavsif"}
+          {text("Анонимизированное описание для conflict check", "Manfaatlar to‘qnashuvi tekshiruvi uchun anonimlashtirilgan tavsif", "Anonymised summary for the conflict check")}
           <textarea
             value={summary}
             minLength={20}
@@ -525,9 +507,7 @@ export function LawyerHandoffClient({
             disabled={!entitlements?.lawyerHandoff || busy}
             onChange={(event) => setSummary(event.target.value)}
             placeholder={
-              ru
-                ? "Без имён, реквизитов и содержания документов"
-                : "Ismlar, rekvizitlar va hujjat mazmunisiz"
+              text("Без имён, реквизитов и содержания документов", "Ismlar, rekvizitlar va hujjat mazmunisiz", "Do not include names, identifiers, or document contents")
             }
           />
         </label>
@@ -539,9 +519,7 @@ export function LawyerHandoffClient({
             onChange={(event) => setConsent(event.target.checked)}
           />
           <span>
-            {ru
-              ? "Подтверждаю создание анонимизированной заявки; доступ к делу пока не предоставляется."
-              : "Anonimlashtirilgan so‘rov yaratilishini tasdiqlayman; ishga ruxsat hozircha berilmaydi."}
+            {text("Подтверждаю создание анонимизированной заявки; доступ к делу пока не предоставляется.", "Anonimlashtirilgan so‘rov yaratilishini tasdiqlayman; ishga ruxsat hozircha berilmaydi.", "I confirm the creation of an anonymised request. This does not grant access to the case.")}
           </span>
         </label>
         <button
@@ -555,33 +533,31 @@ export function LawyerHandoffClient({
           }
         >
           {busy ? <LoaderCircle className="spin" /> : null}
-          {ru ? "Создать заявку" : "So‘rov yaratish"}
+          {text("Создать заявку", "So‘rov yaratish", "Create request")}
         </button>
       </form>
       {requests.length > 0 && (
         <div className="lawyer-handoff-list">
           <h3>
-            {ru ? "Мои заявки к юристу" : "Yuristga yuborgan so‘rovlarim"}
+            {text("Мои заявки к юристу", "Yuristga yuborgan so‘rovlarim", "My lawyer requests")}
           </h3>
           {requests.map((item) => (
             <div key={item.id}>
-              <strong>{handoffStatus(item.status, ru)}</strong>
+              <strong>{handoffStatus(item.status, locale)}</strong>
               <span>
                 {item.lawyerName ||
-                  (ru
-                    ? "Ожидается назначение JURO"
-                    : "JURO tayinlashi kutilmoqda")}
+                  text("Ожидается назначение JURO", "JURO tayinlashi kutilmoqda", "Awaiting assignment by JURO")}
               </span>
               <time dateTime={item.createdAt}>
-                {new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", {
+                {new Intl.DateTimeFormat(lawyerIntlLocale(locale), {
                   dateStyle: "medium",
                   timeZone: "Asia/Tashkent",
                 }).format(new Date(item.createdAt))}
               </time>
               <div className="lawyer-request-intake">
-                <span>{serviceLabel(item.serviceCode, ru)}</span>
-                <span>{formatLabel(item.preferredFormat, ru)}</span>
-                {item.proposedStartsAt && <time dateTime={item.proposedStartsAt}>{formatRequestDate(item.proposedStartsAt, ru)}</time>}
+                <span>{serviceLabel(item.serviceCode, locale)}</span>
+                <span>{formatLabel(item.preferredFormat, locale)}</span>
+                {item.proposedStartsAt && <time dateTime={item.proposedStartsAt}>{formatRequestDate(item.proposedStartsAt, locale)}</time>}
               </div>
               {item.status === "awaiting_user_consent" && (
                 <div className="lawyer-access-action">
@@ -598,9 +574,7 @@ export function LawyerHandoffClient({
                       }
                     />
                     <span>
-                      {ru
-                        ? "Подтверждаю передачу выбранному юристу материалов этого дела и взаимное раскрытие наших номеров телефона для обычного звонка. Доступ можно отозвать в любой момент."
-                        : "Tanlangan yuristga ushbu ish materiallarini berish va oddiy qo‘ng‘iroq uchun telefon raqamlarimizni o‘zaro ko‘rsatishni tasdiqlayman. Ruxsatni istalgan paytda bekor qilish mumkin."}
+                      {text("Подтверждаю передачу выбранному юристу материалов этого дела и взаимное раскрытие наших номеров телефона для обычного звонка. Доступ можно отозвать в любой момент.", "Tanlangan yuristga ushbu ish materiallarini berish va oddiy qo‘ng‘iroq uchun telefon raqamlarimizni o‘zaro ko‘rsatishni tasdiqlayman. Ruxsatni istalgan paytda bekor qilish mumkin.", "I confirm sharing this case’s materials with the selected lawyer and the mutual disclosure of our phone numbers for a standard call. I can revoke access at any time.")}
                     </span>
                   </label>
                   <button
@@ -613,16 +587,14 @@ export function LawyerHandoffClient({
                     {accessActionId === item.id ? (
                       <LoaderCircle className="spin" />
                     ) : null}
-                    {ru ? "Предоставить доступ" : "Ruxsat berish"}
+                    {text("Предоставить доступ", "Ruxsat berish", "Grant access")}
                   </button>
                 </div>
               )}
               {item.activeGrantId && (
                 <div className="lawyer-access-action">
                   <p>
-                    {ru
-                      ? "У юриста есть доступ к материалам этого дела."
-                      : "Yurist ushbu ish materiallariga ruxsatga ega."}
+                    {text("У юриста есть доступ к материалам этого дела.", "Yurist ushbu ish materiallariga ruxsatga ega.", "The lawyer has access to this case’s materials.")}
                   </p>
                   <LawyerConsultationPanel
                     requestId={item.id}
@@ -638,14 +610,14 @@ export function LawyerHandoffClient({
                   />
                   {item.offerId && (
                     <div className="lawyer-offer-card">
-                      <strong>{offerLabel(item.offerStatus, ru)}</strong>
+                      <strong>{offerLabel(item.offerStatus, locale)}</strong>
                       <p>{item.offerScopeDescription}</p>
                       <p>
-                        {ru ? "Стоимость: " : "Narx: "}
+                        {text("Стоимость: ", "Narx: ", "Fees: ")}
                         {item.offerPriceDescription}
                       </p>
                       <p>
-                        {ru ? "Срок: " : "Muddat: "}
+                        {text("Срок: ", "Muddat: ", "Timeline: ")}
                         {item.offerDurationDescription}
                       </p>
                       {item.offerStatus === "proposed" && (
@@ -657,9 +629,7 @@ export function LawyerHandoffClient({
                               void respondToOffer(item, "accepted")
                             }
                           >
-                            {ru
-                              ? "Принять внешние условия"
-                              : "Tashqi shartlarni qabul qilish"}
+                            {text("Принять внешние условия", "Tashqi shartlarni qabul qilish", "Accept external terms")}
                           </button>
                           <button
                             type="button"
@@ -669,7 +639,7 @@ export function LawyerHandoffClient({
                               void respondToOffer(item, "declined")
                             }
                           >
-                            {ru ? "Отклонить" : "Rad etish"}
+                            {text("Отклонить", "Rad etish", "Decline")}
                           </button>
                         </div>
                       )}
@@ -685,7 +655,7 @@ export function LawyerHandoffClient({
                     {accessActionId === item.id ? (
                       <LoaderCircle className="spin" />
                     ) : null}
-                    {ru ? "Отозвать доступ" : "Ruxsatni bekor qilish"}
+                    {text("Отозвать доступ", "Ruxsatni bekor qilish", "Revoke access")}
                   </button>
                 </div>
               )}
@@ -703,29 +673,33 @@ export function LawyerHandoffClient({
   );
 }
 
-function offerLabel(status: string | null | undefined, ru: boolean) {
-  const labels: Record<string, [string, string]> = {
-    proposed: ["Предложение ожидает решения", "Taklif qarorni kutmoqda"],
-    accepted: ["Условия приняты", "Shartlar qabul qilindi"],
-    declined: ["Условия отклонены", "Shartlar rad etildi"],
+function offerLabel(status: string | null | undefined, locale: PlatformLocale) {
+  const labels: Record<string, [string, string, string]> = {
+    proposed: ["Предложение ожидает решения", "Taklif qarorni kutmoqda", "Offer awaiting decision"],
+    accepted: ["Условия приняты", "Shartlar qabul qilindi", "Terms accepted"],
+    declined: ["Условия отклонены", "Shartlar rad etildi", "Terms declined"],
   };
-  return labels[status || ""]?.[ru ? 0 : 1] || status || "";
+  const value = labels[status || ""];
+  return value ? lawyerText(locale, value[0], value[1], value[2]) : status || "";
 }
 
-function handoffStatus(status: string, ru: boolean) {
-  const labels: Record<string, [string, string]> = {
-    unassigned: ["Ожидается назначение", "Tayinlash kutilmoqda"],
+function handoffStatus(status: string, locale: PlatformLocale) {
+  const labels: Record<string, [string, string, string]> = {
+    unassigned: ["Ожидается назначение", "Tayinlash kutilmoqda", "Awaiting assignment"],
     conflict_check_pending: [
       "Проверка конфликта",
       "Manfaatlar to‘qnashuvi tekshirilmoqda",
+      "Conflict check in progress",
     ],
     awaiting_user_consent: [
       "Нужно ваше подтверждение",
       "Sizning tasdig‘ingiz kerak",
+      "Your confirmation is required",
     ],
-    access_granted: ["Доступ предоставлен", "Ruxsat berildi"],
-    access_revoked: ["Доступ отозван", "Ruxsat bekor qilindi"],
-    conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi"],
+    access_granted: ["Доступ предоставлен", "Ruxsat berildi", "Access granted"],
+    access_revoked: ["Доступ отозван", "Ruxsat bekor qilindi", "Access revoked"],
+    conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi", "Conflict of interest"],
   };
-  return labels[status]?.[ru ? 0 : 1] || status;
+  const value = labels[status];
+  return value ? lawyerText(locale, value[0], value[1], value[2]) : status;
 }

@@ -1,7 +1,15 @@
 "use client";
 
 import { CircleHelp } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import type { PlatformLocale } from "../../../lib/platform/routing";
+import { builderText } from "../builder-localization";
+
+const BuilderFormLocaleContext = createContext<PlatformLocale>("ru");
+
+export function BuilderFormLocaleProvider({ locale, children }: { locale: PlatformLocale; children: ReactNode }) {
+  return <BuilderFormLocaleContext value={locale}>{children}</BuilderFormLocaleContext>;
+}
 
 interface BaseProps {
   label: string;
@@ -11,7 +19,10 @@ interface BaseProps {
 }
 
 function FieldLabel({ label, help, example }: BaseProps) {
-  return <span className="dbt-field-label"><span>{label}</span>{help && <details className="dbt-help"><summary aria-label={`Подсказка: ${label}`}><CircleHelp size={16}/></summary><div><p>{help}</p>{example && <small>Пример: {example}</small>}</div></details>}</span>;
+  const locale = useContext(BuilderFormLocaleContext);
+  const hint = builderText(locale, { ru: "Подсказка", uz: "Izoh", en: "Help" });
+  const exampleLabel = builderText(locale, { ru: "Пример", uz: "Misol", en: "Example" });
+  return <span className="dbt-field-label"><span>{label}</span>{help && <details className="dbt-help"><summary aria-label={`${hint}: ${label}`}><CircleHelp size={16}/></summary><div><p>{help}</p>{example && <small>{exampleLabel}: {example}</small>}</div></details>}</span>;
 }
 
 export function InputField({ label, help, example, className = "", ...props }: BaseProps & React.InputHTMLAttributes<HTMLInputElement>) {

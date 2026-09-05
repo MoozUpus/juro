@@ -20,6 +20,7 @@ type PlanVersionRow = {
   planCode: string;
   nameRu: string;
   nameUz: string;
+  nameEn: string | null;
   billingPeriod: string;
   priceMinor: number;
   currency: string;
@@ -66,7 +67,7 @@ export async function readCheckoutOrder(
       FROM marketplace_orders WHERE id=? AND workspace_id=? AND customer_user_id=? LIMIT 1`)
       .bind(orderId, actor.workspaceId, actor.userId),
     db.prepare(`SELECT id,item_type AS itemType,reference_type AS referenceType,reference_id AS referenceId,
-      title_ru AS titleRu,title_uz AS titleUz,quantity,unit_amount_minor AS unitAmountMinor,
+      title_ru AS titleRu,title_uz AS titleUz,title_en AS titleEn,quantity,unit_amount_minor AS unitAmountMinor,
       base_amount_minor AS baseAmountMinor,tax_amount_minor AS taxAmountMinor,
       total_amount_minor AS totalAmountMinor,currency
       FROM order_items WHERE order_id=? ORDER BY created_at,id`).bind(orderId),
@@ -124,7 +125,7 @@ export async function createSubscriptionCheckout(
 
   const at = now.toISOString();
   const [plan, policy, taxProfile] = await Promise.all([
-    db.prepare(`SELECT v.id,v.plan_id AS planId,p.code AS planCode,v.name_ru AS nameRu,v.name_uz AS nameUz,
+    db.prepare(`SELECT v.id,v.plan_id AS planId,p.code AS planCode,v.name_ru AS nameRu,v.name_uz AS nameUz,v.name_en AS nameEn,
       v.billing_period AS billingPeriod,v.price_minor AS priceMinor,v.currency
       FROM subscription_plan_versions v JOIN subscription_plans p ON p.id=v.plan_id
       WHERE v.id=? AND p.status='active' AND v.approval_status='approved'
@@ -184,11 +185,11 @@ export async function createSubscriptionCheckout(
         pricing.clientTotalMinor, idempotencyKey, 1, expiresAt, at, at,
       ),
       db.prepare(`INSERT INTO order_items(
-        id,order_id,item_type,reference_type,reference_id,title_ru,title_uz,quantity,
+        id,order_id,item_type,reference_type,reference_id,title_ru,title_uz,title_en,quantity,
         unit_amount_minor,base_amount_minor,tax_amount_minor,total_amount_minor,currency,created_at
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
         itemId, orderId, "SUBSCRIPTION_PERIOD", "subscription_plan_version", plan.id,
-        plan.nameRu, plan.nameUz, 1, plan.priceMinor, plan.priceMinor,
+        plan.nameRu, plan.nameUz, plan.nameEn, 1, plan.priceMinor, plan.priceMinor,
         pricing.juroVatAmountMinor, pricing.juroGrossAmountMinor, "UZS", at,
       ),
       db.prepare(`INSERT INTO pricing_snapshots(

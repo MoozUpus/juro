@@ -2,8 +2,10 @@
 
 import { RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { platformIntlLocale } from "../../lib/platform/date-time";
+import type { PlatformLocale } from "../../lib/platform/routing";
 
-type Locale = "ru" | "uz";
+type Locale = PlatformLocale;
 type Health = {
   state: "fresh" | "degraded" | "stale" | "unknown";
   checkedAt: string | null;
@@ -29,6 +31,8 @@ const copy = {
     description: "Это техническая проверка robots endpoints, а не подтверждение правового содержания, актуальности закона или полноты базы.",
     unavailable: "Не удалось получить защищённый статус.",
     never: "нет данных",
+    healthy: "Доступен",
+    sourceUnavailable: "Недоступен",
   },
   uz: {
     title: "Rasmiy endpointlar mavjudligi",
@@ -42,6 +46,23 @@ const copy = {
     description: "Bu robots endpointlarining texnik tekshiruvi bo‘lib, huquqiy mazmun, qonun dolzarbligi yoki baza to‘liqligini tasdiqlamaydi.",
     unavailable: "Himoyalangan holatni olish imkoni bo‘lmadi.",
     never: "ma’lumot yo‘q",
+    healthy: "Mavjud",
+    sourceUnavailable: "Mavjud emas",
+  },
+  en: {
+    title: "Official endpoint availability",
+    refresh: "Refresh status",
+    fresh: "Endpoints are available",
+    degraded: "One or more endpoints are unavailable",
+    stale: "The check is stale",
+    unknown: "The check has not run yet",
+    last: "Last check",
+    latency: "Latency",
+    description: "This is a technical check of robots endpoints, not confirmation of legal content, legislative currency or corpus coverage.",
+    unavailable: "Secure status could not be retrieved.",
+    never: "no data",
+    healthy: "Available",
+    sourceUnavailable: "Unavailable",
   },
 } as const;
 
@@ -71,7 +92,7 @@ export function LegalSourceHealthPanel({ locale }: { locale: Locale }) {
     return () => window.clearTimeout(timer);
   }, [load]);
   const date = (value: string | null) => value
-    ? new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", {
+    ? new Intl.DateTimeFormat(platformIntlLocale(locale), {
       dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent",
     }).format(new Date(value))
     : l.never;
@@ -96,7 +117,7 @@ export function LegalSourceHealthPanel({ locale }: { locale: Locale }) {
       </div>
       {(health?.sources ?? []).map((source) => <div key={source.sourceKind}>
         <span>lex.uz</span>
-        <b>{source.status}</b>
+        <b>{source.status === "healthy" ? l.healthy : l.sourceUnavailable}</b>
         <small>{date(source.checkedAt)} · {l.latency}: {source.latencyMs} ms{source.errorCode ? ` · ${source.errorCode}` : ""}</small>
       </div>)}
       <div><small>{l.description}</small></div>

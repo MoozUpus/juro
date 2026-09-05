@@ -1093,6 +1093,34 @@ test("disabled legal-source staff list is indistinguishable and touches no sessi
   });
 });
 
+test("legal-source staff locale contract preserves English and rejects unknown locales", async () => {
+  let sessionRequested = false;
+  const dependencies = {
+    enabled: "false",
+    sessionForRequest: async () => {
+      sessionRequested = true;
+      throw new Error("Locale validation must not resolve a session.");
+    },
+  };
+  const english = await handleLegalSourceReviewListRequest(
+    staffListRequest("/api/platform/legal-sources/reviews?lang=en"),
+    dependencies,
+  );
+  assert.equal(english.status, 404);
+  assert.deepEqual(await english.json(), {
+    code: "NOT_FOUND",
+    error: "Route not found.",
+  });
+
+  const unknown = await handleLegalSourceReviewListRequest(
+    staffListRequest("/api/platform/legal-sources/reviews?lang=de"),
+    { ...dependencies, enabled: "true" },
+  );
+  assert.equal(unknown.status, 400);
+  assert.equal((await unknown.json() as { code: string }).code, "INVALID_INPUT");
+  assert.equal(sessionRequested, false);
+});
+
 test("legal-source staff list authorizes before query parsing and returns bounded metadata", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();

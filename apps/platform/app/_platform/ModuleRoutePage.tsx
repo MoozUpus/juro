@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireChatGPTUser } from "../chatgpt-auth";
 import { publicDocumentUrlImportEnabled } from "../../lib/document-analysis/public-url-import-feature";
 import { runtimeEnv } from "../../lib/document-builder/storage/runtime";
-import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformPath, type AccountType, type PlatformLocale, type PlatformModule } from "../../lib/platform/routing";
+import { isAccountType, isAuthenticatedPlatformLocaleReady, isLocale, isPlatformModule, isWorkspaceId, platformPath, type AccountType, type PlatformLocale, type PlatformModule } from "../../lib/platform/routing";
 import { ModuleContent } from "./ModuleContent";
 import { safeDisplayName } from "../../lib/platform/display-name";
 import {
@@ -31,7 +31,7 @@ type BusinessModuleRouteInput = {
  * can be emitted with the module that needs it, rather than every workspace.
  */
 export async function renderAccountModuleRoute({ locale, accountType, module }: AccountModuleRouteInput) {
-  if (!isLocale(locale) || !isAccountType(accountType) || !isPlatformModule(module)) notFound();
+  if (!isLocale(locale) || !isAuthenticatedPlatformLocaleReady(locale) || !isAccountType(accountType) || !isPlatformModule(module)) notFound();
   const requestHeaders = await headers();
   const lawyerHost = isLawyerHostRequest(requestHeaders);
   const user = await requireChatGPTUser(`/${locale}/${accountType}/${module}`);
@@ -57,7 +57,7 @@ export async function renderAccountModuleRoute({ locale, accountType, module }: 
 }
 
 export async function renderBusinessModuleRoute({ locale, workspaceId, module }: BusinessModuleRouteInput) {
-  if (!isLocale(locale) || !isWorkspaceId(workspaceId) || !isPlatformModule(module)) notFound();
+  if (!isLocale(locale) || !isAuthenticatedPlatformLocaleReady(locale) || !isWorkspaceId(workspaceId) || !isPlatformModule(module)) notFound();
   const typedLocale = locale as PlatformLocale;
   const destination = platformPath(typedLocale, "business", module, workspaceId);
   const user = await requireChatGPTUser(destination);

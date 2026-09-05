@@ -11,11 +11,13 @@ import {
   runtimeEnv,
 } from "../../../../../lib/document-builder/storage/runtime";
 import { missingLawyerMarketplaceFields } from "../../../../../lib/platform/lawyer-marketplace";
+import { lawyerText } from "../../../../../lib/platform/lawyer-localization";
 import { localizedLawyerProfileStatusNotification } from "../../../../../lib/platform/lawyer-profile-notifications";
+import { lawyerProfileError } from "../../../../../lib/platform/lawyer-profile";
 import { isLawyerProfileDirectoryPreviewEnabled } from "../../../../../lib/platform/lawyer-profile-preview";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
 
-const input = z.object({ locale: z.enum(["ru", "uz"]) }).strict();
+const input = z.object({ locale: z.enum(["ru", "uz", "en"]) }).strict();
 
 type SubmissionProfile = {
   id: string;
@@ -64,7 +66,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "INVALID_INPUT",
-        error: "Проверьте данные заявки / Ariza ma’lumotlarini tekshiring.",
       },
       400,
     );
@@ -87,7 +88,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "PROFILE_UNAVAILABLE",
-        error: "Профиль юриста недоступен / Yurist profili mavjud emas.",
+        error: lawyerProfileError(parsed.data.locale, "PROFILE_UNAVAILABLE"),
       },
       404,
     );
@@ -106,8 +107,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "PROFILE_LOCKED",
-        error:
-          "Профиль ограничен модерацией / Profil moderatsiya bilan cheklangan.",
+        error: lawyerProfileError(parsed.data.locale, "PROFILE_LOCKED"),
       },
       423,
     );
@@ -131,8 +131,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "PROFILE_INCOMPLETE",
-        error:
-          "Заполните обязательные поля перед отправкой / Yuborishdan oldin majburiy maydonlarni to‘ldiring.",
+        error: lawyerText(
+          parsed.data.locale,
+          "Заполните обязательные поля перед отправкой.",
+          "Yuborishdan oldin majburiy maydonlarni to‘ldiring.",
+          "Complete the required fields before submitting your profile.",
+        ),
         missingRequiredFields,
       },
       409,
@@ -195,7 +199,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "PROFILE_UNAVAILABLE",
-        error: "Профиль изменился. Обновите страницу и повторите отправку.",
+        error: lawyerText(
+          parsed.data.locale,
+          "Профиль изменился. Обновите страницу и повторите отправку.",
+          "Profil o‘zgardi. Sahifani yangilang va qayta yuboring.",
+          "The profile changed. Refresh the page and submit it again.",
+        ),
       },
       409,
     );

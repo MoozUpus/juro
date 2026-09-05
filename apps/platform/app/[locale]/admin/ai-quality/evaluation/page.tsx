@@ -6,12 +6,12 @@ import "../../../../_staff/legal-source-reviews.css";
 import { requirePlatformStaffAccess } from "../../../../../lib/auth/staff-access";
 import { localSessionForRequest } from "../../../../../lib/auth/mfa-http";
 import { runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
-import { isLocale } from "../../../../../lib/platform/routing";
+import { isLocale, type PlatformLocale } from "../../../../../lib/platform/routing";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false, nocache: true } };
 
-async function reviewerSession(locale: "ru" | "uz") {
+async function reviewerSession(locale: PlatformLocale) {
   const runtime = runtimeEnv();
   if (!isLocale(locale) || runtime.APP_ENV !== "staging" || !runtime.DB) notFound();
   try {

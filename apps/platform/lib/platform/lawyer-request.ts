@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { lawyerText } from "./lawyer-localization";
+import type { PlatformLocale } from "./routing";
 
 const uuid = z.string().uuid();
-const localizedLocale = z.enum(["ru", "uz"]);
+const localizedLocale = z.enum(["ru", "uz", "en"]);
 
 export const lawyerRequestSchema = z.object({
   caseId: uuid,
@@ -30,18 +32,17 @@ export const lawyerAccessGrantSchema = z.object({
   locale: localizedLocale,
 }).strict();
 
-export function localizedHandoffError(locale: "ru" | "uz", code: string) {
-  const ru = locale === "ru";
+export function localizedHandoffError(locale: PlatformLocale, code: string) {
   const messages: Record<string, string> = {
-    PLAN_LIMIT: ru ? "Передача дела юристу недоступна на бесплатном плане." : "Ishni yuristga topshirish bepul rejada mavjud emas.",
-    CASE_UNAVAILABLE: ru ? "Выбранное дело недоступно." : "Tanlangan ish mavjud emas.",
-    LAWYER_UNAVAILABLE: ru ? "Выбранный юрист сейчас недоступен." : "Tanlangan yurist hozir mavjud emas.",
-    REQUEST_UNAVAILABLE: ru ? "Заявка недоступна." : "So‘rov mavjud emas.",
-    CONFLICT_REQUIRED: ru ? "Сначала необходим положительный conflict check." : "Avval ijobiy manfaatlar to‘qnashuvi tekshiruvi talab qilinadi.",
-    GRANT_EXISTS: ru ? "Доступ к этому делу уже предоставлен." : "Bu ishga kirish huquqi allaqachon berilgan.",
-    INVALID_INPUT: ru ? "Проверьте введённые данные." : "Kiritilgan ma’lumotlarni tekshiring.",
+    PLAN_LIMIT: lawyerText(locale, "Передача дела юристу недоступна на бесплатном плане.", "Ishni yuristga topshirish bepul rejada mavjud emas.", "Lawyer handoff is not available on the free plan."),
+    CASE_UNAVAILABLE: lawyerText(locale, "Выбранное дело недоступно.", "Tanlangan ish mavjud emas.", "The selected case is unavailable."),
+    LAWYER_UNAVAILABLE: lawyerText(locale, "Выбранный юрист сейчас недоступен.", "Tanlangan yurist hozir mavjud emas.", "The selected lawyer is currently unavailable."),
+    REQUEST_UNAVAILABLE: lawyerText(locale, "Заявка недоступна.", "So‘rov mavjud emas.", "The request is unavailable."),
+    CONFLICT_REQUIRED: lawyerText(locale, "Сначала необходим положительный conflict check.", "Avval ijobiy manfaatlar to‘qnashuvi tekshiruvi talab qilinadi.", "A successful conflict-of-interest check is required first."),
+    GRANT_EXISTS: lawyerText(locale, "Доступ к этому делу уже предоставлен.", "Bu ishga kirish huquqi allaqachon berilgan.", "Access to this case has already been granted."),
+    INVALID_INPUT: lawyerText(locale, "Проверьте введённые данные.", "Kiritilgan ma’lumotlarni tekshiring.", "Review the information provided and try again."),
   };
-  return messages[code] ?? (ru ? "Не удалось выполнить действие." : "Amalni bajarib bo‘lmadi.");
+  return messages[code] ?? lawyerText(locale, "Не удалось выполнить действие.", "Amalni bajarib bo‘lmadi.", "We could not complete this action.");
 }
 
 export type LawyerRequestInput = z.infer<typeof lawyerRequestSchema>;

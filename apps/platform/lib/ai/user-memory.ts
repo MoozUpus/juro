@@ -7,6 +7,7 @@ import {
   type IdentityKeyring,
 } from "../auth/keyring";
 import { sha256Json } from "./run-store";
+import type { AiOutputLocale } from "./localization";
 
 function isoNow(): string {
   return new Date().toISOString();
@@ -125,7 +126,7 @@ function capture(text: string, pattern: RegExp): string | null {
 
 export function extractAutomaticMemoryCandidates(
   question: string,
-  locale: "ru" | "uz",
+  locale: AiOutputLocale,
 ): MemoryCandidate[] {
   const text = question.normalize("NFKC").slice(0, 8_000);
   const candidates: MemoryCandidate[] = [];
@@ -151,7 +152,7 @@ export function extractAutomaticMemoryCandidates(
     if (/(?:предпочитаю\s+(?:подробн|детальн))/iu.test(text)) add("answer_style", "Пользователь предпочитает подробные ответы.");
     const instruction = capture(text, /(?:^|[.!?]\s*)(?:запомни|учитывай всегда)\s*[:—-]?\s*([^\n]{2,300})/iu);
     add("user_instruction", instruction ? `Инструкция пользователя: ${instruction}` : null);
-  } else {
+  } else if (locale === "uz") {
     const name = capture(text, /(?:^|[.!?]\s*)(?:mening ismim|ismim)\s+([^.!?\n]{2,80})/iu);
     add("profile_name", name ? `Foydalanuvchining ismi: ${name}` : null);
     const company = capture(text, /(?:^|[.!?]\s*)(?:mening kompaniyam|kompaniyam)\s+([^.!?\n]{2,160})/iu);
@@ -160,6 +161,15 @@ export function extractAutomaticMemoryCandidates(
     if (/\bbatafsil\s+javob(?:larni)?\s+afzal\s+ko['‘’ʻʼ]?raman/iu.test(text)) add("answer_style", "Foydalanuvchi batafsil javoblarni afzal ko‘radi.");
     const instruction = capture(text, /(?:^|[.!?]\s*)(?:eslab qol|har doim hisobga ol)\s*[:—-]?\s*([^\n]{2,300})/iu);
     add("user_instruction", instruction ? `Foydalanuvchi ko‘rsatmasi: ${instruction}` : null);
+  } else {
+    const name = capture(text, /(?:^|[.!?]\s*)(?:my name is|call me)\s+([^.!?\n]{2,80})/iu);
+    add("profile_name", name ? `User name: ${name}` : null);
+    const company = capture(text, /(?:^|[.!?]\s*)(?:my company is|my company is called)\s+([^.!?\n]{2,160})/iu);
+    add("company", company ? `User company: ${company}` : null, "workspace");
+    if (/\b(?:i prefer|please use)\s+(?:concise|short)\s+answers?\b/iu.test(text)) add("answer_style", "The user prefers concise answers.");
+    if (/\b(?:i prefer|please use)\s+(?:detailed|thorough)\s+answers?\b/iu.test(text)) add("answer_style", "The user prefers detailed answers.");
+    const instruction = capture(text, /(?:^|[.!?]\s*)(?:remember|always take into account)\s*[:—-]?\s*([^\n]{2,300})/iu);
+    add("user_instruction", instruction ? `User instruction: ${instruction}` : null);
   }
   return candidates.slice(0, 4);
 }
@@ -514,7 +524,7 @@ export async function persistAutomaticMemories(input: {
   conversationId: string;
   messageId: string;
   question: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
 }): Promise<number> {
   if (!(await memorySettings(input.db, input.userId)).automaticEnabled) return 0;
   const candidates = extractAutomaticMemoryCandidates(input.question, input.locale);

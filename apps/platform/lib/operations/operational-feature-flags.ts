@@ -15,7 +15,7 @@ export const operationalEnvironments = ["development", "staging", "production"] 
 
 export type OperationalFeatureKey = (typeof operationalFeatureKeys)[number];
 export type OperationalEnvironment = (typeof operationalEnvironments)[number];
-export type OperationalLocale = "ru" | "uz";
+export type OperationalLocale = "ru" | "uz" | "en";
 
 export const setOperationalFeatureSchema = z.object({
   key: z.enum(operationalFeatureKeys),
@@ -61,17 +61,18 @@ export function operationalLocaleFromRequest(
   fallback: OperationalLocale = "ru",
 ): OperationalLocale {
   const explicit = request.headers.get("x-juro-locale")?.trim().toLowerCase();
-  if (explicit === "ru" || explicit === "uz") return explicit;
+  if (explicit === "ru" || explicit === "uz" || explicit === "en") return explicit;
   const referrer = request.headers.get("referer");
   if (referrer) {
     try {
       const firstSegment = new URL(referrer).pathname.split("/").filter(Boolean)[0];
-      if (firstSegment === "ru" || firstSegment === "uz") return firstSegment;
+      if (firstSegment === "ru" || firstSegment === "uz" || firstSegment === "en") return firstSegment;
     } catch {}
   }
   const accepted = request.headers.get("accept-language")?.trim().toLowerCase();
   if (accepted?.startsWith("uz")) return "uz";
   if (accepted?.startsWith("ru")) return "ru";
+  if (accepted?.startsWith("en")) return "en";
   return fallback;
 }
 
@@ -264,7 +265,9 @@ export async function assertOperationalFeatureEnabled(input: {
 }
 
 export function operationalFeatureMessage(locale: OperationalLocale): string {
-  return locale === "uz"
-    ? "Bu funksiya operator tomonidan vaqtincha to‘xtatildi. Ma’lumotlar va limitlar o‘zgarmadi."
-    : "Функция временно приостановлена оператором. Данные и лимиты не изменены.";
+  return {
+    ru: "Функция временно приостановлена оператором. Данные и лимиты не изменены.",
+    uz: "Bu funksiya operator tomonidan vaqtincha to‘xtatildi. Ma’lumotlar va limitlar o‘zgarmadi.",
+    en: "This feature has been temporarily paused by the operator. Your data and limits have not changed.",
+  }[locale];
 }

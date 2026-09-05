@@ -3,6 +3,7 @@
 import { ExternalLink } from "lucide-react";
 import { lazy, Suspense, useId, type ReactNode } from "react";
 import { deriveLegalEvidenceMode } from "../../lib/ai/legal-evidence-mode";
+import type { PlatformLocale } from "../../lib/platform/routing";
 
 const SafeMarkdown = lazy(() => import("./SafeMarkdown").then((module) => ({ default: module.SafeMarkdown })));
 
@@ -57,9 +58,12 @@ type AnswerCopy = {
   authority: Record<NonNullable<LegalAnswerViewResult["evidenceMode"]>, string>;
   citationLabel: string;
   openSource: string;
+  criticalUrgency: string;
+  priorityUrgency: string;
+  secondaryNote: string;
 };
 
-const COPY: Record<"ru" | "uz", AnswerCopy> = {
+const COPY: Record<PlatformLocale, AnswerCopy> = {
   ru: {
     main: "Главное",
     law: "Что говорит закон",
@@ -83,6 +87,9 @@ const COPY: Record<"ru" | "uz", AnswerCopy> = {
     },
     citationLabel: "Правовые основания",
     openSource: "Открыть источник",
+    criticalUrgency: "Критическая срочность: проверьте ближайший срок и возможность немедленной помощи.",
+    priorityUrgency: "Вопрос требует приоритетного внимания.",
+    secondaryNote: "Эти материалы поясняют контекст, но не устанавливают правовые нормы, сроки, расчёты или обязательные действия.",
   },
   uz: {
     main: "Asosiysi",
@@ -107,6 +114,36 @@ const COPY: Record<"ru" | "uz", AnswerCopy> = {
     },
     citationLabel: "Huquqiy asoslar",
     openSource: "Manbani ochish",
+    criticalUrgency: "Juda shoshilinch: yaqin muddat va zudlik bilan yordam olish imkonini tekshiring.",
+    priorityUrgency: "Masala ustuvor e’tiborni talab qiladi.",
+    secondaryNote: "Bu materiallar kontekstni tushuntiradi, lekin huquqiy norma, muddat, hisob-kitob yoki majburiy harakatni belgilamaydi.",
+  },
+  en: {
+    main: "Key point",
+    law: "What the law says",
+    branches: "When the answer changes",
+    next: "What to do next",
+    important: "Important considerations",
+    deadlines: "Deadlines",
+    prepare: "What to prepare",
+    additional: "Additional materials",
+    clarify: "What needs clarification",
+    insufficient: "The answer cannot yet be verified",
+    checked: "What was checked",
+    checkedBody: "JURO checked the available index of official sources and the configured search tiers, but found insufficient support for a legal conclusion.",
+    missing: "Additional facts or a verified applicable rule are required. JURO will not replace them with an assumption based on a model's general knowledge.",
+    authority: {
+      official: "Verified by official sources",
+      mixed: "Official and contextual sources",
+      secondary_only: "Reference materials only",
+      private_only: "Facts from your documents",
+      none: "Legal basis not verified",
+    },
+    citationLabel: "Legal authorities",
+    openSource: "Open source",
+    criticalUrgency: "Critical urgency: check the nearest deadline and whether immediate assistance is available.",
+    priorityUrgency: "This matter requires priority attention.",
+    secondaryNote: "These materials explain context, but do not establish legal rules, deadlines, calculations or mandatory actions.",
   },
 };
 
@@ -121,12 +158,12 @@ function publicSourceUrl(source: LegalAnswerViewSource): string | null {
   }
 }
 
-function citationText(source: LegalAnswerViewSource, locale: "ru" | "uz"): string {
+function citationText(source: LegalAnswerViewSource, locale: PlatformLocale): string {
   const article = source.article?.replace(/^(?:статья|ст\.?|modda)\s*/iu, "").trim();
   const act = source.actTitle
-    .replace(/Республики Узбекистан/giu, locale === "ru" ? "РУз" : "O‘zR")
-    .replace(/O‘zbekiston Respublikasi/giu, locale === "ru" ? "РУз" : "O‘zR");
-  if (article) return locale === "ru" ? `ст. ${article} · ${act}` : `${article}-modda · ${act}`;
+    .replace(/Республики Узбекистан/giu, { ru: "РУз", uz: "O‘zR", en: "Uzbekistan" }[locale])
+    .replace(/O‘zbekiston Respublikasi/giu, { ru: "РУз", uz: "O‘zR", en: "Uzbekistan" }[locale]);
+  if (article) return locale === "ru" ? `ст. ${article} · ${act}` : locale === "uz" ? `${article}-modda · ${act}` : `Art. ${article} · ${act}`;
   if (source.documentNumber) return `${act} · № ${source.documentNumber}`;
   return act;
 }
@@ -139,7 +176,7 @@ function CitationList({
 }: {
   sourceIds?: readonly string[];
   result: LegalAnswerViewResult;
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
   onCitationSelect?: (sourceId: string) => void;
 }) {
   const copy = COPY[locale];
@@ -160,7 +197,7 @@ function CitationList({
   </span>;
 }
 
-function Markdown({ children, result, locale }: { children: string; result: LegalAnswerViewResult; locale: "ru" | "uz" }) {
+function Markdown({ children, result, locale }: { children: string; result: LegalAnswerViewResult; locale: PlatformLocale }) {
   const allowedLinks = result.sources.flatMap((source) => publicSourceUrl(source) ?? []);
   return <Suspense fallback={<p className="legal-answer__markdown-fallback" aria-busy="true">{children}</p>}>
     <SafeMarkdown locale={locale} allowedLinks={allowedLinks}>{children}</SafeMarkdown>
@@ -182,7 +219,7 @@ export function LegalAnswerView({
   onCitationSelect,
 }: {
   result: LegalAnswerViewResult;
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
   className?: string;
   onQuestionSelect?: (question: string) => void;
   onCitationSelect?: (sourceId: string) => void;
@@ -251,8 +288,8 @@ export function LegalAnswerView({
     </Section>}
     {important && <Section id={`${id}-important`} title={copy.important} className="legal-answer__section--important">
       {result.urgency !== "normal" && <p className={`legal-answer__urgency legal-answer__urgency--${result.urgency}`}>{result.urgency === "critical"
-        ? (locale === "ru" ? "Критическая срочность: проверьте ближайший срок и возможность немедленной помощи." : "Juda shoshilinch: yaqin muddat va zudlik bilan yordam olish imkonini tekshiring.")
-        : (locale === "ru" ? "Вопрос требует приоритетного внимания." : "Masala ustuvor e’tiborni talab qiladi.")}</p>}
+        ? copy.criticalUrgency
+        : copy.priorityUrgency}</p>}
       {result.assumptions.map((assumption) => <article key={assumption.statement}><h3>{assumption.statement}</h3><Markdown result={result} locale={locale}>{assumption.impact}</Markdown></article>)}
       {result.risks.map((risk) => <article className={`legal-answer__risk legal-answer__risk--${risk.level}`} key={`${risk.level}:${risk.title}`}>
         <h3>{risk.title}</h3><Markdown result={result} locale={locale}>{risk.explanation}</Markdown>
@@ -273,9 +310,7 @@ export function LegalAnswerView({
       {result.suggestedDocument && <article className="legal-answer__suggested-document"><h3>{result.suggestedDocument.title}</h3><p>{result.suggestedDocument.reason}</p></article>}
     </Section>}
     {(result.referenceNotes ?? []).length > 0 && <Section id={`${id}-additional`} title={copy.additional} className="legal-answer__section--additional">
-      <p className="legal-answer__secondary-note">{locale === "ru"
-        ? "Эти материалы поясняют контекст, но не устанавливают правовые нормы, сроки, расчёты или обязательные действия."
-        : "Bu materiallar kontekstni tushuntiradi, lekin huquqiy norma, muddat, hisob-kitob yoki majburiy harakatni belgilamaydi."}</p>
+      <p className="legal-answer__secondary-note">{copy.secondaryNote}</p>
       {(result.referenceNotes ?? []).map((note) => <article key={`${note.title}:${note.sourceIds.join(":")}`}>
         <h3>{note.title}</h3><Markdown result={result} locale={locale}>{note.note}</Markdown>
         <CitationList sourceIds={note.sourceIds} result={result} locale={locale} onCitationSelect={onCitationSelect} />

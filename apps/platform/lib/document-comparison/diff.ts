@@ -15,6 +15,10 @@ const TERM_RE = /\d+\s*(?:(?:календарн[\p{L}\p{N}_]*|рабоч[\p{L}\p
 const DATE_RE = /\b(?:\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/gu;
 export const MAX_FUZZY_SECTION_COMPARISONS = 50_000;
 
+function comparisonText(locale: ComparisonLocale, ru: string, uz: string, en: string): string {
+  return { ru, uz, en }[locale];
+}
+
 function tokenSet(value: string): Set<string> {
   return new Set(value.toLocaleLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []);
 }
@@ -77,43 +81,37 @@ function describeChange(before: string, after: string, locale: ComparisonLocale)
   const afterTerms = compact(after.match(TERM_RE));
   const beforeDates = compact(before.match(DATE_RE));
   const afterDates = compact(after.match(DATE_RE));
-  const ru = locale === "ru";
-
   if (beforeAmounts.join("|") !== afterAmounts.join("|") && (beforeAmounts.length || afterAmounts.length)) {
     return {
-      summary: ru
-        ? `Изменено денежное значение: ${beforeAmounts.join(", ") || "не указано"} → ${afterAmounts.join(", ") || "не указано"}.`
-        : `Pul qiymati o‘zgartirilgan: ${beforeAmounts.join(", ") || "ko‘rsatilmagan"} → ${afterAmounts.join(", ") || "ko‘rsatilmagan"}.`,
-      legalEffect: ru ? "Изменение суммы или процента может повлиять на объём обязательства." : "Summa yoki foizning o‘zgarishi majburiyat hajmiga ta’sir qilishi mumkin.",
-      recommendation: ru ? "Проверьте расчёт, валюту, налоги и порядок оплаты." : "Hisob-kitob, valyuta, soliqlar va to‘lov tartibini tekshiring.",
+      summary: comparisonText(locale, `Изменено денежное значение: ${beforeAmounts.join(", ") || "не указано"} → ${afterAmounts.join(", ") || "не указано"}.`, `Pul qiymati o‘zgartirilgan: ${beforeAmounts.join(", ") || "ko‘rsatilmagan"} → ${afterAmounts.join(", ") || "ko‘rsatilmagan"}.`, `Monetary value changed: ${beforeAmounts.join(", ") || "not specified"} → ${afterAmounts.join(", ") || "not specified"}.`),
+      legalEffect: comparisonText(locale, "Изменение суммы или процента может повлиять на объём обязательства.", "Summa yoki foizning o‘zgarishi majburiyat hajmiga ta’sir qilishi mumkin.", "A change in an amount or percentage may affect the scope of the obligation."),
+      recommendation: comparisonText(locale, "Проверьте расчёт, валюту, налоги и порядок оплаты.", "Hisob-kitob, valyuta, soliqlar va to‘lov tartibini tekshiring.", "Review the calculation, currency, tax treatment and payment procedure."),
       riskLevel: "high",
       confidencePercent: 94,
     };
   }
   if (beforeTerms.join("|") !== afterTerms.join("|") && (beforeTerms.length || afterTerms.length)) {
     return {
-      summary: ru
-        ? `Изменён срок: ${beforeTerms.join(", ") || "не указан"} → ${afterTerms.join(", ") || "не указан"}.`
-        : `Muddat o‘zgartirilgan: ${beforeTerms.join(", ") || "ko‘rsatilmagan"} → ${afterTerms.join(", ") || "ko‘rsatilmagan"}.`,
-      legalEffect: ru ? "Изменение срока может сократить время на исполнение, уведомление или защиту права." : "Muddat o‘zgarishi bajarish, xabardor qilish yoki huquqni himoya qilish vaqtini qisqartirishi mumkin.",
-      recommendation: ru ? "Сопоставьте новый срок с обязанностями обеих сторон и календарём исполнения." : "Yangi muddatni tomonlarning majburiyatlari va bajarish taqvimi bilan solishtiring.",
+      summary: comparisonText(locale, `Изменён срок: ${beforeTerms.join(", ") || "не указан"} → ${afterTerms.join(", ") || "не указан"}.`, `Muddat o‘zgartirilgan: ${beforeTerms.join(", ") || "ko‘rsatilmagan"} → ${afterTerms.join(", ") || "ko‘rsatilmagan"}.`, `Time period changed: ${beforeTerms.join(", ") || "not specified"} → ${afterTerms.join(", ") || "not specified"}.`),
+      legalEffect: comparisonText(locale, "Изменение срока может сократить время на исполнение, уведомление или защиту права.", "Muddat o‘zgarishi bajarish, xabardor qilish yoki huquqni himoya qilish vaqtini qisqartirishi mumkin.", "A changed time period may reduce the time available for performance, notice or enforcement of rights."),
+      recommendation: comparisonText(locale, "Сопоставьте новый срок с обязанностями обеих сторон и календарём исполнения.", "Yangi muddatni tomonlarning majburiyatlari va bajarish taqvimi bilan solishtiring.", "Check the new period against both parties' obligations and the performance schedule."),
       riskLevel: "high",
       confidencePercent: 92,
     };
   }
   if (beforeDates.join("|") !== afterDates.join("|") && (beforeDates.length || afterDates.length)) {
     return {
-      summary: ru ? "Изменена календарная дата." : "Kalendar sanasi o‘zgartirilgan.",
-      legalEffect: ru ? "Дата может влиять на начало, окончание или просрочку обязательства." : "Sana majburiyatning boshlanishi, tugashi yoki kechikishiga ta’sir qilishi mumkin.",
-      recommendation: ru ? "Проверьте связанные сроки и переходные условия." : "Bog‘liq muddatlar va o‘tish shartlarini tekshiring.",
+      summary: comparisonText(locale, "Изменена календарная дата.", "Kalendar sanasi o‘zgartirilgan.", "A calendar date changed."),
+      legalEffect: comparisonText(locale, "Дата может влиять на начало, окончание или просрочку обязательства.", "Sana majburiyatning boshlanishi, tugashi yoki kechikishiga ta’sir qilishi mumkin.", "The date may affect when an obligation starts, ends or becomes overdue."),
+      recommendation: comparisonText(locale, "Проверьте связанные сроки и переходные условия.", "Bog‘liq muddatlar va o‘tish shartlarini tekshiring.", "Review related deadlines and transitional provisions."),
       riskLevel: "medium",
       confidencePercent: 90,
     };
   }
   return {
-    summary: ru ? "Текст условия изменён." : "Shart matni o‘zgartirilgan.",
-    legalEffect: ru ? "Юридическое значение требует проверки в контексте всего документа." : "Yuridik ahamiyat butun hujjat kontekstida tekshirilishi kerak.",
-    recommendation: ru ? "Сопоставьте изменение с предметом, ответственностью и правами сторон." : "O‘zgarishni predmet, javobgarlik va tomonlar huquqlari bilan solishtiring.",
+    summary: comparisonText(locale, "Текст условия изменён.", "Shart matni o‘zgartirilgan.", "The clause wording changed."),
+    legalEffect: comparisonText(locale, "Юридическое значение требует проверки в контексте всего документа.", "Yuridik ahamiyat butun hujjat kontekstida tekshirilishi kerak.", "Its legal effect must be reviewed in the context of the entire document."),
+    recommendation: comparisonText(locale, "Сопоставьте изменение с предметом, ответственностью и правами сторон.", "O‘zgarishni predmet, javobgarlik va tomonlar huquqlari bilan solishtiring.", "Assess the change against the subject matter, liability provisions and each party's rights."),
     riskLevel: "medium",
     confidencePercent: 68,
   };
@@ -138,16 +136,15 @@ function baseChange(
   locale: ComparisonLocale,
 ): ComparisonChange {
   const id = `change-${ordinal}`;
-  const ru = locale === "ru";
   if (!before && after) {
     return {
       id, ordinal, changeType: "added", beforeSectionId: null, afterSectionId: after.id,
       beforeLabel: null, afterLabel: after.label, beforeHeading: null, afterHeading: after.heading,
       beforeText: null, afterText: after.text, wordDiff: wordDiff(null, after.text),
-      summary: ru ? "Добавлено новое условие." : "Yangi shart qo‘shilgan.",
-      legalEffect: ru ? "Последствия нового условия требуют проверки." : "Yangi shart oqibatlari tekshirilishi kerak.",
-      affectedParty: ru ? "Не определено" : "Aniqlanmagan", riskEffect: "requires_review",
-      riskLevel: "medium", recommendation: ru ? "Проверьте новое условие в контексте прав и обязанностей сторон." : "Yangi shartni tomonlarning huquq va majburiyatlari kontekstida tekshiring.",
+      summary: comparisonText(locale, "Добавлено новое условие.", "Yangi shart qo‘shilgan.", "A new clause was added."),
+      legalEffect: comparisonText(locale, "Последствия нового условия требуют проверки.", "Yangi shart oqibatlari tekshirilishi kerak.", "The consequences of the new clause require review."),
+      affectedParty: comparisonText(locale, "Не определено", "Aniqlanmagan", "Not determined"), riskEffect: "requires_review",
+      riskLevel: "medium", recommendation: comparisonText(locale, "Проверьте новое условие в контексте прав и обязанностей сторон.", "Yangi shartni tomonlarning huquq va majburiyatlari kontekstida tekshiring.", "Review the new clause in the context of each party's rights and obligations."),
       sourceIds: [], confidencePercent: 96, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
@@ -156,10 +153,10 @@ function baseChange(
       id, ordinal, changeType: "removed", beforeSectionId: before.id, afterSectionId: null,
       beforeLabel: before.label, afterLabel: null, beforeHeading: before.heading, afterHeading: null,
       beforeText: before.text, afterText: null, wordDiff: wordDiff(before.text, null),
-      summary: ru ? "Условие удалено." : "Shart olib tashlangan.",
-      legalEffect: ru ? "Удаление может прекратить право, обязанность или защитный механизм." : "Olib tashlash huquq, majburiyat yoki himoya mexanizmini bekor qilishi mumkin.",
-      affectedParty: ru ? "Не определено" : "Aniqlanmagan", riskEffect: "requires_review",
-      riskLevel: "high", recommendation: ru ? "Убедитесь, что удалённое условие не было существенной защитой." : "Olib tashlangan shart muhim himoya bo‘lmaganini tekshiring.",
+      summary: comparisonText(locale, "Условие удалено.", "Shart olib tashlangan.", "A clause was removed."),
+      legalEffect: comparisonText(locale, "Удаление может прекратить право, обязанность или защитный механизм.", "Olib tashlash huquq, majburiyat yoki himoya mexanizmini bekor qilishi mumkin.", "Removing the clause may end a right, obligation or protective mechanism."),
+      affectedParty: comparisonText(locale, "Не определено", "Aniqlanmagan", "Not determined"), riskEffect: "requires_review",
+      riskLevel: "high", recommendation: comparisonText(locale, "Убедитесь, что удалённое условие не было существенной защитой.", "Olib tashlangan shart muhim himoya bo‘lmaganini tekshiring.", "Confirm that the removed clause was not a material protection."),
       sourceIds: [], confidencePercent: 96, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
@@ -174,10 +171,10 @@ function baseChange(
       id, ordinal, changeType: "renumbered", beforeSectionId: before.id, afterSectionId: after.id,
       beforeLabel: before.label, afterLabel: after.label, beforeHeading: before.heading, afterHeading: after.heading,
       beforeText: before.text, afterText: after.text, wordDiff: wordDiff(before.text, after.text),
-      summary: ru ? `Пункт перенумерован: ${before.label ?? "—"} → ${after.label ?? "—"}.` : `Band qayta raqamlangan: ${before.label ?? "—"} → ${after.label ?? "—"}.`,
-      legalEffect: ru ? "Смысл текста не изменился." : "Matn mazmuni o‘zgarmagan.",
-      affectedParty: ru ? "Не влияет" : "Ta’sir qilmaydi", riskEffect: "neutral", riskLevel: "information",
-      recommendation: ru ? "Проверьте внутренние ссылки на номер пункта." : "Band raqamiga ichki havolalarni tekshiring.",
+      summary: comparisonText(locale, `Пункт перенумерован: ${before.label ?? "—"} → ${after.label ?? "—"}.`, `Band qayta raqamlangan: ${before.label ?? "—"} → ${after.label ?? "—"}.`, `Clause renumbered: ${before.label ?? "—"} → ${after.label ?? "—"}.`),
+      legalEffect: comparisonText(locale, "Смысл текста не изменился.", "Matn mazmuni o‘zgarmagan.", "The meaning of the text did not change."),
+      affectedParty: comparisonText(locale, "Не влияет", "Ta’sir qilmaydi", "No direct impact"), riskEffect: "neutral", riskLevel: "information",
+      recommendation: comparisonText(locale, "Проверьте внутренние ссылки на номер пункта.", "Band raqamiga ichki havolalarni tekshiring.", "Review internal references to the clause number."),
       sourceIds: [], confidencePercent: 98, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
@@ -186,10 +183,10 @@ function baseChange(
       id, ordinal, changeType: "moved", beforeSectionId: before.id, afterSectionId: after.id,
       beforeLabel: before.label, afterLabel: after.label, beforeHeading: before.heading, afterHeading: after.heading,
       beforeText: before.text, afterText: after.text, wordDiff: wordDiff(before.text, after.text),
-      summary: ru ? "Пункт перемещён без изменения текста." : "Band matni o‘zgarmasdan ko‘chirilgan.",
-      legalEffect: ru ? "Прямого изменения смысла не обнаружено; проверьте контекст нового раздела." : "Bevosita ma’no o‘zgarishi topilmadi; yangi bo‘lim kontekstini tekshiring.",
-      affectedParty: ru ? "Не определено" : "Aniqlanmagan", riskEffect: "neutral", riskLevel: "information",
-      recommendation: ru ? "Проверьте связи пункта с соседними условиями." : "Bandning qo‘shni shartlar bilan aloqasini tekshiring.",
+      summary: comparisonText(locale, "Пункт перемещён без изменения текста.", "Band matni o‘zgarmasdan ko‘chirilgan.", "The clause was moved without changing its text."),
+      legalEffect: comparisonText(locale, "Прямого изменения смысла не обнаружено; проверьте контекст нового раздела.", "Bevosita ma’no o‘zgarishi topilmadi; yangi bo‘lim kontekstini tekshiring.", "No direct change in meaning was detected; review the context of the new section."),
+      affectedParty: comparisonText(locale, "Не определено", "Aniqlanmagan", "Not determined"), riskEffect: "neutral", riskLevel: "information",
+      recommendation: comparisonText(locale, "Проверьте связи пункта с соседними условиями.", "Bandning qo‘shni shartlar bilan aloqasini tekshiring.", "Review how the clause interacts with neighbouring provisions."),
       sourceIds: [], confidencePercent: 95, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
@@ -198,10 +195,10 @@ function baseChange(
       id, ordinal, changeType: "formatting", beforeSectionId: before.id, afterSectionId: after.id,
       beforeLabel: before.label, afterLabel: after.label, beforeHeading: before.heading, afterHeading: after.heading,
       beforeText: before.text, afterText: after.text, wordDiff: wordDiff(before.text, after.text),
-      summary: ru ? "Изменено форматирование без обнаруженного изменения смысла." : "Aniqlangan ma’no o‘zgarishisiz format o‘zgartirilgan.",
-      legalEffect: ru ? "Юридически значимое изменение не обнаружено." : "Yuridik ahamiyatli o‘zgarish topilmadi.",
-      affectedParty: ru ? "Не влияет" : "Ta’sir qilmaydi", riskEffect: "neutral", riskLevel: "information",
-      recommendation: ru ? "Дополнительное действие не требуется." : "Qo‘shimcha harakat talab qilinmaydi.",
+      summary: comparisonText(locale, "Изменено форматирование без обнаруженного изменения смысла.", "Aniqlangan ma’no o‘zgarishisiz format o‘zgartirilgan.", "Formatting changed with no detected change in meaning."),
+      legalEffect: comparisonText(locale, "Юридически значимое изменение не обнаружено.", "Yuridik ahamiyatli o‘zgarish topilmadi.", "No legally material change was detected."),
+      affectedParty: comparisonText(locale, "Не влияет", "Ta’sir qilmaydi", "No direct impact"), riskEffect: "neutral", riskLevel: "information",
+      recommendation: comparisonText(locale, "Дополнительное действие не требуется.", "Qo‘shimcha harakat talab qilinmaydi.", "No further action is required."),
       sourceIds: [], confidencePercent: 94, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
@@ -210,10 +207,10 @@ function baseChange(
       id, ordinal, changeType: "unchanged", beforeSectionId: before.id, afterSectionId: after.id,
       beforeLabel: before.label, afterLabel: after.label, beforeHeading: before.heading, afterHeading: after.heading,
       beforeText: before.text, afterText: after.text, wordDiff: [{ value: after.text, kind: "same" }],
-      summary: ru ? "Без изменений." : "O‘zgarishsiz.",
-      legalEffect: ru ? "Изменений не обнаружено." : "O‘zgarish topilmadi.",
-      affectedParty: ru ? "Не влияет" : "Ta’sir qilmaydi", riskEffect: "neutral", riskLevel: "information",
-      recommendation: ru ? "Действие не требуется." : "Harakat talab qilinmaydi.",
+      summary: comparisonText(locale, "Без изменений.", "O‘zgarishsiz.", "No change."),
+      legalEffect: comparisonText(locale, "Изменений не обнаружено.", "O‘zgarish topilmadi.", "No change was detected."),
+      affectedParty: comparisonText(locale, "Не влияет", "Ta’sir qilmaydi", "No direct impact"), riskEffect: "neutral", riskLevel: "information",
+      recommendation: comparisonText(locale, "Действие не требуется.", "Harakat talab qilinmaydi.", "No action is required."),
       sourceIds: [], confidencePercent: 100, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
@@ -223,7 +220,7 @@ function baseChange(
     beforeLabel: before.label, afterLabel: after.label, beforeHeading: before.heading, afterHeading: after.heading,
     beforeText: before.text, afterText: after.text, wordDiff: wordDiff(before.text, after.text),
     summary: description.summary, legalEffect: description.legalEffect,
-    affectedParty: ru ? "Не определено" : "Aniqlanmagan", riskEffect: "requires_review",
+    affectedParty: comparisonText(locale, "Не определено", "Aniqlanmagan", "Not determined"), riskEffect: "requires_review",
     riskLevel: description.riskLevel, recommendation: description.recommendation,
     sourceIds: [], confidencePercent: description.confidencePercent, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
   };

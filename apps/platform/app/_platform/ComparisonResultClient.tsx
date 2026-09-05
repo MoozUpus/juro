@@ -81,7 +81,8 @@ type ComparisonExport = {
   createdAt: string;
 };
 
-type Tab = keyof typeof comparisonResultText.ru.tabs;
+type ComparisonResultCopy = (typeof comparisonResultText)[PlatformLocale];
+type Tab = keyof ComparisonResultCopy["tabs"];
 type BooleanFilter =
   | "material"
   | "increased"
@@ -122,7 +123,6 @@ export function ComparisonResultClient({
 }) {
   const copy = comparisonResultText[locale];
   const stageCopy = comparisonText[locale];
-  const ru = locale === "ru";
   const router = useRouter();
   const base = usePlatformBasePath();
   const [detail, setDetail] = useState<ComparisonDetail | null>(null);
@@ -146,11 +146,11 @@ export function ComparisonResultClient({
     try {
       const response = await fetch(
         `/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}`,
-        { cache: "no-store" },
+        { cache: "no-store", headers: { "x-juro-locale": locale } },
       );
       const body = await response.json() as { comparison?: ComparisonDetail; error?: string };
       if (!response.ok || !body.comparison) {
-        throw new Error(body.error || (ru ? "Сравнение не найдено." : "Taqqoslash topilmadi."));
+        throw new Error(body.error || copy.loadError);
       }
       setDetail(body.comparison);
       setError("");
@@ -159,7 +159,7 @@ export function ComparisonResultClient({
     } finally {
       setLoading(false);
     }
-  }, [comparisonId, ru]);
+  }, [comparisonId, copy.loadError, locale]);
 
   useEffect(() => {
     void load();
@@ -243,10 +243,13 @@ export function ComparisonResultClient({
     try {
       const response = await fetch(
         `/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}/process`,
-        { method: "POST", headers: { "x-juro-csrf": "1" } },
+        {
+          method: "POST",
+          headers: { "x-juro-csrf": "1", "x-juro-locale": locale },
+        },
       );
       const body = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(body.error || (ru ? "Обработка не завершена." : "Qayta ishlash yakunlanmadi."));
+      if (!response.ok) throw new Error(body.error || copy.processingError);
       await load();
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -262,13 +265,17 @@ export function ComparisonResultClient({
       `/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}`,
       {
         method: "PATCH",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+          "x-juro-locale": locale,
+        },
         body: JSON.stringify({ changeId: change.id, reviewed }),
       },
     );
     if (!response.ok) {
       const body = await response.json() as { error?: string };
-      setError(body.error || (ru ? "Статус не сохранён." : "Holat saqlanmadi."));
+      setError(body.error || copy.reviewSaveError);
       return;
     }
     setDetail((current) => current ? {
@@ -283,11 +290,14 @@ export function ComparisonResultClient({
     if (!window.confirm(copy.deleteConfirm)) return;
     const response = await fetch(
       `/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}`,
-      { method: "DELETE", headers: { "x-juro-csrf": "1" } },
+      {
+        method: "DELETE",
+        headers: { "x-juro-csrf": "1", "x-juro-locale": locale },
+      },
     );
     if (!response.ok) {
       const body = await response.json() as { error?: string };
-      setError(body.error || (ru ? "Сравнение не удалено." : "Taqqoslash o‘chirilmadi."));
+      setError(body.error || copy.deleteError);
       return;
     }
     router.replace(`${base}/document-review?mode=compare`);
@@ -302,13 +312,17 @@ export function ComparisonResultClient({
       `/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}`,
       {
         method: "PATCH",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+          "x-juro-locale": locale,
+        },
         body: JSON.stringify({ caseId }),
       },
     );
     if (!response.ok) {
       const body = await response.json() as { error?: string };
-      setError(body.error || (ru ? "Связь с делом не сохранена." : "Ish bilan bog‘lanish saqlanmadi."));
+      setError(body.error || copy.caseLinkError);
     } else {
       setDetail((current) => current ? { ...current, caseId } : current);
       setCaseNotice(copy.caseSaved);
@@ -328,7 +342,11 @@ export function ComparisonResultClient({
         `/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}/changes/${encodeURIComponent(change.id)}`,
         {
           method: "PATCH",
-          headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+          headers: {
+            "content-type": "application/json",
+            "x-juro-csrf": "1",
+            "x-juro-locale": locale,
+          },
           body: JSON.stringify({ decision: decision ?? "pending", locale }),
         },
       );
@@ -364,13 +382,14 @@ export function ComparisonResultClient({
           headers: {
             "content-type": "application/json",
             "x-juro-csrf": "1",
+            "x-juro-locale": locale,
             "idempotency-key": `comparison-${comparisonId}-${format}-${crypto.randomUUID()}`,
           },
           body: JSON.stringify({ format }),
         },
       );
       const body = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(body.error || (ru ? "Экспорт не создан." : "Eksport yaratilmadi."));
+      if (!response.ok) throw new Error(body.error || copy.exportCreateError);
       await load();
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -382,11 +401,14 @@ export function ComparisonResultClient({
   async function removeExport(exportId: string) {
     const response = await fetch(
       `/api/platform/document-comparisons/exports/${encodeURIComponent(exportId)}`,
-      { method: "DELETE", headers: { "x-juro-csrf": "1" } },
+      {
+        method: "DELETE",
+        headers: { "x-juro-csrf": "1", "x-juro-locale": locale },
+      },
     );
     if (!response.ok) {
       const body = await response.json() as { error?: string };
-      setError(body.error || (ru ? "Экспорт не удалён." : "Eksport o‘chirilmadi."));
+      setError(body.error || copy.exportDeleteError);
       return;
     }
     await load();
@@ -413,7 +435,7 @@ export function ComparisonResultClient({
     return (
       <div className="comparison-result-state error" role="alert">
         <ShieldAlert />
-        <h1>{error || (ru ? "Сравнение недоступно" : "Taqqoslash mavjud emas")}</h1>
+        <h1>{error || copy.unavailableTitle}</h1>
         <div><button type="button" onClick={() => void load()}><RefreshCcw />{copy.retry}</button><Link href={`${base}/document-review?mode=compare`}><ArrowLeft />{copy.back}</Link></div>
       </div>
     );
@@ -468,7 +490,7 @@ export function ComparisonResultClient({
             return (
               <span className="comparison-export-action" key={format}>
                 {completed ? (
-                  <a href={`/api/platform/document-comparisons/exports/${encodeURIComponent(item.id)}/file`}>
+                  <a href={`/api/platform/document-comparisons/exports/${encodeURIComponent(item.id)}/file?locale=${locale}`}>
                     {format === "pdf" ? <Download /> : <FileText />}{label}
                   </a>
                 ) : (
@@ -488,7 +510,7 @@ export function ComparisonResultClient({
           <Link href={`${base}/document-builder`}><FileText />{copy.edit}</Link>
           <button type="button" className="danger" onClick={() => void removeComparison()}><Trash2 /><span>{copy.delete}</span></button>
         </div>
-        <section className="comparison-version-metadata" aria-label={ru ? "Сведения о версиях" : "Versiyalar haqida ma’lumot"}>
+        <section className="comparison-version-metadata" aria-label={copy.versionMetadataAria}>
           {([detail.versionOne, detail.versionTwo] as const).map((version, index) => (
             <article key={index}>
               <FileText />
@@ -504,7 +526,7 @@ export function ComparisonResultClient({
                 <div><dt>{copy.size}</dt><dd>{formatSize(version.sizeBytes)}</dd></div>
               </dl>
               <a
-                href={`/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}/files/${index === 0 ? "one" : "two"}`}
+                href={`/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}/files/${index === 0 ? "one" : "two"}?locale=${locale}`}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -537,7 +559,7 @@ export function ComparisonResultClient({
         ) : <Link href={`${base}/cases`}><ArrowLeft />{copy.createCase}</Link>}
       </section>
 
-      <nav className="comparison-result-tabs" role="tablist" aria-label={ru ? "Представление результата" : "Natija ko‘rinishi"}>
+      <nav className="comparison-result-tabs" role="tablist" aria-label={copy.resultViewAria}>
         {resultTabs.map((item) => (
           <button
             key={item}
@@ -631,7 +653,7 @@ function SummaryView({
   copy,
 }: {
   summary: ComparisonSummary;
-  copy: typeof comparisonResultText.ru | typeof comparisonResultText.uz;
+  copy: ComparisonResultCopy;
 }) {
   const metrics = [
     ["changes", summary.totalChanges],
@@ -675,7 +697,7 @@ function FilterPanel({
   party,
   setParty,
 }: {
-  copy: typeof comparisonResultText.ru | typeof comparisonResultText.uz;
+  copy: ComparisonResultCopy;
   counts: Record<BooleanFilter, number>;
   filters: Record<BooleanFilter, boolean>;
   setFilters: React.Dispatch<React.SetStateAction<Record<BooleanFilter, boolean>>>;
@@ -719,7 +741,7 @@ function ChangeCard({
   decisionSaving,
 }: {
   change: ComparisonChange;
-  copy: typeof comparisonResultText.ru | typeof comparisonResultText.uz;
+  copy: ComparisonResultCopy;
   source?: Source;
   onReviewed: () => void;
   onDecision: (decision: ComparisonChange["reviewDecision"]) => void;
@@ -815,7 +837,7 @@ function SideBySide({
 }: {
   changes: ComparisonChange[];
   detail: ComparisonDetail;
-  copy: typeof comparisonResultText.ru | typeof comparisonResultText.uz;
+  copy: ComparisonResultCopy;
   syncScroll: boolean;
   setSyncScroll: (value: boolean) => void;
   mobileVersion: "one" | "two";
@@ -863,7 +885,7 @@ function RedlineRow({
   copy,
 }: {
   change: ComparisonChange;
-  copy: typeof comparisonResultText.ru | typeof comparisonResultText.uz;
+  copy: ComparisonResultCopy;
 }) {
   return (
     <article className="comparison-redline-row">
@@ -887,7 +909,7 @@ function SourcesView({
   locale,
 }: {
   sources: Source[];
-  copy: typeof comparisonResultText.ru | typeof comparisonResultText.uz;
+  copy: ComparisonResultCopy;
   locale: PlatformLocale;
 }) {
   if (!sources.length) {
@@ -936,7 +958,10 @@ function formatDate(value: string, locale: PlatformLocale) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : new Intl.DateTimeFormat(locale === "ru" ? "ru-UZ" : "uz-UZ", { dateStyle: "medium", timeStyle: "short" }).format(date);
+    : new Intl.DateTimeFormat(
+      { ru: "ru-UZ", uz: "uz-UZ", en: "en-GB" }[locale],
+      { dateStyle: "medium", timeStyle: "short" },
+    ).format(date);
 }
 
 function formatSize(bytes: number) {
@@ -946,15 +971,42 @@ function formatSize(bytes: number) {
 }
 
 function errorLabel(code: string | null, locale: PlatformLocale) {
-  const ru = locale === "ru";
-  const labels: Record<string, { ru: string; uz: string }> = {
-    CORRUPT_FILE: { ru: "Файл повреждён или был удалён во время обработки.", uz: "Fayl shikastlangan yoki qayta ishlash vaqtida o‘chirilgan." },
-    FILE_SCAN_REQUIRED: { ru: "Файл нужно повторно загрузить для проверки безопасности.", uz: "Xavfsizlik tekshiruvi uchun faylni qayta yuklang." },
-    PASSWORD_PROTECTED: { ru: "PDF защищён паролем. Снимите защиту и замените версию.", uz: "PDF parol bilan himoyalangan. Himoyani olib tashlab, versiyani almashtiring." },
-    NO_READABLE_TEXT: { ru: "В документе нет читаемого текста.", uz: "Hujjatda o‘qiladigan matn yo‘q." },
-    OCR_REQUIRED: { ru: "Это скан. Для сравнения требуется подключённый OCR.", uz: "Bu skan. Taqqoslash uchun OCR ulanishi kerak." },
-    PAGE_LIMIT_EXCEEDED: { ru: "Документ превышает безопасный лимит страниц.", uz: "Hujjat xavfsiz sahifa limitidan oshgan." },
-    PROCESSING_TIMEOUT: { ru: "Обработка превысила лимит времени. Уже выполненные этапы сохранены.", uz: "Qayta ishlash vaqt limitidan oshdi. Bajarilgan bosqichlar saqlandi." },
+  const labels: Record<string, Record<PlatformLocale, string>> = {
+    CORRUPT_FILE: {
+      ru: "Файл повреждён или был удалён во время обработки.",
+      uz: "Fayl shikastlangan yoki qayta ishlash vaqtida o‘chirilgan.",
+      en: "The file is corrupted or was deleted during processing.",
+    },
+    FILE_SCAN_REQUIRED: {
+      ru: "Файл нужно повторно загрузить для проверки безопасности.",
+      uz: "Xavfsizlik tekshiruvi uchun faylni qayta yuklang.",
+      en: "Upload the file again so it can be checked for security.",
+    },
+    PASSWORD_PROTECTED: {
+      ru: "PDF защищён паролем. Снимите защиту и замените версию.",
+      uz: "PDF parol bilan himoyalangan. Himoyani olib tashlab, versiyani almashtiring.",
+      en: "The PDF is password-protected. Remove the protection and replace this version.",
+    },
+    NO_READABLE_TEXT: {
+      ru: "В документе нет читаемого текста.",
+      uz: "Hujjatda o‘qiladigan matn yo‘q.",
+      en: "The document contains no readable text.",
+    },
+    OCR_REQUIRED: {
+      ru: "Это скан. Для сравнения требуется подключённый OCR.",
+      uz: "Bu skan. Taqqoslash uchun OCR ulanishi kerak.",
+      en: "This document is a scan. A connected OCR service is required for comparison.",
+    },
+    PAGE_LIMIT_EXCEEDED: {
+      ru: "Документ превышает безопасный лимит страниц.",
+      uz: "Hujjat xavfsiz sahifa limitidan oshgan.",
+      en: "The document exceeds the safe page limit.",
+    },
+    PROCESSING_TIMEOUT: {
+      ru: "Обработка превысила лимит времени. Уже выполненные этапы сохранены.",
+      uz: "Qayta ishlash vaqt limitidan oshdi. Bajarilgan bosqichlar saqlandi.",
+      en: "Processing exceeded the time limit. Completed stages have been preserved.",
+    },
   };
-  return labels[code || ""]?.[ru ? "ru" : "uz"] || (ru ? "Сравнение не завершено." : "Taqqoslash yakunlanmadi.");
+  return labels[code || ""]?.[locale] || comparisonResultText[locale].processingError;
 }

@@ -12,7 +12,7 @@ export const createBusinessWorkspaceInputSchema = z.object({
   requestId: z.string().uuid(),
   fullName: safeBusinessName(200),
   shortName: safeBusinessName(80),
-  locale: z.enum(["ru", "uz"]).default("ru"),
+  locale: z.enum(["ru", "uz", "en"]).default("ru"),
 }).strict();
 
 export type CreateBusinessWorkspaceInput = z.infer<

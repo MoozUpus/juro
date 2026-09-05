@@ -22,7 +22,53 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { platformApiError } from "../../content/platform-ui";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
+
+const searchCopy = {
+  ru: {
+    unavailable: "Поиск недоступен.",
+    globalSearch: "Глобальный поиск",
+    search: "Поиск",
+    closeSearch: "Закрыть поиск",
+    title: "Поиск по JURO",
+    placeholder: "Чаты, документы, дела, задачи, анализы, юристы, источники",
+    close: "Закрыть",
+    minimum: "Введите минимум два символа.",
+    empty: "Ничего не найдено в доступном вам пространстве.",
+    select: "выбор",
+    open: "открыть",
+    closeHint: "закрыть",
+  },
+  uz: {
+    unavailable: "Qidiruv mavjud emas.",
+    globalSearch: "Global qidiruv",
+    search: "Qidiruv",
+    closeSearch: "Qidiruvni yopish",
+    title: "JURO bo‘yicha qidiruv",
+    placeholder: "Chatlar, hujjatlar, ishlar, vazifalar, tahlillar, yuristlar, manbalar",
+    close: "Yopish",
+    minimum: "Kamida ikki belgi kiriting.",
+    empty: "Sizga ochiq makonda hech narsa topilmadi.",
+    select: "tanlash",
+    open: "ochish",
+    closeHint: "yopish",
+  },
+  en: {
+    unavailable: "Search is temporarily unavailable.",
+    globalSearch: "Global search",
+    search: "Search",
+    closeSearch: "Close search",
+    title: "Search JURO",
+    placeholder: "Chats, documents, matters, tasks, analyses, lawyers and sources",
+    close: "Close",
+    minimum: "Enter at least two characters.",
+    empty: "No results were found in the workspaces you can access.",
+    select: "select",
+    open: "open",
+    closeHint: "close",
+  },
+} as const;
 
 type SearchResult = {
   id: string;
@@ -54,7 +100,7 @@ export function GlobalSearch({
   locale: PlatformLocale;
   accountType: AccountType;
 }) {
-  const ru = locale === "ru";
+  const copy = searchCopy[locale];
   const router = useRouter();
   const dialogRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -125,7 +171,7 @@ export function GlobalSearch({
           { cache: "no-store", signal: controller.signal },
         );
         const body = await response.json() as { results?: SearchResult[]; error?: string };
-        if (!response.ok) throw new Error(body.error || (ru ? "Поиск недоступен." : "Qidiruv mavjud emas."));
+        if (!response.ok) throw new Error(platformApiError(locale, body.error, copy.unavailable));
         setResults(body.results ?? []);
         setActive(0);
       } catch (value) {
@@ -139,7 +185,7 @@ export function GlobalSearch({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [locale, open, query, ru]);
+  }, [copy.unavailable, locale, open, query]);
 
   const resultLinks = useMemo(() => results.map((result) => ({
     result,
@@ -162,16 +208,16 @@ export function GlobalSearch({
 
   return (
     <>
-      <button ref={triggerRef} className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={ru ? "Глобальный поиск" : "Global qidiruv"} aria-expanded={open} aria-controls="global-search-workspace">
-        <Search /><span>{ru ? "Поиск" : "Qidiruv"}</span><kbd>⌘K</kbd>
+      <button ref={triggerRef} className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={copy.globalSearch} aria-expanded={open} aria-controls="global-search-workspace">
+        <Search /><span>{copy.search}</span><kbd>⌘K</kbd>
       </button>
       {open && (
         <div className="global-search-layer">
-          <button className="global-search-backdrop" type="button" onClick={() => setOpen(false)} aria-label={ru ? "Закрыть поиск" : "Qidiruvni yopish"} />
+          <button className="global-search-backdrop" type="button" onClick={() => setOpen(false)} aria-label={copy.closeSearch} />
           <section id="global-search-workspace" ref={dialogRef} className="global-search-dialog" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
             <header>
               <Search />
-              <h2 id="global-search-title" className="sr-only">{ru ? "Поиск по JURO" : "JURO bo‘yicha qidiruv"}</h2>
+              <h2 id="global-search-title" className="sr-only">{copy.title}</h2>
               <input
                 ref={inputRef}
                 type="text"
@@ -184,17 +230,17 @@ export function GlobalSearch({
                   if (event.key === "ArrowUp") { event.preventDefault(); setActive((current) => Math.max(current - 1, 0)); }
                   if (event.key === "Enter") { event.preventDefault(); openActive(); }
                 }}
-                placeholder={ru ? "Чаты, документы, дела, задачи, анализы, юристы, источники" : "Chatlar, hujjatlar, ishlar, vazifalar, tahlillar, yuristlar, manbalar"}
+                placeholder={copy.placeholder}
                 aria-controls="global-search-results"
                 aria-activedescendant={resultLinks[active] ? `global-search-result-${active}` : undefined}
               />
-              {loading ? <LoaderCircle className="spin" /> : <button type="button" onClick={() => setOpen(false)} aria-label={ru ? "Закрыть" : "Yopish"}><X /></button>}
+              {loading ? <LoaderCircle className="spin" /> : <button type="button" onClick={() => setOpen(false)} aria-label={copy.close}><X /></button>}
             </header>
             <div id="global-search-results" className="global-search-results" role="listbox">
               {error ? <p className="global-search-message error" role="alert">{error}</p> : query.trim().length < 2 ? (
-                <p className="global-search-message">{ru ? "Введите минимум два символа." : "Kamida ikki belgi kiriting."}</p>
+                <p className="global-search-message">{copy.minimum}</p>
               ) : !loading && !resultLinks.length ? (
-                <p className="global-search-message">{ru ? "Ничего не найдено в доступном вам пространстве." : "Sizga ochiq makonda hech narsa topilmadi."}</p>
+                <p className="global-search-message">{copy.empty}</p>
               ) : resultLinks.map(({ result, href }, index) => {
                 const Icon = icons[result.type as keyof typeof icons] ?? Search;
                 const external = result.type === "source";
@@ -212,12 +258,12 @@ export function GlobalSearch({
                     onClick={() => setOpen(false)}
                   >
                     <span><Icon /></span>
-                    <div><strong>{result.title}</strong><small>{typeLabel(result.type, ru)}{result.subtitle ? ` · ${result.subtitle}` : ""}</small></div>
+                    <div><strong>{result.title}</strong><small>{typeLabel(result.type, locale)}{result.subtitle ? ` · ${result.subtitle}` : ""}</small></div>
                   </Link>
                 );
               })}
             </div>
-            <footer><span>↑↓ {ru ? "выбор" : "tanlash"}</span><span>Enter {ru ? "открыть" : "ochish"}</span><span>Esc {ru ? "закрыть" : "yopish"}</span></footer>
+            <footer><span>↑↓ {copy.select}</span><span>Enter {copy.open}</span><span>Esc {copy.closeHint}</span></footer>
           </section>
         </div>
       )}
@@ -246,18 +292,18 @@ function safeOfficialUrl(value: string) {
   }
 }
 
-function typeLabel(type: SearchResult["type"], ru: boolean) {
+function typeLabel(type: SearchResult["type"], locale: PlatformLocale) {
   const labels = {
-    case: ["Дело", "Ish"],
-    document: ["Документ", "Hujjat"],
-    "document-content": ["В документе", "Hujjat ichida"],
-    conversation: ["Диалог", "Suhbat"],
-    comparison: ["Сравнение", "Taqqoslash"],
-    task: ["Задача", "Vazifa"],
-    analysis: ["Анализ", "Tahlil"],
-    template: ["Шаблон", "Shablon"],
-    lawyer: ["Юрист", "Yurist"],
-    source: ["Официальный источник", "Rasmiy manba"],
+    case: { ru: "Дело", uz: "Ish", en: "Matter" },
+    document: { ru: "Документ", uz: "Hujjat", en: "Document" },
+    "document-content": { ru: "В документе", uz: "Hujjat ichida", en: "In document" },
+    conversation: { ru: "Диалог", uz: "Suhbat", en: "Conversation" },
+    comparison: { ru: "Сравнение", uz: "Taqqoslash", en: "Comparison" },
+    task: { ru: "Задача", uz: "Vazifa", en: "Task" },
+    analysis: { ru: "Анализ", uz: "Tahlil", en: "Analysis" },
+    template: { ru: "Шаблон", uz: "Shablon", en: "Template" },
+    lawyer: { ru: "Юрист", uz: "Yurist", en: "Lawyer" },
+    source: { ru: "Официальный источник", uz: "Rasmiy manba", en: "Official source" },
   } as const;
-  return (labels[type as keyof typeof labels] ?? ["Результат", "Natija"])[ru ? 0 : 1];
+  return (labels[type as keyof typeof labels] ?? { ru: "Результат", uz: "Natija", en: "Result" })[locale];
 }

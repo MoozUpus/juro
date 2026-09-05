@@ -22,6 +22,7 @@ import {
   withApiErrors,
 } from "../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
+import { localizedRequestFormatError } from "../../../../../lib/auth/request-locale";
 
 export const GET = withApiErrors(async function GET(request: Request) {
   let session;
@@ -71,7 +72,7 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
         : 400;
     return jsonNoStore({
       code: parsed.error.toLocaleUpperCase(),
-      error: "Проверьте формат запроса.",
+      error: localizedRequestFormatError(request),
     }, status);
   }
   const { locale, code } = parsed.data;
