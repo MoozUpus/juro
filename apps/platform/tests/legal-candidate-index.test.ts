@@ -683,6 +683,77 @@ test("privacy transformation retains exact legally material act names without ad
   assert.deepEqual(forged.partialErrors, [{ code: "PRIVACY_TRANSFORM_REJECTED" }]);
   assert.equal(providerQueries.length, 1, "an interpreter label cannot forge a trusted title");
 
+  const safeAlternate = await index.retrieve({
+    id: "privacy-untrusted-translated-alternate",
+    formulations: [{
+      id: "privacy-trusted-source-formulation",
+      text: "Companies Act filing rules",
+      legalTitleSpans: ["Companies Act"],
+      privateNameSpans: [],
+      readingIds: ["privacy-legal-title-reading"],
+      requirementIds: ["privacy-legal-title-requirement"],
+    }, {
+      id: "privacy-untrusted-translated-formulation",
+      text: "Ley de Sociedades filing rules",
+      legalTitleSpans: ["Ley de Sociedades"],
+      privateNameSpans: [],
+      readingIds: ["privacy-legal-title-reading"],
+      requirementIds: ["privacy-legal-title-requirement"],
+    }, {
+      id: "privacy-inflected-title-formulation",
+      text: "Provisions of the Company Act on filing",
+      legalTitleSpans: ["Companies Act"],
+      privateNameSpans: [],
+      readingIds: ["privacy-legal-title-reading"],
+      requirementIds: ["privacy-legal-title-requirement"],
+    }],
+  }, endpoint, release);
+  assert.equal(safeAlternate.availability, "available");
+  assert.equal(providerQueries.length, 2);
+  assert.equal(providerQueries[1], "Companies Act filing rules");
+
+  const uncoveredAlternate = await index.retrieve({
+    id: "privacy-untrusted-unique-coverage",
+    formulations: [{
+      id: "privacy-trusted-source-formulation",
+      text: "Companies Act filing rules",
+      legalTitleSpans: ["Companies Act"],
+      privateNameSpans: [],
+      readingIds: ["privacy-legal-title-reading"],
+      requirementIds: ["privacy-legal-title-requirement"],
+    }, {
+      id: "privacy-untrusted-translated-formulation",
+      text: "Ley de Sociedades translated rule",
+      legalTitleSpans: ["Ley de Sociedades"],
+      privateNameSpans: [],
+      readingIds: ["privacy-legal-title-reading"],
+      requirementIds: ["privacy-translated-requirement"],
+    }],
+  }, endpoint, release);
+  assert.equal(uncoveredAlternate.availability, "unavailable");
+  assert.equal(providerQueries.length, 2, "untrusted unique coverage fails closed");
+
+  const duplicateIds = await index.retrieve({
+    id: "privacy-duplicate-formulation-identities",
+    formulations: [{
+      id: "duplicate",
+      text: "Companies Act filing rules",
+      legalTitleSpans: ["Companies Act"],
+      privateNameSpans: [],
+      readingIds: ["privacy-legal-title-reading"],
+      requirementIds: ["privacy-legal-title-requirement"],
+    }, {
+      id: "duplicate",
+      text: "Ley de Sociedades exemption",
+      legalTitleSpans: ["Ley de Sociedades"],
+      privateNameSpans: [],
+      readingIds: ["privacy-legal-title-reading"],
+      requirementIds: ["privacy-translated-requirement"],
+    }],
+  }, endpoint, release);
+  assert.equal(duplicateIds.availability, "unavailable");
+  assert.equal(providerQueries.length, 2, "duplicate formulation IDs fail before provider search");
+
   const adjacentSingleName = await index.retrieve({
     id: "privacy-single-name-adjacent-to-title",
     formulations: [{
@@ -695,9 +766,9 @@ test("privacy transformation retains exact legally material act names without ad
     }],
   }, endpoint, release);
   assert.equal(adjacentSingleName.availability, "available");
-  assert.equal(providerQueries.length, 2);
-  assert.doesNotMatch(providerQueries[1] ?? "", /John/u);
-  assert.match(providerQueries[1] ?? "", /Companies Act applies/u);
+  assert.equal(providerQueries.length, 3);
+  assert.doesNotMatch(providerQueries[2] ?? "", /John/u);
+  assert.match(providerQueries[2] ?? "", /Companies Act applies/u);
 
   const sentenceInitialFacts = await index.retrieve({
     id: "privacy-sentence-initial-material-facts",
@@ -728,7 +799,7 @@ test("privacy transformation retains exact legally material act names without ad
     }],
   }, endpoint, release);
   assert.equal(sentenceInitialFacts.availability, "available");
-  assert.equal(providerQueries.length, 6);
+  assert.equal(providerQueries.length, 7);
   for (const fact of ["Dismissal", "Pregnancy", "Увольнение", "Homiladorlik"]) {
     assert.equal(providerQueries.some((query) => query.includes(fact)), true, fact);
   }
