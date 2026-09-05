@@ -945,11 +945,12 @@ async function listReceipts(env: CurrentBuildEnv): Promise<CustomReleasePageRece
       ...(cursor ? { cursor } : {}),
       include: ["customMetadata"],
     });
-    for (const object of page.objects) {
+    const receipts = await mapCustomArtifactOperations(page.objects, async object => {
       const sha256 = object.customMetadata?.sha256;
       if (!sha256) throw new CustomIndexPipelineError("CUSTOM_CURRENT_RECEIPT_HASH_MISSING");
-      values.push(await verifiedJson<CustomReleasePageReceipt>(env.ARTIFACTS, object.key, sha256));
-    }
+      return verifiedJson<CustomReleasePageReceipt>(env.ARTIFACTS, object.key, sha256);
+    });
+    values.push(...receipts);
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
   return values;
@@ -1005,44 +1006,47 @@ async function prepareSparseReducerPlans(
     Record<string, ReducerArtifactReference[]>;
   let documentCount = 0;
   let recordCount = 0;
-  for (const receipt of [...receipts].sort((left, right) =>
-    left.sourceOrdinalStart - right.sourceOrdinalStart)) {
-    const manifest = await verifiedJson<SparseInputManifest>(
-      env.ARTIFACTS, receipt.sparseInputKey, receipt.sparseInputSha256,
-    );
-    if (manifest.schemaVersion !== 1 || manifest.releaseId !== RELEASE_ID
-      || manifest.batchId !== receipt.batchId || manifest.analyzer !== "word-v1"
-      || !Number.isSafeInteger(manifest.recordCount) || manifest.recordCount !== receipt.sparseRecordCount
-      || manifest.documents.count !== receipt.chunkCount) {
-      throw new CustomIndexPipelineError("CUSTOM_CURRENT_SPARSE_MANIFEST_INVALID");
-    }
-    assertReducerReference(manifest.documents);
-    documentInputs.push(manifest.documents);
-    documentCount += manifest.documents.count;
-    let batchRecordCount = 0;
-    for (const partition of SPARSE_PARTITIONS) {
-      const reference = manifest.partitions[partition];
-      assertReducerReference(reference);
-      if (!Number.isSafeInteger(reference.recordCount) || reference.recordCount < 0) {
+  const ordered = [...receipts].sort((left, right) => left.sourceOrdinalStart - right.sourceOrdinalStart);
+  for (let offset = 0; offset < ordered.length; offset += 6) {
+    const batch = await mapCustomArtifactOperations(ordered.slice(offset, offset + 6), async receipt => ({
+      receipt, manifest: await verifiedJson<SparseInputManifest>(env.ARTIFACTS, receipt.sparseInputKey, receipt.sparseInputSha256),
+    }));
+    for (const { receipt, manifest } of batch) {
+      if (manifest.schemaVersion !== 1 || manifest.releaseId !== RELEASE_ID
+        || manifest.batchId !== receipt.batchId || manifest.analyzer !== "word-v1"
+        || !Number.isSafeInteger(manifest.recordCount) || manifest.recordCount !== receipt.sparseRecordCount
+        || manifest.documents.count !== receipt.chunkCount) {
         throw new CustomIndexPipelineError("CUSTOM_CURRENT_SPARSE_MANIFEST_INVALID");
       }
-      partitionInputs[partition]!.push(reference);
-      batchRecordCount += reference.recordCount;
+      assertReducerReference(manifest.documents);
+      documentInputs.push(manifest.documents);
+      documentCount += manifest.documents.count;
+      let batchRecordCount = 0;
+      for (const partition of SPARSE_PARTITIONS) {
+        const reference = manifest.partitions[partition];
+        assertReducerReference(reference);
+        if (!Number.isSafeInteger(reference.recordCount) || reference.recordCount < 0) {
+          throw new CustomIndexPipelineError("CUSTOM_CURRENT_SPARSE_MANIFEST_INVALID");
+        }
+        partitionInputs[partition]!.push(reference);
+        batchRecordCount += reference.recordCount;
+      }
+      if (batchRecordCount !== manifest.recordCount) {
+        throw new CustomIndexPipelineError("CUSTOM_CURRENT_SPARSE_MANIFEST_INVALID");
+      }
+      recordCount += batchRecordCount;
     }
-    if (batchRecordCount !== manifest.recordCount) {
-      throw new CustomIndexPipelineError("CUSTOM_CURRENT_SPARSE_MANIFEST_INVALID");
-    }
-    recordCount += batchRecordCount;
   }
   const documents = await writeReducerPlan(env, "documents", {
     schemaVersion: 1, releaseId: RELEASE_ID, inputs: documentInputs,
   });
-  const partitions = Object.fromEntries(await Promise.all(SPARSE_PARTITIONS.map(async (partition) => [
-    partition,
-    await writeReducerPlan(env, `partition-${partition}`, {
+  const partitions: Record<string, ReducerArtifactReference> = {};
+  for (const partition of SPARSE_PARTITIONS) {
+    partitions[partition] = await writeReducerPlan(env, `partition-${partition}`, {
       schemaVersion: 1, releaseId: RELEASE_ID, partition, inputs: partitionInputs[partition],
-    }),
-  ])));
+    });
+    delete partitionInputs[partition];
+  }
   return { documents, partitions, documentCount, recordCount };
 }
 
