@@ -32,6 +32,59 @@ test("container reducer uses deterministic external sort and scoped virtual R2 o
   assert.equal(CUSTOM_CURRENT_REDUCER_PROGRAM.includes("OPENAI"), false);
 });
 
+test("container reducer overlaps bounded page reads without losing document identities", async (context) => {
+  const objects = new Map<string, Buffer>();
+  const releaseId = "release:staging:current:custom-v1:2026-09-03";
+  const put = (key: string, value: unknown) => {
+    const bytes = Buffer.from(`${JSON.stringify(value)}\n`);
+    objects.set(key, bytes);
+    return { key, sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+  };
+  const inputs = Array.from({ length: 24 }, (_, ordinal) => put(`page-${ordinal}`, {
+    schemaVersion: 1, releaseId, documents: [{ ordinal, itemKey: `chunk-${ordinal}`,
+      segmentId: "current-base-v1", fieldLengths: { title: 1, hierarchy: 0, article: 0, text: 2 } }],
+  }));
+  const plan = put("plan", { schemaVersion: 1, releaseId, inputs });
+  let active = 0, peak = 0;
+  const server = createServer(async (request, response) => {
+    const [, operation, encoded] = request.url!.split("/");
+    const key = Buffer.from(encoded!, "base64url").toString("utf8");
+    if (operation === "object") {
+      if (key.startsWith("page-")) {
+        active++; peak = Math.max(peak, active);
+        await new Promise(resolve => setTimeout(resolve, 15 + (23 - Number(key.slice(5))) % 6 * 5));
+        active--;
+      }
+      response.end(objects.get(key)); return;
+    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const bytes = Buffer.concat(chunks); objects.set(key, bytes);
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ key, sizeBytes: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex") }));
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  context.after(() => server.close());
+  const address = server.address(); assert.ok(address && typeof address === "object");
+  const child = spawn(process.execPath, ["--input-type=module", "-e", CUSTOM_CURRENT_REDUCER_PROGRAM], {
+    env: { ...process.env, JURO_ARTIFACT_HOST: `http://127.0.0.1:${address.port}` },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  let stdout = "", stderr = "";
+  child.stdout.setEncoding("utf8").on("data", value => { stdout += value; });
+  child.stderr.setEncoding("utf8").on("data", value => { stderr += value; });
+  child.stdin.end(JSON.stringify({ schemaVersion: 1, releaseId, mode: "documents", plan,
+    outputPrefix: `search-releases/${releaseId}/sparse/word-v1/reduced` }));
+  const [code] = await once(child, "close");
+  assert.equal(code, 0, stderr);
+  const report = JSON.parse(stdout);
+  const artifact = JSON.parse(objects.get(report.artifact.key)!.toString("utf8"));
+  assert.deepEqual(artifact.documents.map((document: { ordinal: number }) => document.ordinal),
+    Array.from({ length: 24 }, (_, ordinal) => ordinal));
+  assert.ok(peak > 1 && peak <= 6, `expected bounded overlap, observed ${peak}`);
+});
+
 test("container reducer builds documents, hashed postings, lexicon and manifest", async (context) => {
   const objects = new Map<string, Buffer>();
   const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");

@@ -38,6 +38,12 @@ async function getJson(reference){
   if(shaBytes(bytes)!==reference.sha256) fail("REDUCER_INPUT_HASH_MISMATCH");
   try { return JSON.parse(bytes.toString("utf8")); } catch { fail("REDUCER_INPUT_JSON_INVALID"); }
 }
+async function* getPages(references){
+  for(let offset=0;offset<references.length;offset+=6){
+    const pages=await Promise.all(references.slice(offset,offset+6).map(getJson));
+    for(const page of pages) yield page;
+  }
+}
 async function putFile(file,key,sha256){
   if(!SHA.test(sha256)) fail("REDUCER_OUTPUT_HASH_INVALID");
   const sizeBytes=fs.statSync(file).size;
@@ -62,8 +68,7 @@ function validatePlan(plan,input){
 async function reduceDocuments(input,directory){
   const plan=await getJson(input.plan); validatePlan(plan,input);
   const documents=[];
-  for(const reference of plan.inputs){
-    const page=await getJson(reference);
+  for await(const page of getPages(plan.inputs)){
     if(page.schemaVersion!==1 || page.releaseId!==input.releaseId || !Array.isArray(page.documents)) fail("REDUCER_DOCUMENT_PAGE_INVALID");
     documents.push(...page.documents);
   }
@@ -110,8 +115,7 @@ async function reducePartition(input,directory){
   const documents=new Map(documentPage.documents.map(value=>[value.ordinal,value]));
   const raw=path.join(directory,"records.tsv"), sorted=path.join(directory,"records.sorted.tsv");
   const rawFd=fs.openSync(raw,"wx"); let sourceRecordCount=0;
-  for(const reference of plan.inputs){
-    const page=await getJson(reference);
+  for await(const page of getPages(plan.inputs)){
     if(page.schemaVersion!==1 || page.releaseId!==input.releaseId || page.partition!==input.partition || !Array.isArray(page.records)) fail("REDUCER_PARTITION_PAGE_INVALID");
     for(const record of page.records){
       const fieldIndex=FIELD_NAMES.indexOf(record.field);
