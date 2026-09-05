@@ -1067,11 +1067,17 @@ export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuild
       });
       const state = await coordinator(this.env).status() as unknown as {
         lastVectorizeMutationId: string | null;
+        embeddings: { reservedTokens: number; creditStopped: boolean; retryAfter: number | null };
       };
       const finalMutationId = String(state.lastVectorizeMutationId ?? "");
       if (!finalMutationId || !receipts.some((receipt) => receipt.vectorizeMutationId === finalMutationId)) {
         throw new CustomIndexPipelineError("CUSTOM_CURRENT_FINAL_MUTATION_INVALID");
       }
+      const providerAccounting = {
+        authorizedTokens: parsePositiveInteger(this.env.AUTHORIZED_PROVIDER_TOKENS, "CUSTOM_EMBEDDING_COST_STOP"),
+        inputTokens: result.providerInputTokens,
+        ...state.embeddings,
+      };
       const bytes = serializeCustomCurrentArtifact({
         schemaVersion: 1,
         ...result,
@@ -1079,6 +1085,7 @@ export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuild
         sourceRootSha256: SOURCE_ROOT_SHA256,
         planInventorySha256: payload.planInventorySha256,
         finalVectorizeMutationId: finalMutationId,
+        providerAccounting,
         sparseReductionComplete: false,
         vectorizeFullListReconciled: false,
         activationAuthorized: false,
@@ -1090,7 +1097,7 @@ export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuild
         bytes,
         { contentType: "application/json", customMetadata: { kind: "materialization-reconciliation" } },
       );
-      return { ...result, finalMutationId, materializationReconciliationSha256: digest };
+      return { ...result, finalMutationId, providerAccounting, materializationReconciliationSha256: digest };
     });
     const prepared = await step.do("prepare exact sparse reducer plans", {
       retries: { limit: 5, delay: "1 minute", backoff: "exponential" },
