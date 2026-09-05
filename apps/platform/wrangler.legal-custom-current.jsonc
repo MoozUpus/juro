@@ -6,6 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "preview_urls": false,
+  "limits": { "cpu_ms": 120000 },
   "vars": {
     "APP_ENV": "staging",
     "AI_GATEWAY_ID": "juro-ai-search-staging",

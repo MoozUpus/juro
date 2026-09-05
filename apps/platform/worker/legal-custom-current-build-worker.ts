@@ -1210,6 +1210,10 @@ export default {
         const parsed = parseMessage(message.body);
         releaseId = parsed.releaseId;
         sourceOrdinalStart = parsed.sourceOrdinalStart;
+        console.log(JSON.stringify(contentFreePipelineTelemetry({
+          environment: "staging", releaseId, component: "materialize",
+          sourceOrdinalStart, status: "started", failureCode: null,
+        })));
         const result = await processMaterializeMessage(env, parsed, (stage) => { failureStage = stage; });
         console.log(JSON.stringify(contentFreePipelineTelemetry({
           environment: "staging",
