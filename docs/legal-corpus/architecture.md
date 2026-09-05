@@ -2,6 +2,10 @@
 
 > This document records the implemented corpus subsystem and its present rollout controls. The accepted replacement is the [custom hybrid target architecture](./target-search-architecture.md) selected by [ADR 0006](../adr/0006-own-hybrid-official-corpus-retrieval.md); no custom Search Release is implemented or active yet.
 
+Operational acceptance follows the [verification policy](../operations/legal-corpus-verification.md).
+Descriptions of earlier replay/qualification tooling below are historical
+implementation evidence, not requirements to rerun that tooling for each change.
+
 ## Scope boundary
 
 `apps/platform/lib/legal-corpus` is a JURO-owned Cloudflare/D1/R2 subsystem.
@@ -50,21 +54,19 @@ is rebuilt from official-source provenance, exact D1/R2 integrity, supported
 extraction, stable source identities, the cutoff-pinned current pointer,
 supported temporal state, public privacy, quarantine clearance and
 deterministic canonicalization. Visible retrieval stays on the legacy Adapter
-until the custom-index build produces a new candidate and provider qualification
-evaluates, soaks and activates it through a capability-scoped Activation Set. The source-snapshot Corpus
+until the custom-index build produces a new candidate, its new-index inventory
+check and bounded capability smoke pass, and a capability-scoped Activation Set
+selects it. The source-snapshot Corpus
 Snapshot remains qualified, but its draft AI Search Search Release identity and
 provider gates do not transfer.
 
 The archived release builder and replay validator shared the same canonical
-projection primitive. A completed construction is deliberately unsealed: post-build
-reconciliation must prove exactly-once projection membership and the complete,
-pairwise-disjoint shard union, then independent `baseline` and `repeat` runs
-must re-read the source objects and reproduce the same full-corpus root.
-Checkpoint restart may reuse verified pages but must reject a changed page or
-run identity. External validation, review and verified recovery-export hashes
-are recorded by a final immutable qualification before the green2 storage
-coordinator becomes sealed/ready. The Search Release remains draft and no
-Activation Set is selected during source-snapshot qualification.
+projection primitive. Their historical baseline/repeat runs and external
+qualification records remain audit evidence. They are not repeated migration
+prerequisites: accepted source roots and explicit waivers are reused, and new
+writes accumulate one complete membership inventory. Checkpoint restart still
+rejects a changed page or run identity. Source storage completion does not select
+an Activation Set or qualify an unbuilt search index.
 
 For forensic replay, use the completed one-off tooling retained under
 `.scratch/legal-retrieval-architecture-evaluation/archived-code/`; it is not a
@@ -93,7 +95,8 @@ gates and Activation Sets. It owns no body, term dictionary, posting/position
 list or vector. Exhaustive index inventories live in R2, and a measured
 projection above 7 GB blocks release pending an accepted catalog-sharding plan.
 The implemented D1 sparse tables and Qdrant path remain legacy rollback state
-until the replacement satisfies its real stability and restore gates.
+until custom operation, unused-resource checks and recovery coverage permit
+retirement under the current verification policy.
 
 ## Local development against the staging index
 

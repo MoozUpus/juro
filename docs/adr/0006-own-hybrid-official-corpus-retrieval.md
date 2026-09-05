@@ -6,6 +6,15 @@ JURO will own Hybrid Candidate Fusion for the Indexed Official Corpus. Immutable
 
 ## Consequences
 
+- By owner direction on 2026-09-05, the
+  [verification policy](../operations/legal-corpus-verification.md) replaces
+  repeated full-corpus replays, routine full backup/restore rehearsals,
+  independent verification packages and fixed staging/canary/stability waits.
+  Reuse compatible accepted manifests and recovery evidence, verify new writes
+  during construction, check each new index inventory once, and use bounded
+  capability smoke tests before activation. Runtime evidence integrity,
+  privacy, spend limits and recoverability before deletion remain required.
+
 - One Search Release pins an immutable Corpus Snapshot, JURO-owned Retrieval Chunk policy, sparse artifact set, dense artifact set, Vectorize index, embedding model/dimensions, metadata/filter policy and RRF policy. Sparse and dense components seal and activate together; a partial lane is Source Unavailability.
 - R2 is authoritative for immutable BM25 artifacts, reusable document embeddings and exhaustive release inventories. Vectorize is disposable. D1 retains legal facts, minimal candidate-to-evidence mappings, release roots, gates, Activation Sets and rollback history, but no bodies, term dictionaries, postings, positions or vectors. A projected 7 GB D1 size blocks a release until a sharding plan exists.
 - JURO uses unweighted reciprocal-rank fusion with `k = 60`. If both word and character n-gram sparse analyzers are required by evaluation, they first fuse into one Sparse Candidate Lane so sparse retrieval does not receive two votes against the Dense Candidate Lane.
@@ -29,5 +38,5 @@ JURO will own Hybrid Candidate Fusion for the Indexed Official Corpus. Immutable
   retrieval continues to Live Official Search; both lanes must reconcile before
   activation.
 - The same owner-approved OpenAI key may serve staging and production, but each environment stores it independently behind a distinct authenticated, logging-disabled and cache-disabled AI Gateway. The root Cloudflare bootstrap token remains only in the ignored root `.env` until the migration program is resolved, then is scrubbed after verified final readback and revoked by the owner.
-- AI Search's partial Porter/trigram build remains non-authoritative historical evidence. Its corpus projection, token measurements and privacy observations may inform the replacement, but its reconciliation, evaluation and soak cannot qualify the custom backend.
+- AI Search's partial Porter/trigram build remains non-authoritative historical evidence. Its corpus projection, token measurements and privacy observations may inform the replacement, but its provider results cannot qualify the custom backend. Legacy retirement follows demonstrated custom operation, exact unused-resource checks and existing recovery coverage; no fixed observation period is required.
 - Question Interpretation, Retrieval Eligibility, D1 revalidation, hash-verified R2 hydration, Provision Set selection, Official Coverage, the strict Source Ladder and Legal Answer behavior do not change.

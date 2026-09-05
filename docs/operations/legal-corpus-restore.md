@@ -1,5 +1,11 @@
 # Legal corpus restore rehearsal
 
+Use this full procedure for actual recovery or a specific defect that requires
+it. It is not a routine ticket, build, activation or retirement prerequisite.
+The [verification policy](./legal-corpus-verification.md) reuses compatible
+restore evidence and uses bounded fixtures when the recovery path changes.
+Resume interrupted recovery from checkpoints instead of starting another proof.
+
 ## Custom hybrid Search Release
 
 Restore legal D1 only into an isolated database and verify integrity, exact

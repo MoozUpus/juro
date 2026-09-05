@@ -1,8 +1,15 @@
 # Custom hybrid target architecture for the Indexed Official Corpus
 
-Status: accepted detailed design; capability-scoped promotion gates apply
+Status: accepted detailed design; verification simplified by owner direction — 2026-09-05
 
 This architecture implements [ADR 0001](../adr/0001-strict-legal-source-ladder.md), [ADR 0003](../adr/0003-coverage-mapped-legal-provision-retrieval.md), [ADR 0005](../adr/0005-use-source-snapshot-retrieval-eligibility.md), and [ADR 0006](../adr/0006-own-hybrid-official-corpus-retrieval.md). ADR 0006 supersedes ADR 0004's Cloudflare AI Search selection. Source identity remains Source Document → Source Snapshot → Snapshot Provision → Retrieval Eligibility; legacy authority and translation records remain optional audit enrichment, never eligibility gates.
+
+The [verification policy](../operations/legal-corpus-verification.md) controls
+operational acceptance. Reuse accepted immutable evidence, check new work once
+and keep rollout tests bounded. Repeated corpus replays, routine full remote
+restore, fixed observation periods and independent sign-off packages are no
+longer required. Runtime evidence checks and complete new-index membership
+remain enforced.
 
 ## Non-negotiable invariants
 
@@ -182,15 +189,15 @@ Content-free telemetry may contain release/component/version identities, hashed 
 
 The qualified source Corpus Snapshot may source the first custom release, but its draft AI Search Search Release identity may not. Changed chunk, sparse, embedding, Vectorize, filtering and fusion contracts require a new identity and fresh backend gates.
 
-A Search Release seals only after Retrieval Chunks are complete and reproducible; every sparse artifact/hash/statistic reconciles; every embedding and the Vectorize final mutation plus fresh list snapshot proves exact parity; both lanes pass temporal/failure/integrity tests; privacy/cost/configuration attestations pass; and the locked evaluation plus applicable soak passes.
+A Search Release seals only after Retrieval Chunks are complete and reproducible; new sparse/embedding writes pass their byte/hash checks; and one exact ID/count/metadata comparison after the final Vectorize mutation confirms the new index inventory. Reuse those results during activation, with a bounded smoke set for the changed capability and the applicable privacy/cost/configuration checks. Unchanged source bodies and prior builds do not need another verification pass.
 
 Current and history are separate releases. Current may activate alone. As-of requires history. Comparison requires compatible current/history releases from the same Corpus Snapshot and policy family. Activation and rollback are single D1 transactions preserving prior sets and immutable events.
 
-AI Search's partial Porter/trigram candidates remain historical non-authoritative evidence until custom staging current activation; the first implementation checkpoint pauses/cancels their jobs with exact readback. Qdrant and legacy D1 remain rollback paths until complete production activation is green for 90 days and isolated restore passes. No missing full-corpus Qdrant snapshot may be fabricated: evidence inventories it exactly and proves snapshot mechanics separately.
+AI Search's partial Porter/trigram candidates remain historical non-authoritative evidence until custom staging current activation; the first implementation checkpoint pauses/cancels their jobs with exact readback. Qdrant and legacy D1 remain until the custom replacement works, their active readers/writers are removed and accessible recovery artifacts cover the exact retirement targets. No missing full-corpus Qdrant snapshot may be fabricated: evidence inventories it exactly and proves snapshot mechanics separately.
 
-## Mandatory evaluation and gates
+## Quality targets and focused acceptance
 
-The existing 314 scenarios remain a locked final suite. BM25 parameters, boosts, analyzer choice, chunk policy and future fusion challengers use a separate development set. Required gates remain:
+The existing 314 scenarios remain a locked benchmark for retrieval-quality work. BM25 parameters, boosts, analyzer choice, chunk policy and fusion changes use a separate development set. Repeated full benchmark runs are not migration prerequisites; reuse unchanged behavior evidence and apply the bounded capability smoke policy. The following remain quality and latency targets, not percentages that can be inferred from a small smoke sample:
 
 - recall@5 ≥ 0.90, recall@10 ≥ 0.95 and MRR ≥ 0.85;
 - citation precision 1.00, citation recall ≥ 0.95, article exactness ≥ 0.95 and document exactness ≥ 0.97;
@@ -199,16 +206,18 @@ The existing 314 scenarios remain a locked final suite. BM25 parameters, boosts,
 - source-unavailability rate ≤ 0.02;
 - warm hybrid candidate p95 ≤ 1.5 seconds and cold hybrid candidate p95 ≤ 3 seconds;
 - complete indexed-stage p95 ≤ 5 seconds and answer p95 ≤ 30 seconds;
-- evaluation cost ≤ USD 30;
-- 14 continuous green staging days and at least 10,000 shadow/synthetic requests;
-- 30 green production-canary days before complete activation; and
-- 90 green post-activation days plus isolated restore before legacy retirement.
+- evaluation cost ≤ USD 30.
+
+Fixed staging/canary/stability durations and synthetic-request quotas are removed.
+A new capability activates after its build result and bounded smoke checks pass;
+ordinary monitoring continues after the ticket closes. An observed failure or
+unverified case is recorded and resolved, not concealed by the time limit.
 
 Cost circuits remain USD 50 current build, USD 450 complete migration and USD 25 monthly production query embeddings. Document-build authorization is the exact unique missing token inventory multiplied by the dated accepted standard rate plus 25%; reused and duplicate inputs authorize zero. Exact corpus-wide measurement and any post-cutoff delta control each build, never sample extrapolation. Current releases remain due within 24 hours of a validated change. The four-hour emergency path may reuse matching embeddings or build changed inputs within the same authorization and integrity gates; if a complete release cannot be ready, indexed retrieval becomes unavailable and continues Live Official Search. History reconciles at least weekly.
 
 ## Restore contract
 
-An isolated restore imports the exact legal D1 export, verifies both R2 inventory roots, opens/probes the BM25 manifest, creates fresh compatible Vectorize, repopulates it solely from hash-verified R2 embeddings, waits through the final mutation, reconciles a fresh vector-list snapshot and runs representative hybrid retrieval. A restore that calls OpenAI, relies on container-local disk, observes count-only parity or pairs different releases fails.
+The recovery mechanism imports legal D1, opens the pinned BM25 manifest and reconstructs compatible Vectorize solely from hash-verified R2 embeddings, with terminal index membership checks. It never calls OpenAI or relies on container-local disk. Existing proof is reusable for unchanged formats and paths; changed recovery behavior uses bounded fixtures. A full remote restore is for actual recovery or an identified defect, not another routine build/activation/retirement gate.
 
 ## Migration sequence
 
@@ -216,11 +225,11 @@ An isolated restore imports the exact legal D1 export, verifies both R2 inventor
 2. Pause/cancel partial AI Search work with exact readback; retain instances/evidence without activation.
 3. Prove Retrieval Chunk, BM25, embedding and query-reader contracts on representative current/history data.
 4. Build the Workflow/Queue pipeline, adding a Container reducer only if proved necessary.
-5. Build, reconcile, evaluate, soak and activate a new staging current custom release.
-6. Use current failover to export/restore saturated legacy D1 safely, inventory Qdrant truthfully, then migrate/canonicalize history.
-7. Build, reconcile, evaluate, soak and activate staging history/as-of/comparison.
-8. Repeat isolated production evidence, current/history builds, canaries and atomic activation.
-9. After 90 green days and restore, stop legacy writes and retire AI Search, Qdrant and platform-D1 corpus bodies/postings.
+5. Build staging current once, check the new index once and activate after a bounded smoke set.
+6. Migrate missing historical metadata from accepted evidence and resolve only remaining canonical mapping gaps; reuse recovery coverage.
+7. Build staging history once, check its new index and activate the new temporal capabilities after focused checks.
+8. Copy missing production evidence and reusable embeddings, build each production index once and activate after environment/capability checks.
+9. Stop legacy writes and retire unused resources after exact target/reference and recovery-coverage checks; preserve immutable evidence and prior custom releases.
 10. Verify final resources, scrub the root Cloudflare token and require owner revocation.
 
 ## Verified platform constraints

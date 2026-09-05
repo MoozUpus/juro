@@ -1,13 +1,20 @@
 # Legal corpus backup
 
+Follow the [verification policy](./legal-corpus-verification.md). Reuse existing
+recovery artifacts when they cover the affected state. Additive off-side work
+does not require a fresh all-resource export or restore. Before replacing or
+deleting state, capture only missing recovery coverage for the exact targets.
+The historical migration procedures below describe past recovery mechanics;
+they do not impose repeated full verification on unchanged accepted artifacts.
+
 ## Custom hybrid Search Release
 
-Before any custom-index or provider-qualification mutation, capture and
-verify the exact account/environment, legal D1 export/isolated restore, evidence
-R2 inventory root, derivative-index R2 inventory root, active/prior Activation
-Sets, Vectorize index/configuration/mutation state, Workflow/Queue configuration,
-Gateway logging/cache/authentication state, and the truthful legacy AI Search and
-Qdrant inventories. Configuration evidence contains names, IDs, versions, counts,
+Before custom-index work, read the relevant account/environment and configuration
+once and reference the accepted evidence/index manifests, active/prior Activation
+Sets and applicable recovery artifacts. New index state is verified by its build;
+unchanged legacy inventories need no new sweep. If an operation could replace or
+delete state not covered by the existing recovery point, capture that affected
+state once. Configuration evidence contains names, IDs, versions, counts,
 hashes and safe states only—never token/key values, query/evidence text, postings
 or vectors.
 
@@ -18,10 +25,10 @@ snapshot identity and final processed mutation; D1 release/gate/activation roots
 the deduplicated structured-input manifest hashes; content-free regular API
 request/attempt receipts and terminal counts; actual usage/cost; response-index
 reconciliation and outstanding budget reservations; and cost/privacy/evaluation
-evidence. Provider request/response bodies are not backup evidence. Backup succeeds only after an isolated
-reader opens the exact BM25 artifacts and a fresh Vectorize index is reconstructed
-solely from R2 embeddings without an OpenAI call, then representative hybrid
-queries pass.
+evidence. Provider request/response bodies are not backup evidence. Reference
+the build's successful inventory check and existing compatible restore proof;
+do not reconstruct a fresh Vectorize index for every backup. If the restore
+format or path changes, verify the affected behavior with a bounded fixture.
 
 The root `CLOUDFLARE_API_TOKEN` and platform `OPENAI_API_KEY` stay in their
 ignored `.env` files and are never backup material. By owner direction the root
@@ -29,7 +36,7 @@ token is not removed until the migration program is resolved; the final
 credential-retirement checkpoint owns final verified readback, removal of only
 that entry, leakage scan and owner revocation.
 
-## Source Snapshot candidate boundary
+## Historical Source Snapshot candidate procedure
 
 Before any source-snapshot green2 mutation, verify the Cloudflare account, exact D1
 UUID/name, exact R2 bucket, route-free Worker and paused private namespace;
@@ -48,8 +55,8 @@ may be sealed only after those external hashes exist. Record the final
 qualification object separately; it must still show a draft Search Release,
 zero active Activation Sets and the provider-qualification boundary.
 
-Create a backup before enabling discovery, ingestion, reindexing or a version
-pointer update in an environment.
+For new discovery, ingestion, reindexing or pointer work, apply the recovery
+coverage rule above; do not automatically repeat this historical full procedure.
 
 The private backup set contains a D1 export, all `legal_corpus_*` registries,
 source-alias and checkpoint ledgers, current-version pointers, version and
