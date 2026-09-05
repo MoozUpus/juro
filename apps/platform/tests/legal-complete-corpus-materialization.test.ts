@@ -35,8 +35,9 @@ import {
 import { assertTicket29DistinctArtifactPaths } from "../scripts/ticket29-isolated-artifact-paths";
 import { countTicket29IdentityMismatches } from "../scripts/ticket29-isolated-identity";
 import { countTicket29OrphanObjects } from "../scripts/ticket29-isolated-object-reconciliation";
+import { countTicket29ProvenanceGaps } from "../scripts/ticket29-isolated-provenance-reconciliation";
 import {
-  buildTicket29ReconstructionLaneProofs,
+  buildExpectedTicket29ReconstructionLaneReports,
   ticket29ReconstructionLaneReportMatches,
 } from "../scripts/ticket29-isolated-reconstruction-reports";
 import { reconstructTicket28Roots } from "../scripts/ticket29-isolated-ticket28-roots";
@@ -185,6 +186,29 @@ test("Ticket 29 isolated object reconciliation finds orphans with set-based refe
 
   assert.equal(countTicket29OrphanObjects(database, runId), 2);
   database.close();
+});
+
+test("Ticket 29 isolated provenance reconciliation scans aliases set-wise", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE legal_complete_corpus_records (
+      run_id TEXT NOT NULL, source_version_id TEXT NOT NULL);
+    CREATE TABLE legal_complete_corpus_aliases (
+      run_id TEXT NOT NULL, owner_id TEXT NOT NULL, alias_kind TEXT NOT NULL);
+    CREATE TABLE legal_complete_corpus_lineage_refs (
+      run_id TEXT NOT NULL, source_version_id TEXT NOT NULL);
+    INSERT INTO legal_complete_corpus_records VALUES
+      ('run','complete'),('run','complete'),('run','missing-normalized'),('other','other');
+    INSERT INTO legal_complete_corpus_aliases VALUES
+      ('run','complete','raw_capture'),('run','complete','normalized_revision'),
+      ('run','missing-normalized','raw_capture'),
+      ('other','other','raw_capture'),('other','other','normalized_revision');
+    INSERT INTO legal_complete_corpus_lineage_refs VALUES
+      ('run','complete'),('run','missing-normalized'),('other','other');`);
+  try {
+    assert.equal(countTicket29ProvenanceGaps(database, "run"), 1);
+  } finally {
+    database.close();
+  }
 });
 
 test("Ticket 29 isolated proof reconstructs Ticket 28's exact manifest projections", () => {
@@ -711,7 +735,7 @@ test("isolated reconstruction uses only body-free mappings and evidence objects"
 test("isolated reconstruction verifies persisted whole-object reports without downloading bodies again", () => {
   const objects = Array.from({ length: 101 }, (_, index) => ({
     objectKind: index % 2 === 0 ? "provision_rendition" : "raw_capture",
-    sha256: `a${index.toString(16).padStart(63, "0")}`,
+    sha256: `a${(index === 1 ? 0 : index).toString(16).padStart(63, "0")}`,
     r2Key: `corpus/${index}`,
     byteCount: index + 1,
   }));
@@ -722,11 +746,26 @@ test("isolated reconstruction verifies persisted whole-object reports without do
     byteCount: 10,
   });
 
-  const proofs = buildTicket29ReconstructionLaneProofs("run", objects);
+  const proofs = buildExpectedTicket29ReconstructionLaneReports("run", objects);
   const lane = proofs.find((proof) => proof.lane === "a")!;
-  assert.equal(lane.pageCount, 2);
-  assert.equal(lane.verifiedObjectCount, 101);
-  assert.equal(lane.byteCount, 5_151);
+  assert.deepEqual(lane, {
+    schemaVersion: 1,
+    kind: "reconstruction-lane",
+    runId: "run",
+    lane: "a",
+    pageCount: 2,
+    verifiedObjectCount: 101,
+    byteCount: 5_151,
+    missingObjects: 0,
+    hashMismatches: 0,
+    rootSha256: "e24cbb7fbc573910265054902748fb182dd16e2f2959f7efcafb56f43ba90377",
+    pages: [
+      { count: 100, byteCount: 5_050,
+        rootSha256: "964a02957924dc6ca1903fb6c79c6fb140e7235516f8ce4378fdc7b611f45ae9" },
+      { count: 1, byteCount: 101,
+        rootSha256: "68c847efaef3c75463167fd32c8840a59f06f03b2c06920e9644835120921b55" },
+    ],
+  });
   assert.equal(proofs.find((proof) => proof.lane === "b")!.verifiedObjectCount, 0);
   assert.equal(ticket29ReconstructionLaneReportMatches(lane, lane), true);
   assert.equal(ticket29ReconstructionLaneReportMatches(lane, {

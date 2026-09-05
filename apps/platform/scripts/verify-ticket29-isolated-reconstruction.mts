@@ -19,8 +19,9 @@ import {
   publisherTokensMatch,
 } from "./ticket29-isolated-identity";
 import { countTicket29OrphanObjects } from "./ticket29-isolated-object-reconciliation";
+import { countTicket29ProvenanceGaps } from "./ticket29-isolated-provenance-reconciliation";
 import {
-  buildTicket29ReconstructionLaneProofs,
+  buildExpectedTicket29ReconstructionLaneReports,
   ticket29ReconstructionLaneReportMatches,
 } from "./ticket29-isolated-reconstruction-reports";
 import { reconstructTicket28Roots } from "./ticket29-isolated-ticket28-roots";
@@ -517,14 +518,8 @@ async function main(): Promise<void> {
     targetManifestLanes[membership] = lanes;
   }
 
-  const provenanceGaps = database.prepare(`SELECT count(*) AS count FROM legal_complete_corpus_records r
-    WHERE r.run_id=? AND (NOT EXISTS (SELECT 1 FROM legal_complete_corpus_aliases a
-      WHERE a.run_id=r.run_id AND a.owner_id=r.source_version_id AND a.alias_kind='raw_capture')
-      OR NOT EXISTS (SELECT 1 FROM legal_complete_corpus_aliases a WHERE a.run_id=r.run_id
-        AND a.owner_id=r.source_version_id AND a.alias_kind='normalized_revision')
-      OR NOT EXISTS (SELECT 1 FROM legal_complete_corpus_lineage_refs l
-        WHERE l.run_id=r.run_id AND l.source_version_id=r.source_version_id))`).get(RUN_ID) as { count: number };
-  if (provenanceGaps.count !== 0) throw new Error("TICKET29_PROVENANCE_PATH_MISSING");
+  const provenanceGaps = countTicket29ProvenanceGaps(database, RUN_ID);
+  if (provenanceGaps !== 0) throw new Error("TICKET29_PROVENANCE_PATH_MISSING");
   const attemptParity = database.prepare(`SELECT
       (SELECT count(*) FROM legal_complete_corpus_attempt_pages WHERE run_id=?
         AND attempt_id='ticket29:first') AS firstPages,
@@ -713,7 +708,7 @@ async function main(): Promise<void> {
   }
   const apiToken = await token();
   const objectByKey = new Map(objects.map((row) => [row.r2Key, row]));
-  const expectedReconstructionProofs = new Map(buildTicket29ReconstructionLaneProofs(RUN_ID, objects)
+  const expectedReconstructionProofs = new Map(buildExpectedTicket29ReconstructionLaneReports(RUN_ID, objects)
     .map((proof) => [proof.lane, proof]));
   const reconstructionLaneRows = database.prepare(`SELECT lane,r2_key AS r2Key,
       report_sha256 AS reportSha256,verified_object_count AS verifiedObjectCount,

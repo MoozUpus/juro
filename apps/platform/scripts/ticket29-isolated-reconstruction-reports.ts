@@ -15,7 +15,7 @@ export type Ticket29ReconstructionObject = {
   byteCount: number;
 };
 
-export type Ticket29ReconstructionLaneProof = {
+export type ExpectedTicket29ReconstructionLaneReport = {
   schemaVersion: 1;
   kind: "reconstruction-lane";
   runId: string;
@@ -37,10 +37,10 @@ function stableRoot(value: unknown): string {
   return sha256(stableSourceSnapshotJson(value));
 }
 
-export function buildTicket29ReconstructionLaneProofs(
+export function buildExpectedTicket29ReconstructionLaneReports(
   runId: string,
   objects: readonly Ticket29ReconstructionObject[],
-): Ticket29ReconstructionLaneProof[] {
+): ExpectedTicket29ReconstructionLaneReport[] {
   const dataObjects = objects
     .filter((object) => DATA_OBJECT_KINDS.has(object.objectKind))
     .toSorted((left, right) => left.sha256 < right.sha256 ? -1 : left.sha256 > right.sha256 ? 1
@@ -48,7 +48,7 @@ export function buildTicket29ReconstructionLaneProofs(
 
   return [..."0123456789abcdef"].map((lane) => {
     const laneObjects = dataObjects.filter((object) => object.sha256.startsWith(lane));
-    const pages: Ticket29ReconstructionLaneProof["pages"] = [];
+    const pages: ExpectedTicket29ReconstructionLaneReport["pages"] = [];
     for (let offset = 0; offset < laneObjects.length; offset += 100) {
       const page = laneObjects.slice(offset, offset + 100).map((object) => ({
         objectKind: object.objectKind,
@@ -80,7 +80,7 @@ export function buildTicket29ReconstructionLaneProofs(
 }
 
 export function ticket29ReconstructionLaneReportMatches(
-  expected: Ticket29ReconstructionLaneProof,
+  expected: ExpectedTicket29ReconstructionLaneReport,
   actual: unknown,
 ): boolean {
   return stableSourceSnapshotJson(actual) === stableSourceSnapshotJson(expected);
