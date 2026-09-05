@@ -1,4 +1,4 @@
-const buildPath = /^\/internal\/legal-corpus\/(?:search-index-build\/(?:advance|reconcile|finalize)|source-snapshot-build\/(?:start|advance|reconcile|finalize|replay|qualify|dry-run)|ai-search-projection\/advance|ai-search\/configure-candidate)$/u;
+const buildPath = /^\/internal\/legal-corpus\/(?:search-index-build\/(?:advance|reconcile|finalize)|ai-search-projection\/advance|ai-search\/configure-candidate)$/u;
 
 type Env = { LEGAL_CORPUS_BUILD_SERVICE: Fetcher };
 

@@ -50,13 +50,13 @@ is rebuilt from official-source provenance, exact D1/R2 integrity, supported
 extraction, stable source identities, the cutoff-pinned current pointer,
 supported temporal state, public privacy, quarantine clearance and
 deterministic canonicalization. Visible retrieval stays on the legacy Adapter
-until Tickets 23–25 build a new custom candidate and Ticket 13 evaluates, soaks
-and activates it through a capability-scoped Activation Set. Ticket 12's Corpus
+until the custom-index build produces a new candidate and provider qualification
+evaluates, soaks and activates it through a capability-scoped Activation Set. The source-snapshot Corpus
 Snapshot remains qualified, but its draft AI Search Search Release identity and
 provider gates do not transfer.
 
-The release builder and replay validator share the same canonical projection
-primitive. A completed construction is deliberately unsealed: post-build
+The archived release builder and replay validator shared the same canonical
+projection primitive. A completed construction is deliberately unsealed: post-build
 reconciliation must prove exactly-once projection membership and the complete,
 pairwise-disjoint shard union, then independent `baseline` and `repeat` runs
 must re-read the source objects and reproduce the same full-corpus root.
@@ -64,7 +64,11 @@ Checkpoint restart may reuse verified pages but must reject a changed page or
 run identity. External validation, review and verified recovery-export hashes
 are recorded by a final immutable qualification before the green2 storage
 coordinator becomes sealed/ready. The Search Release remains draft and no
-Activation Set is selected in Ticket 12.
+Activation Set is selected during source-snapshot qualification.
+
+For forensic replay, use the completed one-off tooling retained under
+`.scratch/legal-retrieval-architecture-evaluation/archived-code/`; it is not a
+production runtime dependency.
 
 ## Accepted custom retrieval transition
 
@@ -80,7 +84,7 @@ only bypass.
 
 A private Workflow coordinates builds and bounded Queue consumers perform
 idempotent batches from R2 locators. A Container reducer is permitted only if the
-representative Ticket 23 prototype proves Worker sort limits inadequate. The
+representative prototype proves Worker sort limits inadequate. The
 system is intentionally laptop-independent. Vectorize restore reuses
 hash-verified R2 embeddings without another OpenAI call.
 
@@ -89,7 +93,7 @@ gates and Activation Sets. It owns no body, term dictionary, posting/position
 list or vector. Exhaustive index inventories live in R2, and a measured
 projection above 7 GB blocks release pending an accepted catalog-sharding plan.
 The implemented D1 sparse tables and Qdrant path remain legacy rollback state
-until Tickets 21–22 satisfy their real stability and restore gates.
+until the replacement satisfies its real stability and restore gates.
 
 ## Local development against the staging index
 

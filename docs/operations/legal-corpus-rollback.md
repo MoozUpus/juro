@@ -10,7 +10,7 @@ Indexed Official Corpus unavailable and continue the strict Source Ladder.
 
 AI Search's partial Porter/trigram candidates are non-authoritative historical
 evidence, not a rollback target. Qdrant/D1 remains a legacy rollback Adapter only
-until Tickets 21–22 complete the accepted stability and restore gates.
+until the replacement completes the accepted stability and restore gates.
 
 The first rollback action is server-side flag disablement:
 

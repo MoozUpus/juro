@@ -11,12 +11,27 @@ import {
   type CustomRetrievalChunk,
 } from "./custom-hybrid-index";
 import { customItemOrdinal } from "./custom-release-manifest";
-import { provisionObjectSchema } from "./source-snapshot-build-service";
 import { stableSourceSnapshotJson } from "./source-snapshot";
 import { legalLanguageSchema } from "./target-domain-schemas";
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const instantSchema = z.string().datetime({ offset: true });
+const provisionObjectSchema = z.object({
+  schemaVersion: z.literal(1),
+  provisionRenditionId: z.string(),
+  publisherInstrumentToken: z.string(),
+  publisherProvisionToken: z.string(),
+  languageTag: z.enum(["uz-Latn", "uz-Cyrl", "ru", "en"]),
+  actTitle: z.string(),
+  documentType: z.string(),
+  articleNumber: z.string(),
+  articleTitle: z.string().nullable(),
+  provisionSequence: z.number().int().nonnegative(),
+  provisionText: z.string().min(1),
+  sourceUrl: z.string().url(),
+  capturedAt: z.string(),
+  sourceNormalizedSha256: sha256Schema,
+}).passthrough();
 const sourcePlanItemSchema = z.object({
   sourceOrdinal: z.number().int().nonnegative(),
   snapshotProvisionId: z.string().min(1).max(300),

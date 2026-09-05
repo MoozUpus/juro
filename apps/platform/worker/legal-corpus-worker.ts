@@ -37,11 +37,6 @@ import {
   isLegalSearchIndexBuildPath,
 } from "../lib/legal-corpus/search-index-build-service";
 import {
-  handleSourceSnapshotBuildRequest,
-  isSourceSnapshotBuildPath,
-  type SourceSnapshotBuildEnv,
-} from "../lib/legal-corpus/source-snapshot-build-service";
-import {
   handleAiSearchProjectionRequest,
   isAiSearchProjectionPath,
   type AiSearchProjectionEnv,
@@ -160,7 +155,7 @@ export function legalCorpusIngestionStartAllowed(
 
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv
   & LegalTargetReadinessEnv & OfficialEvidenceEnv & ReleaseLifecycleEnv
-  & TargetRetrievalRuntimeEnv & SourceSnapshotBuildEnv & AiSearchProjectionEnv & {
+  & TargetRetrievalRuntimeEnv & AiSearchProjectionEnv & {
   BACKUP_BUCKET?: R2Bucket;
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
@@ -647,9 +642,6 @@ const worker = {
     }
     if (isLegalSearchIndexBuildPath(url.pathname)) {
       return handleLegalSearchIndexBuildRequest(request, env);
-    }
-    if (isSourceSnapshotBuildPath(url.pathname)) {
-      return handleSourceSnapshotBuildRequest(request, env);
     }
     if (isAiSearchProjectionPath(url.pathname)) {
       return handleAiSearchProjectionRequest(request, env);

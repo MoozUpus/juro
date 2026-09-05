@@ -8,7 +8,7 @@ Status: research note; not an architecture decision or authorization to upload c
 
 Do not select a provider from vendor benchmarks alone. Run a sealed JURO bake-off
 now, before the first full-corpus dense build. The current custom staging index has
-zero vectors and the failed Ticket 25 attempt incurred zero provider tokens, so
+zero vectors and the failed dense-build attempt incurred zero provider tokens, so
 this is the lowest-cost point at which to compare providers.
 
 The provisional production baseline should remain OpenAI
@@ -96,7 +96,7 @@ API compatibility, not a retrieval-quality guarantee.
 ## Input, tokenization and transformation
 
 JURO's accepted 512-target structural policy produced a maximum 712-token
-structured OpenAI input in the Ticket 23 sample and a sample-extrapolated
+structured OpenAI input in the representative sample and a sample-extrapolated
 603,779,160 OpenAI-token complete-corpus projection. That number uses the
 current OpenAI-side tokenization contract. It is not a Gemini token count.
 
@@ -222,7 +222,7 @@ and [Google AI Studio through AI Gateway](https://developers.cloudflare.com/ai-g
 Cloudflare's public provider pages do not explicitly prove every Files/Batch
 upload, create, poll, result-download and deletion path needed by either design.
 That remains an unknown, not permission to bypass the Gateway. Each candidate
-must pass Ticket 24's authenticated, cache-disabled and payload-logging-disabled
+must pass the authenticated, cache-disabled and payload-logging-disabled provider
 end-to-end preflight. Gemini additionally requires a new Google credential and
 distinct staging/production secret setup; no existing OpenAI secret should be
 repurposed.

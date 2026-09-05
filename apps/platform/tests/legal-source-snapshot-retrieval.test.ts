@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -118,12 +117,6 @@ test("Source Snapshot item hydration rejects provider metadata drift before R2",
     valid_from: "2026-01-02T00:00:00.000Z", valid_to: null,
   }), /SOURCE_SNAPSHOT_PROVIDER_METADATA_MISMATCH/u);
   assert.equal(read, false);
-});
-
-test("Source Snapshot replay driver terminates lanes for an already-completed run", async () => {
-  const driver = await readFile(new URL("../scripts/run-source-snapshot-build.mjs", import.meta.url), "utf8");
-  assert.match(driver,
-    /if \(!results\[index\]\.laneComplete && !results\[index\]\.complete\) laneQueue\.push\(active\[index\]\);/u);
 });
 
 test("Source Snapshot catalog ignores preserved eligibility from an unqualified build", async () => {

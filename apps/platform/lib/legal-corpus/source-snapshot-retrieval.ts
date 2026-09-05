@@ -118,8 +118,8 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 
 /**
  * Future target-runtime hydration seam. Activation remains outside this
- * module, so Ticket 12 can validate neutral source-snapshot retrieval while
- * the visible staging runtime stays on the legacy Adapter until Ticket 13.
+ * module, so neutral source-snapshot retrieval can be validated while the
+ * visible staging runtime stays on the legacy Adapter pending qualification.
  */
 export function createSourceSnapshotPassageResolver(dependencies: {
   catalog: SourceSnapshotRetrievalCatalog;

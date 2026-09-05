@@ -133,16 +133,14 @@ test("offline document indexing requires Batch-materialized embedding artifacts"
   );
 });
 
-test("offline workers cannot synchronously call a document-embedding provider", async () => {
-  const workers = await Promise.all([
-    readFile(new URL("../worker/legal-custom-index-pipeline-worker.ts", import.meta.url), "utf8"),
-    readFile(new URL("../worker/legal-custom-current-build-worker.ts", import.meta.url), "utf8"),
-  ]);
-  for (const worker of workers) {
-    assert.match(worker, /assertOfflineEmbeddingArtifactsAvailable\(missing\.length\)/u);
-    assert.doesNotMatch(worker, /endpoint:\s*["']embeddings["']/u);
-    assert.doesNotMatch(worker, /\.gateway\(/u);
-  }
+test("offline worker cannot synchronously call a document-embedding provider", async () => {
+  const worker = await readFile(
+    new URL("../worker/legal-custom-current-build-worker.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(worker, /assertOfflineEmbeddingArtifactsAvailable\(missing\.length\)/u);
+  assert.doesNotMatch(worker, /endpoint:\s*["']embeddings["']/u);
+  assert.doesNotMatch(worker, /\.gateway\(/u);
 });
 
 test("seal requires all lanes, terminal Vectorize mutations and exact inventory", () => {

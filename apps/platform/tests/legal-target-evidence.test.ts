@@ -28,7 +28,7 @@ function migrationProvision<T extends Record<string, unknown> = Record<never, ne
     sourceRawSha256: sha256(merged.rawCapture),
     sourceNormalizedSha256: sha256(merged.normalizedRevision),
     sourceProvisionSha256: sha256(merged.provisionText),
-    migrationRunId: "ticket-12-current-20260831t062627z",
+    migrationRunId: "source-snapshot-current-20260831t062627z",
     cutoffAt: migrationCutoff,
     editorialValidity: {
       validFrom: "2026-01-01T00:00:00.000Z",
@@ -568,7 +568,7 @@ test("a complete revision import shares verified source evidence and restarts id
     const cutoff = sqlite.prepare(`SELECT migration_run_id AS migrationRunId,
       cutoff_at AS cutoffAt FROM legal_migration_cutoffs WHERE scope='current'`).get();
     assert.deepEqual({ ...cutoff }, {
-      migrationRunId: "ticket-12-current-20260831t062627z",
+      migrationRunId: "source-snapshot-current-20260831t062627z",
       cutoffAt: migrationCutoff,
     });
   } finally {
@@ -710,7 +710,7 @@ test("separate revision calls cannot mix immutable current-baseline migration ru
     await assert.rejects(
       () => importProvisionRevision({ db: d1, bucket }, [{
         ...input,
-        migrationRunId: "ticket-12-current-later-run",
+        migrationRunId: "source-snapshot-current-later-run",
       }]),
       /LEGAL_EVIDENCE_IDENTITY_CONFLICT/u,
     );

@@ -168,7 +168,7 @@ A current update creates chunks and embeddings only for changed content, emits a
 
 The owner-approved OpenAI key in the ignored platform `.env` may bootstrap both environments. Staging and production nevertheless use distinct authenticated AI Gateways and encrypted secret bindings with payload logging and caching disabled. Application Workers receive gateway access, not the raw key. Production real-query embedding remains blocked until disclosure/DPA and approved ZDR/MAM evidence exist.
 
-The ignored root `CLOUDFLARE_API_TOKEN` is a local control-plane bootstrap only. It is never printed, committed, written to evidence or bound to a Worker. It remains until all migration tickets resolve. Ticket 22 then verifies the pinned account/resources, removes only that entry, deletes the file only when empty, scans for leakage and requires owner revocation.
+The ignored root `CLOUDFLARE_API_TOKEN` is a local control-plane bootstrap only. It is never printed, committed, written to evidence or bound to a Worker. It remains until the migration program resolves. The final credential-retirement checkpoint then verifies the pinned account/resources, removes only that entry, deletes the file only when empty, scans for leakage and requires owner revocation.
 
 The provider privacy transform removes direct identifiers, contacts, addresses, account/case/document identifiers, secrets, payment data and irrelevant narrative while preserving material legal facts. Query vectors are request-local and never persisted.
 
@@ -176,13 +176,13 @@ Content-free telemetry may contain release/component/version identities, hashed 
 
 ## Release, activation and rollback
 
-Ticket 12's qualified Corpus Snapshot may source the first custom release, but its draft AI Search Search Release identity may not. Changed chunk, sparse, embedding, Vectorize, filtering and fusion contracts require a new identity and fresh backend gates.
+The qualified source Corpus Snapshot may source the first custom release, but its draft AI Search Search Release identity may not. Changed chunk, sparse, embedding, Vectorize, filtering and fusion contracts require a new identity and fresh backend gates.
 
 A Search Release seals only after Retrieval Chunks are complete and reproducible; every sparse artifact/hash/statistic reconciles; every embedding and the Vectorize final mutation plus fresh list snapshot proves exact parity; both lanes pass temporal/failure/integrity tests; privacy/cost/configuration attestations pass; and the locked evaluation plus applicable soak passes.
 
 Current and history are separate releases. Current may activate alone. As-of requires history. Comparison requires compatible current/history releases from the same Corpus Snapshot and policy family. Activation and rollback are single D1 transactions preserving prior sets and immutable events.
 
-AI Search's partial Porter/trigram candidates remain historical non-authoritative evidence until custom staging current activation; the first implementation ticket pauses/cancels their jobs with exact readback. Qdrant and legacy D1 remain rollback paths until complete production activation is green for 90 days and isolated restore passes. No missing full-corpus Qdrant snapshot may be fabricated: evidence inventories it exactly and proves snapshot mechanics separately.
+AI Search's partial Porter/trigram candidates remain historical non-authoritative evidence until custom staging current activation; the first implementation checkpoint pauses/cancels their jobs with exact readback. Qdrant and legacy D1 remain rollback paths until complete production activation is green for 90 days and isolated restore passes. No missing full-corpus Qdrant snapshot may be fabricated: evidence inventories it exactly and proves snapshot mechanics separately.
 
 ## Mandatory evaluation and gates
 
@@ -200,7 +200,7 @@ The existing 314 scenarios remain a locked final suite. BM25 parameters, boosts,
 - 30 green production-canary days before complete activation; and
 - 90 green post-activation days plus isolated restore before legacy retirement.
 
-Cost circuits remain USD 50 current build, USD 450 complete migration and USD 25 monthly production query embeddings. The offline authorization is exact unique missing input tokens multiplied by the accepted Batch rate plus 25%; reused and duplicate inputs authorize zero. Ticket 23's 512-token sample projection is about USD 39.245 at the currently verified 50%-discounted Batch rate, or USD 49.05625 with margin, but exact post-dedup measurement controls every build. Current releases remain due within 24 hours of a validated change. The four-hour emergency path may use an already matching embedding or mark indexed retrieval unavailable and continue Live Official Search; it never uses synchronous document embedding or activates an incomplete sparse-only release. History reconciles at least weekly.
+Cost circuits remain USD 50 current build, USD 450 complete migration and USD 25 monthly production query embeddings. The offline authorization is exact unique missing input tokens multiplied by the accepted Batch rate plus 25%; reused and duplicate inputs authorize zero. The representative 512-token sample projection is about USD 39.245 at the currently verified 50%-discounted Batch rate, or USD 49.05625 with margin, but exact post-dedup measurement controls every build. Current releases remain due within 24 hours of a validated change. The four-hour emergency path may use an already matching embedding or mark indexed retrieval unavailable and continue Live Official Search; it never uses synchronous document embedding or activates an incomplete sparse-only release. History reconciles at least weekly.
 
 ## Restore contract
 
@@ -208,7 +208,7 @@ An isolated restore imports the exact legal D1 export, verifies both R2 inventor
 
 ## Migration sequence
 
-1. Preserve Ticket 12 and mark Ticket 13 AI Search qualification non-transferable.
+1. Preserve the qualified source snapshot and mark its AI Search qualification non-transferable.
 2. Pause/cancel partial AI Search work with exact readback; retain instances/evidence without activation.
 3. Prove Retrieval Chunk, BM25, embedding and query-reader contracts on representative current/history data.
 4. Build the Workflow/Queue pipeline, adding a Container reducer only if proved necessary.
@@ -237,6 +237,6 @@ An isolated restore imports the exact legal D1 export, verifies both R2 inventor
   than the provider's default expiry after durable reconciliation.
 - [Cloudflare's OpenAI provider-native endpoint](https://developers.cloudflare.com/ai-gateway/usage/providers/openai/)
   replaces the OpenAI base URL, while [AI Gateway authentication](https://developers.cloudflare.com/ai-gateway/configuration/authentication/)
-  protects the path. Ticket 24 must still prove every required Files/Batch
+  protects the path. The provider preflight must still prove every required Files/Batch
   operation end to end before any corpus upload.
 - [`text-embedding-3-large`](https://developers.openai.com/api/docs/models/text-embedding-3-large) is the selected multilingual model.

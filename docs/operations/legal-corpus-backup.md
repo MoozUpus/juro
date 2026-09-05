@@ -2,7 +2,7 @@
 
 ## Custom hybrid Search Release
 
-Before any Tickets 23–27 or refactored Tickets 13–22 mutation, capture and
+Before any custom-index or provider-qualification mutation, capture and
 verify the exact account/environment, legal D1 export/isolated restore, evidence
 R2 inventory root, derivative-index R2 inventory root, active/prior Activation
 Sets, Vectorize index/configuration/mutation state, Workflow/Queue configuration,
@@ -25,13 +25,13 @@ queries pass.
 
 The root `CLOUDFLARE_API_TOKEN` and platform `OPENAI_API_KEY` stay in their
 ignored `.env` files and are never backup material. By owner direction the root
-token is not removed until every migration ticket is resolved; Ticket 22 owns
-final verified readback, removal of only that entry, leakage scan and owner
-revocation.
+token is not removed until the migration program is resolved; the final
+credential-retirement checkpoint owns final verified readback, removal of only
+that entry, leakage scan and owner revocation.
 
 ## Source Snapshot candidate boundary
 
-Before any Ticket 12 green2 mutation, verify the Cloudflare account, exact D1
+Before any source-snapshot green2 mutation, verify the Cloudflare account, exact D1
 UUID/name, exact R2 bucket, route-free Worker and paused private namespace;
 verify the latest full D1 export restores with `quick_check=ok` and zero foreign
 key failures; and verify the R2 inventory/readback manifest. Preserve the
@@ -46,7 +46,7 @@ replay run roots, the injected failure/restart record, dry-run identity, review
 attestations and the pre-qualification export/restore hashes. The coordinator
 may be sealed only after those external hashes exist. Record the final
 qualification object separately; it must still show a draft Search Release,
-zero active Activation Sets and the Ticket 13 provider boundary.
+zero active Activation Sets and the provider-qualification boundary.
 
 Create a backup before enabling discovery, ingestion, reindexing or a version
 pointer update in an environment.

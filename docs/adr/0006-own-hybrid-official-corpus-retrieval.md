@@ -24,6 +24,6 @@ JURO will own Hybrid Candidate Fusion for the Indexed Official Corpus. Immutable
   existing exact embedding or fail over to Live Official Search; it may not
   bypass Batch to create a new document embedding or claim a complete hybrid
   release before both lanes reconcile.
-- The same owner-approved OpenAI key may serve staging and production, but each environment stores it independently behind a distinct authenticated, logging-disabled and cache-disabled AI Gateway. The root Cloudflare bootstrap token remains only in the ignored root `.env` until every migration ticket is resolved, then is scrubbed after verified final readback and revoked by the owner.
+- The same owner-approved OpenAI key may serve staging and production, but each environment stores it independently behind a distinct authenticated, logging-disabled and cache-disabled AI Gateway. The root Cloudflare bootstrap token remains only in the ignored root `.env` until the migration program is resolved, then is scrubbed after verified final readback and revoked by the owner.
 - AI Search's partial Porter/trigram build remains non-authoritative historical evidence. Its corpus projection, token measurements and privacy observations may inform the replacement, but its reconciliation, evaluation and soak cannot qualify the custom backend.
 - Question Interpretation, Retrieval Eligibility, D1 revalidation, hash-verified R2 hydration, Provision Set selection, Official Coverage, the strict Source Ladder and Legal Answer behavior do not change.

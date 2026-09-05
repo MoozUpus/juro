@@ -29,9 +29,10 @@ The current candidate is built off-side into immutable canonical chunks,
 sparse projection rows, dense candidates, a pairwise-disjoint complete shard
 union and one Search Release. Checkpoints and immutable puts make restart after
 partial failure byte-identical. Full D1 inventories and R2 readback are part of
-reconciliation. Ticket 12 may seal the green2 storage candidate, but the Search
-Release stays draft, inactive and unpromoted until Ticket 13 completes provider
-evaluation, failure/quality/latency/cost gates and activation.
+reconciliation. Source-snapshot qualification may seal the green2 storage
+candidate, but the Search Release stays draft, inactive and unpromoted until
+provider qualification completes evaluation, failure/quality/latency/cost gates
+and activation.
 
 Legacy primary keys remain compatibility surrogates only. Additive stable
 identity mappings derive Source Document, Source Snapshot and Snapshot
