@@ -6,10 +6,38 @@ import {
   materializeCustomCurrentItem,
   partitionCustomBm25IntermediateRecords,
   serializeCustomCurrentArtifact,
+  ensureCustomCurrentReduction,
 } from "../lib/legal-corpus/custom-current-build";
 import { buildRetrievalChunks, serializeCustomEmbeddingInput } from "../lib/legal-corpus/custom-hybrid-index";
 
 const releaseId = "release:staging:current:custom-v1:2026-09-03";
+
+test("reduction handoff uses a valid stable instance identity and resumes after an ambiguous creation", async () => {
+  const instances = new Map<string, unknown>();
+  let creates = 0;
+  const workflow = {
+    async create(options: { id?: string; params?: unknown } = {}) {
+      assert.match(options.id!, /^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,99}$/u);
+      creates++;
+      if (!instances.has(options.id!)) instances.set(options.id!, options.params);
+      throw Error("CREATE_RESPONSE_LOST_OR_ALREADY_EXISTS");
+    },
+    async get(id: string) {
+      if (!instances.has(id)) throw Error("INSTANCE_MISSING");
+      return { id, status: async () => ({ status: "running" }) } as WorkflowInstance;
+    },
+  };
+  const payload = { releaseId, expectedPageCount: 16098 };
+  const first = await ensureCustomCurrentReduction(workflow, payload);
+  assert.equal(await ensureCustomCurrentReduction(workflow, payload), first);
+  assert.equal(instances.size, 1);
+  assert.equal(creates, 2);
+  assert.deepEqual(instances.get(first), payload);
+  await assert.rejects(() => ensureCustomCurrentReduction({
+    create: async () => { throw Error("CREATE_UNAVAILABLE"); },
+    get: async () => { throw Error("INSTANCE_MISSING"); },
+  }, { releaseId: "release:other" }), /CREATE_UNAVAILABLE/);
+});
 const provision = {
   schemaVersion: 1,
   provisionRenditionId: "rendition:1",

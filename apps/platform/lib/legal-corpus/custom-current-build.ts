@@ -114,6 +114,19 @@ export function partitionCustomBm25IntermediateRecords(
 
 const encoder = new TextEncoder();
 
+/** A lost creation response must reuse the immutable release's existing reduction. */
+export async function ensureCustomCurrentReduction<T extends { releaseId: string }>(
+  workflow: Pick<Workflow<T>, "create" | "get">, payload: T,
+): Promise<string> {
+  const id = `reduce-${await customCurrentSha256(payload.releaseId)}`;
+  try { await workflow.create({ id, params: payload }); }
+  catch (error) {
+    try { await (await workflow.get(id)).status(); }
+    catch { throw error; }
+  }
+  return id;
+}
+
 export async function customCurrentSha256(value: Uint8Array | string): Promise<string> {
   const source = typeof value === "string" ? encoder.encode(value) : value;
   const bytes = new Uint8Array(source.byteLength);

@@ -15,6 +15,7 @@ import { reconcileDocumentEmbeddings } from "../lib/legal-corpus/document-embedd
 
 import {
   customCurrentSha256,
+  ensureCustomCurrentReduction,
   materializeCustomCurrentItem,
   partitionCustomBm25IntermediateRecords,
   serializeCustomCurrentArtifact,
@@ -435,16 +436,13 @@ export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv
     ]);
     if (!configuration || !plan || started || completedPages !== configuration.expectedPageCount) return;
     try {
-      await this.env.REDUCE_WORKFLOW.create({
-        id: `reduce-${RELEASE_ID}`,
-        params: {
-          schemaVersion: 1,
-          releaseId: RELEASE_ID,
-          sourceSnapshotId: SOURCE_SNAPSHOT_ID,
-          sourceRootSha256: SOURCE_ROOT_SHA256,
-          expectedPageCount: plan.pageCount,
-          planInventorySha256: plan.planInventorySha256,
-        },
+      await ensureCustomCurrentReduction(this.env.REDUCE_WORKFLOW, {
+        schemaVersion: 1,
+        releaseId: RELEASE_ID,
+        sourceSnapshotId: SOURCE_SNAPSHOT_ID,
+        sourceRootSha256: SOURCE_ROOT_SHA256,
+        expectedPageCount: plan.pageCount,
+        planInventorySha256: plan.planInventorySha256,
       });
       await this.ctx.storage.put("reductionStarted", true);
     } catch {
