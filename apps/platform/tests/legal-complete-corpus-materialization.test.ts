@@ -34,6 +34,7 @@ import {
 } from "../lib/legal-corpus/complete-corpus-materialization";
 import { assertTicket29DistinctArtifactPaths } from "../scripts/ticket29-isolated-artifact-paths";
 import { countTicket29IdentityMismatches } from "../scripts/ticket29-isolated-identity";
+import { countTicket29OrphanObjects } from "../scripts/ticket29-isolated-object-reconciliation";
 import { reconstructTicket28Roots } from "../scripts/ticket29-isolated-ticket28-roots";
 import { stableSourceSnapshotJson } from "../lib/legal-corpus/source-snapshot";
 
@@ -122,6 +123,63 @@ test("Ticket 29 isolated identity proof reads the source-version token owner", (
     publisherRevisionToken, publisherProvisionToken, applicabilityIdentity,
   );
   assert.equal(countTicket29IdentityMismatches(database, "run"), 0);
+  database.close();
+});
+
+test("Ticket 29 isolated object reconciliation finds orphans with set-based references", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE legal_complete_corpus_objects (
+      run_id TEXT, object_kind TEXT, r2_key TEXT);
+    CREATE TABLE legal_complete_corpus_records (
+      run_id TEXT, raw_object_r2_key TEXT, normalized_object_r2_key TEXT,
+      provision_object_r2_key TEXT);
+    CREATE TABLE legal_complete_corpus_quarantines (
+      run_id TEXT, raw_object_r2_key TEXT, normalized_object_r2_key TEXT);
+    CREATE TABLE legal_complete_corpus_pages (run_id TEXT, plan_r2_key TEXT);
+    CREATE TABLE legal_complete_corpus_lane_reports (
+      run_id TEXT, report_kind TEXT, r2_key TEXT);
+    CREATE TABLE legal_complete_corpus_runs (
+      id TEXT, plan_r2_key TEXT, final_reconstruction_r2_key TEXT);
+    CREATE TABLE legal_complete_corpus_snapshots (run_id TEXT, r2_key TEXT)`);
+  const runId = "ticket29:test";
+  const referenced = [
+    ["raw_capture", "raw:record"],
+    ["normalized_revision", "normalized:record"],
+    ["provision_rendition", "provision:record"],
+    ["raw_capture", "raw:quarantine"],
+    ["normalized_revision", "normalized:quarantine"],
+    ["plan", "plan:page"],
+    ["plan", "plan:lane"],
+    ["plan", "plan:run"],
+    ["manifest", "manifest:always-registered"],
+    ["reconstruction", "reconstruction:lane"],
+    ["reconstruction", "reconstruction:run"],
+    ["corpus_snapshot", "snapshot:run"],
+  ] as const;
+  const insertObject = database.prepare(
+    "INSERT INTO legal_complete_corpus_objects VALUES (?,?,?)",
+  );
+  for (const [kind, key] of referenced) insertObject.run(runId, kind, key);
+  insertObject.run(runId, "raw_capture", "raw:orphan");
+  insertObject.run(runId, "plan", "plan:wrong-run-reference");
+  database.prepare("INSERT INTO legal_complete_corpus_records VALUES (?,?,?,?)")
+    .run(runId, "raw:record", "normalized:record", "provision:record");
+  database.prepare("INSERT INTO legal_complete_corpus_quarantines VALUES (?,?,?)")
+    .run(runId, "raw:quarantine", "normalized:quarantine");
+  database.prepare("INSERT INTO legal_complete_corpus_pages VALUES (?,?)")
+    .run(runId, "plan:page");
+  database.prepare("INSERT INTO legal_complete_corpus_lane_reports VALUES (?,?,?)")
+    .run(runId, "plan", "plan:lane");
+  database.prepare("INSERT INTO legal_complete_corpus_lane_reports VALUES (?,?,?)")
+    .run(runId, "reconstruction", "reconstruction:lane");
+  database.prepare("INSERT INTO legal_complete_corpus_runs VALUES (?,?,?)")
+    .run(runId, "plan:run", "reconstruction:run");
+  database.prepare("INSERT INTO legal_complete_corpus_snapshots VALUES (?,?)")
+    .run(runId, "snapshot:run");
+  database.prepare("INSERT INTO legal_complete_corpus_pages VALUES (?,?)")
+    .run("ticket29:other", "plan:wrong-run-reference");
+
+  assert.equal(countTicket29OrphanObjects(database, runId), 2);
   database.close();
 });
 

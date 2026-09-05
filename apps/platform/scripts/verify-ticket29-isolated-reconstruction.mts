@@ -18,6 +18,7 @@ import {
   countTicket29IdentityMismatches,
   publisherTokensMatch,
 } from "./ticket29-isolated-identity";
+import { countTicket29OrphanObjects } from "./ticket29-isolated-object-reconciliation";
 import { reconstructTicket28Roots } from "./ticket29-isolated-ticket28-roots";
 
 const ACCOUNT_ID = "e22babd36b65c99b69adf3de50df5227";
@@ -751,32 +752,7 @@ async function main(): Promise<void> {
           AND normalized.sha256=q.normalized_source_sha256
         WHERE q.run_id=? AND (raw.r2_key IS NULL OR normalized.r2_key IS NULL)) AS count`)
     .get(RUN_ID, RUN_ID) as { count: number }).count;
-  const orphanObjects = (database.prepare(`SELECT count(*) AS count
-    FROM legal_complete_corpus_objects o WHERE o.run_id=? AND NOT (
-      (o.object_kind='raw_capture' AND (EXISTS (SELECT 1 FROM legal_complete_corpus_records r
-        WHERE r.run_id=o.run_id AND r.raw_object_r2_key=o.r2_key)
-        OR EXISTS (SELECT 1 FROM legal_complete_corpus_quarantines q
-          WHERE q.run_id=o.run_id AND q.raw_object_r2_key=o.r2_key)))
-      OR (o.object_kind='normalized_revision' AND (EXISTS (SELECT 1 FROM legal_complete_corpus_records r
-        WHERE r.run_id=o.run_id AND r.normalized_object_r2_key=o.r2_key)
-        OR EXISTS (SELECT 1 FROM legal_complete_corpus_quarantines q
-          WHERE q.run_id=o.run_id AND q.normalized_object_r2_key=o.r2_key)))
-      OR (o.object_kind='provision_rendition' AND EXISTS (SELECT 1 FROM legal_complete_corpus_records r
-        WHERE r.run_id=o.run_id AND r.provision_object_r2_key=o.r2_key))
-      OR (o.object_kind='plan' AND (EXISTS (SELECT 1 FROM legal_complete_corpus_pages p
-        WHERE p.run_id=o.run_id AND p.plan_r2_key=o.r2_key)
-        OR EXISTS (SELECT 1 FROM legal_complete_corpus_lane_reports l
-          WHERE l.run_id=o.run_id AND l.report_kind='plan' AND l.r2_key=o.r2_key)
-        OR EXISTS (SELECT 1 FROM legal_complete_corpus_runs r
-          WHERE r.id=o.run_id AND r.plan_r2_key=o.r2_key)))
-      OR o.object_kind='manifest'
-      OR (o.object_kind='reconstruction' AND (EXISTS (SELECT 1 FROM legal_complete_corpus_lane_reports l
-        WHERE l.run_id=o.run_id AND l.report_kind='reconstruction' AND l.r2_key=o.r2_key)
-        OR EXISTS (SELECT 1 FROM legal_complete_corpus_runs r
-          WHERE r.id=o.run_id AND r.final_reconstruction_r2_key=o.r2_key)))
-      OR (o.object_kind='corpus_snapshot' AND EXISTS (SELECT 1 FROM legal_complete_corpus_snapshots s
-        WHERE s.run_id=o.run_id AND s.r2_key=o.r2_key))
-    )`).get(RUN_ID) as { count: number }).count;
+  const orphanObjects = countTicket29OrphanObjects(database, RUN_ID);
   if (locatorMismatches !== 0) {
     throw new Error("TICKET29_OBJECT_LOCATOR_RECONCILIATION_FAILED");
   }
