@@ -98,6 +98,49 @@ test("document build uses regular requests, validates reordered results and reus
   assert.equal(providerRequests.length, 1);
 });
 
+test("large embedding requests tolerate storage latency within a bounded I/O budget", async () => {
+  const inputs = await Promise.all(Array.from({ length: 64 }, (_, index) => input(`Provision ${index}.`)));
+  const tokens = inputs.reduce((sum, item) => sum + item.inputTokens, 0);
+  const storage = new MemoryStore();
+  const bucket = new MemoryR2();
+  let rounds = 0;
+  let active = 0;
+  let maximumActive = 0;
+  let waiting: Array<() => void> = [];
+  const latency = () => new Promise<void>((resolve) => {
+    active++;
+    maximumActive = Math.max(maximumActive, active);
+    waiting.push(() => { active--; resolve(); });
+    if (waiting.length === 1) setImmediate(() => {
+      rounds++;
+      const current = waiting;
+      waiting = [];
+      for (const finish of current) finish();
+    });
+  });
+  const head = bucket.head.bind(bucket), get = bucket.get.bind(bucket), put = bucket.put.bind(bucket);
+  bucket.head = async (...args) => { await latency(); return head(...args); };
+  bucket.get = async (...args) => { await latency(); return get(...args); };
+  bucket.put = async (...args) => { await latency(); return put(...args); };
+  let requests = 0;
+  const run = () => ensureDocumentEmbeddings({ configuration, ledger: new DocumentEmbeddingLedger(storage),
+    bucket: bucket.binding(), inputs, ownerId: "large-request", provider: async () => {
+      requests++;
+      return Response.json({ model: "text-embedding-3-large",
+        data: inputs.map((_, index) => ({ index, embedding: Array.from({ length: 1536 }, (_, i) => i === index ? 1 : 0) })).reverse(),
+        usage: { prompt_tokens: tokens, total_tokens: tokens } });
+    } });
+  const first = await run();
+  assert.ok(rounds < 300, `storage latency rounds: ${rounds}`);
+  assert.ok(maximumActive <= 6, `concurrent artifact operations: ${maximumActive}`);
+  assert.deepEqual(first.artifacts.map(item => item.inputSha256), inputs.map(item => item.inputSha256));
+  const second = await run();
+  assert.deepEqual(second.artifacts, first.artifacts);
+  assert.equal(requests, 1);
+  assert.equal(first.providerInputTokens, tokens);
+  assert.equal((await new DocumentEmbeddingLedger(storage).status()).reservedTokens, tokens);
+});
+
 test("unknown provider outcomes retain the reservation and cannot be dispatched twice", async () => {
   const item = await input("Unknown outcome.");
   const storage = new MemoryStore();
@@ -194,6 +237,49 @@ test("restart after vector persistence finishes pointers and accounting without 
   assert.equal(requests, 1);
   assert.equal(result.providerInputTokens, item.inputTokens);
   assert.equal(result.artifacts.length, 1);
+});
+
+test("pointer failure settles other started writes before a restart reuses the paid response", async () => {
+  const inputs = [await input("First persisted vector."), await input("Second persisted vector.")];
+  const tokens = inputs.reduce((sum, item) => sum + item.inputTokens, 0);
+  const storage = new MemoryStore();
+  const bucket = new MemoryR2();
+  const put = bucket.put.bind(bucket);
+  let fail = true;
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  let entered!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  bucket.put = async (key, bytes, options) => {
+    if (fail && key.includes("/verified/")) {
+      if (key.includes(inputs[0]!.inputSha256)) throw Error("R2 interruption");
+      entered();
+      await pending;
+    }
+    return put(key, bytes, options);
+  };
+  let requests = 0;
+  const run = () => ensureDocumentEmbeddings({ configuration, ledger: new DocumentEmbeddingLedger(storage),
+    bucket: bucket.binding(), inputs, ownerId: "settled-restart", provider: async () => {
+      requests++;
+      return Response.json({ model: "text-embedding-3-large",
+        data: inputs.map((_, index) => ({ index, embedding: Array(1536).fill(1) })),
+        usage: { prompt_tokens: tokens, total_tokens: tokens } });
+    } });
+  let settled = false;
+  const first = run().finally(() => { settled = true; });
+  const rejected = assert.rejects(first, /R2 interruption/);
+  await started;
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(settled, false);
+  release();
+  await rejected;
+  fail = false;
+  const result = await run();
+  assert.equal(requests, 1);
+  assert.equal(result.providerInputTokens, tokens);
+  assert.equal(result.artifacts.length, 2);
+  assert.equal((await new DocumentEmbeddingLedger(storage).status()).reservedTokens, tokens);
 });
 
 test("credit exhaustion stops later dispatch and does not retry unrelated inputs", async () => {

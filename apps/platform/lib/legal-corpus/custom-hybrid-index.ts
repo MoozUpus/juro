@@ -310,6 +310,23 @@ export async function putImmutableCustomArtifact(
   return { status: "created", key, sizeBytes: bytes.byteLength, sha256 };
 }
 
+/** Bound artifact I/O, preserve input order, and settle started writes before propagating a failure. */
+export async function mapCustomArtifactOperations<T, R>(
+  items: readonly T[],
+  operation: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const output: R[] = [];
+  for (let offset = 0; offset < items.length; offset += 6) {
+    const results = await Promise.allSettled(items.slice(offset, offset + 6)
+      .map(async (item, index) => operation(item, offset + index)));
+    for (const result of results) {
+      if (result.status === "rejected") throw result.reason;
+      output.push(result.value);
+    }
+  }
+  return output;
+}
+
 export async function readVerifiedCustomArtifactRange(
   bucket: R2Bucket,
   locator: { key: string; offset: number; length: number; sha256: string },

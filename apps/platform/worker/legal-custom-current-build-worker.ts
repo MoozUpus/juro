@@ -22,6 +22,7 @@ import {
 } from "../lib/legal-corpus/custom-current-build";
 import {
   deserializeNormalizedEmbedding,
+  mapCustomArtifactOperations,
   putImmutableCustomArtifact,
 } from "../lib/legal-corpus/custom-hybrid-index";
 import {
@@ -743,7 +744,7 @@ async function processMaterializeMessage(
     throw new CustomIndexPipelineError("CUSTOM_CURRENT_PLAN_PAGE_RANGE_INVALID");
   }
   reportStage("evidence");
-  const materialized = [];
+  const materialized: Awaited<ReturnType<typeof materializeCustomCurrentItem>>[] = [];
   for (const planItem of planItems) {
     if (!planItem.accepted) throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_SOURCE_MISSING");
     const evidenceBytes = await readAcceptedObject(env.EVIDENCE, planItem.accepted.provision, 8 * 1024 * 1024);
@@ -763,8 +764,7 @@ async function processMaterializeMessage(
     throw new CustomIndexPipelineError("CUSTOM_CURRENT_BATCH_DUPLICATE_IDENTITY");
   }
   reportStage("chunks");
-  const chunkInventory = [];
-  for (const [index, chunk] of chunks.entries()) {
+  const chunkInventory = await mapCustomArtifactOperations(chunks, async (chunk, index) => {
     const source = materialized.find((item) => item.chunks.includes(chunk))?.source;
     if (!source) throw new CustomIndexPipelineError("CUSTOM_CURRENT_CHUNK_PARENT_MISSING");
     const artifact = {
@@ -786,7 +786,7 @@ async function processMaterializeMessage(
       contentType: "application/json",
       customMetadata: { kind: "retrieval-chunk", snapshotProvisionId: source.snapshotProvisionId },
     });
-    chunkInventory.push({
+    return {
       ordinal: documentFieldLengths[index]!.itemOrdinal,
       id: chunk.id,
       key,
@@ -795,8 +795,8 @@ async function processMaterializeMessage(
       snapshotProvisionId: source.snapshotProvisionId,
       evidenceR2Key: source.evidenceR2Key,
       evidenceSha256: source.evidenceSha256,
-    });
-  }
+    };
+  });
   const chunkInventoryBytes = serializeCustomCurrentArtifact({
     schemaVersion: 1, releaseId: RELEASE_ID, batchId: message.batchId, chunks: chunkInventory,
   });

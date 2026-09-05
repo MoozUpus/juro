@@ -3,7 +3,7 @@ import { customCurrentSha256, serializeCustomCurrentArtifact } from "./custom-cu
 import { CUSTOM_EMBEDDING_MODEL, CUSTOM_EMBEDDING_DIMENSIONS,
   CUSTOM_EMBEDDING_INPUT_VERSION, CUSTOM_EMBEDDING_TRANSFORM_VERSION,
   createCustomEmbeddingArtifact, deserializeNormalizedEmbedding,
-  putImmutableCustomArtifact, serializeCustomEmbeddingInput, type CustomRetrievalChunk,
+  mapCustomArtifactOperations, putImmutableCustomArtifact, serializeCustomEmbeddingInput, type CustomRetrievalChunk,
 } from "./custom-hybrid-index";
 import { CustomIndexPipelineError } from "./custom-index-pipeline";
 
@@ -147,7 +147,7 @@ export class DocumentEmbeddingLedger {
       if (!request) fail("REQUEST_CONFLICT");
       if (request.state !== "pending") continue;
       if (!request.artifacts) fail("OUTCOME_UNRESOLVED");
-      for (const pointer of request.artifacts) await persistPointer(bucket, pointer);
+      await mapCustomArtifactOperations(request.artifacts, pointer => persistPointer(bucket, pointer));
       await this.complete(request);
     }
   }
@@ -260,8 +260,10 @@ export async function ensureDocumentEmbeddings(input: {
   await input.ledger.recover([...unique.values()], input.bucket);
   const pointers = new Map<string, DocumentEmbeddingPointer>();
   const missing: DocumentEmbeddingInput[] = [];
-  for (const item of unique.values()) {
-    const pointer = await readDocumentEmbedding(input.bucket, item.inputSha256);
+  const existing = await mapCustomArtifactOperations([...unique.values()], async item => ({
+    item, pointer: await readDocumentEmbedding(input.bucket, item.inputSha256),
+  }));
+  for (const { item, pointer } of existing) {
     if (pointer) pointers.set(item.inputSha256, pointer); else missing.push(item);
   }
   const reusedEmbeddingCount = input.inputs.filter(item => pointers.has(item.inputSha256)).length;
@@ -300,17 +302,17 @@ export async function ensureDocumentEmbeddings(input: {
       || payload.usage.prompt_tokens !== tokens || payload.usage.total_tokens !== tokens) fail("RESPONSE_MISMATCH");
     // Validate every vector before any artifact becomes reusable.
     const artifacts = await Promise.all(payload.data.map(item => createCustomEmbeddingArtifact(group[item.index]!.chunk, item.embedding)));
-    const validated: DocumentEmbeddingPointer[] = [];
-    for (const artifact of artifacts) {
+    const validated = await mapCustomArtifactOperations(artifacts, async artifact => {
       await putImmutableCustomArtifact(input.bucket, artifact.key, artifact.bytes, { contentType: "application/octet-stream" });
       const pointer: DocumentEmbeddingPointer = { schemaVersion: 1, provider: "openai", model: artifact.model,
         dimensions: artifact.dimensions, inputVersion: artifact.inputVersion, transformVersion: artifact.transformVersion,
         inputSha256: artifact.inputSha256, vectorSha256: artifact.vectorSha256, artifactKey: artifact.key,
         sizeBytes: CUSTOM_EMBEDDING_DIMENSIONS * 4 };
-      validated.push(pointer);
-    }
+      return pointer;
+    });
     await input.ledger.persistValidated(request, validated);
-    for (const pointer of validated) pointers.set(pointer.inputSha256, await persistPointer(input.bucket, pointer));
+    const verified = await mapCustomArtifactOperations(validated, pointer => persistPointer(input.bucket, pointer));
+    for (const pointer of verified) pointers.set(pointer.inputSha256, pointer);
     await input.ledger.complete(request);
   }
   return { artifacts: input.inputs.map(item => pointers.get(item.inputSha256)!),
