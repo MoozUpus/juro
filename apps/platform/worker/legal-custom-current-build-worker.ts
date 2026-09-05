@@ -299,6 +299,10 @@ function coordinator(env: CurrentBuildEnv): DurableObjectStub<CustomCurrentBuild
 }
 
 export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv> {
+  async inspectEmbeddings(inputSha256s: string[]) {
+    return new DocumentEmbeddingLedger(this.ctx.storage).inspect(inputSha256s);
+  }
+
   async embed(input: { ownerId: string; items: DocumentEmbeddingInput[] }) {
     requireBuildEnabled(this.env);
     if (!SAFE_ID.test(input.ownerId) || input.items.length < 1 || input.items.length > 64) {

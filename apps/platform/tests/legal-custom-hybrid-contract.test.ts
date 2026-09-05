@@ -129,6 +129,26 @@ test("Retrieval Chunks are deterministic, provision-owned, zero-overlap, and emb
   }
 });
 
+test("long provision chunking bounds tokenizer work while preserving accepted identities", async () => {
+  const source = { ...sourceProvision, officialText: Array.from({ length: 1200 }, (_, index) =>
+    `Section ${index}. Workers retain their rights. Қонун ҳуқуқларни ҳимоя қилади. Закон защищает права. 🏛️`
+  ).join("\n\n") };
+  const referenceStart = process.cpuUsage();
+  for (let index = 0; index < 50; index++) countCustomEmbeddingTokens(source.officialText);
+  const reference = process.cpuUsage(referenceStart);
+  const started = process.cpuUsage();
+  const chunks = await buildRetrievalChunks(source, { targetTokens: 512 });
+  const used = process.cpuUsage(started);
+  const root = createHash("sha256").update(JSON.stringify(chunks.map(chunk => [
+    chunk.id, chunk.officialTextSha256, chunk.embeddingTokenCount,
+  ]))).digest("hex");
+  assert.equal(chunks.map(chunk => chunk.officialText).join(""), source.officialText);
+  assert.equal(root, "d87e9babdf0deff55bcee3aa669ba10b4351e4aec0f2f1af58b90678c74a4fed");
+  const budget = 2 * (reference.user + reference.system);
+  assert.ok(used.user + used.system < budget,
+    `chunk CPU ${used.user + used.system}; bounded reference ${budget}; root ${root}`);
+});
+
 test("immutable BM25 segments share global scores, filter before top-K, and use ranged postings", async () => {
   const documents = [
     {

@@ -1,4 +1,4 @@
-import { encode } from "gpt-tokenizer/encoding/cl100k_base";
+import { encode, isWithinTokenLimit } from "gpt-tokenizer/encoding/cl100k_base";
 import { z } from "zod";
 
 import { stableSourceSnapshotJson } from "./source-snapshot";
@@ -123,7 +123,7 @@ function structuralBoundary(value: string, maximumOffset: number): number {
 }
 
 function nextChunkBoundary(value: string, targetTokens: number): number {
-  if (countCustomEmbeddingTokens(value) <= targetTokens) return value.length;
+  if (isWithinTokenLimit(value, targetTokens) !== false) return value.length;
   const offsets = codePointOffsets(value);
   let low = 1;
   let high = offsets.length - 1;
@@ -131,7 +131,7 @@ function nextChunkBoundary(value: string, targetTokens: number): number {
   while (low <= high) {
     const middle = Math.floor((low + high) / 2);
     const offset = offsets[middle] ?? value.length;
-    if (countCustomEmbeddingTokens(value.slice(0, offset)) <= targetTokens) {
+    if (isWithinTokenLimit(value.slice(0, offset), targetTokens) !== false) {
       best = offset;
       low = middle + 1;
     } else {

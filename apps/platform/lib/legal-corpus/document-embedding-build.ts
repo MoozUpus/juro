@@ -158,6 +158,21 @@ export class DocumentEmbeddingLedger {
       retryAfter: await this.storage.get<number>("embedding:retryAfter") ?? null };
   }
 
+  async inspect(inputSha256s: readonly string[]) {
+    if (inputSha256s.length < 1 || inputSha256s.length > 64
+      || inputSha256s.some(value => !digestSchema.safeParse(value).success)) fail("INSPECTION_INVALID");
+    const inputs = await Promise.all([...new Set(inputSha256s)].map(async inputSha256 => ({
+      inputSha256, requestId: await this.storage.get<string>(`embedding:input:${inputSha256}`) ?? null,
+    })));
+    const requests: RequestRecord[] = [];
+    for (const requestId of new Set(inputs.map(item => item.requestId).filter(value => value !== null))) {
+      const request = await this.storage.get<RequestRecord>(`embedding:request:${requestId}`);
+      if (!request) fail("REQUEST_CONFLICT");
+      requests.push(request);
+    }
+    return { inputs, requests, accounting: await this.status() };
+  }
+
   async complete(request: RequestRecord): Promise<void> {
     await this.storage.transaction(async store => {
       const prior = await store.get<RequestRecord>(`embedding:request:${request.id}`);

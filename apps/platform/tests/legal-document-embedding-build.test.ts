@@ -155,6 +155,25 @@ test("unknown provider outcomes retain the reservation and cannot be dispatched 
   assert.equal(bucket.objects.size, 0);
 });
 
+test("request inspection is bounded, content-free and does not change pending reservations", async () => {
+  const item = await input("Inspect a pending request without dispatch.");
+  const storage = new MemoryStore();
+  const ledger = new DocumentEmbeddingLedger(storage);
+  const request = await ledger.begin(configuration, [item], "inspection", 1000);
+  const before = structuredClone(storage.values);
+  const result = await ledger.inspect([item.inputSha256, item.inputSha256, "b".repeat(64)]);
+  assert.deepEqual(result.requests, [request]);
+  assert.deepEqual(result.inputs, [
+    { inputSha256: item.inputSha256, requestId: request.id },
+    { inputSha256: "b".repeat(64), requestId: null },
+  ]);
+  assert.equal(result.accounting.reservedTokens, item.inputTokens);
+  assert.doesNotMatch(JSON.stringify(result), /Inspect a pending|officialText|embeddingTokenCount/);
+  await assert.rejects(ledger.inspect(["invalid"]), /INSPECTION_INVALID/);
+  await assert.rejects(ledger.inspect(Array(65).fill(item.inputSha256)), /INSPECTION_INVALID/);
+  assert.deepEqual(storage.values, before);
+});
+
 test("disabled and over-budget configurations never dispatch", async () => {
   const item = await input("Budget guard.");
   for (const config of [{ ...configuration, enabled: false }, { ...configuration, authorizedTokens: item.inputTokens - 1 }]) {
