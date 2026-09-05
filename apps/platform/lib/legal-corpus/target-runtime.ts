@@ -13,6 +13,7 @@ import {
 import { CUSTOM_SEARCH_PATH, CUSTOM_SEARCH_SERVICE_MARKER, customSearchResponseSchema }
   from "./custom-search-service";
 import { customReleaseGovernanceSchema } from "./custom-release-governance";
+import { resolveCustomTrustedLegalTitles } from "./custom-search-trusted-titles";
 import { assertCompleteCorpusCurrentInterval, resolveCompleteCorpusCurrentEvidence, resolveControllingEvidence,
   type LegalEvidenceBucket } from "./target-evidence";
 import { resolveProvisionLineage } from "./target-lineage";
@@ -350,24 +351,15 @@ export function createRuntimeCustomSearchProvider(input: {
 }
 
 export async function resolveRuntimeTrustedLegalTitles(db: D1Database, releaseId: string): Promise<string[]> {
+  const custom = await resolveCustomTrustedLegalTitles(db, releaseId);
+  if (custom !== null) return custom;
   const result = await db.prepare(`SELECT DISTINCT instrument.canonical_title AS title
     FROM legal_search_release_items item
     JOIN legal_provision_renditions rendition ON rendition.id=item.provision_rendition_id
     JOIN legal_provision_concepts concept ON concept.id=rendition.provision_concept_id
     JOIN legal_instruments instrument ON instrument.id=concept.legal_instrument_id
-    WHERE item.search_release_id=?
-    UNION
-    SELECT instrument.canonical_title AS title
-    FROM legal_custom_search_runtime_items item
-    JOIN legal_custom_search_runtime_components runtime
-      ON runtime.search_release_id=item.search_release_id
-    JOIN legal_complete_corpus_records record
-      ON record.run_id=runtime.complete_corpus_run_id
-      AND record.legal_identity_sha256=item.legal_identity_sha256
-    JOIN legal_instruments instrument ON instrument.id=record.instrument_id
-    WHERE item.search_release_id=? AND record.current_eligible=1 AND record.quarantined=0
-    ORDER BY title`)
-    .bind(releaseId, releaseId).all<{ title: string }>();
+    WHERE item.search_release_id=? ORDER BY title`)
+    .bind(releaseId).all<{ title: string }>();
   return result.results.map((row) => z.string().trim().min(3).max(300).parse(row.title));
 }
 

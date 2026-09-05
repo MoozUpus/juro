@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { createAiSearchCandidateIndex, parseCandidatePacket, parsePinnedCandidateRelease }
@@ -7,6 +8,7 @@ import { createAiSearchCandidateIndex, parseCandidatePacket, parsePinnedCandidat
 import { createRuntimeAiSearchProvider, createRuntimeCustomSearchProvider, createRuntimeCandidateCatalog,
   resolveRuntimeTrustedLegalTitles }
   from "../lib/legal-corpus/target-runtime";
+import { buildCustomTrustedTitleInventory } from "../lib/legal-corpus/custom-search-trusted-titles";
 
 const configuration = {
   identity: "ai-search-governed-v1",
@@ -31,7 +33,9 @@ const configuration = {
 
 test("named instruments remain searchable with custom-only release mappings", async () => {
   const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec(`CREATE TABLE legal_search_release_items (search_release_id TEXT,provision_rendition_id TEXT);
+  sqlite.exec(`CREATE TABLE legal_search_releases (id TEXT PRIMARY KEY);
+    INSERT INTO legal_search_releases VALUES ('custom-release'),('legacy-release');
+    CREATE TABLE legal_search_release_items (search_release_id TEXT,provision_rendition_id TEXT);
     CREATE TABLE legal_provision_renditions (id TEXT,provision_concept_id TEXT);
     CREATE TABLE legal_provision_concepts (id TEXT,legal_instrument_id TEXT);
     CREATE TABLE legal_instruments (id TEXT,canonical_title TEXT);
@@ -39,7 +43,6 @@ test("named instruments remain searchable with custom-only release mappings", as
     CREATE TABLE legal_custom_search_runtime_components (search_release_id TEXT,complete_corpus_run_id TEXT);
     CREATE TABLE legal_complete_corpus_records (run_id TEXT,legal_identity_sha256 TEXT,
       instrument_id TEXT,current_eligible INTEGER,quarantined INTEGER);
-    INSERT INTO legal_instruments VALUES ('labor','Labor Code'),('other','Other Code');
     INSERT INTO legal_search_release_items VALUES ('legacy-release','legacy-rendition');
     INSERT INTO legal_provision_renditions VALUES ('legacy-rendition','legacy-concept');
     INSERT INTO legal_provision_concepts VALUES ('legacy-concept','other');
@@ -47,6 +50,12 @@ test("named instruments remain searchable with custom-only release mappings", as
     INSERT INTO legal_custom_search_runtime_components VALUES ('custom-release','accepted-run');
     INSERT INTO legal_complete_corpus_records VALUES ('accepted-run','identity','labor',1,0),
       ('unrelated-run','identity','other',1,0);`);
+  sqlite.exec(readFileSync(new URL("../legal-drizzle/0026_custom_search_trusted_titles.sql", import.meta.url), "utf8"));
+  const inventory = await buildCustomTrustedTitleInventory("custom-release", ["Labor Code"]);
+  sqlite.prepare("INSERT INTO legal_custom_search_trusted_titles VALUES (?,?)")
+    .run(inventory.releaseId, inventory.titles[0]!);
+  sqlite.prepare("INSERT INTO legal_custom_search_title_inventories VALUES (?,?,?,?)")
+    .run(inventory.releaseId, inventory.titleCount, inventory.sha256, "2026-09-06T00:00:00.000Z");
   const db = { prepare(sql: string) { return { bind(...values: string[]) {
     return { async all() { return { results: sqlite.prepare(sql).all(...values) }; } };
   } }; } } as unknown as D1Database;
@@ -77,6 +86,7 @@ test("named instruments remain searchable with custom-only release mappings", as
     assert.equal(packet.availability, "available");
     assert.deepEqual(searched, ["Labor Code termination rules"]);
     assert.deepEqual(await resolveRuntimeTrustedLegalTitles(db, release.id), ["Labor Code"]);
+    sqlite.prepare("INSERT INTO legal_instruments VALUES (?,?)").run("other", "Other Code");
     assert.deepEqual(await resolveRuntimeTrustedLegalTitles(db, "legacy-release"), ["Other Code"]);
   } finally { sqlite.close(); }
 });
