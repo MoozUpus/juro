@@ -514,20 +514,26 @@ async function main(): Promise<void> {
   for (const lane of "123456789") {
     const lower = `lexuz-family:${lane}`;
     const upper = lane === "9" ? "lexuz-family::" : `lexuz-family:${Number(lane) + 1}`;
-    let cursor = "";
     const pages: Array<{ counts: Awaited<ReturnType<typeof ticket29ManifestRoot>>["counts"];
       roots: Awaited<ReturnType<typeof ticket29ManifestRoot>>["roots"] }> = [];
-    for (;;) {
-      const rows = database.prepare(`${recordSelect} WHERE run_id=? AND source_id>=? AND source_id<?
-        AND legal_identity_sha256>? ORDER BY legal_identity_sha256 LIMIT 1000`)
-        .all(RUN_ID, lower, upper, cursor) as RecordRow[];
-      if (rows.length === 0) break;
+    const appendPage = async (rows: RecordRow[]) => {
       recordHashMismatches += rows.filter((row) =>
         sha256(stableSourceSnapshotJson(recordHashInput(row))) !== row.recordSha256).length;
-      const manifest = await ticket29ManifestRoot(rows.map(bodyFree));
-      pages.push(manifest);
-      cursor = rows.at(-1)!.legalIdentitySha256;
+      pages.push(await ticket29ManifestRoot(rows.map(bodyFree)));
+    };
+    const laneRows = database.prepare(`WITH lane AS MATERIALIZED (
+        ${recordSelect} WHERE run_id=? AND source_id>=? AND source_id<?
+      ) SELECT * FROM lane ORDER BY legalIdentitySha256`)
+      .iterate(RUN_ID, lower, upper) as Iterable<RecordRow>;
+    let pageRows: RecordRow[] = [];
+    for (const row of laneRows) {
+      pageRows.push(row);
+      if (pageRows.length === 1000) {
+        await appendPage(pageRows);
+        pageRows = [];
+      }
     }
+    if (pageRows.length > 0) await appendPage(pageRows);
     computedManifestPages[lane] = pages;
     for (const membership of ["union", "current", "history", "gaps", "quarantines"] as const) {
       const key = `${lane}:${membership}`;
