@@ -10,12 +10,11 @@ import {
   withApiErrors,
 } from "../../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { authLocaleFromRequest } from "../../../../../../lib/auth/request-locale";
 
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
-  const locale = new URL(request.url).searchParams.get("lang") === "uz"
-    ? "uz"
-    : "ru";
+  const locale = authLocaleFromRequest(request);
   try {
     const session = await localSessionForRequest(request, { recent: true });
     const enrollment = await beginTotpEnrollment(

@@ -105,10 +105,11 @@ test("URL fetch fails closed on DNS rebinding, missing length, compression and u
   }
 });
 
-test("URL import route and RU/UZ UI expose no credential forwarding or fake success", async () => {
-  const [route, ui, config] = await Promise.all([
+test("URL import route and RU/UZ/EN UI expose no credential forwarding or fake success", async () => {
+  const [route, ui, copy, config] = await Promise.all([
     readFile(new URL("../app/api/platform/document-analysis/url-import/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/DocumentReviewClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/document-review-localization.ts", import.meta.url), "utf8"),
     readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
   ]);
   assert.match(route, /assertSafeWrite/);
@@ -122,12 +123,14 @@ test("URL import route and RU/UZ UI expose no credential forwarding or fake succ
   assert.doesNotMatch(route, /requireQuarantineR2|quarantined|MALWARE_SCAN|FILE_SCAN_/);
   assert.match(ui, /publicUrlImportEnabled \? <form className="review-url-import"/);
   assert.match(ui, /review-url-import-disabled/);
-  assert.match(ui, /Контролируемая beta-функция временно недоступна/);
-  assert.match(ui, /Nazorat qilinadigan beta-funksiya vaqtincha mavjud emas/);
-  assert.match(ui, /Импортировать публичную ссылку/);
-  assert.match(ui, /Ommaviy havolani import qilish/);
+  assert.match(copy, /Контролируемая beta-функция временно недоступна/);
+  assert.match(copy, /Nazorat qilinadigan beta-funksiya vaqtincha mavjud emas/);
+  assert.match(copy, /This controlled beta feature is temporarily unavailable/);
+  assert.match(copy, /Импортировать публичную ссылку/);
+  assert.match(copy, /Ommaviy havolani import qilish/);
+  assert.match(copy, /Import a public link/);
   assert.match(ui, /type="url"/);
-  assert.match(ui, /uploadDocumentForAnalysis\(file, locale, setUploadProgress, uploadCaseId \|\| null\)/);
+  assert.match(ui, /uploadDocumentForAnalysis\(file, locale, setUploadProgress, uploadCaseId \|\| null, analysisLocale\)/);
   assert.match(ui, /!publicUrlImportEnabled \|\| !publicUrl\.trim\(\)/);
   assert.match(await readFile(new URL("../lib/document-analysis/client-upload.ts", import.meta.url), "utf8"), /"x-juro-locale": locale/);
   assert.match(config, /global_fetch_strictly_public/);

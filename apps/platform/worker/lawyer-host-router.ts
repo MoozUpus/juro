@@ -34,13 +34,13 @@ export function lawyerHostTarget(url: URL): URL | null {
     return target;
   }
   const staleIndividualDashboard = url.pathname.match(
-    /^\/(ru|uz)\/individual\/dashboard\/?$/u,
+    /^\/(ru|uz|en)\/individual\/dashboard\/?$/u,
   );
   if (staleIndividualDashboard) {
     target.pathname = `/${staleIndividualDashboard[1]}/lawyer/dashboard`;
     return target;
   }
-  const onboarding = url.pathname.match(/^\/(?:(ru|uz)\/)?onboarding\/?$/u);
+  const onboarding = url.pathname.match(/^\/(?:(ru|uz|en)\/)?onboarding\/?$/u);
   if (onboarding) {
     target.pathname = `/${onboarding[1] || "ru"}/onboarding`;
     return target;
@@ -53,7 +53,7 @@ export function lawyerHostTarget(url: URL): URL | null {
     if (mapped.view) target.searchParams.set("view", mapped.view);
     return target;
   }
-  const clean = url.pathname.match(/^\/(ru|uz)(?:\/([^/]+))?\/?$/u);
+  const clean = url.pathname.match(/^\/(ru|uz|en)(?:\/([^/]+))?\/?$/u);
   if (clean) {
     const locale = clean[1];
     const page = clean[2] || "dashboard";
@@ -63,6 +63,6 @@ export function lawyerHostTarget(url: URL): URL | null {
     if (mapped.view) target.searchParams.set("view", mapped.view);
     return target;
   }
-  if (/^\/(?:ru|uz)\/lawyer(?:\/|$)/u.test(url.pathname)) return target;
+  if (/^\/(?:ru|uz|en)\/lawyer(?:\/|$)/u.test(url.pathname)) return target;
   return null;
 }

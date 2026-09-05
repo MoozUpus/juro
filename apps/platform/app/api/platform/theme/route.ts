@@ -1,4 +1,5 @@
 import { parseJsonRequest } from "../../../../lib/auth/input";
+import { authLocaleFromRequest } from "../../../../lib/auth/request-locale";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import {
@@ -31,7 +32,15 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
   const parsed = await parseJsonRequest(request, themeInput, 256);
-  if (!parsed.ok) return response({ code: "INVALID_THEME", error: "Проверьте тему / Mavzuni tekshiring." }, 400);
+  if (!parsed.ok) {
+    const locale = authLocaleFromRequest(request);
+    const error = {
+      ru: "Выберите светлую или тёмную тему.",
+      uz: "Yorug‘ yoki tungi mavzuni tanlang.",
+      en: "Choose the light or dark theme.",
+    }[locale];
+    return response({ code: "INVALID_THEME", error }, 400);
+  }
   await requireD1().prepare(
     "UPDATE user_profiles SET theme_preference=?,updated_at=? WHERE id=?",
   ).bind(parsed.data.theme, new Date().toISOString(), user.id).run();

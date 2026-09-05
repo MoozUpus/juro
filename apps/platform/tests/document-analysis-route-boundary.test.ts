@@ -50,6 +50,7 @@ test("analysis deletion is owner-scoped, CSRF-protected, vector-aware, and retry
   const route = source("app/api/platform/document-analysis/[analysisId]/route.ts");
   const retention = source("lib/document-analysis/resource-retention.ts");
   const review = source("app/_platform/DocumentReviewClient.tsx");
+  const reviewCopy = source("app/_platform/document-review-localization.ts");
   assert.match(route, /assertSafeWrite/);
   assert.match(route, /requireApiUser/);
   assert.match(route, /workspaceForUser/);
@@ -59,7 +60,7 @@ test("analysis deletion is owner-scoped, CSRF-protected, vector-aware, and retry
   assert.match(retention, /deleteUserDocumentVectorsForAnalysis/);
   assert.match(retention, /analysis_content_purged/);
   assert.match(retention, /purge_attempt_count=purge_attempt_count\+1/);
-  assert.match(review, /Удалить анализ, исходный файл, результаты и экспорты/);
+  assert.match(reviewCopy, /Удалить анализ, исходный файл, результаты и экспорты/);
   assert.match(review, /x-juro-csrf/);
 });
 
@@ -78,7 +79,7 @@ test("dashboard and review surfaces use the secure upload client", () => {
   const review = source("app/_platform/DocumentReviewClient.tsx");
   const uploadClient = source("lib/document-analysis/client-upload.ts");
   assert.match(dashboard, /uploadDocumentForAnalysis\(file, locale, setUploadProgress\)/);
-  assert.match(review, /uploadDocumentForAnalysis\(file, locale, setUploadProgress, uploadCaseId \|\| null\)/);
+  assert.match(review, /uploadDocumentForAnalysis\(file, locale, setUploadProgress, uploadCaseId \|\| null, analysisLocale\)/);
   assert.match(dashboard, /role="progressbar"/);
   assert.match(review, /role="progressbar"/);
   assert.match(uploadClient, /new XMLHttpRequest\(\)/);
@@ -131,10 +132,13 @@ test("analysis revision routes preserve auth, tenant, idempotency, and object-in
 test("comparison change decisions are validated, tenant-scoped, audited, and do not merge documents", () => {
   const route = source("app/api/platform/document-comparisons/[comparisonId]/changes/[changeId]/route.ts");
   const service = source("lib/document-comparison/review-decision.ts");
+  const localization = source("lib/document-comparison/localization.ts");
   const client = source("app/_platform/ComparisonResultClient.tsx");
   assert.match(route, /decisionSchema/);
-  assert.match(route, /locale: z\.enum\(\["ru", "uz"\]\)/);
-  assert.match(route, /O‘zgarish topilmadi/);
+  assert.match(route, /locale: z\.enum\(\["ru", "uz", "en"\]\)/);
+  assert.match(route, /The change could not be found/);
+  assert.match(route, /comparisonProcessingErrorMessage/);
+  assert.match(localization, /en: "File security validation has not completed\."/);
   assert.match(route, /assertSafeWrite/);
   assert.match(route, /requireApiUser/);
   assert.match(route, /workspaceForContentEditor/);
@@ -148,6 +152,8 @@ test("comparison change decisions are validated, tenant-scoped, audited, and do 
   assert.match(client, /aria-pressed/);
   assert.match(client, /decisionSaving/);
   assert.match(client, /decision \?\? "pending"/);
+  assert.doesNotMatch(client, /const\s+ru\s*=\s*locale\s*===\s*["']ru["']/u);
+  assert.match(client, /en: "The file is corrupted or was deleted during processing\."/u);
 });
 
 test("scanner promotion requires strict evidence and never trusts document instructions", () => {

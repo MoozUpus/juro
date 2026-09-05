@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { lawyerHostTarget } from "../worker/lawyer-host-router";
 
-test("lawyer host maps every clean professional route for RU and UZ", () => {
+test("lawyer host maps every clean professional route for RU, UZ, and EN", () => {
   const routes = [
     ["dashboard", "dashboard", null],
     ["requests", "consultations", "requests"],
@@ -20,7 +20,7 @@ test("lawyer host maps every clean professional route for RU and UZ", () => {
     ["settings", "settings", null],
   ] as const;
 
-  for (const locale of ["ru", "uz"] as const) {
+  for (const locale of ["ru", "uz", "en"] as const) {
     for (const [path, module, view] of routes) {
       const target = lawyerHostTarget(
         new URL(`https://lawyer.juro.uz/${locale}/${path}`),
@@ -74,8 +74,12 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
 
   const onboarding = lawyerHostTarget(new URL("https://lawyer.juro.uz/onboarding"));
   assert.equal(onboarding?.pathname, "/ru/onboarding");
+  const englishOnboarding = lawyerHostTarget(
+    new URL("https://lawyer.juro.uz/en/onboarding"),
+  );
+  assert.equal(englishOnboarding?.pathname, "/en/onboarding");
 
-  for (const locale of ["ru", "uz"] as const) {
+  for (const locale of ["ru", "uz", "en"] as const) {
     const staleIndividualDashboard = lawyerHostTarget(
       new URL(`https://lawyer.juro.uz/${locale}/individual/dashboard?source=legacy-link`),
     );
@@ -86,8 +90,12 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/not-a-module")), null);
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/not-a-module")), null);
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/individual/documents")), null);
-  // English authentication is intentionally available before the protected
-  // product shell is translated. Do not silently serve RU/UZ product copy
-  // under an /en URL.
-  assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/en/dashboard")), null);
+  assert.equal(
+    lawyerHostTarget(new URL("https://lawyer.juro.uz/en/dashboard"))?.pathname,
+    "/en/lawyer/dashboard",
+  );
+  assert.equal(
+    lawyerHostTarget(new URL("https://lawyer.juro.uz/en/lawyer/settings"))?.pathname,
+    "/en/lawyer/settings",
+  );
 });

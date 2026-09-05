@@ -10,6 +10,7 @@ import type {
   DependencyHealthSnapshot,
   DependencyHealthState,
 } from "./dependency-health";
+import type { PlatformLocale } from "../platform/routing";
 
 export const statusComponentKeys = [
   "platform",
@@ -40,7 +41,7 @@ export type StatusComponentKey = (typeof statusComponentKeys)[number];
 export type StatusImpact = (typeof statusImpactValues)[number];
 export type StatusIncidentState = (typeof statusIncidentStates)[number];
 export type PublicComponentState = DependencyHealthState;
-export type StatusLocale = "ru" | "uz";
+export type StatusLocale = PlatformLocale;
 
 const componentMutationSchema = z.object({
   key: z.enum(statusComponentKeys),
@@ -50,10 +51,13 @@ const componentMutationSchema = z.object({
 export const createStatusIncidentSchema = z.object({
   titleRu: z.string().trim().min(3).max(140),
   titleUz: z.string().trim().min(3).max(140),
+  titleEn: z.string().trim().min(3).max(140),
   summaryRu: z.string().trim().min(10).max(2_000),
   summaryUz: z.string().trim().min(10).max(2_000),
+  summaryEn: z.string().trim().min(10).max(2_000),
   messageRu: z.string().trim().min(10).max(2_000),
   messageUz: z.string().trim().min(10).max(2_000),
+  messageEn: z.string().trim().min(10).max(2_000),
   startedAt: z.string().datetime({ offset: true }),
   components: z.array(componentMutationSchema).min(1).max(statusComponentKeys.length),
 }).strict().superRefine((value, context) => {
@@ -68,6 +72,7 @@ export const appendStatusUpdateSchema = z.object({
   state: z.enum(["identified", "monitoring", "resolved"]),
   messageRu: z.string().trim().min(10).max(2_000),
   messageUz: z.string().trim().min(10).max(2_000),
+  messageEn: z.string().trim().min(10).max(2_000),
 }).strict();
 
 const impactRank: Readonly<Record<StatusImpact, number>> = {
@@ -89,30 +94,30 @@ const publicStateRank: Readonly<Record<PublicComponentState, number>> = {
   outage: 6,
 };
 
-const componentLabels: Readonly<Record<StatusComponentKey, { ru: string; uz: string }>> = {
-  platform: { ru: "Платформа", uz: "Platforma" },
-  otp: { ru: "Вход и OTP", uz: "Kirish va OTP" },
-  ai: { ru: "AI-юрист", uz: "AI-yurist" },
-  document_analysis: { ru: "Анализ документов", uz: "Hujjatlarni tahlil qilish" },
-  upload: { ru: "Загрузка файлов", uz: "Fayllarni yuklash" },
-  document_builder: { ru: "Конструктор документов", uz: "Hujjat konstruktori" },
-  email: { ru: "Email-уведомления", uz: "Email bildirishnomalari" },
-  lawyer_area: { ru: "Работа с юристами", uz: "Yuristlar bilan ishlash" },
+const componentLabels: Readonly<Record<StatusComponentKey, Record<StatusLocale, string>>> = {
+  platform: { ru: "Платформа", uz: "Platforma", en: "Platform" },
+  otp: { ru: "Вход и OTP", uz: "Kirish va OTP", en: "Sign-in and OTP" },
+  ai: { ru: "AI-юрист", uz: "AI-yurist", en: "AI legal assistant" },
+  document_analysis: { ru: "Анализ документов", uz: "Hujjatlarni tahlil qilish", en: "Document analysis" },
+  upload: { ru: "Загрузка файлов", uz: "Fayllarni yuklash", en: "File uploads" },
+  document_builder: { ru: "Конструктор документов", uz: "Hujjat konstruktori", en: "Document builder" },
+  email: { ru: "Email-уведомления", uz: "Email bildirishnomalari", en: "Email notifications" },
+  lawyer_area: { ru: "Работа с юристами", uz: "Yuristlar bilan ishlash", en: "Lawyer services" },
 };
 
-const dependencyLabels: Readonly<Record<DependencyHealthKey, { ru: string; uz: string }>> = {
-  d1: { ru: "База данных", uz: "Ma’lumotlar bazasi" },
-  private_r2: { ru: "Защищённое хранилище файлов", uz: "Himoyalangan fayl ombori" },
-  queues: { ru: "Фоновые очереди", uz: "Fon navbatlari" },
-  queue_dlq: { ru: "Очередь ошибок", uz: "Xatolar navbati" },
-  malware_scanner: { ru: "Проверка файлов", uz: "Fayllarni tekshirish" },
-  openai: { ru: "AI-провайдер OpenAI", uz: "OpenAI AI-provayderi" },
-  anthropic: { ru: "AI-провайдер Anthropic", uz: "Anthropic AI-provayderi" },
-  resend: { ru: "Сервис email", uz: "Email xizmati" },
-  legal_source_sync: { ru: "Синхронизация правовых источников", uz: "Huquqiy manbalar sinxronizatsiyasi" },
-  document_analysis: { ru: "Обработка анализа документов", uz: "Hujjat tahlilini qayta ishlash" },
-  document_builder: { ru: "Генерация документов", uz: "Hujjatlarni yaratish" },
-  lawyer_area: { ru: "Передача юристу", uz: "Yuristga yuborish" },
+const dependencyLabels: Readonly<Record<DependencyHealthKey, Record<StatusLocale, string>>> = {
+  d1: { ru: "База данных", uz: "Ma’lumotlar bazasi", en: "Database" },
+  private_r2: { ru: "Защищённое хранилище файлов", uz: "Himoyalangan fayl ombori", en: "Secure file storage" },
+  queues: { ru: "Фоновые очереди", uz: "Fon navbatlari", en: "Background queues" },
+  queue_dlq: { ru: "Очередь ошибок", uz: "Xatolar navbati", en: "Failed jobs queue" },
+  malware_scanner: { ru: "Проверка файлов", uz: "Fayllarni tekshirish", en: "File security scanning" },
+  openai: { ru: "AI-провайдер OpenAI", uz: "OpenAI AI-provayderi", en: "OpenAI provider" },
+  anthropic: { ru: "AI-провайдер Anthropic", uz: "Anthropic AI-provayderi", en: "Anthropic provider" },
+  resend: { ru: "Сервис email", uz: "Email xizmati", en: "Email delivery" },
+  legal_source_sync: { ru: "Синхронизация правовых источников", uz: "Huquqiy manbalar sinxronizatsiyasi", en: "Legal source synchronisation" },
+  document_analysis: { ru: "Обработка анализа документов", uz: "Hujjat tahlilini qayta ishlash", en: "Document analysis processing" },
+  document_builder: { ru: "Генерация документов", uz: "Hujjatlarni yaratish", en: "Document generation" },
+  lawyer_area: { ru: "Передача юристу", uz: "Yuristga yuborish", en: "Lawyer handoff" },
 };
 
 type IncidentRow = {
@@ -122,8 +127,10 @@ type IncidentRow = {
   severity: StatusImpact;
   titleRu: string;
   titleUz: string;
+  titleEn: string | null;
   summaryRu: string;
   summaryUz: string;
+  summaryEn: string | null;
   startedAt: string;
   resolvedAt: string | null;
   createdAt: string;
@@ -142,6 +149,7 @@ type UpdateRow = {
   state: StatusIncidentState;
   messageRu: string;
   messageUz: string;
+  messageEn: string | null;
   createdAt: string;
 };
 
@@ -274,7 +282,8 @@ async function readRows(db: D1Database): Promise<{
   const [incidentResult, componentResult, updateResult] = await db.batch([
     db.prepare(
       `SELECT id,public_reference AS publicReference,state,severity,title_ru AS titleRu,
-        title_uz AS titleUz,summary_ru AS summaryRu,summary_uz AS summaryUz,
+        title_uz AS titleUz,title_en AS titleEn,summary_ru AS summaryRu,
+        summary_uz AS summaryUz,summary_en AS summaryEn,
         started_at AS startedAt,resolved_at AS resolvedAt,created_at AS createdAt,
         updated_at AS updatedAt
        FROM system_status_incidents ORDER BY started_at DESC,id DESC LIMIT 50`,
@@ -286,7 +295,7 @@ async function readRows(db: D1Database): Promise<{
     ),
     db.prepare(
       `SELECT id,incident_id AS incidentId,state,message_ru AS messageRu,
-        message_uz AS messageUz,created_at AS createdAt
+        message_uz AS messageUz,message_en AS messageEn,created_at AS createdAt
        FROM system_status_updates WHERE incident_id IN (${recent})
        ORDER BY created_at DESC,id DESC`,
     ),
@@ -363,8 +372,16 @@ export async function readPublicStatus(input: {
     reference: incident.publicReference,
     state: incident.state,
     severity: incident.severity,
-    title: input.locale === "uz" ? incident.titleUz : incident.titleRu,
-    summary: input.locale === "uz" ? incident.summaryUz : incident.summaryRu,
+    title: input.locale === "ru"
+      ? incident.titleRu
+      : input.locale === "uz"
+        ? incident.titleUz
+        : incident.titleEn ?? "Incident details are not available in English.",
+    summary: input.locale === "ru"
+      ? incident.summaryRu
+      : input.locale === "uz"
+        ? incident.summaryUz
+        : incident.summaryEn ?? "This legacy incident was published before English status updates were introduced.",
     startedAt: incident.startedAt,
     resolvedAt: incident.resolvedAt,
     components: rows.components
@@ -379,7 +396,11 @@ export async function readPublicStatus(input: {
       .slice(0, 20)
       .map((update) => ({
         state: update.state,
-        message: input.locale === "uz" ? update.messageUz : update.messageRu,
+        message: input.locale === "ru"
+          ? update.messageRu
+          : input.locale === "uz"
+            ? update.messageUz
+            : update.messageEn ?? "This legacy update is not available in English.",
         createdAt: update.createdAt,
       })),
   });
@@ -445,17 +466,20 @@ export async function createStatusIncident(input: {
     await input.db.batch([
       input.db.prepare(
         `INSERT INTO system_status_incidents
-         (id,public_reference,state,severity,title_ru,title_uz,summary_ru,summary_uz,
+         (id,public_reference,state,severity,
+          title_ru,title_uz,title_en,summary_ru,summary_uz,summary_en,
           current_update_id,started_at,resolved_at,created_by_user_id,created_at,updated_at)
-         VALUES (?,?,'investigating',?,?,?,?,?,?,?,NULL,?,?,?)`,
+         VALUES (?,?,'investigating',?, ?,?,?, ?,?,?, ?,?,NULL, ?,?,?)`,
       ).bind(
         id,
         reference,
         severity,
         value.titleRu,
         value.titleUz,
+        value.titleEn,
         value.summaryRu,
         value.summaryUz,
+        value.summaryEn,
         updateId,
         startedAt,
         input.actorUserId,
@@ -468,9 +492,9 @@ export async function createStatusIncident(input: {
       ).bind(id, component.key, component.impact, nowIso)),
       input.db.prepare(
         `INSERT INTO system_status_updates
-         (id,incident_id,state,message_ru,message_uz,created_by_user_id,created_at)
-         VALUES (?,?,'investigating',?,?,?,?)`,
-      ).bind(updateId, id, value.messageRu, value.messageUz, input.actorUserId, nowIso),
+         (id,incident_id,state,message_ru,message_uz,message_en,created_by_user_id,created_at)
+         VALUES (?,?,'investigating',?,?,?,?,?)`,
+      ).bind(updateId, id, value.messageRu, value.messageUz, value.messageEn, input.actorUserId, nowIso),
     ]);
   } catch {
     throw new SystemStatusError("SYSTEM_STATUS_PERSISTENCE_FAILED");
@@ -509,8 +533,8 @@ export async function appendStatusIncidentUpdate(input: {
       ),
       input.db.prepare(
         `INSERT INTO system_status_updates
-         (id,incident_id,state,message_ru,message_uz,created_by_user_id,created_at)
-         SELECT ?,?,?,?,?,?,? WHERE EXISTS (
+         (id,incident_id,state,message_ru,message_uz,message_en,created_by_user_id,created_at)
+         SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (
            SELECT 1 FROM system_status_incidents WHERE id=? AND current_update_id=?
          )`,
       ).bind(
@@ -519,6 +543,7 @@ export async function appendStatusIncidentUpdate(input: {
         value.state,
         value.messageRu,
         value.messageUz,
+        value.messageEn,
         input.actorUserId,
         now,
         value.incidentId,

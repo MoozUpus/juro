@@ -27,6 +27,18 @@ test("Turnstile delegates cross-origin messaging to the official explicit-render
   assert.match(turnstileWidget, /turnstileWindow\.turnstile\.remove\(/);
 });
 
+test("Turnstile never passes Cloudflare an unsupported Uzbek language code", () => {
+  assert.match(
+    turnstileWidget,
+    /return locale === "uz" \? "auto" : locale;/,
+  );
+  assert.match(
+    turnstileWidget,
+    /language: turnstileLanguage\(locale\)/,
+  );
+  assert.doesNotMatch(turnstileWidget, /language: locale,/);
+});
+
 test("Turnstile reserves its challenge height before the provider renders", () => {
   assert.match(
     authStyles,

@@ -19,7 +19,7 @@ const input = z.object({
     (value) => Date.parse(value.startsAt) < Date.parse(value.endsAt),
     "INVALID_UNAVAILABILITY_RANGE",
   )).max(100),
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
 }).strict();
 
 function response(body: unknown, status = 200) {
@@ -51,7 +51,7 @@ export const PUT = withApiErrors(async function PUT(request: Request) {
   const profile = await ownProfile(user.id);
   if (!profile) return response({ code: "LAWYER_PROFILE_REQUIRED" }, 403);
   const parsed = await parseJsonRequest(request, input, 8_192);
-  if (!parsed.ok) return response({ code: "INVALID_SCHEDULE", error: "Проверьте рабочие часы." }, 400);
+  if (!parsed.ok) return response({ code: "INVALID_SCHEDULE" }, 400);
   const db = requireD1();
   const now = new Date().toISOString();
   await db.batch([

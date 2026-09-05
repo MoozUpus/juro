@@ -1,3 +1,6 @@
+import type { PlatformLocale } from "../platform/routing";
+import { defaultDocumentAnalysisLocale, type SupportedDocumentAnalysisLocale } from "./language";
+
 export type SecureDocumentUploadResult = {
   analysis: {
     id: string;
@@ -21,39 +24,51 @@ export type SecureDocumentUploadProgress = {
 
 export async function uploadDocumentForAnalysis(
   file: File,
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
   onProgress?: (progress: SecureDocumentUploadProgress) => void,
   caseId?: string | null,
+  analysisLocale: SupportedDocumentAnalysisLocale = defaultDocumentAnalysisLocale(locale),
 ): Promise<SecureDocumentUploadResult> {
   if (file.size <= 0 || file.size > 50 * 1024 * 1024) {
-    throw new Error(locale === "ru" ? "Размер файла должен быть от 1 байта до 50 МБ." : "Fayl hajmi 1 baytdan 50 MB gacha bo‘lishi kerak.");
+    throw new Error(locale === "ru"
+      ? "Размер файла должен быть от 1 байта до 50 МБ."
+      : locale === "uz"
+        ? "Fayl hajmi 1 baytdan 50 MB gacha bo‘lishi kerak."
+        : "The file size must be between 1 byte and 50 MB.");
   }
   onProgress?.({ phase: "hashing", loaded: 0, total: file.size });
   const sha256 = await fileSha256(file);
   const idempotencyKey = crypto.randomUUID();
-  const init = await jsonRequest<SecureDocumentUploadResult>("/api/platform/document-analysis/uploads", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "idempotency-key": idempotencyKey,
-      "x-juro-csrf": "1",
+  const init = await jsonRequest<SecureDocumentUploadResult>(
+    "/api/platform/document-analysis/uploads",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+        "x-juro-csrf": "1",
+        "x-juro-locale": locale,
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        sha256,
+        locale: analysisLocale,
+        mode: "quick",
+        caseId: caseId || null,
+        consent: true,
+      }),
     },
-    body: JSON.stringify({
-      fileName: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      sha256,
-      locale,
-      mode: "quick",
-      caseId: caseId || null,
-      consent: true,
-    }),
-  });
+    [],
+    locale,
+  );
   const analysisId = init.analysis.id;
   await putFileWithProgress(
     `/api/platform/document-analysis/uploads/${encodeURIComponent(analysisId)}`,
     file,
     sha256,
+    locale,
     (loaded, total) => onProgress?.({ phase: "uploading", loaded, total }),
   );
   onProgress?.({ phase: "finalizing", loaded: file.size, total: file.size });
@@ -61,13 +76,15 @@ export async function uploadDocumentForAnalysis(
     `/api/platform/document-analysis/uploads/${encodeURIComponent(analysisId)}/finalize`,
     { method: "POST", headers: { "x-juro-csrf": "1" } },
     [202],
+    locale,
   );
 }
 
 export async function importDocumentUrlForAnalysis(
   url: string,
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
   caseId?: string | null,
+  analysisLocale: SupportedDocumentAnalysisLocale = defaultDocumentAnalysisLocale(locale),
 ): Promise<SecureDocumentUploadResult> {
   return jsonRequest<SecureDocumentUploadResult>(
     "/api/platform/document-analysis/url-import",
@@ -79,9 +96,10 @@ export async function importDocumentUrlForAnalysis(
         "x-juro-csrf": "1",
         "x-juro-locale": locale,
       },
-      body: JSON.stringify({ url: url.trim(), locale, mode: "quick", caseId: caseId || null, consent: true }),
+      body: JSON.stringify({ url: url.trim(), locale: analysisLocale, mode: "quick", caseId: caseId || null, consent: true }),
     },
     [202],
+    locale,
   );
 }
 
@@ -89,6 +107,7 @@ function putFileWithProgress(
   url: string,
   file: File,
   sha256: string,
+  locale: PlatformLocale,
   onProgress: (loaded: number, total: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -100,15 +119,16 @@ function putFileWithProgress(
     request.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) onProgress(event.loaded, event.total);
     });
-    request.addEventListener("error", () => reject(new Error("Файл не обработан.")));
-    request.addEventListener("abort", () => reject(new Error("Файл не обработан.")));
+    const fallback = uploadFailure(locale);
+    request.addEventListener("error", () => reject(new Error(fallback)));
+    request.addEventListener("abort", () => reject(new Error(fallback)));
     request.addEventListener("load", () => {
       if (request.status >= 200 && request.status < 300) return resolve();
       try {
         const body = JSON.parse(request.responseText) as { error?: string };
-        reject(new Error(body.error || "Файл не обработан."));
+        reject(new Error(locale === "en" ? fallback : body.error || fallback));
       } catch {
-        reject(new Error("Файл не обработан."));
+        reject(new Error(fallback));
       }
     });
     request.send(file);
@@ -120,11 +140,25 @@ async function fileSha256(file: File): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function jsonRequest<T>(url: string, init: RequestInit, acceptedStatuses: number[] = []): Promise<T> {
+function uploadFailure(locale: PlatformLocale): string {
+  return locale === "ru"
+    ? "Не удалось обработать файл."
+    : locale === "uz"
+      ? "Faylni qayta ishlash imkoni bo‘lmadi."
+      : "The file could not be processed.";
+}
+
+async function jsonRequest<T>(
+  url: string,
+  init: RequestInit,
+  acceptedStatuses: number[] = [],
+  locale: PlatformLocale = "ru",
+): Promise<T> {
   const response = await fetch(url, { ...init, cache: "no-store" });
   const body = await response.json() as T & { error?: string };
   if (!response.ok && !acceptedStatuses.includes(response.status)) {
-    throw new Error(body.error || "Файл не обработан.");
+    const fallback = uploadFailure(locale);
+    throw new Error(locale === "en" ? fallback : body.error || fallback);
   }
   return body;
 }

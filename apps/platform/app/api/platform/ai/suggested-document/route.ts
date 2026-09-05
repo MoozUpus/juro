@@ -9,19 +9,19 @@ import {
   createAiSuggestedDocumentDraft,
   previewAiSuggestedDocument,
 } from "../../../../../lib/ai/suggested-document";
+import { aiText, parseAiOutputLocale, type AiOutputLocale } from "../../../../../lib/ai/localization";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, status === 200 ? { headers: { "cache-control": "private, no-store" } } : { status, headers: { "cache-control": "private, no-store" } });
 }
 
-function localizedError(locale: "ru" | "uz", code: string): string {
-  const ru = locale === "ru";
-  if (code === "AI_SUGGESTED_DOCUMENT_NOT_FOUND") return ru ? "Сохранённая рекомендация AI не найдена." : "Saqlangan AI tavsiyasi topilmadi.";
-  if (code === "AI_SUGGESTED_DOCUMENT_UNAVAILABLE") return ru ? "Подходящий опубликованный шаблон пока недоступен." : "Mos e’lon qilingan shablon hozircha mavjud emas.";
-  if (code === "AI_SUGGESTED_DOCUMENT_CONFLICT") return ru ? "Этот запрос уже использован с другими данными. Обновите предпросмотр." : "Bu so‘rov boshqa ma’lumotlar bilan ishlatilgan. Ko‘rib chiqishni yangilang.";
-  if (code === "AI_SUGGESTED_DOCUMENT_SENSITIVE_CONSENT_REQUIRED") return ru ? "Подтвердите сохранение выбранных конфиденциальных реквизитов." : "Tanlangan maxfiy rekvizitlarni saqlashni tasdiqlang.";
-  return ru ? "Рекомендацию документа не удалось проверить." : "Hujjat tavsiyasini tekshirib bo‘lmadi.";
+function localizedError(locale: AiOutputLocale, code: string): string {
+  if (code === "AI_SUGGESTED_DOCUMENT_NOT_FOUND") return aiText(locale, "Сохранённая рекомендация AI не найдена.", "Saqlangan AI tavsiyasi topilmadi.", "The saved AI document recommendation was not found.");
+  if (code === "AI_SUGGESTED_DOCUMENT_UNAVAILABLE") return aiText(locale, "Подходящий опубликованный шаблон пока недоступен.", "Mos e’lon qilingan shablon hozircha mavjud emas.", "A suitable published English template is not available yet.");
+  if (code === "AI_SUGGESTED_DOCUMENT_CONFLICT") return aiText(locale, "Этот запрос уже использован с другими данными. Обновите предпросмотр.", "Bu so‘rov boshqa ma’lumotlar bilan ishlatilgan. Ko‘rib chiqishni yangilang.", "This request was already used with different data. Refresh the preview.");
+  if (code === "AI_SUGGESTED_DOCUMENT_SENSITIVE_CONSENT_REQUIRED") return aiText(locale, "Подтвердите сохранение выбранных конфиденциальных реквизитов.", "Tanlangan maxfiy rekvizitlarni saqlashni tasdiqlang.", "Confirm that the selected sensitive details may be saved.");
+  return aiText(locale, "Рекомендацию документа не удалось проверить.", "Hujjat tavsiyasini tekshirib bo‘lmadi.", "The document recommendation could not be verified.");
 }
 
 export const POST = withApiErrors(async function POST(request: Request) {
@@ -29,14 +29,17 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const raw = await parseJsonRequest(request, z.unknown(), 64_000);
+  const locale = raw.ok && raw.data && typeof raw.data === "object" && !Array.isArray(raw.data)
+    ? parseAiOutputLocale((raw.data as { locale?: unknown }).locale)
+    : "ru";
   if (!raw.ok) {
-    return response({ code: "AI_SUGGESTED_DOCUMENT_INVALID", error: localizedError("uz", "AI_SUGGESTED_DOCUMENT_INVALID") }, raw.error === "payload_too_large" ? 413 : 400);
+    return response({ code: "AI_SUGGESTED_DOCUMENT_INVALID", error: localizedError(locale, "AI_SUGGESTED_DOCUMENT_INVALID") }, raw.error === "payload_too_large" ? 413 : 400);
   }
   if (!raw.data || typeof raw.data !== "object" || Array.isArray(raw.data)) {
-    return response({ code: "AI_SUGGESTED_DOCUMENT_INVALID", error: localizedError("uz", "AI_SUGGESTED_DOCUMENT_INVALID") }, 400);
+    return response({ code: "AI_SUGGESTED_DOCUMENT_INVALID", error: localizedError(locale, "AI_SUGGESTED_DOCUMENT_INVALID") }, 400);
   }
   const parsed = aiSuggestedDocumentRequestSchema.safeParse({ action: "preview", ...raw.data });
-  if (!parsed.success) return response({ code: "AI_SUGGESTED_DOCUMENT_INVALID", error: localizedError("uz", "AI_SUGGESTED_DOCUMENT_INVALID") }, 400);
+  if (!parsed.success) return response({ code: "AI_SUGGESTED_DOCUMENT_INVALID", error: localizedError(locale, "AI_SUGGESTED_DOCUMENT_INVALID") }, 400);
   const db = requireD1();
   try {
     if (parsed.data.action === "preview") {

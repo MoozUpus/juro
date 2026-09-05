@@ -8,6 +8,9 @@ import {
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$/;
 const statusSchema = z.enum(["draft", "published", "archived"]);
+const optionalEnglishTitleSchema = z.string().trim().min(3).max(180).nullable().default(null);
+const optionalEnglishSummarySchema = z.string().trim().min(10).max(500).nullable().default(null);
+const optionalEnglishBodySchema = knowledgeBaseArticleBodySchema.nullable().default(null);
 
 export const knowledgeBaseAdminQuerySchema = z.object({
   articleId: z.string().regex(idPattern).optional(),
@@ -19,10 +22,13 @@ export const knowledgeBaseDraftContentSchema = z.object({
   category: z.string().trim().min(2).max(60).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   titleRu: z.string().trim().min(3).max(180),
   titleUz: z.string().trim().min(3).max(180),
+  titleEn: optionalEnglishTitleSchema,
   summaryRu: z.string().trim().min(10).max(500),
   summaryUz: z.string().trim().min(10).max(500),
+  summaryEn: optionalEnglishSummarySchema,
   bodyRu: knowledgeBaseArticleBodySchema,
   bodyUz: knowledgeBaseArticleBodySchema,
+  bodyEn: optionalEnglishBodySchema,
   relatedSlugs: knowledgeBaseRelatedSlugsSchema,
 }).strict().superRefine((value, context) => {
   if (new Set(value.relatedSlugs).size !== value.relatedSlugs.length) {
@@ -30,6 +36,11 @@ export const knowledgeBaseDraftContentSchema = z.object({
   }
   if (value.relatedSlugs.includes(value.slug)) {
     context.addIssue({ code: "custom", path: ["relatedSlugs"], message: "ARTICLE_CANNOT_RELATE_TO_ITSELF" });
+  }
+  const englishFields = [value.titleEn, value.summaryEn, value.bodyEn];
+  const englishFieldCount = englishFields.filter((field) => field !== null).length;
+  if (englishFieldCount > 0 && englishFieldCount < englishFields.length) {
+    context.addIssue({ code: "custom", path: ["titleEn"], message: "ENGLISH_CONTENT_INCOMPLETE" });
   }
 });
 
@@ -61,6 +72,7 @@ export type KnowledgeBaseAdminArticleSummary = {
   status: z.infer<typeof statusSchema>;
   titleRu: string;
   titleUz: string;
+  titleEn: string | null;
   latestVersionNumber: number;
   draftVersionId: string | null;
   publishedVersionId: string | null;
@@ -74,10 +86,13 @@ export type KnowledgeBaseAdminVersion = {
   versionNumber: number;
   titleRu: string;
   titleUz: string;
+  titleEn: string | null;
   summaryRu: string;
   summaryUz: string;
+  summaryEn: string | null;
   bodyRu: KnowledgeBaseDraftContent["bodyRu"];
   bodyUz: KnowledgeBaseDraftContent["bodyUz"];
+  bodyEn: KnowledgeBaseDraftContent["bodyEn"];
   relatedSlugs: string[];
   contentSha256: string;
   contentHashVersion: string;
@@ -113,6 +128,7 @@ type AdminRow = {
   status: "draft" | "published" | "archived";
   titleRu: string | null;
   titleUz: string | null;
+  titleEn: string | null;
   latestVersionNumber: number;
   draftVersionId: string | null;
   publishedVersionId: string | null;
@@ -126,10 +142,13 @@ type VersionRow = {
   versionNumber: number;
   titleRu: string;
   titleUz: string;
+  titleEn: string | null;
   summaryRu: string;
   summaryUz: string;
+  summaryEn: string | null;
   bodyRuJson: string;
   bodyUzJson: string;
+  bodyEnJson: string | null;
   relatedSlugsJson: string;
   contentSha256: string;
   contentHashVersion: string;
@@ -149,6 +168,7 @@ export async function listKnowledgeBaseAdminArticles(input: {
     `SELECT article.id AS articleId,article.slug,article.category,article.status,
       coalesce((SELECT title_ru FROM knowledge_base_article_versions draft WHERE draft.article_id=article.id AND draft.published_at IS NULL ORDER BY draft.version_number DESC LIMIT 1),(SELECT title_ru FROM knowledge_base_article_versions published WHERE published.article_id=article.id AND published.published_at IS NOT NULL ORDER BY published.version_number DESC LIMIT 1)) AS titleRu,
       coalesce((SELECT title_uz FROM knowledge_base_article_versions draft WHERE draft.article_id=article.id AND draft.published_at IS NULL ORDER BY draft.version_number DESC LIMIT 1),(SELECT title_uz FROM knowledge_base_article_versions published WHERE published.article_id=article.id AND published.published_at IS NOT NULL ORDER BY published.version_number DESC LIMIT 1)) AS titleUz,
+      coalesce((SELECT title_en FROM knowledge_base_article_versions draft WHERE draft.article_id=article.id AND draft.published_at IS NULL ORDER BY draft.version_number DESC LIMIT 1),(SELECT title_en FROM knowledge_base_article_versions published WHERE published.article_id=article.id AND published.published_at IS NOT NULL ORDER BY published.version_number DESC LIMIT 1)) AS titleEn,
       coalesce((SELECT max(version_number) FROM knowledge_base_article_versions version WHERE version.article_id=article.id),0) AS latestVersionNumber,
       (SELECT id FROM knowledge_base_article_versions draft WHERE draft.article_id=article.id AND draft.published_at IS NULL ORDER BY draft.version_number DESC LIMIT 1) AS draftVersionId,
       (SELECT id FROM knowledge_base_article_versions published WHERE published.article_id=article.id AND published.published_at IS NOT NULL ORDER BY published.version_number DESC LIMIT 1) AS publishedVersionId,
@@ -171,8 +191,9 @@ export async function getKnowledgeBaseAdminArticle(input: {
   ).bind(input.articleId).first<{ articleId: string; slug: string; category: string; status: "draft" | "published" | "archived"; updatedAt: string }>();
   if (!article) return null;
   const rows = await input.db.prepare(
-    `SELECT id AS versionId,version_number AS versionNumber,title_ru AS titleRu,title_uz AS titleUz,
-      summary_ru AS summaryRu,summary_uz AS summaryUz,body_ru_json AS bodyRuJson,body_uz_json AS bodyUzJson,
+    `SELECT id AS versionId,version_number AS versionNumber,title_ru AS titleRu,title_uz AS titleUz,title_en AS titleEn,
+      summary_ru AS summaryRu,summary_uz AS summaryUz,summary_en AS summaryEn,
+      body_ru_json AS bodyRuJson,body_uz_json AS bodyUzJson,body_en_json AS bodyEnJson,
       related_slugs_json AS relatedSlugsJson,content_sha256 AS contentSha256,content_hash_version AS contentHashVersion,created_at AS createdAt,
       coalesce(updated_at,created_at) AS updatedAt,published_at AS publishedAt
      FROM knowledge_base_article_versions WHERE article_id=? ORDER BY version_number DESC`,
@@ -209,9 +230,9 @@ export async function saveKnowledgeBaseDraft(input: {
         ).bind(articleId, content.slug, content.category, now, now, input.actorUserId, input.actorUserId),
         input.db.prepare(
           `INSERT INTO knowledge_base_article_versions
-           (id,article_id,version_number,title_ru,title_uz,summary_ru,summary_uz,body_ru_json,body_uz_json,related_slugs_json,content_sha256,content_hash_version,created_at,published_at,created_by_user_id,updated_by_user_id,published_by_user_id,updated_at)
-           VALUES (?,?,1,?,?,?,?,?,?,?,?,'full-v2',?,NULL,?,?,NULL,?)`,
-        ).bind(versionId, articleId, content.titleRu, content.titleUz, content.summaryRu, content.summaryUz, JSON.stringify(content.bodyRu), JSON.stringify(content.bodyUz), JSON.stringify(content.relatedSlugs), hash, now, input.actorUserId, input.actorUserId, now),
+           (id,article_id,version_number,title_ru,title_uz,title_en,summary_ru,summary_uz,summary_en,body_ru_json,body_uz_json,body_en_json,related_slugs_json,content_sha256,content_hash_version,created_at,published_at,created_by_user_id,updated_by_user_id,published_by_user_id,updated_at)
+           VALUES (?,?,1,?,?,?,?,?,?,?,?,?,?,?,'full-v2',?,NULL,?,?,NULL,?)`,
+        ).bind(versionId, articleId, content.titleRu, content.titleUz, content.titleEn, content.summaryRu, content.summaryUz, content.summaryEn, JSON.stringify(content.bodyRu), JSON.stringify(content.bodyUz), content.bodyEn === null ? null : JSON.stringify(content.bodyEn), JSON.stringify(content.relatedSlugs), hash, now, input.actorUserId, input.actorUserId, now),
       ]);
     } catch (error) {
       if (isUniqueConstraint(error)) throw new KnowledgeBaseAdminError("SLUG_CONFLICT", "Такой slug уже используется.", 409);
@@ -241,9 +262,9 @@ export async function saveKnowledgeBaseDraft(input: {
         input.db.prepare("UPDATE knowledge_base_articles SET slug=?,category=?,updated_at=?,updated_by_user_id=? WHERE id=?")
           .bind(content.slug, content.category, now, input.actorUserId, article.id),
         input.db.prepare(
-          `UPDATE knowledge_base_article_versions SET title_ru=?,title_uz=?,summary_ru=?,summary_uz=?,body_ru_json=?,body_uz_json=?,related_slugs_json=?,content_sha256=?,content_hash_version='full-v2',updated_by_user_id=?,updated_at=?
+          `UPDATE knowledge_base_article_versions SET title_ru=?,title_uz=?,title_en=?,summary_ru=?,summary_uz=?,summary_en=?,body_ru_json=?,body_uz_json=?,body_en_json=?,related_slugs_json=?,content_sha256=?,content_hash_version='full-v2',updated_by_user_id=?,updated_at=?
            WHERE id=? AND article_id=? AND published_at IS NULL`,
-        ).bind(content.titleRu, content.titleUz, content.summaryRu, content.summaryUz, JSON.stringify(content.bodyRu), JSON.stringify(content.bodyUz), JSON.stringify(content.relatedSlugs), hash, input.actorUserId, now, version.id, article.id),
+        ).bind(content.titleRu, content.titleUz, content.titleEn, content.summaryRu, content.summaryUz, content.summaryEn, JSON.stringify(content.bodyRu), JSON.stringify(content.bodyUz), content.bodyEn === null ? null : JSON.stringify(content.bodyEn), JSON.stringify(content.relatedSlugs), hash, input.actorUserId, now, version.id, article.id),
       ]);
     } catch (error) {
       if (isUniqueConstraint(error)) throw new KnowledgeBaseAdminError("SLUG_CONFLICT", "Такой slug уже используется.", 409);
@@ -266,9 +287,9 @@ export async function saveKnowledgeBaseDraft(input: {
       .bind(now, input.actorUserId, article.id),
     input.db.prepare(
       `INSERT INTO knowledge_base_article_versions
-       (id,article_id,version_number,title_ru,title_uz,summary_ru,summary_uz,body_ru_json,body_uz_json,related_slugs_json,content_sha256,content_hash_version,created_at,published_at,created_by_user_id,updated_by_user_id,published_by_user_id,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,'full-v2',?,NULL,?,?,NULL,?)`,
-    ).bind(versionId, article.id, versionNumber, content.titleRu, content.titleUz, content.summaryRu, content.summaryUz, JSON.stringify(content.bodyRu), JSON.stringify(content.bodyUz), JSON.stringify(content.relatedSlugs), hash, now, input.actorUserId, input.actorUserId, now),
+       (id,article_id,version_number,title_ru,title_uz,title_en,summary_ru,summary_uz,summary_en,body_ru_json,body_uz_json,body_en_json,related_slugs_json,content_sha256,content_hash_version,created_at,published_at,created_by_user_id,updated_by_user_id,published_by_user_id,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'full-v2',?,NULL,?,?,NULL,?)`,
+    ).bind(versionId, article.id, versionNumber, content.titleRu, content.titleUz, content.titleEn, content.summaryRu, content.summaryUz, content.summaryEn, JSON.stringify(content.bodyRu), JSON.stringify(content.bodyUz), content.bodyEn === null ? null : JSON.stringify(content.bodyEn), JSON.stringify(content.relatedSlugs), hash, now, input.actorUserId, input.actorUserId, now),
   ]);
   return { articleId: article.id, versionId, versionNumber, created: true };
 }
@@ -360,6 +381,11 @@ export async function knowledgeBaseContentSha256(content: KnowledgeBaseDraftCont
     summaryUz: content.summaryUz,
     bodyRu: content.bodyRu,
     bodyUz: content.bodyUz,
+    ...(content.titleEn === null ? {} : {
+      titleEn: content.titleEn,
+      summaryEn: content.summaryEn,
+      bodyEn: content.bodyEn,
+    }),
     related: content.relatedSlugs,
   });
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
@@ -370,17 +396,23 @@ function parseVersionRow(row: VersionRow): KnowledgeBaseAdminVersion[] {
   try {
     const bodyRu = knowledgeBaseArticleBodySchema.safeParse(JSON.parse(row.bodyRuJson));
     const bodyUz = knowledgeBaseArticleBodySchema.safeParse(JSON.parse(row.bodyUzJson));
+    const bodyEn = row.bodyEnJson === null
+      ? null
+      : knowledgeBaseArticleBodySchema.safeParse(JSON.parse(row.bodyEnJson));
     const related = knowledgeBaseRelatedSlugsSchema.safeParse(JSON.parse(row.relatedSlugsJson));
-    if (!bodyRu.success || !bodyUz.success || !related.success) return [];
+    if (!bodyRu.success || !bodyUz.success || (bodyEn !== null && !bodyEn.success) || !related.success) return [];
     return [{
       versionId: row.versionId,
       versionNumber: row.versionNumber,
       titleRu: row.titleRu,
       titleUz: row.titleUz,
+      titleEn: row.titleEn,
       summaryRu: row.summaryRu,
       summaryUz: row.summaryUz,
+      summaryEn: row.summaryEn,
       bodyRu: bodyRu.data,
       bodyUz: bodyUz.data,
+      bodyEn: bodyEn === null ? null : bodyEn.data,
       relatedSlugs: related.data,
       contentSha256: row.contentSha256,
       contentHashVersion: row.contentHashVersion,

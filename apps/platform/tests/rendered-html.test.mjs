@@ -236,6 +236,8 @@ test("localized legacy auth routes redirect to the canonical auth surface", asyn
   for (const [source, target] of [
     ["/ru/login?returnTo=%2Fru%2Flawyer%2Fmain", "/ru/auth/login?returnTo=%2Fru%2Flawyer%2Fmain"],
     ["/uz/register?accountType=entrepreneur", "/uz/auth/register?accountType=entrepreneur"],
+    ["/en/login?returnTo=%2Fen%2Findividual%2Fdashboard", "/en/auth/login?returnTo=%2Fen%2Findividual%2Fdashboard"],
+    ["/en/register?accountType=lawyer&returnTo=%2Fen%2Flawyer%2Fmain", "/en/auth/register?accountType=lawyer&returnTo=%2Fen%2Flawyer%2Fmain"],
   ]) {
     const response = await worker.fetch(new Request(`http://localhost${source}`, { redirect: "manual" }), runtime, context);
     assert.equal(response.status, 308, source);

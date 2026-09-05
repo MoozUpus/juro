@@ -45,6 +45,28 @@ test("handoff rejects and cancels an oversized chunked form before D1", async ()
   assert.ok(pulls < 20);
 });
 
+test("handoff errors preserve supported locales and reject unknown locale values", async () => {
+  for (const [requested, expected] of [
+    ["uz", "/uz/auth/login?handoff=invalid"],
+    ["en", "/en/auth/login?handoff=invalid"],
+    ["de", "/ru/auth/login?handoff=invalid"],
+  ] as const) {
+    const response = await consumeHandoffRequest(new Request(
+      `https://lawyer.juro.uz/api/auth/session-handoff?lang=${requested}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "text/plain",
+          origin: "https://app.juro.uz",
+        },
+        body: "invalid",
+      },
+    ));
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get("location"), expected);
+  }
+});
+
 function fixture(...userIds: string[]) {
   const value = sqliteD1Fixture();
   const createdAt = BASE_TIME.toISOString();
@@ -80,14 +102,14 @@ test("session handoff is single-use and revokes its source session", async () =>
       userId: "handoff-user",
       sourceSessionId: source.sessionId,
       sourceHost: "app.juro.uz",
-      destinationUrl: "https://lawyer.juro.uz/ru/lawyer/dashboard?from=login",
+      destinationUrl: "https://lawyer.juro.uz/en/lawyer/dashboard?from=login",
       rememberMe: true,
       now: issuedAt,
     });
     assert.ok(handoff);
     assert.equal(
       handoff.action,
-      "https://lawyer.juro.uz/api/auth/session-handoff",
+      "https://lawyer.juro.uz/api/auth/session-handoff?lang=en",
     );
     assert.match(handoff.ticket, /^[A-Za-z0-9_-]{43}$/u);
     const stored = sqlite.prepare(
@@ -111,7 +133,7 @@ test("session handoff is single-use and revokes its source session", async () =>
     });
     assert.ok(consumed);
     assert.equal(consumed.rememberMe, true);
-    assert.equal(consumed.redirectPath, "/ru/lawyer/dashboard?from=login");
+    assert.equal(consumed.redirectPath, "/en/lawyer/dashboard?from=login");
     const destination = await localSessionFromCookie(
       d1,
       `juro_session=${consumed.token}`,
@@ -186,6 +208,10 @@ test("handoff rejects invalid origins, audiences, destinations, and expiry witho
       now: BASE_TIME,
     });
     assert.ok(handoff);
+    assert.equal(
+      handoff.action,
+      "https://lawyer.juro.uz/api/auth/session-handoff?lang=ru",
+    );
 
     assert.equal(await consumeSessionHandoff(d1, {
       ticket: handoff.ticket,

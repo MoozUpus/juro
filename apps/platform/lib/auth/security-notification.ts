@@ -15,7 +15,7 @@ export type LoginSecurityNotificationEvent =
 export type LoginSecurityNotificationConfig = {
   keyring: IdentityKeyring;
   recipientEmail: string;
-  locale: "ru" | "uz";
+  locale: "ru" | "uz" | "en";
   workspaceId: string | null;
 };
 

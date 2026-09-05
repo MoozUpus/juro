@@ -33,6 +33,15 @@ test("case creation input is strict, localized and audience-specific", () => {
   assert.ok(personal.some((item) => item.direction === "other"));
   assert.equal(caseScenarioSteps("debt", "ru").length, 4);
   assert.equal(caseScenarioSteps("debt", "uz").length, 4);
+  assert.equal(caseScenarioSteps("debt", "en").length, 4);
+  assert.equal(
+    caseScenariosForAccount("individual").find(({ id }) => id === "debt")?.en,
+    "Recovery of a debt evidenced by an IOU",
+  );
+  assert.equal(
+    caseDirectionsForAccount("individual").find(({ id }) => id === "justice")?.en,
+    "Courts, public authorities and enforcement",
+  );
   for (const direction of caseDirectionsForAccount("individual")) {
     assert.ok(
       direction.id === "other" || caseScenariosForAccount("individual", direction.id).length >= 5,
@@ -47,6 +56,18 @@ test("case creation input is strict, localized and audience-specific", () => {
     locale: "ru",
     accountType: "individual",
   }).success, true);
+  assert.equal(caseCreateInputSchema.safeParse({
+    title: "Debt recovery",
+    legalArea: "debt",
+    locale: "en",
+    accountType: "individual",
+  }).success, true);
+  assert.equal(caseCreateInputSchema.safeParse({
+    title: "Debt recovery",
+    legalArea: "debt",
+    locale: "de",
+    accountType: "individual",
+  }).success, false);
   assert.equal(caseCreateInputSchema.safeParse({
     title: "",
     legalArea: "debt",
@@ -107,6 +128,7 @@ test("case creation UI posts a CSRF-protected real mutation and opens the persis
 
 test("case API validates input, derives tenant context and atomically inserts a correctly aligned plan", async () => {
   const route = await readFile(new URL("../app/api/platform/cases/route.ts", import.meta.url), "utf8");
+  assert.match(route, /en: "Plan"/u);
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.match(route, /requireApiUser\(\)/);
   assert.match(route, /parseJsonRequest\(request,caseCreateInputSchema,4_096\)/);

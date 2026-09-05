@@ -29,7 +29,10 @@ import {
   LegalCorpusQdrantContainer,
 } from "./legal-corpus-private-services";
 import { lawyerHostTarget } from "./lawyer-host-router";
-import { INTERNAL_REQUEST_PATH_HEADER } from "../lib/platform/routing";
+import {
+  INTERNAL_REQUEST_PATH_HEADER,
+  isAuthenticatedPlatformPathReady,
+} from "../lib/platform/routing";
 import { STATUS_ORIGIN_HEADER } from "../lib/operations/status-metadata";
 import {
   publicApiRequestBodyLimit,
@@ -138,6 +141,10 @@ const worker = {
     let routedRequest = request;
     let routedUrl = url;
 
+    if (!isAuthenticatedPlatformPathReady(url.pathname)) {
+      return withSecurityHeaders(new Response("Not Found", { status: 404 }), url);
+    }
+
     const hostname = url.hostname.toLowerCase();
     const isLawyerHost = hostname === "lawyer.juro.uz";
     const lawyerPassthrough = url.pathname.startsWith("/_next/")
@@ -161,8 +168,10 @@ const worker = {
         || url.pathname === "/status"
         || url.pathname === "/ru"
         || url.pathname === "/uz"
+        || url.pathname === "/en"
         || url.pathname === "/ru/status"
         || url.pathname === "/uz/status"
+        || url.pathname === "/en/status"
         || url.pathname === "/api/status"
         || isStatusAsset;
       if (!allowedStatusPath) {
@@ -171,9 +180,9 @@ const worker = {
       if (request.method !== "GET" && request.method !== "HEAD") {
         return withSecurityHeaders(new Response("Method Not Allowed", { status: 405, headers: { allow: "GET, HEAD" } }), url);
       }
-      if (url.pathname === "/" || url.pathname === "/ru" || url.pathname === "/uz") {
+      if (url.pathname === "/" || url.pathname === "/ru" || url.pathname === "/uz" || url.pathname === "/en") {
         const target = new URL(url);
-        if (url.pathname === "/ru" || url.pathname === "/uz") {
+        if (url.pathname === "/ru" || url.pathname === "/uz" || url.pathname === "/en") {
           target.pathname = `${url.pathname}/status`;
         } else {
           target.pathname = "/status";
@@ -237,7 +246,7 @@ const worker = {
       || routedUrl.pathname.startsWith("/document-builder/signed-share/");
     const isPublicStatus = routedUrl.pathname === "/status"
       || routedUrl.pathname === "/api/status"
-      || /^\/(?:ru|uz)\/status$/.test(routedUrl.pathname);
+      || /^\/(?:ru|uz|en)\/status$/.test(routedUrl.pathname);
     const headers = new Headers(response.headers);
     if (isPublicStatus) {
       headers.set(

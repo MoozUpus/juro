@@ -1,3 +1,4 @@
+import { authLocaleFromRequest } from "../../../../lib/auth/request-locale";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { knowledgeBaseQuerySchema, listKnowledgeBaseArticles } from "../../../../lib/platform/knowledge-base";
 
@@ -9,7 +10,15 @@ export async function GET(request: Request) {
     category: url.searchParams.get("category") ?? "",
   });
   if (!parsed.success) {
-    return Response.json({ code: "INVALID_INPUT", error: "Проверьте параметры поиска / Qidiruv parametrlarini tekshiring." }, { status: 400 });
+    const locale = authLocaleFromRequest(request);
+    return Response.json({
+      code: "INVALID_INPUT",
+      error: {
+        ru: "Проверьте параметры поиска.",
+        uz: "Qidiruv parametrlarini tekshiring.",
+        en: "Check the search parameters.",
+      }[locale],
+    }, { status: 400 });
   }
   const articles = await listKnowledgeBaseArticles({ db: requireD1(), ...parsed.data });
   return Response.json({ articles }, {

@@ -114,6 +114,7 @@ const copy = {
     settings: "Настройки мониторинга",
     preferences: "Предпочтения мониторинга",
     preferencesHint: "Сохраняются только темы, аудитория и желаемая частота для текущего пространства.",
+    settingsHint: "Настройки сохраняются только для текущего пространства.",
     preferenceOnlyNotice: "Пока Lex.uz недоступен или нет свежего запуска, настройки сохранены, но уведомления не отправляются.",
     audience: "Кого затрагивают обновления",
     individual: "Физическое лицо",
@@ -142,6 +143,7 @@ const copy = {
     integrationPending: "Мониторинг Lex.uz включён, но свежий запуск ещё не завершён.",
     integrationActive: "Последний запуск Lex.uz успешно получил официальные metadata.",
     honestStatus: "JURO хранит только технические metadata: URL, идентификатор, дату и fingerprint. Полный текст НПА и редакционные очереди не используются.",
+    integrationAria: "Статус интеграции",
     controlledBeta: "Статус Lex.uz",
     fresh: "Есть свежий успешный запуск",
     stale: "Последняя сверка Lex.uz устарела",
@@ -165,6 +167,10 @@ const copy = {
     createTask: "Создать задачу",
     lawyer: "Передать юристу",
     retry: "Повторить",
+    loading: "Проверяем сохранённые записи…",
+    loadError: "Мониторинг не загрузился.",
+    selectTopicError: "Выберите хотя бы одну область права.",
+    saveError: "Настройки не сохранены.",
   },
   uz: {
     eyebrow: "JURO · Lex.uz metadata",
@@ -173,6 +179,7 @@ const copy = {
     settings: "Monitoring sozlamalari",
     preferences: "Monitoring afzalliklari",
     preferencesHint: "Faqat joriy makon uchun mavzular, auditoriya va kerakli tezlik sifatida saqlanadi.",
+    settingsHint: "Sozlamalar faqat joriy makon uchun saqlanadi.",
     preferenceOnlyNotice: "Lex.uz mavjud bo‘lmaguncha yoki yangi ishga tushirish bo‘lmaguncha afzalliklar saqlanadi, lekin bildirishnomalar yuborilmaydi.",
     audience: "Yangilanishlar kimga taalluqli",
     individual: "Jismoniy shaxs",
@@ -201,6 +208,7 @@ const copy = {
     integrationPending: "Lex.uz monitoringi yoqilgan, ammo yangi ishga tushirish hali tugamagan.",
     integrationActive: "Oxirgi Lex.uz ishga tushirilishi rasmiy metadata’larni muvaffaqiyatli oldi.",
     honestStatus: "JURO faqat texnik metadata’larni saqlaydi: URL, identifikator, sana va fingerprint. NPA to‘liq matni va tahririy navbatlar ishlatilmaydi.",
+    integrationAria: "Integratsiya holati",
     controlledBeta: "Lex.uz holati",
     fresh: "Yangi muvaffaqiyatli ishga tushirish mavjud",
     stale: "Lex.uz oxirgi tekshiruvi eskirgan",
@@ -224,21 +232,90 @@ const copy = {
     createTask: "Vazifa yaratish",
     lawyer: "Yuristga yuborish",
     retry: "Qayta urinish",
+    loading: "Saqlangan yozuvlar tekshirilmoqda…",
+    loadError: "Monitoring yuklanmadi.",
+    selectTopicError: "Kamida bitta huquq sohasini tanlang.",
+    saveError: "Sozlamalar saqlanmadi.",
+  },
+  en: {
+    eyebrow: "JURO · Lex.uz metadata",
+    title: "Legislation monitoring",
+    intro: "Choose the areas of law that matter to you. JURO checks official Lex.uz RSS metadata every day and shows detected changes without storing a local copy of legislation.",
+    settings: "Monitoring settings",
+    preferences: "Monitoring preferences",
+    preferencesHint: "Only the selected topics, audience and preferred frequency are saved for this workspace.",
+    settingsHint: "Settings are saved only for the current workspace.",
+    preferenceOnlyNotice: "Your preferences are saved, but notifications are not sent while Lex.uz is unavailable or no recent monitoring run exists.",
+    audience: "Who the updates affect",
+    individual: "Individual",
+    business: "Business",
+    topics: "Areas of law",
+    channels: "Channels",
+    deliveryWhenActive: "Delivery channels when monitoring is active",
+    deliveryInactive: "Automatic delivery is currently off",
+    inAppInactive: "In-app notifications will begin once monitoring is active.",
+    emailInactive: "Email will not be sent until monitoring is active.",
+    inApp: "In app",
+    email: "Email",
+    emailUnavailable: "Email will become available after the mail service is connected.",
+    frequency: "Frequency",
+    frequencyWhenActive: "Preferred frequency once delivery is enabled",
+    immediate: "Immediately",
+    daily: "Daily",
+    weekly: "Weekly",
+    documentConsent: "Allow JURO to suggest checking documents I select when a relevant legal change is detected.",
+    consentHint: "JURO does not scan all documents automatically. Each check requires your access rights and a separate action.",
+    save: "Save settings",
+    savePreferences: "Save preferences",
+    saved: "Monitoring settings saved.",
+    savedPreferenceOnly: "Preferences saved. Automatic delivery is currently off.",
+    integrationOff: "Lex.uz metadata monitoring is currently off.",
+    integrationPending: "Lex.uz monitoring is on, but a recent run has not completed yet.",
+    integrationActive: "The latest Lex.uz run successfully retrieved official metadata.",
+    honestStatus: "JURO stores technical metadata only: URL, identifier, date and fingerprint. It does not use local copies of legislation or editorial queues.",
+    integrationAria: "Integration status",
+    controlledBeta: "Lex.uz status",
+    fresh: "Recent successful run available",
+    stale: "The latest Lex.uz check is out of date",
+    unavailable: "No recent Lex.uz result",
+    coverage: "This feed shows changes detected in the official Lex.uz RSS feed. It does not make a legal finding about the substance of a change.",
+    feed: "Lex.uz updates",
+    empty: "No Lex.uz changes have been detected yet",
+    emptyHint: "JURO does not generate a demonstration feed or insert fabricated dates.",
+    lastCheck: "Last source check",
+    lastRun: "Latest Lex.uz run",
+    found: "Found / processed / errors",
+    never: "not run yet",
+    sources: "Verified metadata",
+    adopted: "Adopted",
+    effective: "Effective",
+    changed: "What changed",
+    action: "Recommended action",
+    original: "Original language",
+    official: "Official source",
+    checkDocuments: "Check my documents",
+    createTask: "Create task",
+    lawyer: "Send to a lawyer",
+    retry: "Try again",
+    loading: "Checking saved records…",
+    loadError: "Monitoring could not be loaded.",
+    selectTopicError: "Choose at least one area of law.",
+    saveError: "Settings could not be saved.",
   },
 } as const;
 
-const topicLabels: Record<Topic, { ru: string; uz: string }> = {
-  civil: { ru: "Гражданское право", uz: "Fuqarolik huquqi" },
-  contract: { ru: "Договорное право", uz: "Shartnoma huquqi" },
-  labor: { ru: "Трудовое право", uz: "Mehnat huquqi" },
-  family: { ru: "Семейное право", uz: "Oila huquqi" },
-  tax: { ru: "Налоговое право", uz: "Soliq huquqi" },
-  entrepreneurship: { ru: "Предпринимательство", uz: "Tadbirkorlik" },
-  corporate: { ru: "Корпоративное право", uz: "Korporativ huquq" },
-  administrative: { ru: "Административное право", uz: "Ma’muriy huquq" },
-  consumer: { ru: "Защита прав потребителей", uz: "Iste’molchilar huquqlarini himoya qilish" },
-  personal_data_it: { ru: "Персональные данные и IT", uz: "Shaxsiy ma’lumotlar va IT" },
-  banking_finance: { ru: "Банковское и финансовое регулирование", uz: "Bank va moliyaviy tartibga solish" },
+const topicLabels: Record<Topic, Record<PlatformLocale, string>> = {
+  civil: { ru: "Гражданское право", uz: "Fuqarolik huquqi", en: "Civil law" },
+  contract: { ru: "Договорное право", uz: "Shartnoma huquqi", en: "Contract law" },
+  labor: { ru: "Трудовое право", uz: "Mehnat huquqi", en: "Employment law" },
+  family: { ru: "Семейное право", uz: "Oila huquqi", en: "Family law" },
+  tax: { ru: "Налоговое право", uz: "Soliq huquqi", en: "Tax law" },
+  entrepreneurship: { ru: "Предпринимательство", uz: "Tadbirkorlik", en: "Entrepreneurship" },
+  corporate: { ru: "Корпоративное право", uz: "Korporativ huquq", en: "Corporate law" },
+  administrative: { ru: "Административное право", uz: "Ma’muriy huquq", en: "Administrative law" },
+  consumer: { ru: "Защита прав потребителей", uz: "Iste’molchilar huquqlarini himoya qilish", en: "Consumer protection" },
+  personal_data_it: { ru: "Персональные данные и IT", uz: "Shaxsiy ma’lumotlar va IT", en: "Personal data and IT" },
+  banking_finance: { ru: "Банковское и финансовое регулирование", uz: "Bank va moliyaviy tartibga solish", en: "Banking and financial regulation" },
 };
 
 const defaultStatus: MonitoringStatus = {
@@ -288,7 +365,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
         status?: MonitoringStatus;
         error?: string;
       };
-      if (!response.ok) throw new Error(body.error || (locale === "ru" ? "Мониторинг не загрузился." : "Monitoring yuklanmadi."));
+      if (!response.ok) throw new Error(body.error || t.loadError);
       if (body.preference) {
         setPreference({
           ...body.preference,
@@ -302,7 +379,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
     } finally {
       setLoading(false);
     }
-  }, [locale]);
+  }, [locale, t.loadError]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -323,7 +400,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!preference.topics.length) {
-      setError(locale === "ru" ? "Выберите хотя бы одну область права." : "Kamida bitta huquq sohasini tanlang.");
+      setError(t.selectTopicError);
       return;
     }
     setSaving(true);
@@ -336,7 +413,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
         body: JSON.stringify({ ...preference, locale }),
       });
       const body = await response.json() as { preference?: Preference; error?: string };
-      if (!response.ok) throw new Error(body.error || (locale === "ru" ? "Настройки не сохранены." : "Sozlamalar saqlanmadi."));
+      if (!response.ok) throw new Error(body.error || t.saveError);
       if (body.preference) {
         setPreference({
           ...body.preference,
@@ -362,7 +439,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
       {error && <p className="monitoring-message error" role="alert"><CircleAlert />{error}<button onClick={() => void load()}><RefreshCw />{t.retry}</button></p>}
       {notice && <p className="monitoring-message success" role="status"><CheckCircle2 />{notice}</p>}
 
-      <section className="monitoring-status" aria-label={locale === "ru" ? "Статус интеграции" : "Integratsiya holati"}>
+      <section className="monitoring-status" aria-label={t.integrationAria}>
         <div className="monitoring-status-copy">
           {status.freshness.state === "fresh" ? <ShieldCheck aria-hidden="true" /> : <ShieldAlert aria-hidden="true" />}
           <div>
@@ -381,7 +458,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
 
       <div className="monitoring-layout">
         <form className="monitoring-settings" onSubmit={save}>
-          <div className="monitoring-section-heading"><BellRing /><div><h2>{preferenceOnly ? t.preferences : t.settings}</h2><p>{preferenceOnly ? t.preferencesHint : (locale === "ru" ? "Настройки сохраняются только для текущего пространства." : "Sozlamalar faqat joriy makon uchun saqlanadi.")}</p></div></div>
+          <div className="monitoring-section-heading"><BellRing /><div><h2>{preferenceOnly ? t.preferences : t.settings}</h2><p>{preferenceOnly ? t.preferencesHint : t.settingsHint}</p></div></div>
           {preferenceOnly && <p className="monitoring-preference-note" role="note">{t.preferenceOnlyNotice}</p>}
 
           <fieldset>
@@ -421,7 +498,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
 
         <section className="monitoring-feed">
           <div className="monitoring-section-heading"><Gavel /><div><h2>{t.feed}</h2><p>{t.coverage}</p></div></div>
-          {loading ? <div className="monitoring-loading"><LoaderCircle className="spin" /><span>{locale === "ru" ? "Проверяем сохранённые записи…" : "Saqlangan yozuvlar tekshirilmoqda…"}</span></div>
+          {loading ? <div className="monitoring-loading"><LoaderCircle className="spin" /><span>{t.loading}</span></div>
             : updates.length ? <div className="monitoring-updates">{updates.map(update => <UpdateCard key={update.id} update={update} locale={locale} />)}</div>
               : <div className="monitoring-empty"><Scale /><h3>{t.empty}</h3><p>{t.emptyHint}</p></div>}
         </section>
@@ -459,7 +536,8 @@ function UpdateCard({ update, locale }: { update: LegislationUpdate; locale: Pla
 function formatDate(value: string, locale: PlatformLocale, withTime = false) {
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return "—";
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", withTime
+  const dateLocale = locale === "ru" ? "ru-RU" : locale === "uz" ? "uz-UZ" : "en-GB";
+  return new Intl.DateTimeFormat(dateLocale, withTime
     ? { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }
     : { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(date);
 }

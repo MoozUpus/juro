@@ -1,4 +1,5 @@
 import { parseJsonRequest } from "../../../../../lib/auth/input";
+import { authLocaleFromRequest, type RequestAuthLocale } from "../../../../../lib/auth/request-locale";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
@@ -9,7 +10,17 @@ function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }
 
+function message(
+  locale: RequestAuthLocale,
+  russian: string,
+  uzbek: string,
+  english: string,
+): string {
+  return { ru: russian, uz: uzbek, en: english }[locale];
+}
+
 export const GET = withApiErrors(async function GET(_request: Request, { params }: { params: Promise<{ ticketId: string }> }) {
+  const locale = authLocaleFromRequest(_request);
   const { ticketId } = await params;
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
@@ -17,24 +28,25 @@ export const GET = withApiErrors(async function GET(_request: Request, { params 
   const ticket = await db.prepare(
     "SELECT id,category,severity,status,subject,created_at AS createdAt,updated_at AS updatedAt,closed_at AS closedAt FROM support_tickets WHERE id=? AND workspace_id=? AND requester_user_id=?",
   ).bind(ticketId, workspace.id, user.id).first();
-  if (!ticket) return response({ code: "NOT_FOUND" }, 404);
+  if (!ticket) return response({ code: "NOT_FOUND", error: message(locale, "Обращение не найдено.", "Murojaat topilmadi.", "The support request was not found.") }, 404);
   const messages = await db.prepare("SELECT id,author_type AS authorType,body,created_at AS createdAt FROM support_messages WHERE ticket_id=? ORDER BY created_at ASC").bind(ticketId).all();
   return response({ ticket, messages: messages.results });
 });
 
 export const POST = withApiErrors(async function POST(request: Request, { params }: { params: Promise<{ ticketId: string }> }) {
   assertSafeWrite(request);
+  const locale = authLocaleFromRequest(request);
   const { ticketId } = await params;
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const parsed = await parseJsonRequest(request, supportTicketReplySchema, 8_512);
-  if (!parsed.ok) return response({ code: "INVALID_INPUT", error: "Проверьте сообщение / Xabarni tekshiring." }, parsed.error === "payload_too_large" ? 413 : 400);
+  if (!parsed.ok) return response({ code: "INVALID_INPUT", error: message(locale, "Проверьте сообщение.", "Xabarni tekshiring.", "Check your message.") }, parsed.error === "payload_too_large" ? 413 : 400);
   const db = requireD1();
   const ticket = await db.prepare(
     "SELECT id,status FROM support_tickets WHERE id=? AND workspace_id=? AND requester_user_id=? LIMIT 1",
   ).bind(ticketId, workspace.id, user.id).first<{ id: string; status: string }>();
-  if (!ticket) return response({ code: "NOT_FOUND" }, 404);
-  if (ticket.status === "resolved") return response({ code: "TICKET_RESOLVED", error: "Обращение уже закрыто / Murojaat yopilgan." }, 409);
+  if (!ticket) return response({ code: "NOT_FOUND", error: message(locale, "Обращение не найдено.", "Murojaat topilmadi.", "The support request was not found.") }, 404);
+  if (ticket.status === "resolved") return response({ code: "TICKET_RESOLVED", error: message(locale, "Обращение уже закрыто.", "Murojaat yopilgan.", "This support request is already closed.") }, 409);
   const now = isoNow();
   await db.batch([
     db.prepare("INSERT INTO support_messages (id,ticket_id,author_user_id,author_type,body,created_at) VALUES (?,?,?,'requester',?,?)").bind(crypto.randomUUID(), ticketId, user.id, parsed.data.message, now),

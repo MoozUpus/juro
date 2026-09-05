@@ -9,6 +9,8 @@
  * direct-live Lex.uz discovery plans.
  */
 
+import { aiText, type AiDiscoveryLocale, type AiOutputLocale } from "./localization";
+
 export const legalIntentKinds = [
   "conversation",
   "legal_question",
@@ -43,7 +45,7 @@ export type LegalIntentDecision = {
 };
 
 export type LegalResearchPlan = {
-  locale: "ru" | "uz";
+  locale: AiDiscoveryLocale;
   domain: LegalDomainMode;
   primaryQuery: string;
   expandedQueries: string[];
@@ -58,10 +60,10 @@ export type LegalResearchPlan = {
 
 const GREETING = /^(?:привет|здравствуйте|добрый\s+(?:день|вечер|утро)|салом|ассалом(?:у\s+алайкум)?|salom|hello|hi|как\s+дела|qalaysiz)[!,.?\s]*$/iu;
 const THANKS = /^(?:спасибо|благодарю|рахмат|tashakkur|thank\s+you)[!,.?\s]*$/iu;
-const DOCUMENT_REQUEST = /(?:состав(?:ь|ить)|подготов(?:ь|ить)|заполн(?:и|ить)|шаблон|образец|договор|заявлени[ея]|жалоб[ау]|исков(?:ое)?\s+заявление|hujjat|shartnoma|ariza|da.vo|namuna|tayyorla|to.ldir)/iu;
-const CALCULATION_REQUEST = /(?:рассчита(?:й|ть)|посчита(?:й|ть)|калькулятор|расч[её]т|пен[яи]|процент|госпошлин|soliqni\s+hisob|hisobla|foiz|penya|davlat\s+boji)/iu;
-const OUT_OF_SCOPE = /(?:медицинск(?:ий|ая)\s+диагноз|назначь\s+лекарство|взлом|обойти\s+защиту|оружи[ея]|malware|парол[ья]\s+чуж|ставк[аи]\s+на\s+спорт)/iu;
-const LEGAL_MARKERS = /(?:прав[оа]|закон|кодекс|стать[яию]|договор|суд|налог|штраф|увольн|работодатель|работник|брак|развод|алименты|наслед|регистрац|лицензи|обязан|можно\s+ли|имею\s+ли|qonun|huquq|kodeks|modda|sud|soliq|jarima|ishdan|nikoh|aliment|meros|ro.yxat|majbur)/iu;
+const DOCUMENT_REQUEST = /(?:состав(?:ь|ить)|подготов(?:ь|ить)|заполн(?:и|ить)|шаблон|образец|договор|заявлени[ея]|жалоб[ау]|исков(?:ое)?\s+заявление|hujjat|shartnoma|ariza|da.vo|namuna|tayyorla|to.ldir|draft|prepare|complete|template|sample|contract|application|complaint|claim)/iu;
+const CALCULATION_REQUEST = /(?:рассчита(?:й|ть)|посчита(?:й|ть)|калькулятор|расч[её]т|пен[яи]|процент|госпошлин|soliqni\s+hisob|hisobla|foiz|penya|davlat\s+boji|calculate|calculator|interest|penalty|court\s+fee)/iu;
+const OUT_OF_SCOPE = /(?:медицинск(?:ий|ая)\s+диагноз|назначь\s+лекарство|взлом|обойти\s+защиту|оружи[ея]|malware|парол[ья]\s+чуж|ставк[аи]\s+на\s+спорт|medical\s+diagnosis|prescribe\s+medicine|hack|bypass\s+security|weapon|someone.?s\s+password|sports?\s+bet)/iu;
+const LEGAL_MARKERS = /(?:прав[оа]|закон|кодекс|стать[яию]|договор|суд|налог|штраф|увольн|работодатель|работник|брак|развод|алименты|наслед|регистрац|лицензи|обязан|можно\s+ли|имею\s+ли|qonun|huquq|kodeks|modda|sud|soliq|jarima|ishdan|nikoh|aliment|meros|ro.yxat|majbur|law|legal|code|article|contract|court|tax|fine|dismiss|employer|employee|marriage|divorce|maintenance|inherit|registration|licen[cs]e|obligation|may\s+i|can\s+i)/iu;
 
 const SENSITIVE_PATTERNS: RegExp[] = [
   /\b\d{14}\b/gu,
@@ -72,8 +74,8 @@ const SENSITIVE_PATTERNS: RegExp[] = [
   /\b\d{9,19}\b/gu,
 ];
 
-const FOLLOW_UP = /^(?:а\s+)?(?:какие|какой|как|когда|куда|что|сколько|почему|где|можно\s+ли|нужн\p{L}*|qanday|qaysi|qachon|qayerga|nima|qancha|nega|kerakmi)(?:\s|$)/iu;
-const FOLLOW_UP_NOUN = /^(?:а\s+)?(?:какие\s+)?(?:документы|сроки|риски|шаги|основания|hujjatlar|muddatlar|xavflar|qadamlar|asoslar)[?!.\s]*$/iu;
+const FOLLOW_UP = /^(?:а\s+)?(?:какие|какой|как|когда|куда|что|сколько|почему|где|можно\s+ли|нужн\p{L}*|qanday|qaysi|qachon|qayerga|nima|qancha|nega|kerakmi|which|what|how|when|where|why|how\s+much|can\s+i|do\s+i\s+need)(?:\s|$)/iu;
+const FOLLOW_UP_NOUN = /^(?:а\s+)?(?:какие\s+)?(?:документы|сроки|риски|шаги|основания|hujjatlar|muddatlar|xavflar|qadamlar|asoslar|documents|deadlines|risks|steps|grounds)[?!.\s]*$/iu;
 
 const DOMAIN_PATTERNS: ReadonlyArray<[LegalDomainMode, RegExp]> = [
   ["labor", /(?:труд|работодател|работник|увольн|зарплат|отпуск|mehnat|ish\s+beruvchi|xodim|ishdan|ta.til)/iu],
@@ -199,7 +201,7 @@ function relevantHistorySubject(history: readonly { user: string; assistant: str
 
 export function rewriteLegalFollowUp(input: {
   question: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   conversationHistory?: readonly { user: string; assistant: string }[];
 }): { query: string; rewritten: boolean } {
   const question = redactLegalQuerySensitiveData(input.question).slice(0, 500);
@@ -208,9 +210,7 @@ export function rewriteLegalFollowUp(input: {
   if (!shortFollowUp) return { query: question, rewritten: false };
   const subject = relevantHistorySubject(history);
   if (!subject) return { query: question, rewritten: false };
-  const query = input.locale === "ru"
-    ? `${subject}. Уточняющий вопрос: ${question}`
-    : `${subject}. Aniqlashtiruvchi savol: ${question}`;
+  const query = aiText(input.locale, `${subject}. Уточняющий вопрос: ${question}`, `${subject}. Aniqlashtiruvchi savol: ${question}`, `${subject}. Follow-up question: ${question}`);
   return { query: redactLegalQuerySensitiveData(query).slice(0, 900), rewritten: true };
 }
 
@@ -230,7 +230,7 @@ function extractActName(value: string): string | null {
   return null;
 }
 
-function expandCompanyAlias(value: string, locale: "ru" | "uz"): string {
+function expandCompanyAlias(value: string, locale: AiDiscoveryLocale): string {
   if (!LLC_DOMAIN_MARKER.test(value)) return value;
   return locale === "ru"
     ? "общество с ограниченной ответственностью"
@@ -247,7 +247,7 @@ function compactSearchQuery(value: string): string {
 
 export function planLegalResearch(input: {
   question: string;
-  locale: "ru" | "uz";
+  locale: AiDiscoveryLocale;
   conversationHistory?: readonly { user: string; assistant: string }[];
 }): LegalResearchPlan {
   const rewrite = rewriteLegalFollowUp(input);

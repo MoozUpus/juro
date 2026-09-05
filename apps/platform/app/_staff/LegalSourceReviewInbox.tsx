@@ -12,8 +12,11 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { platformIntlLocale } from "../../lib/platform/date-time";
+import type { PlatformLocale } from "../../lib/platform/routing";
 
-type Locale = "ru" | "uz";
+type Locale = PlatformLocale;
+type SourceLocale = "ru" | "uz";
 type ReviewStatus = "pending" | "in_review" | "approved" | "rejected" | "closed";
 type ReviewItem = {
   reviewId: string;
@@ -29,7 +32,7 @@ type ReviewItem = {
   createdAt: string;
   updatedAt: string;
   sourceKind: "lex";
-  language: Locale;
+  language: SourceLocale;
   officialUrl: string;
   title: string;
   actIdentifier: string | null;
@@ -57,7 +60,7 @@ type ClaimedReview = {
     sourceId: string;
     versionId: string;
     sourceKind: "lex";
-    locale: Locale;
+    locale: SourceLocale;
     canonicalId: string;
     canonicalUrl: string;
     rawContentSha256: string;
@@ -71,6 +74,7 @@ type ListResponse = { ok: true; items: ReviewItem[]; nextCursor: string | null }
 
 const labels = {
   ru: {
+    skip: "К очереди", filters: "Фильтры очереди", russian: "Русский", uzbek: "O‘zbekcha",
     title: "Проверка юридических источников",
     subtitle: "Только сохранённые снимки Lex.uz. Публикация требует подтверждённого решения.",
     protected: "Защищённый контур · свежая 2FA",
@@ -110,6 +114,7 @@ const labels = {
     error: "Не удалось выполнить запрос.", count: "заданий",
   },
   uz: {
+    skip: "Navbatga o‘tish", filters: "Navbat filtrlari", russian: "Русский", uzbek: "O‘zbekcha",
     title: "Huquqiy manbalarni tekshirish",
     subtitle: "Faqat Lex.uz saqlangan nusxalari. Nashr tasdiqlangan qarorni talab qiladi.",
     protected: "Himoyalangan kontur · yangi 2FA",
@@ -147,6 +152,46 @@ const labels = {
     bulkConfirm: "Tasdiqlash", bulkCancel: "Bekor qilish",
     bulkDone: "Ommaviy tekshiruv yakunlandi", bulkSkipped: "holat o‘zgargani uchun o‘tkazib yuborildi",
     error: "So‘rovni bajarib bo‘lmadi.", count: "topshiriq",
+  },
+  en: {
+    skip: "Skip to review queue", filters: "Queue filters", russian: "Russian", uzbek: "Uzbek",
+    title: "Legal source review",
+    subtitle: "Saved Lex.uz snapshots only. Publication requires a confirmed human decision.",
+    protected: "Secure environment · recent 2FA",
+    status: "Status", scope: "Assignment", source: "Source", language: "Language",
+    pending: "Pending", inReview: "In review", approved: "Approved", rejected: "Rejected", closed: "Closed",
+    workable: "Available to me", mine: "Assigned to me", unassigned: "Unassigned", all: "All",
+    allSources: "All sources", allLanguages: "All languages",
+    refreshed: "Queue refreshed.", retry: "Try again", refresh: "Refresh", loadMore: "Show more",
+    emptyTitle: "No tasks match these filters", emptyText: "Change the filters or refresh the queue later.",
+    sourceCol: "Source", reasonCol: "Reason", stateCol: "Status", receivedCol: "Received", actionCol: "Action",
+    claim: "Claim for review", resume: "Continue", publish: "Publish", published: "Published",
+    openOriginal: "Open official source", back: "Return to queue", evidence: "Checksums",
+    normalized: "Normalised snapshot", showMore: "Show more excerpts",
+    notes: "Decision rationale", notesHint: "At least 10 characters. Record exactly what was reviewed.",
+    effectiveDate: "Effective from", expiresDate: "Effective until — optional",
+    applicabilityHint: "Dates are confirmed by the reviewer and determine whether the edition is current or historical.",
+    approve: "Approve snapshot", reject: "Reject snapshot", reviewing: "Opening verified snapshot…",
+    publishing: "Publishing verified snapshot…", deciding: "Saving decision…",
+    approvedDone: "Snapshot approved. It is available under “Approved” for a separate publication action.",
+    rejectedDone: "Snapshot rejected and not published.", publishedDone: "Verified snapshot published.",
+    withdraw: "Withdraw", withdrawing: "Withdrawing publication…",
+    withdrawalTitle: "Withdraw current publication",
+    withdrawalHint: "Provide a legally relevant reason. The published snapshot and its evidence remain in the audit history.",
+    withdrawalNotes: "Reason for withdrawal", withdrawalCancel: "Cancel",
+    withdrawalConfirm: "Confirm withdrawal",
+    withdrawalDone: "Publication withdrawn and removed from current sources.",
+    syncTitle: "Add official source",
+    syncHint: "Enter an exact Lex.uz document URL. The snapshot will enter the queue and will not be published automatically.",
+    syncUrl: "Official document URL",
+    syncPlaceholder: "https://lex.uz/docs/111189",
+    syncSubmit: "Add to queue",
+    syncQueued: "Request queued. Once retrieved, the snapshot will appear for manual review.",
+    selectPage: "Select eligible items on this page", selected: "Selected", bulkApprove: "Approve selected",
+    bulkTitle: "Bulk approval", bulkHint: "A separate decision is recorded for every snapshot. Publication remains a separate action.",
+    bulkConfirm: "Confirm approval", bulkCancel: "Cancel",
+    bulkDone: "Bulk review completed", bulkSkipped: "skipped because the status changed",
+    error: "The request could not be completed.", count: "tasks",
   },
 } as const;
 
@@ -416,16 +461,17 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
     }
   };
 
-  const date = (value: string) => new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", {
+  const date = (value: string) => new Intl.DateTimeFormat(platformIntlLocale(locale), {
     dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent",
   }).format(new Date(value));
+  const nextLocale: Locale = locale === "ru" ? "uz" : locale === "uz" ? "en" : "ru";
 
   return <div className="staff-console">
-    <a className="staff-skip" href="#staff-main">{locale === "ru" ? "К очереди" : "Navbatga o‘tish"}</a>
+    <a className="staff-skip" href="#staff-main">{l.skip}</a>
     <header className="staff-topbar">
       <div className="staff-brand"><ShieldCheck aria-hidden="true"/><span><b>JURO</b><small>LEGAL OPERATIONS</small></span></div>
       <div className="staff-session"><span>{l.protected}</span><b>{reviewerName}</b></div>
-      <a href={`/${locale === "ru" ? "uz" : "ru"}/admin/legal-sources/reviews`} hrefLang={locale === "ru" ? "uz" : "ru"}>{locale === "ru" ? "UZ" : "RU"}</a>
+      <a href={`/${nextLocale}/admin/legal-sources/reviews`} hrefLang={nextLocale}>{nextLocale.toUpperCase()}</a>
     </header>
     <main id="staff-main" className="staff-main">
       {claimed ? <section className="staff-review-document" aria-labelledby="review-document-title">
@@ -478,11 +524,11 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
           {syncError && <p className="staff-sync-error" role="alert">{syncError}</p>}
           {syncConfirmation && <p className="staff-sync-confirmation" role="status">{syncConfirmation}</p>}
         </form>
-        <section className="staff-filters" aria-label={locale === "ru" ? "Фильтры очереди" : "Navbat filtrlari"}>
+        <section className="staff-filters" aria-label={l.filters}>
           <label>{l.status}<select value={status} onChange={(event) => setStatus(event.target.value as ReviewStatus)}><option value="pending">{l.pending}</option><option value="in_review">{l.inReview}</option><option value="approved">{l.approved}</option><option value="rejected">{l.rejected}</option><option value="closed">{l.closed}</option></select></label>
           <label>{l.scope}<select value={scope} onChange={(event) => setScope(event.target.value)}><option value="workable">{l.workable}</option><option value="mine">{l.mine}</option><option value="unassigned">{l.unassigned}</option><option value="all">{l.all}</option></select></label>
           <label>{l.source}<select value={sourceKind} onChange={(event) => setSourceKind(event.target.value)}><option value="all">{l.allSources}</option><option value="lex">lex.uz</option></select></label>
-          <label>{l.language}<select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">{l.allLanguages}</option><option value="ru">Русский</option><option value="uz">O‘zbekcha</option></select></label>
+          <label>{l.language}<select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">{l.allLanguages}</option><option value="ru">{l.russian}</option><option value="uz">{l.uzbek}</option></select></label>
         </section>
         <div className="staff-count">{items.length} {l.count}</div>
         {status === "pending" && eligibleItems.length > 0 && <section className="staff-bulk-toolbar" aria-label={l.bulkTitle}>

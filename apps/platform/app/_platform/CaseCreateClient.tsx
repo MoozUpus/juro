@@ -4,12 +4,19 @@ import { CircleAlert, LoaderCircle, Plus, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
+import { platformApiError } from "../../content/platform-ui";
 import { caseDirectionsForAccount, caseScenariosForAccount, type CaseDirectionId } from "../../lib/platform/case-create";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
+const caseCreateCopy = {
+  ru: { createError: "Не удалось создать дело.", section: "Новое дело", title: "Соберите ситуацию в управляемое дело", description: "После создания JURO добавит проверяемый стартовый план. Никакие задачи не будут назначены без вашего подтверждения.", direction: "1. Выберите направление", situation: "2. Выберите ситуацию", searchLabel: "Поиск ситуации", search: "Поиск в выбранном направлении", lawyerReview: "Рекомендуется проверка юристом", noScenario: "Ситуация не найдена. Опишите её AI-юристу — JURO предложит подходящий план.", matterTitle: "Название дела", titlePlaceholder: "Например: возврат долга по расписке", brief: "Краткое описание", descriptionPlaceholder: "Что произошло, когда и какой результат вам нужен", note: "Дело и первая версия плана сохраняются вместе. При ошибке не будет создана частичная запись.", cancel: "Отмена", creating: "Создаём…", create: "Создать дело" },
+  uz: { createError: "Ishni yaratib bo‘lmadi.", section: "Yangi ish", title: "Vaziyatni boshqariladigan ishga aylantiring", description: "Yaratilgandan so‘ng JURO tekshiriladigan boshlang‘ich reja qo‘shadi. Siz tasdiqlamaguningizcha vazifalar tayinlanmaydi.", direction: "1. Yo‘nalishni tanlang", situation: "2. Vaziyatni tanlang", searchLabel: "Vaziyatni qidirish", search: "Tanlangan yo‘nalishda qidirish", lawyerReview: "Yurist tekshiruvi tavsiya etiladi", noScenario: "Vaziyat topilmadi. Uni AI-yuristga yozing — JURO mos reja taklif qiladi.", matterTitle: "Ish nomi", titlePlaceholder: "Masalan: tilxat bo‘yicha qarzni qaytarish", brief: "Qisqa tavsif", descriptionPlaceholder: "Nima bo‘ldi, qachon va qanday natija kerak", note: "Ish va rejaning birinchi versiyasi birga saqlanadi. Xatoda qisman yozuv yaratilmaydi.", cancel: "Bekor qilish", creating: "Yaratilmoqda…", create: "Ish yaratish" },
+  en: { createError: "We could not create the matter.", section: "New matter", title: "Turn the situation into a manageable matter", description: "After creation, JURO adds a verifiable starting plan. No tasks are assigned without your confirmation.", direction: "1. Choose an area", situation: "2. Choose a situation", searchLabel: "Search situations", search: "Search within the selected area", lawyerReview: "Lawyer review recommended", noScenario: "No matching situation was found. Describe it to the AI legal assistant and JURO will suggest a suitable plan.", matterTitle: "Matter title", titlePlaceholder: "For example: recovering a documented debt", brief: "Brief description", descriptionPlaceholder: "What happened, when it happened and what outcome you need", note: "The matter and the first plan version are saved together. A failed request will not leave a partial record.", cancel: "Cancel", creating: "Creating…", create: "Create matter" },
+} as const;
+
 export function CaseCreateClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
-  const ru = locale === "ru";
+  const copy = caseCreateCopy[locale];
   const base = usePlatformBasePath();
   const router = useRouter();
   const directions = caseDirectionsForAccount(accountType);
@@ -26,7 +33,7 @@ export function CaseCreateClient({ locale, accountType }: { locale: PlatformLoca
 
   const visibleScenarios = scenarios.filter((scenario) => {
     const query = scenarioQuery.trim().toLocaleLowerCase();
-    return !query || `${scenario.ru} ${scenario.uz}`.toLocaleLowerCase().includes(query);
+    return !query || `${scenario.ru} ${scenario.uz} ${scenario.en}`.toLocaleLowerCase().includes(query);
   });
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -41,7 +48,7 @@ export function CaseCreateClient({ locale, accountType }: { locale: PlatformLoca
       });
       const body = await response.json() as { caseId?: string; error?: string };
       if (!response.ok || !body.caseId) {
-        throw new Error(body.error || (ru ? "Не удалось создать дело." : "Ishni yaratib bo‘lmadi."));
+        throw new Error(platformApiError(locale, body.error, copy.createError));
       }
       router.replace(`${base}/cases/${encodeURIComponent(body.caseId)}`);
     } catch (value) {
@@ -54,16 +61,16 @@ export function CaseCreateClient({ locale, accountType }: { locale: PlatformLoca
     <section className="case-create">
       <header>
         <div>
-          <small>JURO · {ru ? "Новое дело" : "Yangi ish"}</small>
-          <h1>{ru ? "Соберите ситуацию в управляемое дело" : "Vaziyatni boshqariladigan ishga aylantiring"}</h1>
-          <p>{ru ? "После создания JURO добавит проверяемый стартовый план. Никакие задачи не будут назначены без вашего подтверждения." : "Yaratilgandan so‘ng JURO tekshiriladigan boshlang‘ich reja qo‘shadi. Siz tasdiqlamaguningizcha vazifalar tayinlanmaydi."}</p>
+          <small>JURO · {copy.section}</small>
+          <h1>{copy.title}</h1>
+          <p>{copy.description}</p>
         </div>
         <ShieldCheck aria-hidden="true" />
       </header>
 
       <form onSubmit={submit} aria-describedby="case-create-note">
         <fieldset>
-          <legend>{ru ? "1. Выберите направление" : "1. Yo‘nalishni tanlang"}</legend>
+          <legend>{copy.direction}</legend>
           <div className="case-create-directions" role="list">
             {directions.map((item) => (
               <button
@@ -83,13 +90,13 @@ export function CaseCreateClient({ locale, accountType }: { locale: PlatformLoca
         </fieldset>
 
         <fieldset>
-          <legend>{ru ? "2. Выберите ситуацию" : "2. Vaziyatni tanlang"}</legend>
+          <legend>{copy.situation}</legend>
           <label className="case-create-scenario-search">
-            <span className="sr-only">{ru ? "Поиск ситуации" : "Vaziyatni qidirish"}</span>
+            <span className="sr-only">{copy.searchLabel}</span>
             <input
               value={scenarioQuery}
               onChange={(event) => setScenarioQuery(event.target.value)}
-              placeholder={ru ? "Поиск в выбранном направлении" : "Tanlangan yo‘nalishda qidirish"}
+              placeholder={copy.search}
             />
           </label>
           <div className="case-create-scenarios">
@@ -101,43 +108,43 @@ export function CaseCreateClient({ locale, accountType }: { locale: PlatformLoca
                 onClick={() => setSelected(scenario.id)}
               >
                 {scenario[locale]}
-                {scenario.requiresLawyerReview && <small>{ru ? "Рекомендуется проверка юристом" : "Yurist tekshiruvi tavsiya etiladi"}</small>}
+                {scenario.requiresLawyerReview && <small>{copy.lawyerReview}</small>}
               </button>
             ))}
           </div>
-          {!visibleScenarios.length && <p className="case-create-empty">{ru ? "Ситуация не найдена. Опишите её AI-юристу — JURO предложит подходящий план." : "Vaziyat topilmadi. Uni AI-yuristga yozing — JURO mos reja taklif qiladi."}</p>}
+          {!visibleScenarios.length && <p className="case-create-empty">{copy.noScenario}</p>}
         </fieldset>
 
         <label>
-          <span>{ru ? "Название дела" : "Ish nomi"}</span>
+          <span>{copy.matterTitle}</span>
           <input
             autoFocus
             required
             maxLength={180}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder={ru ? "Например: возврат долга по расписке" : "Masalan: tilxat bo‘yicha qarzni qaytarish"}
+            placeholder={copy.titlePlaceholder}
           />
         </label>
 
         <label>
-          <span>{ru ? "Краткое описание" : "Qisqa tavsif"}</span>
+          <span>{copy.brief}</span>
           <textarea
             rows={5}
             maxLength={2_000}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder={ru ? "Что произошло, когда и какой результат вам нужен" : "Nima bo‘ldi, qachon va qanday natija kerak"}
+            placeholder={copy.descriptionPlaceholder}
           />
         </label>
 
-        <p id="case-create-note">{ru ? "Дело и первая версия плана сохраняются вместе. При ошибке не будет создана частичная запись." : "Ish va rejaning birinchi versiyasi birga saqlanadi. Xatoda qisman yozuv yaratilmaydi."}</p>
+        <p id="case-create-note">{copy.note}</p>
         {error && <p className="case-create-error" role="alert"><CircleAlert />{error}</p>}
         <div className="case-create-actions">
-          <button type="button" onClick={() => router.push(`${base}/cases`)}>{ru ? "Отмена" : "Bekor qilish"}</button>
+          <button type="button" onClick={() => router.push(`${base}/cases`)}>{copy.cancel}</button>
           <button type="submit" disabled={submitting}>
             {submitting ? <LoaderCircle className="spin" /> : <Plus />}
-            {submitting ? (ru ? "Создаём…" : "Yaratilmoqda…") : (ru ? "Создать дело" : "Ish yaratish")}
+            {submitting ? copy.creating : copy.create}
           </button>
         </div>
       </form>

@@ -772,7 +772,12 @@ test("password-login route issues a remembered opaque session accepted by protec
     });
   };
 
-  const request = (requestEmail: string, requestPassword: string, token: string) =>
+  const request = (
+    requestEmail: string,
+    requestPassword: string,
+    token: string,
+    locale: "ru" | "uz" | "en" = "ru",
+  ) =>
     passwordLogin(new Request(
       "https://app.juro.uz/api/auth/password-login",
       {
@@ -788,7 +793,7 @@ test("password-login route issues a remembered opaque session accepted by protec
         body: JSON.stringify({
           email: requestEmail,
           password: requestPassword,
-          locale: "ru",
+          locale,
           rememberMe: true,
           turnstileToken: token,
         }),
@@ -915,6 +920,26 @@ test("password-login route issues a remembered opaque session accepted by protec
       consultations: 0,
       unreadNotifications: 0,
     });
+
+    const englishResponse = await request(
+      email,
+      password,
+      "turnstile-valid-password-en",
+      "en",
+    );
+    assert.equal(englishResponse.status, 200);
+    assert.deepEqual(await englishResponse.json(), {
+      ok: true,
+      redirectTo: "/en/individual/dashboard",
+      handoff: null,
+      themePreference: "dark",
+    });
+    assert.deepEqual(turnstileTokens, [
+      "turnstile-wrong-password",
+      "turnstile-missing-account",
+      "turnstile-valid-password",
+      "turnstile-valid-password-en",
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
     for (const key of envKeys) {

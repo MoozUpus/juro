@@ -2,6 +2,7 @@ import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/
 import { documentVisibilityScope } from "../../../../lib/document-builder/permissions/document-visibility";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { filterVerifiedLexSources } from "../../../../lib/legal/source-trust";
+import { isLocale } from "../../../../lib/platform/routing";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 import { searchUserDocuments } from "../../../../lib/document-analysis/user-document-vectors";
 
@@ -30,7 +31,10 @@ export const GET = withApiErrors(async function GET(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const url = new URL(request.url);
-  const locale = url.searchParams.get("locale") === "uz" ? "uz" : "ru";
+  const requestedLocale = url.searchParams.get("locale");
+  const locale = typeof requestedLocale === "string" && isLocale(requestedLocale)
+    ? requestedLocale
+    : "ru";
   const query = (url.searchParams.get("q") || "").normalize("NFKC").trim().slice(0, 120);
   if (query.length < 2) return response({ query, results: [] });
   const like = likeValue(query);

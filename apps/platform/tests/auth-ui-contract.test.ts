@@ -12,6 +12,11 @@ test("auth handoff and redirects fail closed to JURO destinations", () => {
   assert.match(form, /https:\/\/lawyer\.juro\.uz\/api\/auth\/session-handoff/);
   assert.match(form, /\^\[A-Za-z0-9_-\]\{43\}\$/);
   assert.match(form, /Number\.isFinite\(expiresAt\)/);
+  assert.match(form, /action\.searchParams\.get\("lang"\)/u);
+  assert.match(form, /action\.searchParams\.size === 1/u);
+  assert.match(form, /AUTH_HANDOFF_LOCALES\.has\(locale as Locale\)/u);
+  assert.match(form, /AUTH_HANDOFF_ACTIONS\.has\(canonicalAction\)/u);
+  assert.doesNotMatch(form, /&& !action\.search/u);
   assert.match(form, /if \(!validHandoff\(data\.handoff\)\)/);
   assert.match(form, /safeAuthenticationDestination\(data\.redirectTo\)/);
   assert.doesNotMatch(form, /window\.location\.replace\(data\.redirectTo\)/);

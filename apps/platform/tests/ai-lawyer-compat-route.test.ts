@@ -49,11 +49,17 @@ test("business compatibility route keeps the exact workspace and rejects malform
   assert.equal(voice.status, 308);
   assert.equal(voice.headers.get("location"), "https://app.juro.uz/uz/business/workspace-1/ai-chat?mode=voice");
 
+  const english = await personalAiLawyerCompatibilityRoute(
+    new Request("https://app.juro.uz/en/individual/ai-lawyer/new"),
+    Promise.resolve({ locale: "en", accountType: "individual", path: ["new"] }),
+  );
+  assert.equal(english.status, 308);
+  assert.equal(
+    english.headers.get("location"),
+    "https://app.juro.uz/en/individual/ai-chat",
+  );
+
   for (const invalid of [
-    personalAiLawyerCompatibilityRoute(
-      new Request("https://app.juro.uz/en/individual/ai-lawyer/new"),
-      Promise.resolve({ locale: "en", accountType: "individual", path: ["new"] }),
-    ),
     personalAiLawyerCompatibilityRoute(
       new Request("https://app.juro.uz/ru/business/ai-lawyer/new"),
       Promise.resolve({ locale: "ru", accountType: "business", path: ["new"] }),

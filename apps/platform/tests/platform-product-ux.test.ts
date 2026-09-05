@@ -111,10 +111,10 @@ test("guest AI keeps its workspace and interactive states legible in dark mode",
 test("history presents human labels without exposing opaque entity ids", async () => {
   const history = await source("../app/_platform/HistoryClient.tsx");
   assert.doesNotMatch(history, /\{event\.entityId\}/);
-  assert.match(history, /ai_chat_completed: \["AI-ответ подготовлен"/);
-  assert.match(history, /malware_scan_clean: \["Проверка файла завершена"/);
-  assert.match(history, /conversation: \["Юридический диалог"/);
-  assert.match(history, /\? "Системное действие" : "Tizim harakati"/);
+  assert.match(history, /ai_chat_completed: \{ ru: "AI-ответ подготовлен", uz: "AI javobi tayyorlandi", en: "AI response prepared" \}/);
+  assert.match(history, /malware_scan_clean: \{ ru: "Проверка файла завершена", uz: "Fayl tekshiruvi yakunlandi", en: "File security check completed" \}/);
+  assert.match(history, /conversation: \{ ru: "Юридический диалог", uz: "Yuridik suhbat", en: "Legal conversation" \}/);
+  assert.match(history, /\{ ru: "Системное действие", uz: "Tizim harakati", en: "System action" \}\[locale\]/);
 });
 
 test("dashboard changes composition before the hero controls are squeezed", async () => {
@@ -137,7 +137,7 @@ test("document workspace search fields expose localized accessible names", async
     source("../app/_document-builder/documents/DocumentsClient.tsx"),
     source("../app/_document-builder/contacts/ContactsClient.tsx"),
   ]);
-  assert.match(library, /aria-label=\{language === "uz" \? "Hujjat nomi yoki kodi bo‘yicha qidirish"/);
+  assert.match(library, /placeholder=\{copy\.search\} aria-label=\{copy\.searchLabel\}/);
   assert.match(documents, /placeholder=\{copy\.search\} aria-label=\{copy\.search\}/);
   assert.match(contacts, /placeholder=\{copy\.search\} aria-label=\{copy\.search\}/);
 });
@@ -190,8 +190,10 @@ test("document workspace error dismissals and loading state follow the active lo
     source("../app/_document-builder/_components/ConfigurableDocumentBuilder.tsx"),
   ]);
   assert.match(contacts, /aria-label=\{copy\.close\} title=\{copy\.close\}/);
-  assert.match(configuredBuilder, /aria-label=\{language === "uz" \? "Xabarni yopish" : "Закрыть сообщение"\}/);
-  assert.match(configuredBuilder, /language === "uz" \? "Konstruktor yuklanmoqda…" : "Загружаем конструктор…"/);
+  assert.match(configuredBuilder, /aria-label=\{copy\.closeMessage\} title=\{copy\.closeMessage\}/);
+  assert.match(configuredBuilder, /<p>\{copy\.loading\}<\/p>/);
+  assert.match(configuredBuilder, /closeMessage: "Close message"/);
+  assert.match(configuredBuilder, /loading: "Loading document builder…"/);
 });
 
 test("document rename uses the JURO dialog instead of a native prompt", async () => {

@@ -3,6 +3,7 @@
 import { CircleAlert, LoaderCircle, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { PlatformLocale } from "../../../lib/platform/routing";
 
 type InviteState = "idle" | "accepting" | "accepted" | "error";
 
@@ -29,6 +30,17 @@ const copy = {
     fallbackError: "Taklif qabul qilinmadi.",
     networkError: "Taklifni tekshirib bo‘lmadi. Ulanishni tekshirib, qayta urinib ko‘ring.",
   },
+  en: {
+    eyebrow: "JURO · TEAM",
+    title: "Join a workspace",
+    description: "JURO will verify the one-time token, its expiry, and that the invitation email matches your account. Access is granted only after you confirm.",
+    idle: "The invitation is ready to accept.",
+    accepting: "Checking the invitation and adding you to the workspace…",
+    accepted: "Invitation accepted. Opening the workspace…",
+    button: "Accept invitation",
+    fallbackError: "The invitation could not be accepted.",
+    networkError: "We could not check the invitation. Check your connection and try again.",
+  },
 } as const;
 
 export function InviteAcceptClient({
@@ -36,7 +48,7 @@ export function InviteAcceptClient({
   locale,
 }: {
   token: string;
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
 }) {
   const router = useRouter();
   const [state, setState] = useState<InviteState>("idle");

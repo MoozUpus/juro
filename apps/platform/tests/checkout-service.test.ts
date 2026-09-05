@@ -44,9 +44,9 @@ function seededBilling() {
   sqlite.prepare("INSERT INTO subscription_plans(id,code,status,created_at,updated_at) VALUES (?,?,'active',?,?)")
     .run(ids.plan, "individual", now, now);
   sqlite.prepare(`INSERT INTO subscription_plan_versions(
-    id,plan_id,version,name_ru,name_uz,billing_period,price_minor,currency,entitlements_json,
+    id,plan_id,version,name_ru,name_uz,name_en,billing_period,price_minor,currency,entitlements_json,
     effective_from,approval_status,approved_by_user_id,approved_at,created_by_user_id,created_at
-  ) VALUES (?,?,1,'Личная подписка','Shaxsiy obuna','monthly',1000000,'UZS','{}',?,'approved',?,?,?,?)`)
+  ) VALUES (?,?,1,'Личная подписка','Shaxsiy obuna','Personal plan','monthly',1000000,'UZS','{}',?,'approved',?,?,?,?)`)
     .run(ids.planVersion, ids.plan, now, ids.user, now, ids.user, now);
   return fixture;
 }
@@ -77,6 +77,7 @@ test("subscription checkout is tenant-scoped, priced once, and replay-safe", asy
     assert.equal(first.order.status, "PRICED");
     assert.equal(first.pricingSnapshot?.clientTotalMinor, 1_120_000);
     assert.equal(first.pricingSnapshot?.juroVatAmountMinor, 120_000);
+    assert.equal(first.items[0]?.titleEn, "Personal plan");
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM marketplace_orders").get()?.count, 1);
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM pricing_snapshots").get()?.count, 1);
     assert.equal(await readCheckoutOrder(d1, { userId: ids.user, workspaceId: "other-workspace" }, String(first.order.id)), null);
@@ -297,9 +298,13 @@ test("checkout routes and UI retain auth, CSRF, workspace, localization and feat
   assert.match(confirmRoute, /sandboxEnabled/);
   assert.doesNotMatch(createRoute + confirmRoute, /providerPaymentId.*success|status:\s*["']paid["']/i);
   for (const source of [checkoutUi, paymentUi, billingUi]) {
-    assert.match(source, /locale === "ru"/);
+    assert.match(source, /type PlatformLocale/);
+    assert.match(source, /en:\s*\{/);
+    assert.match(source, /en-GB/);
     assert.match(source, /x-juro-csrf/);
   }
+  assert.match(plansRoute, /name_en AS nameEn/);
+  assert.match(checkoutUi, /titleEn/);
   assert.match(checkoutUi, /AUTO_RENEW/);
   assert.match(paymentUi, /sandbox-authorize/);
   assert.match(billingUi, /api\/subscriptions\/plans/);

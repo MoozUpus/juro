@@ -29,7 +29,7 @@ export const POST = withApiErrors(async function POST(
   const workspace = await workspaceForUser(user);
   const { requestId } = await context.params;
   if (!/^[A-Za-z0-9_-]{1,128}$/u.test(requestId)) {
-    return response({ code: "REQUEST_UNAVAILABLE", error: "Контакт недоступен / Aloqa mavjud emas." }, 404);
+    return response({ code: "REQUEST_UNAVAILABLE" }, 404);
   }
   try {
     const phone = await revealLawyerRequestPhone({
@@ -42,11 +42,6 @@ export const POST = withApiErrors(async function POST(
     return response({ phone });
   } catch (error) {
     if (!(error instanceof LawyerPhoneContactError)) throw error;
-    const message = error.code === "PHONE_UNAVAILABLE"
-      ? "Номер телефона не указан / Telefon raqami ko‘rsatilmagan."
-      : error.code === "IDENTITY_UNAVAILABLE"
-        ? "Контакт временно недоступен / Aloqa vaqtincha mavjud emas."
-        : "Контакт недоступен / Aloqa mavjud emas.";
-    return response({ code: error.code, error: message }, error.status);
+    return response({ code: error.code }, error.status);
   }
 });

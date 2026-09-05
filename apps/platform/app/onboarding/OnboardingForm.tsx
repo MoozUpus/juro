@@ -20,9 +20,10 @@ import type {
   AccountPersona,
   OnboardingGoal,
 } from "../../lib/platform/onboarding";
+import type { PlatformLocale } from "../../lib/platform/routing";
 import { ThemeSwitcher } from "../_theme/ThemeSwitcher";
 
-type Locale = "ru" | "uz";
+type Locale = PlatformLocale;
 
 type Props = {
   initialLocale: Locale;
@@ -35,14 +36,15 @@ type Props = {
 };
 
 const personaOptions = [
-  ["individual", "Физическое лицо", "Jismoniy shaxs", UserRound],
+  ["individual", "Физическое лицо", "Jismoniy shaxs", "Individual", UserRound],
   [
     "entrepreneur",
     "Индивидуальный предприниматель",
     "Yakka tartibdagi tadbirkor",
+    "Sole proprietor",
     BriefcaseBusiness,
   ],
-  ["lawyer", "Юрист", "Yurist", Scale],
+  ["lawyer", "Юрист", "Yurist", "Lawyer", Scale],
 ] as const;
 
 const goalOptions = [
@@ -50,34 +52,48 @@ const goalOptions = [
     "legal_answer",
     "Получить юридический ответ",
     "Huquqiy javob olish",
+    "Get a legal answer",
     MessageCircleQuestion,
   ],
   [
     "review_document",
     "Проверить документ",
     "Hujjatni tekshirish",
+    "Review a document",
     FileCheck2,
   ],
   [
     "create_document",
     "Создать документ",
     "Hujjat yaratish",
+    "Create a document",
     FilePlus2,
   ],
   [
     "manage_case",
     "Вести юридическое дело",
     "Huquqiy ishni yuritish",
+    "Manage a legal matter",
     FolderKanban,
   ],
-  ["find_lawyer", "Найти юриста", "Yurist topish", UsersRound],
+  ["find_lawyer", "Найти юриста", "Yurist topish", "Find a lawyer", UsersRound],
   [
     "professional_work",
     "Использовать JURO в профессиональной работе",
     "JURO’dan professional ishda foydalanish",
+    "Use JURO for professional work",
     Scale,
   ],
 ] as const;
+
+function localized(
+  locale: Locale,
+  russian: string,
+  uzbek: string,
+  english: string,
+): string {
+  return locale === "ru" ? russian : locale === "uz" ? uzbek : english;
+}
 
 export function OnboardingForm({
   initialLocale,
@@ -101,7 +117,8 @@ export function OnboardingForm({
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const ru = locale === "ru";
+  const text = (russian: string, uzbek: string, english: string) =>
+    localized(locale, russian, uzbek, english);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -113,6 +130,7 @@ export function OnboardingForm({
         headers: {
           "content-type": "application/json",
           "x-juro-csrf": "1",
+          "x-juro-locale": locale,
         },
         body: JSON.stringify({
           locale,
@@ -131,9 +149,11 @@ export function OnboardingForm({
       if (!response.ok || !data.redirectTo) {
         throw new Error(
           data.error ||
-            (ru
-              ? "Не удалось сохранить настройки."
-              : "Sozlamalarni saqlab bo‘lmadi."),
+            text(
+              "Не удалось сохранить настройки.",
+              "Sozlamalarni saqlab bo‘lmadi.",
+              "We could not save your settings.",
+            ),
         );
       }
       window.location.assign(data.redirectTo);
@@ -149,23 +169,25 @@ export function OnboardingForm({
         <div className="onboarding-theme"><ThemeSwitcher locale={locale} compact persistAccount={false} /></div>
         <div className="onboarding-copy">
           <span>JURO · 01/01</span>
-          <h1>
-            {ru
-              ? "Настроим ваш личный кабинет"
-              : "Shaxsiy kabinetingizni sozlaymiz"}
-          </h1>
-          <p>
-            {ru
-              ? "Укажите данные, необходимые для персональной юридической работы. Бизнес-пространство можно создать отдельно после входа."
-              : "Shaxsiy huquqiy ish uchun zarur ma’lumotlarni kiriting. Biznes makonini tizimga kirgandan so‘ng alohida yaratish mumkin."}
-          </p>
+          <h1>{text(
+            "Настроим ваш личный кабинет",
+            "Shaxsiy kabinetingizni sozlaymiz",
+            "Set up your personal workspace",
+          )}</h1>
+          <p>{text(
+            "Укажите данные, необходимые для персональной юридической работы. Бизнес-пространство можно создать отдельно после входа.",
+            "Shaxsiy huquqiy ish uchun zarur ma’lumotlarni kiriting. Biznes makonini tizimga kirgandan so‘ng alohida yaratish mumkin.",
+            "Add the details needed for your personal legal work. You can create a separate business workspace after signing in.",
+          )}</p>
         </div>
         <figure className="onboarding-jurobek">
           <Image
             src="/jurobek-avatar.webp"
-            alt={ru
-              ? "Журобек — помощник JURO"
-              : "Jurobek — JURO yordamchisi"}
+            alt={text(
+              "Журобек — помощник JURO",
+              "Jurobek — JURO yordamchisi",
+              "Jurobek, your JURO assistant",
+            )}
             width={1024}
             height={1792}
             priority
@@ -174,30 +196,25 @@ export function OnboardingForm({
         </figure>
         <form onSubmit={submit}>
           <fieldset>
-            <legend>{ru ? "Язык" : "Til"}</legend>
+            <legend>{text("Язык", "Til", "Language")}</legend>
             <div className="onboarding-segments onboarding-segments-language">
-              <button
-                type="button"
-                className={locale === "ru" ? "active" : ""}
-                aria-pressed={locale === "ru"}
-                onClick={() => setLocale("ru")}
-              >
-                Русский
-              </button>
-              <button
-                type="button"
-                className={locale === "uz" ? "active" : ""}
-                aria-pressed={locale === "uz"}
-                onClick={() => setLocale("uz")}
-              >
-                O‘zbekcha
-              </button>
+              {(["ru", "uz", "en"] as const).map((value) => (
+                <button
+                  type="button"
+                  className={locale === value ? "active" : ""}
+                  aria-pressed={locale === value}
+                  onClick={() => setLocale(value)}
+                  key={value}
+                >
+                  {{ ru: "Русский", uz: "O‘zbekcha", en: "English" }[value]}
+                </button>
+              ))}
             </div>
           </fieldset>
           <fieldset>
-            <legend>{ru ? "Тип профиля" : "Profil turi"}</legend>
-            {initialAccountPersona === "lawyer" ? <div className="onboarding-fixed-persona"><Scale />{ru ? "Профессиональный кабинет юриста" : "Yuristning professional kabineti"}</div> : <div className="onboarding-segments onboarding-personas">
-              {personaOptions.map(([id, ruLabel, uzLabel, Icon]) => (
+            <legend>{text("Тип профиля", "Profil turi", "Profile type")}</legend>
+            {initialAccountPersona === "lawyer" ? <div className="onboarding-fixed-persona"><Scale />{text("Профессиональный кабинет юриста", "Yuristning professional kabineti", "Professional lawyer workspace")}</div> : <div className="onboarding-segments onboarding-personas">
+              {personaOptions.map(([id, ruLabel, uzLabel, enLabel, Icon]) => (
                 <button
                   type="button"
                   className={accountPersona === id ? "active" : ""}
@@ -206,14 +223,14 @@ export function OnboardingForm({
                   key={id}
                 >
                   <Icon />
-                  <span>{ru ? ruLabel : uzLabel}</span>
+                  <span>{localized(locale, ruLabel, uzLabel, enLabel)}</span>
                 </button>
               ))}
             </div>}
           </fieldset>
           <div className="onboarding-row">
             <label>
-              {ru ? "Фамилия" : "Familiya"}
+              {text("Фамилия", "Familiya", "Last name")}
               <input
                 value={lastName}
                 onChange={(event) =>
@@ -223,7 +240,7 @@ export function OnboardingForm({
               />
             </label>
             <label>
-              {ru ? "Имя" : "Ism"}
+              {text("Имя", "Ism", "First name")}
               <input
                 value={firstName}
                 onChange={(event) =>
@@ -235,7 +252,7 @@ export function OnboardingForm({
           </div>
           <div className="onboarding-row">
             <label>
-              {ru ? "Отчество, если имеется" : "Otasining ismi, agar bo‘lsa"}
+              {text("Отчество, если имеется", "Otasining ismi, agar bo‘lsa", "Middle name, if applicable")}
               <input
                 value={middleName}
                 onChange={(event) =>
@@ -244,7 +261,7 @@ export function OnboardingForm({
               />
             </label>
             <label>
-              {ru ? "Телефон" : "Telefon"}
+              {text("Телефон", "Telefon", "Phone number")}
               <input
                 value={phone}
                 onChange={(event) => setPhone(event.target.value.slice(0, 40))}
@@ -256,11 +273,9 @@ export function OnboardingForm({
             </label>
           </div>
           <fieldset>
-            <legend>
-              {ru ? "Основная цель" : "Asosiy maqsad"}
-            </legend>
+            <legend>{text("Основная цель", "Asosiy maqsad", "Primary goal")}</legend>
             <div className="onboarding-goals">
-              {goalOptions.map(([id, ruLabel, uzLabel, Icon]) => (
+              {goalOptions.map(([id, ruLabel, uzLabel, enLabel, Icon]) => (
                 <button
                   type="button"
                   className={primaryGoal === id ? "active" : ""}
@@ -269,7 +284,7 @@ export function OnboardingForm({
                   key={id}
                 >
                   <Icon />
-                  <span>{ru ? ruLabel : uzLabel}</span>
+                  <span>{localized(locale, ruLabel, uzLabel, enLabel)}</span>
                   {primaryGoal === id && <Check aria-hidden="true" />}
                 </button>
               ))}
@@ -277,25 +292,29 @@ export function OnboardingForm({
           </fieldset>
           <p className="onboarding-policy-evidence">
             {developmentPolicyBypass
-              ? (ru
-                ? "Локальный режим разработки: подтверждение обязательных документов пропущено и не записывается как согласие пользователя. Документы: "
-                : "Mahalliy ishlab chiqish rejimi: majburiy hujjatlarni tasdiqlash o‘tkazib yuborildi va foydalanuvchi roziligi sifatida yozilmaydi. Hujjatlar: ")
-              : (ru
-                ? "Обязательные документы подтверждены при регистрации по email-коду: "
-                : "Majburiy hujjatlar email-kod orqali ro‘yxatdan o‘tishda tasdiqlangan: ")}
+              ? text(
+                "Локальный режим разработки: подтверждение обязательных документов пропущено и не записывается как согласие пользователя. Документы: ",
+                "Mahalliy ishlab chiqish rejimi: majburiy hujjatlarni tasdiqlash o‘tkazib yuborildi va foydalanuvchi roziligi sifatida yozilmaydi. Hujjatlar: ",
+                "Local development mode: required-policy confirmation was bypassed and is not recorded as user consent. Documents: ",
+              )
+              : text(
+                "Обязательные документы подтверждены при регистрации по email-коду: ",
+                "Majburiy hujjatlar email-kod orqali ro‘yxatdan o‘tishda tasdiqlangan: ",
+                "Required documents were accepted during email-code registration: ",
+              )}
             <Link href={`/legal/terms?lang=${locale}`} target="_blank">
-              {ru ? "условия" : "shartlar"}
+              {text("условия", "shartlar", "terms")}
             </Link>
             {", "}
             <Link href={`/legal/privacy?lang=${locale}`} target="_blank">
-              {ru ? "конфиденциальность" : "maxfiylik"}
+              {text("конфиденциальность", "maxfiylik", "privacy policy")}
             </Link>
-            {ru ? " и " : " va "}
+            {text(" и ", " va ", " and ")}
             <Link
               href={`/legal/personal-data?lang=${locale}`}
               target="_blank"
             >
-              {ru ? "обработка данных" : "ma’lumotlarni qayta ishlash"}
+              {text("обработка данных", "ma’lumotlarni qayta ishlash", "personal data processing")}
             </Link>
             .
           </p>
@@ -308,7 +327,7 @@ export function OnboardingForm({
             {pending
               ? <LoaderCircle className="spin" aria-hidden="true" />
               : <ArrowRight aria-hidden="true" />}
-            {ru ? "Открыть личный кабинет" : "Shaxsiy kabinetni ochish"}
+            {text("Открыть личный кабинет", "Shaxsiy kabinetni ochish", "Open my workspace")}
           </button>
         </form>
       </section>

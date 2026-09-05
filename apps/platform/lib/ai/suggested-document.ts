@@ -6,10 +6,11 @@ import { createConfiguredDocument } from "../document-builder/storage/configured
 import type { UserProfile } from "../document-builder/types";
 import { requireWorkspaceContentEditor } from "../platform/permissions";
 import { parseLegalChatResponse } from "./legal-chat-schema";
+import type { AiOutputLocale } from "./localization";
 
 export const resolveAiSuggestedDocumentInputSchema = z.object({
   assistantMessageId: z.string().uuid(),
-  locale: z.enum(["ru", "uz"]).default("uz"),
+  locale: z.enum(["ru", "uz", "en"]).default("uz"),
 }).strict();
 
 export const aiSuggestedDocumentSelectionSchema = z.array(z.object({
@@ -27,12 +28,12 @@ export const aiSuggestedDocumentRequestSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("preview"),
     assistantMessageId: z.string().uuid(),
-    locale: z.enum(["ru", "uz"]),
+    locale: z.enum(["ru", "uz", "en"]),
   }).strict(),
   z.object({
     action: z.literal("confirm"),
     assistantMessageId: z.string().uuid(),
-    locale: z.enum(["ru", "uz"]),
+    locale: z.enum(["ru", "uz", "en"]),
     fields: aiSuggestedDocumentSelectionSchema,
     sensitiveDataConsent: z.boolean().default(false),
   }).strict(),
@@ -124,8 +125,9 @@ export async function resolveAiSuggestedDocument(input: {
   workspaceId: string;
   userId: string;
   assistantMessageId: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
 }): Promise<{ templateCode: string; categorySlug: string; title: string; reason: string }> {
+  if (input.locale === "en") throw new AiSuggestedDocumentError("AI_SUGGESTED_DOCUMENT_UNAVAILABLE");
   const { definition, reason } = await loadSuggestedContext(input);
   return {
     templateCode: definition.code,
@@ -167,8 +169,9 @@ export async function previewAiSuggestedDocument(input: {
   workspaceId: string;
   user: UserProfile;
   assistantMessageId: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
 }): Promise<AiSuggestedDocumentPreview> {
+  if (input.locale === "en") throw new AiSuggestedDocumentError("AI_SUGGESTED_DOCUMENT_UNAVAILABLE");
   const context = await loadSuggestedContext({ ...input, userId: input.user.id });
   const workspace = await input.db.prepare(
     "SELECT type,name,full_name AS fullName FROM workspaces WHERE id=? LIMIT 1",
@@ -253,11 +256,12 @@ export async function createAiSuggestedDocumentDraft(input: {
   workspaceRole: string;
   user: UserProfile;
   assistantMessageId: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   fields: Array<{ fieldId: string; value: string }>;
   sensitiveDataConsent?: boolean;
   idempotencyKey: string;
 }): Promise<{ documentId: string; replayed: boolean }> {
+  if (input.locale === "en") throw new AiSuggestedDocumentError("AI_SUGGESTED_DOCUMENT_UNAVAILABLE");
   const preview = await previewAiSuggestedDocument(input);
   if (preview.caseId) requireWorkspaceContentEditor(input.workspaceRole);
   const allowed = new Map(preview.candidates.map((item) => [item.fieldId, item]));

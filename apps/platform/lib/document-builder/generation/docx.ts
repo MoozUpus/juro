@@ -1,6 +1,18 @@
 import PizZip from "pizzip";
 import type { RenderedParagraph } from "../types";
 
+export type DocxGenerationOptions = {
+  documentLanguage?: "ru-RU" | "uz-Latn-UZ" | "en-GB";
+  title?: string;
+  subject?: string;
+  keywords?: string;
+  footer?: {
+    createdLabel: string;
+    pageLabel: string;
+    totalLabel: string;
+  };
+};
+
 const xmlEscape = (value: string): string => value
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
@@ -8,7 +20,7 @@ const xmlEscape = (value: string): string => value
   .replace(/"/g, "&quot;")
   .replace(/'/g, "&apos;");
 
-function paragraphXml(paragraph: RenderedParagraph, index: number): string {
+function paragraphXml(paragraph: RenderedParagraph, index: number, documentLanguage: string): string {
   if (paragraph.kind === "spacer") {
     return `<w:p w14:paraId="${(index + 1).toString(16).padStart(8, "0").toUpperCase()}"><w:pPr><w:spacing w:after="220"/></w:pPr></w:p>`;
   }
@@ -34,12 +46,16 @@ function paragraphXml(paragraph: RenderedParagraph, index: number): string {
       : "";
   const preserve = /^\s|\s$/.test(listText) ? ' xml:space="preserve"' : "";
   return `<w:p w14:paraId="${(index + 1).toString(16).padStart(8, "0").toUpperCase()}">
-    <w:pPr>${keep}<w:widowControl/><w:spacing w:before="${before}" w:after="${after}" w:line="276" w:lineRule="auto"/>${indentation}<w:jc w:val="${justification}"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/>${bold}<w:lang w:val="ru-RU" w:eastAsia="ru-RU" w:bidi="ru-RU"/></w:rPr></w:pPr>
-    <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/>${bold}${review}<w:lang w:val="ru-RU" w:eastAsia="ru-RU" w:bidi="ru-RU"/></w:rPr><w:t${preserve}>${xmlEscape(listText)}</w:t></w:r>
+    <w:pPr>${keep}<w:widowControl/><w:spacing w:before="${before}" w:after="${after}" w:line="276" w:lineRule="auto"/>${indentation}<w:jc w:val="${justification}"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/>${bold}<w:lang w:val="${documentLanguage}" w:eastAsia="${documentLanguage}" w:bidi="${documentLanguage}"/></w:rPr></w:pPr>
+    <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/>${bold}${review}<w:lang w:val="${documentLanguage}" w:eastAsia="${documentLanguage}" w:bidi="${documentLanguage}"/></w:rPr><w:t${preserve}>${xmlEscape(listText)}</w:t></w:r>
   </w:p>`;
 }
 
-export function generateDocx(templateBytes: ArrayBuffer, paragraphs: RenderedParagraph[]): Uint8Array {
+export function generateDocx(
+  templateBytes: ArrayBuffer,
+  paragraphs: RenderedParagraph[],
+  options: DocxGenerationOptions = {},
+): Uint8Array {
   const zip = new PizZip(templateBytes);
   const documentFile = zip.file("word/document.xml");
   if (!documentFile) throw new Error("DOCX template has no word/document.xml");
@@ -51,13 +67,37 @@ export function generateDocx(templateBytes: ArrayBuffer, paragraphs: RenderedPar
     throw new Error("DOCX template body is malformed");
   }
   const sectionXml = documentXml.slice(sectionStart, bodyEnd);
-  const contentXml = paragraphs.map(paragraphXml).join("");
+  const documentLanguage = options.documentLanguage ?? "ru-RU";
+  const contentXml = paragraphs.map((paragraph, index) => paragraphXml(paragraph, index, documentLanguage)).join("");
   const nextXml = `${documentXml.slice(0, bodyStart + "<w:body>".length)}${contentXml}${sectionXml}</w:body>${documentXml.slice(bodyEnd + "</w:body>".length)}`;
   if (/\{\{[^}]+\}\}/.test(nextXml)) throw new Error("Unresolved template placeholder in DOCX");
   zip.file("word/document.xml", nextXml);
+
+  if (options.footer) {
+    const footerFile = zip.file("word/footer1.xml");
+    if (footerFile) {
+      const footerXml = footerFile.asText()
+        .replace("  Создано в JURO  ·  Страница ", `  ${xmlEscape(options.footer.createdLabel)}  ·  ${xmlEscape(options.footer.pageLabel)} `)
+        .replace(" из ", ` ${xmlEscape(options.footer.totalLabel)} `);
+      zip.file("word/footer1.xml", footerXml);
+    }
+  }
+
+  const coreFile = zip.file("docProps/core.xml");
+  if (coreFile && (options.title || options.subject || options.keywords)) {
+    let coreXml = coreFile.asText();
+    if (options.title) coreXml = replaceCoreProperty(coreXml, "dc:title", options.title);
+    if (options.subject) coreXml = replaceCoreProperty(coreXml, "dc:subject", options.subject);
+    if (options.keywords) coreXml = replaceCoreProperty(coreXml, "cp:keywords", options.keywords);
+    zip.file("docProps/core.xml", coreXml);
+  }
   const generated = zip.generate({ type: "uint8array", compression: "DEFLATE", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   if (generated.byteLength < 1_000 || generated[0] !== 0x50 || generated[1] !== 0x4b) {
     throw new Error("Generated DOCX is not a valid OOXML archive");
   }
   return generated;
+}
+
+function replaceCoreProperty(xml: string, element: string, value: string): string {
+  return xml.replace(new RegExp(`<${element}>[\\s\\S]*?<\\/${element}>`), `<${element}>${xmlEscape(value)}</${element}>`);
 }

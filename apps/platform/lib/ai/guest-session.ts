@@ -5,6 +5,7 @@ import {
   revealIdentityValue,
   type IdentityKeyring,
 } from "../auth/keyring";
+import type { AiOutputLocale } from "./localization";
 
 export const GUEST_AI_COOKIE = "juro_guest_ai";
 export const GUEST_AI_SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
@@ -23,7 +24,7 @@ export type GuestAiSession = {
   id: string;
   tokenHmac: string;
   tokenKeyVersion: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   state: GuestAiSessionState;
   requestCount: number;
   answerCount: number;
@@ -134,7 +135,7 @@ function isoAfter(now: Date, milliseconds: number): string {
 
 function sessionFromRow(row: GuestSessionRow): GuestAiSession {
   if (
-    (row.locale !== "ru" && row.locale !== "uz")
+    (row.locale !== "ru" && row.locale !== "uz" && row.locale !== "en")
     || !["available", "reserved", "consumed"].includes(row.state)
   ) throw new GuestAiError("GUEST_SESSION_INVALID");
   return {
@@ -217,7 +218,7 @@ export async function createGuestAiSession(input: {
   db: D1Database;
   keyring: IdentityKeyring;
   connectingIp: string | null;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   now?: Date | string;
 }): Promise<{ session: GuestAiSession; token: string }> {
   const now = date(input.now);

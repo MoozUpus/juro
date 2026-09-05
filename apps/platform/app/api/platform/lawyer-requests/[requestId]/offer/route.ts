@@ -33,7 +33,7 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
      JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
      WHERE r.id=? ORDER BY o.version DESC LIMIT 1`,
   ).bind(user.id, user.id, new Date().toISOString(), requestId).first<OfferRow>();
-  if (!lawyerOffer) return response({ code: "REQUEST_UNAVAILABLE", error: "Заявка или доступ недоступны / So‘rov yoki ruxsat mavjud emas." }, 404);
+  if (!lawyerOffer) return response({ code: "REQUEST_UNAVAILABLE" }, 404);
   return response({ offer: lawyerOffer, audience: "lawyer" });
 });
 

@@ -4,8 +4,9 @@ type Props = {
   locale: PlatformLocale;
   ru: string;
   uz: string;
+  en: string;
 };
 
-export function SidebarSectionLabel({ locale, ru, uz }: Props) {
-  return <small className="platform-sidebar-section-label">{locale === "ru" ? ru : uz}</small>;
+export function SidebarSectionLabel({ locale, ru, uz, en }: Props) {
+  return <small className="platform-sidebar-section-label">{{ ru, uz, en }[locale]}</small>;
 }

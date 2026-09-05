@@ -276,10 +276,7 @@ export const GET = withApiErrors(async function GET() {
   const user = await requireApiUser();
   if (!(await accountIsLawyer(user.id))) {
     return response(
-      {
-        code: "PROFILE_FORBIDDEN",
-        error: lawyerProfileError("ru", "PROFILE_FORBIDDEN"),
-      },
+      { code: "PROFILE_FORBIDDEN" },
       403,
     );
   }

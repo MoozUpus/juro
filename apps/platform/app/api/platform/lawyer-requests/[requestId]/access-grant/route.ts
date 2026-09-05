@@ -109,7 +109,7 @@ export const DELETE = withApiErrors(async function DELETE(request: Request, cont
      FROM lawyer_access_grants g JOIN lawyer_requests r ON r.id=g.lawyer_request_id
      WHERE g.lawyer_request_id=? AND r.workspace_id=? AND r.requester_user_id=? AND g.revoked_at IS NULL LIMIT 1`,
   ).bind(requestId, workspace.id, user.id).first<{ id: string; caseId: string }>();
-  if (!grant) return response({ code: "REQUEST_UNAVAILABLE", error: "Заявка или доступ недоступны / So‘rov yoki ruxsat mavjud emas." }, 404);
+  if (!grant) return response({ code: "REQUEST_UNAVAILABLE" }, 404);
 
   const now = isoNow();
   await db.batch([

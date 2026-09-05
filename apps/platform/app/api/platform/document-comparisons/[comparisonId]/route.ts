@@ -1,4 +1,5 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
+import { authLocaleFromRequest } from "../../../../../lib/auth/request-locale";
 import { isoNow } from "../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
 import {
@@ -10,6 +11,10 @@ import {
 } from "../../../../../lib/document-comparison/storage";
 import { assertComparisonSourceFilesClean } from "../../../../../lib/document-comparison/scan-evidence";
 import { ComparisonProcessingError } from "../../../../../lib/document-comparison/types";
+import {
+  comparisonProcessingErrorMessage,
+  comparisonRouteErrorMessage,
+} from "../../../../../lib/document-comparison/localization";
 import { workspaceForContentEditor, workspaceForUser } from "../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -20,15 +25,18 @@ function response(body: unknown, status = 200) {
 }
 
 export const GET = withApiErrors(async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ comparisonId: string }> },
 ) {
+  const locale = authLocaleFromRequest(request);
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const { comparisonId } = await context.params;
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
-  if (!comparison) return response({ error: "Сравнение не найдено." }, 404);
+  if (!comparison) {
+    return response({ error: comparisonRouteErrorMessage("COMPARISON_NOT_FOUND", locale) }, 404);
+  }
   try {
     await assertComparisonSourceFilesClean(db, {
       versionOneFileId: comparison.versionOneFileId,
@@ -38,7 +46,10 @@ export const GET = withApiErrors(async function GET(
     });
   } catch (error) {
     if (error instanceof ComparisonProcessingError) {
-      return response({ code: error.code, error: error.message }, 422);
+      return response({
+        code: error.code,
+        error: comparisonProcessingErrorMessage(error.code, locale),
+      }, 422);
     }
     throw error;
   }
@@ -80,12 +91,15 @@ export const PATCH = withApiErrors(async function PATCH(
   context: { params: Promise<{ comparisonId: string }> },
 ) {
   assertSafeWrite(request);
+  const locale = authLocaleFromRequest(request);
   const user = await requireApiUser();
   const workspace = await workspaceForContentEditor(user);
   const { comparisonId } = await context.params;
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
-  if (!comparison) return response({ error: "Сравнение не найдено." }, 404);
+  if (!comparison) {
+    return response({ error: comparisonRouteErrorMessage("COMPARISON_NOT_FOUND", locale) }, 404);
+  }
   try {
     await assertComparisonSourceFilesClean(db, {
       versionOneFileId: comparison.versionOneFileId,
@@ -95,7 +109,10 @@ export const PATCH = withApiErrors(async function PATCH(
     });
   } catch (error) {
     if (error instanceof ComparisonProcessingError) {
-      return response({ code: error.code, error: error.message }, 422);
+      return response({
+        code: error.code,
+        error: comparisonProcessingErrorMessage(error.code, locale),
+      }, 422);
     }
     throw error;
   }
@@ -108,7 +125,11 @@ export const PATCH = withApiErrors(async function PATCH(
          WHERE c.id=comparison_changes.comparison_id AND c.workspace_id=? AND c.owner_user_id=? AND c.deleted_at IS NULL
        )`,
     ).bind(body.reviewed === false ? null : isoNow(), body.changeId, comparisonId, workspace.id, user.id).run();
-    if (!result.meta.changes) return response({ error: "Изменение не найдено." }, 404);
+    if (!result.meta.changes) {
+      return response({
+        error: comparisonRouteErrorMessage("COMPARISON_CHANGE_NOT_FOUND", locale),
+      }, 404);
+    }
     return response({ ok: true });
   }
   if (Object.prototype.hasOwnProperty.call(body, "caseId")) {
@@ -116,14 +137,20 @@ export const PATCH = withApiErrors(async function PATCH(
       const accessibleCase = await db.prepare(
         "SELECT id FROM cases WHERE id=? AND workspace_id=? AND archived_at IS NULL LIMIT 1",
       ).bind(body.caseId, workspace.id).first();
-      if (!accessibleCase) return response({ error: "Дело не найдено или недоступно." }, 403);
+      if (!accessibleCase) {
+        return response({
+          error: comparisonRouteErrorMessage("COMPARISON_CASE_UNAVAILABLE", locale),
+        }, 403);
+      }
     }
     await db.prepare(
       "UPDATE document_comparisons SET case_id=?,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
     ).bind(body.caseId || null, isoNow(), comparisonId, workspace.id, user.id).run();
     return response({ ok: true });
   }
-  return response({ error: "Нет поддерживаемого изменения." }, 400);
+  return response({
+    error: comparisonRouteErrorMessage("COMPARISON_UNSUPPORTED_CHANGE", locale),
+  }, 400);
 });
 
 export const DELETE = withApiErrors(async function DELETE(
@@ -131,12 +158,15 @@ export const DELETE = withApiErrors(async function DELETE(
   context: { params: Promise<{ comparisonId: string }> },
 ) {
   assertSafeWrite(request);
+  const locale = authLocaleFromRequest(request);
   const user = await requireApiUser();
   const workspace = await workspaceForContentEditor(user);
   const { comparisonId } = await context.params;
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
-  if (!comparison) return response({ error: "Сравнение не найдено." }, 404);
+  if (!comparison) {
+    return response({ error: comparisonRouteErrorMessage("COMPARISON_NOT_FOUND", locale) }, 404);
+  }
   const now = isoNow();
   await db.batch([
     db.prepare(

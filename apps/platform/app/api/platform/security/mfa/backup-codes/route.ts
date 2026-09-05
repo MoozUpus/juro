@@ -14,6 +14,7 @@ import {
   withApiErrors,
 } from "../../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { localizedRequestFormatError } from "../../../../../../lib/auth/request-locale";
 
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
@@ -26,7 +27,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         : 400;
     return jsonNoStore({
       code: parsed.error.toLocaleUpperCase(),
-      error: "Проверьте формат запроса.",
+      error: localizedRequestFormatError(request),
     }, status);
   }
   const { code, locale } = parsed.data;

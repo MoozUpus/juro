@@ -10,6 +10,7 @@ import {
   accountPersonas,
   type AccountPersona,
 } from "../../lib/platform/onboarding";
+import { isLocale, type PlatformLocale } from "../../lib/platform/routing";
 import "./onboarding.css";
 import { workspaceProfile } from "../../lib/platform/profile";
 import {
@@ -20,7 +21,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function OnboardingScreen({ locale: requestedLocale }: {
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
 }) {
   const authUser = await requireChatGPTUser(
     `/${requestedLocale}/onboarding`,
@@ -82,5 +83,5 @@ export default async function Onboarding({ searchParams }: {
   searchParams: Promise<{ lang?: string }>;
 }) {
   const query = await searchParams;
-  return <OnboardingScreen locale={query.lang === "ru" ? "ru" : "uz"} />;
+  return <OnboardingScreen locale={isLocale(query.lang ?? "") ? query.lang as PlatformLocale : "uz"} />;
 }

@@ -42,7 +42,7 @@ type EmailJobRow = {
   taskTitle: string;
   dueAt: string | null;
   caseTitle: string;
-  locale: "ru" | "uz";
+  locale: "ru" | "uz" | "en";
   reminderStatus: string;
   reminderAt: string;
   currentReminderUpdatedAt: string;
@@ -149,6 +149,7 @@ export async function executeTaskReminderEmail(
         to: [recipient],
         subject: copy.subject,
         html: copy.html,
+        text: copy.text,
       }),
       signal: AbortSignal.timeout(8_000),
     });
@@ -258,27 +259,37 @@ function providerFailure(status: number): TaskReminderEmailError {
     : new TaskReminderEmailError("EMAIL_PROVIDER_REJECTED", false);
 }
 
-function emailCopy(row: EmailJobRow): { subject: string; html: string } {
+function emailCopy(row: EmailJobRow): { subject: string; html: string; text: string } {
   const task = escapeHtml(row.taskTitle);
   const legalCase = escapeHtml(row.caseTitle);
   const due = escapeHtml(formatDueDate(row.dueAt, row.locale));
+  if (row.locale === "en") {
+    return {
+      subject: "JURO: task deadline approaching",
+      html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Task deadline approaching</h2><p><strong>${task}</strong></p><p>Matter: ${legalCase}<br>Due: ${due}</p><p>Review the plan and deadline in your JURO account.</p></div>`,
+      text: `Task deadline approaching\n\n${row.taskTitle}\nMatter: ${row.caseTitle}\nDue: ${formatDueDate(row.dueAt, row.locale)}\n\nReview the plan and deadline in your JURO account.`,
+    };
+  }
   if (row.locale === "uz") {
     return {
       subject: "JURO: vazifa muddati yaqinlashmoqda",
       html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Vazifa muddati yaqinlashmoqda</h2><p><strong>${task}</strong></p><p>Ish: ${legalCase}<br>Muddat: ${due}</p><p>Reja va muddatni JURO hisobingizda tekshiring.</p></div>`,
+      text: `Vazifa muddati yaqinlashmoqda\n\n${row.taskTitle}\nIsh: ${row.caseTitle}\nMuddat: ${formatDueDate(row.dueAt, row.locale)}\n\nReja va muddatni JURO hisobingizda tekshiring.`,
     };
   }
   return {
     subject: "JURO: приближается срок по задаче",
     html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Приближается срок по задаче</h2><p><strong>${task}</strong></p><p>Дело: ${legalCase}<br>Срок: ${due}</p><p>Проверьте план и срок в своём аккаунте JURO.</p></div>`,
+    text: `Приближается срок по задаче\n\n${row.taskTitle}\nДело: ${row.caseTitle}\nСрок: ${formatDueDate(row.dueAt, row.locale)}\n\nПроверьте план и срок в своём аккаунте JURO.`,
   };
 }
 
-function formatDueDate(value: string | null, locale: "ru" | "uz"): string {
-  if (!value) return locale === "uz" ? "belgilanmagan" : "не назначен";
+function formatDueDate(value: string | null, locale: "ru" | "uz" | "en"): string {
+  const missing = { ru: "не назначен", uz: "belgilanmagan", en: "not set" }[locale];
+  if (!value) return missing;
   const parsed = new Date(value.length === 10 ? `${value}T12:00:00.000Z` : value);
-  if (Number.isNaN(parsed.getTime())) return locale === "uz" ? "belgilanmagan" : "не назначен";
-  return new Intl.DateTimeFormat(locale === "uz" ? "uz-UZ" : "ru-RU", {
+  if (Number.isNaN(parsed.getTime())) return missing;
+  return new Intl.DateTimeFormat({ ru: "ru-RU", uz: "uz-UZ", en: "en-GB" }[locale], {
     dateStyle: "long",
     timeZone: "Asia/Tashkent",
   }).format(parsed);

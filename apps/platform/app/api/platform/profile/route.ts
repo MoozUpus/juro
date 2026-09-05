@@ -9,15 +9,28 @@ import {
   type UserIdentityRow,
 } from "../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
+import {
+  authLocaleFromRequest,
+  localizedRequestFormatError,
+  type RequestAuthLocale,
+} from "../../../../lib/auth/request-locale";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 import { canManageTeam } from "../../../../lib/platform/role-policy";
+import { isLocale } from "../../../../lib/platform/routing";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }
 
-export const GET = withApiErrors(async function GET() {
-  const user = await requireApiUser();
+function localized(
+  locale: RequestAuthLocale,
+  values: Record<RequestAuthLocale, string>,
+): string {
+  return values[locale];
+}
+
+export const GET = withApiErrors(async function GET(request: Request) {
+  const user = await requireApiUser(request);
   const workspace = await workspaceForUser(user);
   const db = requireD1();
   const [profile, workspaceRow, consents, acceptances, deletionRequest] =
@@ -90,13 +103,19 @@ export const GET = withApiErrors(async function GET() {
   const identity = profileRow
     ? await resolveUserIdentity(runtimeIdentityProtection(), profileRow)
     : null;
+  const profileLocale = profileRow && isLocale(profileRow.locale)
+    ? profileRow.locale
+    : "ru";
+  const storedWorkspace = workspaceRow.results[0] as
+    | (Record<string, unknown> & { locale?: unknown })
+    | undefined;
   return response({
     profile: profileRow && identity ? {
       id: profileRow.id,
       email: identity.email,
       fullName: profileRow.fullName,
       phone: identity.phone,
-      locale: profileRow.locale,
+      locale: profileLocale,
       accountType: profileRow.accountType,
       companyName: profileRow.companyName,
       organizationRole: profileRow.organizationRole,
@@ -105,7 +124,15 @@ export const GET = withApiErrors(async function GET() {
       onboardingCompletedAt: profileRow.onboardingCompletedAt,
       createdAt: profileRow.createdAt,
     } : null,
-    workspace: workspaceRow.results[0] ?? null,
+    workspace: storedWorkspace
+      ? {
+          ...storedWorkspace,
+          locale: typeof storedWorkspace.locale === "string"
+              && isLocale(storedWorkspace.locale)
+            ? storedWorkspace.locale
+            : profileLocale,
+        }
+      : null,
     role: workspace.role,
     consents: consents.results,
     acceptances: acceptances.results,
@@ -115,13 +142,35 @@ export const GET = withApiErrors(async function GET() {
 
 export const PATCH = withApiErrors(async function PATCH(request: Request) {
   assertSafeWrite(request);
-  const user = await requireApiUser();
+  const requestLocale = authLocaleFromRequest(request);
+  const user = await requireApiUser(request);
   const workspace = await workspaceForUser(user);
   const body = await request.json().catch(() => null) as { fullName?: string; phone?: string; locale?: string; timezone?: string; companyName?: string; organizationRole?: string } | null;
-  if (!body) return response({ error: "Некорректные данные." }, 400);
+  if (!body) {
+    return response({ error: localizedRequestFormatError(request) }, 400);
+  }
   const fullName = body.fullName?.trim().slice(0, 160);
-  if (!fullName) return response({ error: "Укажите имя." }, 400);
-  const locale = body.locale === "uz" ? "uz" : "ru";
+  if (!fullName) {
+    return response({
+      code: "FULL_NAME_REQUIRED",
+      error: localized(requestLocale, {
+        ru: "Укажите имя.",
+        uz: "Ismingizni kiriting.",
+        en: "Enter your name.",
+      }),
+    }, 400);
+  }
+  if (typeof body.locale !== "string" || !isLocale(body.locale)) {
+    return response({
+      code: "INVALID_LOCALE",
+      error: localized(requestLocale, {
+        ru: "Выберите поддерживаемый язык интерфейса.",
+        uz: "Qo‘llab-quvvatlanadigan interfeys tilini tanlang.",
+        en: "Choose a supported interface language.",
+      }),
+    }, 400);
+  }
+  const locale = body.locale;
   const timezone = body.timezone === "UTC" ? "UTC" : "Asia/Tashkent";
   const phone = body.phone?.trim().slice(0, 40) || null;
   const companyName = body.companyName?.trim().slice(0, 180) || null;
@@ -135,7 +184,14 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     user.id,
   );
   if (!currentIdentity) {
-    return response({ error: "Профиль не найден." }, 404);
+    return response({
+      code: "PROFILE_NOT_FOUND",
+      error: localized(locale, {
+        ru: "Профиль не найден.",
+        uz: "Profil topilmadi.",
+        en: "Profile not found.",
+      }),
+    }, 404);
   }
   const protectedIdentity = identityContext.mode === "dual_write"
     ? await prepareUserIdentityWrite(identityContext, {

@@ -856,11 +856,12 @@ async function challengeFromToken(
        t.backup_key_version AS backupKeyVersion,
        t.enrollment_expires_at AS enrollmentExpiresAt,
        t.verified_at AS verifiedAt,
-       u.locale,u.account_type AS accountType,
+       otp.locale,u.account_type AS accountType,
        u.theme_preference AS themePreference,
        u.onboarding_completed_at AS onboardingCompletedAt
      FROM auth_mfa_challenges c
      JOIN auth_totp_credentials t ON t.id=c.credential_id
+     JOIN auth_otp_challenges otp ON otp.id=c.email_otp_challenge_id
      JOIN user_profiles u ON u.id=c.user_id
      WHERE c.token_hash=? LIMIT 1`,
   ).bind(await sha256(token)).first<LoginChallenge>();
@@ -1523,7 +1524,11 @@ export async function verifyLoginMfa(
     loginSecurityNotification: {
       keyring,
       recipientEmail: identity.email,
-      locale: challenge.locale === "uz" ? "uz" : "ru",
+      locale: challenge.locale === "uz"
+        ? "uz"
+        : challenge.locale === "en"
+          ? "en"
+          : "ru",
       workspaceId: profile.defaultWorkspaceId,
     },
     rememberMe: input.rememberMe,

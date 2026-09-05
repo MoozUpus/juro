@@ -6,7 +6,7 @@ import { assertSafeWrite } from "../../../../../lib/auth/safe-write";
 import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../lib/auth/staff-http";
 import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 
-const requestSchema = z.object({ locale: z.enum(["ru", "uz"]) }).strict();
+const requestSchema = z.object({ locale: z.enum(["ru", "uz", "en"]) }).strict();
 
 function adminOrigin(): string | null {
   const runtime = runtimeEnv();

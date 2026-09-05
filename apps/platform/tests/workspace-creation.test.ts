@@ -83,6 +83,33 @@ test("business workspace creation atomically grants owner access, activates, and
   sqlite.close();
 });
 
+test("business workspace creation preserves an English locale", async () => {
+  const { sqlite, d1 } = fixtureWithUsers();
+  try {
+    const created = await createBusinessWorkspaceInDatabase(
+      d1,
+      "workspace-owner",
+      input({
+        requestId: "22222222-2222-4222-8222-222222222222",
+        fullName: "JURO International LLC",
+        shortName: "JURO International",
+        locale: "en",
+      }),
+      NOW,
+    );
+    assert.deepEqual(
+      {
+        ...sqlite.prepare(
+          "SELECT locale,full_name AS fullName FROM workspaces WHERE id=?",
+        ).get(created.id),
+      },
+      { locale: "en", fullName: "JURO International LLC" },
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("business workspace retry is idempotent and rejects mismatched or cross-user replay", async () => {
   const { sqlite, d1 } = fixtureWithUsers();
   const first = await createBusinessWorkspaceInDatabase(d1, "workspace-owner", input(), NOW);

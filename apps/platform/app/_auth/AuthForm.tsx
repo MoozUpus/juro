@@ -66,6 +66,7 @@ const AUTH_HANDOFF_ACTIONS = new Set([
   "https://app.juro.uz/api/auth/session-handoff",
   "https://lawyer.juro.uz/api/auth/session-handoff",
 ]);
+const AUTH_HANDOFF_LOCALES = new Set<Locale>(["ru", "uz", "en"]);
 
 function copy(locale: Locale, value: Copy): string {
   return value[locale];
@@ -105,11 +106,15 @@ function validHandoff(handoff: Handoff): boolean {
   if (!Number.isFinite(expiresAt)) return false;
   try {
     const action = new URL(handoff.action);
+    const locale = action.searchParams.get("lang");
+    const canonicalAction = `${action.origin}${action.pathname}`;
     return !action.username
       && !action.password
-      && !action.search
       && !action.hash
-      && AUTH_HANDOFF_ACTIONS.has(action.href);
+      && action.searchParams.size === 1
+      && locale !== null
+      && AUTH_HANDOFF_LOCALES.has(locale as Locale)
+      && AUTH_HANDOFF_ACTIONS.has(canonicalAction);
   } catch {
     return false;
   }

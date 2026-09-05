@@ -26,7 +26,7 @@ import {
   withApiErrors,
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
-import { isPersonalAccountType } from "../../../../lib/platform/routing";
+import { isLocale, isPersonalAccountType } from "../../../../lib/platform/routing";
 import { lawyerLandingDestination } from "../../../../lib/platform/lawyer-entry-routing";
 import { issueSessionHandoff } from "../../../../lib/auth/session-handoff";
 import { localizedRequestFormatError } from "../../../../lib/auth/request-locale";
@@ -88,7 +88,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         rememberMe,
       },
     );
-    const userLocale = result.locale === "uz" ? "uz" : "ru";
+    const userLocale = isLocale(result.locale) ? result.locale : locale;
     const accountType = isPersonalAccountType(result.accountType)
       ? result.accountType
       : "individual";

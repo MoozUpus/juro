@@ -22,7 +22,7 @@ const instructionInjectionPatterns = [
  * names an act or a provision, so a question cannot smuggle an ungrounded legal
  * premise past the source gate that just rejected the answer itself.
  */
-const legalPremisePattern = /(?:стать\p{L}*|модда|modda|кодекс\p{L}*|kodeks\p{L}*|закон\p{L}*|qonun\p{L}*|постановлен\p{L}*|qaror\p{L}*|пункт\p{L}*|band\p{L}*)/iu;
+const legalPremisePattern = /(?:стать\p{L}*|модда|modda|кодекс\p{L}*|kodeks\p{L}*|закон\p{L}*|qonun\p{L}*|постановлен\p{L}*|qaror\p{L}*|пункт\p{L}*|band\p{L}*|article|code|law|resolution|clause)/iu;
 
 export function assertsLegalPremise(value: string): boolean {
   return legalPremisePattern.test(value.normalize("NFKC"));
@@ -118,7 +118,7 @@ export function containsUnvalidatedHttpLink(
 
 export function sanitizeClarificationQuestions(
   values: readonly string[],
-  locale: "ru" | "uz",
+  locale: AiOutputLocale,
 ): string[] {
   const seen = new Set<string>();
   const safe: string[] = [];
@@ -143,3 +143,4 @@ export function sanitizeClarificationQuestions(
   }
   return safe;
 }
+import type { AiOutputLocale } from "./localization";

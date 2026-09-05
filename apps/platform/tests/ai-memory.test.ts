@@ -402,11 +402,16 @@ test("provider and API boundaries treat memory as authenticated untrusted contex
   assert.match(memoryRoute, /workspaceForUser/);
   assert.match(memoryRoute, /assertSafeWrite/);
   assert.match(memoryRoute, /discriminatedUnion/);
+  assert.match(memoryRoute, /z\.enum\(\["ru", "uz", "en"\]\)/);
+  assert.match(memoryRoute, /Encrypted memory is temporarily unavailable/);
   assert.match(memoryRoute, /cache-control.*private, no-store/s);
   assert.match(privacyExport, /listUserMemories/);
   assert.match(privacyExport, /неполный экспорт не создан/);
   assert.match(client, /Автоматически сохранять безопасные факты/);
   assert.match(client, /Пароли, коды и платёжные данные не сохраняются/);
+  assert.match(client, /Automatically save safe facts/);
+  assert.match(client, /Passwords, verification codes and payment details are never stored/);
+  assert.doesNotMatch(client, /const ru = locale === "ru"/);
   for (const source of [openai, anthropic, aiRoute, memoryRoute, privacyExport, client]) {
     assert.doesNotMatch(source, /NEXT_PUBLIC_(?:OPENAI|ANTHROPIC|IDENTITY)/);
   }

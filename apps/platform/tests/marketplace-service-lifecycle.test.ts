@@ -39,7 +39,7 @@ function seedMarketplace() {
     .run(ids.profile, ids.lawyer, "Тестовый юрист", NOW, NOW);
   sqlite.prepare("INSERT INTO lawyer_requests(id,workspace_id,case_id,requester_user_id,lawyer_profile_id,status,anonymized_summary,requested_scope_json,created_at,updated_at) VALUES (?,?,?,?,?,'service_proposal_proposed','{}','{}',?,?)")
     .run(ids.request, ids.workspace, ids.case, ids.client, ids.profile, NOW, NOW);
-  sqlite.prepare("INSERT INTO legal_service_proposals(id,external_id,lawyer_request_id,case_id,workspace_id,client_user_id,lawyer_profile_id,lawyer_user_id,version,status,title_ru,title_uz,scope_ru,scope_uz,duration_description,lawyer_base_amount_minor,currency,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,1,'ACCEPTED','Анализ договора','Shartnomani tahlil qilish','Проверка и письменное заключение','Tekshiruv va yozma xulosa','2 рабочих дня',1000000,'UZS',?,?)")
+  sqlite.prepare("INSERT INTO legal_service_proposals(id,external_id,lawyer_request_id,case_id,workspace_id,client_user_id,lawyer_profile_id,lawyer_user_id,version,status,title_ru,title_uz,title_en,scope_ru,scope_uz,scope_en,duration_description,duration_description_en,lawyer_base_amount_minor,currency,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,1,'ACCEPTED','Анализ договора','Shartnomani tahlil qilish','Contract review','Проверка и письменное заключение','Tekshiruv va yozma xulosa','Review and written opinion','2 рабочих дня','2 business days',1000000,'UZS',?,?)")
     .run(ids.proposal, "proposal_test_1", ids.request, ids.case, ids.workspace, ids.client, ids.profile, ids.lawyer, NOW, NOW);
   sqlite.prepare("INSERT INTO proposal_acceptances(id,proposal_id,client_user_id,workspace_id,agreement_version,agreement_sha256,consent_scope_json,accepted_at,created_at) VALUES (?,?,?,?,?,?,'{}',?,?)")
     .run(ids.acceptance, ids.proposal, ids.client, ids.workspace, "2026-08-03", "d".repeat(64), NOW, NOW);
@@ -73,6 +73,7 @@ test("marketplace legal-service payment creates exactly one allocation and payab
     assert.equal(created.order.id, replayedCreate.order.id);
     assert.equal(created.order.orderType, "LEGAL_SERVICE");
     assert.equal(created.pricingSnapshot?.clientTotalMinor, 1_232_000);
+    assert.equal(created.items[0]?.titleEn, "Contract review");
 
     const confirmed = await confirmMarketplaceServiceCheckout(
       d1,

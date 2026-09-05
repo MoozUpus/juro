@@ -15,14 +15,17 @@ test("email reminder resolves protected identity at delivery and is idempotent",
   const originalFetch = globalThis.fetch;
   let calls = 0;
   try {
-    const jobId = seed(sqlite);
+    const jobId = seed(sqlite, "en");
     globalThis.fetch = async (input, init) => {
       calls += 1;
       assert.equal(String(input), "https://api.resend.com/emails");
       assert.equal(new Headers(init?.headers).get("idempotency-key"), `juro_task_reminder_${jobId}`);
-      const body = JSON.parse(String(init?.body)) as { to: string[]; html: string };
+      const body = JSON.parse(String(init?.body)) as { to: string[]; subject: string; html: string; text: string };
       assert.deepEqual(body.to, ["user-a@example.invalid"]);
       assert.match(body.html, /Task &lt;A&gt;/u);
+      assert.equal(body.subject, "JURO: task deadline approaching");
+      assert.match(body.text, /Matter: Case A/u);
+      assert.doesNotMatch(`${body.subject}\n${body.html}\n${body.text}`, /[\u0400-\u04ff]/u);
       return new Response(JSON.stringify({ id: "resend_message_0098" }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -116,14 +119,17 @@ test("stale source cancels before provider delivery", async () => {
   }
 });
 
-function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): string {
+function seed(
+  sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
+  locale: "ru" | "uz" | "en" = "ru",
+): string {
   const createdAt = "2026-08-05T23:58:00.000Z";
   sqlite.prepare("INSERT INTO user_profiles(id,email,created_at,updated_at) VALUES ('user-a','user-a@example.invalid',?,?)").run(createdAt, createdAt);
   sqlite.prepare("INSERT INTO workspaces(id,type,name,created_at,updated_at) VALUES ('workspace-a','individual','A',?,?)").run(createdAt, createdAt);
   sqlite.prepare("INSERT INTO workspace_members(id,workspace_id,user_id,role,status,joined_at,created_at,updated_at) VALUES ('member-a','workspace-a','user-a','owner','active',?,?,?)").run(createdAt, createdAt, createdAt);
   sqlite.prepare(`INSERT INTO cases
     (id,workspace_id,owner_user_id,account_type,locale,title,legal_area,status,current_revision,created_at,updated_at)
-    VALUES ('case-a','workspace-a','user-a','individual','ru','Case A','contracts','open',1,?,?)`).run(createdAt, createdAt);
+    VALUES ('case-a','workspace-a','user-a','individual',?,'Case A','contracts','open',1,?,?)`).run(locale, createdAt, createdAt);
   sqlite.prepare(`INSERT INTO tasks
     (id,workspace_id,case_id,owner_user_id,title,due_at,status,created_at,updated_at)
     VALUES ('task-a','workspace-a','case-a','user-a','Task <A>',?,'planned',?,?)`).run(dueAt, createdAt, createdAt);

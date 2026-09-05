@@ -160,7 +160,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const email = normalizeEmail(body.email);
   const code = body.code;
   const locale = body.locale;
-  const routeLocale = locale === "en" ? "ru" : locale;
+  const routeLocale = locale;
   const purpose = body.purpose;
   if (purpose === "register" && (!body.acceptTerms || !body.acceptPrivacy || !body.acceptPersonalData)) return json({ error: localized(locale, {
     ru: "Нужно принять обязательные документы.",

@@ -12,6 +12,7 @@ import {
   type WorkspaceRouteSource,
 } from "./workspace-route-access";
 import { requireWorkspaceContentEditor } from "./permissions";
+import { isLocale } from "./routing";
 
 export { workspaceForUserByIdInDatabase } from "./workspace-route-access";
 
@@ -97,7 +98,7 @@ export async function ensureDefaultWorkspace(userId: string): Promise<string> {
       workspaceName,
       businessWorkspace ? workspaceName : null,
       businessWorkspace ? workspaceName.slice(0, 80) : null,
-      profile.locale === "uz" ? "uz" : "ru",
+      isLocale(profile.locale) ? profile.locale : "ru",
       now,
       now,
     ),

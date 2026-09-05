@@ -2,6 +2,7 @@ import { pricingConfig } from "../../../../config/pricing";
 import { parseJsonRequest } from "../../../../lib/auth/input";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { billingPlanSelectionSchema } from "../../../../lib/billing/input";
+import { billingErrorMessage } from "../../../../lib/billing/localization";
 import { paymentProviderStatus } from "../../../../lib/billing/provider";
 import { paymentDemoStatus, paymentFoundationStatus } from "../../../../lib/billing/foundation";
 import {
@@ -55,13 +56,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!parsed.ok) {
     return response({
       code: parsed.error.toUpperCase(),
-      error: "Некорректный тариф / Noto‘g‘ri tarif.",
     }, parsed.error === "payload_too_large" ? 413 : 400);
   }
   if (!pricingConfig.plans.some((plan) => plan.code === parsed.data.planCode)) {
     return response({
       code: "PLAN_UNAVAILABLE",
-      error: parsed.data.locale === "ru" ? "Неизвестный тариф." : "Noma’lum tarif.",
+      error: billingErrorMessage("PLAN_UNAVAILABLE", parsed.data.locale),
     }, 400);
   }
 
@@ -69,15 +69,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!provider.credentialsConfigured) {
     return response({
       code: "PAYMENT_PROVIDER_UNAVAILABLE",
-      error: parsed.data.locale === "ru"
-        ? "Оплата не выполнена: платёжный провайдер не подключён. JURO не показывает ложный результат платежа."
-        : "To‘lov bajarilmadi: to‘lov provayderi ulanmagan. JURO soxta muvaffaqiyatni ko‘rsatmaydi.",
+      error: billingErrorMessage("PAYMENT_PROVIDER_UNAVAILABLE", parsed.data.locale),
     }, 503);
   }
   return response({
     code: "PAYMENT_ADAPTER_REQUIRED",
-    error: parsed.data.locale === "ru"
-      ? "Для выбранного провайдера ещё не настроен checkout adapter."
-      : "Tanlangan provayder uchun checkout adapteri hali sozlanmagan.",
+    error: billingErrorMessage("PAYMENT_ADAPTER_REQUIRED", parsed.data.locale),
   }, 501);
 });

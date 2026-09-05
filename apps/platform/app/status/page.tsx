@@ -10,12 +10,19 @@ import {
   STATUS_ORIGIN_HEADER,
 } from "../../lib/operations/status-metadata";
 import { readPublicStatus } from "../../lib/operations/system-status";
+import { isLocale } from "../../lib/platform/routing";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({ searchParams }: {
+  searchParams: Promise<{ lang?: string }>;
+}): Promise<Metadata> {
   const requestHeaders = await headers();
-  return publicStatusMetadata(requestHeaders.get(STATUS_ORIGIN_HEADER));
+  const requestedLocale = (await searchParams).lang;
+  return publicStatusMetadata(
+    requestHeaders.get(STATUS_ORIGIN_HEADER),
+    typeof requestedLocale === "string" && isLocale(requestedLocale) ? requestedLocale : "ru",
+  );
 }
 
 export default async function StatusPage({
@@ -25,7 +32,10 @@ export default async function StatusPage({
 }) {
   const runtime = runtimeEnv();
   if (!runtime.DB) notFound();
-  const locale = (await searchParams).lang === "uz" ? "uz" : "ru";
+  const requestedLocale = (await searchParams).lang;
+  const locale = typeof requestedLocale === "string" && isLocale(requestedLocale)
+    ? requestedLocale
+    : "ru";
   const snapshot = await readPublicStatus({
     db: runtime.DB,
     locale,

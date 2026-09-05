@@ -12,7 +12,7 @@ export const knowledgeBaseArticleBodySchema = z.array(knowledgeBaseArticleSectio
 export const knowledgeBaseRelatedSlugsSchema = z.array(z.string().regex(slugPattern)).max(12);
 
 export const knowledgeBaseQuerySchema = z.object({
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
   q: z.string().trim().max(120).default(""),
   category: z.string().trim().max(60).regex(/^[a-z0-9-]*$/).default(""),
 }).strict();
@@ -54,15 +54,50 @@ export type KnowledgeBaseFeedbackResult = {
   changed: boolean;
 };
 
+export type KnowledgeBaseErrorCode =
+  | "ARTICLE_UNAVAILABLE"
+  | "INVALID_IDEMPOTENCY_KEY"
+  | "IDEMPOTENCY_CONFLICT"
+  | "FEEDBACK_CONFLICT";
+
 export class KnowledgeBaseError extends Error {
   constructor(
-    public readonly code: "ARTICLE_UNAVAILABLE" | "INVALID_IDEMPOTENCY_KEY" | "IDEMPOTENCY_CONFLICT" | "FEEDBACK_CONFLICT",
+    public readonly code: KnowledgeBaseErrorCode,
     message: string,
     public readonly status: number,
   ) {
     super(message);
     this.name = "KnowledgeBaseError";
   }
+}
+
+export function knowledgeBaseErrorMessage(
+  code: KnowledgeBaseErrorCode,
+  locale: PlatformLocale,
+): string {
+  const messages: Record<KnowledgeBaseErrorCode, Record<PlatformLocale, string>> = {
+    ARTICLE_UNAVAILABLE: {
+      ru: "Статья недоступна.",
+      uz: "Maqola mavjud emas.",
+      en: "This article is unavailable.",
+    },
+    INVALID_IDEMPOTENCY_KEY: {
+      ru: "Для оценки требуется корректный ключ запроса.",
+      uz: "Baholash uchun to‘g‘ri so‘rov kaliti kerak.",
+      en: "A valid request key is required to save feedback.",
+    },
+    IDEMPOTENCY_CONFLICT: {
+      ru: "Этот ключ запроса уже использован для другой оценки.",
+      uz: "Bu so‘rov kaliti boshqa baho uchun ishlatilgan.",
+      en: "This request key has already been used for different feedback.",
+    },
+    FEEDBACK_CONFLICT: {
+      ru: "Оценка уже изменилась. Обновите страницу и повторите действие.",
+      uz: "Baho allaqachon o‘zgargan. Sahifani yangilang va qayta urinib ko‘ring.",
+      en: "Your feedback has changed. Refresh the page and try again.",
+    },
+  };
+  return messages[code][locale];
 }
 
 export async function listKnowledgeBaseArticles(input: {
@@ -76,10 +111,16 @@ export async function listKnowledgeBaseArticles(input: {
     q: input.q ?? "",
     category: input.category ?? "",
   });
-  const language = parsed.locale === "ru" ? "ru" : "uz";
+  const language = parsed.locale;
   const title = `version.title_${language}`;
   const summary = `version.summary_${language}`;
-  const filters = ["article.status='published'", "version.published_at IS NOT NULL"];
+  const filters = [
+    "article.status='published'",
+    "version.published_at IS NOT NULL",
+    `${title} IS NOT NULL`,
+    `${summary} IS NOT NULL`,
+    `version.body_${language}_json IS NOT NULL`,
+  ];
   const bindings: unknown[] = [];
   if (parsed.category) {
     filters.push("article.category=?");
@@ -87,7 +128,7 @@ export async function listKnowledgeBaseArticles(input: {
   }
   if (parsed.q) {
     filters.push(`(lower(${title}) LIKE ? ESCAPE '\\' OR lower(${summary}) LIKE ? ESCAPE '\\')`);
-    const term = `%${escapeLike(parsed.q.toLocaleLowerCase(language === "ru" ? "ru" : "uz"))}%`;
+    const term = `%${escapeLike(parsed.q.toLocaleLowerCase(language === "uz" ? "uz" : language === "ru" ? "ru" : "en"))}%`;
     bindings.push(term, term);
   }
   const rows = await input.db.prepare(
@@ -117,7 +158,11 @@ export async function getKnowledgeBaseArticle(input: {
   slug: string;
 }): Promise<KnowledgeBaseArticle | null> {
   if (!slugPattern.test(input.slug)) return null;
-  const language = input.locale === "ru" ? "ru" : "uz";
+  const { locale: language } = knowledgeBaseQuerySchema.parse({
+    locale: input.locale,
+    q: "",
+    category: "",
+  });
   const row = await input.db.prepare(
     `SELECT article.id AS articleId,article.slug,article.category,
       version.id AS versionId,version.version_number AS versionNumber,
@@ -129,6 +174,9 @@ export async function getKnowledgeBaseArticle(input: {
      FROM knowledge_base_articles article
      INNER JOIN knowledge_base_article_versions version ON version.article_id=article.id
      WHERE article.slug=? AND article.status='published' AND version.published_at IS NOT NULL
+       AND version.title_${language} IS NOT NULL
+       AND version.summary_${language} IS NOT NULL
+       AND version.body_${language}_json IS NOT NULL
        AND version.version_number=(
          SELECT max(candidate.version_number)
          FROM knowledge_base_article_versions candidate
@@ -220,7 +268,7 @@ function summaryFromRow(row: ArticleRow): KnowledgeBaseArticleSummary {
   };
 }
 
-async function relatedArticles(db: D1Database, language: "ru" | "uz", slugs: string[]): Promise<KnowledgeBaseArticleSummary[]> {
+async function relatedArticles(db: D1Database, language: PlatformLocale, slugs: string[]): Promise<KnowledgeBaseArticleSummary[]> {
   if (slugs.length === 0) return [];
   const placeholders = slugs.map(() => "?").join(",");
   const rows = await db.prepare(
@@ -234,6 +282,9 @@ async function relatedArticles(db: D1Database, language: "ru" | "uz", slugs: str
      INNER JOIN knowledge_base_article_versions version ON version.article_id=article.id
      WHERE article.status='published' AND article.slug IN (${placeholders})
        AND version.published_at IS NOT NULL
+       AND version.title_${language} IS NOT NULL
+       AND version.summary_${language} IS NOT NULL
+       AND version.body_${language}_json IS NOT NULL
        AND version.version_number=(SELECT max(candidate.version_number) FROM knowledge_base_article_versions candidate WHERE candidate.article_id=article.id AND candidate.published_at IS NOT NULL)
      ORDER BY article.slug ASC`,
   ).bind(...slugs).all<ArticleRow>();

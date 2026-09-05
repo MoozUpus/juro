@@ -1,8 +1,10 @@
 import { parseJsonRequest } from "../../../../../../../lib/auth/input";
+import { authLocaleFromRequest } from "../../../../../../../lib/auth/request-locale";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../../../lib/document-builder/storage/runtime";
 import {
   KnowledgeBaseError,
+  knowledgeBaseErrorMessage,
   knowledgeBaseFeedbackSchema,
   recordKnowledgeBaseFeedback,
 } from "../../../../../../../lib/platform/knowledge-base";
@@ -14,11 +16,19 @@ function response(body: unknown, status = 200) {
 
 export const POST = withApiErrors(async function POST(request: Request, { params }: { params: Promise<{ articleSlug: string }> }) {
   assertSafeWrite(request);
+  const locale = authLocaleFromRequest(request);
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const parsed = await parseJsonRequest(request, knowledgeBaseFeedbackSchema, 1_024);
   if (!parsed.ok) {
-    return response({ code: "INVALID_INPUT", error: "Проверьте оценку статьи / Maqola bahosini tekshiring." }, parsed.error === "payload_too_large" ? 413 : 400);
+    return response({
+      code: "INVALID_INPUT",
+      error: {
+        ru: "Проверьте оценку статьи.",
+        uz: "Maqola bahosini tekshiring.",
+        en: "Check the article feedback.",
+      }[locale],
+    }, parsed.error === "payload_too_large" ? 413 : 400);
   }
   const { articleSlug } = await params;
   try {
@@ -28,7 +38,12 @@ export const POST = withApiErrors(async function POST(request: Request, { params
     });
     return response(result, result.changed ? 201 : 200);
   } catch (error) {
-    if (error instanceof KnowledgeBaseError) return response({ code: error.code, error: error.message }, error.status);
+    if (error instanceof KnowledgeBaseError) {
+      return response({
+        code: error.code,
+        error: knowledgeBaseErrorMessage(error.code, locale),
+      }, error.status);
+    }
     throw error;
   }
 });
