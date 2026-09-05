@@ -350,16 +350,24 @@ const MATERIALIZATION_STAGES = ["receipt", "plan", "evidence", "chunks", "sparse
   "embeddings", "embedding_artifacts", "vectorize", "dense_inventory", "coordinator"] as const;
 export type CustomMaterializationStage = (typeof MATERIALIZATION_STAGES)[number];
 
+function r2FailureTelemetry(error: unknown): { r2Operation: string; r2ErrorCode: number } | null {
+  if (!(error instanceof Error)) return null;
+  // workerd R2Result::throwIfError wraps a service message as "action: message (v4Code)".
+  const match = /^(get|head|put|delete|list): [\s\S]* \((\d{1,6})\)$/u.exec(error.message);
+  return match ? { r2Operation: match[1]!, r2ErrorCode: Number(match[2]) } : null;
+}
+
 function buildFailureCode(error: unknown): string {
   if (error instanceof CustomIndexPipelineError) return error.code;
   if (!(error instanceof Error)) return "CUSTOM_CURRENT_UNEXPECTED";
   if (/^CUSTOM_[A-Z0-9_]+$/u.test(error.message)) return error.message;
   if (/too many subrequests|subrequest limit/iu.test(error.message)) return "CUSTOM_CURRENT_SUBREQUEST_LIMIT";
   if (/memory limit|out of memory/iu.test(error.message)) return "CUSTOM_CURRENT_MEMORY_LIMIT";
-  if (/^R2\b/iu.test(error.message)) return "CUSTOM_CURRENT_R2_UNAVAILABLE";
+  if (/^R2\b/iu.test(error.message) || r2FailureTelemetry(error)) return "CUSTOM_CURRENT_R2_UNAVAILABLE";
   if (/^D1(?:_|\b)/iu.test(error.message)) return "CUSTOM_CURRENT_D1_UNAVAILABLE";
   if (/overloaded|disconnected|connection (?:lost|reset)|network/iu.test(error.message)) return "CUSTOM_CURRENT_RPC_UNAVAILABLE";
   if (/timeout|timed out|time limit/iu.test(error.message)) return "CUSTOM_CURRENT_TIMEOUT";
+  if (/^internal error(?:;|$)/iu.test(error.message)) return "CUSTOM_CURRENT_INTERNAL_ERROR";
   if (error.name === "ZodError") return "CUSTOM_CURRENT_SCHEMA_INVALID";
   return "CUSTOM_CURRENT_UNEXPECTED";
 }
@@ -403,5 +411,5 @@ export function contentFreePipelineTelemetry(input: {
   }
   const { error, ...fields } = input;
   return { service: "legal-custom-index", ...fields,
-    ...(error === undefined ? {} : { failureCode: buildFailureCode(error) }) };
+    ...(error === undefined ? {} : { failureCode: buildFailureCode(error), ...r2FailureTelemetry(error) }) };
 }

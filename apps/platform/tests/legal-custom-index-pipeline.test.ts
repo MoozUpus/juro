@@ -313,6 +313,18 @@ test("failed build telemetry identifies the work unit and classifies runtime err
     environment: "staging", releaseId,
     error: new Error("sensitive unknown failure"),
   }).failureCode, "CUSTOM_CURRENT_UNEXPECTED");
+  const nativeR2 = contentFreePipelineTelemetry({
+    environment: "staging", releaseId,
+    error: new Error("put: We encountered an internal error; sensitive object contents (10001)"),
+  });
+  assert.equal(nativeR2.failureCode, "CUSTOM_CURRENT_R2_UNAVAILABLE");
+  assert.equal(nativeR2.r2Operation, "put");
+  assert.equal(nativeR2.r2ErrorCode, 10001);
+  assert.ok(!JSON.stringify(nativeR2).includes("sensitive"));
+  assert.equal(contentFreePipelineTelemetry({
+    environment: "staging", releaseId,
+    error: new Error("internal error; reference = private-reference"),
+  }).failureCode, "CUSTOM_CURRENT_INTERNAL_ERROR");
   assert.throws(() => contentFreePipelineTelemetry({
     environment: "staging", releaseId, sourceOrdinalStart: -1,
   }));
