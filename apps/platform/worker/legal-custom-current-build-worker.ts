@@ -5,6 +5,7 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import { Container, getContainer } from "@cloudflare/containers";
+export { ContainerProxy } from "@cloudflare/containers";
 import type { CustomCurrentBindings } from "./legal-custom-current-env";
 import { acceptedCurrentManifestSchema, acceptedCurrentPageSchema, readAcceptedObject,
   readAcceptedCurrentMetadata } from "../lib/legal-corpus/accepted-current-inputs";
