@@ -19,6 +19,12 @@ The accepted input manifest binds the source snapshot, accepted audit, input inv
 - Successful responses require exact model, indices, dimensionality, finite nonzero vectors and audited usage. Normalized vector bytes are written immutably before a content-free validated-response record and verified pointers. A restart after that record can finish pointers and token accounting without calling the provider again. A crash before the record remains an unknown outcome.
 - Vectorize receives only verified R2 embeddings. Page receipts retain durable provider token totals across delivery retries. The coordinator's `status()` reports reserved tokens, credit-stop state and cooldown without corpus bodies.
 
+### Authorized unknown-outcome reconciliation
+
+After investigating an actual unknown outcome and obtaining separate owner authorization, bind `AUTHORIZED_EMBEDDING_RECONCILIATION_SHA256` to the exact content-free recovery decision. The private coordinator's `reconcileEmbeddings` RPC validates the decision against original request IDs, owners, input hashes and token reservations. It reuses only the decision's checked raw artifacts and reserves supplemental provider work in a separate durable ledger. Original request records, reservations and input fences remain intact. An unknown supplemental outcome stays fenced across retries.
+
+All recovered vectors and decision provenance must be durable before the original requests finish. Ordinary work envelopes can then resume and produce their original receipts. Coordinator and terminal accounting include a separate reconciliation record with original conservative token exposure, supplemental authorization and reservations; original receipt token totals do not include the supplemental exposure. Resume the same decision after an interruption. Do not replace it or authorize another provider attempt merely because a retry remains unresolved.
+
 ## Deployment handoff
 
 After owner authorization, upload the prepared immutable input pages and manifest, read back their hashes while uploading, confirm private bindings and the authenticated stored-key Gateway configuration once, and set the authorized inventory and measured rates. Do not perform a separate live proof Worker or rebuild the accepted source evidence. Start a new release Workflow only after reconciling the paused older envelopes. Keep retrieval activation separate from construction.

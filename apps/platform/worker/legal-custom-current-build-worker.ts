@@ -11,6 +11,7 @@ import { acceptedCurrentManifestSchema, acceptedCurrentPageSchema, readAcceptedO
 import { DocumentEmbeddingLedger, ensureDocumentEmbeddings, importDocumentEmbedding,
   readDocumentEmbedding, type DocumentEmbeddingInput } from "../lib/legal-corpus/document-embedding-build";
 import { requestGatewayDocumentEmbeddings } from "../lib/legal-corpus/document-embedding-build";
+import { reconcileDocumentEmbeddings } from "../lib/legal-corpus/document-embedding-build";
 
 import {
   customCurrentSha256,
@@ -84,7 +85,7 @@ type SourcePlanPage = {
 
 type CurrentBuildEnv = Pick<CustomCurrentBindings, "AI" | "AI_GATEWAY_ID" | "DOCUMENT_EMBEDDINGS_ENABLED"
   | "ACCEPTED_INPUT_MANIFEST_KEY" | "ACCEPTED_INPUT_MANIFEST_SHA256" | "OPENAI_REQUESTS_PER_MINUTE"
-  | "OPENAI_TOKENS_PER_MINUTE" | "AUTHORIZED_PROVIDER_TOKENS" | "SOURCE_DB" | "REUSABLE_ARTIFACTS"
+  | "OPENAI_TOKENS_PER_MINUTE" | "AUTHORIZED_PROVIDER_TOKENS" | "AUTHORIZED_EMBEDDING_RECONCILIATION_SHA256" | "SOURCE_DB" | "REUSABLE_ARTIFACTS"
   | "LEGAL_DB" | "EVIDENCE" | "ARTIFACTS" | "COORDINATOR" | "REDUCER"> & {
   APP_ENV: "staging";
   // The shared runtime declarations retain the legacy VectorizeIndex name; this index uses asynchronous V2 mutations.
@@ -299,6 +300,18 @@ function coordinator(env: CurrentBuildEnv): DurableObjectStub<CustomCurrentBuild
 }
 
 export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv> {
+  async reconcileEmbeddings(input: { decisionJson: string; supplementalInputs: DocumentEmbeddingInput[] }) {
+    requireBuildEnabled(this.env);
+    return reconcileDocumentEmbeddings({ ...input, authorizedDecisionSha256: this.env.AUTHORIZED_EMBEDDING_RECONCILIATION_SHA256,
+      configuration: {
+        environment: this.env.APP_ENV, releaseId: RELEASE_ID, manifestSha256: this.env.ACCEPTED_INPUT_MANIFEST_SHA256,
+        enabled: true, authorizedTokens: parsePositiveInteger(this.env.AUTHORIZED_PROVIDER_TOKENS, "CUSTOM_EMBEDDING_COST_STOP"),
+        requestsPerMinute: parsePositiveInteger(this.env.OPENAI_REQUESTS_PER_MINUTE, "CUSTOM_EMBEDDING_RATE_INVALID"),
+        tokensPerMinute: parsePositiveInteger(this.env.OPENAI_TOKENS_PER_MINUTE, "CUSTOM_EMBEDDING_RATE_INVALID"),
+      }, storage: this.ctx.storage, bucket: this.env.ARTIFACTS,
+      provider: request => requestGatewayDocumentEmbeddings(this.env.AI.gateway(this.env.AI_GATEWAY_ID), this.env.AI_GATEWAY_ID, request) });
+  }
+
   async inspectEmbeddings(inputSha256s: string[]) {
     return new DocumentEmbeddingLedger(this.ctx.storage).inspect(inputSha256s);
   }

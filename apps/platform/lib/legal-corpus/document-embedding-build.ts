@@ -87,7 +87,22 @@ type RequestRecord = {
   id: string; ownerId: string; inputs: Array<{ inputSha256: string; inputTokens: number }>;
   tokens: number; state: "pending" | "complete" | "rejected";
   artifacts?: DocumentEmbeddingPointer[];
+  reconciliationSha256?: string;
 };
+
+type ReconciliationRecord = {
+  decisionSha256: string; originalUnknownReservedTokens: number;
+  supplementalAuthorizedTokens: number; state: "pending" | "complete";
+};
+
+function reconciliationStore(storage: EmbeddingStore, decisionSha256: string): EmbeddingStore {
+  const prefix = `embedding:recovery:${decisionSha256}:`;
+  const values = (store: EmbeddingValues): EmbeddingValues => ({
+    get: <T>(key: string) => store.get<T>(prefix + key),
+    put: entries => store.put(Object.fromEntries(Object.entries(entries).map(([key, value]) => [prefix + key, value]))),
+  });
+  return { ...values(storage), transaction: callback => storage.transaction(store => callback(values(store))) };
+}
 
 /** One transactional ledger per release: content hashes fence concurrent Queue deliveries. */
 export class DocumentEmbeddingLedger {
@@ -152,10 +167,29 @@ export class DocumentEmbeddingLedger {
     }
   }
 
-  async status() {
+  async status(): Promise<{ reservedTokens: number; creditStopped: boolean; retryAfter: number | null;
+    reconciliation?: ReconciliationRecord & { supplementalReservedTokens: number; supplementalCreditStopped: boolean } }> {
+    const record = await this.storage.get<ReconciliationRecord>("embedding:reconciliation");
+    const supplemental = record ? new DocumentEmbeddingLedger(reconciliationStore(this.storage, record.decisionSha256)) : null;
+    const supplementalStatus = await supplemental?.status();
     return { reservedTokens: await this.storage.get<number>("embedding:reservedTokens") ?? 0,
       creditStopped: await this.storage.get<boolean>("embedding:creditStopped") ?? false,
-      retryAfter: await this.storage.get<number>("embedding:retryAfter") ?? null };
+      retryAfter: await this.storage.get<number>("embedding:retryAfter") ?? null,
+      ...(record && supplementalStatus ? { reconciliation: { ...record,
+        supplementalReservedTokens: supplementalStatus.reservedTokens,
+        supplementalCreditStopped: supplementalStatus.creditStopped } } : {}) };
+  }
+
+  async reconcileValidated(requestId: string, decisionSha256: string, artifacts: DocumentEmbeddingPointer[]) {
+    await this.storage.transaction(async store => {
+      const record = await store.get<ReconciliationRecord>("embedding:reconciliation");
+      const prior = await store.get<RequestRecord>(`embedding:request:${requestId}`);
+      if (record?.decisionSha256 !== decisionSha256 || !prior || prior.state === "rejected"
+        || (prior.reconciliationSha256 && prior.reconciliationSha256 !== decisionSha256)
+        || artifacts.length !== prior.inputs.length || new Set(artifacts.map(item => item.inputSha256)).size !== artifacts.length
+        || prior.inputs.some(item => !artifacts.some(pointer => pointer.inputSha256 === item.inputSha256))) fail("RECONCILIATION_CONFLICT");
+      await store.put({ [`embedding:request:${requestId}`]: { ...prior, artifacts, reconciliationSha256: decisionSha256 } });
+    });
   }
 
   async inspect(inputSha256s: readonly string[]) {
@@ -332,4 +366,92 @@ export async function ensureDocumentEmbeddings(input: {
   }
   return { artifacts: input.inputs.map(item => pointers.get(item.inputSha256)!),
     providerInputTokens: await input.ledger.ownerTokens(input.ownerId), reusedEmbeddingCount };
+}
+
+const reconciliationDecisionSchema = z.object({
+  schemaVersion: z.literal(1), releaseId: z.string(), acceptedManifestSha256: digestSchema,
+  originalUnknownReservedTokens: z.number().int().positive(), supplementalTokens: z.number().int().positive().max(250000),
+  requests: z.array(z.object({ requestId: z.string().uuid(), ownerId: z.string().min(1).max(300),
+    originalReservedTokens: z.number().int().positive(), inputs: z.array(z.object({
+      inputSha256: digestSchema, inputTokens: z.number().int().positive().max(8192),
+      existingArtifact: z.object({ key: z.string(), sha256: digestSchema, sizeBytes: z.literal(6144) }).nullable(),
+    })).min(1).max(64),
+  })).min(1).max(64),
+});
+
+/** A hash-bound operator decision recovers saved bytes without releasing unknown reservations. */
+export async function reconcileDocumentEmbeddings(input: {
+  decisionJson: string; authorizedDecisionSha256: string;
+  configuration: DocumentEmbeddingConfiguration; storage: EmbeddingStore; bucket: R2Bucket;
+  supplementalInputs: DocumentEmbeddingInput[];
+  provider: (request: DocumentEmbeddingRequest) => Promise<Response>;
+}) {
+  if (!input.configuration.enabled || !digestSchema.safeParse(input.authorizedDecisionSha256).success
+    || new TextEncoder().encode(input.decisionJson).length > 64000
+    || await customCurrentSha256(input.decisionJson) !== input.authorizedDecisionSha256) fail("RECONCILIATION_UNAUTHORIZED");
+  const decision = reconciliationDecisionSchema.parse(JSON.parse(input.decisionJson));
+  const decisionSha256 = input.authorizedDecisionSha256;
+  const allInputs = decision.requests.flatMap(request => request.inputs);
+  const missing = allInputs.filter(item => !item.existingArtifact);
+  if (decision.releaseId !== input.configuration.releaseId
+    || decision.acceptedManifestSha256 !== input.configuration.manifestSha256
+    || allInputs.length > 64 || new Set(allInputs.map(item => item.inputSha256)).size !== allInputs.length
+    || new Set(decision.requests.map(request => request.requestId)).size !== decision.requests.length
+    || decision.requests.reduce((sum, request) => sum + request.originalReservedTokens, 0) !== decision.originalUnknownReservedTokens
+    || missing.reduce((sum, item) => sum + item.inputTokens, 0) !== decision.supplementalTokens
+    || input.supplementalInputs.length !== missing.length
+    || new Set(input.supplementalInputs.map(item => item.inputSha256)).size !== missing.length) fail("RECONCILIATION_INVALID");
+  for (const item of input.supplementalInputs) {
+    if (!missing.some(expected => expected.inputSha256 === item.inputSha256 && expected.inputTokens === item.inputTokens)
+      || item.chunk.embeddingTokenCount !== item.inputTokens
+      || await customCurrentSha256(serializeCustomEmbeddingInput(item.chunk)) !== item.inputSha256) fail("RECONCILIATION_INVALID");
+  }
+  const ledger = new DocumentEmbeddingLedger(input.storage);
+  const inspected = await ledger.inspect(allInputs.map(item => item.inputSha256));
+  for (const expected of decision.requests) {
+    const actual = inspected.requests.find(request => request.id === expected.requestId);
+    if (!actual || actual.ownerId !== expected.ownerId || actual.tokens !== expected.originalReservedTokens
+      || actual.inputs.length !== expected.inputs.length
+      || actual.tokens !== expected.inputs.reduce((sum, item) => sum + item.inputTokens, 0)
+      || actual.inputs.some(item => !expected.inputs.some(value => value.inputSha256 === item.inputSha256 && value.inputTokens === item.inputTokens))
+      || expected.inputs.some(item => !inspected.inputs.some(value => value.inputSha256 === item.inputSha256 && value.requestId === expected.requestId))
+      || (actual.reconciliationSha256 !== decisionSha256 && (actual.state !== "pending" || actual.artifacts))) fail("RECONCILIATION_CONFLICT");
+  }
+  await input.storage.transaction(async store => {
+    const prior = await store.get<ReconciliationRecord>("embedding:reconciliation");
+    if (prior && prior.decisionSha256 !== decisionSha256) fail("RECONCILIATION_CONFLICT");
+    if (!prior) await store.put({ "embedding:reconciliation": {
+      decisionSha256, originalUnknownReservedTokens: decision.originalUnknownReservedTokens,
+      supplementalAuthorizedTokens: decision.supplementalTokens, state: "pending",
+    } satisfies ReconciliationRecord, "embedding:reconciliation:decision": input.decisionJson });
+  });
+  // Publish only decision-bound saved artifacts, while original input fences still block normal dispatch.
+  await mapCustomArtifactOperations(allInputs.filter(item => item.existingArtifact), async item => {
+    const artifact = item.existingArtifact!;
+    await importDocumentEmbedding(input.bucket, input.bucket, { inputSha256: item.inputSha256,
+      artifactKey: artifact.key, vectorSha256: artifact.sha256, sizeBytes: artifact.sizeBytes });
+    const pointer = await readDocumentEmbedding(input.bucket, item.inputSha256);
+    if (pointer?.artifactKey !== artifact.key || pointer.vectorSha256 !== artifact.sha256) fail("RECONCILIATION_CONFLICT");
+  });
+  const supplementalLedger = new DocumentEmbeddingLedger(reconciliationStore(input.storage, decisionSha256));
+  await ensureDocumentEmbeddings({ configuration: { ...input.configuration, authorizedTokens: decision.supplementalTokens },
+    ledger: supplementalLedger, bucket: input.bucket, inputs: input.supplementalInputs,
+    ownerId: `reconciliation:${decisionSha256}`, provider: input.provider });
+  const artifacts = await mapCustomArtifactOperations(allInputs, async item => {
+    const pointer = await readDocumentEmbedding(input.bucket, item.inputSha256);
+    if (!pointer) fail("ARTIFACT_MISSING");
+    return pointer;
+  });
+  // All vectors and decision provenance exist before any original request is allowed to complete.
+  for (const expected of decision.requests) {
+    await ledger.reconcileValidated(expected.requestId, decisionSha256,
+      artifacts.filter(pointer => expected.inputs.some(item => item.inputSha256 === pointer.inputSha256)));
+    await ledger.complete(inspected.requests.find(request => request.id === expected.requestId)!);
+  }
+  await input.storage.transaction(async store => {
+    const prior = await store.get<ReconciliationRecord>("embedding:reconciliation");
+    if (prior?.decisionSha256 !== decisionSha256) fail("RECONCILIATION_CONFLICT");
+    await store.put({ "embedding:reconciliation": { ...prior, state: "complete" } });
+  });
+  return ledger.status();
 }

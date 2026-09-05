@@ -4,6 +4,8 @@ import { DocumentEmbeddingLedger, ensureDocumentEmbeddings, type EmbeddingStore,
 import { buildRetrievalChunks, serializeCustomEmbeddingInput } from "../lib/legal-corpus/custom-hybrid-index";
 import { customCurrentSha256 } from "../lib/legal-corpus/custom-current-build";
 import { requestGatewayDocumentEmbeddings } from "../lib/legal-corpus/document-embedding-build";
+import { reconcileDocumentEmbeddings } from "../lib/legal-corpus/document-embedding-build";
+import { createCustomEmbeddingArtifact, putImmutableCustomArtifact } from "../lib/legal-corpus/custom-hybrid-index";
 
 class MemoryStore implements EmbeddingStore {
   values = new Map<string, unknown>();
@@ -358,4 +360,113 @@ test("a known rate-limit rejection can retry once the durable cooldown ends", as
   const result = await run();
   assert.equal(result.providerInputTokens, item.inputTokens);
   assert.equal(requests, 2);
+});
+
+async function interruptedEmbeddingFixture() {
+  const inputs = [await input("Saved response vector."), await input("Missing response vector.")];
+  const storage = new MemoryStore(), bucket = new MemoryR2();
+  const ledger = new DocumentEmbeddingLedger(storage);
+  const request = await ledger.begin(configuration, inputs, "page-recovery", 1000);
+  const artifact = await createCustomEmbeddingArtifact(inputs[0]!.chunk,
+    Array.from({ length: 1536 }, (_, index) => index === 0 ? 1 : 0));
+  await putImmutableCustomArtifact(bucket.binding(), artifact.key, artifact.bytes,
+    { contentType: "application/octet-stream" });
+  const decisionJson = JSON.stringify({ schemaVersion: 1, releaseId: configuration.releaseId,
+    acceptedManifestSha256: configuration.manifestSha256, originalUnknownReservedTokens: request.tokens,
+    supplementalTokens: inputs[1]!.inputTokens, requests: [{ requestId: request.id, ownerId: request.ownerId,
+      originalReservedTokens: request.tokens, inputs: inputs.map((item, index) => ({
+        inputSha256: item.inputSha256, inputTokens: item.inputTokens,
+        existingArtifact: index === 0 ? { key: artifact.key, sha256: artifact.vectorSha256, sizeBytes: 6144 } : null,
+      })) }] });
+  const authorizedDecisionSha256 = await customCurrentSha256(decisionJson);
+  return { inputs, storage, bucket, ledger, request, decisionJson, authorizedDecisionSha256 };
+}
+
+test("authorized reconciliation preserves original fences and bills only missing vectors to a separate reservation", async () => {
+  const fixture = await interruptedEmbeddingFixture();
+  const { inputs, ledger, request } = fixture;
+  let calls = 0;
+  const run = () => reconcileDocumentEmbeddings({ ...fixture, bucket: fixture.bucket.binding(), configuration,
+    supplementalInputs: [inputs[1]!], provider: async body => {
+      calls++;
+      assert.deepEqual(body.input, [serializeCustomEmbeddingInput(inputs[1]!.chunk)]);
+      return Response.json({ model: "text-embedding-3-large", data: [{ index: 0,
+        embedding: Array.from({ length: 1536 }, (_, index) => index === 1 ? 1 : 0) }],
+      usage: { prompt_tokens: inputs[1]!.inputTokens, total_tokens: inputs[1]!.inputTokens } });
+    } });
+  await run();
+  await run();
+  assert.equal(calls, 1);
+  const inspected = await ledger.inspect(inputs.map(item => item.inputSha256));
+  assert.ok(inspected.inputs.every(item => item.requestId === request.id));
+  assert.equal(inspected.requests[0]?.state, "complete");
+  assert.equal(await ledger.ownerTokens(request.ownerId), request.tokens);
+  const accounting = await ledger.status();
+  assert.equal(accounting.reservedTokens, request.tokens);
+  assert.equal(accounting.reconciliation?.supplementalReservedTokens, inputs[1]!.inputTokens);
+  assert.equal(accounting.reconciliation?.originalUnknownReservedTokens, request.tokens);
+  assert.equal(accounting.reconciliation?.state, "complete");
+  const ordinary = await ensureDocumentEmbeddings({ configuration, ledger, bucket: fixture.bucket.binding(),
+    inputs, ownerId: request.ownerId, provider: async () => { throw Error("UNEXPECTED_PROVIDER_RETRY"); } });
+  assert.equal(ordinary.artifacts.length, 2);
+  assert.equal(ordinary.providerInputTokens, request.tokens);
+});
+
+test("an unknown supplemental outcome stays fenced across reconciliation retries", async () => {
+  const fixture = await interruptedEmbeddingFixture();
+  let calls = 0;
+  const run = () => reconcileDocumentEmbeddings({ ...fixture, bucket: fixture.bucket.binding(), configuration,
+    supplementalInputs: [fixture.inputs[1]!], provider: async () => { calls++; throw Error("NETWORK_OUTCOME_UNKNOWN"); } });
+  await assert.rejects(run, /NETWORK_OUTCOME_UNKNOWN/);
+  await assert.rejects(run, /OUTCOME_UNRESOLVED/);
+  assert.equal(calls, 1);
+  const inspected = await fixture.ledger.inspect(fixture.inputs.map(item => item.inputSha256));
+  assert.equal(inspected.requests[0]?.state, "pending");
+  assert.ok(inspected.inputs.every(item => item.requestId === fixture.request.id));
+  assert.equal(await fixture.ledger.ownerTokens(fixture.request.ownerId), 0);
+  assert.equal(inspected.accounting.reservedTokens, fixture.request.tokens);
+  assert.equal(inspected.accounting.reconciliation?.supplementalReservedTokens, fixture.inputs[1]!.inputTokens);
+});
+
+test("reconciliation rejects altered authority and mismatched original inputs before provider dispatch", async () => {
+  const fixture = await interruptedEmbeddingFixture();
+  const before = await fixture.ledger.inspect(fixture.inputs.map(item => item.inputSha256));
+  let calls = 0;
+  const provider = async () => { calls++; throw Error("UNEXPECTED_PROVIDER"); };
+  await assert.rejects(() => reconcileDocumentEmbeddings({ ...fixture, bucket: fixture.bucket.binding(), configuration,
+    supplementalInputs: [fixture.inputs[1]!], decisionJson: fixture.decisionJson + " ", provider }), /RECONCILIATION_UNAUTHORIZED/);
+  const altered = JSON.parse(fixture.decisionJson);
+  altered.requests[0].ownerId = "other-page";
+  const decisionJson = JSON.stringify(altered);
+  const authorizedDecisionSha256 = await customCurrentSha256(decisionJson);
+  await assert.rejects(() => reconcileDocumentEmbeddings({ ...fixture, bucket: fixture.bucket.binding(), configuration,
+    supplementalInputs: [fixture.inputs[1]!], decisionJson, authorizedDecisionSha256,
+    provider }), /RECONCILIATION_CONFLICT/);
+  assert.equal(calls, 0);
+  assert.deepEqual(await fixture.ledger.inspect(fixture.inputs.map(item => item.inputSha256)), before);
+});
+
+test("reconciliation resumes after accounting interruption without another provider charge", async () => {
+  const fixture = await interruptedEmbeddingFixture();
+  let calls = 0, failOnce = true;
+  const ordinaryPut = fixture.storage.put.bind(fixture.storage);
+  fixture.storage.put = async values => {
+    if (failOnce && Object.keys(values).some(key => key === `embedding:owner:${fixture.request.ownerId}`)) {
+      failOnce = false;
+      throw Error("ACCOUNTING_INTERRUPTED");
+    }
+    return ordinaryPut(values);
+  };
+  const run = () => reconcileDocumentEmbeddings({ ...fixture, bucket: fixture.bucket.binding(), configuration,
+    supplementalInputs: [fixture.inputs[1]!], provider: async () => {
+      calls++;
+      return Response.json({ model: "text-embedding-3-large", data: [{ index: 0,
+        embedding: Array.from({ length: 1536 }, (_, index) => index === 1 ? 1 : 0) }],
+      usage: { prompt_tokens: fixture.inputs[1]!.inputTokens, total_tokens: fixture.inputs[1]!.inputTokens } });
+    } });
+  await assert.rejects(run, /ACCOUNTING_INTERRUPTED/);
+  await run();
+  assert.equal(calls, 1);
+  assert.equal(await fixture.ledger.ownerTokens(fixture.request.ownerId), fixture.request.tokens);
+  assert.equal((await fixture.ledger.status()).reconciliation?.state, "complete");
 });
