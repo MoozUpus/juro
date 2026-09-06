@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   renderJuroAuthEmail,
+  sendJuroAuthEmail,
   type AuthEmailLocale,
   type AuthEmailPurpose,
 } from "../lib/auth/transactional-email";
@@ -118,5 +119,70 @@ test("English and Uzbek auth emails do not leak Cyrillic copy", () => {
       assert.doesNotMatch(message.subject, /[А-Яа-яЁё]/u);
       assert.doesNotMatch(message.text, /[А-Яа-яЁё]/u);
     }
+  }
+});
+
+test("auth email retries transient provider failures without duplicating the message", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: RequestInit[] = [];
+  try {
+    globalThis.fetch = async (_input, init) => {
+      requests.push(init ?? {});
+      return requests.length === 1
+        ? new Response("temporary failure", { status: 503 })
+        : new Response(JSON.stringify({ id: "provider-message-id" }), { status: 200 });
+    };
+    const result = await sendJuroAuthEmail({
+      apiKey: "test-api-key",
+      from: "JURO <no-reply@juro.uz>",
+      to: "recipient@example.test",
+      idempotencyKey: "auth-email-contract-test",
+      message: renderJuroAuthEmail({
+        locale: "en",
+        purpose: "registration",
+        code: "482731",
+      }),
+    });
+
+    assert.deepEqual(result, { ok: true, attempts: 2 });
+    assert.equal(requests.length, 2);
+    assert.equal(
+      (requests[0]?.headers as Record<string, string>)["idempotency-key"],
+      "auth-email-contract-test",
+    );
+    assert.equal(
+      (requests[1]?.headers as Record<string, string>)["idempotency-key"],
+      "auth-email-contract-test",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("auth email exposes only safe provider metadata when delivery is rejected", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response("unverified sender", { status: 403 });
+    const result = await sendJuroAuthEmail({
+      apiKey: "test-api-key",
+      from: "JURO <no-reply@juro.uz>",
+      to: "recipient@example.test",
+      idempotencyKey: "auth-email-rejection-contract-test",
+      message: renderJuroAuthEmail({
+        locale: "en",
+        purpose: "registration",
+        code: "482731",
+      }),
+    });
+
+    assert.deepEqual(result, {
+      ok: false,
+      attempts: 1,
+      failure: "provider_rejected",
+      providerStatus: 403,
+    });
+    assert.doesNotMatch(JSON.stringify(result), /recipient|test-api-key|unverified sender/u);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });

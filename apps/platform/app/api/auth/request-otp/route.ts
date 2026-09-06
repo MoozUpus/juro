@@ -382,7 +382,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
     idempotencyKey: `juro_otp_${id}`,
     message,
   });
-  if (!sent) {
+  if (!sent.ok) {
+    console.error(JSON.stringify({
+      event: "auth_otp_email_delivery_failed",
+      provider: "resend",
+      purpose,
+      attempts: sent.attempts,
+      failure: sent.failure,
+      providerStatus: sent.providerStatus,
+    }));
     await db.prepare("UPDATE auth_otp_challenges SET invalidated_at = ? WHERE id = ?").bind(new Date().toISOString(), id).run();
     return json({ code: "EMAIL_PROVIDER_ERROR", error: localized(locale, {
       ru: "Не удалось отправить письмо. Попробуйте позже.",
