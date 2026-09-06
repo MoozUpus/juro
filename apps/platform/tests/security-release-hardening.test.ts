@@ -57,7 +57,7 @@ test("profile, development authentication, and production configuration preserve
   assert.match(adminConfig, /"keep_vars": false/u);
   assert.match(
     platformConfig,
-    /"migrations_pattern": "\.\/drizzle\/\{0121,012\[4-9\],013\[0-9\],014\[0-9\],015\[0-3\]\}_\*\.sql"/u,
+    /"migrations_pattern": "\.\/drizzle\/\{0121,012\[4-9\],01\[3-9\]\[0-9\],0\[2-9\]\[0-9\]\[0-9\],\[1-9\]\[0-9\]\[0-9\]\[0-9\]\}_\*\.sql"/u,
   );
 });
 

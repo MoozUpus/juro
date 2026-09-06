@@ -18,7 +18,7 @@ export const POST = withApiErrors(async function POST(request: Request, context:
   const workspace = await workspaceForUser(user);
   const { recordingId } = await context.params;
   const recording = await voiceRecordingForUser(requireD1(), recordingId, workspace.id, user.id);
-  const locale = voiceLocale(request, recording?.locale === "uz" ? "uz" : "ru");
+  const locale = voiceLocale(request, recording?.locale ?? "ru");
   if (!recording) return voiceProblem("VOICE_RECORDING_NOT_FOUND", 404, locale);
   try {
     await assertOperationalFeatureEnabled({

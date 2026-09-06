@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { DEMO_PAYMENT_ACTIONS, DEMO_PAYMENT_FLOW_TYPES } from "./demo-payments";
 
+export const billingLocaleSchema = z.enum(["ru", "uz", "en"]);
+
 export const checkoutOrderParamsSchema = z.object({ orderId: z.uuid() }).strict();
 export const checkoutWorkspaceQuerySchema = z.object({
   workspaceId: z.string().regex(/^[A-Za-z0-9_-]{3,128}$/).optional(),
@@ -9,19 +11,19 @@ export const checkoutWorkspaceQuerySchema = z.object({
 
 export const billingPlanSelectionSchema = z.object({
   planCode: z.enum(["individual", "business", "legal_team"]),
-  locale: z.enum(["ru", "uz"]),
+  locale: billingLocaleSchema,
 }).strict();
 
 export const checkoutCreateSchema = z.object({
   requestId: z.uuid(),
   planVersionId: z.uuid(),
-  locale: z.enum(["ru", "uz"]),
+  locale: billingLocaleSchema,
   workspaceId: z.string().regex(/^[A-Za-z0-9_-]{3,128}$/).optional(),
 }).strict();
 
 export const checkoutConfirmSchema = z.object({
   requestId: z.uuid(),
-  locale: z.enum(["ru", "uz"]),
+  locale: billingLocaleSchema,
   accountType: z.enum(["individual", "entrepreneur", "lawyer", "business"]),
   workspaceId: z.string().regex(/^[A-Za-z0-9_-]{3,128}$/).optional(),
   renewalMode: z.enum(["ONE_TIME", "AUTO_RENEW"]),
@@ -30,7 +32,7 @@ export const checkoutConfirmSchema = z.object({
 
 export const sandboxAuthorizeSchema = z.object({
   requestId: z.uuid(),
-  locale: z.enum(["ru", "uz"]),
+  locale: billingLocaleSchema,
   outcome: z.enum(["FUNDED", "DECLINED"]),
   workspaceId: z.string().regex(/^[A-Za-z0-9_-]{3,128}$/).optional(),
 }).strict();
@@ -56,7 +58,7 @@ export const subscriptionEntitlementsConfigSchema = z.object({
 
 const demoBaseSchema = z.object({
   requestId: z.uuid(),
-  locale: z.enum(["ru", "uz"]),
+  locale: billingLocaleSchema,
   workspaceId: z.string().regex(/^[A-Za-z0-9_-]{3,128}$/).optional(),
 });
 

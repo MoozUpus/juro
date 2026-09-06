@@ -4,14 +4,20 @@
  * calendar date, not a UTC timestamp, so it is parsed at noon UTC to preserve
  * the intended day before it is displayed in Asia/Tashkent.
  */
-export type PlatformDateLocale = "ru" | "uz";
+export type PlatformDateLocale = "ru" | "uz" | "en";
 
 export const PLATFORM_TIME_ZONE = "Asia/Tashkent";
 
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export function platformIntlLocale(locale: PlatformDateLocale): "ru-RU" | "uz-Latn-UZ" {
-  return locale === "uz" ? "uz-Latn-UZ" : "ru-RU";
+export function platformIntlLocale(
+  locale: PlatformDateLocale,
+): "ru-RU" | "uz-Latn-UZ" | "en-GB" {
+  return locale === "uz"
+    ? "uz-Latn-UZ"
+    : locale === "en"
+      ? "en-GB"
+      : "ru-RU";
 }
 
 export function platformDate(value: Date | string): Date | null {

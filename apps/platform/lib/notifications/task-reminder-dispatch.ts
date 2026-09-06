@@ -22,7 +22,7 @@ type ReminderRow = {
   workspaceId: string;
   userId: string;
   taskTitle: string;
-  locale: "ru" | "uz";
+  locale: "ru" | "uz" | "en";
   reminderAt: string;
   reminderStatus: string;
   reminderUpdatedAt: string;
@@ -97,7 +97,15 @@ function parseSubjectId(subjectId: string): {
   return { reminderId, version };
 }
 
-function copyFor(reminder: ReminderRow): { title: string; body: string } {
+export function taskReminderNotificationCopy(
+  reminder: Pick<ReminderRow, "locale" | "taskTitle">,
+): { title: string; body: string } {
+  if (reminder.locale === "en") {
+    return {
+      title: "Task deadline",
+      body: `Task deadline approaching: ${reminder.taskTitle}.`,
+    };
+  }
   if (reminder.locale === "uz") {
     return {
       title: "Vazifa muddati",
@@ -190,7 +198,7 @@ export async function executeTaskReminderNotification(
       return { notificationId: null, outcome: "stale" };
     }
 
-    const copy = copyFor(reminder);
+    const copy = taskReminderNotificationCopy(reminder);
     await env.DB.batch([
       env.DB.prepare(
         `INSERT OR IGNORE INTO notifications (

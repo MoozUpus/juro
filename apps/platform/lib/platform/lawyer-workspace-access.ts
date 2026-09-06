@@ -1,3 +1,5 @@
+import type { PlatformLocale } from "./routing";
+
 export type LawyerWorkspaceParticipant = {
   requestId: string;
   workspaceId: string;
@@ -5,6 +7,8 @@ export type LawyerWorkspaceParticipant = {
   clientUserId: string;
   lawyerProfileId: string;
   lawyerUserId: string;
+  clientLocale: PlatformLocale;
+  lawyerLocale: PlatformLocale;
   role: "client" | "lawyer";
 };
 
@@ -30,9 +34,13 @@ export async function activeLawyerWorkspaceParticipant(
   const row = await db.prepare(
     `SELECT r.id AS requestId,r.workspace_id AS workspaceId,r.case_id AS caseId,
       r.requester_user_id AS clientUserId,p.id AS lawyerProfileId,p.user_id AS lawyerUserId,
+      CASE client.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS clientLocale,
+      CASE lawyer.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS lawyerLocale,
       p.status AS profileStatus,p.marketplace_status AS marketplaceStatus,g.id AS grantId
      FROM lawyer_requests r
      JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id
+     JOIN user_profiles client ON client.id=r.requester_user_id
+     JOIN user_profiles lawyer ON lawyer.id=p.user_id
      JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.case_id=r.case_id
        AND g.lawyer_user_id=p.user_id AND g.revoked_at IS NULL
        AND (g.expires_at IS NULL OR g.expires_at>?)
@@ -51,6 +59,8 @@ export async function activeLawyerWorkspaceParticipant(
     clientUserId: row.clientUserId,
     lawyerProfileId: row.lawyerProfileId,
     lawyerUserId: row.lawyerUserId,
+    clientLocale: row.clientLocale,
+    lawyerLocale: row.lawyerLocale,
     role,
   } : null;
 }

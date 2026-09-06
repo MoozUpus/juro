@@ -3,6 +3,7 @@ import { userIdByEmail } from "../auth/identity-protection";
 import { runtimeIdentityProtection } from "../auth/identity-runtime";
 import {
   isPersonalAccountType,
+  isLocale,
   type AccountType,
   type PlatformLocale,
 } from "./routing";
@@ -45,7 +46,7 @@ export async function workspaceProfile(email: string): Promise<WorkspaceProfile 
       }>();
     if (!row) return null;
     return {
-      locale: row.locale === "uz" ? "uz" : "ru",
+      locale: isLocale(row.locale) ? row.locale : "ru",
       accountType: row.workspaceType === "business"
         ? "business"
         : isPersonalAccountType(row.accountPersona)

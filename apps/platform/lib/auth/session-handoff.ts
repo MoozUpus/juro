@@ -4,6 +4,7 @@ import {
   guardedSessionInsertStatements,
   prepareLocalSessionCreation,
 } from "./session-management";
+import { isLocale } from "../platform/routing";
 
 const HANDOFF_TTL_MS = 90 * 1_000;
 const AUTH_HOSTS = new Set(["app.juro.uz", "lawyer.juro.uz"]);
@@ -60,6 +61,10 @@ export async function issueSessionHandoff(
   const tokenHash = await sha256(ticket);
   const id = crypto.randomUUID();
   const redirectPath = `${target.pathname}${target.search}`;
+  const destinationLocaleCandidate = target.pathname.split("/").filter(Boolean)[0] ?? "";
+  const destinationLocale = isLocale(destinationLocaleCandidate)
+    ? destinationLocaleCandidate
+    : "ru";
   const result = await db.prepare(
     `INSERT INTO auth_session_handoffs (
        id,token_hash,user_id,source_session_id,source_host,destination_host,
@@ -92,7 +97,7 @@ export async function issueSessionHandoff(
     throw new Error("SESSION_HANDOFF_SOURCE_INVALID");
   }
   return {
-    action: `https://${target.hostname}/api/auth/session-handoff`,
+    action: `https://${target.hostname}/api/auth/session-handoff?lang=${destinationLocale}`,
     ticket,
     expiresAt,
   };

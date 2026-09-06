@@ -1,4 +1,5 @@
 import { runtimeEnv } from "../document-builder/storage/runtime";
+import type { PlatformLocale } from "./routing";
 
 const supportCategories = new Set([
   "technical", "ai_error", "wrong_norm", "document", "ocr", "tariff",
@@ -13,7 +14,7 @@ const supportSeverities = new Set(["low", "normal", "high", "critical"]);
 export function trackSupportTicketCreated(input: {
   category: string;
   severity: string;
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
 }): void {
   if (!supportCategories.has(input.category) || !supportSeverities.has(input.severity)) return;
   try {

@@ -1,4 +1,5 @@
 import { requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
+import { authLocaleFromRequest } from "../../../../../../../lib/auth/request-locale";
 import { getPrivateObject } from "../../../../../../../lib/document-builder/storage/files";
 import { requireD1 } from "../../../../../../../lib/document-builder/storage/runtime";
 import { comparisonForUser } from "../../../../../../../lib/document-comparison/storage";
@@ -9,21 +10,32 @@ import {
   type ComparisonFileRecord,
 } from "../../../../../../../lib/document-comparison/scan-evidence";
 import { ComparisonProcessingError } from "../../../../../../../lib/document-comparison/types";
+import {
+  comparisonProcessingErrorMessage,
+  comparisonRouteErrorMessage,
+} from "../../../../../../../lib/document-comparison/localization";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
 
 export const GET = withApiErrors(async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ comparisonId: string; version: string }> },
 ) {
+  const locale = authLocaleFromRequest(request);
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const { comparisonId, version } = await context.params;
   if (version !== "one" && version !== "two") {
-    return Response.json({ error: "Версия не найдена." }, { status: 404 });
+    return Response.json({
+      error: comparisonRouteErrorMessage("COMPARISON_VERSION_NOT_FOUND", locale),
+    }, { status: 404 });
   }
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
-  if (!comparison) return Response.json({ error: "Сравнение не найдено." }, { status: 404 });
+  if (!comparison) {
+    return Response.json({
+      error: comparisonRouteErrorMessage("COMPARISON_NOT_FOUND", locale),
+    }, { status: 404 });
+  }
   const fileId = version === "one" ? comparison.versionOneFileId : comparison.versionTwoFileId;
   let file: ComparisonFileRecord;
   try {
@@ -31,7 +43,10 @@ export const GET = withApiErrors(async function GET(
     await assertStoredComparisonFileIsClean(file);
   } catch (error) {
     if (error instanceof ComparisonProcessingError) {
-      return Response.json({ code: error.code, error: error.message }, {
+      return Response.json({
+        code: error.code,
+        error: comparisonProcessingErrorMessage(error.code, locale),
+      }, {
         status: 422,
         headers: { "cache-control": "private, no-store" },
       });
@@ -39,12 +54,19 @@ export const GET = withApiErrors(async function GET(
     throw error;
   }
   const object = await getPrivateObject(file.r2Key);
-  if (!object) return Response.json({ error: "Файл недоступен." }, { status: 404 });
+  if (!object) {
+    return Response.json({
+      error: comparisonRouteErrorMessage("COMPARISON_FILE_UNAVAILABLE", locale),
+    }, { status: 404 });
+  }
   try {
     assertComparisonFileScanEvidence(file, object);
   } catch (error) {
     if (error instanceof ComparisonProcessingError) {
-      return Response.json({ code: error.code, error: error.message }, {
+      return Response.json({
+        code: error.code,
+        error: comparisonProcessingErrorMessage(error.code, locale),
+      }, {
         status: 422,
         headers: { "cache-control": "private, no-store" },
       });

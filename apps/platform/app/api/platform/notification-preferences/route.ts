@@ -1,4 +1,5 @@
 import { parseJsonRequest } from "../../../../lib/auth/input";
+import { localizedRequestFormatError } from "../../../../lib/auth/request-locale";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
@@ -32,7 +33,12 @@ export const PUT = withApiErrors(async function PUT(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const parsed = await parseJsonRequest(request, notificationPreferencesSchema, 2_048);
-  if (!parsed.ok) return response({ code: "INVALID_INPUT", error: "Некорректные настройки уведомлений." }, 400);
+  if (!parsed.ok) {
+    return response({
+      code: "INVALID_INPUT",
+      error: localizedRequestFormatError(request),
+    }, 400);
+  }
   const now = isoNow(); const db = requireD1();
   const statements: D1PreparedStatement[] = [];
   for (const type of optionalEmailPreferenceKeys) {

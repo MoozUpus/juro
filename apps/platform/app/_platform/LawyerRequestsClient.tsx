@@ -15,6 +15,9 @@ import { LawyerServiceProposalForm } from "./MarketplaceServiceProposalFlow";
 import { LawyerConsultationPanel } from "./LawyerConsultationPanel";
 import { LawyerDocumentRequests } from "./LawyerDocumentRequests";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { lawyerIntlLocale, lawyerText } from "../../lib/platform/lawyer-localization";
+import { lawyerOfferError } from "../../lib/platform/lawyer-offer";
+import { localizedHandoffError } from "../../lib/platform/lawyer-request";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import {
   formatLawyerRequestDate as formatRequestDate,
@@ -53,7 +56,10 @@ type AssignedRequest = {
 };
 
 export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
-  const ru = locale === "ru";
+  const text = useCallback(
+    (russian: string, uzbek: string, english: string) => lawyerText(locale, russian, uzbek, english),
+    [locale],
+  );
   const [requests, setRequests] = useState<AssignedRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState("");
@@ -76,11 +82,10 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
     });
     const body = (await response.json()) as {
       requests?: AssignedRequest[];
-      error?: string;
     };
-    if (!response.ok) throw new Error(body.error || "Ошибка");
+    if (!response.ok) throw new Error(text("Не удалось загрузить заявки.", "So‘rovlarni yuklab bo‘lmadi.", "We could not load your requests."));
     setRequests(body.requests || []);
-  }, []);
+  }, [text]);
 
   useEffect(() => {
     void load()
@@ -103,16 +108,12 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
           body: JSON.stringify({ decision, locale }),
         },
       );
-      const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error || "Ошибка");
+      const body = (await response.json()) as { code?: string };
+      if (!response.ok) throw new Error(localizedHandoffError(locale, body.code || "INVALID_INPUT"));
       setMessage(
         decision === "clear"
-          ? ru
-            ? "Проверка завершена: теперь владелец дела сам решает, предоставлять ли доступ."
-            : "Tekshiruv tugallandi: endi ish egasi ruxsat berishni mustaqil hal qiladi."
-          : ru
-            ? "Конфликт отмечен. Материалы дела не будут раскрыты."
-            : "Manfaatlar to‘qnashuvi belgilandi. Ish materiallari oshkor qilinmaydi.",
+          ? text("Проверка завершена: теперь владелец дела сам решает, предоставлять ли доступ.", "Tekshiruv tugallandi: endi ish egasi ruxsat berishni mustaqil hal qiladi.", "Conflict check complete. The case owner will now decide whether to grant access.")
+          : text("Конфликт отмечен. Материалы дела не будут раскрыты.", "Manfaatlar to‘qnashuvi belgilandi. Ish materiallari oshkor qilinmaydi.", "Conflict recorded. The case materials will not be disclosed."),
       );
       await load();
     } catch (value) {
@@ -130,10 +131,10 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
         `/api/platform/lawyer-requests/${encodeURIComponent(item.id)}/completion`,
         { method: "POST", headers: { "x-juro-csrf": "1" } },
       );
-      const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error || "Ошибка");
+      const body = (await response.json()) as { code?: string };
+      if (!response.ok) throw new Error(localizedHandoffError(locale, body.code || "REQUEST_UNAVAILABLE"));
       setMessage(
-        ru ? "Работа отмечена завершённой." : "Ish yakunlandi deb belgilandi.",
+        text("Работа отмечена завершённой.", "Ish yakunlandi deb belgilandi.", "The work has been marked as complete."),
       );
       await load();
     } catch (value) {
@@ -162,12 +163,10 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
           body: JSON.stringify({ ...draft, locale }),
         },
       );
-      const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error || "Ошибка");
+      const body = (await response.json()) as { code?: string };
+      if (!response.ok) throw new Error(lawyerOfferError(locale, body.code || "INVALID_INPUT"));
       setMessage(
-        ru
-          ? "Предложение сохранено и ожидает решения владельца дела."
-          : "Taklif saqlandi va ish egasining qarorini kutmoqda.",
+        text("Предложение сохранено и ожидает решения владельца дела.", "Taklif saqlandi va ish egasining qarorini kutmoqda.", "The offer has been saved and is awaiting the case owner’s decision."),
       );
       await load();
     } catch (value) {
@@ -187,12 +186,10 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
         <div>
           <small>JURO</small>
           <h1 id="lawyer-requests-heading">
-            {ru ? "Заявки по вашим делам" : "Sizga yuborilgan so‘rovlar"}
+            {text("Заявки по вашим делам", "Sizga yuborilgan so‘rovlar", "Client requests")}
           </h1>
           <p>
-            {ru
-              ? "До вашего положительного conflict check видна только анонимизированная информация. Полные материалы открываются лишь после отдельного согласия владельца дела."
-              : "Sizning ijobiy manfaatlar to‘qnashuvi tekshiruvingizgacha faqat anonimlashtirilgan ma’lumot ko‘rinadi. To‘liq materiallar faqat ish egasining alohida roziligidan keyin ochiladi."}
+            {text("До вашего положительного conflict check видна только анонимизированная информация. Полные материалы открываются лишь после отдельного согласия владельца дела.", "Sizning ijobiy manfaatlar to‘qnashuvi tekshiruvingizgacha faqat anonimlashtirilgan ma’lumot ko‘rinadi. To‘liq materiallar faqat ish egasining alohida roziligidan keyin ochiladi.", "Only anonymised information is visible until you clear the conflict-of-interest check. Full case materials become available only after the case owner gives separate consent.")}
           </p>
         </div>
       </header>
@@ -214,26 +211,24 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
           {requests.map((item) => (
             <article id={`request-${item.id}`} key={item.id}>
               <div className="lawyer-request-summary">
-                <strong>{lawyerRequestStatus(item.status, ru)}</strong>
+                <strong>{lawyerRequestStatus(item.status, locale)}</strong>
                 <time dateTime={item.createdAt}>
-                  {new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", {
+                  {new Intl.DateTimeFormat(lawyerIntlLocale(locale), {
                     dateStyle: "medium",
                     timeZone: "Asia/Tashkent",
                   }).format(new Date(item.createdAt))}
                 </time>
                 <p>{item.anonymizedSummary}</p>
                 <div className="lawyer-request-intake">
-                  <span>{serviceLabel(item.serviceCode, ru)}</span>
-                  <span>{formatLabel(item.preferredFormat, ru)}</span>
-                  {item.proposedStartsAt && <time dateTime={item.proposedStartsAt}>{formatRequestDate(item.proposedStartsAt, ru)}</time>}
+                  <span>{serviceLabel(item.serviceCode, locale)}</span>
+                  <span>{formatLabel(item.preferredFormat, locale)}</span>
+                  {item.proposedStartsAt && <time dateTime={item.proposedStartsAt}>{formatRequestDate(item.proposedStartsAt, locale)}</time>}
                 </div>
               </div>
               {item.status === "conflict_check_pending" && (
                 <div className="lawyer-conflict-actions">
                   <p>
-                    {ru
-                      ? "Нажимая «Конфликта нет», я соглашаюсь после отдельного разрешения владельца взаимно раскрыть наши номера телефона для обычного звонка. JURO звонок не записывает."
-                      : "«To‘qnashuv yo‘q» tugmasini bosib, egasining alohida ruxsatidan keyin oddiy qo‘ng‘iroq uchun telefon raqamlarimizni o‘zaro ko‘rsatishga rozilik beraman. JURO qo‘ng‘iroqni yozmaydi."}
+                    {text("Нажимая «Конфликта нет», я соглашаюсь после отдельного разрешения владельца взаимно раскрыть наши номера телефона для обычного звонка. JURO звонок не записывает.", "«To‘qnashuv yo‘q» tugmasini bosib, egasining alohida ruxsatidan keyin oddiy qo‘ng‘iroq uchun telefon raqamlarimizni o‘zaro ko‘rsatishga rozilik beraman. JURO qo‘ng‘iroqni yozmaydi.", "By selecting “No conflict”, I agree that our phone numbers may be disclosed to each other for a standard call after the case owner gives separate permission. JURO does not record the call.")}
                   </p>
                   <button
                     type="button"
@@ -245,9 +240,7 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                     ) : (
                       <ShieldCheck aria-hidden="true" />
                     )}
-                    {ru
-                      ? "Конфликта нет · согласен на контакт"
-                      : "To‘qnashuv yo‘q · aloqaga roziman"}
+                    {text("Конфликта нет · согласен на контакт", "To‘qnashuv yo‘q · aloqaga roziman", "No conflict · agree to contact")}
                   </button>
                   <button
                     type="button"
@@ -260,7 +253,7 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                     ) : (
                       <ShieldX aria-hidden="true" />
                     )}
-                    {ru ? "Есть конфликт" : "To‘qnashuv bor"}
+                    {text("Есть конфликт", "To‘qnashuv bor", "Conflict identified")}
                   </button>
                 </div>
               )}
@@ -268,12 +261,10 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                 <>
                   <div className="lawyer-case-access">
                     <strong>
-                      {ru
-                        ? "Доступ к делу предоставлен"
-                        : "Ishga ruxsat berildi"}
+                      {text("Доступ к делу предоставлен", "Ishga ruxsat berildi", "Case access granted")}
                     </strong>
                     <p>
-                      {item.caseTitle || (ru ? "Дело" : "Ish")}
+                      {item.caseTitle || text("Дело", "Ish", "Case")}
                       {item.legalArea ? ` · ${item.legalArea}` : ""}
                     </p>
                     {item.caseDescription && <p>{item.caseDescription}</p>}
@@ -295,14 +286,14 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                   )}
                   {item.offerId && (
                     <div className="lawyer-offer-card">
-                      <strong>{offerStatus(item.offerStatus, ru)}</strong>
+                      <strong>{offerStatus(item.offerStatus, locale)}</strong>
                       <p>{item.offerScopeDescription}</p>
                       <p>
-                        {ru ? "Стоимость: " : "Narx: "}
+                        {text("Стоимость: ", "Narx: ", "Fees: ")}
                         {item.offerPriceDescription}
                       </p>
                       <p>
-                        {ru ? "Срок: " : "Muddat: "}
+                        {text("Срок: ", "Muddat: ", "Timeline: ")}
                         {item.offerDurationDescription}
                       </p>
                     </div>
@@ -313,12 +304,10 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                       onSubmit={(event) => void submitOffer(event, item)}
                     >
                       <h2>
-                        {ru
-                          ? "Внешнее предложение без оплаты в JURO"
-                          : "JURO orqali to‘lovsiz tashqi taklif"}
+                        {text("Внешнее предложение без оплаты в JURO", "JURO orqali to‘lovsiz tashqi taklif", "External offer without payment through JURO")}
                       </h2>
                       <label>
-                        {ru ? "Объём работы" : "Ish hajmi"}
+                        {text("Объём работы", "Ish hajmi", "Scope of work")}
                         <textarea
                           required
                           minLength={20}
@@ -339,7 +328,7 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                         />
                       </label>
                       <label>
-                        {ru ? "Стоимость" : "Narx"}
+                        {text("Стоимость", "Narx", "Fees")}
                         <input
                           required
                           minLength={2}
@@ -360,7 +349,7 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                         />
                       </label>
                       <label>
-                        {ru ? "Срок" : "Muddat"}
+                        {text("Срок", "Muddat", "Timeline")}
                         <input
                           required
                           minLength={2}
@@ -386,18 +375,14 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                         {actionId === item.id ? (
                           <LoaderCircle className="spin" />
                         ) : null}
-                        {ru
-                          ? "Отправить внешние условия"
-                          : "Tashqi shartlarni yuborish"}
+                        {text("Отправить внешние условия", "Tashqi shartlarni yuborish", "Send external terms")}
                       </button>
                     </form>
                   )}
                 </>
               ) : (
                 <p className="lawyer-request-privacy">
-                  {ru
-                    ? "Материалы дела недоступны, пока владелец не предоставит доступ."
-                    : "Ish egasi ruxsat bermaguncha ish materiallari mavjud emas."}
+                  {text("Материалы дела недоступны, пока владелец не предоставит доступ.", "Ish egasi ruxsat bermaguncha ish materiallari mavjud emas.", "Case materials remain unavailable until the case owner grants access.")}
                 </p>
               )}
               {item.offerStatus === "accepted" &&
@@ -407,9 +392,7 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                     onClick={() => void complete(item)}
                     disabled={actionId === item.id}
                   >
-                    {ru
-                      ? "Отметить работу завершённой"
-                      : "Ishni yakunlangan deb belgilash"}
+                    {text("Отметить работу завершённой", "Ishni yakunlangan deb belgilash", "Mark work as complete")}
                   </button>
                 )}
               {item.accessGrantId && (
@@ -434,14 +417,10 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
         <div className="consult-empty">
           <UserRoundCheck aria-hidden="true" />
           <h2>
-            {ru
-              ? "Назначенных заявок пока нет"
-              : "Hozircha tayinlangan so‘rovlar yo‘q"}
+            {text("Назначенных заявок пока нет", "Hozircha tayinlangan so‘rovlar yo‘q", "No assigned requests yet")}
           </h2>
           <p>
-            {ru
-              ? "JURO не создаёт демонстрационные заявки. Новая запись появится только после реального назначения."
-              : "JURO namoyish so‘rovlarini yaratmaydi. Yangi yozuv faqat haqiqiy tayinlashdan keyin paydo bo‘ladi."}
+            {text("JURO не создаёт демонстрационные заявки. Новая запись появится только после реального назначения.", "JURO namoyish so‘rovlarini yaratmaydi. Yangi yozuv faqat haqiqiy tayinlashdan keyin paydo bo‘ladi.", "JURO does not create demonstration requests. A new request appears only after a real assignment.")}
           </p>
         </div>
       )}
@@ -449,28 +428,32 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
   );
 }
 
-function offerStatus(status: string | null | undefined, ru: boolean) {
-  const labels: Record<string, [string, string]> = {
-    proposed: ["Предложение ожидает решения", "Taklif qarorni kutmoqda"],
-    accepted: ["Условия приняты", "Shartlar qabul qilindi"],
-    declined: ["Условия отклонены", "Shartlar rad etildi"],
+function offerStatus(status: string | null | undefined, locale: PlatformLocale) {
+  const labels: Record<string, [string, string, string]> = {
+    proposed: ["Предложение ожидает решения", "Taklif qarorni kutmoqda", "Offer awaiting decision"],
+    accepted: ["Условия приняты", "Shartlar qabul qilindi", "Terms accepted"],
+    declined: ["Условия отклонены", "Shartlar rad etildi", "Terms declined"],
   };
-  return labels[status || ""]?.[ru ? 0 : 1] || status || "";
+  const value = labels[status || ""];
+  return value ? lawyerText(locale, value[0], value[1], value[2]) : status || "";
 }
 
-function lawyerRequestStatus(status: string, ru: boolean) {
-  const labels: Record<string, [string, string]> = {
+function lawyerRequestStatus(status: string, locale: PlatformLocale) {
+  const labels: Record<string, [string, string, string]> = {
     conflict_check_pending: [
       "Требуется проверка конфликта",
       "Manfaatlar to‘qnashuvini tekshirish kerak",
+      "Conflict check required",
     ],
     awaiting_user_consent: [
       "Ожидается решение владельца",
       "Ish egasining qarori kutilmoqda",
+      "Awaiting case owner decision",
     ],
-    access_granted: ["Доступ к делу предоставлен", "Ishga ruxsat berildi"],
-    access_revoked: ["Доступ отозван", "Ruxsat bekor qilindi"],
-    conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi"],
+    access_granted: ["Доступ к делу предоставлен", "Ishga ruxsat berildi", "Case access granted"],
+    access_revoked: ["Доступ отозван", "Ruxsat bekor qilindi", "Access revoked"],
+    conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi", "Conflict of interest"],
   };
-  return labels[status]?.[ru ? 0 : 1] || status;
+  const value = labels[status];
+  return value ? lawyerText(locale, value[0], value[1], value[2]) : status;
 }

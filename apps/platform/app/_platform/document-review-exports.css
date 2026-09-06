@@ -11,7 +11,7 @@
   padding: .55rem;
   border: 1px solid var(--review-border);
   border-radius: .65rem;
-  background: #f8f7f2;
+  background: var(--surface-subtle);
 }
 
 .review-version-export > strong {
@@ -36,7 +36,7 @@
   gap: .35rem;
   border: 1px solid var(--review-border);
   border-radius: .5rem;
-  background: #fff;
+  background: var(--surface-raised);
   color: var(--review-navy);
   font: inherit;
   font-size: .68rem;
@@ -64,7 +64,7 @@
   .review-version-export a:hover,
   .review-version-export button:hover:not(:disabled) {
     border-color: var(--review-navy);
-    background: #eef2f3;
+    background: var(--surface-hover);
   }
 }
 

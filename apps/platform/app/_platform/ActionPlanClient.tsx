@@ -12,6 +12,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { platformApiError } from "../../content/platform-ui";
 import { caseDirectionsForAccount, caseScenariosForAccount, type CaseDirectionId } from "../../lib/platform/case-create";
 import type {
   DeadlineCalculationInput,
@@ -115,6 +116,10 @@ function initialDeadlineDraft(step: Step): DeadlineDraft {
   };
 }
 
+function localizedText(locale: PlatformLocale, ru: string, uz: string, en: string) {
+  return { ru, uz, en }[locale];
+}
+
 export function ActionPlanClient({
   locale,
   accountType,
@@ -124,7 +129,7 @@ export function ActionPlanClient({
   accountType: AccountType;
   initialCaseId?: string;
 }) {
-  const ru = locale === "ru";
+  const t = (ru: string, uz: string, en: string) => localizedText(locale, ru, uz, en);
   const base = usePlatformBasePath();
   const directions = caseDirectionsForAccount(accountType);
   const [direction, setDirection] = useState<CaseDirectionId>(directions[0]?.id ?? "employment");
@@ -152,14 +157,14 @@ export function ActionPlanClient({
     try {
       const response = await fetch(initialCaseId ? `/api/platform/cases?caseId=${encodeURIComponent(initialCaseId)}` : "/api/platform/cases", { cache: "no-store" });
       const data = await response.json() as { cases?: Case[]; error?: string };
-      if (!response.ok) throw new Error(data.error || "Ошибка загрузки");
+      if (!response.ok) throw new Error(platformApiError(locale, data.error, localizedText(locale, "Ошибка загрузки", "Yuklashda xato yuz berdi", "We could not load the action plans.")));
       setCases(data.cases || []);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
       setLoading(false);
     }
-  }, [initialCaseId]);
+  }, [initialCaseId, locale]);
 
   useEffect(() => {
     void load();
@@ -172,7 +177,7 @@ export function ActionPlanClient({
     try {
       const response = await fetch("/api/platform/cases/" + item.id + "/plan-versions", { cache: "no-store" });
       const data = await response.json() as { versions?: PlanVersion[]; error?: string };
-      if (!response.ok) throw new Error(data.error || (ru ? "Не удалось загрузить историю." : "Tarixni yuklab bo‘lmadi."));
+      if (!response.ok) throw new Error(platformApiError(locale, data.error, t("Не удалось загрузить историю.", "Tarixni yuklab bo‘lmadi.", "We could not load the version history.")));
       setVersionsByCase((current) => ({ ...current, [item.id]: data.versions || [] }));
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -191,7 +196,7 @@ export function ActionPlanClient({
         body: JSON.stringify({ title, description, legalArea: selected, locale, accountType }),
       });
       const data = await response.json() as { caseId?: string; error?: string };
-      if (!response.ok) throw new Error(data.error || "Ошибка");
+      if (!response.ok) throw new Error(platformApiError(locale, data.error, t("Не удалось создать дело и план.", "Ish va reja yaratilmadi.", "We could not create the matter and plan.")));
       setTitle("");
       setDescription("");
       setOpenCase(data.caseId || null);
@@ -263,7 +268,7 @@ export function ActionPlanClient({
         body: JSON.stringify(input),
       });
       const data = await response.json() as { result?: DeadlineCalculationResult; error?: string };
-      if (!response.ok || !data.result) throw new Error(data.error || (ru ? "Не удалось рассчитать срок." : "Muddatni hisoblab bo‘lmadi."));
+      if (!response.ok || !data.result) throw new Error(platformApiError(locale, data.error, t("Не удалось рассчитать срок.", "Muddatni hisoblab bo‘lmadi.", "We could not calculate the deadline.")));
       setDeadlineDrafts((all) => ({ ...all, [key]: { ...draft, loading: false, result: data.result } }));
       stageStepChange(item, step, { dueAt: data.result.dueDate, deadlineCalculation: input });
     } catch (value) {
@@ -289,11 +294,11 @@ export function ActionPlanClient({
       if (response.status === 409) {
         setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }));
         clearDeadlineResultsForCase(item.id);
-        setError(ru ? "План изменён в другой вкладке. Показаны актуальные данные." : "Reja boshqa oynada o‘zgartirilgan. Amaldagi ma’lumotlar ko‘rsatildi.");
+        setError(t("План изменён в другой вкладке. Показаны актуальные данные.", "Reja boshqa oynada o‘zgartirilgan. Amaldagi ma’lumotlar ko‘rsatildi.", "The plan changed in another tab. The latest data is now shown."));
         await load();
         return;
       }
-      if (!response.ok) throw new Error(data.error || (ru ? "Не удалось применить изменения плана." : "Reja o‘zgarishlarini qo‘llab bo‘lmadi."));
+      if (!response.ok) throw new Error(platformApiError(locale, data.error, t("Не удалось применить изменения плана.", "Reja o‘zgarishlarini qo‘llab bo‘lmadi.", "We could not apply the plan changes.")));
       setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }));
       clearDeadlineResultsForCase(item.id);
       setVersionsByCase((all) => ({ ...all, [item.id]: [] }));
@@ -311,7 +316,7 @@ export function ActionPlanClient({
     try {
       const response = await fetch(`/api/platform/cases/${item.id}/tasks`, { method: "POST", headers: { "x-juro-csrf": "1" } });
       const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error || (ru ? "Не удалось создать задачи." : "Vazifalarni yaratib bo‘lmadi."));
+      if (!response.ok) throw new Error(platformApiError(locale, data.error, t("Не удалось создать задачи.", "Vazifalarni yaratib bo‘lmadi.", "We could not create the tasks.")));
       await load();
     } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
     finally { setCreatingTasksFor(null); }
@@ -328,17 +333,17 @@ export function ActionPlanClient({
   return <div className="plan-workspace">
     <section className="plan-heading">
       <div>
-        <small>JURO · {ru ? "План действий" : "Harakatlar rejasi"}</small>
-        <h1>{ru ? "Свяжите шаги, сроки и документы в одном деле" : "Qadamlar, muddatlar va hujjatlarni bitta ishda bog‘lang"}</h1>
-        <p>{ru ? "Прогресс рассчитывается только по реально завершённым шагам." : "Jarayon faqat haqiqatan bajarilgan qadamlar asosida hisoblanadi."}</p>
+        <small>JURO · {t("План действий", "Harakatlar rejasi", "Action plan")}</small>
+        <h1>{t("Свяжите шаги, сроки и документы в одном деле", "Qadamlar, muddatlar va hujjatlarni bitta ishda bog‘lang", "Connect steps, deadlines and documents in one matter")}</h1>
+        <p>{t("Прогресс рассчитывается только по реально завершённым шагам.", "Jarayon faqat haqiqatan bajarilgan qadamlar asosida hisoblanadi.", "Progress reflects only steps that have actually been completed.")}</p>
       </div>
       <CalendarDays />
     </section>
     <div className="plan-layout">
       <section className="plan-main">
         {!initialCaseId && <form className="plan-create" onSubmit={create}>
-          <h2>{ru ? "Создать план из сценария" : "Ssenariydan reja yaratish"}</h2>
-          <p className="plan-create-step">{ru ? "1. Направление" : "1. Yo‘nalish"}</p>
+          <h2>{t("Создать план из сценария", "Ssenariydan reja yaratish", "Create a plan from a scenario")}</h2>
+          <p className="plan-create-step">{t("1. Направление", "1. Yo‘nalish", "1. Area")}</p>
           <div className="scenario-pills scenario-directions">
             {directions.map((item) => <button
               type="button"
@@ -348,44 +353,44 @@ export function ActionPlanClient({
                 setSelected(caseScenariosForAccount(accountType, item.id)[0]?.id ?? "unpaid-salary");
               }}
               key={item.id}
-            >{ru ? item.ru : item.uz}</button>)}
+            >{item[locale]}</button>)}
           </div>
-          <p className="plan-create-step">{ru ? "2. Ситуация" : "2. Vaziyat"}</p>
+          <p className="plan-create-step">{t("2. Ситуация", "2. Vaziyat", "2. Situation")}</p>
           <div className="scenario-pills">
             {scenarioCatalog.map((item) => <button
               type="button"
               className={selected === item.id ? "active" : ""}
               onClick={() => setSelected(item.id)}
               key={item.id}
-            >{ru ? item.ru : item.uz}</button>)}
+            >{item[locale]}</button>)}
           </div>
-          <label>{ru ? "Название ситуации" : "Vaziyat nomi"}
+          <label>{t("Название ситуации", "Vaziyat nomi", "Matter title")}
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
               maxLength={180}
-              placeholder={ru ? "Например: задолженность по договору" : "Masalan: shartnoma bo‘yicha qarzdorlik"}
+              placeholder={t("Например: задолженность по договору", "Masalan: shartnoma bo‘yicha qarzdorlik", "For example: unpaid amount under a contract")}
             />
           </label>
-          <label>{ru ? "Краткое описание" : "Qisqa tavsif"}
+          <label>{t("Краткое описание", "Qisqa tavsif", "Brief description")}
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} maxLength={2000} />
           </label>
           <button className="plan-primary" disabled={creating}>
             {creating ? <LoaderCircle className="spin" /> : <Plus />}
-            {ru ? "Создать дело и план" : "Ish va reja yaratish"}
+            {t("Создать дело и план", "Ish va reja yaratish", "Create matter and plan")}
           </button>
         </form>}
         {error && <p className="plan-error" role="alert"><CircleAlert />{error}</p>}
         <section className="plan-list">
           <div className="plan-section-title">
-            <h2>{ru ? "Мои активные планы" : "Faol rejalarim"}</h2>
-            <button onClick={() => void load()} aria-label={ru ? "Обновить" : "Yangilash"}><RotateCcw /></button>
+            <h2>{t("Мои активные планы", "Faol rejalarim", "My active plans")}</h2>
+            <button onClick={() => void load()} aria-label={t("Обновить", "Yangilash", "Refresh")}><RotateCcw /></button>
           </div>
           {loading
             ? <div className="plan-loading"><LoaderCircle className="spin" /></div>
             : cases.length === 0
-              ? <div className="platform-empty"><CalendarDays /><p>{ru ? "Создайте первый план из проверяемого сценария." : "Tekshiriladigan ssenariydan birinchi rejangizni yarating."}</p></div>
+              ? <div className="platform-empty"><CalendarDays /><p>{t("Создайте первый план из проверяемого сценария.", "Tekshiriladigan ssenariydan birinchi rejangizni yarating.", "Create your first plan from a verifiable scenario.")}</p></div>
               : cases.map((item) => {
                 const panelId = `plan-${item.id}`;
                 const expanded = openCase === item.id;
@@ -399,7 +404,7 @@ export function ActionPlanClient({
                     <div>
                       <span>{item.legalArea}</span>
                       <h3>{item.title}</h3>
-                      <p>{item.progressPercent}% · {item.steps.filter((step) => step.status === "completed").length}/{item.steps.length} {ru ? "шагов" : "qadam"}</p>
+                      <p>{item.progressPercent}% · {item.steps.filter((step) => step.status === "completed").length}/{item.steps.length} {t("шагов", "qadam", "steps")}</p>
                     </div>
                     <div className="plan-progress" aria-label={`${item.progressPercent}%`}><i style={{ width: `${item.progressPercent}%` }} /></div>
                     <ChevronDown className={expanded ? "rotated" : ""} />
@@ -407,23 +412,23 @@ export function ActionPlanClient({
                   {expanded && <div className="plan-steps" id={panelId}>
                     <button type="button" className="plan-primary" disabled={creatingTasksFor === item.id} onClick={() => void createTasks(item)}>
                       {creatingTasksFor === item.id ? <LoaderCircle className="spin" /> : <Plus />}
-                      {ru ? "Подтвердить и добавить шаги в задачи" : "Tasdiqlash va qadamlarni vazifalarga qo‘shish"}
+                      {t("Подтвердить и добавить шаги в задачи", "Tasdiqlash va qadamlarni vazifalarga qo‘shish", "Confirm and add steps as tasks")}
                     </button>
-                    <section className="plan-history" aria-label={ru ? "История версий плана" : "Reja versiyalari tarixi"}>
+                    <section className="plan-history" aria-label={t("История версий плана", "Reja versiyalari tarixi", "Plan version history")}>
                       <button
                         type="button"
                         onClick={() => void loadVersionHistory(item)}
                         disabled={loadingVersionsFor === item.id}
                       >
                         {loadingVersionsFor === item.id ? <LoaderCircle className="spin" /> : <RotateCcw />}
-                        {ru ? "Показать историю версий" : "Versiyalar tarixini ko‘rsatish"}
+                        {t("Показать историю версий", "Versiyalar tarixini ko‘rsatish", "Show version history")}
                       </button>
                       {versionsByCase[item.id]?.length ? <ol>
                         {versionsByCase[item.id].map((entry) => <li key={entry.id}>
                           <button type="button" aria-pressed={selectedHistoryVersionByCase[item.id] === entry.id} onClick={() => setSelectedHistoryVersionByCase((all) => ({ ...all, [item.id]: entry.id }))}>
-                            <strong>{ru ? "Версия " + entry.version : entry.version + "-versiya"}</strong>
-                            <span>{formatPlatformDateTime(entry.createdAt, ru ? "ru" : "uz")}</span>
-                            <small>{entry.snapshot ? entry.snapshot.progressPercent + "% · " + entry.snapshot.steps.filter((step) => step.status === "completed").length + "/" + entry.snapshot.steps.length : (ru ? "Снимок недоступен" : "Snapshot mavjud emas")}</small>
+                            <strong>{t("Версия " + entry.version, entry.version + "-versiya", "Version " + entry.version)}</strong>
+                            <span>{formatPlatformDateTime(entry.createdAt, locale)}</span>
+                            <small>{entry.snapshot ? entry.snapshot.progressPercent + "% · " + entry.snapshot.steps.filter((step) => step.status === "completed").length + "/" + entry.snapshot.steps.length : t("Снимок недоступен", "Snapshot mavjud emas", "Snapshot unavailable")}</small>
                           </button>
                         </li>)}
                       </ol> : null}
@@ -433,30 +438,31 @@ export function ActionPlanClient({
                         const index = versions.findIndex((entry) => entry.id === selectedId);
                         const selectedVersion = index >= 0 ? versions[index] : null;
                         const previousVersion = index >= 0 ? versions[index + 1] : null;
-                        if (!selectedVersion?.snapshot || !previousVersion?.snapshot) return selectedVersion ? <p className="plan-history-empty">{ru ? "Для первой версии нет предыдущего снимка для сравнения." : "Birinchi versiyani solishtirish uchun oldingi snapshot yo‘q."}</p> : null;
+                        if (!selectedVersion?.snapshot || !previousVersion?.snapshot) return selectedVersion ? <p className="plan-history-empty">{t("Для первой версии нет предыдущего снимка для сравнения.", "Birinchi versiyani solishtirish uchun oldingi snapshot yo‘q.", "The first version has no earlier snapshot to compare.")}</p> : null;
                         const previousSteps = new Map(previousVersion.snapshot.steps.map((step) => [step.id, step]));
                         const selectedSteps = new Map(selectedVersion.snapshot.steps.map((step) => [step.id, step]));
                         const changes = selectedVersion.snapshot.steps.flatMap((step) => {
                           const before = previousSteps.get(step.id);
-                          if (!before) return [`${step.title}: ${ru ? "добавлен" : "qo‘shildi"}`];
-                          const detail = [before.status !== step.status ? `${before.status} → ${step.status}` : "", before.dueAt !== step.dueAt ? `${before.dueAt || (ru ? "без срока" : "muddat yo‘q")} → ${step.dueAt || (ru ? "без срока" : "muddat yo‘q")}` : ""].filter(Boolean).join(" · ");
+                          if (!before) return [`${step.title}: ${t("добавлен", "qo‘shildi", "added")}`];
+                          const noDeadline = t("без срока", "muddat yo‘q", "no deadline");
+                          const detail = [before.status !== step.status ? `${before.status} → ${step.status}` : "", before.dueAt !== step.dueAt ? `${before.dueAt || noDeadline} → ${step.dueAt || noDeadline}` : ""].filter(Boolean).join(" · ");
                           return detail ? [`${step.title}: ${detail}`] : [];
                         });
-                        previousVersion.snapshot.steps.forEach((step) => { if (!selectedSteps.has(step.id)) changes.push(`${step.title}: ${ru ? "удалён" : "olib tashlandi"}`); });
-                        return <section className="plan-history-diff" aria-live="polite"><h4>{ru ? `Различия: версия ${selectedVersion.version} и ${previousVersion.version}` : `${selectedVersion.version}- va ${previousVersion.version}-versiyalar farqi`}</h4>{changes.length ? <ul>{changes.map((change) => <li key={change}>{change}</li>)}</ul> : <p>{ru ? "Содержимое шагов не изменилось." : "Qadamlar mazmuni o‘zgarmagan."}</p>}</section>;
+                        previousVersion.snapshot.steps.forEach((step) => { if (!selectedSteps.has(step.id)) changes.push(`${step.title}: ${t("удалён", "olib tashlandi", "removed")}`); });
+                        return <section className="plan-history-diff" aria-live="polite"><h4>{t(`Различия: версия ${selectedVersion.version} и ${previousVersion.version}`, `${selectedVersion.version}- va ${previousVersion.version}-versiyalar farqi`, `Differences between versions ${selectedVersion.version} and ${previousVersion.version}`)}</h4>{changes.length ? <ul>{changes.map((change) => <li key={change}>{change}</li>)}</ul> : <p>{t("Содержимое шагов не изменилось.", "Qadamlar mazmuni o‘zgarmagan.", "The step content did not change.")}</p>}</section>;
                       })()}
                     </section>
                     {Object.values(pendingChangesByCase[item.id] || {}).length > 0 && <section className="plan-change-preview" aria-labelledby={`plan-preview-${item.id}`}>
                       <div>
-                        <small>{ru ? "Предпросмотр версии" : "Versiyani oldindan ko‘rish"}</small>
-                        <h3 id={`plan-preview-${item.id}`}>{ru ? "Изменения ещё не применены" : "O‘zgarishlar hali qo‘llanmagan"}</h3>
-                        <p>{ru ? "Проверьте изменения: они будут сохранены одной новой версией плана только после подтверждения." : "O‘zgarishlarni tekshiring: ular faqat tasdiqlangandan keyin rejaning bitta yangi versiyasi sifatida saqlanadi."}</p>
+                        <small>{t("Предпросмотр версии", "Versiyani oldindan ko‘rish", "Version preview")}</small>
+                        <h3 id={`plan-preview-${item.id}`}>{t("Изменения ещё не применены", "O‘zgarishlar hali qo‘llanmagan", "Changes have not been applied")}</h3>
+                        <p>{t("Проверьте изменения: они будут сохранены одной новой версией плана только после подтверждения.", "O‘zgarishlarni tekshiring: ular faqat tasdiqlangandan keyin rejaning bitta yangi versiyasi sifatida saqlanadi.", "Review the changes. They will be saved as one new plan version only after confirmation.")}</p>
                       </div>
                       <ul>
                         {item.steps.filter((step) => pendingChangesByCase[item.id]?.[step.id]).map((step) => {
                           const change = pendingChangesByCase[item.id][step.id];
-                          const beforeDate = step.dueAt?.slice(0, 10) || (ru ? "не задан" : "belgilanmagan");
-                          const afterDate = change.dueAt || (ru ? "не задан" : "belgilanmagan");
+                          const beforeDate = step.dueAt?.slice(0, 10) || t("не задан", "belgilanmagan", "not set");
+                          const afterDate = change.dueAt || t("не задан", "belgilanmagan", "not set");
                           return <li key={step.id}><strong>{step.title}</strong><span>{step.status} → {change.status}{beforeDate !== afterDate ? ` · ${beforeDate} → ${afterDate}` : ""}</span></li>;
                         })}
                       </ul>
@@ -464,10 +470,10 @@ export function ActionPlanClient({
                         <button type="button" onClick={() => {
                           setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }));
                           clearDeadlineResultsForCase(item.id);
-                        }}>{ru ? "Отменить" : "Bekor qilish"}</button>
+                        }}>{t("Отменить", "Bekor qilish", "Cancel")}</button>
                         <button type="button" className="plan-primary" disabled={applyingChangesFor === item.id} onClick={() => void applyStagedChanges(item)}>
                           {applyingChangesFor === item.id ? <LoaderCircle className="spin" /> : <Check />}
-                          {ru ? "Подтвердить и применить" : "Tasdiqlash va qo‘llash"}
+                          {t("Подтвердить и применить", "Tasdiqlash va qo‘llash", "Confirm and apply")}
                         </button>
                       </div>
                     </section>}
@@ -482,10 +488,10 @@ export function ActionPlanClient({
                         <span>{step.status === "completed" ? <Check /> : step.ordinal}</span>
                         <div>
                           <strong>{step.title}</strong>
-                          {step.dueAt && <small>{formatPlatformDate(step.dueAt, ru ? "ru" : "uz")}</small>}
+                          {step.dueAt && <small>{formatPlatformDate(step.dueAt, locale)}</small>}
                         </div>
                         <label className="plan-step-date">
-                          <span>{ru ? "Срок" : "Muddat"}</span>
+                          <span>{t("Срок", "Muddat", "Deadline")}</span>
                           <input
                             type="date"
                             value={staged?.dueAt ?? step.dueAt?.slice(0, 10) ?? ""}
@@ -494,97 +500,101 @@ export function ActionPlanClient({
                           />
                         </label>
                         <label className="plan-step-status">
-                          <span className="sr-only">{ru ? "Статус шага" : "Qadam holati"}</span>
+                          <span className="sr-only">{t("Статус шага", "Qadam holati", "Step status")}</span>
                           <select
                             value={staged?.status ?? step.status}
                             disabled={saving}
                             onChange={(event) => stageStepChange(item, step, { status: event.target.value as StepStatus })}
                           >
-                            <option value="not_started">{ru ? "Не начато" : "Boshlanmagan"}</option>
-                            <option value="in_progress">{ru ? "В работе" : "Jarayonda"}</option>
-                            <option value="waiting_user">{ru ? "Ждёт меня" : "Meni kutmoqda"}</option>
-                            <option value="waiting_response">{ru ? "Ожидает ответа" : "Javob kutilmoqda"}</option>
-                            <option value="overdue">{ru ? "Просрочено" : "Muddati o‘tgan"}</option>
-                            <option value="completed">{ru ? "Завершено" : "Bajarilgan"}</option>
-                            <option value="cancelled">{ru ? "Отменено" : "Bekor qilingan"}</option>
+                            <option value="not_started">{t("Не начато", "Boshlanmagan", "Not started")}</option>
+                            <option value="in_progress">{t("В работе", "Jarayonda", "In progress")}</option>
+                            <option value="waiting_user">{t("Ждёт меня", "Meni kutmoqda", "Waiting for me")}</option>
+                            <option value="waiting_response">{t("Ожидает ответа", "Javob kutilmoqda", "Awaiting response")}</option>
+                            <option value="overdue">{t("Просрочено", "Muddati o‘tgan", "Overdue")}</option>
+                            <option value="completed">{t("Завершено", "Bajarilgan", "Completed")}</option>
+                            <option value="cancelled">{t("Отменено", "Bekor qilingan", "Cancelled")}</option>
                           </select>
                         </label>
                         <Link
                           href={`${base}/document-builder?${builderQuery}`}
-                          aria-label={ru ? `Создать документ для шага «${step.title}»` : `«${step.title}» qadami uchun hujjat yaratish`}
+                          aria-label={t(`Создать документ для шага «${step.title}»`, `«${step.title}» qadami uchun hujjat yaratish`, `Create a document for “${step.title}”`)}
                         ><FilePenLine /></Link>
                         <details className="deadline-calculator">
-                          <summary>{ru ? "Рассчитать срок" : "Muddatni hisoblash"}</summary>
+                          <summary>{t("Рассчитать срок", "Muddatni hisoblash", "Calculate deadline")}</summary>
                           <div className="deadline-calculator-grid">
                             <label>
-                              <span>{ru ? "Исходная дата" : "Boshlang‘ich sana"}</span>
+                              <span>{t("Исходная дата", "Boshlang‘ich sana", "Start date")}</span>
                               <input type="date" required value={deadlineDraft.sourceDate} onChange={(event) => updateDeadlineDraft(item, step, { sourceDate: event.target.value, result: undefined })} />
                             </label>
                             <label>
-                              <span>{ru ? "Количество дней" : "Kunlar soni"}</span>
+                              <span>{t("Количество дней", "Kunlar soni", "Number of days")}</span>
                               <input type="number" required min="0" max="3650" inputMode="numeric" value={deadlineDraft.daysCount} onChange={(event) => updateDeadlineDraft(item, step, { daysCount: event.target.value, result: undefined })} />
                             </label>
                             <label>
-                              <span>{ru ? "Тип дней" : "Kun turi"}</span>
+                              <span>{t("Тип дней", "Kun turi", "Day type")}</span>
                               <select value={deadlineDraft.dayType} onChange={(event) => updateDeadlineDraft(item, step, { dayType: event.target.value as DeadlineDraft["dayType"], result: undefined })}>
-                                <option value="calendar_days">{ru ? "Календарные" : "Kalendar"}</option>
-                                <option value="business_days">{ru ? "Рабочие" : "Ish kunlari"}</option>
+                                <option value="calendar_days">{t("Календарные", "Kalendar", "Calendar days")}</option>
+                                <option value="business_days">{t("Рабочие", "Ish kunlari", "Business days")}</option>
                               </select>
                             </label>
                             <label>
-                              <span>{ru ? "Перенос" : "Ko‘chirish"}</span>
+                              <span>{t("Перенос", "Ko‘chirish", "Adjustment")}</span>
                               <select value={deadlineDraft.rollRule} onChange={(event) => updateDeadlineDraft(item, step, { rollRule: event.target.value as DeadlineDraft["rollRule"], result: undefined })}>
-                                <option value="none">{ru ? "Не переносить" : "Ko‘chirmaslik"}</option>
-                                <option value="next_business_day">{ru ? "На следующий рабочий день" : "Keyingi ish kuniga"}</option>
-                                <option value="previous_business_day">{ru ? "На предыдущий рабочий день" : "Oldingi ish kuniga"}</option>
+                                <option value="none">{t("Не переносить", "Ko‘chirmaslik", "Do not adjust")}</option>
+                                <option value="next_business_day">{t("На следующий рабочий день", "Keyingi ish kuniga", "Next business day")}</option>
+                                <option value="previous_business_day">{t("На предыдущий рабочий день", "Oldingi ish kuniga", "Previous business day")}</option>
                               </select>
                             </label>
                             <label>
-                              <span>{ru ? "Безопасный запас, раб. дней" : "Xavfsiz zaxira, ish kuni"}</span>
+                              <span>{t("Безопасный запас, раб. дней", "Xavfsiz zaxira, ish kuni", "Safety margin, business days")}</span>
                               <input type="number" min="0" max="30" inputMode="numeric" value={deadlineDraft.safeMarginBusinessDays} onChange={(event) => updateDeadlineDraft(item, step, { safeMarginBusinessDays: event.target.value, result: undefined })} />
                             </label>
                             <label className="deadline-calculator-wide">
-                              <span>{ru ? "Праздничные даты (ГГГГ-ММ-ДД)" : "Bayram sanalari (YYYY-MM-DD)"}</span>
+                              <span>{t("Праздничные даты (ГГГГ-ММ-ДД)", "Bayram sanalari (YYYY-MM-DD)", "Public holidays (YYYY-MM-DD)")}</span>
                               <input value={deadlineDraft.holidays} placeholder="2026-09-01, 2026-12-08" onChange={(event) => updateDeadlineDraft(item, step, { holidays: event.target.value, result: undefined })} />
                             </label>
                             <label className="deadline-calculator-wide">
-                              <span>{ru ? "Версия календаря, если известна" : "Kalendar versiyasi, ma’lum bo‘lsa"}</span>
-                              <input maxLength={120} value={deadlineDraft.holidayCalendarVersion} placeholder={ru ? "Это значение не подтверждает календарь" : "Bu qiymat kalendarni tasdiqlamaydi"} onChange={(event) => updateDeadlineDraft(item, step, { holidayCalendarVersion: event.target.value, result: undefined })} />
+                              <span>{t("Версия календаря, если известна", "Kalendar versiyasi, ma’lum bo‘lsa", "Calendar version, if known")}</span>
+                              <input maxLength={120} value={deadlineDraft.holidayCalendarVersion} placeholder={t("Это значение не подтверждает календарь", "Bu qiymat kalendarni tasdiqlamaydi", "This value does not verify the calendar")} onChange={(event) => updateDeadlineDraft(item, step, { holidayCalendarVersion: event.target.value, result: undefined })} />
                             </label>
                             <label className="deadline-calculator-wide">
-                              <span>{ru ? "Правовое основание" : "Huquqiy asos"}</span>
-                              <textarea rows={2} maxLength={500} value={deadlineDraft.legalBasis} placeholder={ru ? "Укажите норму после проверки источника" : "Manba tekshirilgandan keyin normani kiriting"} onChange={(event) => updateDeadlineDraft(item, step, { legalBasis: event.target.value, result: undefined })} />
+                              <span>{t("Правовое основание", "Huquqiy asos", "Legal basis")}</span>
+                              <textarea rows={2} maxLength={500} value={deadlineDraft.legalBasis} placeholder={t("Укажите норму после проверки источника", "Manba tekshirilgandan keyin normani kiriting", "Add the legal rule after verifying its source")} onChange={(event) => updateDeadlineDraft(item, step, { legalBasis: event.target.value, result: undefined })} />
                             </label>
                             <label className="deadline-calculator-check">
                               <input type="checkbox" checked={deadlineDraft.includeSourceDate} onChange={(event) => updateDeadlineDraft(item, step, { includeSourceDate: event.target.checked, result: undefined })} />
-                              <span>{ru ? "Включать исходную дату в отсчёт" : "Boshlang‘ich sanani hisobga qo‘shish"}</span>
+                              <span>{t("Включать исходную дату в отсчёт", "Boshlang‘ich sanani hisobga qo‘shish", "Include the start date in the calculation")}</span>
                             </label>
                           </div>
                           <button type="button" className="deadline-calculate" disabled={deadlineDraft.loading || !deadlineDraft.sourceDate || deadlineDraft.daysCount === ""} onClick={() => void previewDeadline(item, step)}>
                             {deadlineDraft.loading ? <LoaderCircle className="spin" /> : <CalendarDays />}
-                            {ru ? "Показать проверяемый расчёт" : "Tekshiriladigan hisobni ko‘rsatish"}
+                            {t("Показать проверяемый расчёт", "Tekshiriladigan hisobni ko‘rsatish", "Show verifiable calculation")}
                           </button>
                           {deadlineDraft.error && <p className="deadline-calculator-error" role="alert">{deadlineDraft.error}</p>}
                           {deadlineDraft.result && <section className="deadline-result" aria-live="polite">
-                            <strong>{ru ? "Предварительный расчёт" : "Dastlabki hisob"}</strong>
+                            <strong>{t("Предварительный расчёт", "Dastlabki hisob", "Preliminary calculation")}</strong>
                             <dl>
-                              <div><dt>{ru ? "Расчётная дата" : "Hisoblangan sana"}</dt><dd>{deadlineDraft.result.dueDate}</dd></div>
-                              <div><dt>{ru ? "Безопасная дата" : "Xavfsiz sana"}</dt><dd>{deadlineDraft.result.safeEarlierDate}</dd></div>
-                              <div><dt>{ru ? "Выходных в периоде" : "Davrdagi dam olish kunlari"}</dt><dd>{deadlineDraft.result.weekendDates.length}</dd></div>
-                              <div><dt>{ru ? "Указанных праздников" : "Ko‘rsatilgan bayramlar"}</dt><dd>{deadlineDraft.result.holidayDates.length}</dd></div>
+                              <div><dt>{t("Расчётная дата", "Hisoblangan sana", "Calculated date")}</dt><dd>{deadlineDraft.result.dueDate}</dd></div>
+                              <div><dt>{t("Безопасная дата", "Xavfsiz sana", "Safe date")}</dt><dd>{deadlineDraft.result.safeEarlierDate}</dd></div>
+                              <div><dt>{t("Выходных в периоде", "Davrdagi dam olish kunlari", "Weekend days in period")}</dt><dd>{deadlineDraft.result.weekendDates.length}</dd></div>
+                              <div><dt>{t("Указанных праздников", "Ko‘rsatilgan bayramlar", "Specified public holidays")}</dt><dd>{deadlineDraft.result.holidayDates.length}</dd></div>
                             </dl>
-                            <p>{ru ? "Дата добавлена в предпросмотр плана. Она сохранится только после подтверждения изменений." : "Sana reja oldindan ko‘rishiga qo‘shildi. U faqat o‘zgarishlar tasdiqlangandan keyin saqlanadi."}</p>
+                            <p>{t("Дата добавлена в предпросмотр плана. Она сохранится только после подтверждения изменений.", "Sana reja oldindan ko‘rishiga qo‘shildi. U faqat o‘zgarishlar tasdiqlangandan keyin saqlanadi.", "The date has been added to the plan preview. It will be saved only after you confirm the changes.")}</p>
                             {deadlineDraft.result.warnings.length > 0 && <ul>
                               {deadlineDraft.result.warnings.map((warning) => <li key={warning}>{warning === "HOLIDAY_CALENDAR_UNVERIFIED"
-                                ? (ru ? "Календарь праздников не подтверждён." : "Bayramlar kalendari tasdiqlanmagan.")
+                                ? t("Календарь праздников не подтверждён.", "Bayramlar kalendari tasdiqlanmagan.", "The public holiday calendar has not been verified.")
                                 : warning === "LEGAL_BASIS_UNCONFIRMED"
-                                  ? (ru ? "Правовое основание не подтверждено." : "Huquqiy asos tasdiqlanmagan.")
-                                  : (ru ? "Дата приходится на нерабочий день без переноса." : "Sana ko‘chirilmasdan ish bo‘lmagan kunga to‘g‘ri keladi.")}</li>)}
+                                  ? t("Правовое основание не подтверждено.", "Huquqiy asos tasdiqlanmagan.", "The legal basis has not been verified.")
+                                  : t("Дата приходится на нерабочий день без переноса.", "Sana ko‘chirilmasdan ish bo‘lmagan kunga to‘g‘ri keladi.", "The date falls on a non-working day without adjustment.")}</li>)}
                             </ul>}
                           </section>}
                           {step.deadlineConfidence && step.deadlineConfidence !== "unverified" && <p className="deadline-stored-evidence">
-                            {ru ? `Сохранённый расчёт: ${step.deadlineConfidence === "preliminary" ? "предварительный" : "источник проверен"}.` : `Saqlangan hisob: ${step.deadlineConfidence === "preliminary" ? "dastlabki" : "manba tekshirilgan"}.`}
-                            {step.safeDueAt ? ` ${ru ? "Безопасная дата" : "Xavfsiz sana"}: ${step.safeDueAt.slice(0, 10)}.` : ""}
+                            {t(
+                              `Сохранённый расчёт: ${step.deadlineConfidence === "preliminary" ? "предварительный" : "источник проверен"}.`,
+                              `Saqlangan hisob: ${step.deadlineConfidence === "preliminary" ? "dastlabki" : "manba tekshirilgan"}.`,
+                              `Saved calculation: ${step.deadlineConfidence === "preliminary" ? "preliminary" : "source verified"}.`,
+                            )}
+                            {step.safeDueAt ? ` ${t("Безопасная дата", "Xavfsiz sana", "Safe date")}: ${step.safeDueAt.slice(0, 10)}.` : ""}
                           </p>}
                         </details>
                       </div>;
@@ -595,15 +605,15 @@ export function ActionPlanClient({
         </section>
       </section>
       <aside className="plan-calendar">
-        <h2>{ru ? "Ближайшие сроки" : "Yaqin muddatlar"}</h2>
-        <div className="today"><CalendarDays /><div><small>{ru ? "Сегодня" : "Bugun"}</small><strong>{formatPlatformDate(new Date(), ru ? "ru" : "uz", { dateStyle: "long" })}</strong></div></div>
+        <h2>{t("Ближайшие сроки", "Yaqin muddatlar", "Upcoming deadlines")}</h2>
+        <div className="today"><CalendarDays /><div><small>{t("Сегодня", "Bugun", "Today")}</small><strong>{formatPlatformDate(new Date(), locale, { dateStyle: "long" })}</strong></div></div>
         {deadlines.length
           ? deadlines.slice(0, 8).map((item) => <div className="deadline" key={`${item.date}-${item.title}`}>
-            <time dateTime={item.date}>{formatPlatformDayMonth(item.date, ru ? "ru" : "uz")}</time>
+            <time dateTime={item.date}>{formatPlatformDayMonth(item.date, locale)}</time>
             <div><strong>{item.title}</strong><small>{item.caseTitle}</small></div>
           </div>)
-          : <p>{ru ? "Сроки появятся после назначения дат конкретным шагам." : "Aniq qadamlar uchun sana belgilangandan keyin muddatlar ko‘rinadi."}</p>}
-        <Link className="plan-consult" href={`${base}/consultations`}>{ru ? "Записаться на консультацию" : "Maslahatga yozilish"}<span>→</span></Link>
+          : <p>{t("Сроки появятся после назначения дат конкретным шагам.", "Aniq qadamlar uchun sana belgilangandan keyin muddatlar ko‘rinadi.", "Deadlines will appear after dates are assigned to specific steps.")}</p>}
+        <Link className="plan-consult" href={`${base}/consultations`}>{t("Записаться на консультацию", "Maslahatga yozilish", "Request a consultation")}<span>→</span></Link>
       </aside>
     </div>
   </div>;

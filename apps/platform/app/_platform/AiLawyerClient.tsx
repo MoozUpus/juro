@@ -10,6 +10,7 @@ import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
 import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, type VoiceSpeechPhase } from "../../lib/ai/voice-ui";
 import { formatPlatformDate, formatPlatformLongDate, formatPlatformMonth } from "../../lib/platform/date-time";
 import type { PlatformLocale } from "../../lib/platform/routing";
+import { aiText } from "../../lib/ai/localization";
 import { uzbekistanCalendarDate } from "../../lib/legal/applicability-date";
 import { usePlatformBasePath, usePlatformWorkspaceId } from "./PlatformRouteContext";
 import { AiSelect } from "./AiSelect";
@@ -136,7 +137,10 @@ type AiRunRecoveryStatus =
 const feedbackOptions: AiFeedbackType[] = ["not_helpful", "wrong_norm", "broken_link", "outdated", "incomplete", "language", "unsafe", "ignored_facts"];
 
 export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
-  const ru = locale === "ru";
+  const text = useCallback(
+    (ru: string, uz: string, en: string) => aiText(locale, ru, uz, en),
+    [locale],
+  );
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -253,7 +257,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         headers: { "x-juro-workspace-id": workspaceId },
       });
       const body = await response.json() as { status?: ProviderStatus; usage?: Usage; conversations?: Conversation[]; cases?: CaseOption[]; selected?: Answer | null; error?: string };
-      if (!response.ok) throw new Error(body.error || (ru ? "AI-модуль не загрузился." : "AI moduli yuklanmadi."));
+      if (!response.ok) throw new Error(body.error || text("AI-модуль не загрузился.", "AI moduli yuklanmadi.", "The AI workspace could not be loaded."));
       setStatus(body.status ?? null);
       setUsage(body.usage ?? null);
       setConversations(body.conversations ?? []);
@@ -264,7 +268,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     } finally {
       setLoading(false);
     }
-  }, [ru, selectedBranchId, selectedConversationId, workspaceId]);
+  }, [selectedBranchId, selectedConversationId, text, workspaceId]);
 
   async function finalizeIntake(): Promise<boolean> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(intakeHandle)) return true;
@@ -298,7 +302,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     if (selectedConversationId || intakeHandledRef.current || !handle) return;
     intakeHandledRef.current = true;
     if (!/^[A-Za-z0-9_-]{43}$/.test(handle)) {
-      setError(ru ? "Черновик вопроса недоступен." : "Savol qoralamasi mavjud emas.");
+      setError(text("Черновик вопроса недоступен.", "Savol qoralamasi mavjud emas.", "The question draft is unavailable."));
       return;
     }
     void fetch("/api/platform/ai/intake/consume", {
@@ -314,14 +318,14 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       body: await response.json() as { question?: string; error?: string },
     })).then(({ response, body }) => {
       if (!response.ok || !body.question) {
-        throw new Error(body.error || (ru ? "Черновик вопроса недоступен." : "Savol qoralamasi mavjud emas."));
+        throw new Error(body.error || text("Черновик вопроса недоступен.", "Savol qoralamasi mavjud emas.", "The question draft is unavailable."));
       }
       setQuestion((current) => current || body.question!);
       requestAnimationFrame(() => composerRef.current?.focus());
     }).catch((value) => {
       setError(value instanceof Error ? value.message : String(value));
     });
-  }, [locale, pathname, ru, searchParams, selectedConversationId, workspaceId]);
+  }, [locale, pathname, searchParams, selectedConversationId, text, workspaceId]);
 
   useEffect(() => {
     if (!mobileContextOpen) return;
@@ -387,12 +391,12 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   useEffect(() => {
     if (!answer?.messageId) { setFeedback([]); setFeedbackStatus(""); return; }
     let active = true;
-    void fetch(`/api/platform/ai/feedback?assistantMessageId=${encodeURIComponent(answer.messageId)}`, { cache: "no-store" })
+    void fetch(`/api/platform/ai/feedback?assistantMessageId=${encodeURIComponent(answer.messageId)}`, { cache: "no-store", headers: { "x-juro-locale": locale } })
       .then(async (response) => ({ response, body: await response.json() as { feedback?: AiFeedback[] } }))
       .then(({ response, body }) => { if (active && response.ok) setFeedback(body.feedback ?? []); })
       .catch(() => { /* Feedback is supplementary; an unavailable read must not hide the legal answer. */ });
     return () => { active = false; };
-  }, [answer?.messageId]);
+  }, [answer?.messageId, locale]);
 
   async function recoverPendingRequest(pending: AiRetryRequest<AiRequestPayload>, signal: AbortSignal) {
     const waits = [500, 1_000, 1_500, 2_500, 4_000];
@@ -471,10 +475,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     setSending(true);
     setError("");
     setCanRetry(false);
-    setStreamStatus(ru ? "Понимаю вопрос" : "Savolni tushunyapman");
+    setStreamStatus(text("Понимаю вопрос", "Savolni tushunyapman", "Understanding your question"));
     try {
       if (pending.payload.voiceRecordingId && pending.payload.question) {
-        setStreamStatus(ru ? "Подтверждаем распознанный текст…" : "Tanilgan matn tasdiqlanmoqda…");
+        setStreamStatus(text("Подтверждаем распознанный текст…", "Tanilgan matn tasdiqlanmoqda…", "Confirming the transcript…"));
         await confirmVoiceTranscript(pending.payload.voiceRecordingId, pending.payload.question.trim(), locale);
       }
       const response = await fetch("/api/platform/ai", {
@@ -490,30 +494,30 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         signal: controller.signal,
       });
       if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
-        throw new Error(ru ? "Не удалось открыть защищённый поток ответа." : "Himoyalangan javob oqimini ochib bo‘lmadi.");
+        throw new Error(text("Не удалось открыть защищённый поток ответа.", "Himoyalangan javob oqimini ochib bo‘lmadi.", "The secure answer stream could not be opened."));
       }
       let terminal;
       try {
         terminal = await readAiEventStream(response, (progress) => {
           if (progress.stage === "accepted") {
-            setStreamStatus(ru ? "Понимаю вопрос" : "Savolni tushunyapman");
+            setStreamStatus(text("Понимаю вопрос", "Savolni tushunyapman", "Understanding your question"));
           } else if (progress.stage === "document_search_started") {
-            setStreamStatus(ru ? "Сначала проверяю юридические документы в базе JURO" : "Avval JURO bazasidagi yuridik hujjatlarni tekshiryapman");
+            setStreamStatus(text("Сначала проверяю юридические документы в базе JURO", "Avval JURO bazasidagi yuridik hujjatlarni tekshiryapman", "Checking legal documents in JURO first"));
           } else if (progress.stage === "lex_search_started") {
-            setStreamStatus(ru ? "Ищу действующие нормы в Lex.uz" : "Lex.uz’dan amaldagi normalarni izlayapman");
+            setStreamStatus(text("Ищу действующие нормы в Lex.uz", "Lex.uz’dan amaldagi normalarni izlayapman", "Searching Lex.uz for applicable law"));
           } else if (progress.stage === "internet_search_started") {
-            setStreamStatus(ru ? "Дополняю поиск другими открытыми материалами" : "Qidiruvni boshqa ochiq materiallar bilan to‘ldiryapman");
+            setStreamStatus(text("Дополняю поиск другими открытыми материалами", "Qidiruvni boshqa ochiq materiallar bilan to‘ldiryapman", "Extending the search with other public materials"));
           } else if (progress.stage === "source_verified") {
-            setStreamStatus(ru ? "Проверяю официальный источник" : "Rasmiy manbani tekshiryapman");
+            setStreamStatus(text("Проверяю официальный источник", "Rasmiy manbani tekshiryapman", "Verifying the official source"));
           } else if (progress.stage === "provider_started") {
-            setStreamStatus(ru ? "Готовлю практический ответ…" : "Amaliy javobni tayyorlayapman…");
+            setStreamStatus(text("Готовлю практический ответ…", "Amaliy javobni tayyorlayapman…", "Preparing a practical answer…"));
           } else if (progress.stage === "provider_delta") {
-            setStreamStatus(ru ? "JURO проверяет структуру и источники…" : "JURO tuzilma va manbalarni tekshirmoqda…");
+            setStreamStatus(text("JURO проверяет структуру и источники…", "JURO tuzilma va manbalarni tekshirmoqda…", "JURO is validating the structure and sources…"));
           } else if (progress.stage === "preliminary" && progress.preliminary) {
             setPreliminary(progress.preliminary);
             setStreamStatus(progress.preliminary.message);
           } else if (progress.stage === "fallback") {
-            setStreamStatus(ru ? "Основной провайдер недоступен — включён резервный…" : "Asosiy provayder ishlamayapti — zaxira yoqildi…");
+            setStreamStatus(text("Основной провайдер недоступен — включён резервный…", "Asosiy provayder ishlamayapti — zaxira yoqildi…", "The primary provider is unavailable — switching to the fallback…"));
           }
         });
       } catch (streamError) {
@@ -523,11 +527,11 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       }
       const body = terminal.body as Answer & { error?: string; code?: string };
       if (terminal.status < 200 || terminal.status >= 300) {
-        const message = body.error || (ru ? "Не удалось получить ответ." : "Javob olinmadi.");
+        const message = body.error || text("Не удалось получить ответ.", "Javob olinmadi.", "The answer could not be generated.");
         if (isRestartableAiTerminal(terminal.status, body.code)) throw new AiRestartableRequestError(message);
         throw new Error(message);
       }
-      if (terminal.status === 202) throw new AiRetryableRequestError(ru ? "Запрос уже обрабатывается. Повторите проверку через несколько секунд." : "So‘rov qayta ishlanmoqda. Bir necha soniyadan so‘ng qayta tekshiring.");
+      if (terminal.status === 202) throw new AiRetryableRequestError(text("Запрос уже обрабатывается. Повторите проверку через несколько секунд.", "So‘rov qayta ishlanmoqda. Bir necha soniyadan so‘ng qayta tekshiring.", "This request is still being processed. Check again in a few seconds."));
       setAnswer(body);
       setOptimisticQuestion("");
       setPreliminary(null);
@@ -549,7 +553,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       const cancelled = isUserCancelledAiRequest(value);
       if (cancelled && pending.payload.question) setQuestion(pending.payload.question);
       if (!cancelled && (value instanceof AiRetryableRequestError || value instanceof TypeError)) {
-        setStreamStatus(ru ? "Проверяем, сохранился ли ответ…" : "Javob saqlanganini tekshiryapmiz…");
+        setStreamStatus(text("Проверяем, сохранился ли ответ…", "Javob saqlanganini tekshiryapmiz…", "Checking whether the answer was saved…"));
         try {
           const recovery = await recoverPendingRequest(pending, controller.signal);
           if (recovery.kind === "completed") {
@@ -559,14 +563,16 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           if (recovery.kind === "failed") {
             pendingAiRequestRef.current = createAiRetryRequest(pending.payload, () => crypto.randomUUID());
             setCanRetry(true);
-            setError(ru
-              ? "Предыдущая попытка завершилась без списания лимита. Можно безопасно повторить запрос."
-              : "Oldingi urinish limit yechilmasdan yakunlandi. So‘rovni xavfsiz takrorlash mumkin.");
+            setError(text(
+              "Предыдущая попытка завершилась без списания лимита. Можно безопасно повторить запрос.",
+              "Oldingi urinish limit yechilmasdan yakunlandi. So‘rovni xavfsiz takrorlash mumkin.",
+              "The previous attempt ended without using your allowance. You can safely retry.",
+            ));
             return;
           }
         } catch (recoveryError) {
           if (isUserCancelledAiRequest(recoveryError)) {
-            setError(ru ? "Восстановление остановлено." : "Tiklash to‘xtatildi.");
+            setError(text("Восстановление остановлено.", "Tiklash to‘xtatildi.", "Recovery was stopped."));
             return;
           }
           // An unavailable status check is still an uncertain outcome. Reuse
@@ -580,7 +586,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         setCanRetry(true);
       }
       setError(cancelled
-        ? (ru ? "Генерация остановлена. Лимит не списан." : "Javob yaratish to‘xtatildi. Limit yechilmadi.")
+        ? text("Генерация остановлена. Лимит не списан.", "Javob yaratish to‘xtatildi. Limit yechilmadi.", "Generation stopped. Your allowance was not used.")
         : value instanceof Error ? value.message : String(value));
     } finally {
       streamAbortRef.current = null;
@@ -621,7 +627,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         headers: { "x-juro-csrf": "1", "x-juro-workspace-id": workspaceId },
       });
       const body = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(body.error || (ru ? "Диалог не удалён." : "Suhbat o‘chirilmadi."));
+      if (!response.ok) throw new Error(body.error || text("Диалог не удалён.", "Suhbat o‘chirilmadi.", "The conversation could not be deleted."));
       setConversations((current) => current.filter((item) => item.id !== conversationId));
       setDeleteCandidateId("");
       if (conversationId === selectedConversationId) window.location.assign(aiLocation());
@@ -639,7 +645,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       body: JSON.stringify({ status: nextStatus }),
     });
     const body = await response.json() as { error?: string };
-    if (!response.ok) { setError(body.error || (ru ? "Факт не обновлён." : "Fakt yangilanmadi.")); return; }
+    if (!response.ok) { setError(body.error || text("Факт не обновлён.", "Fakt yangilanmadi.", "The fact could not be updated.")); return; }
     setAnswer((current) => current ? { ...current, facts: current.facts.map((fact) => fact.id === factId ? { ...fact, status: nextStatus } : fact) } : current);
   }
 
@@ -651,11 +657,11 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     try {
       const response = await fetch("/api/platform/ai/action-plan", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify({ assistantMessageId: answer.messageId, targetCaseId: targetCaseId || undefined, locale }),
       });
       const body = await response.json() as { caseId?: string; error?: string };
-      if (!response.ok || !body.caseId) throw new Error(body.error || (ru ? "План не сохранён в дело." : "Reja ishga saqlanmadi."));
+      if (!response.ok || !body.caseId) throw new Error(body.error || text("План не сохранён в дело.", "Reja ishga saqlanmadi.", "The action plan could not be saved to the matter."));
       router.push(`${base}/cases/${encodeURIComponent(body.caseId)}`);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -676,7 +682,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       });
       const body = await response.json() as Partial<DocumentPrefillPreview> & { error?: string };
       if (!response.ok || !body.templateCode || !body.categorySlug || !body.title || !Array.isArray(body.candidates)) {
-        throw new Error(body.error || (ru ? "Шаблон не удалось проверить." : "Shablonni tekshirib bo‘lmadi."));
+        throw new Error(body.error || text("Шаблон не удалось проверить.", "Shablonni tekshirib bo‘lmadi.", "The template could not be verified."));
       }
       documentHandoffKeyRef.current = `ai-document-${crypto.randomUUID()}`;
       setDocumentPrefill(body as DocumentPrefillPreview);
@@ -692,7 +698,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   async function confirmSuggestedDocument() {
     if (!documentPrefillMessageId || !documentPrefill || creatingSuggestedDocument) return;
     if (documentPrefill.candidates.some((candidate) => candidate.sensitive) && !sensitivePrefillConsent) {
-      setError(ru ? "Подтвердите сохранение выбранных конфиденциальных реквизитов." : "Tanlangan maxfiy rekvizitlarni saqlashni tasdiqlang.");
+      setError(text("Подтвердите сохранение выбранных конфиденциальных реквизитов.", "Tanlangan maxfiy rekvizitlarni saqlashni tasdiqlang.", "Confirm that the selected sensitive details may be saved."));
       return;
     }
     setCreatingSuggestedDocument(true);
@@ -715,7 +721,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         }),
       });
       const body = await response.json() as { documentId?: string; error?: string };
-      if (!response.ok || !body.documentId) throw new Error(body.error || (ru ? "Черновик не создан." : "Qoralama yaratilmadi."));
+      if (!response.ok || !body.documentId) throw new Error(body.error || text("Черновик не создан.", "Qoralama yaratilmadi.", "The draft could not be created."));
       router.push(`${base}/documents/${encodeURIComponent(body.documentId)}/edit`);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -731,15 +737,15 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     try {
       const response = await fetch("/api/platform/ai/feedback", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify({ assistantMessageId: answer.messageId, feedbackType: nextType, comment }),
       });
       const body = await response.json() as { error?: string; feedbackType?: AiFeedbackType; updatedAt?: string };
-      if (!response.ok || body.feedbackType === undefined || body.updatedAt === undefined) throw new Error(body.error || (ru ? "Отзыв не сохранён." : "Fikr-mulohaza saqlanmadi."));
+      if (!response.ok || body.feedbackType === undefined || body.updatedAt === undefined) throw new Error(body.error || text("Отзыв не сохранён.", "Fikr-mulohaza saqlanmadi.", "Your feedback could not be saved."));
       const savedFeedback: AiFeedback = { feedbackType: body.feedbackType, comment: comment.trim() || null, updatedAt: body.updatedAt };
       setFeedback((current) => [...current.filter((item) => item.feedbackType !== savedFeedback.feedbackType), savedFeedback]);
       setFeedbackComment("");
-      setFeedbackStatus(ru ? "Спасибо, отзыв сохранён для проверки качества JURO." : "Rahmat, fikr-mulohaza JURO sifatini tekshirish uchun saqlandi.");
+      setFeedbackStatus(text("Спасибо, отзыв сохранён для проверки качества JURO.", "Rahmat, fikr-mulohaza JURO sifatini tekshirish uchun saqlandi.", "Thank you. Your feedback has been saved for JURO quality review."));
     } catch (value) {
       setFeedbackStatus(value instanceof Error ? value.message : String(value));
     } finally {
@@ -750,7 +756,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   function feedbackLabel(type: AiFeedbackType) {
     const ruLabels: Record<AiFeedbackType, string> = { helpful: "Полезно", not_helpful: "Не помогло", wrong_norm: "Неверная норма", broken_link: "Нерабочая ссылка", outdated: "Устарело", incomplete: "Неполно", language: "Проблема языка", unsafe: "Небезопасно", ignored_facts: "Не учтены факты" };
     const uzLabels: Record<AiFeedbackType, string> = { helpful: "Foydali", not_helpful: "Yordam bermadi", wrong_norm: "Noto‘g‘ri norma", broken_link: "Ishlamaydigan havola", outdated: "Eskirgan", incomplete: "To‘liq emas", language: "Til muammosi", unsafe: "Xavfsiz emas", ignored_facts: "Faktlar hisobga olinmadi" };
-    return (ru ? ruLabels : uzLabels)[type];
+    const enLabels: Record<AiFeedbackType, string> = { helpful: "Helpful", not_helpful: "Not helpful", wrong_norm: "Incorrect legal rule", broken_link: "Broken link", outdated: "Out of date", incomplete: "Incomplete", language: "Language issue", unsafe: "Unsafe", ignored_facts: "Facts were overlooked" };
+    return (locale === "en" ? enLabels : locale === "uz" ? uzLabels : ruLabels)[type];
   }
 
   const visibleSources = answer?.result.sources.filter((source) =>
@@ -761,22 +768,22 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
   return (
     <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""} ${historyCollapsed ? "ai-history-collapsed" : ""} ${evidenceCollapsed ? "ai-evidence-collapsed" : ""}`}>
-      <aside className="ai-conversations" id="ai-conversations-panel" aria-label={ru ? "История диалогов" : "Suhbatlar tarixi"}>
-        <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
-        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setOptimisticQuestion(""); setPreliminary(null); setVoiceRecordingId(""); setEditSourceMessageId(""); window.location.assign(aiLocation()); }}><Plus />{ru ? "Новый вопрос" : "Yangi savol"}</button>
-        <nav className="ai-conversation-list" aria-label={ru ? "История диалогов" : "Suhbatlar tarixi"}>
+      <aside className="ai-conversations" id="ai-conversations-panel" aria-label={text("История диалогов", "Suhbatlar tarixi", "Conversation history")}>
+        <header><Bot /><div><small>JURO</small><strong>{text("Диалоги", "Suhbatlar", "Conversations")}</strong></div></header>
+        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setOptimisticQuestion(""); setPreliminary(null); setVoiceRecordingId(""); setEditSourceMessageId(""); window.location.assign(aiLocation()); }}><Plus />{text("Новый вопрос", "Yangi savol", "New question")}</button>
+        <nav className="ai-conversation-list" aria-label={text("История диалогов", "Suhbatlar tarixi", "Conversation history")}>
           {conversationDeleteError && <p className="ai-conversation-delete-error" role="alert">{conversationDeleteError}</p>}
           {conversations.length ? conversations.map((item) => <div className="ai-conversation-item" key={item.id}>
-            <a aria-current={item.id === selectedConversationId ? "page" : undefined} href={aiLocation(new URLSearchParams({ conversationId: item.id }))}><span className="ai-conversation-marker" aria-hidden="true" /><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></a>
-            <button className="ai-conversation-delete" type="button" disabled={sending || Boolean(deletingConversationId)} aria-expanded={deleteCandidateId === item.id} aria-label={ru ? `Удалить диалог «${item.title}»` : `“${item.title}” suhbatini o‘chirish`} title={ru ? "Удалить диалог" : "Suhbatni o‘chirish"} onClick={() => { setConversationDeleteError(""); setDeleteCandidateId((current) => current === item.id ? "" : item.id); }}><Trash2 /></button>
-            {deleteCandidateId === item.id && <div className="ai-conversation-delete-confirm" role="group" aria-label={ru ? "Подтверждение удаления" : "O‘chirishni tasdiqlash"}><span>{ru ? "Удалить без возможности восстановления?" : "Tiklash imkoniyatisiz o‘chirilsinmi?"}</span><button type="button" disabled={Boolean(deletingConversationId)} onClick={() => setDeleteCandidateId("")}>{ru ? "Отмена" : "Bekor qilish"}</button><button className="is-danger" type="button" disabled={Boolean(deletingConversationId)} onClick={() => void deleteConversation(item.id)}>{deletingConversationId === item.id ? (ru ? "Удаляем…" : "O‘chirilmoqda…") : (ru ? "Удалить" : "O‘chirish")}</button></div>}
-          </div>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}
+            <a aria-current={item.id === selectedConversationId ? "page" : undefined} href={aiLocation(new URLSearchParams({ conversationId: item.id }))}><span className="ai-conversation-marker" aria-hidden="true" /><strong>{item.title}</strong><small>{formatDate(item.updatedAt, locale)}</small></a>
+            <button className="ai-conversation-delete" type="button" disabled={sending || Boolean(deletingConversationId)} aria-expanded={deleteCandidateId === item.id} aria-label={text(`Удалить диалог «${item.title}»`, `“${item.title}” suhbatini o‘chirish`, `Delete conversation “${item.title}”`)} title={text("Удалить диалог", "Suhbatni o‘chirish", "Delete conversation")} onClick={() => { setConversationDeleteError(""); setDeleteCandidateId((current) => current === item.id ? "" : item.id); }}><Trash2 /></button>
+            {deleteCandidateId === item.id && <div className="ai-conversation-delete-confirm" role="group" aria-label={text("Подтверждение удаления", "O‘chirishni tasdiqlash", "Confirm deletion")}><span>{text("Удалить без возможности восстановления?", "Tiklash imkoniyatisiz o‘chirilsinmi?", "Permanently delete this conversation?")}</span><button type="button" disabled={Boolean(deletingConversationId)} onClick={() => setDeleteCandidateId("")}>{text("Отмена", "Bekor qilish", "Cancel")}</button><button className="is-danger" type="button" disabled={Boolean(deletingConversationId)} onClick={() => void deleteConversation(item.id)}>{deletingConversationId === item.id ? text("Удаляем…", "O‘chirilmoqda…", "Deleting…") : text("Удалить", "O‘chirish", "Delete")}</button></div>}
+          </div>) : <p>{text("История появится после первого обработанного вопроса.", "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi.", "Your history will appear after the first completed question.")}</p>}
         </nav>
       </aside>
       <section className="ai-dialog" aria-labelledby="ai-lawyer-heading">
-        <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (usage?.limit === null
-          ? (ru ? `Право Узбекистана · безлимитно (локально) · ${usage.used} ответов` : `O‘zbekiston huquqi · lokal cheklanmagan · ${usage.used} javob`)
-          : (ru ? `Право Узбекистана · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston huquqi · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`)) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><div className="ai-panel-controls"><button type="button" aria-controls="ai-conversations-panel" aria-expanded={!historyCollapsed} onClick={toggleHistory}><History aria-hidden="true" /><span>{ru ? "История" : "Tarix"}</span></button><button type="button" aria-controls="ai-context-panel" aria-expanded={mobileContextOpen || !evidenceCollapsed} onClick={() => { if (window.matchMedia("(max-width: 1380px)").matches) openMobileContext("sources"); else setEvidenceCollapsed((current) => !current); }}><BookOpenCheck aria-hidden="true" /><span>{ru ? "Источники" : "Manbalar"}</span></button></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button></nav></header>
+        <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{text("AI-юрист JURO", "JURO AI-yuristi", "JURO AI Lawyer")}</h1><p>{status?.configured ? (usage?.limit === null
+          ? text(`Право Узбекистана · безлимитно (локально) · ${usage.used} ответов`, `O‘zbekiston huquqi · lokal cheklanmagan · ${usage.used} javob`, `Law of Uzbekistan · unlimited locally · ${usage.used} answers`)
+          : text(`Право Узбекистана · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов`, `O‘zbekiston huquqi · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`, `Law of Uzbekistan · ${usage?.used ?? 0} of ${usage?.limit ?? 20} answers`)) : text("Провайдер не подключён", "Provayder ulanmagan", "Provider not connected")}</p></div><div className="ai-panel-controls"><button type="button" aria-controls="ai-conversations-panel" aria-expanded={!historyCollapsed} onClick={toggleHistory}><History aria-hidden="true" /><span>{text("История", "Tarix", "History")}</span></button><button type="button" aria-controls="ai-context-panel" aria-expanded={mobileContextOpen || !evidenceCollapsed} onClick={() => { if (window.matchMedia("(max-width: 1380px)").matches) openMobileContext("sources"); else setEvidenceCollapsed((current) => !current); }}><BookOpenCheck aria-hidden="true" /><span>{text("Источники", "Manbalar", "Sources")}</span></button></div><nav className="ai-composer-mode" aria-label={text("Способ общения", "Muloqot usuli", "Interaction mode")}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{text("Текст", "Matn", "Text")}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{text("Голос", "Ovoz", "Voice")}</button></nav></header>
         {voiceMode && <VoiceModeStage
           locale={locale}
           configured={Boolean(status?.configured)}
@@ -785,82 +792,84 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           recorderPhase={voiceRecorderPhase}
           speechPhase={voiceSpeechPhase}
         />}
-        {!status?.configured && <div className="ai-unavailable" role="status"><ShieldAlert /><div><strong>{ru ? "AI пока недоступен" : "AI hozircha ishlamaydi"}</strong><p>{ru ? "Сервер не подтвердил ключ AI-провайдера. JURO не имитирует ответ и не показывает ложный success." : "Server AI-provayder kalitini tasdiqlamadi. JURO javobni taqlid qilmaydi va soxta muvaffaqiyatni ko‘rsatmaydi."}</p></div></div>}
-        {error && <div className="ai-error" role="alert"><CircleAlert /><div><p>{error}</p>{canRetry && <button type="button" disabled={sending} onClick={() => { const pending = pendingAiRequestRef.current; if (pending) void submit(undefined, undefined, pending); }}>{ru ? "Безопасно повторить запрос" : "So‘rovni xavfsiz qaytarish"}</button>}</div></div>}
-        <p className="sr-only" role="status" aria-live="polite">{sending ? streamStatus : answer?.messageId ? (ru ? "Проверенный ответ готов" : "Tekshirilgan javob tayyor") : ""}</p>
-        <div className="ai-answer-stream" ref={transcriptRef} role="log" aria-label={ru ? "Юридический диалог" : "Huquqiy suhbat"} aria-busy={sending} onScroll={(event) => { const transcript = event.currentTarget; transcriptPinnedRef.current = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 96; }}>
+        {!status?.configured && <div className="ai-unavailable" role="status"><ShieldAlert /><div><strong>{text("AI пока недоступен", "AI hozircha ishlamaydi", "AI is currently unavailable")}</strong><p>{text("Сервер не подтвердил ключ AI-провайдера. JURO не имитирует ответ и не показывает ложный success.", "Server AI-provayder kalitini tasdiqlamadi. JURO javobni taqlid qilmaydi va soxta muvaffaqiyatni ko‘rsatmaydi.", "The server could not verify the AI provider configuration. JURO will not simulate an answer or report a false success.")}</p></div></div>}
+        {error && <div className="ai-error" role="alert"><CircleAlert /><div><p>{error}</p>{canRetry && <button type="button" disabled={sending} onClick={() => { const pending = pendingAiRequestRef.current; if (pending) void submit(undefined, undefined, pending); }}>{text("Безопасно повторить запрос", "So‘rovni xavfsiz qaytarish", "Retry safely")}</button>}</div></div>}
+        <p className="sr-only" role="status" aria-live="polite">{sending ? streamStatus : answer?.messageId ? text("Проверенный ответ готов", "Tekshirilgan javob tayyor", "Verified answer ready") : ""}</p>
+        <div className="ai-answer-stream" ref={transcriptRef} role="log" aria-label={text("Юридический диалог", "Huquqiy suhbat", "Legal conversation")} aria-busy={sending} onScroll={(event) => { const transcript = event.currentTarget; transcriptPinnedRef.current = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 96; }}>
           {!answer && !optimisticQuestion ? (
-            <div className="ai-start"><FileQuestion /><h2>{ru ? "Опишите юридическую ситуацию" : "Yuridik vaziyatni yozing"}</h2><p>{ru ? "Не указывайте лишние персональные данные. JURO отделит подтверждённые нормы от предположений." : "Ortiqcha shaxsiy ma’lumotlarni yozmang. JURO tasdiqlangan normalarni taxminlardan ajratadi."}</p></div>
+            <div className="ai-start"><FileQuestion /><h2>{text("Опишите юридическую ситуацию", "Yuridik vaziyatni yozing", "Describe your legal situation")}</h2><p>{text("Не указывайте лишние персональные данные. JURO отделит подтверждённые нормы от предположений.", "Ortiqcha shaxsiy ma’lumotlarni yozmang. JURO tasdiqlangan normalarni taxminlardan ajratadi.", "Avoid unnecessary personal data. JURO separates verified law from assumptions.")}</p></div>
           ) : <>
             {answer && <>
             <div className="ai-transcript">
-              {(answer.turns ?? []).filter((turn) => turn.responseMessageId !== answer.messageId).map((turn) => <ConversationTurnPair key={turn.branchId} turn={turn} ru={ru} onCitationSelect={revealCitation} />)}
-              <HumanMessage question={answer.question || answer.turns?.at(-1)?.question || ""} ru={ru} />
-              <div className="ai-current-answer" ref={latestAnswerRef}><LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} onCitationSelect={revealCitation} onQuestionSelect={(selected) => {
+              {(answer.turns ?? []).filter((turn) => turn.responseMessageId !== answer.messageId).map((turn) => <ConversationTurnPair key={turn.branchId} turn={turn} locale={locale} onCitationSelect={revealCitation} />)}
+              <HumanMessage question={answer.question || answer.turns?.at(-1)?.question || ""} locale={locale} />
+              <div className="ai-current-answer" ref={latestAnswerRef}><LegalAnswer result={answer.result} freshness={answer.sourceFreshness} locale={locale} onCitationSelect={revealCitation} onQuestionSelect={(selected) => {
                  setQuestion(selected);
                  requestAnimationFrame(() => composerRef.current?.focus());
               }} /></div>
             </div>
             {answer.result.responseKind === "answer" && answer.result.actionPlan.length > 0 && dismissedPlanMessageId !== answer.messageId && <section className="ai-plan-card" aria-labelledby="ai-plan-card-title">
-              <header><small>{ru ? "После ответа AI" : "AI javobidan so‘ng"}</small><h2 id="ai-plan-card-title">{ru ? "Создать план действий" : "Harakatlar rejasini yaratish"}</h2></header>
-              <p>{ru ? "Сохраните следующие шаги из ответа как задачи в новом или существующем деле." : "Javobdagi keyingi qadamlarni yangi yoki mavjud ishda vazifalar sifatida saqlang."}</p>
-              {planEditorOpen && <div className="ai-plan-destination"><label htmlFor="ai-plan-case">{ru ? "Куда добавить план" : "Rejani qayerga qo‘shish"}</label><AiSelect id="ai-plan-case" value={targetCaseId} disabled={savingPlan} onChange={setTargetCaseId} options={[{ value: "", label: ru ? "Новое дело" : "Yangi ish" }, ...cases.map((item) => ({ value: item.id, label: item.title }))]} /></div>}
-              {!planConfirmationOpen ? <footer><button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => setPlanConfirmationOpen(true)}><ListPlus />{targetCaseId ? (ru ? "Создать в выбранном деле" : "Tanlangan ishda yaratish") : (ru ? "Создать план" : "Reja yaratish")}</button><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanEditorOpen((current) => !current)}>{ru ? "Изменить" : "O‘zgartirish"}</button><button type="button" className="quiet" disabled={savingPlan} onClick={() => setDismissedPlanMessageId(answer.messageId || "")}>{ru ? "Не предлагать" : "Taklif qilmaslik"}</button></footer> : <div className="ai-plan-confirmation" ref={planConfirmationRef} tabIndex={-1} role="group" aria-label={ru ? "Подтверждение сохранения плана" : "Rejani saqlashni tasdiqlash"}>
+              <header><small>{text("После ответа AI", "AI javobidan so‘ng", "After the AI answer")}</small><h2 id="ai-plan-card-title">{text("Создать план действий", "Harakatlar rejasini yaratish", "Create an action plan")}</h2></header>
+              <p>{text("Сохраните следующие шаги из ответа как задачи в новом или существующем деле.", "Javobdagi keyingi qadamlarni yangi yoki mavjud ishda vazifalar sifatida saqlang.", "Save the next steps from this answer as tasks in a new or existing matter.")}</p>
+              {planEditorOpen && <div className="ai-plan-destination"><label htmlFor="ai-plan-case">{text("Куда добавить план", "Rejani qayerga qo‘shish", "Where to add the plan")}</label><AiSelect id="ai-plan-case" value={targetCaseId} disabled={savingPlan} onChange={setTargetCaseId} options={[{ value: "", label: text("Новое дело", "Yangi ish", "New matter") }, ...cases.map((item) => ({ value: item.id, label: item.title }))]} /></div>}
+              {!planConfirmationOpen ? <footer><button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => setPlanConfirmationOpen(true)}><ListPlus />{targetCaseId ? text("Создать в выбранном деле", "Tanlangan ishda yaratish", "Create in selected matter") : text("Создать план", "Reja yaratish", "Create plan")}</button><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanEditorOpen((current) => !current)}>{text("Изменить", "O‘zgartirish", "Change")}</button><button type="button" className="quiet" disabled={savingPlan} onClick={() => setDismissedPlanMessageId(answer.messageId || "")}>{text("Не предлагать", "Taklif qilmaslik", "Dismiss")}</button></footer> : <div className="ai-plan-confirmation" ref={planConfirmationRef} tabIndex={-1} role="group" aria-label={text("Подтверждение сохранения плана", "Rejani saqlashni tasdiqlash", "Confirm plan save")}>
                 <p>{targetCaseId
-                  ? (ru ? `Добавить задачи в дело «${cases.find((item) => item.id === targetCaseId)?.title ?? "Выбранное дело"}»?` : `Vazifalar “${cases.find((item) => item.id === targetCaseId)?.title ?? "Tanlangan ish"}” ishiga qo‘shilsinmi?`)
-                  : (ru ? "Создать новое дело и задачи по этому плану?" : "Bu reja bo‘yicha yangi ish va vazifalar yaratiladimi?")}</p>
-                <div><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanConfirmationOpen(false)}>{ru ? "Отмена" : "Bekor qilish"}</button><button type="button" disabled={savingPlan} aria-busy={savingPlan} onClick={() => void savePlanToCase()}>{savingPlan ? <LoaderCircle className="spin" /> : <ListPlus />}{savingPlan ? (ru ? "Сохраняем…" : "Saqlanmoqda…") : (ru ? "Подтвердить и сохранить" : "Tasdiqlash va saqlash")}</button></div>
+                  ? text(`Добавить задачи в дело «${cases.find((item) => item.id === targetCaseId)?.title ?? "Выбранное дело"}»?`, `Vazifalar “${cases.find((item) => item.id === targetCaseId)?.title ?? "Tanlangan ish"}” ishiga qo‘shilsinmi?`, `Add these tasks to “${cases.find((item) => item.id === targetCaseId)?.title ?? "Selected matter"}”?`)
+                  : text("Создать новое дело и задачи по этому плану?", "Bu reja bo‘yicha yangi ish va vazifalar yaratiladimi?", "Create a new matter and tasks from this plan?")}</p>
+                <div><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanConfirmationOpen(false)}>{text("Отмена", "Bekor qilish", "Cancel")}</button><button type="button" disabled={savingPlan} aria-busy={savingPlan} onClick={() => void savePlanToCase()}>{savingPlan ? <LoaderCircle className="spin" /> : <ListPlus />}{savingPlan ? text("Сохраняем…", "Saqlanmoqda…", "Saving…") : text("Подтвердить и сохранить", "Tasdiqlash va saqlash", "Confirm and save")}</button></div>
               </div>}
             </section>}
             <div className="ai-answer-actions">
-              {answer.result.responseKind === "answer" && answer.result.suggestedDocument && <button type="button" disabled={!answer.messageId || sending || openingSuggestedDocument} onClick={() => void openSuggestedDocument()}><FilePlus2 />{openingSuggestedDocument ? (ru ? "Проверяем шаблон…" : "Shablon tekshirilmoqda…") : (ru ? "Открыть шаблон JURO" : "JURO shablonini ochish")}</button>}
-              <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setVoiceRecordingId(""); setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
-              <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
+              {answer.result.responseKind === "answer" && answer.result.suggestedDocument && <button type="button" disabled={!answer.messageId || sending || openingSuggestedDocument} onClick={() => void openSuggestedDocument()}><FilePlus2 />{openingSuggestedDocument ? text("Проверяем шаблон…", "Shablon tekshirilmoqda…", "Verifying template…") : text("Открыть шаблон JURO", "JURO shablonini ochish", "Open JURO template")}</button>}
+              <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setVoiceRecordingId(""); setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{text("Редактировать вопрос", "Savolni tahrirlash", "Edit question")}</button>
+              <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{text("Повторить ответ", "Javobni qayta yaratish", "Regenerate answer")}</button>
               {answer.messageId && answer.result.responseKind === "answer" && <AssistantSpeechControls locale={locale} assistantMessageId={answer.messageId} disabled={sending} onPhaseChange={setVoiceSpeechPhase} />}
             </div>
             {documentPrefill && documentPrefillMessageId === answer.messageId && <section className="ai-document-prefill" aria-labelledby="ai-document-prefill-title" aria-busy={creatingSuggestedDocument}>
-              <header><div><small>{ru ? "Проверка перед созданием" : "Yaratishdan oldin tekshirish"}</small><h2 id="ai-document-prefill-title">{documentPrefill.title}</h2><p>{documentPrefill.reason}</p></div><button type="button" aria-label={ru ? "Закрыть проверку заполнения" : "To‘ldirish tekshiruvini yopish"} disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); setSensitivePrefillConsent(false); documentHandoffKeyRef.current = ""; }}><X /></button></header>
-              <p className="ai-document-prefill-note">{ru
-                ? "JURO предлагает только данные из вашего профиля, workspace и сохранённого AI-ответа. Проверьте роль каждой стороны: можно исправить или удалить любое поле. Данные не помещаются в URL."
-                : "JURO faqat profilingiz, workspace va saqlangan AI javobidagi ma’lumotlarni taklif qiladi. Har bir taraf rolini tekshiring: istalgan maydonni tuzatish yoki olib tashlash mumkin. Ma’lumotlar URLga joylanmaydi."}</p>
+              <header><div><small>{text("Проверка перед созданием", "Yaratishdan oldin tekshirish", "Review before creation")}</small><h2 id="ai-document-prefill-title">{documentPrefill.title}</h2><p>{documentPrefill.reason}</p></div><button type="button" aria-label={text("Закрыть проверку заполнения", "To‘ldirish tekshiruvini yopish", "Close prefill review")} disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); setSensitivePrefillConsent(false); documentHandoffKeyRef.current = ""; }}><X /></button></header>
+              <p className="ai-document-prefill-note">{text(
+                "JURO предлагает только данные из вашего профиля, workspace и сохранённого AI-ответа. Проверьте роль каждой стороны: можно исправить или удалить любое поле. Данные не помещаются в URL.",
+                "JURO faqat profilingiz, workspace va saqlangan AI javobidagi ma’lumotlarni taklif qiladi. Har bir taraf rolini tekshiring: istalgan maydonni tuzatish yoki olib tashlash mumkin. Ma’lumotlar URLga joylanmaydi.",
+                "JURO only suggests data from your profile, workspace and saved AI answer. Check each party’s role; you can edit or remove any field. These details are never placed in the URL.",
+              )}</p>
               {documentPrefill.candidates.length ? <div className="ai-document-prefill-fields">{documentPrefill.candidates.map((candidate) => <div className="ai-document-prefill-field" key={candidate.fieldId}>
-                <label><span>{candidate.label}<em>{candidate.source === "profile" ? (ru ? "Профиль" : "Profil") : candidate.source === "workspace" ? "Workspace" : (ru ? "AI-ответ" : "AI javobi")}{candidate.sensitive ? ` · ${ru ? "проверьте конфиденциальные данные" : "maxfiy ma’lumotlarni tekshiring"}` : ""}</em></span>{candidate.value.length > 160 ? <textarea rows={4} value={candidate.value} disabled={creatingSuggestedDocument} onChange={(event) => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.map((item) => item.fieldId === candidate.fieldId ? { ...item, value: event.target.value } : item) } : current)} /> : <input value={candidate.value} disabled={creatingSuggestedDocument} onChange={(event) => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.map((item) => item.fieldId === candidate.fieldId ? { ...item, value: event.target.value } : item) } : current)} />}</label>
-                <button type="button" disabled={creatingSuggestedDocument} onClick={() => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.filter((item) => item.fieldId !== candidate.fieldId) } : current)}>{ru ? "Удалить" : "Olib tashlash"}</button>
-              </div>)}</div> : <p role="status">{ru ? "Безопасных данных для автозаполнения не найдено. Можно создать пустой черновик и заполнить его вручную." : "Xavfsiz avtomatik to‘ldirish ma’lumotlari topilmadi. Bo‘sh qoralama yaratib, uni qo‘lda to‘ldirish mumkin."}</p>}
-              {documentPrefill.candidates.some((candidate) => candidate.sensitive) && <label className="ai-document-sensitive-consent"><input type="checkbox" checked={sensitivePrefillConsent} disabled={creatingSuggestedDocument} onChange={(event) => setSensitivePrefillConsent(event.target.checked)} /><span>{ru ? "Я подтверждаю сохранение только выбранных конфиденциальных реквизитов в этом черновике." : "Faqat tanlangan maxfiy rekvizitlarni ushbu qoralamada saqlashni tasdiqlayman."}</span></label>}
-              <footer><button type="button" className="secondary" disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); setSensitivePrefillConsent(false); documentHandoffKeyRef.current = ""; }}>{ru ? "Отмена" : "Bekor qilish"}</button><button type="button" disabled={creatingSuggestedDocument || (documentPrefill.candidates.some((candidate) => candidate.sensitive) && !sensitivePrefillConsent)} aria-busy={creatingSuggestedDocument} onClick={() => void confirmSuggestedDocument()}>{creatingSuggestedDocument ? <LoaderCircle className="spin" /> : <FilePlus2 />}{creatingSuggestedDocument ? (ru ? "Создаём черновик…" : "Qoralama yaratilmoqda…") : (ru ? "Подтвердить и создать черновик" : "Tasdiqlash va qoralama yaratish")}</button><span className="sr-only" role="status" aria-live="polite">{creatingSuggestedDocument ? (ru ? "JURO создаёт черновик документа" : "JURO hujjat qoralamasini yaratmoqda") : ""}</span></footer>
+                <label><span>{candidate.label}<em>{candidate.source === "profile" ? text("Профиль", "Profil", "Profile") : candidate.source === "workspace" ? "Workspace" : text("AI-ответ", "AI javobi", "AI answer")}{candidate.sensitive ? ` · ${text("проверьте конфиденциальные данные", "maxfiy ma’lumotlarni tekshiring", "check sensitive details")}` : ""}</em></span>{candidate.value.length > 160 ? <textarea rows={4} value={candidate.value} disabled={creatingSuggestedDocument} onChange={(event) => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.map((item) => item.fieldId === candidate.fieldId ? { ...item, value: event.target.value } : item) } : current)} /> : <input value={candidate.value} disabled={creatingSuggestedDocument} onChange={(event) => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.map((item) => item.fieldId === candidate.fieldId ? { ...item, value: event.target.value } : item) } : current)} />}</label>
+                <button type="button" disabled={creatingSuggestedDocument} onClick={() => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.filter((item) => item.fieldId !== candidate.fieldId) } : current)}>{text("Удалить", "Olib tashlash", "Remove")}</button>
+              </div>)}</div> : <p role="status">{text("Безопасных данных для автозаполнения не найдено. Можно создать пустой черновик и заполнить его вручную.", "Xavfsiz avtomatik to‘ldirish ma’lumotlari topilmadi. Bo‘sh qoralama yaratib, uni qo‘lda to‘ldirish mumkin.", "No safe prefill data was found. You can create an empty draft and complete it manually.")}</p>}
+              {documentPrefill.candidates.some((candidate) => candidate.sensitive) && <label className="ai-document-sensitive-consent"><input type="checkbox" checked={sensitivePrefillConsent} disabled={creatingSuggestedDocument} onChange={(event) => setSensitivePrefillConsent(event.target.checked)} /><span>{text("Я подтверждаю сохранение только выбранных конфиденциальных реквизитов в этом черновике.", "Faqat tanlangan maxfiy rekvizitlarni ushbu qoralamada saqlashni tasdiqlayman.", "I confirm that only the selected sensitive details may be saved in this draft.")}</span></label>}
+              <footer><button type="button" className="secondary" disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); setSensitivePrefillConsent(false); documentHandoffKeyRef.current = ""; }}>{text("Отмена", "Bekor qilish", "Cancel")}</button><button type="button" disabled={creatingSuggestedDocument || (documentPrefill.candidates.some((candidate) => candidate.sensitive) && !sensitivePrefillConsent)} aria-busy={creatingSuggestedDocument} onClick={() => void confirmSuggestedDocument()}>{creatingSuggestedDocument ? <LoaderCircle className="spin" /> : <FilePlus2 />}{creatingSuggestedDocument ? text("Создаём черновик…", "Qoralama yaratilmoqda…", "Creating draft…") : text("Подтвердить и создать черновик", "Tasdiqlash va qoralama yaratish", "Confirm and create draft")}</button><span className="sr-only" role="status" aria-live="polite">{creatingSuggestedDocument ? text("JURO создаёт черновик документа", "JURO hujjat qoralamasini yaratmoqda", "JURO is creating the document draft") : ""}</span></footer>
             </section>}
             {answer.messageId && <section className="ai-feedback" aria-labelledby="ai-feedback-heading">
-              <div><h2 id="ai-feedback-heading">{ru ? "Оцените этот ответ" : "Bu javobni baholang"}</h2><p>{ru ? "Отзыв привязан к этому сохранённому ответу и помогает проверить качество источников." : "Fikr-mulohaza shu saqlangan javobga bog‘lanadi va manbalar sifatini tekshirishga yordam beradi."}</p></div>
+              <div><h2 id="ai-feedback-heading">{text("Оцените этот ответ", "Bu javobni baholang", "Rate this answer")}</h2><p>{text("Отзыв привязан к этому сохранённому ответу и помогает проверить качество источников.", "Fikr-mulohaza shu saqlangan javobga bog‘lanadi va manbalar sifatini tekshirishga yordam beradi.", "Your feedback is linked to this saved answer and helps JURO review source quality.")}</p></div>
               <div className="ai-feedback-actions">
-                <button type="button" className={feedback.some((item) => item.feedbackType === "helpful") ? "selected" : undefined} disabled={savingFeedback} onClick={() => void saveFeedback("helpful")}><ThumbsUp />{feedback.some((item) => item.feedbackType === "helpful") ? (ru ? "Полезно — сохранено" : "Foydali — saqlandi") : feedbackLabel("helpful")}</button>
+                <button type="button" className={feedback.some((item) => item.feedbackType === "helpful") ? "selected" : undefined} disabled={savingFeedback} onClick={() => void saveFeedback("helpful")}><ThumbsUp />{feedback.some((item) => item.feedbackType === "helpful") ? text("Полезно — сохранено", "Foydali — saqlandi", "Helpful — saved") : feedbackLabel("helpful")}</button>
                 <details>
-                  <summary>{ru ? "Сообщить о проблеме" : "Muammo haqida xabar berish"}</summary>
+                  <summary>{text("Сообщить о проблеме", "Muammo haqida xabar berish", "Report an issue")}</summary>
                   <div className="ai-feedback-form">
-                    <div className="ai-select-field"><span id="ai-feedback-type-label">{ru ? "Что не так" : "Nima noto‘g‘ri"}</span><AiSelect value={feedbackType} onChange={setFeedbackType} ariaLabelledBy="ai-feedback-type-label" options={feedbackOptions.map((item) => ({ value: item, label: feedbackLabel(item) }))} /></div>
-                    <label>{ru ? "Комментарий — необязательно" : "Izoh — ixtiyoriy"}<textarea value={feedbackComment} maxLength={2_000} onChange={(event) => setFeedbackComment(event.target.value)} placeholder={ru ? "Не указывайте лишние персональные данные." : "Ortiqcha shaxsiy ma’lumotlarni kiritmang."} /></label>
-                    <button type="button" disabled={savingFeedback} onClick={() => void saveFeedback(feedbackType, feedbackComment)}>{savingFeedback ? (ru ? "Сохраняем…" : "Saqlanmoqda…") : (ru ? "Сохранить отзыв" : "Fikrni saqlash")}</button>
+                    <div className="ai-select-field"><span id="ai-feedback-type-label">{text("Что не так", "Nima noto‘g‘ri", "What went wrong")}</span><AiSelect value={feedbackType} onChange={setFeedbackType} ariaLabelledBy="ai-feedback-type-label" options={feedbackOptions.map((item) => ({ value: item, label: feedbackLabel(item) }))} /></div>
+                    <label>{text("Комментарий — необязательно", "Izoh — ixtiyoriy", "Comment — optional")}<textarea value={feedbackComment} maxLength={2_000} onChange={(event) => setFeedbackComment(event.target.value)} placeholder={text("Не указывайте лишние персональные данные.", "Ortiqcha shaxsiy ma’lumotlarni kiritmang.", "Avoid unnecessary personal data.")} /></label>
+                    <button type="button" disabled={savingFeedback} onClick={() => void saveFeedback(feedbackType, feedbackComment)}>{savingFeedback ? text("Сохраняем…", "Saqlanmoqda…", "Saving…") : text("Сохранить отзыв", "Fikrni saqlash", "Save feedback")}</button>
                   </div>
                 </details>
               </div>
               {feedbackStatus && <p className="ai-feedback-status" role="status">{feedbackStatus}</p>}
             </section>}
-            {answer.branches && answer.branches.length > 1 && <nav className="ai-branch-history" aria-label={ru ? "Версии ответа" : "Javob versiyalari"}>
-              <span><History />{ru ? "Версии" : "Versiyalar"}</span>
-              <div>{answer.branches.map((branch) => <a aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} href={aiLocation(new URLSearchParams({ conversationId: answer.conversationId, branchId: branch.branchId }))}>{branch.versionNumber === 1 ? (ru ? "Исходный ответ" : "Asl javob") : `${ru ? "Версия" : "Versiya"} ${branch.versionNumber}`}</a>)}</div>
+            {answer.branches && answer.branches.length > 1 && <nav className="ai-branch-history" aria-label={text("Версии ответа", "Javob versiyalari", "Answer versions")}>
+              <span><History />{text("Версии", "Versiyalar", "Versions")}</span>
+              <div>{answer.branches.map((branch) => <a aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} href={aiLocation(new URLSearchParams({ conversationId: answer.conversationId, branchId: branch.branchId }))}>{branch.versionNumber === 1 ? text("Исходный ответ", "Asl javob", "Original answer") : `${text("Версия", "Versiya", "Version")} ${branch.versionNumber}`}</a>)}</div>
             </nav>}
             </>}
-            {optimisticQuestion && <PendingConversationTurn question={optimisticQuestion} preliminary={preliminary} status={streamStatus} failed={Boolean(error) && !sending} ru={ru} />}
+            {optimisticQuestion && <PendingConversationTurn question={optimisticQuestion} preliminary={preliminary} status={streamStatus} failed={Boolean(error) && !sending} locale={locale} />}
           </>}
         </div>
         <form className="ai-composer" onSubmit={submit}>
-          {editSourceMessageId && <div className="ai-edit-notice" role="status"><span>{ru ? "Редактирование создаст новую версию; исходный ответ сохранится." : "Tahrirlash yangi versiya yaratadi; oldingi javob saqlanadi."}</span><button type="button" onClick={() => { setEditSourceMessageId(""); setQuestion(""); }}>{ru ? "Отменить" : "Bekor qilish"}</button></div>}
+          {editSourceMessageId && <div className="ai-edit-notice" role="status"><span>{text("Редактирование создаст новую версию; исходный ответ сохранится.", "Tahrirlash yangi versiya yaratadi; oldingi javob saqlanadi.", "Editing creates a new version; the original answer remains available.")}</span><button type="button" onClick={() => { setEditSourceMessageId(""); setQuestion(""); }}>{text("Отменить", "Bekor qilish", "Cancel")}</button></div>}
           <details className="ai-composer-options">
-            <summary><Settings2 aria-hidden="true" /><span>{ru ? "Настройки ответа" : "Javob sozlamalari"}</span><small>{answerMode === "short" ? (ru ? "Кратко" : "Qisqa") : (ru ? "Подробно" : "Batafsil")} · {reasoningMode === "fast" ? (ru ? "Быстро" : "Tez") : (ru ? "Глубоко" : "Chuqur")}{legalContextDate ? ` · ${formatDate(legalContextDate, ru)}` : ""}</small></summary>
+            <summary><Settings2 aria-hidden="true" /><span>{text("Настройки ответа", "Javob sozlamalari", "Answer settings")}</span><small>{answerMode === "short" ? text("Кратко", "Qisqa", "Concise") : text("Подробно", "Batafsil", "Detailed")} · {reasoningMode === "fast" ? text("Быстро", "Tez", "Fast") : text("Глубоко", "Chuqur", "Deep")}{legalContextDate ? ` · ${formatDate(legalContextDate, locale)}` : ""}</small></summary>
             <div className="ai-modes">
-              <div className="ai-mode-field"><span id="ai-answer-mode-label">{ru ? "Формат ответа" : "Javob formati"}</span><div className="ai-segmented" role="group" aria-labelledby="ai-answer-mode-label"><button type="button" aria-pressed={answerMode === "short"} onClick={() => setAnswerMode("short")}>{ru ? "Кратко" : "Qisqa"}</button><button type="button" aria-pressed={answerMode === "detailed"} onClick={() => setAnswerMode("detailed")}>{ru ? "Подробно" : "Batafsil"}</button></div></div>
-              <div className="ai-mode-field"><span id="ai-reasoning-mode-label">{ru ? "Глубина анализа" : "Tahlil chuqurligi"}</span><div className="ai-segmented" role="group" aria-labelledby="ai-reasoning-mode-label"><button type="button" aria-pressed={reasoningMode === "fast"} onClick={() => setReasoningMode("fast")}>{ru ? "Быстро" : "Tez"}</button><button type="button" aria-pressed={reasoningMode === "deep"} onClick={() => setReasoningMode("deep")}>{ru ? "Глубоко" : "Chuqur"}</button></div></div>
-              <AiDatePicker ru={ru} value={legalContextDate} max={uzbekistanCalendarDate()} onChange={(value) => { pendingAiRequestRef.current = null; setCanRetry(false); setLegalContextDate(value); }} />
+              <div className="ai-mode-field"><span id="ai-answer-mode-label">{text("Формат ответа", "Javob formati", "Answer format")}</span><div className="ai-segmented" role="group" aria-labelledby="ai-answer-mode-label"><button type="button" aria-pressed={answerMode === "short"} onClick={() => setAnswerMode("short")}>{text("Кратко", "Qisqa", "Concise")}</button><button type="button" aria-pressed={answerMode === "detailed"} onClick={() => setAnswerMode("detailed")}>{text("Подробно", "Batafsil", "Detailed")}</button></div></div>
+              <div className="ai-mode-field"><span id="ai-reasoning-mode-label">{text("Глубина анализа", "Tahlil chuqurligi", "Analysis depth")}</span><div className="ai-segmented" role="group" aria-labelledby="ai-reasoning-mode-label"><button type="button" aria-pressed={reasoningMode === "fast"} onClick={() => setReasoningMode("fast")}>{text("Быстро", "Tez", "Fast")}</button><button type="button" aria-pressed={reasoningMode === "deep"} onClick={() => setReasoningMode("deep")}>{text("Глубоко", "Chuqur", "Deep")}</button></div></div>
+              <AiDatePicker locale={locale} value={legalContextDate} max={uzbekistanCalendarDate()} onChange={(value) => { pendingAiRequestRef.current = null; setCanRetry(false); setLegalContextDate(value); }} />
             </div>
           </details>
           <div className="ai-composer-input">
@@ -873,36 +882,39 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
               onTranscript={({ recordingId, transcript }) => { setVoiceRecordingId(recordingId); setQuestion(transcript); pendingAiRequestRef.current = null; setCanRetry(false); }}
               onClear={() => setVoiceRecordingId("")}
             />
-            <label className="sr-only" htmlFor="ai-question">{ru ? "Юридический вопрос" : "Yuridik savol"}</label>
-            <textarea ref={composerRef} id="ai-question" value={question} rows={1} onChange={(event) => { pendingAiRequestRef.current = null; setCanRetry(false); setQuestion(event.target.value); resizeComposer(event.currentTarget); }} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Опишите ситуацию или задайте вопрос…" : "Vaziyatni yozing yoki savol bering…"} />
+            <label className="sr-only" htmlFor="ai-question">{text("Юридический вопрос", "Yuridik savol", "Legal question")}</label>
+            <textarea ref={composerRef} id="ai-question" value={question} rows={1} onChange={(event) => { pendingAiRequestRef.current = null; setCanRetry(false); setQuestion(event.target.value); resizeComposer(event.currentTarget); }} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={text("Опишите ситуацию или задайте вопрос…", "Vaziyatni yozing yoki savol bering…", "Describe your situation or ask a question…")} />
             {sending
-              ? <button type="button" onClick={() => streamAbortRef.current?.abort()} aria-label={ru ? "Остановить генерацию" : "Javob yaratishni to‘xtatish"}><Square /></button>
-              : <button disabled={!status?.configured || !question.trim()} aria-label={ru ? "Отправить" : "Yuborish"}><Send /></button>}
+              ? <button type="button" onClick={() => streamAbortRef.current?.abort()} aria-label={text("Остановить генерацию", "Javob yaratishni to‘xtatish", "Stop generation")}><Square /></button>
+              : <button disabled={!status?.configured || !question.trim()} aria-label={text("Отправить", "Yuborish", "Send")}><Send /></button>}
           </div>
-          <small className="ai-composer-hint">{ru ? "Enter — отправить · Shift + Enter — новая строка · не указывайте лишние персональные данные" : "Enter — yuborish · Shift + Enter — yangi satr · ortiqcha shaxsiy ma’lumotlarni kiritmang"}</small>
+          <small className="ai-composer-hint">{text("Enter — отправить · Shift + Enter — новая строка · не указывайте лишние персональные данные", "Enter — yuborish · Shift + Enter — yangi satr · ortiqcha shaxsiy ma’lumotlarni kiritmang", "Enter — send · Shift + Enter — new line · avoid unnecessary personal data")}</small>
         </form>
       </section>
-      <nav className="ai-mobile-context-bar" aria-label={ru ? "Факты и источники ответа" : "Javob faktlari va manbalari"}><button type="button" onClick={() => openMobileContext("facts")}><Check aria-hidden="true" />{ru ? `Факты ${answer?.facts.length ?? 0}` : `Faktlar ${answer?.facts.length ?? 0}`}</button><button type="button" onClick={() => openMobileContext("sources")}><BookOpenCheck aria-hidden="true" />{ru ? `Источники ${visibleSources.length}` : `Manbalar ${visibleSources.length}`}</button></nav>
-      <aside ref={mobileContextRef} className={`ai-context ${mobileContextOpen ? "is-mobile-open" : ""}`} id="ai-context-panel" role={mobileContextOpen ? "dialog" : undefined} aria-modal={mobileContextOpen || undefined} aria-label={ru ? "Факты и источники" : "Faktlar va manbalar"}>
-        <header><BookOpenCheck aria-hidden="true" /><strong>{ru ? "Контекст ответа" : "Javob konteksti"}</strong><button className="ai-context-close" type="button" aria-label={ru ? "Закрыть факты и источники" : "Faktlar va manbalarni yopish"} onClick={closeMobileContext}><X /></button></header>
-        <div className="ai-context-tabs" role="tablist" aria-label={ru ? "Раздел контекста" : "Kontekst bo‘limi"}><button ref={mobileFactsTabRef} id="ai-context-facts-tab" type="button" role="tab" aria-selected={mobileContextTab === "facts"} aria-controls="ai-context-facts-panel" tabIndex={mobileContextTab === "facts" ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("facts")}>{ru ? "Факты" : "Faktlar"}</button><button ref={mobileSourcesTabRef} id="ai-context-sources-tab" type="button" role="tab" aria-selected={mobileContextTab === "sources"} aria-controls="ai-context-sources-panel" tabIndex={mobileContextTab === "sources" ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("sources")}>{ru ? "Источники" : "Manbalar"}</button></div>
-        <section id="ai-context-facts-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-facts-tab" : undefined} hidden={mobileContextOpen && mobileContextTab !== "facts"}><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section id="ai-context-sources-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-sources-tab" : undefined} className="ai-evidence" hidden={mobileContextOpen && mobileContextTab !== "sources"}><h2>{hasPrivateSources || hasSecondarySources ? (ru ? "Источники" : "Manbalar") : (ru ? "Основания в Lex.uz" : "Lex.uz asoslari")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, ru)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
+      <nav className="ai-mobile-context-bar" aria-label={text("Факты и источники ответа", "Javob faktlari va manbalari", "Answer facts and sources")}><button type="button" onClick={() => openMobileContext("facts")}><Check aria-hidden="true" />{text(`Факты ${answer?.facts.length ?? 0}`, `Faktlar ${answer?.facts.length ?? 0}`, `Facts ${answer?.facts.length ?? 0}`)}</button><button type="button" onClick={() => openMobileContext("sources")}><BookOpenCheck aria-hidden="true" />{text(`Источники ${visibleSources.length}`, `Manbalar ${visibleSources.length}`, `Sources ${visibleSources.length}`)}</button></nav>
+      <aside ref={mobileContextRef} className={`ai-context ${mobileContextOpen ? "is-mobile-open" : ""}`} id="ai-context-panel" role={mobileContextOpen ? "dialog" : undefined} aria-modal={mobileContextOpen || undefined} aria-label={text("Факты и источники", "Faktlar va manbalar", "Facts and sources")}>
+        <header><BookOpenCheck aria-hidden="true" /><strong>{text("Контекст ответа", "Javob konteksti", "Answer context")}</strong><button className="ai-context-close" type="button" aria-label={text("Закрыть факты и источники", "Faktlar va manbalarni yopish", "Close facts and sources")} onClick={closeMobileContext}><X /></button></header>
+        <div className="ai-context-tabs" role="tablist" aria-label={text("Раздел контекста", "Kontekst bo‘limi", "Context section")}><button ref={mobileFactsTabRef} id="ai-context-facts-tab" type="button" role="tab" aria-selected={mobileContextTab === "facts"} aria-controls="ai-context-facts-panel" tabIndex={mobileContextTab === "facts" ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("facts")}>{text("Факты", "Faktlar", "Facts")}</button><button ref={mobileSourcesTabRef} id="ai-context-sources-tab" type="button" role="tab" aria-selected={mobileContextTab === "sources"} aria-controls="ai-context-sources-panel" tabIndex={mobileContextTab === "sources" ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("sources")}>{text("Источники", "Manbalar", "Sources")}</button></div>
+        <section id="ai-context-facts-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-facts-tab" : undefined} hidden={mobileContextOpen && mobileContextTab !== "facts"}><h2>{text("Факты для подтверждения", "Tasdiqlash uchun faktlar", "Facts to confirm")}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={text("Подтвердить факт", "Faktni tasdiqlash", "Confirm fact")}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={text("Отклонить факт", "Faktni rad etish", "Reject fact")}><X /></button></span> : <small>{fact.status === "confirmed" ? text("Подтверждено", "Tasdiqlandi", "Confirmed") : text("Отклонено", "Rad etildi", "Rejected")}</small>}</div>) : <p>{text("Предположения появятся после разбора.", "Taxminlar tahlildan keyin paydo bo‘ladi.", "Proposed facts will appear after analysis.")}</p>}</section>
+        <section id="ai-context-sources-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-sources-tab" : undefined} className="ai-evidence" hidden={mobileContextOpen && mobileContextTab !== "sources"}><h2>{hasPrivateSources || hasSecondarySources ? text("Источники", "Manbalar", "Sources") : text("Основания в Lex.uz", "Lex.uz asoslari", "Legal basis in Lex.uz")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, locale)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{text("Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются.", "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi.", "No verified legal basis was found in Lex.uz; JURO will not invent an article or link.")}</p>}</section>
       </aside>
     </section>
   );
 }
 
-function AiDatePicker({ ru, value, max, onChange }: { ru: boolean; value: string; max: string; onChange: (value: string) => void }) {
+function AiDatePicker({ locale, value, max, onChange }: { locale: PlatformLocale; value: string; max: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState((value || max).slice(0, 7));
   const pickerRef = useRef<HTMLDivElement | null>(null);
-  const locale = ru ? "ru" : "uz";
   const monthStart = `${visibleMonth}-01`;
   const firstWeekday = (new Date(`${monthStart}T12:00:00.000Z`).getUTCDay() + 6) % 7;
   const nextMonth = shiftCalendarMonth(visibleMonth, 1);
   const daysInMonth = Math.round((Date.parse(`${nextMonth}-01T12:00:00.000Z`) - Date.parse(`${monthStart}T12:00:00.000Z`)) / 86_400_000);
-  const weekdays = ru ? ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"] : ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
+  const weekdays = locale === "en"
+    ? ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+    : locale === "uz"
+      ? ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"]
+      : ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
   useEffect(() => {
     if (!open) return;
@@ -920,23 +932,23 @@ function AiDatePicker({ ru, value, max, onChange }: { ru: boolean; value: string
     };
   }, [open]);
 
-  const displayValue = value ? formatPlatformLongDate(value, locale) : (ru ? "Выберите дату" : "Sanani tanlang");
+  const displayValue = value ? formatPlatformLongDate(value, locale) : aiText(locale, "Выберите дату", "Sanani tanlang", "Select a date");
   const monthLabel = formatPlatformMonth(monthStart, locale);
 
   return <div className="ai-date-field">
-    <span id="ai-legal-date-label">{ru ? "Дата события — если важна редакция закона" : "Voqea sanasi — qonun tahriri muhim bo‘lsa"}</span>
+    <span id="ai-legal-date-label">{aiText(locale, "Дата события — если важна редакция закона", "Voqea sanasi — qonun tahriri muhim bo‘lsa", "Event date — when the version of the law matters")}</span>
     <div className="ai-date-picker" ref={pickerRef}>
       <div className="ai-date-control">
         <button className="ai-date-trigger" type="button" aria-labelledby="ai-legal-date-label ai-legal-date-value" aria-haspopup="dialog" aria-expanded={open} onClick={() => { setVisibleMonth((value || max).slice(0, 7)); setOpen((current) => !current); }}>
           <CalendarDays /><span id="ai-legal-date-value" className={value ? undefined : "is-placeholder"}>{displayValue}</span>
         </button>
-        {value && <button className="ai-date-clear" type="button" aria-label={ru ? "Очистить дату события" : "Voqea sanasini tozalash"} onClick={() => onChange("")}><X /></button>}
+        {value && <button className="ai-date-clear" type="button" aria-label={aiText(locale, "Очистить дату события", "Voqea sanasini tozalash", "Clear event date")} onClick={() => onChange("")}><X /></button>}
       </div>
-      {open && <div className="ai-date-popover" role="dialog" aria-label={ru ? "Выбор даты события" : "Voqea sanasini tanlash"}>
+      {open && <div className="ai-date-popover" role="dialog" aria-label={aiText(locale, "Выбор даты события", "Voqea sanasini tanlash", "Select event date")}>
         <header>
-          <button type="button" aria-label={ru ? "Предыдущий месяц" : "Oldingi oy"} onClick={() => setVisibleMonth((current) => shiftCalendarMonth(current, -1))}><ChevronLeft /></button>
+          <button type="button" aria-label={aiText(locale, "Предыдущий месяц", "Oldingi oy", "Previous month")} onClick={() => setVisibleMonth((current) => shiftCalendarMonth(current, -1))}><ChevronLeft /></button>
           <strong aria-live="polite">{monthLabel}</strong>
-          <button type="button" disabled={visibleMonth >= max.slice(0, 7)} aria-label={ru ? "Следующий месяц" : "Keyingi oy"} onClick={() => setVisibleMonth((current) => shiftCalendarMonth(current, 1))}><ChevronRight /></button>
+          <button type="button" disabled={visibleMonth >= max.slice(0, 7)} aria-label={aiText(locale, "Следующий месяц", "Keyingi oy", "Next month")} onClick={() => setVisibleMonth((current) => shiftCalendarMonth(current, 1))}><ChevronRight /></button>
         </header>
         <div className="ai-date-grid">
           {weekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
@@ -948,7 +960,7 @@ function AiDatePicker({ ru, value, max, onChange }: { ru: boolean; value: string
             return <button type="button" key={day} disabled={disabled} aria-label={fullLabel} aria-current={day === max ? "date" : undefined} aria-pressed={day === value} className={day === value ? "is-selected" : undefined} onClick={() => { onChange(day); setOpen(false); }}>{index + 1}</button>;
           })}
         </div>
-        <footer><button type="button" onClick={() => { onChange(max); setOpen(false); }}>{ru ? "Сегодня" : "Bugun"}</button>{value && <button type="button" onClick={() => { onChange(""); setOpen(false); }}>{ru ? "Сбросить" : "Tozalash"}</button>}</footer>
+        <footer><button type="button" onClick={() => { onChange(max); setOpen(false); }}>{aiText(locale, "Сегодня", "Bugun", "Today")}</button>{value && <button type="button" onClick={() => { onChange(""); setOpen(false); }}>{aiText(locale, "Сбросить", "Tozalash", "Clear")}</button>}</footer>
       </div>}
     </div>
   </div>;
@@ -960,18 +972,18 @@ function shiftCalendarMonth(value: string, amount: number) {
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function HumanMessage({ question, ru }: { question: string; ru: boolean }) {
+function HumanMessage({ question, locale }: { question: string; locale: PlatformLocale }) {
   if (!question) return null;
   return <article className="ai-human-message">
-    <small>{ru ? "Вы" : "Siz"}</small>
+    <small>{aiText(locale, "Вы", "Siz", "You")}</small>
     <p>{question}</p>
   </article>;
 }
 
-function ConversationTurnPair({ turn, ru, onCitationSelect }: { turn: ConversationTurn; ru: boolean; onCitationSelect?: (sourceId: string) => void }) {
+function ConversationTurnPair({ turn, locale, onCitationSelect }: { turn: ConversationTurn; locale: PlatformLocale; onCitationSelect?: (sourceId: string) => void }) {
   return <section className="ai-conversation-turn">
-    <HumanMessage question={turn.question} ru={ru} />
-    <LegalAnswer result={turn.result} freshness={turn.sourceFreshness} ru={ru} onCitationSelect={onCitationSelect} />
+    <HumanMessage question={turn.question} locale={locale} />
+    <LegalAnswer result={turn.result} freshness={turn.sourceFreshness} locale={locale} onCitationSelect={onCitationSelect} />
   </section>;
 }
 
@@ -980,22 +992,22 @@ function PendingConversationTurn({
   preliminary,
   status,
   failed,
-  ru,
+  locale,
 }: {
   question: string;
   preliminary: AiPreliminary | null;
   status: string;
   failed: boolean;
-  ru: boolean;
+  locale: PlatformLocale;
 }) {
   return <section className="ai-conversation-turn ai-conversation-turn-pending">
-    <HumanMessage question={question} ru={ru} />
+    <HumanMessage question={question} locale={locale} />
     <article className={`ai-assistant-draft ${failed ? "is-failed" : ""}`}>
       <small>JURO · {failed
-        ? (ru ? "ответ не завершён" : "javob yakunlanmadi")
+        ? aiText(locale, "ответ не завершён", "javob yakunlanmadi", "answer incomplete")
         : preliminary
-          ? (ru ? "проверенный вывод · завершаю ответ" : "tekshirilgan xulosa · javob yakunlanmoqda")
-          : (ru ? "отвечает" : "javob bermoqda")}</small>
+          ? aiText(locale, "проверенный вывод · завершаю ответ", "tekshirilgan xulosa · javob yakunlanmoqda", "verified finding · completing the answer")
+          : aiText(locale, "отвечает", "javob bermoqda", "answering")}</small>
       {preliminary
         ? <div className="ai-preliminary" role="status">
           <strong>{preliminary.message}</strong>
@@ -1006,7 +1018,7 @@ function PendingConversationTurn({
               : null}
           </p>
         </div>
-        : <div className="ai-thinking"><LoaderCircle className={failed ? undefined : "spin"} /><span>{failed ? (ru ? "Не удалось завершить ответ. Можно безопасно повторить запрос." : "Javobni yakunlab bo‘lmadi. So‘rovni xavfsiz takrorlash mumkin.") : status || (ru ? "Проверяю факты и источники…" : "Faktlar va manbalarni tekshiryapman…")}</span></div>}
+        : <div className="ai-thinking"><LoaderCircle className={failed ? undefined : "spin"} /><span>{failed ? aiText(locale, "Не удалось завершить ответ. Можно безопасно повторить запрос.", "Javobni yakunlab bo‘lmadi. So‘rovni xavfsiz takrorlash mumkin.", "The answer could not be completed. You can safely retry.") : status || aiText(locale, "Проверяю факты и источники…", "Faktlar va manbalarni tekshiryapman…", "Checking facts and sources…")}</span></div>}
     </article>
   </section>;
 }
@@ -1026,7 +1038,6 @@ function LegalSourceCard({
   cases: CaseOption[];
   locale: PlatformLocale;
 }) {
-  const ru = locale === "ru";
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<ArticleDetails | null>(null);
@@ -1087,12 +1098,18 @@ function LegalSourceCard({
       setDetails(body);
     } catch {
       setError(privateSource
-        ? (ru
-          ? "Документ сейчас недоступен. Ниже остаётся фрагмент, проверенный при формировании ответа."
-          : "Hujjat hozir mavjud emas. Quyida javob tuzilganda tekshirilgan parcha qoladi.")
-        : (ru
-          ? "Полный текст сейчас недоступен. Ниже остаётся проверенный фрагмент из ответа."
-          : "To‘liq matn hozir mavjud emas. Quyida javobdagi tekshirilgan parcha qoladi."));
+        ? aiText(
+          locale,
+          "Документ сейчас недоступен. Ниже остаётся фрагмент, проверенный при формировании ответа.",
+          "Hujjat hozir mavjud emas. Quyida javob tuzilganda tekshirilgan parcha qoladi.",
+          "The document is currently unavailable. The excerpt verified when the answer was generated remains below.",
+        )
+        : aiText(
+          locale,
+          "Полный текст сейчас недоступен. Ниже остаётся проверенный фрагмент из ответа.",
+          "To‘liq matn hozir mavjud emas. Quyida javobdagi tekshirilgan parcha qoladi.",
+          "The full text is currently unavailable. The verified excerpt from the answer remains below.",
+        ));
     } finally {
       setLoading(false);
     }
@@ -1134,64 +1151,63 @@ function LegalSourceCard({
       {(source.documentType || source.documentNumber) && <small>{[source.documentType, source.documentNumber].filter(Boolean).join(" · ")}</small>}
       {source.adoptingAuthority && <small>{source.adoptingAuthority}</small>}
       {source.excerpt && <q>{source.excerpt}</q>}
-      <em>{sourceStatusLabel(source.status, ru)}{source.effectiveDate ? ` · ${formatDate(source.effectiveDate, ru)}` : ""}</em>
-      <small>{sourceClassLabel(source.sourceClass, ru)} · {languageLabel(source.language ?? (locale === "uz" ? "uz-Latn" : "ru"), ru)} · {privateSource ? (ru ? "защищённый индекс" : "himoyalangan indeks") : secondarySource ? (ru ? "открытый интернет" : "ochiq internet") : origin === "live" ? "live Lex.uz" : (ru ? "локальный индекс" : "lokal indeks")}</small>
+      <em>{sourceStatusLabel(source.status, locale)}{source.effectiveDate ? ` · ${formatDate(source.effectiveDate, locale)}` : ""}</em>
+      <small>{sourceClassLabel(source.sourceClass, locale)} · {languageLabel(source.language ?? (locale === "uz" ? "uz-Latn" : locale === "en" ? "en" : "ru"), locale)} · {privateSource ? aiText(locale, "защищённый индекс", "himoyalangan indeks", "secure index") : secondarySource ? aiText(locale, "открытый интернет", "ochiq internet", "public web") : origin === "live" ? "live Lex.uz" : aiText(locale, "локальный индекс", "lokal indeks", "local index")}</small>
       <small>{privateSource
-        ? (ru ? "Доступ и целостность файла проверены для текущего пользователя" : "Faylga kirish va uning yaxlitligi joriy foydalanuvchi uchun tekshirildi")
+        ? aiText(locale, "Доступ и целостность файла проверены для текущего пользователя", "Faylga kirish va uning yaxlitligi joriy foydalanuvchi uchun tekshirildi", "File access and integrity were verified for the current user")
         : secondarySource
-          ? (ru ? "Справочный материал: не заменяет норму Lex.uz" : "Ma’lumotnoma materiali: Lex.uz normasini almashtirmaydi")
+          ? aiText(locale, "Справочный материал: не заменяет норму Lex.uz", "Ma’lumotnoma materiali: Lex.uz normasini almashtirmaydi", "Reference material: it does not replace a legal rule from Lex.uz")
         : origin === "live"
-          ? (ru ? "Проверено напрямую по Lex.uz" : "Lex.uz orqali bevosita tekshirildi")
-          : (ru ? "Проверено по утверждённому пакету источников" : "Tasdiqlangan manbalar paketi bo‘yicha tekshirildi")}</small>
+          ? aiText(locale, "Проверено напрямую по Lex.uz", "Lex.uz orqali bevosita tekshirildi", "Verified directly against Lex.uz")
+          : aiText(locale, "Проверено по утверждённому пакету источников", "Tasdiqlangan manbalar paketi bo‘yicha tekshirildi", "Verified against an approved source package")}</small>
     </div>
     <div className="ai-source-actions">
-      {!secondarySource && <button type="button" onClick={() => void showArticle()}><BookOpenCheck aria-hidden="true" />{privateSource ? (ru ? "Текст документа" : "Hujjat matni") : (ru ? "Текст статьи" : "Modda matni")}</button>}
-      {!privateSource && <a href={source.originalUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{secondarySource ? (ru ? "Открыть материал" : "Materialni ochish") : (ru ? "Открыть Lex.uz" : "Lex.uz saytini ochish")}</a>}
+      {!secondarySource && <button type="button" onClick={() => void showArticle()}><BookOpenCheck aria-hidden="true" />{privateSource ? aiText(locale, "Текст документа", "Hujjat matni", "Document text") : aiText(locale, "Текст статьи", "Modda matni", "Article text")}</button>}
+      {!privateSource && <a href={source.originalUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{secondarySource ? aiText(locale, "Открыть материал", "Materialni ochish", "Open material") : aiText(locale, "Открыть Lex.uz", "Lex.uz saytini ochish", "Open Lex.uz")}</a>}
     </div>
     {!privateSource && !secondarySource && <SourceBookmarkControl source={source} cases={cases} locale={locale} />}
     {open && <div className="ai-source-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeSourceDialog(); }}>
       <section ref={sourceDialogRef} className="ai-source-modal" role="dialog" aria-modal="true" aria-labelledby="ai-source-modal-title">
         <header>
-          <div><small>{privateSource ? "JURO · PRIVATE DOCUMENT" : "JURO · LEX.UZ"}</small><h2 id="ai-source-modal-title">{privateSource ? (ru ? "Документ пользователя" : "Foydalanuvchi hujjati") : display.fullArticle ? (ru ? "Полный текст статьи" : "Moddaning to‘liq matni") : (ru ? "Проверенный фрагмент" : "Tekshirilgan parcha")}</h2></div>
-          <button ref={closeRef} type="button" aria-label={ru ? "Закрыть" : "Yopish"} onClick={closeSourceDialog}><X /></button>
+          <div><small>{privateSource ? "JURO · PRIVATE DOCUMENT" : "JURO · LEX.UZ"}</small><h2 id="ai-source-modal-title">{privateSource ? aiText(locale, "Документ пользователя", "Foydalanuvchi hujjati", "User document") : display.fullArticle ? aiText(locale, "Полный текст статьи", "Moddaning to‘liq matni", "Full article text") : aiText(locale, "Проверенный фрагмент", "Tekshirilgan parcha", "Verified excerpt")}</h2></div>
+          <button ref={closeRef} type="button" aria-label={aiText(locale, "Закрыть", "Yopish", "Close")} onClick={closeSourceDialog}><X /></button>
         </header>
-        {loading ? <div className="ai-source-modal-state" role="status"><LoaderCircle className="spin" />{ru ? "Загружаем проверенную редакцию…" : "Tekshirilgan tahrir yuklanmoqda…"}</div> : <>
+        {loading ? <div className="ai-source-modal-state" role="status"><LoaderCircle className="spin" />{aiText(locale, "Загружаем проверенную редакцию…", "Tekshirilgan tahrir yuklanmoqda…", "Loading the verified version…")}</div> : <>
           {error && <p className="ai-source-modal-warning" role="status">{error}</p>}
-          {display.truncated && <p className="ai-source-modal-warning" role="status">{privateSource ? (ru ? "Очень длинный документ показан частично." : "Juda uzun hujjat qisman ko‘rsatildi.") : (ru ? "Очень длинная статья показана частично; полная редакция доступна по официальной ссылке." : "Juda uzun modda qisman ko‘rsatildi; to‘liq tahrir rasmiy havolada mavjud.")}</p>}
+          {display.truncated && <p className="ai-source-modal-warning" role="status">{privateSource ? aiText(locale, "Очень длинный документ показан частично.", "Juda uzun hujjat qisman ko‘rsatildi.", "This long document is shown in part.") : aiText(locale, "Очень длинная статья показана частично; полная редакция доступна по официальной ссылке.", "Juda uzun modda qisman ko‘rsatildi; to‘liq tahrir rasmiy havolada mavjud.", "This long article is shown in part; the complete version is available through the official link.")}</p>}
           <div className="ai-source-modal-heading">
             <strong>{display.documentTitle}</strong>
             {(display.articleNumber || display.articleTitle) && <span>{[display.articleNumber, display.articleTitle].filter(Boolean).join(" · ")}</span>}
             {[display.part, display.chapter, display.section].filter(Boolean).length > 0 && <small>{[display.part, display.chapter, display.section].filter(Boolean).join(" · ")}</small>}
           </div>
           <dl>
-            {display.documentType && <div><dt>{ru ? "Тип документа" : "Hujjat turi"}</dt><dd>{display.documentType}</dd></div>}
-            {display.documentNumber && <div><dt>{ru ? "Номер документа" : "Hujjat raqami"}</dt><dd>{display.documentNumber}</dd></div>}
-            {display.adoptingAuthority && <div><dt>{ru ? "Принявший орган" : "Qabul qilgan organ"}</dt><dd>{display.adoptingAuthority}</dd></div>}
-            <div><dt>{ru ? "Тип источника" : "Manba turi"}</dt><dd>{sourceClassLabel(display.sourceClass, ru)}</dd></div>
-            <div><dt>{ru ? "Язык" : "Til"}</dt><dd>{display.language}</dd></div>
-            <div><dt>{ru ? "Статус" : "Holat"}</dt><dd>{sourceStatusLabel(display.status, ru)}</dd></div>
-            <div><dt>{privateSource ? (ru ? "Версия документа" : "Hujjat versiyasi") : (ru ? "Редакция" : "Tahrir")}</dt><dd>{display.versionDate ? formatDate(display.versionDate, ru) : "—"}</dd></div>
-            {!privateSource && <div><dt>{ru ? "Действует" : "Amal qiladi"}</dt><dd>{display.validFrom ? formatDate(display.validFrom, ru) : "—"}{display.validTo ? ` — ${formatDate(display.validTo, ru)}` : ""}</dd></div>}
-            <div><dt>{ru ? "Проверено" : "Tekshirildi"}</dt><dd>{formatDate(display.verifiedAt, ru)}</dd></div>
+            {display.documentType && <div><dt>{aiText(locale, "Тип документа", "Hujjat turi", "Document type")}</dt><dd>{display.documentType}</dd></div>}
+            {display.documentNumber && <div><dt>{aiText(locale, "Номер документа", "Hujjat raqami", "Document number")}</dt><dd>{display.documentNumber}</dd></div>}
+            {display.adoptingAuthority && <div><dt>{aiText(locale, "Принявший орган", "Qabul qilgan organ", "Adopting authority")}</dt><dd>{display.adoptingAuthority}</dd></div>}
+            <div><dt>{aiText(locale, "Тип источника", "Manba turi", "Source type")}</dt><dd>{sourceClassLabel(display.sourceClass, locale)}</dd></div>
+            <div><dt>{aiText(locale, "Язык", "Til", "Language")}</dt><dd>{display.language}</dd></div>
+            <div><dt>{aiText(locale, "Статус", "Holat", "Status")}</dt><dd>{sourceStatusLabel(display.status, locale)}</dd></div>
+            <div><dt>{privateSource ? aiText(locale, "Версия документа", "Hujjat versiyasi", "Document version") : aiText(locale, "Редакция", "Tahrir", "Version")}</dt><dd>{display.versionDate ? formatDate(display.versionDate, locale) : "—"}</dd></div>
+            {!privateSource && <div><dt>{aiText(locale, "Действует", "Amal qiladi", "Effective period")}</dt><dd>{display.validFrom ? formatDate(display.validFrom, locale) : "—"}{display.validTo ? ` — ${formatDate(display.validTo, locale)}` : ""}</dd></div>}
+            <div><dt>{aiText(locale, "Проверено", "Tekshirildi", "Verified")}</dt><dd>{formatDate(display.verifiedAt, locale)}</dd></div>
           </dl>
-          {display.availableLanguages.length > 0 && <section className="ai-source-modal-related" aria-label={ru ? "Доступные языки" : "Mavjud tillar"}>
-            <h3>{ru ? "Доступные языки" : "Mavjud tillar"}</h3>
-            <div>{display.availableLanguages.map((variant) => <a key={`${variant.language}:${variant.officialUrl}`} href={variant.officialUrl} target="_blank" rel="noreferrer">{languageLabel(variant.language, ru)}{variant.official ? " · official" : ""}</a>)}</div>
+          {display.availableLanguages.length > 0 && <section className="ai-source-modal-related" aria-label={aiText(locale, "Доступные языки", "Mavjud tillar", "Available languages")}>
+            <h3>{aiText(locale, "Доступные языки", "Mavjud tillar", "Available languages")}</h3>
+            <div>{display.availableLanguages.map((variant) => <a key={`${variant.language}:${variant.officialUrl}`} href={variant.officialUrl} target="_blank" rel="noreferrer">{languageLabel(variant.language, locale)}{variant.official ? ` · ${aiText(locale, "официальный", "rasmiy", "official")}` : ""}</a>)}</div>
           </section>}
           {display.versionHistory.length > 0 && <details className="ai-source-modal-history">
-            <summary>{ru ? `История редакций (${display.versionHistory.length})` : `Tahrirlar tarixi (${display.versionHistory.length})`}</summary>
-            <ol>{display.versionHistory.map((version) => <li key={`${version.versionNumber}:${version.fetchedAt}`}><strong>#{version.versionNumber}</strong><span>{version.versionDate ? formatDate(version.versionDate, ru) : formatDate(version.fetchedAt, ru)} · {sourceStatusLabel(version.status, ru)}{version.validFrom ? ` · ${formatDate(version.validFrom, ru)}` : ""}{version.validTo ? ` — ${formatDate(version.validTo, ru)}` : ""}</span></li>)}</ol>
+            <summary>{aiText(locale, `История редакций (${display.versionHistory.length})`, `Tahrirlar tarixi (${display.versionHistory.length})`, `Version history (${display.versionHistory.length})`)}</summary>
+            <ol>{display.versionHistory.map((version) => <li key={`${version.versionNumber}:${version.fetchedAt}`}><strong>#{version.versionNumber}</strong><span>{version.versionDate ? formatDate(version.versionDate, locale) : formatDate(version.fetchedAt, locale)} · {sourceStatusLabel(version.status, locale)}{version.validFrom ? ` · ${formatDate(version.validFrom, locale)}` : ""}{version.validTo ? ` — ${formatDate(version.validTo, locale)}` : ""}</span></li>)}</ol>
           </details>}
-          <div className="ai-source-modal-text">{display.text || (ru ? "Текст статьи не сохранён." : "Modda matni saqlanmagan.")}</div>
+          <div className="ai-source-modal-text">{display.text || aiText(locale, "Текст статьи не сохранён.", "Modda matni saqlanmagan.", "The article text was not saved.")}</div>
         </>}
-        {!privateSource && <footer><a href={display.officialUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{ru ? "Официальный источник" : "Rasmiy manba"}</a></footer>}
+        {!privateSource && <footer><a href={display.officialUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{aiText(locale, "Официальный источник", "Rasmiy manba", "Official source")}</a></footer>}
       </section>
     </div>}
   </article>;
 }
 
 function SourceBookmarkControl({ source, cases, locale }: { source: Source; cases: CaseOption[]; locale: PlatformLocale }) {
-  const ru = locale === "ru";
   const [caseId, setCaseId] = useState("");
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1215,11 +1231,11 @@ function SourceBookmarkControl({ source, cases, locale }: { source: Source; case
         body: JSON.stringify({ sourceId: source.sourceId, caseId: caseId || null, comment: comment || null }),
       });
       const body = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(body.error || (ru ? "Источник не сохранён." : "Manba saqlanmadi."));
+      if (!response.ok) throw new Error(body.error || aiText(locale, "Источник не сохранён.", "Manba saqlanmadi.", "The source could not be saved."));
       setSaved(true);
       setStatus(caseId
-        ? (ru ? "Норма сохранена в выбранное дело." : "Norma tanlangan ishga saqlandi.")
-        : (ru ? "Норма сохранена в личные закладки." : "Norma shaxsiy xatcho‘plarga saqlandi."));
+        ? aiText(locale, "Норма сохранена в выбранное дело.", "Norma tanlangan ishga saqlandi.", "The legal provision was saved to the selected matter.")
+        : aiText(locale, "Норма сохранена в личные закладки.", "Norma shaxsiy xatcho‘plarga saqlandi.", "The legal provision was saved to your bookmarks."));
     } catch (error) {
       setFailed(true);
       setStatus(error instanceof Error ? error.message : String(error));
@@ -1229,11 +1245,11 @@ function SourceBookmarkControl({ source, cases, locale }: { source: Source; case
   }
 
   return <details className="ai-source-bookmark">
-    <summary><BookmarkPlus aria-hidden="true" />{saved ? (ru ? "Сохранено" : "Saqlandi") : (ru ? "Сохранить норму" : "Normani saqlash")}</summary>
+    <summary><BookmarkPlus aria-hidden="true" />{saved ? aiText(locale, "Сохранено", "Saqlandi", "Saved") : aiText(locale, "Сохранить норму", "Normani saqlash", "Save provision")}</summary>
     <form onSubmit={(event) => void save(event)}>
-      <label>{ru ? "Добавить в дело — необязательно" : "Ishga qo‘shish — ixtiyoriy"}<select value={caseId} disabled={saving || saved} onChange={(event) => setCaseId(event.target.value)}><option value="">{ru ? "Личные закладки" : "Shaxsiy xatcho‘plar"}</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
-      <label>{ru ? "Комментарий — необязательно" : "Izoh — ixtiyoriy"}<textarea value={comment} disabled={saving || saved} maxLength={2_000} onChange={(event) => setComment(event.target.value)} placeholder={ru ? "Почему эта норма важна для вашей ситуации" : "Bu norma vaziyatingiz uchun nega muhim"} /></label>
-      <button type="submit" disabled={saving || saved}><BookmarkPlus aria-hidden="true" />{saving ? (ru ? "Сохраняем…" : "Saqlanmoqda…") : saved ? (ru ? "Сохранено" : "Saqlandi") : (ru ? "Сохранить проверенную версию" : "Tekshirilgan versiyani saqlash")}</button>
+      <label>{aiText(locale, "Добавить в дело — необязательно", "Ishga qo‘shish — ixtiyoriy", "Add to a matter — optional")}<select value={caseId} disabled={saving || saved} onChange={(event) => setCaseId(event.target.value)}><option value="">{aiText(locale, "Личные закладки", "Shaxsiy xatcho‘plar", "Personal bookmarks")}</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+      <label>{aiText(locale, "Комментарий — необязательно", "Izoh — ixtiyoriy", "Comment — optional")}<textarea value={comment} disabled={saving || saved} maxLength={2_000} onChange={(event) => setComment(event.target.value)} placeholder={aiText(locale, "Почему эта норма важна для вашей ситуации", "Bu norma vaziyatingiz uchun nega muhim", "Why this provision matters to your situation")} /></label>
+      <button type="submit" disabled={saving || saved}><BookmarkPlus aria-hidden="true" />{saving ? aiText(locale, "Сохраняем…", "Saqlanmoqda…", "Saving…") : saved ? aiText(locale, "Сохранено", "Saqlandi", "Saved") : aiText(locale, "Сохранить проверенную версию", "Tekshirilgan versiyani saqlash", "Save verified version")}</button>
       <output role={failed ? "alert" : "status"} aria-live="polite">{status}</output>
     </form>
   </details>;
@@ -1247,30 +1263,30 @@ function VoiceModeStage(props: {
   recorderPhase: VoiceRecorderPhase;
   speechPhase: VoiceSpeechPhase;
 }) {
-  const ru = props.locale === "ru";
   const state = resolveVoiceModeState(props);
-  const labels: Record<VoiceModeState, [string, string]> = {
-    idle: ["Голосовой режим ожидает", "Ovozli rejim kutmoqda"],
-    ready: ["Готов слушать после вашего нажатия", "Bosganingizdan keyin tinglashga tayyor"],
-    listening: ["Слушаю вашу ситуацию", "Vaziyatingizni tinglayapman"],
-    transcribing: ["Защищённо распознаю речь", "Nutqni himoyalangan tarzda matnga aylantiryapman"],
-    thinking: ["Проверяю факты и источники", "Faktlar va manbalarni tekshiryapman"],
-    speaking: ["Озвучиваю сохранённый AI-ответ", "Saqlangan AI javobini ovozlantiryapman"],
-    paused: ["Пауза — вы управляете продолжением", "Pauza — davom ettirish sizning nazoratingizda"],
-    completed: ["Ответ готов — проверьте текст и источники", "Javob tayyor — matn va manbalarni tekshiring"],
-    offline: ["Голосовой провайдер сейчас недоступен", "Ovoz provayderi hozir mavjud emas"],
-    error: ["Голосовой этап не завершён — можно повторить или перейти к тексту", "Ovoz bosqichi yakunlanmadi — qayta urinib ko‘ring yoki matnga o‘ting"],
+  const labels: Record<VoiceModeState, Record<PlatformLocale, string>> = {
+    idle: { ru: "Голосовой режим ожидает", uz: "Ovozli rejim kutmoqda", en: "Voice mode is standing by" },
+    ready: { ru: "Готов слушать после вашего нажатия", uz: "Bosganingizdan keyin tinglashga tayyor", en: "Ready to listen when you press the button" },
+    listening: { ru: "Слушаю вашу ситуацию", uz: "Vaziyatingizni tinglayapman", en: "Listening to your situation" },
+    transcribing: { ru: "Защищённо распознаю речь", uz: "Nutqni himoyalangan tarzda matnga aylantiryapman", en: "Securely transcribing your speech" },
+    thinking: { ru: "Проверяю факты и источники", uz: "Faktlar va manbalarni tekshiryapman", en: "Checking facts and sources" },
+    speaking: { ru: "Озвучиваю сохранённый AI-ответ", uz: "Saqlangan AI javobini ovozlantiryapman", en: "Reading the saved AI answer aloud" },
+    paused: { ru: "Пауза — вы управляете продолжением", uz: "Pauza — davom ettirish sizning nazoratingizda", en: "Paused — you control when to continue" },
+    completed: { ru: "Ответ готов — проверьте текст и источники", uz: "Javob tayyor — matn va manbalarni tekshiring", en: "Answer ready — review the text and sources" },
+    offline: { ru: "Голосовой провайдер сейчас недоступен", uz: "Ovoz provayderi hozir mavjud emas", en: "The voice provider is currently unavailable" },
+    error: { ru: "Голосовой этап не завершён — можно повторить или перейти к тексту", uz: "Ovoz bosqichi yakunlanmadi — qayta urinib ko‘ring yoki matnga o‘ting", en: "The voice step did not finish — retry or switch to text" },
   };
   return <section className="ai-voice-stage" data-state={state} aria-labelledby="ai-voice-stage-title">
     <div className="ai-voice-stage-copy">
-      <span><AudioLines aria-hidden="true" />{ru ? "Голосовой режим" : "Ovozli rejim"}</span>
-      <h2 id="ai-voice-stage-title">{labels[state][ru ? 0 : 1]}</h2>
-      <p>{ru
-        ? "Микрофон включается только по вашему нажатию. Перед отправкой вы увидите и сможете исправить расшифровку."
-        : "Mikrofon faqat siz bosganda yoqiladi. Yuborishdan oldin matnni ko‘rib, tahrirlashingiz mumkin."}</p>
-      <small>{ru
-        ? "Это AI-инструмент JURO, а не живой юрист."
-        : "Bu JURO AI vositasi, tirik yurist emas."}</small>
+      <span><AudioLines aria-hidden="true" />{aiText(props.locale, "Голосовой режим", "Ovozli rejim", "Voice mode")}</span>
+      <h2 id="ai-voice-stage-title">{labels[state][props.locale]}</h2>
+      <p>{aiText(
+        props.locale,
+        "Микрофон включается только по вашему нажатию. Перед отправкой вы увидите и сможете исправить расшифровку.",
+        "Mikrofon faqat siz bosganda yoqiladi. Yuborishdan oldin matnni ko‘rib, tahrirlashingiz mumkin.",
+        "The microphone turns on only when you choose. You can review and correct the transcript before sending it.",
+      )}</p>
+      <small>{aiText(props.locale, "Это AI-инструмент JURO, а не живой юрист.", "Bu JURO AI vositasi, tirik yurist emas.", "This is a JURO AI tool, not a human lawyer.")}</small>
     </div>
     <output role={state === "error" ? "alert" : "status"} aria-live="polite">{state}</output>
   </section>;
@@ -1340,13 +1356,13 @@ function focusSourceCard(sourceId: string) {
 function LegalAnswer({
   result,
   freshness,
-  ru,
+  locale,
   onQuestionSelect,
   onCitationSelect,
 }: {
   result: LegalResult;
   freshness?: SourceFreshness;
-  ru: boolean;
+  locale: PlatformLocale;
   onQuestionSelect?: (question: string) => void;
   onCitationSelect?: (sourceId: string) => void;
 }) {
@@ -1354,16 +1370,22 @@ function LegalAnswer({
     {freshness && freshness.status !== "fresh" && result.sourceAccessMode !== "direct" && <div className={`ai-source-freshness ai-source-freshness-${freshness.status}`} role="status">
       <CircleAlert aria-hidden="true" />
       <p>{freshness.status === "unavailable"
-        ? (ru
-          ? "Проверенные официальные источники Lex.uz ещё не опубликованы полностью в индексе JURO. Пока JURO не показывает правовой вывод как подтверждённый."
-          : "Lex.uz rasmiy manbalari JURO tasdiqlangan indeksida hali to‘liq nashr qilinmagan. Shu sabab JURO huquqiy xulosani tasdiqlangan deb ko‘rsatmaydi.")
-        : (ru
-          ? `Правовая база старше ${freshness.maxAgeDays} дней. Последняя подтверждённая полная синхронизация: ${formatDate(freshness.asOf, true)}.`
-          : `Huquqiy baza ${freshness.maxAgeDays} kundan eski. Oxirgi tasdiqlangan to‘liq sinxronlash: ${formatDate(freshness.asOf, false)}.`)}</p>
+        ? aiText(
+          locale,
+          "Проверенные официальные источники Lex.uz ещё не опубликованы полностью в индексе JURO. Пока JURO не показывает правовой вывод как подтверждённый.",
+          "Lex.uz rasmiy manbalari JURO tasdiqlangan indeksida hali to‘liq nashr qilinmagan. Shu sabab JURO huquqiy xulosani tasdiqlangan deb ko‘rsatmaydi.",
+          "Verified official Lex.uz sources are not yet fully available in the JURO index. JURO will not present a legal conclusion as verified in the meantime.",
+        )
+        : aiText(
+          locale,
+          `Правовая база старше ${freshness.maxAgeDays} дней. Последняя подтверждённая полная синхронизация: ${formatDate(freshness.asOf, locale)}.`,
+          `Huquqiy baza ${freshness.maxAgeDays} kundan eski. Oxirgi tasdiqlangan to‘liq sinxronlash: ${formatDate(freshness.asOf, locale)}.`,
+          `The legal database is more than ${freshness.maxAgeDays} days old. Last verified full sync: ${formatDate(freshness.asOf, locale)}.`,
+        )}</p>
     </div>}
     <LegalAnswerView
       result={result}
-      locale={ru ? "ru" : "uz"}
+      locale={locale}
       className="ai-answer"
       onQuestionSelect={onQuestionSelect}
       onCitationSelect={onCitationSelect}
@@ -1371,50 +1393,44 @@ function LegalAnswer({
   </div>;
 }
 
-function formatDate(value: string, ru: boolean) {
-  return formatPlatformDate(value, ru ? "ru" : "uz");
+function formatDate(value: string, locale: PlatformLocale) {
+  return formatPlatformDate(value, locale);
 }
 
 function coverageLabel(
   status: NonNullable<LegalResult["coverageStatus"]>,
-  ru: boolean,
+  locale: PlatformLocale,
 ): string {
-  if (status === "good_coverage") return ru ? "Покрытие: подтверждено" : "Qamrov: tasdiqlangan";
-  if (status === "partial_coverage") return ru
-    ? "Покрытие: частичное — ответ содержит только подтверждённую часть"
-    : "Qamrov: qisman — javob faqat tasdiqlangan qismni o‘z ichiga oladi";
-  if (status === "weak_coverage") return ru
-    ? "Покрытие: слабое — ближайшая норма не выдается за точный ответ"
-    : "Qamrov: zaif — yaqin norma aniq javob sifatida ko‘rsatilmaydi";
-  return ru
-    ? "Покрытие отсутствует — достаточная норма не найдена"
-    : "Qamrov yo‘q — yetarli norma topilmadi";
+  if (status === "good_coverage") return aiText(locale, "Покрытие: подтверждено", "Qamrov: tasdiqlangan", "Coverage: verified");
+  if (status === "partial_coverage") return aiText(locale, "Покрытие: частичное — ответ содержит только подтверждённую часть", "Qamrov: qisman — javob faqat tasdiqlangan qismni o‘z ichiga oladi", "Coverage: partial — the answer contains only the verified portion");
+  if (status === "weak_coverage") return aiText(locale, "Покрытие: слабое — ближайшая норма не выдается за точный ответ", "Qamrov: zaif — yaqin norma aniq javob sifatida ko‘rsatilmaydi", "Coverage: weak — a related provision is not presented as an exact answer");
+  return aiText(locale, "Покрытие отсутствует — достаточная норма не найдена", "Qamrov yo‘q — yetarli norma topilmadi", "No coverage — a sufficient legal provision was not found");
 }
 
-function languageLabel(language: string, ru: boolean): string {
-  if (language === "uz-Latn") return ru ? "Узбекский (латиница)" : "O‘zbekcha (lotin)";
-  if (language === "uz-Cyrl") return ru ? "Узбекский (кириллица)" : "Ўзбекча (кирилл)";
+function languageLabel(language: string, locale: PlatformLocale): string {
+  if (language === "uz-Latn") return aiText(locale, "Узбекский (латиница)", "O‘zbekcha (lotin)", "Uzbek (Latin)");
+  if (language === "uz-Cyrl") return aiText(locale, "Узбекский (кириллица)", "Ўзбекча (кирилл)", "Uzbek (Cyrillic)");
   if (language === "en") return "English";
-  return ru ? "Русский" : "Rus tili";
+  return aiText(locale, "Русский", "Rus tili", "Russian");
 }
 
-function sourceClassLabel(sourceClass: string | undefined, ru: boolean): string {
-  if (sourceClass === "OFFICIAL_GOVERNMENT_GUIDANCE") return ru ? "Официальное разъяснение" : "Rasmiy tushuntirish";
-  if (sourceClass === "OWNER_TRUSTED_GLOBAL") return ru ? "Материал JURO" : "JURO materiali";
-  if (sourceClass === "TENANT_TRUSTED_PRIVATE") return ru ? "Материал организации" : "Tashkilot materiali";
-  if (sourceClass === "USER_TRUSTED_PRIVATE") return ru ? "Личный документ" : "Shaxsiy hujjat";
-  if (sourceClass === "DERIVED_TRANSLATION") return ru ? "Производный перевод" : "Hosila tarjima";
-  if (sourceClass === "SECONDARY_REFERENCE") return ru ? "Вторичный источник" : "Ikkilamchi manba";
-  return ru ? "Официальное законодательство" : "Rasmiy qonunchilik";
+function sourceClassLabel(sourceClass: string | undefined, locale: PlatformLocale): string {
+  if (sourceClass === "OFFICIAL_GOVERNMENT_GUIDANCE") return aiText(locale, "Официальное разъяснение", "Rasmiy tushuntirish", "Official guidance");
+  if (sourceClass === "OWNER_TRUSTED_GLOBAL") return aiText(locale, "Материал JURO", "JURO materiali", "JURO material");
+  if (sourceClass === "TENANT_TRUSTED_PRIVATE") return aiText(locale, "Материал организации", "Tashkilot materiali", "Organisation material");
+  if (sourceClass === "USER_TRUSTED_PRIVATE") return aiText(locale, "Личный документ", "Shaxsiy hujjat", "Personal document");
+  if (sourceClass === "DERIVED_TRANSLATION") return aiText(locale, "Производный перевод", "Hosila tarjima", "Derived translation");
+  if (sourceClass === "SECONDARY_REFERENCE") return aiText(locale, "Вторичный источник", "Ikkilamchi manba", "Secondary source");
+  return aiText(locale, "Официальное законодательство", "Rasmiy qonunchilik", "Official legislation");
 }
 
-function sourceStatusLabel(status: string, ru: boolean): string {
-  if (status === "user_supplied") return ru ? "Предоставлен пользователем" : "Foydalanuvchi taqdim etgan";
-  if (status === "current" || status === "active") return ru ? "Действует" : "Amalda";
-  if (status === "historical") return ru ? "Историческая редакция" : "Tarixiy tahrir";
-  if (status === "repealed") return ru ? "Утратил силу" : "O‘z kuchini yo‘qotgan";
-  if (status === "pending_effect") return ru ? "Ещё не вступил в силу" : "Hali kuchga kirmagan";
-  return ru ? "Статус не подтверждён" : "Holat tasdiqlanmagan";
+function sourceStatusLabel(status: string, locale: PlatformLocale): string {
+  if (status === "user_supplied") return aiText(locale, "Предоставлен пользователем", "Foydalanuvchi taqdim etgan", "Provided by the user");
+  if (status === "current" || status === "active") return aiText(locale, "Действует", "Amalda", "In force");
+  if (status === "historical") return aiText(locale, "Историческая редакция", "Tarixiy tahrir", "Historical version");
+  if (status === "repealed") return aiText(locale, "Утратил силу", "O‘z kuchini yo‘qotgan", "Repealed");
+  if (status === "pending_effect") return aiText(locale, "Ещё не вступил в силу", "Hali kuchga kirmagan", "Not yet in force");
+  return aiText(locale, "Статус не подтверждён", "Holat tasdiqlanmagan", "Status not verified");
 }
 
 function isTrustedPrivateSource(source: Source): boolean {

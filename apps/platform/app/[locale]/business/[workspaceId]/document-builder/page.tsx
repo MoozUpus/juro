@@ -15,7 +15,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params;
   return {
-    ...documentBuilderMetadataCopy(locale === "uz" ? "uz" : "ru"),
+    ...documentBuilderMetadataCopy(locale === "en" ? "en" : locale === "uz" ? "uz" : "ru"),
     robots: { index: false, follow: false, nocache: true },
   };
 }

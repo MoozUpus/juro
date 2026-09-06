@@ -31,7 +31,7 @@ async function contextFor(request: Request, context: Context) {
 
 export const PUT = withApiErrors(async function PUT(request: Request, context: Context) {
   const state = await contextFor(request, context);
-  const locale = voiceLocale(request, state.recording?.locale === "uz" ? "uz" : "ru");
+  const locale = voiceLocale(request, state.recording?.locale ?? "ru");
   if (!state.recording) return voiceProblem("VOICE_RECORDING_NOT_FOUND", 404, locale);
   try {
     await assertOperationalFeatureEnabled({
@@ -79,7 +79,7 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
 
 export const PATCH = withApiErrors(async function PATCH(request: Request, context: Context) {
   const state = await contextFor(request, context);
-  const locale = voiceLocale(request, state.recording?.locale === "uz" ? "uz" : "ru");
+  const locale = voiceLocale(request, state.recording?.locale ?? "ru");
   if (!state.recording) return voiceProblem("VOICE_RECORDING_NOT_FOUND", 404, locale);
   try {
     const transcript = parseVoiceTranscript(await request.json());
@@ -95,7 +95,7 @@ export const PATCH = withApiErrors(async function PATCH(request: Request, contex
 
 export const DELETE = withApiErrors(async function DELETE(request: Request, context: Context) {
   const state = await contextFor(request, context);
-  const locale = voiceLocale(request, state.recording?.locale === "uz" ? "uz" : "ru");
+  const locale = voiceLocale(request, state.recording?.locale ?? "ru");
   if (!state.recording) return voiceResponse({ ok: true });
   try {
     await deleteVoiceRecording({

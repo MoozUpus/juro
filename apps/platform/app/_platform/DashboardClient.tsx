@@ -29,7 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { dashboardCopy } from "../../content/platform-ui";
+import { dashboardCopy, platformApiError } from "../../content/platform-ui";
 import { uploadDocumentForAnalysis } from "../../lib/document-analysis/client-upload";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
@@ -67,7 +67,6 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const copy = dashboardCopy(locale);
-  const ru = locale === "ru";
   const base = usePlatformBasePath();
   const workspaceId = usePlatformWorkspaceId();
   const [data, setData] = useState<DashboardData | null>(null);
@@ -87,14 +86,14 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
         headers: { "x-juro-workspace-id": workspaceId },
       });
       const body = await response.json() as DashboardData & { error?: string };
-      if (!response.ok) throw new Error(body.error || copy.loadError);
+      if (!response.ok) throw new Error(platformApiError(locale, body.error, copy.loadError));
       setData(body);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
       setLoading(false);
     }
-  }, [copy.loadError, workspaceId]);
+  }, [copy.loadError, locale, workspaceId]);
 
   useEffect(() => {
     void load();
@@ -134,9 +133,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
       });
       const body = await response.json() as { handle?: string; error?: string };
       if (!response.ok || !body.handle) {
-        throw new Error(body.error || (ru
-          ? "Не удалось защищённо передать вопрос."
-          : "Savolni himoyalangan tarzda uzatib bo‘lmadi."));
+        throw new Error(platformApiError(locale, body.error, copy.intakeError));
       }
       setPrompt("");
       router.push(`${base}/ai-chat?intake=${encodeURIComponent(body.handle)}`);
@@ -149,7 +146,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
 
   function chooseFile(next: File | null) {
     if (next && next.size > 50 * 1024 * 1024) {
-      setError(ru ? "Размер файла превышает 50 МБ." : "Fayl hajmi 50 MB dan oshadi.");
+      setError(copy.fileTooLarge50);
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -166,8 +163,8 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
       href: `${base}/cases`,
       icon: BriefcaseBusiness,
       copy: {
-        title: ru ? "Мои дела" : "Mening ishlarim",
-        description: ru ? "Сроки, документы и планы действий в одном месте." : "Muddatlar, hujjatlar va harakatlar rejalari bir joyda.",
+        title: copy.myMatters,
+        description: copy.myMattersDescription,
       },
     },
   ];
@@ -175,12 +172,12 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
     ? Math.round((uploadProgress.loaded / uploadProgress.total) * 100)
     : null;
   const uploadStatus = !uploadProgress ? "" : uploadProgress.phase === "hashing"
-    ? (ru ? "Проверяем целостность файла…" : "Fayl yaxlitligi tekshirilmoqda…")
+    ? copy.hashing
     : uploadProgress.phase === "finalizing"
-      ? (ru ? "Защищённо сохраняем файл для анализа…" : "Fayl tahlil uchun himoyalangan tarzda saqlanmoqda…")
+      ? copy.finalizing
       : uploadPercent === null
-        ? (ru ? "Передаём файл…" : "Fayl yuborilmoqda…")
-        : (ru ? `Передаём файл: ${uploadPercent}%` : `Fayl yuborilmoqda: ${uploadPercent}%`);
+        ? copy.uploading
+        : `${copy.uploadingPercent}: ${uploadPercent}%`;
   const attention = data ? [
     ...data.comparisons
       .filter((item) => !["completed", "completed_partial"].includes(item.status))
@@ -190,8 +187,8 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
         icon: FileDiff,
         title: `${item.versionOneName} ↔ ${item.versionTwoName}`,
         detail: item.status === "failed"
-          ? (ru ? "Сравнение остановлено — можно повторить этап" : "Taqqoslash to‘xtadi — bosqichni takrorlash mumkin")
-          : (ru ? "Сравнение обрабатывается" : "Taqqoslash qayta ishlanmoqda"),
+          ? copy.comparisonFailed
+          : copy.comparisonProcessing,
         time: item.updatedAt,
         importance: item.status === "failed" ? "high" : "medium",
       })),
@@ -203,8 +200,8 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
         icon: Upload,
         title: item.fileName,
         detail: item.status === "awaiting_ai_configuration"
-          ? (ru ? "Файл сохранён; AI-анализ ожидает подключения" : "Fayl saqlandi; AI-tahlil ulanishni kutmoqda")
-          : (ru ? "Анализ документа не завершён" : "Hujjat tahlili yakunlanmagan"),
+          ? copy.analysisAwaiting
+          : copy.analysisIncomplete,
         time: item.updatedAt,
         importance: item.errorCode ? "high" : "medium",
       })),
@@ -307,7 +304,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
             >
               <Paperclip />
             </button>
-            <Link className="dashboard-voice-action" href={`${base}/ai-lawyer/voice`} aria-label={ru ? "Открыть голосовой режим" : "Ovozli rejimni ochish"}>
+            <Link className="dashboard-voice-action" href={`${base}/ai-lawyer/voice`} aria-label={copy.voiceMode}>
               <Mic aria-hidden="true" />
             </Link>
             <button className="dashboard-start" disabled={submitting || (!prompt.trim() && !file) || Boolean(file && !consent)}>
@@ -327,19 +324,19 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
                 <span>{copy.consent}</span>
               </label>
             )}
-            {uploadProgress && <><div className="dashboard-upload-progress" role="progressbar" aria-label={ru ? "Прогресс загрузки файла" : "Fayl yuklash jarayoni"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div><p className="dashboard-upload-status" role="status" aria-live="polite">{uploadStatus}</p></>}
+            {uploadProgress && <><div className="dashboard-upload-progress" role="progressbar" aria-label={copy.uploadProgress} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div><p className="dashboard-upload-status" role="status" aria-live="polite">{uploadStatus}</p></>}
           </form>
         </div>
         <aside className="dashboard-today" aria-labelledby="dashboard-today-title">
-          <header><span>{ru ? "Рабочий день" : "Ish kuni"}</span><h2 id="dashboard-today-title">{ru ? "Сегодня" : "Bugun"}</h2></header>
-          {loading && !data ? <div className="dashboard-today-state"><LoaderCircle className="spin" /><span>{ru ? "Синхронизируем" : "Sinxronlanmoqda"}</span></div> : today.length ? today.map((item) => (
+          <header><span>{copy.workday}</span><h2 id="dashboard-today-title">{copy.today}</h2></header>
+          {loading && !data ? <div className="dashboard-today-state"><LoaderCircle className="spin" /><span>{copy.synchronizing}</span></div> : today.length ? today.map((item) => (
             <Link href={item.href} key={item.id}>
               <item.icon aria-hidden="true" />
               <span><strong>{item.title}</strong><small>{item.detail}</small></span>
-              <time>{formatDateTime(item.time, ru)}</time>
+              <time>{formatDateTime(item.time, locale)}</time>
             </Link>
-          )) : <div className="dashboard-today-state"><CheckCircle2 /><span>{ru ? "На сегодня срочных событий нет" : "Bugun shoshilinch voqealar yo‘q"}</span></div>}
-          <Link className="dashboard-today-calendar" href={`${base}/calendar`}>{ru ? "Открыть календарь" : "Kalendarni ochish"}<ArrowRight aria-hidden="true" /></Link>
+          )) : <div className="dashboard-today-state"><CheckCircle2 /><span>{copy.nothingUrgentToday}</span></div>}
+          <Link className="dashboard-today-calendar" href={`${base}/calendar`}>{copy.openCalendar}<ArrowRight aria-hidden="true" /></Link>
         </aside>
       </section>
 
@@ -347,7 +344,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
         <div className="dashboard-command-error" role="alert">
           <CircleAlert />
           <span>{error}</span>
-          <button onClick={() => { setLoading(true); void load(); }}>{ru ? "Повторить" : "Qayta urinish"}</button>
+          <button onClick={() => { setLoading(true); void load(); }}>{copy.retry}</button>
         </div>
       )}
 
@@ -382,27 +379,27 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
           </div>
         </div>
         {loading && !data ? (
-          <div className="dashboard-command-loading" role="status"><LoaderCircle className="spin" /><span>{ru ? "Загружаем рабочий контекст" : "Ish konteksti yuklanmoqda"}</span></div>
+          <div className="dashboard-command-loading" role="status"><LoaderCircle className="spin" /><span>{copy.loadingContext}</span></div>
         ) : (
           <div className="dashboard-continuation-grid">
             <section className="dashboard-work-list">
-              <header><span><CircleAlert /></span><div><h3>{copy.attentionTitle}</h3><p>{ru ? "Сроки, незавершённая обработка и новые события" : "Muddatlar, tugallanmagan qayta ishlash va yangi voqealar"}</p></div></header>
+              <header><span><CircleAlert /></span><div><h3>{copy.attentionTitle}</h3><p>{copy.attentionDescription}</p></div></header>
               {attention.length ? attention.map((item) => (
                 <Link href={item.href} key={item.id} data-importance={item.importance}>
                   <item.icon />
                   <span><strong>{item.title}</strong><small>{item.detail}</small></span>
-                  <time>{formatDateTime(item.time, ru)}</time>
+                  <time>{formatDateTime(item.time, locale)}</time>
                   <ArrowRight />
                 </Link>
               )) : <DashboardEmpty text={copy.emptyAttention} />}
             </section>
             <section className="dashboard-work-list">
-              <header><span><Files /></span><div><h3>{copy.recentTitle}</h3><p>{ru ? "Дела и документы, изменённые последними" : "Oxirgi o‘zgartirilgan ish va hujjatlar"}</p></div></header>
+              <header><span><Files /></span><div><h3>{copy.recentTitle}</h3><p>{copy.recentDescription}</p></div></header>
               {recent.length ? recent.map((item) => (
                 <Link href={item.href} key={item.id}>
                   <item.icon />
                   <span><strong>{item.title}</strong><small>{item.detail}</small></span>
-                  <time>{formatDateTime(item.time, ru)}</time>
+                  <time>{formatDateTime(item.time, locale)}</time>
                   <ArrowRight />
                 </Link>
               )) : <DashboardEmpty text={copy.emptyRecent} />}
@@ -412,11 +409,11 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
       </section>
 
       {data && (
-        <section className="dashboard-context-summary" aria-label={ru ? "Сводка пространства" : "Makon xulosasi"}>
-          <span><BriefcaseBusiness /><b>{data.counts.activeCases}</b>{ru ? "активных дел" : "faol ish"}</span>
-          <span><Files /><b>{data.counts.documents}</b>{ru ? "документов" : "hujjat"}</span>
-          <span><MessageSquareText /><b>{data.counts.consultations}</b>{ru ? "консультаций" : "maslahat"}</span>
-          <span><Bell /><b>{data.counts.unreadNotifications}</b>{ru ? "новых событий" : "yangi voqea"}</span>
+        <section className="dashboard-context-summary" aria-label={copy.workspaceSummary}>
+          <span><BriefcaseBusiness /><b>{data.counts.activeCases}</b>{copy.activeMatters}</span>
+          <span><Files /><b>{data.counts.documents}</b>{copy.documentsCount}</span>
+          <span><MessageSquareText /><b>{data.counts.consultations}</b>{copy.consultationsCount}</span>
+          <span><Bell /><b>{data.counts.unreadNotifications}</b>{copy.newEvents}</span>
         </section>
       )}
     </div>
@@ -427,8 +424,8 @@ function DashboardEmpty({ text }: { text: string }) {
   return <div className="dashboard-list-empty"><CheckCircle2 /><p>{text}</p></div>;
 }
 
-function formatDateTime(value: string, ru: boolean) {
-  return new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", {
+function formatDateTime(value: string, locale: PlatformLocale) {
+  return new Intl.DateTimeFormat({ ru: "ru-RU", uz: "uz-UZ", en: "en-GB" }[locale], {
     day: "2-digit",
     month: "short",
     hour: "2-digit",

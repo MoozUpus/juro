@@ -3,6 +3,7 @@ import { z } from "zod";
 import { callOpenAiStructured } from "../document-builder/ai/openai";
 import { runtimeEnv } from "../document-builder/storage/runtime";
 import { resolveAiRuntimeSettings } from "../ai/runtime-settings";
+import type { AiOutputLocale } from "../ai/localization";
 import type { JuroLegalResearchCandidate } from "../legal-corpus/legal-research-loop";
 
 const retrievalConceptSchema = z.object({
@@ -125,7 +126,7 @@ export function normalizeLegalRetrievalUnderstanding(
  */
 export async function understandLegalRetrievalQuery(input: {
   query: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   requestId: string;
   safetyIdentifier: string;
   conversationHistory?: readonly { user: string; assistant: string }[];
@@ -150,7 +151,7 @@ export async function understandLegalRetrievalQuery(input: {
     parse: (value) => retrievalUnderstandingProviderSchema.parse(value),
     instructions: [
       "Turn the supplied Uzbekistan legal question into a semantically faithful retrieval plan.",
-      "Understand colloquial wording, abbreviations, inflections, and Russian or Uzbek phrasing without relying on a fixed topic dictionary.",
+      "Understand colloquial wording, abbreviations, inflections, and Russian, Uzbek or English phrasing without relying on a fixed topic dictionary.",
       "Preserve the user's actors, action, legal status, circumstances, requested date, and requested outcome.",
       "standaloneQuestion must resolve references from bounded conversation history while preserving the user's current intent.",
       "When an everyday expression can represent materially different legal statuses, standaloneQuestion must preserve the plausible alternatives instead of silently choosing one, and corpusQueries must cover each alternative.",
@@ -204,7 +205,7 @@ export async function understandLegalRetrievalQuery(input: {
  */
 export async function rerankLegalCorpusCandidates(input: {
   question: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   candidates: readonly JuroLegalResearchCandidate[];
   limit: number;
   requestId: string;

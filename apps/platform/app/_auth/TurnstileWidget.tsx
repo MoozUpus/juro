@@ -18,6 +18,13 @@ type TurnstileApi = {
 type TurnstileWindow = Window & { turnstile?: TurnstileApi };
 type TurnstileTheme = "light" | "dark";
 
+function turnstileLanguage(locale: "ru" | "uz" | "en"): "ru" | "en" | "auto" {
+  // Cloudflare does not currently offer Uzbek. `auto` lets the provider use a
+  // supported browser language without rejecting `uz`; JURO-owned status and
+  // error copy remains localized in Uzbek below.
+  return locale === "uz" ? "auto" : locale;
+}
+
 function documentTheme(): TurnstileTheme {
   return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
@@ -75,7 +82,7 @@ export function TurnstileWidget({
           {
             sitekey: siteKey,
             action,
-            language: locale,
+            language: turnstileLanguage(locale),
             theme,
             size: "flexible",
             appearance: "interaction-only",

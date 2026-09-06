@@ -32,6 +32,7 @@ import {
   type LegalChatResponse,
 } from "./legal-chat-schema";
 import { attachSecondaryReferenceContext } from "./secondary-reference-result";
+import { aiText, type AiDiscoveryLocale, type AiOutputLocale } from "./localization";
 import {
   aiProviderStatus,
   type AiProviderStatus,
@@ -110,12 +111,12 @@ export interface LegalAiGateway {
   classifyIntent(question: string): LegalIntentDecision;
   rewriteFollowUp(input: {
     question: string;
-    locale: "ru" | "uz";
+    locale: AiOutputLocale;
     conversationHistory?: readonly { user: string; assistant: string }[];
   }): { query: string; rewritten: boolean };
   planOfficialResearch(input: {
     question: string;
-    locale: "ru" | "uz";
+    locale: AiDiscoveryLocale;
     conversationHistory?: readonly { user: string; assistant: string }[];
   }): LegalResearchPlan;
   generateGroundedAnswer(
@@ -128,7 +129,7 @@ export interface LegalAiGateway {
     sources: readonly LegalSourceContext[];
     question?: string;
     retrievalQuery?: string;
-    locale: "ru" | "uz";
+    locale: AiOutputLocale;
     answerMode: "short" | "detailed";
     reasoningMode: "fast" | "deep";
     legalDatabaseAsOf: string;
@@ -429,7 +430,7 @@ function filteredLegacyResult(
 
 function groundedVisibleAnswer(
   claims: readonly LegalGatewayClaim[],
-  locale: "ru" | "uz",
+  locale: AiOutputLocale,
   labelled = false,
   limit = 3,
 ): string {
@@ -442,14 +443,14 @@ function groundedVisibleAnswer(
     return [statement];
   }).slice(0, limit);
   if (!labelled) return statements.join(" ");
-  return locale === "ru" ? `Краткий вывод: ${statements.join(" ")}` : `Qisqa xulosa: ${statements.join(" ")}`;
+  return aiText(locale, `Краткий вывод: ${statements.join(" ")}`, `Qisqa xulosa: ${statements.join(" ")}`, `Key finding: ${statements.join(" ")}`);
 }
 
 export function validateGroundedPreliminaryFinding(input: {
   finding: unknown;
   sources: readonly LegalSourceContext[];
   question?: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
 }): GroundedLegalPreliminary | null {
   const parsed = legalFindingSchema.safeParse(input.finding);
   if (!parsed.success) return null;
@@ -485,7 +486,7 @@ export function validateGroundedPreliminaryFinding(input: {
 
 function preliminaryFromValidatedResult(
   result: ValidatedLegalGatewayResult,
-  locale: "ru" | "uz",
+  locale: AiOutputLocale,
 ): GroundedLegalPreliminary | null {
   // `type: "fact"` marks a claim that was grounded on a private document or on
   // public-web material. Those must never be streamed as a legal conclusion, so
@@ -618,7 +619,7 @@ export function buildVerifiedSourceOnlyFallback(input: {
   sources: readonly LegalSourceContext[];
   question?: string;
   retrievalQuery?: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   answerMode: "short" | "detailed";
   reasoningMode: "fast" | "deep";
   legalDatabaseAsOf: string;
@@ -648,9 +649,7 @@ export function buildVerifiedSourceOnlyFallback(input: {
       sourceIds: [source.id],
     })),
     responseKind: "answer",
-    summary: input.locale === "ru"
-      ? "Показаны точные положения из проверенных источников."
-      : "Tekshirilgan manbalardagi aniq qoidalar ko‘rsatildi.",
+    summary: aiText(input.locale, "Показаны точные положения из проверенных источников.", "Tekshirilgan manbalardagi aniq qoidalar ko‘rsatildi.", "Exact provisions from verified sources are shown."),
     answer: exactText,
     language: input.locale,
     jurisdiction: "UZ",
@@ -700,7 +699,7 @@ export function validateLegalGatewayAnswer(input: {
   sources: readonly LegalSourceContext[];
   question?: string;
   retrievalQuery?: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   answerMode: "short" | "detailed";
   reasoningMode: "fast" | "deep";
   legalDatabaseAsOf: string;
@@ -775,7 +774,7 @@ export function validateLegalGatewayAnswer(input: {
   const referenceNotes = secondaryClaims.slice(0, 8).flatMap((claim) => {
     const source = claim.sourceId ? sourceById.get(claim.sourceId) : null;
     if (!source || !claim.sourceId) return [];
-    const linkLabel = input.locale === "ru" ? "Открыть справочный источник" : "Ma’lumotnoma manbasini ochish";
+    const linkLabel = aiText(input.locale, "Открыть справочный источник", "Ma’lumotnoma manbasini ochish", "Open reference source");
     return [{
       title: source.actTitle.slice(0, 240),
       note: `${claim.text.slice(0, 800)}\n\n[${linkLabel}](${source.officialUrl})`.slice(0, 3_000),

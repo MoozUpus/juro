@@ -49,8 +49,8 @@ test("every status page derives metadata from the Worker-owned status origin", a
   ]) {
     const page = await readFile(new URL(relativePath, import.meta.url), "utf8");
     assert.match(page, /import \{ headers \} from "next\/headers"/u);
-    assert.match(page, /export async function generateMetadata\(\): Promise<Metadata>/u);
-    assert.match(page, /publicStatusMetadata\(requestHeaders\.get\(STATUS_ORIGIN_HEADER\)\)/u);
+    assert.match(page, /export async function generateMetadata\([\s\S]*?\): Promise<Metadata>/u);
+    assert.match(page, /publicStatusMetadata\(\s*requestHeaders\.get\(STATUS_ORIGIN_HEADER\),/u);
     assert.doesNotMatch(page, /export const metadata:/u);
   }
 });

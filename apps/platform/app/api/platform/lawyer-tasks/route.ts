@@ -2,6 +2,7 @@ import { parseJsonRequest } from "../../../../lib/auth/input";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { addNotification, isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { lawyerText } from "../../../../lib/platform/lawyer-localization";
 import { activeLawyerWorkspaceParticipant } from "../../../../lib/platform/lawyer-workspace-access";
 import { lawyerTaskOperationSchema, lawyerWorkspaceOperationError } from "../../../../lib/platform/lawyer-workspace-operations";
 
@@ -51,7 +52,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         "INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'lawyer_task_created',?,?)",
       ).bind(crypto.randomUUID(), participant.caseId, user.id, JSON.stringify({ requestId: participant.requestId, taskId: id, title: parsed.data.title }), now),
     ]);
-    await addNotification(participant.clientUserId, null, "lawyer_task_created", locale === "ru" ? "Юрист добавил задачу" : "Yurist vazifa qo‘shdi", parsed.data.title);
+    await addNotification(participant.clientUserId, null, "lawyer_task_created", lawyerText(participant.clientLocale, "Юрист добавил задачу", "Yurist vazifa qo‘shdi", "A lawyer added a task"), parsed.data.title);
     return response({ ok: true, task: { id, status: "planned", dueAt } }, 201);
   }
 
@@ -76,7 +77,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
         "INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'lawyer_task_comment_added',?,?)",
       ).bind(crypto.randomUUID(), participant.caseId, user.id, JSON.stringify({ requestId: participant.requestId, taskId: task.id, commentId: id }), now),
     ]);
-    await addNotification(participant.clientUserId, null, "lawyer_task_comment", locale === "ru" ? "Комментарий юриста к задаче" : "Yuristning vazifa izohi", locale === "ru" ? "Откройте дело, чтобы прочитать комментарий." : "Izohni o‘qish uchun ishni oching.");
+    await addNotification(
+      participant.clientUserId,
+      null,
+      "lawyer_task_comment",
+      lawyerText(participant.clientLocale, "Комментарий юриста к задаче", "Yuristning vazifa izohi", "A lawyer commented on a task"),
+      lawyerText(participant.clientLocale, "Откройте дело, чтобы прочитать комментарий.", "Izohni o‘qish uchun ishni oching.", "Open the case to read the comment."),
+    );
     return response({ ok: true, comment: { id, body: parsed.data.body, createdAt: now } }, 201);
   }
 
@@ -103,6 +110,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
       "INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'lawyer_task_updated',?,?)",
     ).bind(crypto.randomUUID(), participant.caseId, user.id, JSON.stringify({ requestId: participant.requestId, taskId: task.id, fromStatus: task.status, toStatus: parsed.data.status, dueAtChanged: hasDueAt }), now),
   ]);
-  await addNotification(participant.clientUserId, null, "lawyer_task_updated", locale === "ru" ? "Юрист обновил задачу" : "Yurist vazifani yangiladi", locale === "ru" ? "Статус задачи изменён." : "Vazifa holati o‘zgardi.");
+  await addNotification(
+    participant.clientUserId,
+    null,
+    "lawyer_task_updated",
+    lawyerText(participant.clientLocale, "Юрист обновил задачу", "Yurist vazifani yangiladi", "A lawyer updated a task"),
+    lawyerText(participant.clientLocale, "Статус задачи изменён.", "Vazifa holati o‘zgardi.", "The task status has changed."),
+  );
   return response({ ok: true, task: { id: task.id, status: parsed.data.status, dueAt: hasDueAt ? dueAt : undefined } });
 });

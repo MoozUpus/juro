@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { env } from "cloudflare:workers";
 import { POST as passwordLogin } from "../app/api/auth/password-login/route";
+import { POST as requestOtp } from "../app/api/auth/request-otp/route";
 import { POST as resetPassword } from "../app/api/auth/reset-password/route";
 import { GET as dashboard } from "../app/api/platform/dashboard/route";
 import { sha256 } from "../lib/auth/crypto";
@@ -114,6 +115,27 @@ test("registration is one payload and password login/reset have strict contracts
     turnstileToken: "verified-token",
   });
   assert.equal(registration.success, true);
+  assert.equal(requestOtpInputSchema.safeParse({
+    purpose: "registration_resend",
+    email: "person@example.com",
+    locale: "en",
+    accountType: "individual",
+    password: "long passphrase",
+    acceptTerms: true,
+    acceptPrivacy: true,
+    acceptPersonalData: true,
+    turnstileToken: "verified-token",
+  }).success, true);
+  assert.equal(requestOtpInputSchema.safeParse({
+    purpose: "registration_resend",
+    email: "person@example.com",
+    locale: "en",
+    accountType: "individual",
+    acceptTerms: true,
+    acceptPrivacy: true,
+    acceptPersonalData: true,
+    turnstileToken: "verified-token",
+  }).success, false, "confirmation resend must prove knowledge of the password");
   assert.equal(requestOtpInputSchema.safeParse({
     purpose: "register",
     email: "person@example.com",
@@ -772,7 +794,12 @@ test("password-login route issues a remembered opaque session accepted by protec
     });
   };
 
-  const request = (requestEmail: string, requestPassword: string, token: string) =>
+  const request = (
+    requestEmail: string,
+    requestPassword: string,
+    token: string,
+    locale: "ru" | "uz" | "en" = "ru",
+  ) =>
     passwordLogin(new Request(
       "https://app.juro.uz/api/auth/password-login",
       {
@@ -788,7 +815,7 @@ test("password-login route issues a remembered opaque session accepted by protec
         body: JSON.stringify({
           email: requestEmail,
           password: requestPassword,
-          locale: "ru",
+          locale,
           rememberMe: true,
           turnstileToken: token,
         }),
@@ -915,6 +942,26 @@ test("password-login route issues a remembered opaque session accepted by protec
       consultations: 0,
       unreadNotifications: 0,
     });
+
+    const englishResponse = await request(
+      email,
+      password,
+      "turnstile-valid-password-en",
+      "en",
+    );
+    assert.equal(englishResponse.status, 200);
+    assert.deepEqual(await englishResponse.json(), {
+      ok: true,
+      redirectTo: "/en/individual/dashboard",
+      handoff: null,
+      themePreference: "dark",
+    });
+    assert.deepEqual(turnstileTokens, [
+      "turnstile-wrong-password",
+      "turnstile-missing-account",
+      "turnstile-valid-password",
+      "turnstile-valid-password-en",
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
     for (const key of envKeys) {
@@ -944,4 +991,194 @@ test("migration 0150 preserves existing accounts and adds password/MFA controls"
     migration,
     /INSERT\s+INTO\s+`?user_password_credentials`?\s+SELECT/iu,
   );
+});
+
+test("registration confirmation resend verifies the password without recreating or enumerating accounts", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const workerEnv = env as unknown as Record<string, unknown>;
+  const envKeys = [
+    "DB",
+    "APP_ENV",
+    "IDENTITY_PROTECTION_MODE",
+    "IDENTITY_KEYRING",
+    "TURNSTILE_SECRET_KEY",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+  ];
+  const previousEnv = new Map(envKeys.map(key => [key, workerEnv[key]]));
+  const originalFetch = globalThis.fetch;
+  const userId = "registration-resend-user";
+  const email = "registration-resend@example.test";
+  const password = "a durable registration passphrase";
+  const now = new Date();
+  const identityContext = createIdentityProtectionContext(
+    "dual_write",
+    PASSWORD_RESET_KEYRING,
+  );
+  const identity = await prepareUserIdentityWrite(identityContext, {
+    userId,
+    email,
+    phone: null,
+  });
+  sqlite.prepare(
+    `INSERT INTO user_profiles (
+       id,email,email_ciphertext,email_iv,email_key_version,
+       email_lookup_hash,email_lookup_key_version,full_name,locale,
+       account_type,theme_preference,email_verified_at,
+       onboarding_completed_at,created_at,updated_at
+     ) VALUES (?,?,?,?,?,?,?,?,'ru','lawyer','light',NULL,NULL,?,?)`,
+  ).run(
+    userId,
+    identity.email,
+    identity.emailCiphertext,
+    identity.emailIv,
+    identity.emailKeyVersion,
+    identity.emailLookupHash,
+    identity.emailLookupKeyVersion,
+    "Original Name",
+    now.toISOString(),
+    now.toISOString(),
+  );
+  await passwordCredentialWriteStatement(
+    d1,
+    userId,
+    await preparePasswordCredential(password, now),
+  ).run();
+  sqlite.prepare(
+    `INSERT INTO auth_pending_registrations (
+       user_id,expires_at,created_at,updated_at
+     ) VALUES (?,?,?,?)`,
+  ).run(
+    userId,
+    new Date(now.getTime() + 24 * 60 * 60 * 1_000).toISOString(),
+    now.toISOString(),
+    now.toISOString(),
+  );
+
+  Object.assign(workerEnv, {
+    DB: d1,
+    APP_ENV: "production",
+    IDENTITY_PROTECTION_MODE: "dual_write",
+    IDENTITY_KEYRING: PASSWORD_RESET_KEYRING,
+    TURNSTILE_SECRET_KEY: "turnstile-server-secret",
+    RESEND_API_KEY: "resend-server-secret",
+    EMAIL_FROM: "JURO <security@juro.uz>",
+  });
+  const providerRecipients: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    if (String(input).includes("challenges.cloudflare.com")) {
+      return Response.json({
+        success: true,
+        hostname: "app.juro.uz",
+        action: "auth_registration_resend",
+      });
+    }
+    assert.equal(String(input), "https://api.resend.com/emails");
+    const payload = JSON.parse(String(init?.body)) as { to?: string[] };
+    providerRecipients.push(payload.to?.[0] ?? "");
+    return Response.json({ id: "resend_registration_confirmation" });
+  };
+
+  const send = (requestEmail: string, requestPassword: string, ip: string) =>
+    requestOtp(new Request("https://app.juro.uz/api/auth/request-otp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://app.juro.uz",
+        "sec-fetch-site": "same-origin",
+        "x-juro-csrf": "1",
+        "cf-connecting-ip": ip,
+      },
+      body: JSON.stringify({
+        purpose: "registration_resend",
+        email: requestEmail,
+        locale: "en",
+        accountType: "individual",
+        password: requestPassword,
+        acceptTerms: true,
+        acceptPrivacy: true,
+        acceptPersonalData: true,
+        turnstileToken: `turnstile-${ip}`,
+      }),
+    }));
+
+  try {
+    const delivered = await send(email, password, "203.0.113.81");
+    assert.equal(delivered.status, 200);
+    const deliveredBody = await delivered.json() as Record<string, unknown>;
+    assert.equal(deliveredBody.ok, true);
+    assert.match(String(deliveredBody.challengeId), /^[0-9a-f-]{36}$/u);
+    assert.deepEqual(providerRecipients, [email]);
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT purpose,account_type AS accountType FROM auth_otp_challenges WHERE id=?",
+      ).get(String(deliveredBody.challengeId)) },
+      { purpose: "register", accountType: "lawyer" },
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT full_name AS fullName FROM user_profiles WHERE id=?").get(userId) as { fullName: string }).fullName,
+      "Original Name",
+      "resend must not overwrite an existing profile",
+    );
+
+    sqlite.prepare(
+      `UPDATE auth_pending_registrations
+       SET created_at=?,updated_at=?,expires_at=? WHERE user_id=?`,
+    ).run(
+      new Date(now.getTime() - 48 * 60 * 60 * 1_000).toISOString(),
+      new Date(now.getTime() - 48 * 60 * 60 * 1_000).toISOString(),
+      new Date(now.getTime() - 24 * 60 * 60 * 1_000).toISOString(),
+      userId,
+    );
+    const expiredPending = await send(
+      email,
+      password,
+      "203.0.113.84",
+    );
+    assert.equal(expiredPending.status, 409);
+    assert.deepEqual(await expiredPending.json(), {
+      code: "REGISTRATION_RESTART_REQUIRED",
+      accountType: "lawyer",
+      error: "Your registration session expired. Continue registration again and your existing account will be updated safely.",
+    });
+    assert.deepEqual(
+      providerRecipients,
+      [email],
+      "an expired pending-registration marker must not emit a false-success email",
+    );
+
+    const wrongPassword = await send(
+      email,
+      "definitely the wrong passphrase",
+      "203.0.113.82",
+    );
+    const missingAccount = await send(
+      "missing-registration-resend@example.test",
+      "definitely the wrong passphrase",
+      "203.0.113.83",
+    );
+    assert.equal(wrongPassword.status, 200);
+    assert.equal(missingAccount.status, 200);
+    const wrongBody = await wrongPassword.json() as Record<string, unknown>;
+    const missingBody = await missingAccount.json() as Record<string, unknown>;
+    assert.deepEqual(Object.keys(wrongBody).sort(), Object.keys(missingBody).sort());
+    assert.equal(wrongBody.ok, true);
+    assert.equal(missingBody.ok, true);
+    assert.match(String(wrongBody.challengeId), /^[0-9a-f-]{36}$/u);
+    assert.match(String(missingBody.challengeId), /^[0-9a-f-]{36}$/u);
+    assert.deepEqual(providerRecipients, [email]);
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM user_profiles").get() as { total: number }).total,
+      1,
+      "resend must never create a second account",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const key of envKeys) {
+      const previous = previousEnv.get(key);
+      if (previous === undefined) delete workerEnv[key];
+      else workerEnv[key] = previous;
+    }
+    sqlite.close();
+  }
 });

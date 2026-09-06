@@ -29,7 +29,11 @@ import {
   LegalCorpusQdrantContainer,
 } from "./legal-corpus-private-services";
 import { lawyerHostTarget } from "./lawyer-host-router";
-import { INTERNAL_REQUEST_PATH_HEADER } from "../lib/platform/routing";
+import {
+  INTERNAL_REQUEST_PATH_HEADER,
+  isAuthenticatedPlatformPathReady,
+} from "../lib/platform/routing";
+import { canonicalLawyerHostRequestHeaders } from "../lib/platform/lawyer-entry-routing";
 import { STATUS_ORIGIN_HEADER } from "../lib/operations/status-metadata";
 import {
   publicApiRequestBodyLimit,
@@ -89,7 +93,11 @@ function isSupportedImageOutputFormat(
   );
 }
 
-function withSecurityHeaders(response: Response, url: URL): Response {
+function withSecurityHeaders(
+  response: Response,
+  url: URL,
+  requestMethod: string,
+): Response {
   const headers = new Headers(response.headers);
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -101,7 +109,11 @@ function withSecurityHeaders(response: Response, url: URL): Response {
     "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https://cloudflareinsights.com; media-src 'self' blob:; worker-src 'self' blob:; upgrade-insecure-requests",
   );
   if (url.protocol === "https:") headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  return new Response(requestMethod === "HEAD" ? null : response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 // Image security config. SVG sources with .svg extension auto-skip the
@@ -131,12 +143,16 @@ const worker = {
       && url.hostname.toLowerCase() === "admin.juro.uz"
       && env.ADMIN_CONSOLE
     ) {
-      return withSecurityHeaders(await env.ADMIN_CONSOLE.fetch(request), url);
+      return withSecurityHeaders(await env.ADMIN_CONSOLE.fetch(request), url, request.method);
     }
     const configuredStatusHostname = env.STATUS_HOSTNAME?.trim().toLowerCase();
     const isStatusHost = Boolean(configuredStatusHostname && url.hostname.toLowerCase() === configuredStatusHostname);
     let routedRequest = request;
     let routedUrl = url;
+
+    if (!isAuthenticatedPlatformPathReady(url.pathname)) {
+      return withSecurityHeaders(new Response("Not Found", { status: 404 }), url, request.method);
+    }
 
     const hostname = url.hostname.toLowerCase();
     const isLawyerHost = hostname === "lawyer.juro.uz";
@@ -147,11 +163,19 @@ const worker = {
       || ["/favicon.ico", "/icon.png", "/apple-touch-icon.png", "/signin-with-chatgpt", "/signout-with-chatgpt", "/callback"].includes(url.pathname);
     if (isLawyerHost && !lawyerPassthrough) {
       const target = lawyerHostTarget(url);
-      if (!target) return withSecurityHeaders(new Response("Not Found", { status: 404 }), url);
+      if (!target) return withSecurityHeaders(new Response("Not Found", { status: 404 }), url, request.method);
       const headers = new Headers(request.headers);
-      headers.set("x-juro-lawyer-host", "1");
       routedUrl = target;
-      routedRequest = new Request(target, { method: request.method, headers, body: request.body, redirect: request.redirect });
+      routedRequest = new Request(target, {
+        method: request.method,
+        headers,
+        ...(
+          request.method === "GET" || request.method === "HEAD"
+            ? {}
+            : { body: request.body }
+        ),
+        redirect: request.redirect,
+      });
     }
 
     if (isStatusHost) {
@@ -161,19 +185,21 @@ const worker = {
         || url.pathname === "/status"
         || url.pathname === "/ru"
         || url.pathname === "/uz"
+        || url.pathname === "/en"
         || url.pathname === "/ru/status"
         || url.pathname === "/uz/status"
+        || url.pathname === "/en/status"
         || url.pathname === "/api/status"
         || isStatusAsset;
       if (!allowedStatusPath) {
-        return withSecurityHeaders(new Response("Not Found", { status: 404 }), url);
+        return withSecurityHeaders(new Response("Not Found", { status: 404 }), url, request.method);
       }
       if (request.method !== "GET" && request.method !== "HEAD") {
-        return withSecurityHeaders(new Response("Method Not Allowed", { status: 405, headers: { allow: "GET, HEAD" } }), url);
+        return withSecurityHeaders(new Response("Method Not Allowed", { status: 405, headers: { allow: "GET, HEAD" } }), url, request.method);
       }
-      if (url.pathname === "/" || url.pathname === "/ru" || url.pathname === "/uz") {
+      if (url.pathname === "/" || url.pathname === "/ru" || url.pathname === "/uz" || url.pathname === "/en") {
         const target = new URL(url);
-        if (url.pathname === "/ru" || url.pathname === "/uz") {
+        if (url.pathname === "/ru" || url.pathname === "/uz" || url.pathname === "/en") {
           target.pathname = `${url.pathname}/status`;
         } else {
           target.pathname = "/status";
@@ -196,11 +222,11 @@ const worker = {
           return result.response();
         },
       }, allowedWidths);
-      return withSecurityHeaders(optimized, url);
+      return withSecurityHeaders(optimized, url, request.method);
     }
 
     const internalAdminResponse = await handleInternalAdminRequest(routedRequest, env);
-    if (internalAdminResponse) return withSecurityHeaders(internalAdminResponse, url);
+    if (internalAdminResponse) return withSecurityHeaders(internalAdminResponse, url, request.method);
 
     const bodyLimit = publicApiRequestBodyLimit(routedUrl.pathname, routedRequest.method);
     if (bodyLimit !== null) {
@@ -215,12 +241,15 @@ const worker = {
               pragma: "no-cache",
             },
           },
-        ), url);
+        ), url, request.method);
       }
       routedRequest = boundedRequest.request;
     }
 
-    const appHeaders = new Headers(routedRequest.headers);
+    const appHeaders = canonicalLawyerHostRequestHeaders(
+      routedRequest.headers,
+      isLawyerHost,
+    );
     appHeaders.delete(STATUS_ORIGIN_HEADER);
     if (isStatusHost) appHeaders.set(STATUS_ORIGIN_HEADER, url.origin);
     appHeaders.set(
@@ -237,7 +266,7 @@ const worker = {
       || routedUrl.pathname.startsWith("/document-builder/signed-share/");
     const isPublicStatus = routedUrl.pathname === "/status"
       || routedUrl.pathname === "/api/status"
-      || /^\/(?:ru|uz)\/status$/.test(routedUrl.pathname);
+      || /^\/(?:ru|uz|en)\/status$/.test(routedUrl.pathname);
     const headers = new Headers(response.headers);
     if (isPublicStatus) {
       headers.set(
@@ -252,7 +281,15 @@ const worker = {
       headers.set("Pragma", "no-cache");
     }
     if (isPrivateShare) headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
-    return withSecurityHeaders(new Response(response.body, { status: response.status, statusText: response.statusText, headers }), url);
+    return withSecurityHeaders(
+      new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      }),
+      url,
+      request.method,
+    );
   },
   async queue(
     batch: MessageBatch<unknown>,

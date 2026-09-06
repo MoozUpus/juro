@@ -301,10 +301,13 @@ const validInput: OnboardingInput = {
   primaryGoal: "professional_work",
 };
 
-function request(body: unknown): Request {
+function request(body: unknown, locale?: "ru" | "uz" | "en"): Request {
   return new Request("https://app.juro.uz/api/onboarding", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(locale ? { "x-juro-locale": locale } : {}),
+    },
     body: JSON.stringify(body),
   });
 }
@@ -329,6 +332,15 @@ test("onboarding API rejects unknown fields and bodies over 4 KiB", async () => 
   );
   assert.equal(unknown.status, 400);
   assert.equal((await unknown.json() as { code: string }).code, "INVALID_INPUT");
+
+  const english = await handleOnboardingRequest(
+    request({ ...validInput, locale: "en", admin: true }, "en"),
+    dependencies(unreachable),
+  );
+  assert.deepEqual(await english.json(), {
+    code: "INVALID_INPUT",
+    error: "Check the request format.",
+  });
 
   const oversized = await handleOnboardingRequest(
     request({ ...validInput, firstName: "x".repeat(4_096) }),
@@ -469,7 +481,53 @@ test("UZ onboarding reuses the existing personal workspace", async () => {
   }
 });
 
-test("English registration evidence remains valid when onboarding enters the RU/UZ shell", async () => {
+test("EN onboarding preserves the profile locale and canonical redirect", async () => {
+  const { sqlite, d1 } = onboardingDatabase();
+  try {
+    const userId = insertProfile(sqlite, {
+      accountType: "individual",
+      workspaceType: "individual",
+    });
+    await insertPolicyEvidence(sqlite, userId, "en");
+    const response = await handleOnboardingRequest(
+      request({
+        lastName: "Smith",
+        firstName: "Alice",
+        middleName: "",
+        phone: "+998 90 123 45 67",
+        locale: "en",
+        accountPersona: "individual",
+        primaryGoal: "legal_answer",
+      }),
+      dependencies(d1, userId),
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      accountPersona: "individual",
+      workspaceId: "individual-workspace",
+      redirectTo: "/en/individual/dashboard",
+    });
+    assert.deepEqual(
+      {
+        ...sqlite.prepare(`
+          SELECT locale,account_type AS accountPersona,
+            primary_goal AS primaryGoal
+          FROM user_profiles WHERE id=?
+        `).get(userId),
+      },
+      {
+        locale: "en",
+        accountPersona: "individual",
+        primaryGoal: "legal_answer",
+      },
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("English registration evidence remains valid when the user changes onboarding language", async () => {
   const { sqlite, d1 } = onboardingDatabase();
   try {
     const userId = insertProfile(sqlite);
@@ -573,7 +631,7 @@ test("repeated onboarding creates at most one default personal workspace", async
   }
 });
 
-test("onboarding UI exposes complete RU/UZ profile and goal contracts", async () => {
+test("onboarding UI exposes complete RU/UZ/EN profile and goal contracts", async () => {
   const [client, route] = await Promise.all([
     readFile(
       new URL("../app/onboarding/OnboardingForm.tsx", import.meta.url),
@@ -595,6 +653,12 @@ test("onboarding UI exposes complete RU/UZ profile and goal contracts", async ()
     "Huquqiy javob olish",
     "Использовать JURO в профессиональной работе",
     "JURO’dan professional ishda foydalanish",
+    "Individual",
+    "Sole proprietor",
+    "Lawyer",
+    "Get a legal answer",
+    "Use JURO for professional work",
+    "Open my workspace",
   ]) {
     assert.match(client, new RegExp(label));
   }
@@ -604,9 +668,13 @@ test("onboarding UI exposes complete RU/UZ profile and goal contracts", async ()
   assert.match(client, /autoComplete="tel"/);
   assert.match(client, /developmentPolicyBypass/);
   assert.match(client, /не записывается как согласие пользователя/);
+  assert.match(client, /\["ru", "uz", "en"\]/);
+  assert.match(client, /"x-juro-locale": locale/);
+  assert.doesNotMatch(client, /const ru = locale === "ru"/);
   assert.doesNotMatch(client, /acceptPolicies|onboarding-consent/);
   assert.match(route, /handleOnboardingRequest/);
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.equal(onboardingRedirect("ru"), "/ru/individual/dashboard");
   assert.equal(onboardingRedirect("uz"), "/uz/individual/dashboard");
+  assert.equal(onboardingRedirect("en"), "/en/individual/dashboard");
 });

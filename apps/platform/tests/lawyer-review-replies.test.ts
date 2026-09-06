@@ -86,7 +86,7 @@ test("unrelated user cannot reply and public projection never exposes a pending 
   } finally { sqlite.close(); }
 });
 
-test("reply routes and interfaces enforce CSRF, fresh MFA, RU/UZ, safe rendering and approved-only projection", async () => {
+test("reply routes and interfaces enforce CSRF, fresh MFA, RU/UZ/EN, safe rendering and approved-only projection", async () => {
   const [submitRoute, adminList, adminPatch, staffPage, lawyerUi, staffUi, listRoute, detailRoute, assignedRoute, requestsUi, css] = await Promise.all([
     readFile(new URL("../app/api/platform/lawyer-reviews/[reviewId]/reply/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/admin/lawyer-review-replies/route.ts", import.meta.url), "utf8"),

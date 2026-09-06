@@ -16,7 +16,8 @@ import {
 } from "../../../../../lib/ai/user-memory";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
 
-const localeSchema = z.enum(["ru", "uz"]).default("ru");
+const localeSchema = z.enum(["ru", "uz", "en"]).default("ru");
+type MemoryLocale = z.infer<typeof localeSchema>;
 const memoryIdSchema = z.string().uuid();
 const statementSchema = z.string().trim().min(2).max(500);
 
@@ -61,7 +62,7 @@ function response(body: unknown, status = 200) {
   });
 }
 
-function localizedError(locale: "ru" | "uz", error: UserMemoryError) {
+function localizedError(locale: MemoryLocale, error: UserMemoryError) {
   const messages = {
     ru: {
       MEMORY_INVALID: "Проверьте текст и категорию памяти.",
@@ -81,11 +82,20 @@ function localizedError(locale: "ru" | "uz", error: UserMemoryError) {
       MEMORY_ENCRYPTION_UNAVAILABLE: "Shifrlangan xotira vaqtincha mavjud emas. Ma’lumot saqlanmadi.",
       MEMORY_DUPLICATE: "Bunday yozuv allaqachon saqlangan.",
     },
+    en: {
+      MEMORY_INVALID: "Check the memory text and category.",
+      MEMORY_NOT_FOUND: "Memory entry not found.",
+      MEMORY_ACCESS_DENIED: "Memory entry is unavailable.",
+      MEMORY_CREDENTIAL_FORBIDDEN: "Passwords, verification codes and payment details cannot be saved in JURO memory.",
+      MEMORY_SENSITIVE_CONFIRMATION_REQUIRED: "This entry may contain sensitive information. Confirm that you want to save it.",
+      MEMORY_ENCRYPTION_UNAVAILABLE: "Encrypted memory is temporarily unavailable. Nothing was saved.",
+      MEMORY_DUPLICATE: "This entry is already saved.",
+    },
   } as const;
   return messages[locale][error.code];
 }
 
-function memoryErrorResponse(locale: "ru" | "uz", error: UserMemoryError) {
+function memoryErrorResponse(locale: MemoryLocale, error: UserMemoryError) {
   const status = error.code === "MEMORY_NOT_FOUND" || error.code === "MEMORY_ACCESS_DENIED"
     ? 404
     : error.code === "MEMORY_ENCRYPTION_UNAVAILABLE"
@@ -99,7 +109,8 @@ function memoryErrorResponse(locale: "ru" | "uz", error: UserMemoryError) {
 export const GET = withApiErrors(async function GET(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
-  const locale = new URL(request.url).searchParams.get("locale") === "uz" ? "uz" : "ru";
+  const requestedLocale = new URL(request.url).searchParams.get("locale");
+  const locale: MemoryLocale = requestedLocale === "uz" || requestedLocale === "en" ? requestedLocale : "ru";
   const db = requireD1();
   const settings = await memorySettings(db, user.id);
   try {
@@ -131,16 +142,17 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const raw = await request.json().catch(() => null);
-  const requestedLocale = raw && typeof raw === "object" && "locale" in raw && raw.locale === "uz"
-    ? "uz"
-    : "ru";
+  const rawLocale = raw && typeof raw === "object" && "locale" in raw ? raw.locale : null;
+  const requestedLocale: MemoryLocale = rawLocale === "uz" || rawLocale === "en" ? rawLocale : "ru";
   const parsed = actionSchema.safeParse(raw);
   if (!parsed.success) {
     return response({
       code: "MEMORY_INVALID",
-      error: requestedLocale === "ru"
-        ? "Некорректные данные памяти."
-        : "Xotira ma’lumotlari noto‘g‘ri.",
+      error: {
+        ru: "Некорректные данные памяти.",
+        uz: "Xotira ma’lumotlari noto‘g‘ri.",
+        en: "The memory data is invalid.",
+      }[requestedLocale],
     }, 400);
   }
   const input = parsed.data;

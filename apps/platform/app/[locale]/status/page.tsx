@@ -14,9 +14,15 @@ import { isLocale } from "../../../lib/platform/routing";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({ params }: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
   const requestHeaders = await headers();
-  return publicStatusMetadata(requestHeaders.get(STATUS_ORIGIN_HEADER));
+  const { locale } = await params;
+  return publicStatusMetadata(
+    requestHeaders.get(STATUS_ORIGIN_HEADER),
+    isLocale(locale) ? locale : "ru",
+  );
 }
 
 export default async function LocalizedStatusPage({ params }: { params: Promise<{ locale: string }> }) {

@@ -18,12 +18,12 @@ test("comparison entry always opens comparison mode instead of the document rout
   ]);
 
   assert.match(shell, /const documentNav = \[/);
-  assert.match(shell, /\["documents", Files, "Мои документы", "Mening hujjatlarim"\]/);
-  assert.match(shell, /\["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"\]/);
-  assert.match(shell, /\["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish"\]/);
+  assert.match(shell, /\["documents", Files, "Мои документы", "Mening hujjatlarim", "My documents"\]/);
+  assert.match(shell, /\["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish", "Create a document"\]/);
+  assert.match(shell, /\["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish", "Review a document"\]/);
   assert.match(
     shell,
-    /\[\s*"document-review\?mode=compare",\s*Files,\s*"Сравнить версии",\s*"Versiyalarni solishtirish",?\s*\]/,
+    /\[\s*"document-review\?mode=compare",\s*Files,\s*"Сравнить версии",\s*"Versiyalarni solishtirish",\s*"Compare versions",?\s*\]/,
   );
   assert.doesNotMatch(shell, /\["documents\/comparisons", Files, "Сравнить версии", "Versiyalarni solishtirish"\]/);
   assert.match(shell, /const \[route, query\] = slug\.split\("\?"\)/);

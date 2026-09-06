@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseJsonRequest } from "../../../../lib/auth/input";
+import { authLocaleFromRequest } from "../../../../lib/auth/request-locale";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import {
@@ -12,7 +13,7 @@ import { isPersonalAccountType, isWorkspaceId, platformPath } from "../../../../
 const switchWorkspaceInputSchema = z.object({
   action: z.literal("switch").optional(),
   workspaceId: z.string().refine(isWorkspaceId),
-  locale: z.enum(["ru", "uz"]).default("ru"),
+  locale: z.enum(["ru", "uz", "en"]).default("ru"),
 }).strict();
 
 const workspaceMutationInputSchema = z.union([
@@ -43,12 +44,17 @@ export const GET = withApiErrors(async function GET() {
 
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
-  const user = await requireApiUser();
+  const requestLocale = authLocaleFromRequest(request);
+  const user = await requireApiUser(request);
   const parsed = await parseJsonRequest(request, workspaceMutationInputSchema, 2_048);
   if (!parsed.ok) {
     return response({
       code: "INVALID_WORKSPACE_INPUT",
-      error: "Проверьте данные пространства. / Makon ma’lumotlarini tekshiring.",
+      error: {
+        ru: "Проверьте данные пространства.",
+        uz: "Makon ma’lumotlarini tekshiring.",
+        en: "Check the workspace details.",
+      }[requestLocale],
     }, parsed.error === "payload_too_large" ? 413 : 400);
   }
   const body = parsed.data;
@@ -74,7 +80,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
           code: "WORKSPACE_CREATION_CONFLICT",
           error: locale === "ru"
             ? "Запрос создания уже использован. Обновите страницу и повторите."
-            : "Yaratish so‘rovi allaqachon ishlatilgan. Sahifani yangilab, qayta urinib ko‘ring.",
+            : locale === "uz"
+              ? "Yaratish so‘rovi allaqachon ishlatilgan. Sahifani yangilab, qayta urinib ko‘ring."
+              : "This creation request has already been used. Refresh the page and try again.",
         }, 409);
       }
       throw error;
@@ -88,7 +96,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response({
       error: locale === "ru"
         ? "У вас нет доступа к выбранному пространству."
-        : "Tanlangan makonga kirish huquqingiz yo‘q.",
+        : locale === "uz"
+          ? "Tanlangan makonga kirish huquqingiz yo‘q."
+          : "You do not have access to the selected workspace.",
     }, 403);
   }
   const profile = await requireD1().prepare(

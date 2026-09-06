@@ -7,16 +7,21 @@ export type LegalDocument = {
   sections: Array<{ heading: string; paragraphs: string[] }>;
 };
 
+// This is the same pre-incorporation contact published by the public site and
+// configured for platform operations. Keep policy content deterministic: an
+// environment-dependent value would make acceptance digests unverifiable.
+export const APP_LEGAL_OPERATOR_EMAIL = "muzaffarbekmurodoff@gmail.com";
+
 const sharedRu = {
-  operator: "JURO работает в режиме предварительного запуска до регистрации отдельного оператора. Юридически значимые уведомления принимаются по адресу muzaffarbekmurodoff@gmail.com. Наименование и адрес зарегистрированного оператора будут опубликованы до заключения договоров от его имени.",
+  operator: `JURO работает в режиме предварительного запуска до регистрации отдельного оператора. Юридически значимые уведомления принимаются по адресу ${APP_LEGAL_OPERATOR_EMAIL}. Наименование и адрес зарегистрированного оператора будут опубликованы до заключения договоров от его имени.`,
   disclaimer: "JURO не является государственным органом, нотариусом или судом. AI-инструменты не заменяют помощь специалиста там, где она обязательна или разумно необходима.",
 };
 const sharedUz = {
-  operator: "JURO alohida operator ro‘yxatdan o‘tkazilguniga qadar dastlabki ishga tushirish rejimida ishlaydi. Yuridik ahamiyatga ega xabarlar muzaffarbekmurodoff@gmail.com manzilida qabul qilinadi. Ro‘yxatdan o‘tkazilgan operatorning nomi va manzili uning nomidan shartnomalar tuzilishidan oldin e’lon qilinadi.",
+  operator: `JURO alohida operator ro‘yxatdan o‘tkazilguniga qadar dastlabki ishga tushirish rejimida ishlaydi. Yuridik ahamiyatga ega xabarlar ${APP_LEGAL_OPERATOR_EMAIL} manzilida qabul qilinadi. Ro‘yxatdan o‘tkazilgan operatorning nomi va manzili uning nomidan shartnomalar tuzilishidan oldin e’lon qilinadi.`,
   disclaimer: "JURO davlat organi, notarius yoki sud emas. AI vositalari majburiy yoki oqilona zarur bo‘lgan mutaxassis yordamini almashtirmaydi.",
 };
 const sharedEn = {
-  operator: "JURO is operating in pre-launch mode until a dedicated operator is incorporated. Legally significant notices are accepted at muzaffarbekmurodoff@gmail.com. The registered operator’s name and address will be published before contracts are entered into on its behalf.",
+  operator: `JURO is operating in pre-launch mode until a dedicated operator is incorporated. Legally significant notices are accepted at ${APP_LEGAL_OPERATOR_EMAIL}. The registered operator’s name and address will be published before contracts are entered into on its behalf.`,
   disclaimer: "JURO is not a public authority, notary, or court. AI tools do not replace qualified professional assistance where it is required or reasonably necessary.",
 };
 
@@ -36,12 +41,12 @@ export const appLegalContent: Record<"ru" | "uz" | "en", Record<AppLegalSlug, Le
     privacy: {
       title: "Политика конфиденциальности приложения JURO",
       description: "Как закрытый кабинет обрабатывает аккаунт, документы, юридические ситуации и служебные журналы.",
-      updated: "26 июля 2026",
+      updated: "5 сентября 2026",
       sections: [
         { heading: "1. Какие данные обрабатываются", paragraphs: ["JURO обрабатывает данные регистрации, настройки рабочего пространства, введённые пользователем факты, документы, комментарии, планы, согласия, технические журналы и историю действий. Состав данных зависит от используемой функции.", sharedRu.operator] },
         { heading: "2. Цели и доступ", paragraphs: ["Данные используются для предоставления функций кабинета, обеспечения безопасности, исполнения запросов, поддержки, расчёта лимитов и выполнения юридических обязанностей. Участники команды и специалисты видят только тот объём, который разрешён ролью, настройками и отдельным согласием.", "Содержание юридических вопросов и документов не должно передаваться в продуктовую аналитику."] },
         { heading: "3. Провайдеры и передача", paragraphs: ["Для email, AI, хранения файлов, мониторинга и платежей могут использоваться внешние обработчики. До включения конкретного провайдера оператор должен определить договорные основания, территорию обработки, сроки хранения и меры защиты.", "При трансграничной передаче оператор обязан применять предусмотренное применимым правом основание и уведомление."] },
-        { heading: "4. Права пользователя", paragraphs: ["В настройках можно получить переносимый экспорт метаданных, посмотреть историю согласий и направить запрос на удаление. Отдельные сведения могут сохраняться в течение обязательного срока или для защиты законных требований.", "Для обращения или жалобы используйте {OPERATOR_EMAIL}."] },
+        { heading: "4. Права пользователя", paragraphs: ["В настройках можно получить переносимый экспорт метаданных, посмотреть историю согласий и направить запрос на удаление. Отдельные сведения могут сохраняться в течение обязательного срока или для защиты законных требований.", `Для обращения или жалобы используйте ${APP_LEGAL_OPERATOR_EMAIL}.`] },
       ],
     },
     cookies: {
@@ -91,12 +96,12 @@ export const appLegalContent: Record<"ru" | "uz" | "en", Record<AppLegalSlug, Le
     privacy: {
       title: "JURO ilovasi maxfiylik siyosati",
       description: "Yopiq kabinet hisob, hujjat, yuridik vaziyat va xizmat jurnallarini qanday qayta ishlaydi.",
-      updated: "2026-yil 26-iyul",
+      updated: "2026-yil 5-sentabr",
       sections: [
         { heading: "1. Qayta ishlanadigan ma’lumotlar", paragraphs: ["JURO ro‘yxatdan o‘tish ma’lumotlari, makon sozlamalari, faktlar, hujjatlar, izohlar, rejalar, roziliklar va harakatlar tarixini qayta ishlaydi.", sharedUz.operator] },
         { heading: "2. Maqsad va kirish", paragraphs: ["Ma’lumotlar kabinet funksiyalari, xavfsizlik, qo‘llab-quvvatlash va majburiyatlarni bajarish uchun ishlatiladi. Jamoa a’zolari va mutaxassislar faqat rol va alohida rozilik doirasidagi ma’lumotni ko‘radi.", "Yuridik savol va hujjat mazmuni mahsulot analitikasiga yuborilmasligi kerak."] },
         { heading: "3. Provayderlar va uzatish", paragraphs: ["Email, AI, fayl saqlash, monitoring va to‘lov uchun tashqi qayta ishlovchilar ishlatilishi mumkin. Har bir provayder uchun asos, hudud, muddat va himoya choralari belgilanadi.", "Transchegaraviy uzatishda amaldagi huquq talablari bajarilishi kerak."] },
-        { heading: "4. Foydalanuvchi huquqlari", paragraphs: ["Sozlamalarda metadata eksporti, roziliklar tarixi va o‘chirish so‘rovi mavjud. Ayrim ma’lumotlar majburiy muddat davomida saqlanishi mumkin.", "Murojaat yoki shikoyat uchun {OPERATOR_EMAIL} manzilidan foydalaning."] },
+        { heading: "4. Foydalanuvchi huquqlari", paragraphs: ["Sozlamalarda metadata eksporti, roziliklar tarixi va o‘chirish so‘rovi mavjud. Ayrim ma’lumotlar majburiy muddat davomida saqlanishi mumkin.", `Murojaat yoki shikoyat uchun ${APP_LEGAL_OPERATOR_EMAIL} manzilidan foydalaning.`] },
       ],
     },
     cookies: {
@@ -146,12 +151,12 @@ export const appLegalContent: Record<"ru" | "uz" | "en", Record<AppLegalSlug, Le
     privacy: {
       title: "JURO application Privacy Policy",
       description: "How the private account area processes account data, documents, legal matters, and service logs.",
-      updated: "26 July 2026",
+      updated: "5 September 2026",
       sections: [
         { heading: "1. Data we process", paragraphs: ["JURO processes registration data, workspace settings, facts entered by users, documents, comments, plans, consent records, technical logs, and activity history. The exact data depends on the feature being used.", sharedEn.operator] },
         { heading: "2. Purposes and access", paragraphs: ["Data is used to provide account features, maintain security, fulfil requests, provide support, calculate limits, and meet legal obligations. Team members and professionals can see only the information permitted by their role, settings, and any specific consent.", "The content of legal questions and documents must not be sent to product analytics."] },
         { heading: "3. Providers and transfers", paragraphs: ["External processors may be used for email, AI, file storage, monitoring, and payments. Before enabling a provider, the operator must establish the contractual basis, processing location, retention period, and protective measures.", "For a cross-border transfer, the operator must use a basis and notice permitted by applicable law."] },
-        { heading: "4. User rights", paragraphs: ["In settings, users can obtain a portable metadata export, review their consent history, and submit a deletion request. Some information may be retained for a mandatory period or to protect legal claims.", "For a request or complaint, contact {OPERATOR_EMAIL}."] },
+        { heading: "4. User rights", paragraphs: ["In settings, users can obtain a portable metadata export, review their consent history, and submit a deletion request. Some information may be retained for a mandatory period or to protect legal claims.", `For a request or complaint, contact ${APP_LEGAL_OPERATOR_EMAIL}.`] },
       ],
     },
     cookies: {

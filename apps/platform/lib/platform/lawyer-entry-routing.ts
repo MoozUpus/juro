@@ -36,8 +36,20 @@ const pendingLawyerModules = new Set<PlatformModule>([
 
 const sharedStagingOrigin = "https://staging.app.juro.uz";
 
+export const LAWYER_HOST_REQUEST_HEADER = "x-juro-lawyer-host";
+
+export function canonicalLawyerHostRequestHeaders(
+  headers: Headers,
+  lawyerHost: boolean,
+): Headers {
+  const canonicalHeaders = new Headers(headers);
+  canonicalHeaders.delete(LAWYER_HOST_REQUEST_HEADER);
+  if (lawyerHost) canonicalHeaders.set(LAWYER_HOST_REQUEST_HEADER, "1");
+  return canonicalHeaders;
+}
+
 export function isLawyerHostRequest(headers: Pick<Headers, "get">): boolean {
-  return headers.get("x-juro-lawyer-host") === "1";
+  return headers.get(LAWYER_HOST_REQUEST_HEADER) === "1";
 }
 
 export function lawyerPublicOrigin(requestHost: string | null): string | null {

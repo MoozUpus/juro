@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { isAccountType } from "../../lib/platform/routing";
+import { isAccountType, isLocale } from "../../lib/platform/routing";
 
 export const SAFE_QUERY = new Set(["draftId", "documentId", "caseId", "stepId", "invitation", "return_to"]);
 
@@ -8,7 +8,12 @@ export async function canonicalBuilderUrl(request: Request, suffix = "document-b
   const store = await cookies();
   const queryLocale = source.searchParams.get("lang");
   const queryType = source.searchParams.get("accountType");
-  const locale = queryLocale === "uz" || store.get("juro_locale")?.value === "uz" ? "uz" : "ru";
+  const storedLocale = store.get("juro_locale")?.value;
+  const locale = typeof queryLocale === "string" && isLocale(queryLocale)
+    ? queryLocale
+    : typeof storedLocale === "string" && isLocale(storedLocale)
+      ? storedLocale
+      : "ru";
   const storedType = store.get("juro_account_type")?.value;
   const accountType = queryType && isAccountType(queryType)
     ? queryType

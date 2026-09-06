@@ -10,6 +10,8 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { lawyerDocumentStatus, lawyerIntlLocale, lawyerText } from "../../lib/platform/lawyer-localization";
+import { lawyerRequestMessageError } from "../../lib/platform/lawyer-request-message";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
@@ -38,7 +40,10 @@ export function LawyerRequestMessages({
   requestId: string;
   locale: PlatformLocale;
 }) {
-  const ru = locale === "ru";
+  const text = useCallback(
+    (russian: string, uzbek: string, english: string) => lawyerText(locale, russian, uzbek, english),
+    [locale],
+  );
   const base = usePlatformBasePath();
   const [messages, setMessages] = useState<Message[]>([]);
   const [documents, setDocuments] = useState<DocumentOption[]>([]);
@@ -59,9 +64,8 @@ export function LawyerRequestMessages({
       documents?: DocumentOption[];
       unreadCount?: number;
       role?: "client" | "lawyer";
-      error?: string;
     };
-    if (!response.ok) throw new Error(payload.error || "Ошибка");
+    if (!response.ok) throw new Error(text("Не удалось загрузить переписку.", "Yozishmani yuklab bo‘lmadi.", "We could not load the conversation."));
     const nextRole = payload.role || "client";
     const nextMessages = payload.messages || [];
     setRole(nextRole);
@@ -77,8 +81,8 @@ export function LawyerRequestMessages({
         },
       );
       if (!readResponse.ok) {
-        const readPayload = await readResponse.json() as { error?: string };
-        throw new Error(readPayload.error || "Ошибка");
+        const readPayload = await readResponse.json() as { code?: string };
+        throw new Error(lawyerRequestMessageError(locale, readPayload.code || "REQUEST_UNAVAILABLE"));
       }
       const ownAuthorRole = nextRole === "client" ? "owner" : "lawyer";
       const readAt = new Date().toISOString();
@@ -86,7 +90,7 @@ export function LawyerRequestMessages({
         ? message
         : { ...message, readAt, attachmentStatus: message.documentId ? "viewed" : null }));
     }
-  }, [locale, requestId]);
+  }, [locale, requestId, text]);
 
   useEffect(() => {
     void load().catch((value) =>
@@ -114,10 +118,10 @@ export function LawyerRequestMessages({
       );
       const payload = await response.json() as {
         message?: Message;
-        error?: string;
+        code?: string;
       };
       if (!response.ok || !payload.message) {
-        throw new Error(payload.error || "Ошибка");
+        throw new Error(lawyerRequestMessageError(locale, payload.code || "INVALID_INPUT"));
       }
       setMessages((current) => [...current, payload.message!]);
       setBody("");
@@ -133,9 +137,9 @@ export function LawyerRequestMessages({
   return (
     <section
       className="lawyer-request-messages"
-      aria-label={ru ? "Переписка по заявке" : "So‘rov bo‘yicha yozishma"}
+      aria-label={text("Переписка по заявке", "So‘rov bo‘yicha yozishma", "Request conversation")}
     >
-      <h3>{ru ? "Сообщения" : "Xabarlar"}</h3>
+      <h3>{text("Сообщения", "Xabarlar", "Messages")}</h3>
       {error && (
         <p className="plan-error" role="alert">
           {error}{" "}
@@ -145,7 +149,7 @@ export function LawyerRequestMessages({
             onClick={() => void load().catch((value) =>
               setError(value instanceof Error ? value.message : String(value)))}
           >
-            {ru ? "Повторить" : "Qayta urinish"}
+            {text("Повторить", "Qayta urinish", "Try again")}
           </button>
         </p>
       )}
@@ -156,34 +160,34 @@ export function LawyerRequestMessages({
             <article key={message.id}>
               <strong>
                 {message.authorRole === "lawyer"
-                  ? (ru ? "Юрист" : "Yurist")
-                  : (ru ? "Владелец дела" : "Ish egasi")}
+                  ? text("Юрист", "Yurist", "Lawyer")
+                  : text("Владелец дела", "Ish egasi", "Case owner")}
               </strong>
               {message.body && <p>{message.body}</p>}
               {message.documentId && (
                 <Link href={`${base}/documents/${encodeURIComponent(message.documentId)}`}>
                   <Paperclip aria-hidden="true" />
-                  {message.documentTitle || (ru ? "Открыть документ" : "Hujjatni ochish")}
+                  {message.documentTitle || text("Открыть документ", "Hujjatni ochish", "Open document")}
                   {message.documentStatus ? ` · ${message.documentStatus}` : ""}
                 </Link>
               )}
               <time dateTime={message.createdAt}>
-                {new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", {
+                {new Intl.DateTimeFormat(lawyerIntlLocale(locale), {
                   dateStyle: "short",
                   timeStyle: "short",
                   timeZone: "Asia/Tashkent",
                 }).format(new Date(message.createdAt))}
                 {own
-                  ? ` · ${message.readAt ? (ru ? "Прочитано" : "O‘qilgan") : (ru ? "Отправлено" : "Yuborilgan")}`
+                  ? ` · ${message.readAt ? text("Прочитано", "O‘qilgan", "Read") : text("Отправлено", "Yuborilgan", "Sent")}`
                   : ""}
               </time>
             </article>
           );
-        }) : <p>{ru ? "Сообщений пока нет." : "Hozircha xabarlar yo‘q."}</p>}
+        }) : <p>{text("Сообщений пока нет.", "Hozircha xabarlar yo‘q.", "No messages yet.")}</p>}
       </div>
       <form onSubmit={(event) => void send(event)}>
         <label>
-          {ru ? "Сообщение" : "Xabar"}
+          {text("Сообщение", "Xabar", "Message")}
           <textarea
             maxLength={4_000}
             value={body}
@@ -191,19 +195,19 @@ export function LawyerRequestMessages({
           />
         </label>
         <label>
-          {ru ? "Прикрепить свой документ" : "O‘z hujjatingizni biriktiring"}
+          {text("Прикрепить свой документ", "O‘z hujjatingizni biriktiring", "Attach one of your documents")}
           <select value={documentId} onChange={(event) => setDocumentId(event.target.value)}>
-            <option value="">{ru ? "Без документа" : "Hujjatsiz"}</option>
+            <option value="">{text("Без документа", "Hujjatsiz", "No document")}</option>
             {documents.map((document) => (
               <option value={document.id} key={document.id}>
-                {document.title} · {document.status}
+                {document.title} · {lawyerDocumentStatus(document.status, locale)}
               </option>
             ))}
           </select>
         </label>
         <button type="submit" disabled={busy || (!body.trim() && !documentId)}>
           {busy ? <LoaderCircle className="spin" /> : <Send aria-hidden="true" />}
-          {ru ? "Отправить" : "Yuborish"}
+          {text("Отправить", "Yuborish", "Send")}
         </button>
       </form>
     </section>

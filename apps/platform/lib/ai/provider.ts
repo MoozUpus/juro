@@ -31,6 +31,7 @@ import {
   type LegalChatResponse,
 } from "./legal-chat-schema";
 import { completeStreamingJsonArrayObjects } from "./streaming-json";
+import { aiText, type AiOutputLocale } from "./localization";
 
 export type LegalSourceSpan = {
   id: string;
@@ -84,7 +85,7 @@ export type LegalChatRequest = {
   question: string;
   /** Retrieval-only semantic expansion used by server-side relevance gates. */
   retrievalQuery?: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   answerMode: "short" | "detailed";
   reasoningMode: "fast" | "deep";
   sources: LegalSourceContext[];
@@ -290,7 +291,7 @@ class OpenAiLegalProvider implements LegalAiProvider {
         "Если intent=document, можно указать suggestedDocument только выбрав templateCode из availableDocumentTemplates. Не выдумывай реквизиты: перечисли недостающие данные и предложи открыть существующий конструктор.",
         "Если intent=calculation, не выдавай правовой срок, сумму или формулу как подтверждённые, пока все числа и правило расчёта не покрыты verifiedSources.sourceSpans с sourceClass=OFFICIAL_LEGISLATION. Числа из USER_TRUSTED_PRIVATE можно назвать только фактом содержания документа.",
         aiResponseToneInstruction(settings.responseTone, input.locale),
-        input.locale === "uz" ? "Отвечай на узбекском языке латиницей." : "Отвечай полностью на русском языке.",
+        aiText(input.locale, "Отвечай полностью на русском языке.", "Отвечай на узбекском языке латиницей.", "Answer entirely in professional English."),
       ].join(" "),
       input: {
         jurisdiction: "UZ",

@@ -6,10 +6,12 @@ import {
 } from "../../../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { lawyerText } from "../../../../../../lib/platform/lawyer-localization";
 import {
   lawyerRequestMessageError,
   lawyerRequestMessageSchema,
 } from "../../../../../../lib/platform/lawyer-request-message";
+import type { PlatformLocale } from "../../../../../../lib/platform/routing";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
 
 type Context = { params: Promise<{ requestId: string }> };
@@ -18,6 +20,8 @@ type Participant = {
   caseId: string;
   clientUserId: string;
   lawyerUserId: string;
+  clientLocale: PlatformLocale;
+  lawyerLocale: PlatformLocale;
   role: "client" | "lawyer";
 };
 
@@ -36,16 +40,24 @@ async function participantForRequest(
   const db = requireD1();
   const client = await db.prepare(
     `SELECT r.workspace_id AS workspaceId,r.case_id AS caseId,
-      r.requester_user_id AS clientUserId,p.user_id AS lawyerUserId
+      r.requester_user_id AS clientUserId,p.user_id AS lawyerUserId,
+      CASE client.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS clientLocale,
+      CASE lawyer.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS lawyerLocale
      FROM lawyer_requests r JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id
+     JOIN user_profiles client ON client.id=r.requester_user_id
+     JOIN user_profiles lawyer ON lawyer.id=p.user_id
      WHERE r.id=? AND r.workspace_id=? AND r.requester_user_id=? LIMIT 1`,
   ).bind(requestId, ownWorkspaceId, userId).first<Omit<Participant, "role">>();
   if (client) return { ...client, role: "client" };
   const lawyer = await db.prepare(
     `SELECT r.workspace_id AS workspaceId,r.case_id AS caseId,
-      r.requester_user_id AS clientUserId,p.user_id AS lawyerUserId
+      r.requester_user_id AS clientUserId,p.user_id AS lawyerUserId,
+      CASE client.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS clientLocale,
+      CASE lawyer.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS lawyerLocale
      FROM lawyer_requests r
      JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=?
+     JOIN user_profiles client ON client.id=r.requester_user_id
+     JOIN user_profiles lawyer ON lawyer.id=p.user_id
        AND p.status='public_approved' AND p.marketplace_status='public_approved'
      JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.case_id=r.case_id
        AND g.lawyer_user_id=? AND g.revoked_at IS NULL
@@ -69,10 +81,7 @@ export const GET = withApiErrors(async function GET(
     requestId,
   );
   if (!participant) {
-    return response({
-      code: "REQUEST_UNAVAILABLE",
-      error: lawyerRequestMessageError("ru", "REQUEST_UNAVAILABLE"),
-    }, 404);
+    return response({ code: "REQUEST_UNAVAILABLE" }, 404);
   }
   const db = requireD1();
   const [messages, unread, documents] = await Promise.all([
@@ -202,6 +211,9 @@ export const POST = withApiErrors(async function POST(
   const recipientUserId = participant.role === "client"
     ? participant.lawyerUserId
     : participant.clientUserId;
+  const recipientLocale = participant.role === "client"
+    ? participant.lawyerLocale
+    : participant.clientLocale;
   const authorRole = participant.role === "client" ? "owner" : "lawyer";
   const attachmentId = document ? crypto.randomUUID() : null;
   await db.batch([
@@ -259,7 +271,7 @@ export const POST = withApiErrors(async function POST(
       recipientUserId,
       recipientUserId,
       document?.id ?? null,
-      locale === "ru" ? "Новое сообщение по делу" : "Ish bo‘yicha yangi xabar",
+      lawyerText(recipientLocale, "Новое сообщение по делу", "Ish bo‘yicha yangi xabar", "New case message"),
       parsed.data.body || document?.title || "",
       now,
     ),

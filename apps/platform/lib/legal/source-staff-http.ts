@@ -40,13 +40,14 @@ import {
   LegalSourceAcquisitionError,
   type LegalSourceAcquisitionEnv,
 } from "./source-acquisition";
+import { isLocale, type PlatformLocale } from "../platform/routing";
 
 type StaffHttpSession = Pick<
   LocalSession,
   "sessionId" | "userId" | "assuranceLevel" | "mfaVerifiedAt"
 >;
 
-type MfaLocale = "ru" | "uz";
+type MfaLocale = PlatformLocale;
 
 export type LegalSourceStaffHttpDependencies = {
   enabled: string | undefined;
@@ -108,7 +109,7 @@ const reviewIdSchema = z.string().min(1).max(180)
   .regex(/^[A-Za-z0-9:_-]+$/);
 const FRESH_MFA_WINDOW_MS = 15 * 60 * 1_000;
 const listRequestSchema = legalSourceReviewListInputSchema.extend({
-  lang: z.enum(["ru", "uz"]).optional(),
+  lang: z.enum(["ru", "uz", "en"]).optional(),
 });
 
 function jsonNoStore(body: unknown, status = 200): Response {
@@ -122,6 +123,22 @@ function jsonNoStore(body: unknown, status = 200): Response {
 }
 
 function acquisitionErrorMessage(locale: MfaLocale, code: string): string {
+  if (locale === "en") {
+    switch (code) {
+      case "LEGAL_SOURCE_POLICY_DISABLED":
+        return "Source synchronisation is temporarily disabled.";
+      case "LEGAL_SOURCE_REQUEST_NOT_FOUND":
+        return "The synchronisation request was not found.";
+      case "LEGAL_SOURCE_REQUEST_CONFLICT":
+      case "LEGAL_SOURCE_REQUEST_CANCELLED":
+      case "LEGAL_SOURCE_REQUEST_TERMINAL":
+      case "LEGAL_SOURCE_SYNC_BUSY":
+      case "LEGAL_SOURCE_STORAGE_FAILED":
+      case "LEGAL_SOURCE_PERSISTENCE_FAILED":
+      default:
+        return "The synchronisation request could not be completed or verified.";
+    }
+  }
   if (locale === "uz") {
     switch (code) {
       case "LEGAL_SOURCE_POLICY_DISABLED":
@@ -159,13 +176,14 @@ function legalSourceMfaErrorResponse(
   locale: MfaLocale,
 ): Response | null {
   if (!(error instanceof MfaError)) return null;
-  const ru = locale === "ru";
   const status = error.code === "MFA_STATE_CONFLICT" ? 409 : 401;
   return jsonNoStore({
     code: error.code,
-    error: ru
+    error: locale === "ru"
       ? "Для этого действия заново войдите в JURO и подтвердите двухфакторную защиту."
-      : "Bu amal uchun JURO hisobiga qayta kiring va ikki bosqichli himoyani tasdiqlang.",
+      : locale === "uz"
+        ? "Bu amal uchun JURO hisobiga qayta kiring va ikki bosqichli himoyani tasdiqlang."
+        : "Sign in to JURO again and confirm two-factor authentication before performing this action.",
   }, status);
 }
 
@@ -173,18 +191,27 @@ export function legalSourceStaffApiEnabled(value: string | undefined): boolean {
   return value === "true";
 }
 
-function localeForRequest(request: Request): MfaLocale {
-  return new URL(request.url).searchParams.get("lang") === "uz" ? "uz" : "ru";
+function localeForRequest(request: Request): MfaLocale | null {
+  const value = new URL(request.url).searchParams.get("lang") ?? "ru";
+  return isLocale(value) ? value : null;
 }
 
-function message(locale: MfaLocale, ru: string, uz: string): string {
-  return locale === "uz" ? uz : ru;
+function message(locale: MfaLocale, ru: string, uz: string, en: string): string {
+  return locale === "ru" ? ru : locale === "uz" ? uz : en;
+}
+
+function invalidLocaleResponse(): Response {
+  return jsonNoStore({
+    code: "INVALID_INPUT",
+    correlationId: crypto.randomUUID(),
+    error: "The requested interface language is not supported.",
+  }, 400);
 }
 
 function disabledResponse(locale: MfaLocale): Response {
   return jsonNoStore({
     code: "NOT_FOUND",
-    error: message(locale, "Маршрут не найден.", "Yo‘nalish topilmadi."),
+    error: message(locale, "Маршрут не найден.", "Yo‘nalish topilmadi.", "Route not found."),
   }, 404);
 }
 
@@ -196,6 +223,7 @@ function unavailableResponse(locale: MfaLocale): Response {
       locale,
       "Контур проверки источников временно недоступен.",
       "Manbalarni tekshirish konturi vaqtincha mavjud emas.",
+      "The source-review service is temporarily unavailable.",
     ),
   }, 503);
 }
@@ -216,6 +244,7 @@ function inputErrorResponse(
       locale,
       "Проверьте формат запроса.",
       "So‘rov formatini tekshiring.",
+      "Check the request format.",
     ),
   }, status);
 }
@@ -251,6 +280,7 @@ function legalSourceErrorResponse(
         locale,
         "Запрос отклонён проверкой безопасности.",
         "So‘rov xavfsizlik tekshiruvi tomonidan rad etildi.",
+        "The request was rejected by the security check.",
       ),
     }, error.status);
   }
@@ -258,7 +288,7 @@ function legalSourceErrorResponse(
     return jsonNoStore({
       code: "ACCESS_DENIED",
       correlationId,
-      error: message(locale, "Доступ запрещён.", "Kirish taqiqlangan."),
+      error: message(locale, "Доступ запрещён.", "Kirish taqiqlangan.", "Access denied."),
     }, 403);
   }
   if (error instanceof z.ZodError) {
@@ -269,6 +299,7 @@ function legalSourceErrorResponse(
         locale,
         "Проверьте формат запроса.",
         "So‘rov formatini tekshiring.",
+        "Check the request format.",
       ),
     }, 400);
   }
@@ -294,6 +325,11 @@ function legalSourceErrorResponse(
           : status === 409
             ? "Tekshiruv holati yoki dalillari o‘zgargan."
             : "Saqlangan manba nusxasini tekshirib bo‘lmadi.",
+        status === 404
+          ? "The review task was not found."
+          : status === 409
+            ? "The review status or its evidence has changed."
+            : "The saved source snapshot could not be reviewed.",
       ),
     }, status);
   }
@@ -325,6 +361,13 @@ function legalSourceErrorResponse(
             : status === 413
               ? "Manba xavfsiz nashr qilish uchun juda katta."
               : "Tekshirilgan manba nusxasini nashr qilib bo‘lmadi.",
+        status === 404
+          ? "The approved review was not found."
+          : status === 409
+            ? "The publication status or its evidence has changed."
+            : status === 413
+              ? "The source is too large to publish safely."
+              : "The verified source snapshot could not be published.",
       ),
     }, status);
   }
@@ -350,6 +393,11 @@ function legalSourceErrorResponse(
           : status === 409
             ? "Joriy nashr yoki uning dalillari o‘zgargan."
             : "Manba nashrini qaytarib bo‘lmadi.",
+        status === 404
+          ? "The source publication was not found."
+          : status === 409
+            ? "The current publication or its evidence has changed."
+            : "The source publication could not be withdrawn.",
       ),
     }, status);
   }
@@ -415,8 +463,9 @@ export async function handleLegalSourceSyncRequest(
 ): Promise<Response> {
   const locale = localeForRequest(request);
   if (!legalSourceStaffApiEnabled(dependencies.enabled)) {
-    return disabledResponse(locale);
+    return disabledResponse(locale ?? "ru");
   }
+  if (!locale) return invalidLocaleResponse();
   if (!dependencies.env) return unavailableResponse(locale);
   const now = dependencies.now?.() ?? new Date();
   try {
@@ -459,8 +508,9 @@ export async function handleLegalSourceReviewListRequest(
 ): Promise<Response> {
   const locale = localeForRequest(request);
   if (!legalSourceStaffApiEnabled(dependencies.enabled)) {
-    return disabledResponse(locale);
+    return disabledResponse(locale ?? "ru");
   }
+  if (!locale) return invalidLocaleResponse();
   if (!dependencies.env) return unavailableResponse(locale);
   const now = dependencies.now?.() ?? new Date();
   try {
@@ -504,8 +554,9 @@ export async function handleLegalSourceReviewClaimRequest(
 ): Promise<Response> {
   const locale = localeForRequest(request);
   if (!legalSourceStaffApiEnabled(dependencies.enabled)) {
-    return disabledResponse(locale);
+    return disabledResponse(locale ?? "ru");
   }
+  if (!locale) return invalidLocaleResponse();
   if (!dependencies.env) return unavailableResponse(locale);
   const now = dependencies.now?.() ?? new Date();
   try {
@@ -546,8 +597,9 @@ export async function handleLegalSourceReviewDecisionRequest(
 ): Promise<Response> {
   const locale = localeForRequest(request);
   if (!legalSourceStaffApiEnabled(dependencies.enabled)) {
-    return disabledResponse(locale);
+    return disabledResponse(locale ?? "ru");
   }
+  if (!locale) return invalidLocaleResponse();
   if (!dependencies.env) return unavailableResponse(locale);
   const now = dependencies.now?.() ?? new Date();
   try {
@@ -577,7 +629,8 @@ export async function handleLegalSourceBulkApprovalRequest(
   dependencies: LegalSourceStaffHttpDependencies,
 ): Promise<Response> {
   const locale = localeForRequest(request);
-  if (!legalSourceStaffApiEnabled(dependencies.enabled)) return disabledResponse(locale);
+  if (!legalSourceStaffApiEnabled(dependencies.enabled)) return disabledResponse(locale ?? "ru");
+  if (!locale) return invalidLocaleResponse();
   if (!dependencies.env) return unavailableResponse(locale);
   const now = dependencies.now?.() ?? new Date();
   try {
@@ -635,8 +688,9 @@ export async function handleLegalSourcePublicationRequest(
 ): Promise<Response> {
   const locale = localeForRequest(request);
   if (!legalSourceStaffApiEnabled(dependencies.enabled)) {
-    return disabledResponse(locale);
+    return disabledResponse(locale ?? "ru");
   }
+  if (!locale) return invalidLocaleResponse();
   if (!dependencies.env) return unavailableResponse(locale);
   const now = dependencies.now?.() ?? new Date();
   try {
@@ -671,8 +725,9 @@ export async function handleLegalSourceWithdrawalRequest(
 ): Promise<Response> {
   const locale = localeForRequest(request);
   if (!legalSourceStaffApiEnabled(dependencies.enabled)) {
-    return disabledResponse(locale);
+    return disabledResponse(locale ?? "ru");
   }
+  if (!locale) return invalidLocaleResponse();
   if (!dependencies.env) return unavailableResponse(locale);
   const now = dependencies.now?.() ?? new Date();
   try {

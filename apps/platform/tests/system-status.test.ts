@@ -36,7 +36,7 @@ async function seedOperationalDependencies(db: D1Database, checkedAt = now): Pro
   })));
 }
 
-test("0083 publishes only bilingual public-safe incident state and resolves it immutably", async () => {
+test("0083 publishes only trilingual public-safe incident state and resolves it immutably", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     seedUser(sqlite);
@@ -56,10 +56,13 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
       value: {
         titleRu: "Задержка ответов AI-юриста",
         titleUz: "AI-yurist javoblarida kechikish",
+        titleEn: "AI legal assistant response delays",
         summaryRu: "Часть запросов обрабатывается дольше обычного.",
         summaryUz: "Ayrim so‘rovlar odatdagidan uzoqroq qayta ishlanmoqda.",
+        summaryEn: "Some requests are taking longer than usual to process.",
         messageRu: "Команда изучает рост времени ответа провайдера.",
         messageUz: "Jamoa provayder javob vaqti oshganini o‘rganmoqda.",
+        messageEn: "The team is investigating increased provider response times.",
         startedAt: "2026-08-05T08:55:00.000Z",
         components: [
           { key: "ai", impact: "partial_outage" },
@@ -71,11 +74,14 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
 
     const ru = await readPublicStatus({ db: d1, locale: "ru", environment: "development", now });
     const uz = await readPublicStatus({ db: d1, locale: "uz", environment: "development", now });
+    const en = await readPublicStatus({ db: d1, locale: "en", environment: "development", now });
     assert.equal(ru.overallStatus, "partial_outage");
     assert.equal(ru.components.find((component) => component.key === "ai")?.status, "partial_outage");
     assert.equal(ru.components.find((component) => component.key === "platform")?.status, "operational");
     assert.equal(ru.activeIncidents[0].title, "Задержка ответов AI-юриста");
     assert.equal(uz.activeIncidents[0].title, "AI-yurist javoblarida kechikish");
+    assert.equal(en.activeIncidents[0].title, "AI legal assistant response delays");
+    assert.equal(en.components.find((component) => component.key === "document_analysis")?.label, "Document analysis");
     const serialized = JSON.stringify(ru);
     assert.doesNotMatch(serialized, /status-admin@example\.test|status-admin|createdBy|actorUserId|workspace|resource/i);
 
@@ -88,6 +94,7 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
         state: "identified",
         messageRu: "Причина связана с повышенной задержкой внешнего AI-провайдера.",
         messageUz: "Sabab tashqi AI-provayder kechikishining oshishi bilan bog‘liq.",
+        messageEn: "The cause is increased latency from the external AI provider.",
       },
     });
     await appendStatusIncidentUpdate({
@@ -99,6 +106,7 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
         state: "monitoring",
         messageRu: "Задержка снизилась, команда наблюдает за восстановлением.",
         messageUz: "Kechikish kamaydi, jamoa tiklanishni kuzatmoqda.",
+        messageEn: "Latency has decreased and the team is monitoring recovery.",
       },
     });
     await seedOperationalDependencies(d1, new Date("2026-08-05T09:15:00.000Z"));
@@ -111,6 +119,7 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
         state: "resolved",
         messageRu: "Время ответа вернулось к обычному уровню.",
         messageUz: "Javob vaqti odatdagi darajaga qaytdi.",
+        messageEn: "Response times have returned to their normal level.",
       },
     });
     const resolved = await readPublicStatus({ db: d1, locale: "ru", environment: "development", now: new Date("2026-08-05T09:16:00.000Z") });
@@ -128,6 +137,7 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
           state: "monitoring",
           messageRu: "Нельзя повторно открыть завершённый инцидент.",
           messageUz: "Yakunlangan hodisani qayta ochib bo‘lmaydi.",
+          messageEn: "A resolved incident cannot be reopened.",
         },
       }),
       (error: unknown) => error instanceof SystemStatusError && error.code === "SYSTEM_STATUS_TRANSITION_INVALID",
@@ -212,10 +222,13 @@ test("0083 rejects duplicate components and exposes no client-supplied actor", a
   assert.equal(createStatusIncidentSchema.safeParse({
     titleRu: "Тестовый инцидент",
     titleUz: "Sinov hodisasi",
+    titleEn: "Test incident",
     summaryRu: "Достаточно длинное публичное описание.",
     summaryUz: "Yetarlicha uzun ochiq tavsif matni.",
+    summaryEn: "A sufficiently long public description.",
     messageRu: "Достаточно длинное первое обновление.",
     messageUz: "Yetarlicha uzun birinchi yangilanish.",
+    messageEn: "A sufficiently long first incident update.",
     startedAt: now.toISOString(),
     components: [{ key: "ai", impact: "degraded" }, { key: "ai", impact: "outage" }],
   }).success, false);
@@ -231,10 +244,13 @@ test("0083 rejects duplicate components and exposes no client-supplied actor", a
         value: {
           titleRu: "Тестовый инцидент",
           titleUz: "Sinov hodisasi",
+          titleEn: "Test incident",
           summaryRu: "Достаточно длинное публичное описание.",
           summaryUz: "Yetarlicha uzun ochiq tavsif matni.",
+          summaryEn: "A sufficiently long public description.",
           messageRu: "Достаточно длинное первое обновление.",
           messageUz: "Yetarlicha uzun birinchi yangilanish.",
+          messageEn: "A sufficiently long first incident update.",
           startedAt: now.toISOString(),
           components: [{ key: "platform", impact: "degraded" }],
         },
@@ -262,16 +278,21 @@ test("status routes use a fresh-MFA operations boundary and a narrow public host
   assert.match(page, /requirePlatformStaffAccess\(runtime\.DB, session, "staff\.operations\.manage"/);
   assert.match(page + route, /dependencyHealthEnvironment\(runtime(?:Env\(\))?\.APP_ENV\)/);
   assert.match(publicApi, /STATUS_TEMPORARILY_UNAVAILABLE/);
+  assert.match(publicApi, /isLocale\(requestedLocale\)/);
   assert.match(publicApi, /s-maxage=30/);
   assert.match(worker, /STATUS_HOSTNAME/);
   assert.match(worker, /allowedStatusPath/);
+  assert.match(worker, /ru\|uz\|en/);
   assert.match(worker, /Method Not Allowed/);
   assert.doesNotMatch(ui + publicUi, /dangerouslySetInnerHTML|transition:\s*all|window\.confirm/);
   assert.match(ui, /aria-live="polite"/);
   assert.match(ui, /status-dependency-health/);
   assert.match(ui, /PROVIDER_CREDIT_BALANCE_LOW/);
+  assert.match(ui, /titleEn/);
+  assert.match(ui, /messageEn/);
   assert.match(publicUi, /role="status"/);
   assert.match(publicUi, /public-status-dependencies/);
   assert.match(publicUi, /dependency\.safeErrorCode/);
   assert.match(publicUi, /className="public-status-shell" lang=\{locale\}/);
+  assert.match(publicUi, /en-GB/);
 });

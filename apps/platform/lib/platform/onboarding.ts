@@ -5,7 +5,9 @@ import {
   type IdentityProtectionContext,
 } from "../auth/identity-protection";
 import { parseJsonRequest, type JsonRequestError } from "../auth/input";
+import { authLocaleFromRequest } from "../auth/request-locale";
 import { registrationPolicies } from "../legal/policies";
+import { isLocale, type PlatformLocale } from "./routing";
 
 export const ONBOARDING_MAX_BYTES = 4_096;
 
@@ -59,7 +61,7 @@ export const onboardingInputSchema = z.object({
     .max(40)
     .transform(normalizePhone)
     .refine((value) => /^\+[1-9]\d{7,14}$/.test(value), "invalid_phone"),
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
   accountPersona: z.enum(accountPersonas),
   primaryGoal: z.enum(onboardingGoals),
 }).strict();
@@ -91,7 +93,7 @@ export type OnboardingCompletion =
   | {
     status: "completed" | "already_completed";
     accountPersona: AccountPersona;
-    locale: "ru" | "uz";
+    locale: PlatformLocale;
     workspaceId: string;
     redirectTo: string;
   }
@@ -118,7 +120,7 @@ function deterministicPersonalWorkspaceId(userId: string): string {
  * lawyer personas therefore enter their private workspace through the existing
  * individual route until the separate account-route migration is completed.
  */
-export function onboardingRedirect(locale: "ru" | "uz"): string {
+export function onboardingRedirect(locale: PlatformLocale): string {
   return `/${locale}/individual/dashboard`;
 }
 
@@ -399,10 +401,10 @@ export async function completeOnboarding(
           )
           ? completed.accountType as AccountPersona
           : "individual",
-        locale: completed.locale === "uz" ? "uz" : "ru",
+        locale: isLocale(completed.locale) ? completed.locale : "ru",
         workspaceId: completed.workspaceId,
         redirectTo: onboardingRedirect(
-          completed.locale === "uz" ? "uz" : "ru",
+          isLocale(completed.locale) ? completed.locale : "ru",
         ),
       };
     }
@@ -420,6 +422,7 @@ export async function completeOnboarding(
 
 function invalidRequestResponse(
   error: JsonRequestError,
+  locale: PlatformLocale,
 ): Response {
   const status = error === "payload_too_large"
     ? 413
@@ -428,7 +431,11 @@ function invalidRequestResponse(
       : 400;
   return Response.json({
     code: error.toLocaleUpperCase("en-US"),
-    error: "Проверьте формат запроса. / So‘rov formatini tekshiring.",
+    error: {
+      ru: "Проверьте формат запроса.",
+      uz: "So‘rov formatini tekshiring.",
+      en: "Check the request format.",
+    }[locale],
   }, {
     status,
     headers: { "cache-control": "private, no-store", pragma: "no-cache" },
@@ -437,16 +444,19 @@ function invalidRequestResponse(
 
 function localizedError(
   code: "PROFILE_NOT_FOUND" | "POLICY_EVIDENCE_REQUIRED",
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
 ): Response {
-  const ru = locale === "ru";
   const error = code === "PROFILE_NOT_FOUND"
-    ? (ru ? "Профиль не найден." : "Profil topilmadi.")
-    : (
-      ru
-        ? "Не найдены подтверждения обязательных документов. Повторите регистрацию или обратитесь в поддержку."
-        : "Majburiy hujjatlar tasdig‘i topilmadi. Qayta ro‘yxatdan o‘ting yoki yordam xizmatiga murojaat qiling."
-    );
+    ? {
+        ru: "Профиль не найден.",
+        uz: "Profil topilmadi.",
+        en: "The profile was not found.",
+      }[locale]
+    : {
+        ru: "Не найдены подтверждения обязательных документов. Повторите регистрацию или обратитесь в поддержку.",
+        uz: "Majburiy hujjatlar tasdig‘i topilmadi. Qayta ro‘yxatdan o‘ting yoki yordam xizmatiga murojaat qiling.",
+        en: "Required policy acceptance evidence was not found. Register again or contact support.",
+      }[locale];
   return Response.json({ code, error }, {
     status: code === "PROFILE_NOT_FOUND" ? 404 : 409,
     headers: { "cache-control": "private, no-store", pragma: "no-cache" },
@@ -462,7 +472,7 @@ export async function handleOnboardingRequest(
     onboardingInputSchema,
     ONBOARDING_MAX_BYTES,
   );
-  if (!parsed.ok) return invalidRequestResponse(parsed.error);
+  if (!parsed.ok) return invalidRequestResponse(parsed.error, authLocaleFromRequest(request));
   const result = await completeOnboarding(parsed.data, dependencies);
   if (result.status === "profile_not_found") {
     return localizedError("PROFILE_NOT_FOUND", parsed.data.locale);

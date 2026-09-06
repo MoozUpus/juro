@@ -79,7 +79,7 @@ export async function reserveAccountDeletionChallenge(
     userId: string;
     sessionId: string;
     email: string;
-    locale: "ru" | "uz";
+    locale: "ru" | "uz" | "en";
     codeSalt: string;
     code: string;
     expiresAt: string;

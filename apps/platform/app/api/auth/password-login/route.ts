@@ -191,10 +191,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const themePreference = resolveThemePreference(profile.themePreference);
   const requestUrl = new URL(request.url);
 
-  // English authentication is supported independently of the still RU/UZ
-  // product shell. Until that shell is localized, the safe signed-in route
-  // uses Russian instead of producing a broken /en protected URL.
-  const routeLocale = locale === "en" ? "ru" : locale;
+  const routeLocale = locale;
   const workspaceId = await ensureDefaultWorkspace(profile.id);
   const requestHostname = requestUrl.hostname.toLowerCase();
   const lawyerHost = requestHostname === "lawyer.juro.uz";

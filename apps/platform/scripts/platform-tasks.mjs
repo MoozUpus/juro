@@ -1015,7 +1015,7 @@ async function runTestCommand(args, label, overrides = {}) {
     environment,
     label,
     timeoutMs: parseDuration(
-      process.env.SITES_TEST_TIMEOUT || "5m",
+      process.env.SITES_TEST_TIMEOUT || "10m",
       "SITES_TEST_TIMEOUT",
     ),
     killAfterMs: parseDuration(

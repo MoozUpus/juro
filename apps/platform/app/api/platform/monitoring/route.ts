@@ -4,6 +4,7 @@ import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/
 import {
   summarizeLexMetadataMonitoringFreshness,
 } from "../../../../lib/legal/monitoring-freshness";
+import type { PlatformLocale } from "../../../../lib/platform/routing";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const topics = new Set([
@@ -22,6 +23,44 @@ const topics = new Set([
 const frequencies = new Set(["immediate", "daily", "weekly"]);
 const channels = new Set(["in_app", "email"]);
 
+const monitoringCopy: Record<PlatformLocale, {
+  metadataChanged: string;
+  newAct: string;
+  invalidPreference: string;
+  invalidTopics: string;
+  invalidChannels: string;
+  emailUnavailable: string;
+}> = {
+  ru: {
+    metadataChanged: "Lex.uz изменил metadata записи; откройте официальный акт для проверки содержания.",
+    newAct: "Lex.uz обнаружил новый акт в официальном RSS; откройте ссылку для проверки содержания.",
+    invalidPreference: "Проверьте аудиторию и частоту.",
+    invalidTopics: "Выберите хотя бы одну поддерживаемую область права.",
+    invalidChannels: "Уведомления в приложении должны оставаться включёнными.",
+    emailUnavailable: "Email-инфраструктура пока не подключена.",
+  },
+  uz: {
+    metadataChanged: "Lex.uz yozuv metadata’larini o‘zgartirdi; mazmunini tekshirish uchun rasmiy aktni oching.",
+    newAct: "Lex.uz rasmiy RSS’da yangi aktni aniqladi; mazmunini tekshirish uchun havolani oching.",
+    invalidPreference: "Auditoriya va tezlikni tekshiring.",
+    invalidTopics: "Kamida bitta qo‘llab-quvvatlanadigan huquq sohasini tanlang.",
+    invalidChannels: "Ilova ichidagi bildirishnomalar yoqilgan bo‘lishi kerak.",
+    emailUnavailable: "Email infratuzilmasi hali ulanmagan.",
+  },
+  en: {
+    metadataChanged: "Lex.uz changed this record’s metadata. Open the official act to review its substance.",
+    newAct: "Lex.uz detected a new act in its official RSS feed. Open the source to review its substance.",
+    invalidPreference: "Check the audience and frequency.",
+    invalidTopics: "Choose at least one supported area of law.",
+    invalidChannels: "In-app notifications must remain enabled.",
+    emailUnavailable: "The email service is not connected yet.",
+  },
+};
+
+function normalizeMonitoringLocale(value: unknown): PlatformLocale {
+  return value === "uz" || value === "en" ? value : "ru";
+}
+
 function response(body: unknown, status = 200) {
   return Response.json(body, {
     status,
@@ -32,7 +71,8 @@ function response(body: unknown, status = 200) {
 export const GET = withApiErrors(async function GET(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
-  const locale = new URL(request.url).searchParams.get("locale") === "uz" ? "uz" : "ru";
+  const locale = normalizeMonitoringLocale(new URL(request.url).searchParams.get("locale"));
+  const t = monitoringCopy[locale];
   const db = requireD1();
   const [preference, updates, sourceCheck, latestRun] = await db.batch([
     db.prepare(
@@ -117,8 +157,8 @@ export const GET = withApiErrors(async function GET(request: Request) {
           title: String(item.title || "Lex.uz"),
           summary: null,
           changeSummary: String(item.changeType || "") === "metadata_changed"
-            ? (locale === "ru" ? "Lex.uz изменил metadata записи; откройте официальный акт для проверки содержания." : "Lex.uz yozuv metadata’larini o‘zgartirdi; mazmunini tekshirish uchun rasmiy aktni oching.")
-            : (locale === "ru" ? "Lex.uz обнаружил новый акт в официальном RSS; откройте ссылку для проверки содержания." : "Lex.uz rasmiy RSS’da yangi aktni aniqladi; mazmunini tekshirish uchun havolani oching."),
+            ? t.metadataChanged
+            : t.newAct,
           recommendedAction: null,
           topics: [] as string[],
           affectedAudiences: [] as string[],
@@ -172,21 +212,22 @@ export const POST = withApiErrors(async function POST(request: Request) {
     locale?: string;
     documentImpactConsent?: boolean;
   } | null;
-  const locale = body?.locale === "uz" ? "uz" : "ru";
+  const locale = normalizeMonitoringLocale(body?.locale);
+  const t = monitoringCopy[locale];
   const selectedTopics = Array.from(new Set(body?.topics || [])).filter((item) => topics.has(item));
   const selectedChannels = Array.from(new Set(body?.channels || [])).filter((item) => channels.has(item));
   if (!body || !["individual", "business"].includes(body.audience || "") || !frequencies.has(body.frequency || "")) {
-    return response({ error: locale === "ru" ? "Проверьте аудиторию и частоту." : "Auditoriya va tezlikni tekshiring." }, 400);
+    return response({ error: t.invalidPreference }, 400);
   }
   if (!selectedTopics.length || selectedTopics.length !== (body.topics || []).length) {
-    return response({ error: locale === "ru" ? "Выберите хотя бы одну поддерживаемую область права." : "Kamida bitta qo‘llab-quvvatlanadigan huquq sohasini tanlang." }, 400);
+    return response({ error: t.invalidTopics }, 400);
   }
   if (!selectedChannels.includes("in_app") || selectedChannels.length !== (body.channels || []).length) {
-    return response({ error: locale === "ru" ? "In-app уведомления должны оставаться включёнными." : "Ilova ichidagi bildirishnomalar yoqilgan bo‘lishi kerak." }, 400);
+    return response({ error: t.invalidChannels }, 400);
   }
   const env = runtimeEnv();
   if (selectedChannels.includes("email") && !(env.RESEND_API_KEY && env.EMAIL_FROM)) {
-    return response({ error: locale === "ru" ? "Email-инфраструктура пока не подключена." : "Email infratuzilmasi hali ulanmagan." }, 409);
+    return response({ error: t.emailUnavailable }, 409);
   }
   const db = requireD1();
   const now = isoNow();

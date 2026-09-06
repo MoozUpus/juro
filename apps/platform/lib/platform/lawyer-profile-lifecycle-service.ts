@@ -3,6 +3,7 @@ import {
   type LawyerMarketplaceStatus,
 } from "./lawyer-marketplace";
 import { localizedLawyerProfileStatusNotification } from "./lawyer-profile-notifications";
+import type { PlatformLocale } from "./routing";
 
 export type LawyerProfileLifecycleAction = "suspend" | "block" | "archive" | "restore";
 
@@ -10,7 +11,7 @@ type ProfileRow = {
   id: string;
   userId: string;
   workspaceId: string | null;
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
   status: string;
   marketplaceStatus: LawyerMarketplaceStatus;
   profileRevision: number;
@@ -97,7 +98,7 @@ export async function transitionLawyerProfileLifecycle(
 ): Promise<{ status: LawyerMarketplaceStatus; profileRevision: number }> {
   const profile = await db.prepare(
     `SELECT p.id,p.user_id AS userId,u.default_workspace_id AS workspaceId,
-       CASE WHEN u.locale='uz' THEN 'uz' ELSE 'ru' END AS locale,
+       CASE u.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS locale,
        p.status,p.marketplace_status AS marketplaceStatus,p.profile_revision AS profileRevision,
        p.display_name AS displayName,p.specialties_json AS specialtiesJson,
        p.languages_json AS languagesJson,p.experience_years AS experienceYears,

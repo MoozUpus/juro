@@ -1,6 +1,8 @@
 import { z } from "zod";
 
+import { lawyerText } from "./lawyer-localization";
 import { hasLikelyPersonalData } from "./lawyer-review-moderation";
+import type { PlatformLocale } from "./routing";
 
 const boundedText = z.string().trim().min(1).max(2_000);
 export const lawyerReviewReplyIdSchema = z.string().uuid();
@@ -8,14 +10,14 @@ export const lawyerReviewReplyIdSchema = z.string().uuid();
 export const lawyerReviewReplySubmissionSchema = z.object({
   body: boundedText,
   clientRequestId: z.string().uuid(),
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
 }).strict();
 
 export const lawyerReviewReplyModerationSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
   moderatedBody: z.string().trim().max(2_000).optional(),
   reason: boundedText,
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
 }).strict().superRefine((value, context) => {
   if (value.decision === "approved" && value.moderatedBody !== undefined && value.moderatedBody.length === 0) {
     context.addIssue({ code: "custom", path: ["moderatedBody"], message: "Moderated reply must not be empty." });
@@ -50,7 +52,7 @@ type ReviewForReply = {
   workspaceId: string;
   lawyerProfileId: string;
   requesterUserId: string;
-  requesterLocale: "ru" | "uz";
+  requesterLocale: PlatformLocale;
 };
 
 type ExistingReply = {
@@ -61,11 +63,16 @@ type ExistingReply = {
   version: number;
 };
 
-function localizedNotification(locale: "ru" | "uz", kind: "submitted" | "approved" | "rejected") {
+function localizedNotification(locale: PlatformLocale, kind: "submitted" | "approved" | "rejected") {
   if (locale === "uz") {
     if (kind === "submitted") return { title: "Yurist fikringizga javob berdi", body: "Javob xavfsizlik tekshiruvidan so‘ng ko‘rinadi." };
     if (kind === "approved") return { title: "Fikrga javob tasdiqlandi", body: "Javob yurist profilida chop etildi." };
     return { title: "Fikrga javobni tuzatish kerak", body: "Javob moderatsiyadan o‘tmadi. Uni tuzatib qayta yuborish mumkin." };
+  }
+  if (locale === "en") {
+    if (kind === "submitted") return { title: "Your lawyer replied to your review", body: "The reply will appear after a safety review." };
+    if (kind === "approved") return { title: "Your review reply has been approved", body: "The reply is now published on the lawyer profile." };
+    return { title: "Your review reply needs changes", body: "The reply did not pass moderation. You can revise and resubmit it." };
   }
   if (kind === "submitted") return { title: "Юрист ответил на ваш отзыв", body: "Ответ появится после проверки безопасности." };
   if (kind === "approved") return { title: "Ответ на отзыв одобрен", body: "Ответ опубликован в профиле юриста." };
@@ -81,7 +88,7 @@ export async function submitLawyerReviewReply(input: ReplyLifecycleInput & {
   const review = await input.db.prepare(
     `SELECT r.id,r.workspace_id AS workspaceId,r.lawyer_profile_id AS lawyerProfileId,
       r.requester_user_id AS requesterUserId,
-      CASE WHEN requester.locale='uz' THEN 'uz' ELSE 'ru' END AS requesterLocale
+      CASE requester.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS requesterLocale
      FROM lawyer_reviews r
      JOIN lawyer_review_moderation moderation ON moderation.review_id=r.id AND moderation.decision='approved'
      JOIN lawyer_profiles profile ON profile.id=r.lawyer_profile_id
@@ -175,7 +182,7 @@ export async function moderateLawyerReviewReply(input: ReplyLifecycleInput & {
   const reply = await input.db.prepare(
     `SELECT reply.id,reply.review_id AS reviewId,reply.body,reply.version,reply.status,
       review.workspace_id AS workspaceId,reply.author_user_id AS authorUserId,
-      CASE WHEN author.locale='uz' THEN 'uz' ELSE 'ru' END AS authorLocale,
+      CASE author.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS authorLocale,
       author.default_workspace_id AS authorWorkspaceId
      FROM lawyer_review_replies reply
      JOIN lawyer_reviews review ON review.id=reply.review_id
@@ -183,7 +190,7 @@ export async function moderateLawyerReviewReply(input: ReplyLifecycleInput & {
      WHERE reply.id=? LIMIT 1`,
   ).bind(input.replyId).first<{
     id: string; reviewId: string; body: string; version: number; status: string;
-    workspaceId: string; authorUserId: string; authorLocale: "ru" | "uz"; authorWorkspaceId: string | null;
+    workspaceId: string; authorUserId: string; authorLocale: PlatformLocale; authorWorkspaceId: string | null;
   }>();
   if (!reply || reply.status !== "pending") throw new LawyerReviewReplyError("REPLY_UNAVAILABLE");
   const effectiveBody = input.moderatedBody ?? reply.body;
@@ -217,14 +224,13 @@ export async function moderateLawyerReviewReply(input: ReplyLifecycleInput & {
   return { id: reply.id, status: input.decision, originalBodySha256 };
 }
 
-export function localizedLawyerReviewReplyError(locale: "ru" | "uz", code: LawyerReviewReplyCode) {
-  const ru = locale === "ru";
+export function localizedLawyerReviewReplyError(locale: PlatformLocale, code: LawyerReviewReplyCode) {
   const messages: Record<LawyerReviewReplyCode, string> = {
-    INVALID_INPUT: ru ? "Проверьте текст ответа." : "Javob matnini tekshiring.",
-    LIKELY_PERSONAL_DATA: ru ? "Удалите персональные данные перед публикацией." : "Nashrdan oldin shaxsiy ma’lumotlarni olib tashlang.",
-    REPLY_CONFLICT: ru ? "Для этого отзыва уже есть ответ на проверке или опубликованный ответ." : "Bu fikr uchun tekshirilayotgan yoki chop etilgan javob mavjud.",
-    REPLY_UNAVAILABLE: ru ? "Ответ уже обработан или недоступен." : "Javob allaqachon ko‘rib chiqilgan yoki mavjud emas.",
-    REVIEW_UNAVAILABLE: ru ? "Опубликованный отзыв недоступен для ответа." : "Chop etilgan fikrga javob berib bo‘lmaydi.",
+    INVALID_INPUT: lawyerText(locale, "Проверьте текст ответа.", "Javob matnini tekshiring.", "Review the reply and try again."),
+    LIKELY_PERSONAL_DATA: lawyerText(locale, "Удалите персональные данные перед публикацией.", "Nashrdan oldin shaxsiy ma’lumotlarni olib tashlang.", "Remove personal data before publishing the reply."),
+    REPLY_CONFLICT: lawyerText(locale, "Для этого отзыва уже есть ответ на проверке или опубликованный ответ.", "Bu fikr uchun tekshirilayotgan yoki chop etilgan javob mavjud.", "This review already has a reply under review or a published reply."),
+    REPLY_UNAVAILABLE: lawyerText(locale, "Ответ уже обработан или недоступен.", "Javob allaqachon ko‘rib chiqilgan yoki mavjud emas.", "The reply has already been processed or is unavailable."),
+    REVIEW_UNAVAILABLE: lawyerText(locale, "Опубликованный отзыв недоступен для ответа.", "Chop etilgan fikrga javob berib bo‘lmaydi.", "The published review is unavailable for a reply."),
   };
   return messages[code];
 }
