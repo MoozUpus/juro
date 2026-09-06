@@ -1,6 +1,9 @@
 import { normalizeEmail } from "../../../../lib/auth/crypto";
 import { localDevelopmentAuthEnabled } from "../../../../lib/auth/development-auth";
-import { sessionCookie } from "../../../../lib/auth/session";
+import {
+  clearLogoutPendingCookie,
+  sessionCookie,
+} from "../../../../lib/auth/session";
 import { createLocalDevelopmentSession } from "../../../../lib/auth/session-management";
 import { getOrCreateUserProfile } from "../../../../lib/document-builder/storage/db";
 import {
@@ -75,6 +78,7 @@ export async function GET(request: Request): Promise<Response> {
     "cache-control": "private, no-store",
     pragma: "no-cache",
   });
+  headers.append("set-cookie", clearLogoutPendingCookie());
   headers.append("set-cookie", sessionCookie(session.token));
   return new Response(null, { status: 303, headers });
 }

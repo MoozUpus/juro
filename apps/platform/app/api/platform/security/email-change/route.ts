@@ -29,9 +29,8 @@ import {
 } from "../../../../../lib/auth/mfa-service";
 import type { LocalSession } from "../../../../../lib/auth/session-management";
 import {
-  sessionCookieUntil,
-  sharedAuthCookieDomain,
-} from "../../../../../lib/auth/session-persistence";
+  replacementSessionCookiesUntil,
+} from "../../../../../lib/auth/session";
 import { sessionTokenFromCookie } from "../../../../../lib/auth/session-token";
 import {
   assertSafeWrite,
@@ -41,6 +40,7 @@ import {
   requireD1,
   runtimeEnv,
 } from "../../../../../lib/document-builder/storage/runtime";
+import { renderJuroAuthEmail } from "../../../../../lib/auth/transactional-email";
 import { ensureDefaultWorkspace } from "../../../../../lib/platform/workspace";
 import { dispatchOutbox } from "../../../../../worker/platform-outbox";
 import type { PlatformJobEnv } from "../../../../../worker/platform-jobs";
@@ -204,32 +204,6 @@ function confirmationError(
   }, status);
 }
 
-function message(
-  locale: "ru" | "uz",
-  destination: "current" | "new",
-  code: string,
-): { subject: string; html: string } {
-  const ru = locale === "ru";
-  if (destination === "current") {
-    return {
-      subject: ru
-        ? "Подтверждение смены email JURO"
-        : "JURO email manzilini almashtirishni tasdiqlash",
-      html: ru
-        ? `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Подтвердите смену email JURO</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${code}</p><p>Это код для текущего адреса. Он действует 10 минут и должен быть введён вместе с кодом, отправленным на новый адрес. Если вы не запрашивали смену email, никому не сообщайте код и завершите другие сессии.</p></div>`
-        : `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>JURO email manzilini almashtirishni tasdiqlang</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${code}</p><p>Bu joriy manzil uchun kod. U 10 daqiqa amal qiladi va yangi manzilga yuborilgan kod bilan birga kiritilishi kerak. Emailni almashtirishni so‘ramagan bo‘lsangiz, kodni hech kimga bermang va boshqa sessiyalarni yakunlang.</p></div>`,
-    };
-  }
-  return {
-    subject: ru
-      ? "Подтверждение нового email JURO"
-      : "Yangi JURO email manzilini tasdiqlash",
-    html: ru
-      ? `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Подтвердите новый email JURO</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${code}</p><p>Это код для нового адреса. Он действует 10 минут и должен быть введён вместе с кодом, отправленным на текущий адрес.</p></div>`
-      : `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Yangi JURO email manzilini tasdiqlang</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${code}</p><p>Bu yangi manzil uchun kod. U 10 daqiqa amal qiladi va joriy manzilga yuborilgan kod bilan birga kiritilishi kerak.</p></div>`,
-  };
-}
-
 async function queueVerificationEmails(input: {
   apiKey: string;
   from: string;
@@ -240,8 +214,16 @@ async function queueVerificationEmails(input: {
   newCode: string;
   locale: "ru" | "uz";
 }): Promise<boolean> {
-  const current = message(input.locale, "current", input.currentCode);
-  const next = message(input.locale, "new", input.newCode);
+  const current = renderJuroAuthEmail({
+    locale: input.locale,
+    purpose: "email_change_current",
+    code: input.currentCode,
+  });
+  const next = renderJuroAuthEmail({
+    locale: input.locale,
+    purpose: "email_change",
+    code: input.newCode,
+  });
   let response: Response | null = null;
   try {
     response = await fetch("https://api.resend.com/emails/batch", {
@@ -257,12 +239,14 @@ async function queueVerificationEmails(input: {
           to: [input.currentEmail],
           subject: current.subject,
           html: current.html,
+          text: current.text,
         },
         {
           from: input.from,
           to: [input.newEmail],
           subject: next.subject,
           html: next.html,
+          text: next.text,
         },
       ]),
       signal: AbortSignal.timeout(8_000),
@@ -502,11 +486,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       securityNotificationQueued: true,
     },
     200,
-    [sessionCookieUntil(
+    replacementSessionCookiesUntil(
       result.session.token,
       result.session.expiresAt,
-      undefined,
-      sharedAuthCookieDomain(new URL(request.url).hostname),
-    )],
+      new URL(request.url).hostname,
+      nowDate,
+    ),
   );
 });

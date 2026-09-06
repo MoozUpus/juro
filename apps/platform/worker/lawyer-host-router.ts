@@ -21,7 +21,7 @@ export function lawyerHostTarget(url: URL): URL | null {
     target.searchParams.set("accountType", "lawyer");
     return target;
   }
-  const auth = url.pathname.match(/^\/(?:(ru|uz)\/)?(login|register|verify)\/?$/u);
+  const auth = url.pathname.match(/^\/(?:(ru|uz|en)\/)?(login|register|verify)\/?$/u);
   if (auth) {
     const locale = auth[1] || "ru";
     const action = auth[2] === "verify" ? "login" : auth[2];
@@ -29,7 +29,7 @@ export function lawyerHostTarget(url: URL): URL | null {
     target.searchParams.set("accountType", "lawyer");
     return target;
   }
-  if (/^\/(?:ru|uz)\/auth\/(?:login|register)\/?$/u.test(url.pathname)) {
+  if (/^\/(?:ru|uz|en)\/auth\/(?:login|register)\/?$/u.test(url.pathname)) {
     target.searchParams.set("accountType", "lawyer");
     return target;
   }

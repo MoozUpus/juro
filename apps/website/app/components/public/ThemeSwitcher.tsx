@@ -1,24 +1,24 @@
 "use client";
 
-import { Laptop, Moon, Sun } from "lucide-react";
-import { useEffect, useSyncExternalStore } from "react";
+import { Moon, Sun } from "lucide-react";
+import { useSyncExternalStore } from "react";
 import type { PublicLanguage } from "../../../content/types";
 
-type ThemeMode = "system" | "light" | "dark";
+type ThemeMode = "light" | "dark";
 
 const labels = {
-  ru: { system: "Системная тема", light: "Светлая тема", dark: "Тёмная тема", group: "Тема оформления" },
-  uz: { system: "Tizim mavzusi", light: "Yorug‘ mavzu", dark: "Qorong‘i mavzu", group: "Ko‘rinish mavzusi" },
-  en: { system: "System theme", light: "Light theme", dark: "Dark theme", group: "Appearance" },
+  ru: { light: "Светлая тема", dark: "Тёмная тема", group: "Тема оформления" },
+  uz: { light: "Yorug‘ mavzu", dark: "Qorong‘i mavzu", group: "Ko‘rinish mavzusi" },
+  en: { light: "Light theme", dark: "Dark theme", group: "Appearance" },
 } as const;
 
-const modes = [["system", Laptop], ["light", Sun], ["dark", Moon]] as const;
+const modes = [["light", Sun], ["dark", Moon]] as const;
 const THEME_CHANGE_EVENT = "juro-theme-change";
 
 function readThemeMode(): ThemeMode {
-  if (typeof document === "undefined") return "system";
+  if (typeof document === "undefined") return "light";
   const value = document.documentElement.dataset.themeMode;
-  return value === "system" || value === "light" || value === "dark" ? value : "system";
+  return value === "dark" ? "dark" : "light";
 }
 
 function subscribeThemeMode(onStoreChange: () => void) {
@@ -31,31 +31,32 @@ function announceThemeMode() {
 }
 
 function apply(mode: ThemeMode) {
-  const resolved = mode === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : mode;
   document.documentElement.dataset.themeMode = mode;
-  document.documentElement.dataset.theme = resolved;
-  document.documentElement.style.colorScheme = resolved;
+  document.documentElement.dataset.theme = mode;
+  document.documentElement.style.colorScheme = mode;
 }
 
-function writeThemeCookie(value: string) {
-  document.cookie = value;
+function persistThemeCookie(mode: ThemeMode) {
+  try {
+    const shared = location.hostname === "juro.uz" || location.hostname.endsWith(".juro.uz");
+    document.cookie = `juro_theme=${mode}; Path=/; Max-Age=31536000; SameSite=Lax${shared ? "; Domain=.juro.uz; Secure" : ""}`;
+  } catch {
+    // A blocked cookie must not prevent the visible theme change.
+  }
 }
 
 export function PublicThemeSwitcher({ locale }: { locale: PublicLanguage }) {
-  const mode = useSyncExternalStore(subscribeThemeMode, readThemeMode, () => "system");
-  useEffect(() => {
-    if (mode !== "system") return;
-    const query = matchMedia("(prefers-color-scheme: dark)");
-    const update = () => apply("system");
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, [mode]);
+  const mode = useSyncExternalStore(subscribeThemeMode, readThemeMode, () => "light");
 
   function select(next: ThemeMode) {
-    localStorage.setItem("juro-theme", next);
-    const shared = location.hostname === "juro.uz" || location.hostname.endsWith(".juro.uz");
-    writeThemeCookie(`juro_theme=${next}; Path=/; Max-Age=31536000; SameSite=Lax${shared ? "; Domain=.juro.uz; Secure" : ""}`);
     apply(next);
+    try {
+      localStorage.setItem("juro-theme", next);
+    } catch {
+      // Storage can be unavailable in privacy-restricted contexts. The active
+      // document theme remains authoritative for this visit.
+    }
+    persistThemeCookie(next);
     announceThemeMode();
   }
 

@@ -25,10 +25,13 @@ import {
 } from "../lib/auth/session-management";
 import { rotatePeriodicSessionToken } from "../lib/auth/session-rotation";
 import {
+  clearLogoutPendingCookie,
   clearSessionCookie,
   replacementSessionCookies,
+  replacementSessionCookiesUntil,
 } from "../lib/auth/session";
 import {
+  logoutPendingCookie,
   sessionCookie,
   sessionCookieUntil,
   sharedAuthCookieDomain,
@@ -849,22 +852,36 @@ test("remember-me keeps cookie and persisted absolute expiry aligned", async () 
     }
 
     assert.match(sessionCookie("token"), /(?:^|; )Max-Age=86400(?:;|$)/);
-    assert.match(sessionCookie("token", false, ".juro.uz"), /Domain=\.juro\.uz/u);
+    assert.doesNotMatch(sessionCookie("token"), /(?:^|; )Domain=/u);
     assert.equal(sharedAuthCookieDomain("app.juro.uz"), ".juro.uz");
     assert.equal(sharedAuthCookieDomain("lawyer.juro.uz"), ".juro.uz");
     assert.equal(sharedAuthCookieDomain("app.staging.juro.uz"), undefined);
     assert.equal(sharedAuthCookieDomain("localhost"), undefined);
     assert.deepEqual(
       replacementSessionCookies("token", false, "app.juro.uz"),
-      [clearSessionCookie(), sessionCookie("token", false, ".juro.uz")],
+      [
+        clearSessionCookie(".juro.uz"),
+        clearSessionCookie(),
+        clearLogoutPendingCookie(),
+        sessionCookie("token", false),
+      ],
     );
     assert.deepEqual(
       replacementSessionCookies("token", true, "lawyer.juro.uz"),
-      [clearSessionCookie(), sessionCookie("token", true, ".juro.uz")],
+      [
+        clearSessionCookie(".juro.uz"),
+        clearSessionCookie(),
+        clearLogoutPendingCookie(),
+        sessionCookie("token", true),
+      ],
     );
     assert.deepEqual(
       replacementSessionCookies("token", false, "localhost"),
-      [sessionCookie("token", false)],
+      [
+        clearSessionCookie(),
+        clearLogoutPendingCookie(),
+        sessionCookie("token", false),
+      ],
     );
     assert.match(
       sessionCookieUntil(
@@ -881,6 +898,42 @@ test("remember-me keeps cookie and persisted absolute expiry aligned", async () 
         now,
       ),
       /(?:^|; )Max-Age=0(?:;|$)/,
+    );
+    assert.deepEqual(
+      replacementSessionCookiesUntil(
+        "rotated-token",
+        "2026-07-26T10:00:10.900Z",
+        "app.juro.uz",
+        now,
+      ),
+      [
+        clearSessionCookie(".juro.uz"),
+        clearSessionCookie(),
+        clearLogoutPendingCookie(),
+        sessionCookieUntil(
+          "rotated-token",
+          "2026-07-26T10:00:10.900Z",
+          now,
+        ),
+      ],
+    );
+    assert.doesNotMatch(
+      replacementSessionCookiesUntil(
+        "rotated-token",
+        "2026-07-26T10:00:10.900Z",
+        "app.juro.uz",
+        now,
+      ).at(-1) ?? "",
+      /(?:^|; )Domain=/u,
+    );
+    assert.match(
+      logoutPendingCookie(),
+      /^__Host-juro_logout_pending=1; Path=\/; Secure; SameSite=Lax; Max-Age=2592000$/u,
+    );
+    assert.doesNotMatch(logoutPendingCookie(), /HttpOnly|Domain=/u);
+    assert.equal(
+      clearLogoutPendingCookie(),
+      "__Host-juro_logout_pending=; Path=/; Secure; SameSite=Lax; Max-Age=0",
     );
     assert.throws(
       () => sessionCookieUntil("token", "invalid", now),

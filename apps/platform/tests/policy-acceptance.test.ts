@@ -9,8 +9,8 @@ import {
 } from "../lib/legal/policies";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
-test("every displayed RU/UZ policy has a locked version and content digest", async () => {
-  for (const locale of ["ru", "uz"] as const) {
+test("every displayed RU/UZ/EN policy has a locked version and content digest", async () => {
+  for (const locale of ["ru", "uz", "en"] as const) {
     const registry = await policyRegistry(locale);
     assert.equal(registry.length, 5);
     assert.deepEqual(
@@ -18,7 +18,7 @@ test("every displayed RU/UZ policy has a locked version and content digest", asy
       policySlugs,
     );
     for (const policy of registry) {
-      assert.equal(policy.documentVersion, "2026-07-26.draft.1");
+      assert.equal(policy.documentVersion, "2026-09-04.draft.2");
       assert.equal(policy.status, "draft");
       assert.match(policy.contentSha256, /^[a-f0-9]{64}$/);
       assert.deepEqual(
@@ -97,7 +97,7 @@ test("registration records exact policy evidence and separates marketing consent
       ["personal-data-processing", "privacy-policy", "terms"],
     );
     for (const acceptance of acceptances) {
-      assert.equal(acceptance.documentVersion, "2026-07-26.draft.1");
+      assert.equal(acceptance.documentVersion, "2026-09-04.draft.2");
       assert.equal(acceptance.locale, "ru");
       assert.equal(acceptance.contentSha256, acceptance.policyDigest);
       assert.equal(
@@ -128,6 +128,92 @@ test("registration records exact policy evidence and separates marketing consent
       version: "2026-07-26.1",
       scopeJson: "{\"channels\":[\"email\"]}",
     });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("English registration records English policy evidence without a language fallback", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const now = "2026-09-04T12:30:00.000Z";
+    sqlite.prepare(
+      `INSERT INTO user_profiles (id,email,locale,created_at,updated_at)
+       VALUES (?,?,?,?,?)`,
+    ).run("policy-user-en", "policy-en@example.test", "en", now, now);
+    await recordRegistrationAcceptances(d1, {
+      userId: "policy-user-en",
+      locale: "en",
+      otpChallengeId: "22222222-2222-4222-8222-222222222222",
+      acceptedMarketing: false,
+      acceptedAt: now,
+    });
+    const rows = sqlite.prepare(
+      `SELECT locale,count(*) AS total
+       FROM user_acceptances WHERE user_id=? GROUP BY locale`,
+    ).all("policy-user-en") as Array<{ locale: string; total: number }>;
+    assert.deepEqual(rows.map((row) => ({ ...row })), [{ locale: "en", total: 3 }]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a new immutable policy version coexists with production-era acceptance rows", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const acceptedAt = "2026-09-04T13:00:00.000Z";
+    sqlite.prepare(
+      `INSERT INTO user_profiles (id,email,locale,created_at,updated_at)
+       VALUES (?,?,?,?,?)`,
+    ).run("policy-version-user", "version@example.test", "ru", acceptedAt, acceptedAt);
+    const prior = [
+      ["terms", "bee1ea543edf4d2ed79025cfaeafb17440640a5c9038855b1e38dccf0d3d0ad1"],
+      ["privacy-policy", "8f843cededaa10aaa1bcc490ebc7c722645213e967e2a13db37011634d9e2805"],
+      ["personal-data-processing", "672d2020393c98d5392b26cec0e0a42253ba0a1328d5b1e1d9bed3d64b2e4c31"],
+    ] as const;
+    for (const [documentKey, digest] of prior) {
+      sqlite.prepare(
+        `INSERT INTO policy_documents (
+           id,document_key,document_version,locale,content_sha256,status,
+           effective_at,published_at,created_at
+         ) VALUES (?,?,?,'ru',?,'draft',NULL,NULL,?)`,
+      ).run(
+        `policy:${documentKey}:2026-07-26.draft.1:ru`,
+        documentKey,
+        "2026-07-26.draft.1",
+        digest,
+        "2026-07-26T12:00:00.000Z",
+      );
+    }
+
+    await recordRegistrationAcceptances(d1, {
+      userId: "policy-version-user",
+      locale: "ru",
+      otpChallengeId: "33333333-3333-4333-8333-333333333333",
+      acceptedMarketing: false,
+      acceptedAt,
+    });
+
+    const versions = sqlite.prepare(
+      `SELECT document_key AS documentKey,document_version AS documentVersion
+       FROM policy_documents
+       WHERE locale='ru' AND document_key IN (
+         'terms','privacy-policy','personal-data-processing'
+       )
+       ORDER BY document_key,document_version`,
+    ).all() as Array<{ documentKey: string; documentVersion: string }>;
+    assert.equal(versions.length, 6);
+    assert.equal(
+      versions.filter(({ documentVersion }) =>
+        documentVersion === "2026-09-04.draft.2"
+      ).length,
+      3,
+    );
+    const accepted = sqlite.prepare(
+      `SELECT count(*) AS total FROM user_acceptances
+       WHERE user_id=? AND document_version='2026-09-04.draft.2'`,
+    ).get("policy-version-user") as { total: number };
+    assert.equal(accepted.total, 3);
   } finally {
     sqlite.close();
   }

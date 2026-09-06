@@ -4,7 +4,7 @@ import {
   mfaErrorResponse,
   type MfaLocale,
 } from "../../../../../../lib/auth/mfa-http";
-import { sessionCookieUntil, sharedAuthCookieDomain } from "../../../../../../lib/auth/session-persistence";
+import { replacementSessionCookiesUntil } from "../../../../../../lib/auth/session";
 import { rotatePeriodicSessionToken } from "../../../../../../lib/auth/session-rotation";
 import { sessionTokenFromCookie } from "../../../../../../lib/auth/session-token";
 import {
@@ -65,6 +65,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       nextRefreshAt: result.nextRotationAt,
     },
     200,
-    [sessionCookieUntil(result.token, result.expiresAt, now, sharedAuthCookieDomain(new URL(request.url).hostname))],
+    replacementSessionCookiesUntil(
+      result.token,
+      result.expiresAt,
+      new URL(request.url).hostname,
+      now,
+    ),
   );
 });

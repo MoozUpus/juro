@@ -16,6 +16,11 @@ type TurnstileApi = {
 };
 
 type TurnstileWindow = Window & { turnstile?: TurnstileApi };
+type TurnstileTheme = "light" | "dark";
+
+function documentTheme(): TurnstileTheme {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
 
 export function TurnstileWidget({
   siteKey,
@@ -25,7 +30,7 @@ export function TurnstileWidget({
   action = "auth_otp",
 }: {
   siteKey: string;
-  locale: "ru" | "uz";
+  locale: "ru" | "uz" | "en";
   resetSignal: number;
   onToken: (token: string) => void;
   action?: string;
@@ -34,6 +39,7 @@ export function TurnstileWidget({
   const widgetId = useRef<string | null>(null);
   const callback = useRef(onToken);
   const [attempt, setAttempt] = useState(0);
+  const [theme, setTheme] = useState<TurnstileTheme>("light");
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
@@ -46,6 +52,13 @@ export function TurnstileWidget({
   }, [onToken]);
 
   useEffect(() => {
+    const updateTheme = () => setTheme(documentTheme());
+    updateTheme();
+    window.addEventListener("juro-theme-change", updateTheme);
+    return () => window.removeEventListener("juro-theme-change", updateTheme);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     const turnstileWindow = window as TurnstileWindow;
     const render = () => {
@@ -56,13 +69,14 @@ export function TurnstileWidget({
         turnstileWindow.turnstile.remove(widgetId.current);
       }
       try {
+        callback.current("");
         widgetId.current = turnstileWindow.turnstile.render(
           container.current,
           {
             sitekey: siteKey,
             action,
             language: locale,
-            theme: "light",
+            theme,
             size: "flexible",
             appearance: "interaction-only",
             retry: turnstileClientRetryMode,
@@ -138,7 +152,7 @@ export function TurnstileWidget({
         widgetId.current = null;
       }
     };
-  }, [action, attempt, locale, siteKey]);
+  }, [action, attempt, locale, siteKey, theme]);
 
   useEffect(() => {
     const turnstile = (window as TurnstileWindow).turnstile;
@@ -149,7 +163,8 @@ export function TurnstileWidget({
     setStatus("loading");
   }, [resetSignal]);
 
-  const ru = locale === "ru";
+  const statusText = (ru: string, uz: string, en: string) =>
+    locale === "ru" ? ru : locale === "uz" ? uz : en;
   const retry = () => {
     if (failure && !failure.retryable) {
       window.location.reload();
@@ -167,15 +182,15 @@ export function TurnstileWidget({
       <div ref={container} />
       <span className="auth-turnstile-status" role="status">
         {status === "ready"
-          ? (ru ? "Проверка пройдена." : "Tekshiruvdan o‘tildi.")
+          ? statusText("Проверка пройдена.", "Tekshiruvdan o‘tildi.", "Security check complete.")
           : status === "error"
             ? failure?.message
-            : (ru ? "Выполняется проверка…" : "Tekshiruv bajarilmoqda…")}
+            : statusText("Выполняется проверка…", "Tekshiruv bajarilmoqda…", "Running security check…")}
       </span>
       {status === "error" && <button type="button" className="auth-turnstile-retry" onClick={retry}>
         {failure && !failure.retryable
-          ? (ru ? "Обновить страницу" : "Sahifani yangilash")
-          : (ru ? "Повторить проверку" : "Tekshiruvni takrorlash")}
+          ? statusText("Обновить страницу", "Sahifani yangilash", "Refresh page")
+          : statusText("Повторить проверку", "Tekshiruvni takrorlash", "Try again")}
       </button>}
     </div>
   );

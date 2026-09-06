@@ -37,8 +37,17 @@ import {
 } from "./session-management";
 import { prepareSessionTokenRotation } from "./session-rotation";
 import { generateTotpSecret, verifyTotpCode } from "./totp";
+import {
+  MFA_IP_FAILURE_LIMIT,
+  MFA_USER_FAILURE_LIMIT,
+  mfaVerificationFailureStatements,
+  mfaVerificationFailureClearStatement,
+  mfaVerificationRateLimit,
+  mfaVerificationScopeKeys,
+} from "./password";
 
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1_000;
+const MFA_ATTEMPT_RESERVATION_TTL_MS = 15 * 60 * 1_000;
 const ENROLLMENT_TTL_MS = 10 * 60 * 1_000;
 const BACKUP_CODE_COUNT = 10;
 const USER_AGENT_MAX_CHARACTERS = 512;
@@ -53,6 +62,7 @@ export type MfaErrorCode =
   | "MFA_CHALLENGE_EXPIRED"
   | "MFA_CHALLENGE_USED"
   | "MFA_ATTEMPTS_EXCEEDED"
+  | "MFA_RATE_LIMITED"
   | "MFA_CODE_INCORRECT"
   | "MFA_CODE_REPLAYED"
   | "LOCAL_SESSION_REQUIRED"
@@ -89,6 +99,7 @@ type LoginChallenge = TotpCredential & {
   challengeId: string;
   tokenHash: string;
   emailOtpChallengeId: string;
+  primaryAuthMethod: string;
   challengeAttemptCount: number;
   challengeMaxAttempts: number;
   challengeExpiresAt: string;
@@ -98,12 +109,22 @@ type LoginChallenge = TotpCredential & {
   evidenceKeyVersion: string | null;
   locale: string;
   accountType: string;
+  themePreference: string;
   onboardingCompletedAt: string | null;
 };
 
 type VerifiedFactor =
   | { factorType: "totp"; factorKey: string; matchedCounter: number }
   | { factorType: "backup_code"; factorKey: string; backupCodeId: string };
+
+type MfaAttemptReservation = {
+  id: string;
+  challengeId: string;
+  userId: string;
+  userScopeKey: string;
+  ipScopeKey: string | null;
+  expiresAt: string;
+};
 
 function nowIso(now: Date): string {
   return now.toISOString();
@@ -732,6 +753,7 @@ export async function createLoginMfaChallenge(
     userId: string;
     emailHash: string;
     emailOtpChallengeId: string;
+    primaryAuthMethod?: "email_otp" | "password";
     userAgent: string | null;
     now?: Date;
   },
@@ -768,10 +790,10 @@ export async function createLoginMfaChallenge(
       db.prepare(
         `INSERT INTO auth_mfa_challenges (
            id,token_hash,user_id,credential_id,email_otp_challenge_id,
-           purpose,attempt_count,max_attempts,request_user_agent_hmac,
+           primary_auth_method,purpose,attempt_count,max_attempts,request_user_agent_hmac,
            evidence_key_version,expires_at,created_at
          )
-         SELECT ?,?,?,id,?,'login',0,5,?,?,?,?
+         SELECT ?,?,?,id,?,?,'login',0,5,?,?,?,?
          FROM auth_totp_credentials
          WHERE id=? AND user_id=? AND status='active'
            AND EXISTS (
@@ -784,6 +806,7 @@ export async function createLoginMfaChallenge(
         tokenHash,
         input.userId,
         input.emailOtpChallengeId,
+        input.primaryAuthMethod ?? "email_otp",
         evidence?.digest ?? null,
         evidence?.keyVersion ?? null,
         expiresAt,
@@ -814,6 +837,7 @@ async function challengeFromToken(
     `SELECT
        c.id AS challengeId,c.token_hash AS tokenHash,
        c.email_otp_challenge_id AS emailOtpChallengeId,
+       c.primary_auth_method AS primaryAuthMethod,
        c.attempt_count AS challengeAttemptCount,
        c.max_attempts AS challengeMaxAttempts,
        c.expires_at AS challengeExpiresAt,
@@ -833,6 +857,7 @@ async function challengeFromToken(
        t.enrollment_expires_at AS enrollmentExpiresAt,
        t.verified_at AS verifiedAt,
        u.locale,u.account_type AS accountType,
+       u.theme_preference AS themePreference,
        u.onboarding_completed_at AS onboardingCompletedAt
      FROM auth_mfa_challenges c
      JOIN auth_totp_credentials t ON t.id=c.credential_id
@@ -841,14 +866,231 @@ async function challengeFromToken(
   ).bind(await sha256(token)).first<LoginChallenge>();
 }
 
+async function reserveMfaAttempt(
+  db: D1Database,
+  challenge: LoginChallenge,
+  requestIp: string | null,
+  now: Date,
+): Promise<MfaAttemptReservation | null> {
+  const timestamp = nowIso(now);
+  const cutoff = new Date(
+    now.getTime() - MFA_ATTEMPT_RESERVATION_TTL_MS,
+  ).toISOString();
+  const scopes = await mfaVerificationScopeKeys({
+    userId: challenge.userId,
+    requestIp,
+  });
+  const reservation = {
+    id: crypto.randomUUID(),
+    challengeId: challenge.challengeId,
+    userId: challenge.userId,
+    userScopeKey: scopes.user,
+    ipScopeKey: scopes.ip,
+    expiresAt: new Date(
+      now.getTime() + MFA_ATTEMPT_RESERVATION_TTL_MS,
+    ).toISOString(),
+  } satisfies MfaAttemptReservation;
+  const results = await db.batch([
+    db.prepare(
+      "DELETE FROM auth_mfa_attempt_reservations WHERE expires_at<=?",
+    ).bind(timestamp),
+    db.prepare(
+      `INSERT INTO auth_mfa_attempt_reservations (
+         id,challenge_id,user_scope_key,ip_scope_key,expires_at,created_at
+       )
+       SELECT ?,?,?,?,?,?
+       WHERE EXISTS (
+         SELECT 1
+         FROM auth_mfa_challenges c
+         JOIN auth_totp_credentials t
+           ON t.id=c.credential_id AND t.status='active'
+         WHERE c.id=? AND c.user_id=? AND c.credential_id=?
+           AND c.consumed_at IS NULL AND c.invalidated_at IS NULL
+           AND c.expires_at>? AND c.attempt_count<c.max_attempts
+           AND c.attempt_count + (
+             SELECT count(*) FROM auth_mfa_attempt_reservations pending
+             WHERE pending.challenge_id=c.id
+               AND pending.failure_claim_nonce IS NULL
+               AND pending.expires_at>?
+           ) < c.max_attempts
+       )
+         AND NOT EXISTS (
+           SELECT 1 FROM auth_password_rate_limits
+           WHERE scope_key=? AND locked_until>?
+         )
+         AND (
+           coalesce((
+             SELECT CASE WHEN window_started_at>? THEN failure_count ELSE 0 END
+             FROM auth_password_rate_limits WHERE scope_key=?
+           ),0)
+           + (
+             SELECT count(*) FROM auth_mfa_attempt_reservations pending
+             WHERE pending.user_scope_key=?
+               AND pending.failure_claim_nonce IS NULL
+               AND pending.expires_at>?
+           )
+         ) < ?
+         AND (? IS NULL OR (
+           NOT EXISTS (
+             SELECT 1 FROM auth_password_rate_limits
+             WHERE scope_key=? AND locked_until>?
+           )
+           AND (
+             coalesce((
+               SELECT CASE WHEN window_started_at>? THEN failure_count ELSE 0 END
+               FROM auth_password_rate_limits WHERE scope_key=?
+             ),0)
+             + (
+               SELECT count(*) FROM auth_mfa_attempt_reservations pending
+               WHERE pending.ip_scope_key=?
+                 AND pending.failure_claim_nonce IS NULL
+                 AND pending.expires_at>?
+             )
+           ) < ?
+         ))`,
+    ).bind(
+      reservation.id,
+      reservation.challengeId,
+      reservation.userScopeKey,
+      reservation.ipScopeKey,
+      reservation.expiresAt,
+      timestamp,
+      challenge.challengeId,
+      challenge.userId,
+      challenge.id,
+      timestamp,
+      timestamp,
+      reservation.userScopeKey,
+      timestamp,
+      cutoff,
+      reservation.userScopeKey,
+      reservation.userScopeKey,
+      timestamp,
+      MFA_USER_FAILURE_LIMIT,
+      reservation.ipScopeKey,
+      reservation.ipScopeKey,
+      timestamp,
+      cutoff,
+      reservation.ipScopeKey,
+      reservation.ipScopeKey,
+      timestamp,
+      MFA_IP_FAILURE_LIMIT,
+    ),
+  ]);
+  return Number(results[1]?.meta?.changes ?? 0) === 1 ? reservation : null;
+}
+
+async function mfaReservationDenialError(
+  db: D1Database,
+  token: string,
+  now: Date,
+): Promise<MfaError> {
+  const timestamp = nowIso(now);
+  const challenge = await challengeFromToken(db, token);
+  if (!challenge || challenge.status !== "active") {
+    return new MfaError("MFA_CHALLENGE_INVALID");
+  }
+  if (challenge.challengeConsumedAt) {
+    return new MfaError("MFA_CHALLENGE_USED");
+  }
+  if (challenge.challengeExpiresAt <= timestamp) {
+    return new MfaError("MFA_CHALLENGE_EXPIRED");
+  }
+  if (challenge.challengeInvalidatedAt) {
+    return new MfaError(
+      challenge.challengeAttemptCount >= challenge.challengeMaxAttempts
+        ? "MFA_ATTEMPTS_EXCEEDED"
+        : "MFA_CHALLENGE_INVALID",
+    );
+  }
+  const pending = await db.prepare(
+    `SELECT count(*) AS value FROM auth_mfa_attempt_reservations
+     WHERE challenge_id=? AND failure_claim_nonce IS NULL AND expires_at>?`,
+  ).bind(challenge.challengeId, timestamp).first<{ value: number }>();
+  return new MfaError(
+    challenge.challengeAttemptCount + Number(pending?.value ?? 0)
+        >= challenge.challengeMaxAttempts
+      ? "MFA_ATTEMPTS_EXCEEDED"
+      : "MFA_RATE_LIMITED",
+  );
+}
+
+function activeMfaAttemptGuard(
+  reservation: MfaAttemptReservation,
+  now: Date,
+): SessionInsertGuard {
+  return {
+    selectSql: `SELECT 1 FROM auth_mfa_attempt_reservations
+      WHERE id=? AND challenge_id=? AND user_scope_key=?
+        AND ip_scope_key IS ? AND failure_claim_nonce IS NULL
+        AND expires_at>?`,
+    bindings: [
+      reservation.id,
+      reservation.challengeId,
+      reservation.userScopeKey,
+      reservation.ipScopeKey,
+      nowIso(now),
+    ],
+  };
+}
+
+function releaseMfaAttemptStatement(
+  db: D1Database,
+  reservation: MfaAttemptReservation,
+): D1PreparedStatement {
+  return db.prepare(
+    `DELETE FROM auth_mfa_attempt_reservations
+     WHERE id=? AND challenge_id=? AND user_scope_key=? AND ip_scope_key IS ?`,
+  ).bind(
+    reservation.id,
+    reservation.challengeId,
+    reservation.userScopeKey,
+    reservation.ipScopeKey,
+  );
+}
+
+async function releaseMfaAttempt(
+  db: D1Database,
+  reservation: MfaAttemptReservation,
+): Promise<void> {
+  try {
+    await releaseMfaAttemptStatement(db, reservation).run();
+  } catch {
+    // The expiring lease is fail-secure; cleanup must not mask the auth result.
+  }
+}
+
 async function recordChallengeFailure(
   db: D1Database,
   challenge: LoginChallenge,
+  reservation: MfaAttemptReservation,
+  requestIp: string | null,
   now: Date,
   reason: "code" | "user_agent",
-): Promise<void> {
+): Promise<{ recorded: boolean; attemptsExceeded: boolean }> {
   const timestamp = nowIso(now);
-  await batchWithSecurityEvent(
+  const failureClaimNonce = crypto.randomUUID();
+  const claimedGuard = {
+    selectSql: `SELECT 1 FROM auth_mfa_attempt_reservations
+      WHERE id=? AND challenge_id=? AND user_scope_key=?
+        AND ip_scope_key IS ? AND failure_claim_nonce=?
+        AND failure_claimed_at=?`,
+    bindings: [
+      reservation.id,
+      reservation.challengeId,
+      reservation.userScopeKey,
+      reservation.ipScopeKey,
+      failureClaimNonce,
+      timestamp,
+    ],
+  } satisfies SessionInsertGuard;
+  const rateLimitStatements = await mfaVerificationFailureStatements(db, {
+    userId: challenge.userId,
+    requestIp,
+    now,
+    guard: claimedGuard,
+  });
+  const results = await batchWithSecurityEvent(
     db,
     {
       userId: challenge.userId,
@@ -861,6 +1103,35 @@ async function recordChallengeFailure(
     },
     () => [
       db.prepare(
+        `UPDATE auth_mfa_attempt_reservations
+         SET failure_claim_nonce=?,failure_claimed_at=?
+         WHERE id=? AND challenge_id=? AND user_scope_key=?
+           AND ip_scope_key IS ? AND failure_claim_nonce IS NULL
+           AND failure_claimed_at IS NULL
+           AND expires_at>?
+           AND EXISTS (
+             SELECT 1
+             FROM auth_mfa_challenges c
+             JOIN auth_totp_credentials t
+               ON t.id=c.credential_id AND t.status='active'
+             WHERE c.id=? AND c.user_id=? AND c.credential_id=?
+               AND c.consumed_at IS NULL AND c.invalidated_at IS NULL
+               AND c.expires_at>? AND c.attempt_count<c.max_attempts
+           )`,
+      ).bind(
+        failureClaimNonce,
+        timestamp,
+        reservation.id,
+        reservation.challengeId,
+        reservation.userScopeKey,
+        reservation.ipScopeKey,
+        timestamp,
+        challenge.challengeId,
+        challenge.userId,
+        challenge.id,
+        timestamp,
+      ),
+      db.prepare(
         `UPDATE auth_mfa_challenges
          SET attempt_count=attempt_count+1,
              invalidated_at=CASE
@@ -868,24 +1139,34 @@ async function recordChallengeFailure(
                ELSE invalidated_at END
          WHERE id=? AND user_id=?
            AND consumed_at IS NULL AND invalidated_at IS NULL
-           AND expires_at>? AND attempt_count<max_attempts`,
+           AND expires_at>? AND attempt_count<max_attempts
+           AND EXISTS (${claimedGuard.selectSql})
+         RETURNING attempt_count AS attemptCount,max_attempts AS maxAttempts`,
       ).bind(
         timestamp,
         challenge.challengeId,
         challenge.userId,
         timestamp,
+        ...claimedGuard.bindings,
       ),
+      ...rateLimitStatements,
     ],
-    {
-      selectSql: `SELECT 1 FROM auth_mfa_challenges
-        WHERE id=? AND user_id=? AND attempt_count>?`,
-      bindings: [
-        challenge.challengeId,
-        challenge.userId,
-        challenge.challengeAttemptCount,
-      ],
-    },
+    claimedGuard,
   );
+  await releaseMfaAttempt(db, reservation);
+  const challengeResult = results[1] as D1Result<{
+    attemptCount: number;
+    maxAttempts: number;
+  }> | undefined;
+  const row = challengeResult?.results?.[0];
+  const recorded = Number(results[0]?.meta?.changes ?? 0) === 1
+    && Number(challengeResult?.meta?.changes ?? 0) === 1
+    && Boolean(row);
+  return {
+    recorded,
+    attemptsExceeded: recorded
+      && Number(row?.attemptCount ?? 0) >= Number(row?.maxAttempts ?? 1),
+  };
 }
 
 async function verifyChallengeUserAgent(
@@ -1098,6 +1379,7 @@ export async function verifyLoginMfa(
     userAgent: string | null;
     securityContext?: AuthRequestSecurityContext;
     deviceToken?: string | null;
+    requestIp?: string | null;
     rememberMe?: boolean;
     now?: Date;
   },
@@ -1106,6 +1388,7 @@ export async function verifyLoginMfa(
   userId: string;
   locale: string;
   accountType: string;
+  themePreference: string;
   onboardingCompletedAt: string | null;
 }> {
   const now = input.now ?? new Date();
@@ -1132,26 +1415,73 @@ export async function verifyLoginMfa(
   if (challenge.challengeAttemptCount >= challenge.challengeMaxAttempts) {
     throw new MfaError("MFA_ATTEMPTS_EXCEEDED");
   }
+  const rollingLimit = await mfaVerificationRateLimit(db, {
+    userId: challenge.userId,
+    requestIp: input.requestIp ?? null,
+    now,
+  });
+  if (!rollingLimit.allowed) {
+    throw new MfaError("MFA_RATE_LIMITED");
+  }
+  const reservation = await reserveMfaAttempt(
+    db,
+    challenge,
+    input.requestIp ?? null,
+    now,
+  );
+  if (!reservation) {
+    throw await mfaReservationDenialError(db, input.token, now);
+  }
   if (
     challenge.status !== "active"
     || !await verifyChallengeUserAgent(keyring, challenge, input.userAgent)
   ) {
-    await recordChallengeFailure(db, challenge, now, "user_agent");
+    await recordChallengeFailure(
+      db,
+      challenge,
+      reservation,
+      input.requestIp ?? null,
+      now,
+      "user_agent",
+    );
     throw new MfaError("MFA_CHALLENGE_INVALID");
   }
-  const factor = await verifiedFactor(
-    db,
-    keyring,
-    challenge,
-    input.code,
-    now,
-  );
+  let factor: VerifiedFactor | null;
+  try {
+    factor = await verifiedFactor(
+      db,
+      keyring,
+      challenge,
+      input.code,
+      now,
+    );
+  } catch (error) {
+    if (error instanceof MfaError && error.code === "MFA_CODE_REPLAYED") {
+      await recordChallengeFailure(
+        db,
+        challenge,
+        reservation,
+        input.requestIp ?? null,
+        now,
+        "code",
+      );
+    }
+    throw error;
+  }
   if (!factor) {
-    await recordChallengeFailure(db, challenge, now, "code");
+    const failure = await recordChallengeFailure(
+      db,
+      challenge,
+      reservation,
+      input.requestIp ?? null,
+      now,
+      "code",
+    );
+    if (!failure.recorded) {
+      throw await mfaReservationDenialError(db, input.token, now);
+    }
     throw new MfaError(
-      challenge.challengeAttemptCount + 1 >= challenge.challengeMaxAttempts
-        ? "MFA_ATTEMPTS_EXCEEDED"
-        : "MFA_CODE_INCORRECT",
+      failure.attemptsExceeded ? "MFA_ATTEMPTS_EXCEEDED" : "MFA_CODE_INCORRECT",
     );
   }
 
@@ -1185,9 +1515,9 @@ export async function verifyLoginMfa(
   const prepared = await prepareLocalSessionCreation(db, {
     userId: challenge.userId,
     userAgent: input.userAgent,
-    authMethod: factor.factorType === "totp"
-      ? "email_otp+totp"
-      : "email_otp+backup_code",
+    authMethod: challenge.primaryAuthMethod === "password"
+      ? (factor.factorType === "totp" ? "password+totp" : "password+backup_code")
+      : (factor.factorType === "totp" ? "email_otp+totp" : "email_otp+backup_code"),
     assuranceLevel: "mfa",
     deviceContinuity,
     loginSecurityNotification: {
@@ -1226,6 +1556,15 @@ export async function verifyLoginMfa(
     prepared,
     challengeConsumedGuard,
   );
+  const sessionCreatedGuard = {
+    selectSql: "SELECT 1 FROM auth_sessions WHERE id=? AND user_id=?",
+    bindings: [prepared.session.sessionId, challenge.userId],
+  } satisfies SessionInsertGuard;
+  const failureClearStatement = await mfaVerificationFailureClearStatement(db, {
+    userId: challenge.userId,
+    guard: sessionCreatedGuard,
+  });
+  const attemptGuard = activeMfaAttemptGuard(reservation, now);
   const statements = [
     factorClaimStatement(db, {
       claimId,
@@ -1236,12 +1575,14 @@ export async function verifyLoginMfa(
       sourceGuardSql: `SELECT 1 FROM auth_mfa_challenges
         WHERE id=? AND user_id=? AND credential_id=?
           AND consumed_at IS NULL AND invalidated_at IS NULL
-          AND expires_at>? AND attempt_count<max_attempts`,
+          AND expires_at>? AND attempt_count<max_attempts
+          AND EXISTS (${attemptGuard.selectSql})`,
       sourceGuardBindings: [
         challenge.challengeId,
         challenge.userId,
         challenge.id,
         timestamp,
+        ...attemptGuard.bindings,
       ],
     }),
     factorConsumeStatement(
@@ -1265,6 +1606,19 @@ export async function verifyLoginMfa(
       ...factorGuard.bindings,
     ),
     ...sessionStatements,
+    failureClearStatement,
+    db.prepare(
+      `DELETE FROM auth_mfa_attempt_reservations
+       WHERE challenge_id=? AND user_scope_key=?
+         AND EXISTS (
+           SELECT 1 FROM auth_sessions WHERE id=? AND user_id=?
+         )`,
+    ).bind(
+      challenge.challengeId,
+      reservation.userScopeKey,
+      prepared.session.sessionId,
+      challenge.userId,
+    ),
   ];
   let results: D1Result[];
   try {
@@ -1289,10 +1643,7 @@ export async function verifyLoginMfa(
         createdAt: timestamp,
       },
       () => statements,
-      {
-        selectSql: "SELECT 1 FROM auth_sessions WHERE id=? AND user_id=?",
-        bindings: [prepared.session.sessionId, challenge.userId],
-      },
+      sessionCreatedGuard,
     );
   } catch (error) {
     if (isFactorClaimConflict(error)) {
@@ -1301,11 +1652,19 @@ export async function verifyLoginMfa(
     throw error;
   }
   const sessionInsertResultIndex = 3 + sessionStatements.length - 1;
+  const reservationCleanupResultIndex = 4 + sessionStatements.length;
+  if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+    const current = await challengeFromToken(db, input.token);
+    if (current?.challengeConsumedAt) {
+      throw new MfaError("MFA_CODE_REPLAYED");
+    }
+  }
   if (
     Number(results[0]?.meta?.changes ?? 0) !== 1
     || Number(results[1]?.meta?.changes ?? 0) !== 1
     || Number(results[2]?.meta?.changes ?? 0) !== 1
     || Number(results[sessionInsertResultIndex]?.meta?.changes ?? 0) !== 1
+    || Number(results[reservationCleanupResultIndex]?.meta?.changes ?? 0) < 1
   ) {
     throw new MfaError("MFA_STATE_CONFLICT");
   }
@@ -1314,6 +1673,7 @@ export async function verifyLoginMfa(
     userId: challenge.userId,
     locale: challenge.locale,
     accountType: challenge.accountType,
+    themePreference: challenge.themePreference,
     onboardingCompletedAt: challenge.onboardingCompletedAt,
   };
 }

@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Building2, CircleAlert, Copy, Database, Download, KeyRound, Languages, LoaderCircle, LogOut, MailCheck, MonitorSmartphone, RefreshCcw, Save, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
+import { performLogout } from "./logout-client";
 
 type View = "profile" | "settings" | "security" | "privacy";
 type ProfileData = {
@@ -92,7 +93,6 @@ type EmailChangeStatus = {
 export function ProfileSettingsClient({ locale, accountType, view }: { locale: PlatformLocale; accountType: AccountType; view: View }) {
   const ru = locale === "ru";
   const base = usePlatformBasePath();
-  const localizedSignOut = `/signout-with-chatgpt?return_to=${encodeURIComponent(`/${locale}/auth/login`)}`;
   const [data, setData] = useState<ProfileData | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,6 +114,8 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
   const [currentEmailCode, setCurrentEmailCode] = useState("");
   const [newEmailCode, setNewEmailCode] = useState("");
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [sessionAction, setSessionAction] = useState<string | null>(null);
   const [businessWorkspace, setBusinessWorkspace] = useState({
     requestId: "",
     fullName: "",
@@ -122,6 +124,32 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
   const mfaSetupRegion = useRef<HTMLDivElement>(null);
   const backupCodesRegion = useRef<HTMLDivElement>(null);
   const emailChangeRegion = useRef<HTMLDivElement>(null);
+  const logoutStarted = useRef(false);
+  const sessionActionPending = useRef(false);
+
+  async function finishLogout() {
+    if (logoutStarted.current) return;
+    logoutStarted.current = true;
+    setLoggingOut(true);
+    setData(null);
+    setSessions([]);
+    setMfa(null);
+    setMfaSetup(null);
+    setBackupCodes([]);
+    setEmailChange(null);
+    setForm({ fullName: "", phone: "", locale, timezone: "Asia/Tashkent", companyName: "", organizationRole: "" });
+    setNewEmail("");
+    setMfaCode("");
+    setCurrentEmailCode("");
+    setNewEmailCode("");
+    setDeletionCode("");
+    setDeletionChallenge(null);
+    setDeleteConfirmation("");
+    setBusinessWorkspace({ requestId: "", fullName: "", shortName: "" });
+    setError("");
+    setNotice("");
+    await performLogout(locale);
+  }
 
   const load = useCallback(async () => {
     setError("");
@@ -355,47 +383,80 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
 
   async function closeAllSessions() {
     if (!window.confirm(ru ? "Завершить все JURO email-сессии и выйти?" : "Barcha JURO email sessiyalarini yakunlab chiqasizmi?")) return;
-    const response = await fetch("/api/platform/security/sessions?scope=all", { method: "DELETE", headers: { "x-juro-csrf": "1" } });
-    if (!response.ok) { const body = await response.json() as { error?: string }; setError(body.error || (ru ? "Сессии не завершены." : "Sessiyalar yakunlanmadi.")); return; }
-    window.location.assign(localizedSignOut);
+    if (sessionActionPending.current || loggingOut) return;
+    sessionActionPending.current = true;
+    setSessionAction("all");
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/platform/security/sessions?scope=all", { method: "DELETE", headers: { "x-juro-csrf": "1" } });
+      if (!response.ok) {
+        const body = await response.json() as { error?: string };
+        throw new Error(body.error || (ru ? "Сессии не завершены." : "Sessiyalar yakunlanmadi."));
+      }
+      await finishLogout();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : (ru ? "Сессии не завершены." : "Sessiyalar yakunlanmadi."));
+    } finally {
+      sessionActionPending.current = false;
+      setSessionAction(null);
+    }
   }
 
   async function closeOtherSessions() {
+    if (sessionActionPending.current || loggingOut) return;
+    sessionActionPending.current = true;
+    setSessionAction("others");
     setError("");
     setNotice("");
-    const response = await fetch("/api/platform/security/sessions?scope=others", { method: "DELETE", headers: { "x-juro-csrf": "1" } });
-    const body = await response.json() as { error?: string; revoked?: number };
-    if (!response.ok) {
-      setError(body.error || (ru ? "Другие сессии не завершены." : "Boshqa sessiyalar yakunlanmadi."));
-      return;
+    try {
+      const response = await fetch("/api/platform/security/sessions?scope=others", { method: "DELETE", headers: { "x-juro-csrf": "1" } });
+      const body = await response.json() as { error?: string; revoked?: number };
+      if (!response.ok) {
+        throw new Error(body.error || (ru ? "Другие сессии не завершены." : "Boshqa sessiyalar yakunlanmadi."));
+      }
+      setNotice(ru
+        ? `Завершено сессий: ${body.revoked ?? 0}.`
+        : `Yakunlangan sessiyalar: ${body.revoked ?? 0}.`);
+      await load();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : (ru ? "Другие сессии не завершены." : "Boshqa sessiyalar yakunlanmadi."));
+    } finally {
+      sessionActionPending.current = false;
+      setSessionAction(null);
     }
-    setNotice(ru
-      ? `Завершено сессий: ${body.revoked ?? 0}.`
-      : `Yakunlangan sessiyalar: ${body.revoked ?? 0}.`);
-    await load();
   }
 
   async function closeSession(session: Session) {
     if (!window.confirm(session.isCurrent
       ? (ru ? "Завершить текущую JURO email-сессию?" : "Joriy JURO email sessiyasini yakunlaysizmi?")
       : (ru ? `Завершить сессию «${session.deviceName}»?` : `“${session.deviceName}” sessiyasini yakunlaysizmi?`))) return;
+    if (sessionActionPending.current || loggingOut) return;
+    sessionActionPending.current = true;
+    setSessionAction(session.id);
     setError("");
     setNotice("");
-    const response = await fetch(`/api/platform/security/sessions/${encodeURIComponent(session.id)}`, {
-      method: "DELETE",
-      headers: { "x-juro-csrf": "1" },
-    });
-    const body = await response.json() as { error?: string; revokedCurrent?: boolean };
-    if (!response.ok) {
-      setError(body.error || (ru ? "Сессия не завершена." : "Sessiya yakunlanmadi."));
-      return;
+    try {
+      const response = await fetch(`/api/platform/security/sessions/${encodeURIComponent(session.id)}`, {
+        method: "DELETE",
+        headers: { "x-juro-csrf": "1" },
+      });
+      const body = await response.json() as { error?: string; revokedCurrent?: boolean };
+      if (!response.ok) {
+        throw new Error(body.error || (ru ? "Сессия не завершена." : "Sessiya yakunlanmadi."));
+      }
+      if (body.revokedCurrent) {
+        await finishLogout();
+        return;
+      }
+      setNotice(ru ? "Сессия завершена." : "Sessiya yakunlandi.");
+      await load();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : (ru ? "Сессия не завершена." : "Sessiya yakunlanmadi."));
+    } finally {
+      sessionActionPending.current = false;
+      setSessionAction(null);
     }
-    if (body.revokedCurrent) {
-      window.location.assign(localizedSignOut);
-      return;
-    }
-    setNotice(ru ? "Сессия завершена." : "Sessiya yakunlandi.");
-    await load();
   }
 
   async function startMfaSetup() {
@@ -580,7 +641,7 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
           : deletionMode === "recoverable_30d"
             ? "O‘chirish 30 kundan keyin rejalashtirildi. Tozalash boshlanguncha qayta kirib so‘rovni bekor qilish mumkin."
             : "Darhol tozalash himoyalangan navbatga qo‘yildi. Sessiyalar yakunlandi.");
-        window.location.assign(localizedSignOut);
+        await finishLogout();
       } else if (
         body.challengeId
         && body.destination
@@ -679,7 +740,7 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
         ? "Очистка снова поставлена в защищённую очередь."
         : "Tozalash himoyalangan navbatga qayta qo‘yildi.");
       if (body.logout) {
-        window.location.assign(localizedSignOut);
+        await finishLogout();
       } else {
         await load();
       }
@@ -842,13 +903,13 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
             </span>
             <div className="session-actions">
               <time>{ru ? "до" : "gacha"} {formatDateTime(session.idleExpiresAt || session.expiresAt, ru)}</time>
-              <button type="button" onClick={() => void closeSession(session)} aria-label={ru ? `Завершить сессию ${session.deviceName}` : `${session.deviceName} sessiyasini yakunlash`}><LogOut />{ru ? "Завершить" : "Yakunlash"}</button>
+              <button type="button" disabled={loggingOut || sessionAction !== null} aria-busy={sessionAction === session.id || (loggingOut && Boolean(session.isCurrent))} onClick={() => void closeSession(session)} aria-label={ru ? `Завершить сессию ${session.deviceName}` : `${session.deviceName} sessiyasini yakunlash`}>{sessionAction === session.id || (loggingOut && Boolean(session.isCurrent)) ? <LoaderCircle className="spin" aria-hidden="true" /> : <LogOut />}{ru ? "Завершить" : "Yakunlash"}</button>
             </div>
           </div>)
           : <p>{ru ? "Активные JURO email-сессии не найдены." : "Faol JURO email sessiyalari topilmadi."}</p>}
         <div className="session-bulk-actions">
-          {sessions.some(session => !Boolean(session.isCurrent)) && <button className="danger-outline" type="button" onClick={() => void closeOtherSessions()}>{ru ? "Завершить остальные" : "Boshqalarini yakunlash"}</button>}
-          <button className="danger-outline" type="button" onClick={() => void closeAllSessions()}>{ru ? "Завершить все email-сессии" : "Barcha email sessiyalarini yakunlash"}</button>
+          {sessions.some(session => !Boolean(session.isCurrent)) && <button className="danger-outline" type="button" disabled={loggingOut || sessionAction !== null} aria-busy={sessionAction === "others"} onClick={() => void closeOtherSessions()}>{sessionAction === "others" && <LoaderCircle className="spin" aria-hidden="true" />}{ru ? "Завершить остальные" : "Boshqalarini yakunlash"}</button>}
+          <button className="danger-outline" type="button" disabled={loggingOut || sessionAction !== null} aria-busy={loggingOut || sessionAction === "all"} onClick={() => void closeAllSessions()}>{(loggingOut || sessionAction === "all") && <LoaderCircle className="spin" aria-hidden="true" />}{ru ? "Завершить все email-сессии" : "Barcha email sessiyalarini yakunlash"}</button>
         </div>
       </section>
       <section className="mfa-panel">

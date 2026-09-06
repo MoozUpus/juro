@@ -1,4 +1,4 @@
-export type TurnstileClientLocale = "ru" | "uz";
+export type TurnstileClientLocale = "ru" | "uz" | "en";
 
 export const turnstileClientRetryMode = "never" as const;
 
@@ -29,7 +29,9 @@ export function turnstileClientFailure(
       retryable,
       message: locale === "ru"
         ? "Проверка безопасности временно недоступна из-за настройки сервиса. Обновите страницу позже или обратитесь в поддержку."
-        : "Xavfsizlik tekshiruvi xizmat sozlamalari sabab vaqtincha ishlamayapti. Keyinroq sahifani yangilang yoki yordam xizmatiga murojaat qiling.",
+        : locale === "uz"
+          ? "Xavfsizlik tekshiruvi xizmat sozlamalari sabab vaqtincha ishlamayapti. Keyinroq sahifani yangilang yoki yordam xizmatiga murojaat qiling."
+          : "The security check is temporarily unavailable because of a service configuration issue. Try again later or contact support.",
     };
   }
 
@@ -38,6 +40,8 @@ export function turnstileClientFailure(
     retryable,
     message: locale === "ru"
       ? "Проверка безопасности не завершилась. Повторите проверку."
-      : "Xavfsizlik tekshiruvi yakunlanmadi. Tekshiruvni takrorlang.",
+      : locale === "uz"
+        ? "Xavfsizlik tekshiruvi yakunlanmadi. Tekshiruvni takrorlang."
+        : "The security check did not finish. Try the check again.",
   };
 }

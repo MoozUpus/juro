@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   executeSecurityEmailJob,
+  notifyPasswordChangedWithRetry,
   prepareEmailChangedSecurityEmail,
+  preparePasswordChangedSecurityEmailRetry,
 } from "../lib/auth/security-email";
 import {
   prepareDeviceContinuity,
@@ -22,6 +24,7 @@ const USER_ID = "security-email-user";
 const WORKSPACE_ID = "security-email-workspace";
 const CHALLENGE_ID = "22222222-2222-4222-8222-222222222222";
 const PREVIOUS_EMAIL = "previous@example.test";
+const PASSWORD_RESET_CHALLENGE_ID = "33333333-3333-4333-8333-333333333333";
 
 function encodedKey(seed: number): string {
   const bytes = Uint8Array.from(
@@ -147,6 +150,175 @@ async function preparedFixture() {
   return { ...value, prepared };
 }
 
+function passwordChangedFixture() {
+  const value = fixture();
+  const now = "2026-09-04T14:00:00.000Z";
+  value.sqlite.prepare(
+    `INSERT INTO auth_otp_challenges (
+       id,email,email_hash,purpose,locale,account_type,code_salt,code_hash,
+       attempt_count,max_attempts,expires_at,consumed_at,created_at
+     ) VALUES (?,?,?,?,?,?,?,?,1,5,?,?,?)`,
+  ).run(
+    PASSWORD_RESET_CHALLENGE_ID,
+    "new@example.test",
+    "password-reset-email-hash",
+    "password_reset",
+    "en",
+    "individual",
+    "password-reset-salt",
+    "password-reset-code-hash",
+    "2026-09-04T14:10:00.000Z",
+    now,
+    now,
+  );
+  return value;
+}
+
+test("failed immediate password-change email creates an encrypted durable English retry", async () => {
+  const { sqlite, d1 } = passwordChangedFixture();
+  const capture: QueueCapture = { envelope: null };
+  const env = envFor(d1, capture);
+  const calls: Array<{
+    headers: Headers;
+    body: { to: string[]; subject: string; html: string; text: string };
+  }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    calls.push({
+      headers: new Headers(init?.headers),
+      body: JSON.parse(String(init?.body)),
+    });
+    if (calls.length === 1) return new Response(null, { status: 503 });
+    return new Response(JSON.stringify({ id: "resend_password_changed_retry" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const prepared = await preparePasswordChangedSecurityEmailRetry(d1, {
+      keyring: parseIdentityKeyring(RAW_KEYRING),
+      userId: USER_ID,
+      authOtpChallengeId: PASSWORD_RESET_CHALLENGE_ID,
+      email: "new@example.test",
+      locale: "en",
+      requiredGuard: {
+        selectSql: `SELECT 1 FROM auth_otp_challenges
+          WHERE id=? AND purpose='password_reset' AND consumed_at IS NOT NULL`,
+        bindings: [PASSWORD_RESET_CHALLENGE_ID],
+      },
+      now: "2026-09-04T14:00:00.000Z",
+    });
+    await d1.batch(prepared.statements);
+    const result = await notifyPasswordChangedWithRetry(d1, {
+      jobId: prepared.jobId,
+      authOtpChallengeId: PASSWORD_RESET_CHALLENGE_ID,
+      email: "new@example.test",
+      locale: "en",
+      now: "2026-09-04T14:00:00.000Z",
+      apiKey: "synthetic-resend-key",
+      from: "JURO <no-reply@juro.uz>",
+    });
+    assert.equal(result.status, "queued");
+    assert.ok(result.jobId);
+    assert.equal(calls.length, 1);
+
+    const stored = sqlite.prepare(
+      `SELECT challenge_id AS challengeId,
+         auth_otp_challenge_id AS authOtpChallengeId,event_type AS eventType,
+         locale,recipient_ciphertext AS recipientCiphertext,status
+       FROM security_email_jobs WHERE id=?`,
+    ).get(result.jobId) as {
+      challengeId: string | null;
+      authOtpChallengeId: string;
+      eventType: string;
+      locale: string;
+      recipientCiphertext: string;
+      status: string;
+    };
+    assert.deepEqual({
+      challengeId: stored.challengeId,
+      authOtpChallengeId: stored.authOtpChallengeId,
+      eventType: stored.eventType,
+      locale: stored.locale,
+      status: stored.status,
+    }, {
+      challengeId: null,
+      authOtpChallengeId: PASSWORD_RESET_CHALLENGE_ID,
+      eventType: "password_changed",
+      locale: "en",
+      status: "retrying",
+    });
+    assert.notEqual(stored.recipientCiphertext, "new@example.test");
+
+    assert.deepEqual(await dispatchOutbox(env, 1, result.jobId), {
+      claimed: 1,
+      dispatched: 1,
+      rejected: 0,
+      retrying: 0,
+    });
+    assert.ok(capture.envelope);
+    assert.equal(JSON.stringify(capture.envelope).includes("new@example.test"), false);
+    const retry = queueMessage(capture.envelope);
+    await handleQueue(retry.batch, env);
+    assert.equal(retry.state.acknowledgements, 1);
+    assert.deepEqual(retry.state.retries, []);
+    assert.equal(calls.length, 2);
+    const providerKey = `juro_password_changed_${PASSWORD_RESET_CHALLENGE_ID}`;
+    assert.equal(calls[0]?.headers.get("idempotency-key"), providerKey);
+    assert.equal(calls[1]?.headers.get("idempotency-key"), providerKey);
+    assert.deepEqual(calls[1]?.body.to, ["new@example.test"]);
+    assert.equal(calls[1]?.body.subject, "Your JURO password was changed");
+    assert.match(calls[1]?.body.html ?? "", /<!doctype html><html lang="en">/u);
+    assert.match(calls[1]?.body.text ?? "", /Password changed/u);
+    assert.deepEqual({ ...sqlite.prepare(
+      `SELECT status,attempt_count AS attemptCount
+       FROM security_email_jobs WHERE id=?`,
+    ).get(result.jobId) }, { status: "sent", attemptCount: 2 });
+  } finally {
+    globalThis.fetch = originalFetch;
+    sqlite.close();
+  }
+});
+
+test("successful immediate password-change email marks the pre-created durable job sent", async () => {
+  const { sqlite, d1 } = passwordChangedFixture();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ id: "resend_password_changed_immediate" }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+  try {
+    const prepared = await preparePasswordChangedSecurityEmailRetry(d1, {
+      keyring: parseIdentityKeyring(RAW_KEYRING),
+      userId: USER_ID,
+      authOtpChallengeId: PASSWORD_RESET_CHALLENGE_ID,
+      email: "new@example.test",
+      locale: "en",
+      requiredGuard: { selectSql: "SELECT 1", bindings: [] },
+      now: "2026-09-04T14:00:00.000Z",
+    });
+    await d1.batch(prepared.statements);
+    assert.deepEqual(await notifyPasswordChangedWithRetry(d1, {
+      jobId: prepared.jobId,
+      authOtpChallengeId: PASSWORD_RESET_CHALLENGE_ID,
+      email: "new@example.test",
+      locale: "en",
+      now: "2026-09-04T14:00:00.000Z",
+      apiKey: "synthetic-resend-key",
+      from: "JURO <no-reply@juro.uz>",
+    }), { status: "sent", jobId: null });
+    assert.deepEqual({ ...sqlite.prepare(
+      `SELECT
+         (SELECT count(*) FROM security_email_jobs) AS jobs,
+         (SELECT count(*) FROM job_outbox WHERE job_type='email.send') AS outbox,
+         (SELECT status FROM security_email_jobs WHERE id=?) AS status`,
+    ).get(prepared.jobId) }, { jobs: 1, outbox: 1, status: "sent" });
+  } finally {
+    globalThis.fetch = originalFetch;
+    sqlite.close();
+  }
+});
+
 test("encrypted security email outbox dispatches identifiers only and sends once", async () => {
   const { sqlite, d1, prepared } = await preparedFixture();
   const capture: QueueCapture = { envelope: null };
@@ -208,6 +380,14 @@ test("encrypted security email outbox dispatches identifiers only and sends once
       (calls[0]?.body as { to: string[] }).to,
       [PREVIOUS_EMAIL],
     );
+    const delivered = calls[0]?.body as {
+      subject: string;
+      html: string;
+      text: string;
+    };
+    assert.equal(delivered.subject, "Email для входа в JURO изменён");
+    assert.match(delivered.html, /<!doctype html><html lang="ru">/u);
+    assert.match(delivered.text, /Email для входа изменён/u);
 
     const sent = sqlite.prepare(
       `SELECT status,attempt_count AS attemptCount,
@@ -481,7 +661,9 @@ test("generic login-security outbox encrypts recipient and sends new-device emai
 
   const capture: QueueCapture = { envelope: null };
   const env = envFor(d1, capture);
-  const calls: Array<{ body: { to: string[]; subject: string; html: string } }> = [];
+  const calls: Array<{
+    body: { to: string[]; subject: string; html: string; text: string };
+  }> = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
     calls.push({ body: JSON.parse(String(init?.body)) });
@@ -502,8 +684,10 @@ test("generic login-security outbox encrypts recipient and sends new-device emai
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0]?.body.to, ["new@example.test"]);
     assert.equal(calls[0]?.body.subject, "Вход в JURO с нового устройства");
+    assert.match(calls[0]?.body.html ?? "", /<!doctype html><html lang="ru">/u);
     assert.match(calls[0]?.body.html ?? "", /Chrome · Windows &lt;unsafe&gt;/);
     assert.equal((calls[0]?.body.html ?? "").includes("<unsafe>"), false);
+    assert.match(calls[0]?.body.text ?? "", /Chrome · Windows <unsafe>/u);
   } finally {
     globalThis.fetch = originalFetch;
     sqlite.close();
@@ -535,7 +719,7 @@ test("recognized device with comparable region change gets Uzbek region copy", a
   await d1.batch(prepared.statements({ selectSql: "SELECT 1", bindings: [] }));
   const capture: QueueCapture = { envelope: null };
   const env = envFor(d1, capture);
-  let body: { subject: string; html: string } | null = null;
+  let body: { subject: string; html: string; text: string } | null = null;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
     body = JSON.parse(String(init?.body));
@@ -546,10 +730,15 @@ test("recognized device with comparable region change gets Uzbek region copy", a
   };
   try {
     await executeSecurityEmailJob(env, prepared.jobId);
-    const sentBody = body as { subject: string; html: string } | null;
+    const sentBody = body as {
+      subject: string;
+      html: string;
+      text: string;
+    } | null;
     assert.ok(sentBody);
     assert.equal(sentBody.subject, "JURO hisobiga yangi hududdan kirish");
     assert.match(sentBody.html, /AN, UZ/);
+    assert.match(sentBody.text, /Hudud: AN, UZ/u);
   } finally {
     globalThis.fetch = originalFetch;
     sqlite.close();

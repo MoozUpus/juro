@@ -94,7 +94,7 @@ test("renders the production landing with localized canonical metadata and real 
     assert.match(head, /<meta name="description" content="[^"]+"/);
     assert.match(head, /<meta name="robots" content="index, follow"/);
     assert.match(head, new RegExp(`<link rel="canonical" href="https://juro\\.uz/${locale}"`));
-    assert.match(html, new RegExp(`https://app\\.juro\\.uz/register\\?lang=${locale}&amp;accountType=individual`));
+    assert.match(html, new RegExp(`https://app\\.juro\\.uz/${locale}/auth/register\\?accountType=individual`));
     assert.doesNotMatch(html, /jurobek-avatar\.avif/);
     assert.match(html, /Контекст не теряется между инструментами|Kontekst vositalar o‘rtasida yo‘qolmaydi/);
     assert.doesNotMatch(html, /ГОЛОСОВОЙ AI-АВАТАР|OVOZLI AI-AVATAR/);
@@ -108,6 +108,22 @@ test("renders the production landing with localized canonical metadata and real 
     assert.doesNotMatch(html, /\{PRICE_|\{OFFICIAL_EMAIL\}|\{COMPLAINT_URL\}/);
     assert.doesNotMatch(html, /(?:[cd]:[\\/](?:users|chatgpt)|\.vinext[\\/]fonts)/i);
   }
+});
+
+test("English public calls to action retain the English auth surface", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(
+    new Request("http://localhost/en", {
+      headers: { accept: "text/html", "user-agent": chromeUserAgent },
+    }),
+    runtime,
+    context,
+  );
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /https:\/\/app\.juro\.uz\/en\/auth\/login/u);
+  assert.match(html, /https:\/\/app\.juro\.uz\/en\/auth\/register\?accountType=individual/u);
+  assert.doesNotMatch(html, /https:\/\/app\.juro\.uz\/ru\/auth/u);
 });
 
 test("fingerprinted public assets are cached immutably", async () => {
@@ -153,7 +169,7 @@ test("serves the public manifest from a same-origin route", async () => {
   assert.equal(body.icons[0].src, "/favicon.png");
 });
 
-test("renders the complete English public landing and routes product actions to an available product locale", async () => {
+test("renders the complete English public landing and keeps product actions on English auth", async () => {
   const worker = await createWorker();
   const response = await worker.fetch(new Request("http://localhost/en", { headers: { accept: "text/html" } }), runtime, context);
   assert.equal(response.status, 200);
@@ -162,7 +178,8 @@ test("renders the complete English public landing and routes product actions to 
   assert.match(html, /<link rel="canonical" href="https:\/\/juro\.uz\/en"/);
   assert.match(html, /Tell us/);
   assert.match(html, /Get a clear next step/);
-  assert.match(html, /https:\/\/app\.juro\.uz\/register\?lang=ru&amp;accountType=individual/);
+  assert.match(html, /https:\/\/app\.juro\.uz\/en\/auth\/register\?accountType=individual/);
+  assert.doesNotMatch(html, /https:\/\/app\.juro\.uz\/ru\/auth/u);
   for (const route of ["/en/video", "/en/lawyers", "/en/legal", "/en/trust"]) assert.match(html, new RegExp(`href="${route}"`));
 });
 

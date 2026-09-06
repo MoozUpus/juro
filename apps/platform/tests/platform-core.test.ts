@@ -307,8 +307,9 @@ test("application shell refreshes due local sessions through the protected perio
   assert.match(route, /rotatePeriodicSessionToken/);
   assert.match(
     route,
-    /sessionCookieUntil\([\s\S]*?result\.token,[\s\S]*?result\.expiresAt,[\s\S]*?now,[\s\S]*?sharedAuthCookieDomain/,
+    /replacementSessionCookiesUntil\([\s\S]*?result\.token,[\s\S]*?result\.expiresAt,[\s\S]*?new URL\(request\.url\)\.hostname,[\s\S]*?now/,
   );
+  assert.doesNotMatch(route, /sharedAuthCookieDomain/);
   assert.match(route, /jsonNoStore/);
   assert.match(shell, /useSessionRefresh\(locale\)/);
   assert.match(refresh, /sessions\/refresh\?lang=\$\{locale\}/);
@@ -326,15 +327,21 @@ test("OTP, MFA, and logout writes require the application CSRF contract", async 
   const [
     authForm,
     logoutButton,
+    logoutClient,
     requestRoute,
     verifyRoute,
     verifyMfaRoute,
     logoutRoute,
+    logoutHandler,
   ] =
     await Promise.all([
       readFile(new URL("../app/_auth/AuthForm.tsx", import.meta.url), "utf8"),
       readFile(
         new URL("../app/_platform/LogoutButton.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../app/_platform/logout-client.ts", import.meta.url),
         "utf8",
       ),
       readFile(
@@ -353,16 +360,29 @@ test("OTP, MFA, and logout writes require the application CSRF contract", async 
         new URL("../app/api/auth/logout/route.ts", import.meta.url),
         "utf8",
       ),
+      readFile(new URL("../lib/auth/logout-handler.ts", import.meta.url), "utf8"),
     ]);
-  assert.equal(authForm.match(/"x-juro-csrf": "1"/g)?.length, 3);
-  assert.match(logoutButton, /"x-juro-csrf"\s*:\s*"1"/);
+  assert.equal(authForm.match(/"x-juro-csrf": "1"/g)?.length, 5);
+  for (const endpoint of [
+    "/api/auth/password-login",
+    "/api/auth/request-otp",
+    "/api/auth/verify-otp",
+    "/api/auth/reset-password",
+    "/api/auth/verify-mfa",
+  ]) {
+    assert.match(authForm, new RegExp(`fetch\\("${endpoint.replaceAll("/", "\\/")}"`));
+  }
+  assert.match(logoutButton, /performLogout\(locale\)/);
+  assert.match(logoutClient, /"x-juro-csrf"\s*:\s*"1"/);
   for (const route of [
     requestRoute,
     verifyRoute,
     verifyMfaRoute,
-    logoutRoute,
+    logoutHandler,
   ]) {
     assert.match(route, /assertSafeWrite\(request\)/);
+  }
+  for (const route of [requestRoute, verifyRoute, verifyMfaRoute, logoutRoute]) {
     assert.match(route, /withApiErrors/);
   }
   assert.match(requestRoute, /requestOtpInputSchema/);
@@ -386,8 +406,9 @@ test("auth locale links retain the canonical locale URL and query string", async
   assert.match(authForm, /const locale = initialLocale/);
   assert.match(authForm, /pathname\.replace/);
   assert.match(authForm, /searchParams\.toString\(\)/);
-  assert.match(authForm, /hrefFor\("ru"\)/);
-  assert.match(authForm, /hrefFor\("uz"\)/);
+  assert.match(authForm, /\(\["ru", "uz", "en"\] as const\)\.map/);
+  assert.match(authForm, /href=\{hrefFor\(value\)\}/);
+  assert.match(authForm, /hrefLang=\{value\}/);
 });
 
 test("production identity prefers OTP sessions and gates trusted edge headers", async () => {
@@ -395,6 +416,11 @@ test("production identity prefers OTP sessions and gates trusted edge headers", 
   assert.ok(source.indexOf("const sessionUser = await getSessionUser(request)") < source.indexOf("const requestHeaders = request?.headers ?? await headers()"));
   assert.match(source, /ALLOW_PLATFORM_AUTH_HEADERS/);
   assert.match(source, /APP_ENV !== "production"/);
+  assert.match(source, /logoutPendingFromCookie/);
+  assert.ok(
+    source.indexOf("logoutPendingFromCookie(requestHeaders.get(\"cookie\"))")
+      < source.indexOf("const email = requestHeaders.get(USER_EMAIL_HEADER)"),
+  );
   assert.doesNotMatch(source, /NODE_ENV !== "production" \|\|/);
   assert.match(source, /authSource: "platform_header"/);
   assert.match(source, /assuranceLevel: "upstream"/);
@@ -425,7 +451,11 @@ test("local development login is explicit, loopback-only, and creates a real ses
   assert.match(route, /sessionCookie\(session\.token\)/);
   assert.match(authPage, /developmentAuthEnabled/);
   assert.match(authForm, /\/api\/auth\/dev-login\?returnTo=/);
-  assert.match(launcher, /LOCAL_AUTH_BYPASS: process\.env\.LOCAL_AUTH_BYPASS \?\? "true"/);
+  assert.match(launcher, /LOCAL_AUTH_BYPASS: process\.env\.LOCAL_AUTH_BYPASS \?\? "false"/);
+  assert.match(
+    await readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
+    /host: "127\.0\.0\.1"/,
+  );
   assert.match(launcher, /CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"/);
 });
 
@@ -473,7 +503,11 @@ test("canonical identity expand stays disabled and public projections omit prote
   assert.match(identity, /IDENTITY_VALUE_DIVERGED/);
   assert.equal(
     (config.match(/"IDENTITY_PROTECTION_MODE": "legacy"/g) ?? []).length,
-    3,
+    1,
+  );
+  assert.equal(
+    (config.match(/"IDENTITY_PROTECTION_MODE": "dual_write"/g) ?? []).length,
+    2,
   );
   assert.match(session, /return \{\s*sessionId:/);
   assert.doesNotMatch(storage, /\.\.\.existing/);
@@ -603,12 +637,13 @@ test("session management distinguishes the current local device and audits revoc
 });
 
 test("MFA cookies and logout use narrow, server-only boundaries", async () => {
-  const [session, logout] = await Promise.all([
+  const [session, logout, logoutResponse] = await Promise.all([
     readFile(new URL("../lib/auth/session.ts", import.meta.url), "utf8"),
     readFile(
-      new URL("../app/api/auth/logout/route.ts", import.meta.url),
+      new URL("../lib/auth/logout-handler.ts", import.meta.url),
       "utf8",
     ),
+    readFile(new URL("../lib/auth/logout-response.ts", import.meta.url), "utf8"),
   ]);
   assert.match(
     session,
@@ -619,9 +654,10 @@ test("MFA cookies and logout use narrow, server-only boundaries", async () => {
     session,
     /DEVICE_CONTINUITY_COOKIE.*Path=\/; HttpOnly; Secure; SameSite=Lax/s,
   );
-  assert.match(logout, /clearSessionCookie/);
-  assert.match(logout, /clearMfaChallengeCookie/);
-  assert.match(logout, /headers\.append\("set-cookie"/);
+  assert.match(logout, /logoutResponseHeaders\(request\.url\)/);
+  assert.match(logoutResponse, /clearSessionCookie/);
+  assert.match(logoutResponse, /clearMfaChallengeCookie/);
+  assert.match(logoutResponse, /headers\.append\("set-cookie"/);
 });
 
 test("email OTP defers primary-session issuance while MFA is active", async () => {
@@ -707,7 +743,8 @@ test("MFA management routes require protected writes and local reauthentication"
   assert.match(routes[2], /confirmTotpEnrollmentInputSchema/);
   assert.match(routes[3], /manageMfaInputSchema/);
   assert.match(routes[0], /sessionTokenFromCookie/);
-  assert.match(routes[0], /sessionCookieUntil/);
+  assert.match(routes[0], /replacementSessionCookiesUntil/);
+  assert.doesNotMatch(routes[0], /sharedAuthCookieDomain/);
   assert.match(routes[0], /currentToken/);
 });
 
@@ -748,7 +785,8 @@ test("email change binds both address proofs to one fresh local session", async 
   assert.match(route, /"idempotency-key"/);
   assert.match(route, /markEmailChangeCodesQueued/);
   assert.match(route, /sessionTokenFromCookie/);
-  assert.match(route, /sessionCookieUntil/);
+  assert.match(route, /replacementSessionCookiesUntil/);
+  assert.doesNotMatch(route, /sharedAuthCookieDomain/);
   assert.match(route, /currentToken,/);
   assert.ok(
     route.indexOf("localSessionForRequest(request)")

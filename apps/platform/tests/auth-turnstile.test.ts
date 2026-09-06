@@ -5,14 +5,32 @@ import {
   turnstileClientFailure,
   turnstileClientRetryMode,
 } from "../lib/auth/turnstile-client";
-import { validateAuthTurnstile, validateTurnstile } from "../lib/auth/turnstile";
+import {
+  authTurnstileActions,
+  validateAuthTurnstile,
+  validateTurnstile,
+} from "../lib/auth/turnstile";
 
 const authStyles = fs.readFileSync("app/_auth/auth.css", "utf8");
+const turnstileWidget = fs.readFileSync(
+  "app/_auth/TurnstileWidget.tsx",
+  "utf8",
+);
+
+test("Turnstile delegates cross-origin messaging to the official explicit-render client", () => {
+  assert.match(
+    turnstileWidget,
+    /https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit/,
+  );
+  assert.doesNotMatch(turnstileWidget, /\.postMessage\s*\(/);
+  assert.match(turnstileWidget, /turnstileWindow\.turnstile\.render\(/);
+  assert.match(turnstileWidget, /turnstileWindow\.turnstile\.remove\(/);
+});
 
 test("Turnstile reserves its challenge height before the provider renders", () => {
   assert.match(
     authStyles,
-    /\.auth-turnstile\s*>\s*div:first-child,[\s\S]*?min-height:\s*72px\s*!important;/,
+    /\.auth-turnstile\s*>\s*div:first-child,[\s\S]*?min-height:\s*65px\s*!important;/,
   );
   assert.match(
     authStyles,
@@ -20,15 +38,16 @@ test("Turnstile reserves its challenge height before the provider renders", () =
   );
 });
 
-test("auth headings clear the fixed theme and language controls at every viewport", () => {
+test("auth utilities stay in document flow and retain accessible touch targets", () => {
   assert.match(
     authStyles,
-    /\.auth-card form header,\s*\n\.auth-unavailable\s*\{[^}]*padding-top:\s*56px;[^}]*padding-right:\s*0;/,
+    /\.auth-utilities\s*\{[^}]*display:\s*flex;[^}]*min-height:\s*44px;[^}]*margin-bottom:\s*34px;/s,
   );
   assert.match(
     authStyles,
-    /@media\s*\(max-width:\s*520px\)[\s\S]*?\.auth-theme\s*\{[^}]*top:\s*14px;[^}]*left:\s*16px;/,
+    /\.auth-language a\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*44px;/s,
   );
+  assert.doesNotMatch(authStyles, /\.auth-(?:language|theme)\s*\{[^}]*position:\s*absolute/s);
 });
 
 test("Turnstile client failures are bounded and distinguish configuration errors", () => {
@@ -59,6 +78,7 @@ test("Turnstile verification binds token, IP, action, and hostname", async () =>
     token: "single-use-token",
     remoteIp: "203.0.113.9",
     expectedHostname: "app.juro.uz",
+    expectedActions: [authTurnstileActions.passwordLogin],
     fetcher: async (input, init) => {
       assert.equal(
         input,
@@ -67,7 +87,7 @@ test("Turnstile verification binds token, IP, action, and hostname", async () =>
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return Response.json({
         success: true,
-        action: "auth_otp",
+        action: "auth_password_login",
         hostname: "app.juro.uz",
       });
     },
@@ -84,18 +104,19 @@ test("Turnstile fails closed on provider denial or context mismatch", async () =
   for (const payload of [
     {
       success: false,
-      action: "auth_otp",
+      action: "auth_password_login",
       hostname: "app.juro.uz",
       "error-codes": ["timeout-or-duplicate"],
     },
     { success: true, action: "different_action", hostname: "app.juro.uz" },
-    { success: true, action: "auth_otp", hostname: "lookalike.test" },
+    { success: true, action: "auth_password_login", hostname: "lookalike.test" },
   ]) {
     const result = await validateAuthTurnstile({
       secretKey: "server-secret",
       token: "single-use-token",
       remoteIp: null,
       expectedHostname: "app.juro.uz",
+      expectedActions: [authTurnstileActions.passwordLogin],
       fetcher: async () => Response.json(payload),
     });
     assert.deepEqual(result, { status: "invalid" });
@@ -108,6 +129,7 @@ test("Turnstile treats transport and malformed provider output as unavailable", 
     token: "single-use-token",
     remoteIp: null,
     expectedHostname: "app.juro.uz",
+    expectedActions: [authTurnstileActions.passwordLogin],
     fetcher: async () => {
       throw new Error("network unavailable");
     },
@@ -119,6 +141,7 @@ test("Turnstile treats transport and malformed provider output as unavailable", 
     token: "single-use-token",
     remoteIp: null,
     expectedHostname: "app.juro.uz",
+    expectedActions: [authTurnstileActions.passwordLogin],
     fetcher: async () => Response.json({ success: "yes" }),
   });
   assert.deepEqual(malformed, { status: "unavailable" });
@@ -132,6 +155,7 @@ test("Turnstile rejects empty or oversized inputs before network access", async 
       token,
       remoteIp: null,
       expectedHostname: "app.juro.uz",
+      expectedActions: [authTurnstileActions.passwordLogin],
       fetcher: async () => {
         fetchCalls += 1;
         return Response.json({ success: true });
@@ -140,6 +164,33 @@ test("Turnstile rejects empty or oversized inputs before network access", async 
     assert.deepEqual(result, { status: "invalid" });
   }
   assert.equal(fetchCalls, 0);
+});
+
+test("auth Turnstile accepts only the actions assigned to the current endpoint", async () => {
+  const validate = (action: string) => validateAuthTurnstile({
+    secretKey: "server-secret",
+    token: "single-use-token",
+    remoteIp: null,
+    expectedHostname: "app.juro.uz",
+    expectedActions: [
+      authTurnstileActions.registration,
+      authTurnstileActions.registrationResend,
+    ],
+    fetcher: async () => Response.json({
+      success: true,
+      action,
+      hostname: "app.juro.uz",
+    }),
+  });
+
+  assert.deepEqual(
+    await validate(authTurnstileActions.registrationResend),
+    { status: "verified" },
+  );
+  assert.deepEqual(
+    await validate(authTurnstileActions.passwordReset),
+    { status: "invalid" },
+  );
 });
 
 test("Turnstile supports an isolated guest AI action without weakening the auth action", async () => {

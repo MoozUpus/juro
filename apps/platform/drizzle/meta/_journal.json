@@ -1051,6 +1051,34 @@
       "when": 1788286800000,
       "tag": "0149_ai_question_intakes",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1788507000000,
+      "tag": "0150_password_authentication",
+      "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1788510600000,
+      "tag": "0151_english_policy_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1788514200000,
+      "tag": "0152_password_changed_email_retry",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1788517800000,
+      "tag": "0153_pending_registration_retention",
+      "breakpoints": true
     }
   ]
 }

@@ -483,7 +483,7 @@ test("OTP JSON contracts reject type confusion, extra keys, and large bodies", a
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         email: "user@example.test",
-        purpose: "login",
+        purpose: "password_reset",
         locale: "ru",
         accountType: "individual",
         turnstileToken: "test-turnstile-token",
@@ -498,7 +498,7 @@ test("OTP JSON contracts reject type confusion, extra keys, and large bodies", a
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         email: 123,
-        purpose: "login",
+        purpose: "password_reset",
         locale: "ru",
         accountType: "individual",
         unexpected: true,
@@ -597,7 +597,7 @@ test("session persistence inputs default safely and reject malformed values", as
     challengeId: "f4fe0582-f957-42f6-aa89-81a39d184ef8",
     email: "user@example.test",
     code: "123456",
-    purpose: "login",
+    purpose: "register",
     locale: "ru",
   };
   const standard = await parseJsonRequest(
@@ -645,7 +645,7 @@ test("session persistence inputs default safely and reject malformed values", as
   }
 });
 
-test("concurrent wrong OTP requests cannot overshoot the attempt budget", async () => {
+test("wrong OTP attempts stay capped per challenge without locking the mailbox", async () => {
   const { sqlite, d1 } = databaseFixture();
   try {
     const challenge = await insertChallenge(sqlite);
@@ -683,7 +683,7 @@ test("concurrent wrong OTP requests cannot overshoot the attempt budget", async 
       "2026-07-26T12:15:00.000Z",
     );
 
-    const blockedReservation = await reserveOtpChallenge(
+    const freshReservation = await reserveOtpChallenge(
       d1,
       reservationInput({
         id: "replacement-during-lock",
@@ -692,20 +692,14 @@ test("concurrent wrong OTP requests cannot overshoot the attempt budget", async 
         hourlySince: "2026-07-26T11:05:00.000Z",
       }),
     );
-    assert.equal(blockedReservation.status, "blocked");
-    if (blockedReservation.status === "blocked") {
-      assert.equal(
-        blockedReservation.verificationLockedUntil,
-        "2026-07-26T12:15:00.000Z",
-      );
-    }
+    assert.equal(freshReservation.status, "reserved");
     assert.equal(
       (
         sqlite.prepare(
           "SELECT count(*) AS total FROM auth_otp_challenges",
         ).get() as { total: number }
       ).total,
-      1,
+      2,
     );
   } finally {
     sqlite.close();
@@ -764,28 +758,49 @@ test("expired, replaced, used, and mismatched OTP states remain distinct", async
   }
 });
 
-test("keyed OTP verification rejects divergent retained SHA evidence", async () => {
-  for (const column of ["email_hash", "code_hash"] as const) {
-    const { sqlite, d1 } = databaseFixture();
-    try {
-      const challenge = await insertChallenge(sqlite);
-      sqlite.prepare(
-        `UPDATE auth_otp_challenges SET ${column}='divergent' WHERE id=?`,
-      ).run(challenge.id);
-      await assert.rejects(
-        consumeOtpChallenge(d1, {
-          identityContext: dualContext,
-          challengeId: challenge.id,
-          email: challenge.email,
-          purpose: challenge.purpose,
-          code: challenge.code,
-          now: "2026-07-26T12:00:00.000Z",
-        }),
-        (error: unknown) => error instanceof IdentityProtectionError
-          && error.code === "IDENTITY_VALUE_DIVERGED",
-      );
-    } finally {
-      sqlite.close();
-    }
+test("keyed OTP keeps email divergence checks without storing an offline code verifier", async () => {
+  const emailFixture = databaseFixture();
+  try {
+    const challenge = await insertChallenge(emailFixture.sqlite);
+    emailFixture.sqlite.prepare(
+      "UPDATE auth_otp_challenges SET email_hash='divergent' WHERE id=?",
+    ).run(challenge.id);
+    await assert.rejects(
+      consumeOtpChallenge(emailFixture.d1, {
+        identityContext: dualContext,
+        challengeId: challenge.id,
+        email: challenge.email,
+        purpose: challenge.purpose,
+        code: challenge.code,
+        now: "2026-07-26T12:00:00.000Z",
+      }),
+      (error: unknown) => error instanceof IdentityProtectionError
+        && error.code === "IDENTITY_VALUE_DIVERGED",
+    );
+  } finally {
+    emailFixture.sqlite.close();
+  }
+
+  const codeFixture = databaseFixture();
+  try {
+    const challenge = await insertChallenge(codeFixture.sqlite);
+    const row = codeFixture.sqlite.prepare(
+      "SELECT code_salt AS salt,code_hash AS hash,code_hmac AS hmac FROM auth_otp_challenges WHERE id=?",
+    ).get(challenge.id) as { salt: string; hash: string; hmac: string };
+    assert.notEqual(row.hash, await sha256(`${row.salt}:${challenge.code}`));
+    assert.ok(row.hmac);
+    codeFixture.sqlite.prepare(
+      "UPDATE auth_otp_challenges SET code_hash='compatibility-sentinel' WHERE id=?",
+    ).run(challenge.id);
+    assert.equal((await consumeOtpChallenge(codeFixture.d1, {
+      identityContext: dualContext,
+      challengeId: challenge.id,
+      email: challenge.email,
+      purpose: challenge.purpose,
+      code: challenge.code,
+      now: "2026-07-26T12:00:00.000Z",
+    })).status, "verified");
+  } finally {
+    codeFixture.sqlite.close();
   }
 });

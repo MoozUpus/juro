@@ -4,6 +4,7 @@ import { userIdByEmail } from "../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../lib/auth/identity-runtime";
 import { hasActiveMfa } from "../lib/auth/mfa-service";
 import { getSessionUser } from "../lib/auth/session";
+import { logoutPendingFromCookie } from "../lib/auth/session-token";
 import {
   requireD1,
   runtimeEnv,
@@ -40,6 +41,9 @@ export async function getAuthPrincipal(request?: Request): Promise<AuthPrincipal
   if (!allowPlatformHeaders) return null;
 
   const requestHeaders = request?.headers ?? await headers();
+  // A pending local logout must not fall through to the non-production
+  // trusted-header compatibility path after suppressing the old bearer.
+  if (logoutPendingFromCookie(requestHeaders.get("cookie"))) return null;
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!email) return null;
 

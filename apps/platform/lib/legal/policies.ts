@@ -5,7 +5,7 @@ import {
 } from "../../content/app-legal";
 import { sha256 } from "../auth/crypto";
 
-export type PolicyLocale = "ru" | "uz";
+export type PolicyLocale = "ru" | "uz" | "en";
 export type PolicyStatus = "draft" | "approved" | "superseded";
 export type PolicyDocumentKey =
   | "terms"
@@ -37,7 +37,10 @@ export type VerifiedPolicyDocument = {
 
 export const MARKETING_CONSENT_VERSION = "2026-07-26.1";
 
-const POLICY_VERSION = "2026-07-26.draft.1";
+// Any canonical text change receives a new immutable version. Production
+// acceptance rows are append-only and must continue to reference the exact
+// text the user accepted.
+const POLICY_VERSION = "2026-09-04.draft.2";
 
 const policyDefinitions = [
   {
@@ -47,8 +50,9 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: true,
     contentSha256: {
-      ru: "bee1ea543edf4d2ed79025cfaeafb17440640a5c9038855b1e38dccf0d3d0ad1",
-      uz: "ac71dc79fb7bf5c44447ceda68b01b46a831a51c0403211e276c495fe2f9b6aa",
+      ru: "927d60c81bebe7aa97fc7a19585f738e5dfa4970ac90853f537a2aa2f5b6b73b",
+      uz: "cae77f18b62c49d40c041ef357287441153fe47fa635ed398904ce7124917181",
+      en: "b7b422f0dd08ba03a0002620a2d71d192012a155af06ff6075d96316b2b1deac",
     },
   },
   {
@@ -58,8 +62,9 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: true,
     contentSha256: {
-      ru: "8f843cededaa10aaa1bcc490ebc7c722645213e967e2a13db37011634d9e2805",
-      uz: "d51ac5b4105fc8628e5adf1cfa8b918fc9c96bd24b78a31f05a9e9cebc38491d",
+      ru: "e83be3984be664d174ac76ee137799cf4f5f4631a58be40e538104a8f8c9fc48",
+      uz: "66a93f80ef14041dd841a861ab03f795b7527491c177ccc71ed0905d14da81cd",
+      en: "7b0e7fe1e1c8f25df8a3d01404f04feb57d5fcce309cfa1a8fa4053f46b14787",
     },
   },
   {
@@ -69,8 +74,9 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: false,
     contentSha256: {
-      ru: "2eb817a4de8965ea9239f7558550c19641df6ae056981e33ab00fa83997005a8",
-      uz: "00f19dc9e4758119288d8257e775ab3acce71f0c2c4757ddf210cfe88a2bd7ae",
+      ru: "adcf7a408de709503ada3dce8f0fa74b2e12f3b4c15af0114d61ae514a168983",
+      uz: "370ce0607bd12842f3480b1a9543fd35a8294f0dcf33436631e1871f71790802",
+      en: "7e94db6c7e8e2fc72069fb3eb128eea37ef6910ad9b66d7758483a115cbbe7bf",
     },
   },
   {
@@ -80,8 +86,9 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: false,
     contentSha256: {
-      ru: "b23ee0d265fd4d50819a793e4f8dfc9f063161221eb071e9eebbd6bd8fe153ef",
-      uz: "1cf21a4315a49135156cc7b9cb90d24e6bff203a35043ce6ce6e3a0227edb069",
+      ru: "3df570103a71c30c9bd1b86f9a5497c1a5c9c4b05663327c2d904af79ebcc664",
+      uz: "45cfb56544660004d434775728505b6445bd6eedb405248285483b6d53a8d24d",
+      en: "46f7987bcbb26d99060c8e077f71af2b2f411053dfb734aaf32c38d28e9b0683",
     },
   },
   {
@@ -91,8 +98,9 @@ const policyDefinitions = [
     status: "draft",
     mandatoryAtRegistration: true,
     contentSha256: {
-      ru: "672d2020393c98d5392b26cec0e0a42253ba0a1328d5b1e1d9bed3d64b2e4c31",
-      uz: "dd07b89ada8fe00113d724af213474076db1ce4ce28847d1bc6dbad6bc0ab291",
+      ru: "7ca0fb1b296ae76dbbaaa29ccb6a2710e4ebf18a993e826e6a97eb14e662fbcc",
+      uz: "d0f590789fa279f866028ccaa9af992d58fa3fc2f53e09bc37e73de55478fdae",
+      en: "b1383b4fde327c552202248ad4ff96ae840e861ed54e4b123ab25bdff4366233",
     },
   },
 ] as const satisfies readonly PolicyDefinition[];

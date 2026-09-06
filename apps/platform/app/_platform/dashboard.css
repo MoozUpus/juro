@@ -62,7 +62,7 @@
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 16px;
-  background: var(--surface-raised);
+  background: var(--white);
   color: #142b3b;
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.16);
 }
@@ -327,7 +327,7 @@
 @media (hover: hover) and (pointer: fine) {
   .dashboard-section-title-row > button:not(:disabled):hover {
     border-color: #c9a866;
-    background: var(--surface-raised);
+    background: var(--white);
     color: var(--p-navy);
   }
 }
@@ -346,7 +346,7 @@
   padding: 20px;
   border: 1px solid var(--p-line);
   border-radius: 14px;
-  background: var(--surface-raised);
+  background: var(--white);
   color: #263d4b;
   text-decoration: none;
   box-shadow: 0 10px 30px rgba(7, 26, 46, 0.035);
@@ -408,7 +408,7 @@
   overflow: hidden;
   border: 1px solid var(--p-line);
   border-radius: 16px;
-  background: var(--surface-raised);
+  background: var(--white);
 }
 .dashboard-work-list > header {
   display: flex;
@@ -424,7 +424,7 @@
   height: 40px;
   place-items: center;
   border-radius: 11px;
-  background: var(--surface-raised);
+  background: var(--white);
   color: #896724;
 }
 .dashboard-work-list > header svg {
@@ -703,16 +703,16 @@
 .dashboard-command-form {
   grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   margin-top: 24px;
-  background: var(--surface-raised);
-  color: var(--text-primary);
+  background: var(--white);
+  color: var(--ink);
 }
 .dashboard-command-form textarea {
-  color: var(--text-primary);
-  caret-color: var(--brand-gold);
-  -webkit-text-fill-color: var(--text-primary);
+  color: var(--ink);
+  caret-color: var(--gold);
+  -webkit-text-fill-color: var(--ink);
 }
 .dashboard-command-form textarea::placeholder {
-  color: var(--text-secondary);
+  color: var(--muted);
 }
 .dashboard-voice-action {
   display: inline-flex;
@@ -721,8 +721,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 11px;
-  background: var(--surface-subtle);
-  color: var(--text-primary);
+  background: var(--soft);
+  color: var(--ink);
 }
 .dashboard-voice-action svg {
   width: 19px;
@@ -833,8 +833,8 @@
   .dashboard-voice-action:hover {
     background: color-mix(
       in srgb,
-      var(--brand-gold) 18%,
-      var(--surface-subtle)
+      var(--gold) 18%,
+      var(--soft)
     );
   }
   .dashboard-today > a:hover {
@@ -907,8 +907,82 @@
 .dashboard-section-heading h2,
 .dashboard-quick-grid > a,
 .dashboard-quick-grid strong {
-  color: var(--text-primary);
+  color: var(--ink);
 }
 .dashboard-quick-grid small {
-  color: var(--text-secondary);
+  color: var(--muted);
+}
+
+html[data-theme="dark"] .dashboard-command-hero {
+  background: linear-gradient(145deg, #0b263a, #071c2c);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.34);
+}
+
+html[data-theme="dark"] .dashboard-command-form,
+html[data-theme="dark"] .dashboard-work-list,
+html[data-theme="dark"] .dashboard-quick-grid > a {
+  border-color: var(--line);
+  background: var(--white);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .dashboard-attach,
+  .dashboard-voice-action,
+  .dashboard-section-title-row > button,
+  .dashboard-action-icon,
+  .dashboard-work-list > header,
+  .dashboard-work-list > header > span
+) {
+  border-color: var(--line);
+  background: var(--soft);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .dashboard-file-chip,
+  .dashboard-work-list > a
+) {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .dashboard-file-chip small,
+  .dashboard-upload-consent,
+  .dashboard-upload-status,
+  .dashboard-work-list > header p,
+  .dashboard-work-list > a small,
+  .dashboard-work-list time,
+  .dashboard-list-empty p,
+  .dashboard-command-loading,
+  .dashboard-context-summary
+) {
+  color: var(--muted);
+}
+
+html[data-theme="dark"] :is(
+  .dashboard-work-list > header h3,
+  .dashboard-work-list > a strong,
+  .dashboard-context-summary b
+) {
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .dashboard-command-error {
+  border-color: color-mix(in srgb, var(--danger) 48%, var(--line));
+  background: var(--red-bg);
+  color: #f0aaa7;
+}
+
+html[data-theme="dark"] .dashboard-upload-progress {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  html[data-theme="dark"] .dashboard-work-list > a:hover,
+  html[data-theme="dark"] .dashboard-quick-grid > a:hover,
+  html[data-theme="dark"] .dashboard-section-title-row > button:not(:disabled):hover {
+    background: var(--surface-hover);
+  }
 }

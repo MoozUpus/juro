@@ -5,6 +5,9 @@ import test from "node:test";
 const rootPage = fs.readFileSync("app/page.tsx", "utf8");
 const localizedPage = fs.readFileSync("app/[locale]/page.tsx", "utf8");
 const globalStyles = fs.readFileSync("app/globals.css", "utf8");
+const rootLayout = fs.readFileSync("app/layout.tsx", "utf8");
+const themeSwitcher = fs.readFileSync("app/components/public/ThemeSwitcher.tsx", "utf8");
+const platformHrefs = fs.readFileSync("app/components/public/platform-hrefs.ts", "utf8");
 const adapter = fs.readFileSync("app/components/cinematic/CinematicLandingPage.tsx", "utf8");
 const homepage = fs.readFileSync("app/components/public/JuroHomepage.tsx", "utf8");
 const homepageStyles = fs.readFileSync("app/components/public/juro-home.module.css", "utf8");
@@ -18,6 +21,10 @@ const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
 const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.css", "utf8");
 const footerRailStyles = fs.readFileSync("app/components/public/footer-rail.module.css", "utf8");
 const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-targets.module.css", "utf8");
+const legalStyles = fs.readFileSync("app/[locale]/legal/legal.module.css", "utf8");
+const trustStyles = fs.readFileSync("app/[locale]/trust/trust.module.css", "utf8");
+const articleStyles = fs.readFileSync("app/[locale]/knowledge/[slug]/article.module.css", "utf8");
+const lawyerStyles = fs.readFileSync("app/[locale]/lawyers/lawyers.module.css", "utf8");
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
@@ -92,7 +99,7 @@ test("public chrome exposes every primary public destination in all three locale
   assert.match(chrome, /languageHref/);
   assert.match(chrome, /const languages: Locale\[\] = \["ru", "uz", "en"\]/);
   assert.match(chrome, /localeHref\(target\)/);
-  assert.match(chrome, /app\.juro\.uz/);
+  assert.match(chrome + platformHrefs, /app\.juro\.uz/);
   assert.match(sitemap, /\/lawyers/);
   assert.doesNotMatch(sitemap, /prototype/);
 });
@@ -106,6 +113,55 @@ test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(headerTouchStyles, /min-height: 44px/);
   assert.match(headerTouchStyles, /aria-current="page"/);
   assert.match(globalStyles, /\.public-theme-switcher button\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/s);
+  assert.match(globalStyles, /@media \(max-width: 420px\)[\s\S]*?\.public-theme-switcher button\[aria-pressed="true"\][\s\S]*?display:\s*none/);
+});
+
+test("mobile chrome keeps both sign-in and registration available", () => {
+  assert.match(chrome, /platformAuthHref\(locale, "login"\)/u);
+  assert.match(chrome, /platformRegistrationHref\(locale\)/u);
+  assert.match(platformHrefs, /\$\{PLATFORM_ORIGIN\}\/\$\{locale\}\/auth\/\$\{mode\}/u);
+  assert.match(platformHrefs, /locale === "en"\) return platformAuthHref\(locale, "login"\)/u);
+  assert.doesNotMatch(chrome + platformHrefs, /locale === "en" \? "ru"/u);
+});
+
+test("public theme defaults to explicit light and persists only light or dark", () => {
+  assert.match(rootLayout, /var r=c\?c\[1\]:/);
+  assert.match(rootLayout, /var m=r==="dark"\?"dark":"light"/);
+  assert.match(rootLayout, /dataset\.themeMode="light"/);
+  assert.match(rootLayout, /colorScheme:\s*"light"/);
+  assert.doesNotMatch(rootLayout, /matchMedia/);
+  assert.match(rootLayout, /<body>\s*<script dangerouslySetInnerHTML=\{\{ __html: themeBootstrap \}\}/s);
+  assert.match(themeSwitcher, /type ThemeMode = "light" \| "dark"/);
+  assert.match(themeSwitcher, /const modes = \[\["light", Sun\], \["dark", Moon\]\]/);
+  assert.match(themeSwitcher, /function select\(next: ThemeMode\) \{\s*apply\(next\);/u);
+  assert.match(themeSwitcher, /try \{\s*localStorage\.setItem\("juro-theme", next\);[\s\S]*?catch \{/u);
+  assert.match(themeSwitcher, /try \{[\s\S]*?document\.cookie = `[\s\S]*?catch \{/u);
+  assert.match(themeSwitcher, /catch \{[\s\S]*?announceThemeMode\(\);/u);
+  assert.doesNotMatch(themeSwitcher, /Laptop|prefers-color-scheme|matchMedia/);
+  assert.match(globalStyles, /:root\s*\{[^}]*color-scheme:\s*light;/s);
+  assert.match(globalStyles, /--brand-navy:\s*#062844/);
+});
+
+test("every light public content family has an explicit semantic dark treatment", () => {
+  assert.match(globalStyles, /html\[data-theme="dark"\]\s*\{[^}]*--surface-canvas:\s*#09141e/s);
+  assert.match(globalStyles, /--status-success-surface:\s*rgba\(73, 153, 116, 0\.16\)/);
+  for (const stylesheet of [
+    homepageStyles,
+    motionStyles,
+    editorialStyles,
+    scenarioStyles,
+    chromeStyles,
+    legalStyles,
+    trustStyles,
+    articleStyles,
+    lawyerStyles,
+  ]) {
+    assert.match(stylesheet, /:global\(html\[data-theme="dark"\]\)/);
+  }
+  assert.match(homepageStyles, /html\[data-theme="dark"\][\s\S]*?\.documentToolbar[\s\S]*?background:\s*var\(--surface-subtle\)/);
+  assert.match(legalStyles, /html\[data-theme="dark"\][\s\S]*?\.tableWrap th[\s\S]*?background:\s*var\(--surface-elevated\)/);
+  assert.match(lawyerStyles, /html\[data-theme="dark"\][\s\S]*?\.filters input[\s\S]*?border-color:\s*var\(--border-strong\)/);
+  assert.doesNotMatch(globalStyles + themeSwitcher, /prefers-color-scheme|matchMedia/);
 });
 
 test("Jurobek uses a lightweight, reduced-motion-safe ambient treatment", () => {

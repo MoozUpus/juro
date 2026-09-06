@@ -14,9 +14,8 @@ import {
   mfaStatus,
 } from "../../../../../lib/auth/mfa-service";
 import {
-  sessionCookieUntil,
-  sharedAuthCookieDomain,
-} from "../../../../../lib/auth/session-persistence";
+  replacementSessionCookiesUntil,
+} from "../../../../../lib/auth/session";
 import { sessionTokenFromCookie } from "../../../../../lib/auth/session-token";
 import {
   assertSafeWrite,
@@ -89,12 +88,11 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
     return jsonNoStore(
       { ok: true },
       200,
-      [sessionCookieUntil(
+      replacementSessionCookiesUntil(
         result.session.token,
         result.session.expiresAt,
-        undefined,
-        sharedAuthCookieDomain(new URL(request.url).hostname),
-      )],
+        new URL(request.url).hostname,
+      ),
     );
   } catch (error) {
     const response = mfaErrorResponse(error, locale);

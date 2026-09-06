@@ -1,34 +1,6 @@
-import {
-  clearMfaChallengeCookie,
-  clearSessionCookie,
-} from "../../../../lib/auth/session";
-import {
-  localSessionFromCookie,
-  revokeOneSession,
-} from "../../../../lib/auth/session-management";
-import {
-  assertSafeWrite,
-  withApiErrors,
-} from "../../../../lib/document-builder/auth/api";
-import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { handleLogout } from "../../../../lib/auth/logout-handler";
+import { withApiErrors } from "../../../../lib/document-builder/auth/api";
 
-export const POST = withApiErrors(async function POST(request: Request) {
-  assertSafeWrite(request);
-  const raw = request.headers.get("cookie") ?? "";
-  const db = requireD1();
-  const session = await localSessionFromCookie(db, raw, { touch: false });
-  if (session) {
-    await revokeOneSession(db, {
-      userId: session.userId,
-      sessionId: session.sessionId,
-      currentSessionId: session.sessionId,
-      revokeDeviceContinuity: false,
-    });
-  }
-  const headers = new Headers({ "cache-control": "private, no-store" });
-  headers.append("set-cookie", clearSessionCookie());
-  const sharedDomain = new URL(request.url).hostname.toLowerCase().endsWith(".juro.uz") ? ".juro.uz" : undefined;
-  if (sharedDomain) headers.append("set-cookie", clearSessionCookie(sharedDomain));
-  headers.append("set-cookie", clearMfaChallengeCookie());
-  return new Response(null, { status: 204, headers });
-});
+// Next passes a route context as the second handler argument. Keep that
+// framework value out of handleLogout's injectable-dependencies slot.
+export const POST = withApiErrors((request: Request) => handleLogout(request));

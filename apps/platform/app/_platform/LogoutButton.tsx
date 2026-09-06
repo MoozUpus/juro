@@ -1,6 +1,8 @@
 "use client";
-import { LogOut } from "lucide-react";
+import { LoaderCircle, LogOut } from "lucide-react";
+import { useRef, useState } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
+import { performLogout } from "./logout-client";
 export function LogoutButton({
   className,
   label,
@@ -10,23 +12,27 @@ export function LogoutButton({
   label: string;
   locale: PlatformLocale;
 }) {
-  const returnTo = encodeURIComponent(`/${locale}/auth/login`);
+  const started = useRef(false);
+  const [pending, setPending] = useState(false);
   return (
     <button
       className={className}
-      aria-label={label}
-      onClick={async () => {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          headers: { "x-juro-csrf": "1" },
-        }).catch(() => null);
-        window.location.assign(
-          `/signout-with-chatgpt?return_to=${returnTo}`,
-        );
+      aria-label={pending ? (locale === "ru" ? "Выполняется выход" : "Chiqilmoqda") : label}
+      aria-busy={pending}
+      disabled={pending}
+      onClick={() => {
+        if (started.current) return;
+        started.current = true;
+        setPending(true);
+        void performLogout(locale);
       }}
     >
-      <LogOut />
-      {className === "platform-sidebar-logout" ? <span>{label}</span> : null}
+      {pending
+        ? <LoaderCircle className="spin" aria-hidden="true" />
+        : <LogOut aria-hidden="true" />}
+      {className === "platform-sidebar-logout"
+        ? <span>{pending ? (locale === "ru" ? "Выходим…" : "Chiqilmoqda…") : label}</span>
+        : null}
     </button>
   );
 }

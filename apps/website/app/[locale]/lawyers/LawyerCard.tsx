@@ -3,6 +3,7 @@ import type { PublicLawyer } from "./catalog";
 import type { PublicLanguage } from "../../../content/types";
 import { publicPhotoUrl } from "./catalog";
 import { LawyerAvatar } from "./LawyerAvatar";
+import { platformPersonalHref } from "../../components/public/platform-hrefs";
 import styles from "./lawyers.module.css";
 
 export function LawyerCard({ lawyer, locale }: { lawyer: PublicLawyer; locale: PublicLanguage }) {
@@ -11,7 +12,7 @@ export function LawyerCard({ lawyer, locale }: { lawyer: PublicLawyer; locale: P
   const t = en ? { independent: "Independent professional", pending: "Profile is under JURO review", approved: "Approved by JURO", advocate: "Advocate status verified", city: "City", experience: "Experience", languages: "Languages", price: "Price", noRating: "A rating appears after 3 approved reviews", profile: "Profile", appointment: "Requests after review", request: "Request a consultation", years: "years" } : ru ? { independent: "Независимый специалист", pending: "Профиль проверяется JURO", approved: "Одобрен JURO", advocate: "Статус адвоката подтверждён", city: "Город", experience: "Опыт", languages: "Языки", price: "Стоимость", noRating: "Рейтинг появится после 3 одобренных отзывов", profile: "Профиль", appointment: "Запись после проверки", request: "Оставить заявку", years: "лет" } : { independent: "Mustaqil mutaxassis", pending: "Profil JURO tomonidan tekshirilmoqda", approved: "JURO tasdiqlagan", advocate: "Advokat maqomi tasdiqlangan", city: "Shahar", experience: "Tajriba", languages: "Tillar", price: "Narx", noRating: "Reyting 3 ta tasdiqlangan fikrdan keyin ko‘rinadi", profile: "Profil", appointment: "Tekshiruvdan keyin", request: "So‘rov qoldirish", years: "yil" };
   const pending = lawyer.marketplaceStatus === "pending_review";
   const profileHref = `/${locale}/lawyers/${encodeURIComponent(lawyer.id)}`;
-  const consultationHref = `https://app.juro.uz/${locale === "en" ? "ru" : locale}/individual/consultations?lawyer=${encodeURIComponent(lawyer.id)}`;
+  const consultationHref = platformPersonalHref(locale, `/consultations?lawyer=${encodeURIComponent(lawyer.id)}`);
   const photo = publicPhotoUrl(lawyer.profilePhotoUrl);
   return <article className={styles.card} data-pending={pending || undefined}>
     <div className={styles.cardHead}>

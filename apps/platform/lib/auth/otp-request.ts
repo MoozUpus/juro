@@ -64,8 +64,8 @@ export async function reserveOtpChallenge(
     id: string;
     email: string;
     requestIp: string | null;
-    purpose: "login" | "register";
-    locale: "ru" | "uz";
+    purpose: "login" | "register" | "password_reset";
+    locale: "ru" | "uz" | "en";
     accountType: "individual" | "entrepreneur" | "lawyer";
     codeSalt: string;
     code: string;
@@ -147,12 +147,6 @@ export async function reserveOtpChallenge(
       WHERE NOT EXISTS (
         SELECT 1
         FROM auth_otp_challenges
-        WHERE verification_locked_until > ?
-          AND ${emailPredicate.sql}
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM auth_otp_challenges
         WHERE invalidated_at IS NULL
           AND created_at > ?
           AND ${emailPredicate.sql}
@@ -182,8 +176,6 @@ export async function reserveOtpChallenge(
       evidence.requestIpEvidence?.lookupHash ?? null,
       evidence.requestIpEvidence?.lookupKeyVersion ?? null,
       input.now,
-      input.now,
-      ...emailPredicate.bindings,
       input.cooldownSince,
       ...emailPredicate.bindings,
       input.hourlySince,
@@ -219,12 +211,7 @@ export async function reserveOtpChallenge(
           FROM auth_otp_challenges
           WHERE id = ?
         ) AS inserted,
-        (
-          SELECT max(verification_locked_until)
-          FROM auth_otp_challenges
-          WHERE verification_locked_until > ?
-            AND ${emailPredicate.sql}
-        ) AS verificationLockedUntil,
+        NULL AS verificationLockedUntil,
         (
           SELECT max(created_at)
           FROM auth_otp_challenges
@@ -241,8 +228,6 @@ export async function reserveOtpChallenge(
         ${ipHourlySnapshot} AS ipHourlyCount
     `).bind(
       input.id,
-      input.now,
-      ...emailPredicate.bindings,
       input.cooldownSince,
       ...emailPredicate.bindings,
       input.hourlySince,
@@ -265,7 +250,10 @@ export async function reserveOtpChallenge(
   return {
     status: "blocked",
     latestActiveCreatedAt: snapshot?.latestActiveCreatedAt ?? null,
-    verificationLockedUntil: snapshot?.verificationLockedUntil ?? null,
+    // Verification locks are intentionally scoped to the failed challenge.
+    // An attacker-created challenge must not block the mailbox owner from
+    // starting a fresh, independently rate-limited challenge.
+    verificationLockedUntil: null,
     emailHourlyCount,
     ipHourlyCount,
     hourlyCount: emailHourlyCount,

@@ -553,6 +553,13 @@ test("MFA login issues exactly one session and fences replay", async () => {
     ]);
     assert.equal(outcomes.filter(result => result.status === "fulfilled").length, 1);
     assert.equal(outcomes.filter(result => result.status === "rejected").length, 1);
+    const rejected = outcomes.find(result => result.status === "rejected");
+    assert.equal(
+      rejected?.status === "rejected"
+        && rejected.reason instanceof MfaError
+        && rejected.reason.code,
+      "MFA_CODE_REPLAYED",
+    );
     assert.equal((
       sqlite.prepare(`
         SELECT count(*) AS total FROM auth_sessions
@@ -595,6 +602,87 @@ test("MFA login issues exactly one session and fences replay", async () => {
       JSON.stringify(loginEvent),
       /203\.0\.113\.21|Browser\/3\.0 private-build/,
     );
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS total FROM auth_mfa_attempt_reservations",
+    ).get() as { total: number }).total, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("parallel invalid MFA guesses cannot outrun challenge or scope budgets", async () => {
+  const value = await enrolledFixture();
+  const { sqlite, d1, enrollment } = value;
+  try {
+    const emailHash = await insertConsumedOtp(
+      sqlite,
+      "otp-concurrent-invalid",
+      "2026-07-26T12:03:00.000Z",
+    );
+    const challenge = await createLoginMfaChallenge(d1, keyring(), {
+      userId: "user-mfa",
+      emailHash,
+      emailOtpChallengeId: "otp-concurrent-invalid",
+      userAgent: "Browser/concurrent-invalid",
+      now: new Date("2026-07-26T12:03:00.000Z"),
+    });
+    const now = new Date("2026-07-26T12:03:30.000Z");
+    const validCode = (await totpCode(enrollment.secret, now)).code;
+    const invalidCode = validCode === "000000" ? "000001" : "000000";
+    const requestIp = "203.0.113.211";
+    const participants = 20;
+    const synchronized = batchBarrier(d1, participants);
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: participants }, () =>
+        verifyLoginMfa(synchronized, keyring(), {
+          token: challenge.token,
+          code: invalidCode,
+          userAgent: "Browser/concurrent-invalid",
+          requestIp,
+          now,
+        })
+      ),
+    );
+    assert.equal(outcomes.every(result => result.status === "rejected"), true);
+    assert.equal(outcomes.filter(result =>
+      result.status === "rejected"
+      && result.reason instanceof MfaError
+      && [
+        "MFA_CODE_INCORRECT",
+        "MFA_ATTEMPTS_EXCEEDED",
+      ].includes(result.reason.code)
+    ).length, participants);
+
+    const challengeRow = sqlite.prepare(`
+      SELECT id AS challengeId,attempt_count AS attemptCount,
+        invalidated_at AS invalidatedAt
+      FROM auth_mfa_challenges WHERE email_otp_challenge_id=?
+    `).get("otp-concurrent-invalid") as {
+      challengeId: string;
+      attemptCount: number;
+      invalidatedAt: string | null;
+    };
+    assert.equal(challengeRow.attemptCount, 5);
+    assert.ok(challengeRow.invalidatedAt);
+
+    const userScopeKey = await sha256("mfa-verification:user:user-mfa");
+    const ipScopeKey = await sha256(`mfa-verification:ip:${requestIp}`);
+    assert.equal((sqlite.prepare(`
+      SELECT failure_count AS failureCount
+      FROM auth_password_rate_limits WHERE scope_key=?
+    `).get(userScopeKey) as { failureCount: number }).failureCount, 5);
+    assert.equal((sqlite.prepare(`
+      SELECT failure_count AS failureCount
+      FROM auth_password_rate_limits WHERE scope_key=?
+    `).get(ipScopeKey) as { failureCount: number }).failureCount, 5);
+    assert.equal((sqlite.prepare(`
+      SELECT count(*) AS total FROM security_events
+      WHERE event_type='mfa.challenge.failed'
+        AND metadata_json LIKE ?
+    `).get(`%${challengeRow.challengeId}%`) as { total: number }).total, 5);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS total FROM auth_mfa_attempt_reservations",
+    ).get() as { total: number }).total, 0);
   } finally {
     sqlite.close();
   }
@@ -748,6 +836,28 @@ test("backup codes are single-use and challenge attempts lock at five", async ()
           ),
       );
     }
+    const replacementHash = await insertConsumedOtp(
+      sqlite,
+      "otp-lockout-replacement",
+      "2026-07-26T12:05:10.000Z",
+    );
+    const replacement = await createLoginMfaChallenge(d1, keyring(), {
+      userId: "user-mfa",
+      emailHash: replacementHash,
+      emailOtpChallengeId: "otp-lockout-replacement",
+      userAgent: "Browser/6.0",
+      now: new Date("2026-07-26T12:05:10.000Z"),
+    });
+    await assert.rejects(
+      verifyLoginMfa(d1, keyring(), {
+        token: replacement.token,
+        code: backupCodes[1],
+        userAgent: "Browser/6.0",
+        now: new Date("2026-07-26T12:05:11.000Z"),
+      }),
+      (error: unknown) =>
+        error instanceof MfaError && error.code === "MFA_RATE_LIMITED",
+    );
     const challengeRow = sqlite.prepare(`
       SELECT attempt_count AS attemptCount,invalidated_at AS invalidatedAt
       FROM auth_mfa_challenges WHERE email_otp_challenge_id=?
