@@ -515,6 +515,92 @@ test("a committed password reset keeps an encrypted durable email job when the f
   }
 });
 
+test("password reset provisions a password for a legacy identity during dual-write migration", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const workerEnv = env as unknown as Record<string, unknown>;
+  const envKeys = ["DB", "IDENTITY_PROTECTION_MODE", "IDENTITY_KEYRING"];
+  const previousEnv = new Map(envKeys.map(key => [key, workerEnv[key]]));
+  const userId = "password-reset-legacy-user";
+  const email = "legacy-reset@example.test";
+  const challengeId = "58585858-5858-4585-8585-585858585858";
+  const code = "914205";
+  const password = "a new legacy migration password";
+  const now = new Date();
+  const identityContext = createIdentityProtectionContext(
+    "dual_write",
+    PASSWORD_RESET_KEYRING,
+  );
+
+  try {
+    // Production accounts created before identity encryption contain a verified
+    // plaintext email and null protected columns. They must still be able to
+    // establish a password through the recovery flow.
+    sqlite.prepare(
+      `INSERT INTO user_profiles (
+         id,email,email_ciphertext,email_iv,email_key_version,
+         email_lookup_hash,email_lookup_key_version,locale,email_verified_at,
+         created_at,updated_at
+       ) VALUES (?, ?, NULL, NULL, NULL, NULL, NULL, 'en', ?, ?, ?)`,
+    ).run(userId, email, now.toISOString(), now.toISOString(), now.toISOString());
+    await reserveOtpChallenge(d1, {
+      identityContext,
+      id: challengeId,
+      email,
+      requestIp: null,
+      purpose: "password_reset",
+      locale: "en",
+      accountType: "individual",
+      codeSalt: "legacy-reset-salt",
+      code,
+      expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(),
+      now: now.toISOString(),
+      cooldownSince: new Date(now.getTime() - 90_000).toISOString(),
+      hourlySince: new Date(now.getTime() - 60 * 60_000).toISOString(),
+    });
+    Object.assign(workerEnv, {
+      DB: d1,
+      IDENTITY_PROTECTION_MODE: "dual_write",
+      IDENTITY_KEYRING: PASSWORD_RESET_KEYRING,
+    });
+
+    const response = await resetPassword(new Request(
+      "https://app.juro.uz/api/auth/reset-password",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://app.juro.uz",
+          "sec-fetch-site": "same-origin",
+          "x-juro-csrf": "1",
+        },
+        body: JSON.stringify({
+          challengeId,
+          email,
+          code,
+          password,
+          locale: "en",
+        }),
+      },
+    ));
+
+    assert.equal(response.status, 200);
+    assert.equal(await verifyPassword(
+      password,
+      await passwordCredentialForUser(d1, userId),
+    ), true);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS total FROM security_events WHERE user_id=? AND event_type='password.changed'",
+    ).get(userId) as { total: number }).total, 1);
+  } finally {
+    for (const key of envKeys) {
+      const previous = previousEnv.get(key);
+      if (previous === undefined) delete workerEnv[key];
+      else workerEnv[key] = previous;
+    }
+    sqlite.close();
+  }
+});
+
 test("auth email renderer produces separate responsive HTML and plain text in every locale", () => {
   for (const locale of ["ru", "uz", "en"] as const) {
     const message = renderJuroAuthEmail({

@@ -67,7 +67,14 @@ export function TurnstileWidget({
 
   useEffect(() => {
     let cancelled = false;
+    let verificationTimeout: number | undefined;
     const turnstileWindow = window as TurnstileWindow;
+    const clearVerificationTimeout = () => {
+      if (verificationTimeout) {
+        window.clearTimeout(verificationTimeout);
+        verificationTimeout = undefined;
+      }
+    };
     const render = () => {
       if (cancelled || !container.current || !turnstileWindow.turnstile) {
         return;
@@ -85,19 +92,25 @@ export function TurnstileWidget({
             language: turnstileLanguage(locale),
             theme,
             size: "flexible",
-            appearance: "interaction-only",
+            // Keep the provider surface visible. Interaction-only mode can
+            // leave a form looking permanently pending when a browser blocks
+            // a background challenge, with no usable recovery control.
+            appearance: "always",
             retry: turnstileClientRetryMode,
             callback(token: string) {
+              clearVerificationTimeout();
               callback.current(token);
               setFailure(null);
               setStatus("ready");
             },
             "expired-callback"() {
+              clearVerificationTimeout();
               callback.current("");
               setFailure(null);
               setStatus("loading");
             },
             "error-callback"(errorCode: string) {
+              clearVerificationTimeout();
               callback.current("");
               setFailure(turnstileClientFailure(errorCode, locale));
               setStatus("error");
@@ -107,7 +120,18 @@ export function TurnstileWidget({
         );
         setFailure(null);
         setStatus("loading");
+        // Cloudflare can load its script while an embedded challenge never
+        // resolves (for example, because a browser extension blocks it).
+        // Do not leave the primary auth action disabled indefinitely.
+        clearVerificationTimeout();
+        verificationTimeout = window.setTimeout(() => {
+          if (cancelled) return;
+          callback.current("");
+          setFailure(turnstileClientFailure(null, locale));
+          setStatus("error");
+        }, 20_000);
       } catch {
+        clearVerificationTimeout();
         callback.current("");
         setFailure(turnstileClientFailure(null, locale));
         setStatus("error");
@@ -152,6 +176,7 @@ export function TurnstileWidget({
     return () => {
       cancelled = true;
       if (timeout) window.clearTimeout(timeout);
+      clearVerificationTimeout();
       script?.removeEventListener("load", handleLoad);
       script?.removeEventListener("error", handleError);
       if (widgetId.current && turnstileWindow.turnstile) {
