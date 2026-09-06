@@ -16,6 +16,7 @@ const turnstileWidget = fs.readFileSync(
   "app/_auth/TurnstileWidget.tsx",
   "utf8",
 );
+const workerSource = fs.readFileSync("worker/index.ts", "utf8");
 
 test("Turnstile delegates cross-origin messaging to the official explicit-render client", () => {
   assert.match(
@@ -25,6 +26,22 @@ test("Turnstile delegates cross-origin messaging to the official explicit-render
   assert.doesNotMatch(turnstileWidget, /\.postMessage\s*\(/);
   assert.match(turnstileWidget, /turnstileWindow\.turnstile\.render\(/);
   assert.match(turnstileWidget, /turnstileWindow\.turnstile\.remove\(/);
+});
+
+test("CSP permits every browser channel required by the Turnstile challenge", () => {
+  const challengeHost = "https://challenges.cloudflare.com";
+  assert.match(
+    workerSource,
+    new RegExp(`script-src[^;]*${challengeHost.replaceAll(".", "\\.")}`),
+  );
+  assert.match(
+    workerSource,
+    new RegExp(`frame-src[^;]*${challengeHost.replaceAll(".", "\\.")}`),
+  );
+  assert.match(
+    workerSource,
+    new RegExp(`connect-src[^;]*${challengeHost.replaceAll(".", "\\.")}`),
+  );
 });
 
 test("Turnstile never passes Cloudflare an unsupported Uzbek language code", () => {

@@ -181,7 +181,7 @@ test("serves public login and registration routes", async () => {
   }
 });
 
-test("lawyer auth uses same-origin icons and permits the injected Cloudflare analytics beacon", async () => {
+test("lawyer auth uses same-origin icons and permits required Cloudflare browser channels", async () => {
   const worker = await createWorker();
   const response = await worker.fetch(
     new Request("https://lawyer.juro.uz/ru/auth/login", {
@@ -199,7 +199,7 @@ test("lawyer auth uses same-origin icons and permits the injected Cloudflare ana
   );
   assert.match(
     policy,
-    /connect-src 'self' https:\/\/cloudflareinsights\.com;/,
+    /connect-src 'self' https:\/\/challenges\.cloudflare\.com https:\/\/cloudflareinsights\.com;/,
   );
   assert.doesNotMatch(policy, /script-src [^;]*\*/);
 
