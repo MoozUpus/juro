@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { lawyerText } from "../../lib/platform/lawyer-localization";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
 const ratingValues = [5, 4, 3, 2, 1] as const;
@@ -9,14 +10,17 @@ type RatingField = "overallRating" | "speedRating" | "qualityRating" | "communic
 type Ratings = Record<RatingField, number>;
 
 export function LawyerReviewForm({ requestId, locale }: { requestId: string; locale: PlatformLocale }) {
-  const ru = locale === "ru";
+  const text = (russian: string, uzbek: string, english: string) => lawyerText(locale, russian, uzbek, english);
   const [ratings, setRatings] = useState<Ratings>({ overallRating: 5, speedRating: 5, qualityRating: 5, communicationRating: 5 });
   const [body, setBody] = useState("");
   const [state, setState] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const labels: Record<RatingField, string> = ru
-    ? { overallRating: "Общая оценка", speedRating: "Скорость", qualityRating: "Качество", communicationRating: "Коммуникация" }
-    : { overallRating: "Umumiy baho", speedRating: "Tezlik", qualityRating: "Sifat", communicationRating: "Muloqot" };
+  const labels: Record<RatingField, string> = {
+    overallRating: text("Общая оценка", "Umumiy baho", "Overall rating"),
+    speedRating: text("Скорость", "Tezlik", "Responsiveness"),
+    qualityRating: text("Качество", "Sifat", "Quality"),
+    communicationRating: text("Коммуникация", "Muloqot", "Communication"),
+  };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,17 +32,16 @@ export function LawyerReviewForm({ requestId, locale }: { requestId: string; loc
         headers: { "content-type": "application/json", "x-juro-csrf": "1" },
         body: JSON.stringify({ ...ratings, body: body.trim() || undefined, locale }),
       });
-      const payload = await response.json() as { error?: string };
       setState(response.ok
-        ? (ru ? "Спасибо, отзыв передан на модерацию." : "Rahmat, fikr moderatsiyaga yuborildi.")
-        : (payload.error || (ru ? "Не удалось отправить отзыв." : "Fikr yuborilmadi.")));
+        ? text("Спасибо, отзыв передан на модерацию.", "Rahmat, fikr moderatsiyaga yuborildi.", "Thank you. Your review has been submitted for moderation.")
+        : text("Не удалось отправить отзыв.", "Fikr yuborilmadi.", "We could not submit your review."));
     } catch {
-      setState(ru ? "Не удалось отправить отзыв." : "Fikr yuborilmadi.");
+      setState(text("Не удалось отправить отзыв.", "Fikr yuborilmadi.", "We could not submit your review."));
     } finally { setSubmitting(false); }
   }
 
   return <form className="lawyer-review-form" onSubmit={(event) => void submit(event)}>
-    <h3>{ru ? "Оценить работу юриста" : "Yurist ishini baholash"}</h3>
+    <h3>{text("Оценить работу юриста", "Yurist ishini baholash", "Rate your lawyer")}</h3>
     <div className="lawyer-review-ratings">
       {(Object.keys(labels) as RatingField[]).map((field) => <label key={field}>{labels[field]}
         <select value={ratings[field]} disabled={submitting} onChange={(event) => setRatings((current) => ({ ...current, [field]: Number(event.target.value) }))}>
@@ -46,10 +49,10 @@ export function LawyerReviewForm({ requestId, locale }: { requestId: string; loc
         </select>
       </label>)}
     </div>
-    <label>{ru ? "Комментарий (необязательно)" : "Izoh (ixtiyoriy)"}
+    <label>{text("Комментарий (необязательно)", "Izoh (ixtiyoriy)", "Comment (optional)")}
       <textarea value={body} maxLength={2000} disabled={submitting} onChange={(event) => setBody(event.target.value)} />
     </label>
-    <button type="submit" disabled={submitting}>{submitting ? (ru ? "Отправляется…" : "Yuborilmoqda…") : (ru ? "Отправить отзыв" : "Fikr yuborish")}</button>
+    <button type="submit" disabled={submitting}>{submitting ? text("Отправляется…", "Yuborilmoqda…", "Submitting…") : text("Отправить отзыв", "Fikr yuborish", "Submit review")}</button>
     {state && <p role="status">{state}</p>}
   </form>;
 }

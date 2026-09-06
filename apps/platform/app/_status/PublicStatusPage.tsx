@@ -26,7 +26,7 @@ const copy = {
     updates: "Обновления",
     lastUpdate: "Последнее обновление реестра",
     generated: "Сводка сформирована",
-    switchLanguage: "O‘zbekcha",
+    language: "Язык страницы",
     operational: "Работает штатно",
     unknown: "Проверка ожидается",
     stale: "Проверка устарела",
@@ -59,7 +59,7 @@ const copy = {
     updates: "Yangilanishlar",
     lastUpdate: "Reyestrning so‘nggi yangilanishi",
     generated: "Xulosa tuzildi",
-    switchLanguage: "Русский",
+    language: "Sahifa tili",
     operational: "Odatdagi tartibda ishlamoqda",
     unknown: "Tekshiruv kutilmoqda",
     stale: "Tekshiruv eskirgan",
@@ -73,10 +73,44 @@ const copy = {
     resolved: "Bartaraf etildi",
     disclosure: "Holat ro‘yxatga olingan voqealarni aks ettiradi va ichki infratuzilma yoki foydalanuvchi ma’lumotlarini oshkor qilmaydi.",
   },
+  en: {
+    eyebrow: "JURO service health",
+    title: "Platform status",
+    description: "A public summary of registered incidents and scheduled maintenance.",
+    active: "Active incidents",
+    recent: "Recent incidents",
+    noActive: "No active incidents have been reported.",
+    noRecent: "There are no resolved incidents yet.",
+    components: "Components",
+    dependencyDetails: "Technical checks",
+    checked: "Checked",
+    age: "Check age",
+    notChecked: "This check has not run yet",
+    latency: "Latency",
+    error: "Latest public-safe error code",
+    source: "Evidence source",
+    updates: "Updates",
+    lastUpdate: "Last registry update",
+    generated: "Status generated",
+    language: "Page language",
+    operational: "Operational",
+    unknown: "Awaiting verification",
+    stale: "Verification is stale",
+    degraded: "Degraded performance",
+    partial_outage: "Partial outage",
+    outage: "Outage",
+    maintenance: "Scheduled maintenance",
+    investigating: "Investigating",
+    identified: "Cause identified",
+    monitoring: "Monitoring",
+    resolved: "Resolved",
+    disclosure: "This status page reflects registered events without exposing internal infrastructure or user data.",
+  },
 } as const;
 
 function date(value: string, locale: StatusLocale): string {
-  return new Intl.DateTimeFormat(locale === "uz" ? "uz-Latn-UZ" : "ru-RU", {
+  const intlLocale = locale === "ru" ? "ru-RU" : locale === "uz" ? "uz-Latn-UZ" : "en-GB";
+  return new Intl.DateTimeFormat(intlLocale, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Tashkent",
@@ -85,7 +119,8 @@ function date(value: string, locale: StatusLocale): string {
 
 function duration(value: number, locale: StatusLocale): string {
   if (value < 1_000) return `${value} ms`;
-  return `${new Intl.NumberFormat(locale === "uz" ? "uz-Latn-UZ" : "ru-RU", {
+  const intlLocale = locale === "ru" ? "ru-RU" : locale === "uz" ? "uz-Latn-UZ" : "en-GB";
+  return `${new Intl.NumberFormat(intlLocale, {
     maximumFractionDigits: 1,
   }).format(value / 1_000)} s`;
 }
@@ -113,9 +148,19 @@ export function PublicStatusPage({
           <ShieldCheck aria-hidden="true" />
           <span><b>JURO</b><small>{t.eyebrow}</small></span>
         </a>
-        <a className="public-status-language" href={`/${locale === "ru" ? "uz" : "ru"}/status`}>
-          {t.switchLanguage}
-        </a>
+        <nav className="public-status-languages" aria-label={t.language}>
+          {(["ru", "uz", "en"] as const).map((language) => (
+            <a
+              className="public-status-language"
+              href={`/${language}/status`}
+              hrefLang={language}
+              aria-current={language === locale ? "page" : undefined}
+              key={language}
+            >
+              {language.toUpperCase()}
+            </a>
+          ))}
+        </nav>
       </header>
 
       <section className="public-status-intro" aria-labelledby="status-title">

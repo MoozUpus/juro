@@ -21,6 +21,8 @@ test("lawyer workspace operations resolve only active, approved handoff particip
       clientUserId: "owner-ops",
       lawyerProfileId: "profile-ops",
       lawyerUserId: "lawyer-ops",
+      clientLocale: "en",
+      lawyerLocale: "uz",
       role: "lawyer",
     });
     assert.equal((await activeLawyerWorkspaceParticipant(d1, "owner-ops", "request-ops", now))?.role, "client");
@@ -222,6 +224,8 @@ function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void {
   for (const id of ["owner-ops", "lawyer-ops", "outsider-ops"]) {
     sqlite.prepare("INSERT INTO user_profiles(id,email,created_at,updated_at) VALUES (?,?,?,?)").run(id, `${id}@example.invalid`, now, now);
   }
+  sqlite.prepare("UPDATE user_profiles SET locale='en' WHERE id='owner-ops'").run();
+  sqlite.prepare("UPDATE user_profiles SET locale='uz' WHERE id='lawyer-ops'").run();
   for (const id of ["workspace-owner-ops", "workspace-lawyer-ops", "workspace-other-ops"]) {
     sqlite.prepare("INSERT INTO workspaces(id,type,name,created_at,updated_at) VALUES (?,'individual',?,?,?)").run(id, id, now, now);
   }

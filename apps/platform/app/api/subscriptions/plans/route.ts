@@ -9,7 +9,7 @@ export const GET = withApiErrors(async function GET() {
   const availability = paymentFoundationStatus(runtimeEnv());
   if (!availability.enabled) return Response.json({ code: "BILLING_UNAVAILABLE", reason: availability.reason }, { status: 503 });
   const now = new Date().toISOString();
-  const plans = await requireD1().prepare(`SELECT v.id AS planVersionId,p.code,v.name_ru AS nameRu,v.name_uz AS nameUz,
+  const plans = await requireD1().prepare(`SELECT v.id AS planVersionId,p.code,v.name_ru AS nameRu,v.name_uz AS nameUz,v.name_en AS nameEn,
     v.billing_period AS billingPeriod,v.price_minor AS priceMinor,v.currency,v.entitlements_json AS entitlementsJson,
     v.effective_from AS effectiveFrom,v.effective_to AS effectiveTo
     FROM subscription_plan_versions v JOIN subscription_plans p ON p.id=v.plan_id

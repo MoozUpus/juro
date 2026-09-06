@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { GuestAiClient } from "../../../_guest/GuestAiClient";
 import { guestAiEnabled } from "../../../../lib/ai/guest-session";
 import { runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
+import { isLocale } from "../../../../lib/platform/routing";
 import "../../../_guest/guest-ai.css";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export default async function GuestAiLawyerPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  if ((locale !== "ru" && locale !== "uz") || !guestAiEnabled(runtimeEnv())) {
+  if (!isLocale(locale) || !guestAiEnabled(runtimeEnv())) {
     notFound();
   }
   return <GuestAiClient locale={locale} />;

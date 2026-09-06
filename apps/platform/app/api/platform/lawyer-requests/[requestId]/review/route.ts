@@ -2,7 +2,66 @@ import { parseJsonRequest } from "../../../../../../lib/auth/input";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { lawyerText } from "../../../../../../lib/platform/lawyer-localization";
 import { lawyerReviewSchema } from "../../../../../../lib/platform/lawyer-review";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
-type Context={params:Promise<{requestId:string}>};
-export const POST=withApiErrors(async function POST(request:Request,context:Context){assertSafeWrite(request);const user=await requireApiUser();const workspace=await workspaceForUser(user);const {requestId}=await context.params;const parsed=await parseJsonRequest(request,lawyerReviewSchema,4096);if(!parsed.ok)return Response.json({code:"INVALID_INPUT",error:"Проверьте оценку / Bahoni tekshiring."},{status:400});const db=requireD1();const row=await db.prepare("SELECT lawyer_profile_id AS lawyerProfileId FROM lawyer_requests WHERE id=? AND workspace_id=? AND requester_user_id=? AND status='completed'").bind(requestId,workspace.id,user.id).first<{lawyerProfileId:string|null}>();if(!row?.lawyerProfileId)return Response.json({code:"REQUEST_UNAVAILABLE",error:"Отзыв недоступен / Fikr mavjud emas."},{status:404});const now=isoNow();const id=crypto.randomUUID();try{await db.batch([db.prepare("INSERT INTO lawyer_reviews (id,lawyer_request_id,workspace_id,lawyer_profile_id,requester_user_id,overall_rating,speed_rating,quality_rating,communication_rating,body,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)").bind(id,requestId,workspace.id,row.lawyerProfileId,user.id,parsed.data.overallRating,parsed.data.speedRating,parsed.data.qualityRating,parsed.data.communicationRating,parsed.data.body||null,now,now),db.prepare("INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_review',?,'lawyer_review_submitted',?,?)").bind(crypto.randomUUID(),workspace.id,user.id,id,JSON.stringify({requestId}),now)]);}catch{const existing=await db.prepare("SELECT id,status FROM lawyer_reviews WHERE lawyer_request_id=? AND workspace_id=? AND requester_user_id=? LIMIT 1").bind(requestId,workspace.id,user.id).first<{id:string;status:string}>();if(existing)return Response.json({ok:true,reviewId:existing.id,status:existing.status,replayed:true},{headers:{"cache-control":"private, no-store"}});throw new Error("LAWYER_REVIEW_WRITE_FAILED");}return Response.json({ok:true,reviewId:id,status:'pending'}, {status:201});});
+
+type Context = { params: Promise<{ requestId: string }> };
+
+export const POST = withApiErrors(async function POST(request: Request, context: Context) {
+  assertSafeWrite(request);
+  const user = await requireApiUser();
+  const workspace = await workspaceForUser(user);
+  const { requestId } = await context.params;
+  const parsed = await parseJsonRequest(request, lawyerReviewSchema, 4_096);
+  if (!parsed.ok) return Response.json({ code: "INVALID_INPUT" }, { status: 400 });
+
+  const db = requireD1();
+  const row = await db.prepare(
+    "SELECT lawyer_profile_id AS lawyerProfileId FROM lawyer_requests WHERE id=? AND workspace_id=? AND requester_user_id=? AND status='completed'",
+  ).bind(requestId, workspace.id, user.id).first<{ lawyerProfileId: string | null }>();
+  if (!row?.lawyerProfileId) {
+    return Response.json({
+      code: "REQUEST_UNAVAILABLE",
+      error: lawyerText(parsed.data.locale, "Отзыв недоступен.", "Fikr mavjud emas.", "This review is unavailable."),
+    }, { status: 404 });
+  }
+
+  const now = isoNow();
+  const id = crypto.randomUUID();
+  try {
+    await db.batch([
+      db.prepare(
+        "INSERT INTO lawyer_reviews (id,lawyer_request_id,workspace_id,lawyer_profile_id,requester_user_id,overall_rating,speed_rating,quality_rating,communication_rating,body,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'pending',?,?)",
+      ).bind(
+        id,
+        requestId,
+        workspace.id,
+        row.lawyerProfileId,
+        user.id,
+        parsed.data.overallRating,
+        parsed.data.speedRating,
+        parsed.data.qualityRating,
+        parsed.data.communicationRating,
+        parsed.data.body || null,
+        now,
+        now,
+      ),
+      db.prepare(
+        "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_review',?,'lawyer_review_submitted',?,?)",
+      ).bind(crypto.randomUUID(), workspace.id, user.id, id, JSON.stringify({ requestId }), now),
+    ]);
+  } catch {
+    const existing = await db.prepare(
+      "SELECT id,status FROM lawyer_reviews WHERE lawyer_request_id=? AND workspace_id=? AND requester_user_id=? LIMIT 1",
+    ).bind(requestId, workspace.id, user.id).first<{ id: string; status: string }>();
+    if (existing) {
+      return Response.json(
+        { ok: true, reviewId: existing.id, status: existing.status, replayed: true },
+        { headers: { "cache-control": "private, no-store" } },
+      );
+    }
+    throw new Error("LAWYER_REVIEW_WRITE_FAILED");
+  }
+  return Response.json({ ok: true, reviewId: id, status: "pending" }, { status: 201 });
+});

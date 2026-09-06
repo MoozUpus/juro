@@ -1,4 +1,5 @@
 import { parseJsonRequest } from "../../../../lib/auth/input";
+import { localizedRequestFormatError } from "../../../../lib/auth/request-locale";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
@@ -17,7 +18,7 @@ export const GET = withApiErrors(async function GET() {
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request); const user = await requireApiUser(); const workspace = await workspaceForUser(user);
   const parsed = await parseJsonRequest(request, supportTicketSchema, 10_240);
-  if (!parsed.ok) return response({ code: "INVALID_INPUT", error: "Проверьте обращение / Murojaatni tekshiring." }, parsed.error === "payload_too_large" ? 413 : 400);
+  if (!parsed.ok) return response({ code: "INVALID_INPUT", error: localizedRequestFormatError(request) }, parsed.error === "payload_too_large" ? 413 : 400);
   const db = requireD1(); const now = isoNow(); const ticketId = crypto.randomUUID();
   await db.batch([
     db.prepare("INSERT INTO support_tickets (id,workspace_id,requester_user_id,category,severity,status,subject,created_at,updated_at) VALUES (?,?,?,?,?,'open',?,?,?)").bind(ticketId, workspace.id, user.id, parsed.data.category, parsed.data.severity, parsed.data.subject, now, now),

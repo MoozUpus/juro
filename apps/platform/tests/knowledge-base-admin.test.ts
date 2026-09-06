@@ -22,15 +22,27 @@ const content = (suffix = ""): KnowledgeBaseDraftContent => ({
   category: "documents",
   titleRu: `Безопасная загрузка документов${suffix}`,
   titleUz: `Hujjatlarni xavfsiz yuklash${suffix}`,
+  titleEn: null,
   summaryRu: "Как подготовить и безопасно загрузить материалы для анализа.",
   summaryUz: "Tahlil uchun materiallarni tayyorlash va xavfsiz yuklash tartibi.",
+  summaryEn: null,
   bodyRu: [{ heading: "До загрузки", paragraphs: ["Проверьте формат, размер и читаемость документа."] }],
   bodyUz: [{ heading: "Yuklashdan oldin", paragraphs: ["Hujjat formati, hajmi va o‘qilishini tekshiring."] }],
+  bodyEn: null,
   relatedSlugs: ["account-security"],
 });
 
-test("admin knowledge mutation schema is strict, bilingual and bounded", () => {
+const translatedContent = (suffix = ""): KnowledgeBaseDraftContent => ({
+  ...content(suffix),
+  titleEn: `Uploading documents securely${suffix}`,
+  summaryEn: "How to prepare and securely upload material for document analysis.",
+  bodyEn: [{ heading: "Before uploading", paragraphs: ["Check the document format, size and legibility."] }],
+});
+
+test("admin knowledge mutation schema is strict, preserves legacy bilingual drafts and requires complete English", () => {
   assert.equal(knowledgeBaseAdminMutationSchema.safeParse({ action: "save_draft", content: content() }).success, true);
+  assert.equal(knowledgeBaseAdminMutationSchema.safeParse({ action: "save_draft", content: translatedContent() }).success, true);
+  assert.equal(knowledgeBaseAdminMutationSchema.safeParse({ action: "save_draft", content: { ...content(), titleEn: "English title" } }).success, false);
   assert.equal(knowledgeBaseAdminMutationSchema.safeParse({ action: "save_draft", content: { ...content(), actorUserId: "attacker" } }).success, false);
   assert.equal(knowledgeBaseAdminMutationSchema.safeParse({ action: "save_draft", content: { ...content(), bodyUz: [] } }).success, false);
   assert.equal(knowledgeBaseAdminMutationSchema.safeParse({ action: "save_draft", content: { ...content(), relatedSlugs: ["safe-upload-guide"] } }).success, false);
@@ -56,14 +68,17 @@ test("staff authoring creates, edits, publishes, versions, archives and restores
     const publicUz = await getKnowledgeBaseArticle({ db: d1, locale: "uz", slug: updatedContent.slug });
     assert.equal(publicRu?.title, updatedContent.titleRu);
     assert.equal(publicUz?.title, updatedContent.titleUz);
+    assert.equal(await getKnowledgeBaseArticle({ db: d1, locale: "en", slug: updatedContent.slug }), null);
     assert.deepEqual(actions(sqlite, created.articleId), ["article_created", "draft_created", "draft_updated", "published", "status_changed"]);
     assert.throws(() => sqlite.prepare("UPDATE knowledge_base_article_versions SET title_ru='tampered' WHERE id=?").run(created.versionId), /knowledge_base_published_version_immutable/);
 
-    const second = await saveKnowledgeBaseDraft({ db: d1, actorUserId: "staff-author", articleId: created.articleId, content: content(" — v2"), now: new Date("2026-08-04T17:03:00.000Z") });
+    const englishVersion = translatedContent(" — v2");
+    const second = await saveKnowledgeBaseDraft({ db: d1, actorUserId: "staff-author", articleId: created.articleId, content: englishVersion, now: new Date("2026-08-04T17:03:00.000Z") });
     assert.equal(second.versionNumber, 2);
     assert.equal((await getKnowledgeBaseArticle({ db: d1, locale: "ru", slug: updatedContent.slug }))?.title, updatedContent.titleRu);
     await publishKnowledgeBaseDraft({ db: d1, actorUserId: "staff-author", articleId: created.articleId, versionId: second.versionId, now: new Date("2026-08-04T17:04:00.000Z") });
     assert.match((await getKnowledgeBaseArticle({ db: d1, locale: "ru", slug: updatedContent.slug }))?.title ?? "", /v2/);
+    assert.equal((await getKnowledgeBaseArticle({ db: d1, locale: "en", slug: updatedContent.slug }))?.title, englishVersion.titleEn);
 
     await setKnowledgeBaseArticleStatus({ db: d1, actorUserId: "staff-author", articleId: created.articleId, status: "archived", now: new Date("2026-08-04T17:05:00.000Z") });
     assert.equal(await getKnowledgeBaseArticle({ db: d1, locale: "ru", slug: updatedContent.slug }), null);
@@ -115,6 +130,7 @@ test("admin route and UI require fresh MFA capability and expose explicit confir
   assert.match(ui, /aria-live="polite"/);
   assert.match(ui, /Русский/);
   assert.match(ui, /O‘zbekcha/);
+  assert.match(ui, /English \(optional\)/);
   assert.doesNotMatch(ui, /dangerouslySetInnerHTML|window\.confirm/);
   assert.match(css, /kb-admin-layout/);
   assert.match(css, /@media\(max-width:700px\)/);

@@ -14,10 +14,69 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { canManageTeam, isWorkspaceRole, requireTeamManager } from "../../../../lib/platform/permissions";
+import { isLocale, type PlatformLocale } from "../../../../lib/platform/routing";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INVITABLE_ROLES = new Set(["admin", "lawyer", "employee", "viewer", "external"]);
+
+const invitationCopy: Record<PlatformLocale, {
+  providerUnavailable: string;
+  invalidEmail: string;
+  invalidRole: string;
+  alreadyMember: string;
+  subject: string;
+  title: string;
+  intro: (email: string) => string;
+  action: string;
+  expiry: string;
+  support: string;
+  footer: string;
+  sendFailed: string;
+}> = {
+  ru: {
+    providerUnavailable: "Приглашение не отправлено: почтовый сервис временно недоступен.",
+    invalidEmail: "Проверьте email участника.",
+    invalidRole: "Выберите допустимую роль.",
+    alreadyMember: "Этот пользователь уже состоит в команде.",
+    subject: "Приглашение в пространство JURO",
+    title: "Вас пригласили в JURO",
+    intro: email => `Откройте защищённую ссылку, войдите с адресом ${email} и подтвердите участие.`,
+    action: "Принять приглашение",
+    expiry: "Ссылка действует 7 дней.",
+    support: "Нужна помощь? Напишите в поддержку: admin@juro.uz",
+    footer: "JURO — цифровая юридическая платформа. Ташкент, Республика Узбекистан.",
+    sendFailed: "Приглашение не отправлено. Попробуйте позже.",
+  },
+  uz: {
+    providerUnavailable: "Taklif yuborilmadi: pochta xizmati vaqtincha mavjud emas.",
+    invalidEmail: "Ishtirokchi emailini tekshiring.",
+    invalidRole: "Ruxsat etilgan rolni tanlang.",
+    alreadyMember: "Bu foydalanuvchi allaqachon jamoada.",
+    subject: "JURO makoniga taklif",
+    title: "Siz JURO makoniga taklif qilindingiz",
+    intro: email => `Himoyalangan havolani oching, ${email} manzili bilan kiring va ishtirokni tasdiqlang.`,
+    action: "Taklifni qabul qilish",
+    expiry: "Havola 7 kun amal qiladi.",
+    support: "Yordam kerakmi? admin@juro.uz manziliga yozing",
+    footer: "JURO — raqamli yuridik platforma. Toshkent, O‘zbekiston Respublikasi.",
+    sendFailed: "Taklif yuborilmadi. Keyinroq urinib ko‘ring.",
+  },
+  en: {
+    providerUnavailable: "The invitation could not be sent because the email service is temporarily unavailable.",
+    invalidEmail: "Check the team member's email address.",
+    invalidRole: "Select an available team role.",
+    alreadyMember: "This user is already a member of the team.",
+    subject: "Invitation to a JURO workspace",
+    title: "You have been invited to JURO",
+    intro: email => `Open the secure link, sign in with ${email}, and confirm that you want to join.`,
+    action: "Accept invitation",
+    expiry: "This link is valid for 7 days.",
+    support: "Need help? Contact support at admin@juro.uz",
+    footer: "JURO — a digital legal platform. Tashkent, Republic of Uzbekistan.",
+    sendFailed: "The invitation could not be sent. Please try again later.",
+  },
+};
 
 type WorkspaceInvitationRow = {
   id: string;
@@ -39,6 +98,15 @@ function response(body: unknown, status = 200) {
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+}
+
+function renderInvitationEmail(locale: PlatformLocale, email: string, inviteUrl: string) {
+  const copy = invitationCopy[locale];
+  const intro = copy.intro(email);
+  const safeUrl = escapeHtml(inviteUrl);
+  const html = `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(copy.subject)}</title></head><body style="margin:0;padding:0;background:#f8f6f2;color:#102333;font-family:Arial,'Helvetica Neue',sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f8f6f2"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e3ddd2;border-radius:18px;overflow:hidden"><tr><td style="padding:24px 32px;background:#062844"><span style="font-size:24px;line-height:1;font-weight:800;letter-spacing:3px;color:#ffffff">JURO</span></td></tr><tr><td style="padding:36px 32px 16px"><h1 style="margin:0;font-size:26px;line-height:1.25;color:#062844">${escapeHtml(copy.title)}</h1><p style="margin:16px 0 0;font-size:16px;line-height:1.6;color:#405568">${escapeHtml(intro)}</p></td></tr><tr><td style="padding:12px 32px 32px"><a href="${safeUrl}" style="display:inline-block;padding:14px 22px;border-radius:10px;background:#be974f;color:#062844;font-size:15px;font-weight:700;text-decoration:none">${escapeHtml(copy.action)}</a><p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#607182">${escapeHtml(copy.expiry)}</p></td></tr><tr><td style="padding:24px 32px;background:#edf1f3;border-top:1px solid #dce3e7"><p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#405568"><a href="mailto:admin@juro.uz" style="color:#062844">${escapeHtml(copy.support)}</a></p><p style="margin:0;font-size:12px;line-height:1.5;color:#6a7a87">${escapeHtml(copy.footer)}</p></td></tr></table></td></tr></table></body></html>`;
+  const text = [copy.title, "", intro, "", `${copy.action}: ${inviteUrl}`, copy.expiry, "", copy.support, copy.footer].join("\n");
+  return { subject: copy.subject, html, text };
 }
 
 export const GET = withApiErrors(async function GET() {
@@ -136,19 +204,20 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const workspace = await workspaceForUser(user);
   requireTeamManager(workspace.role);
   const env = runtimeEnv();
-  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
-    return response({ code: "EMAIL_PROVIDER_UNAVAILABLE", error: "Приглашение не отправлено: почтовый провайдер не настроен." }, 503);
-  }
 
   const body = await request.json().catch(() => null) as { email?: string; role?: string; locale?: string } | null;
   const email = normalizeEmail(body?.email ?? "");
   const role = body?.role;
-  const locale = body?.locale === "uz" ? "uz" : "ru";
+  const locale: PlatformLocale = isLocale(body?.locale ?? "") ? body!.locale as PlatformLocale : "ru";
+  const copy = invitationCopy[locale];
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+    return response({ code: "EMAIL_PROVIDER_UNAVAILABLE", error: copy.providerUnavailable }, 503);
+  }
   if (!EMAIL_RE.test(email) || email.length > 254) {
-    return response({ error: locale === "ru" ? "Проверьте email участника." : "Ishtirokchi emailini tekshiring." }, 400);
+    return response({ error: copy.invalidEmail }, 400);
   }
   if (!isWorkspaceRole(role) || !INVITABLE_ROLES.has(role)) {
-    return response({ error: locale === "ru" ? "Выберите допустимую роль." : "Ruxsat etilgan rolni tanlang." }, 400);
+    return response({ error: copy.invalidRole }, 400);
   }
 
   const db = requireD1();
@@ -161,7 +230,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
        WHERE workspace_id=? AND user_id=? AND status='active' LIMIT 1`,
     ).bind(workspace.id, existingUserId).first()
     : null;
-  if (existingMember) return response({ error: locale === "ru" ? "Этот пользователь уже в команде." : "Bu foydalanuvchi allaqachon jamoada." }, 409);
+  if (existingMember) return response({ error: copy.alreadyMember }, 409);
 
   const now = isoNow();
   const invitationId = crypto.randomUUID();
@@ -211,18 +280,14 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const requestOrigin = new URL(request.url).origin;
   const configuredOrigin = env.APP_URL && /^https:\/\/[^/]+$/i.test(env.APP_URL) ? env.APP_URL : requestOrigin;
   const inviteUrl = new URL(`/invite/${encodeURIComponent(rawToken)}?lang=${locale}`, configuredOrigin).toString();
-  const subject = locale === "ru" ? "Приглашение в пространство JURO" : "JURO makoniga taklif";
-  const safeUrl = escapeHtml(inviteUrl);
-  const html = locale === "ru"
-    ? `<div style="font-family:Arial,sans-serif;color:#102333"><h2>Вас пригласили в JURO</h2><p>Откройте защищённую ссылку, войдите под адресом ${escapeHtml(email)} и подтвердите участие.</p><p><a href="${safeUrl}">Принять приглашение</a></p><p>Ссылка действует 7 дней.</p></div>`
-    : `<div style="font-family:Arial,sans-serif;color:#102333"><h2>Siz JURO makoniga taklif qilindingiz</h2><p>Himoyalangan havolani oching, ${escapeHtml(email)} manzili bilan kiring va ishtirokni tasdiqlang.</p><p><a href="${safeUrl}">Taklifni qabul qilish</a></p><p>Havola 7 kun amal qiladi.</p></div>`;
+  const invitation = renderInvitationEmail(locale, email, inviteUrl);
 
   let sent: Response | null = null;
   try {
     sent = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-      body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], subject, html }),
+      body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], ...invitation }),
       signal: AbortSignal.timeout(8_000),
     });
   } catch {
@@ -230,7 +295,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
   if (!sent?.ok) {
     await db.prepare("UPDATE workspace_invitations SET revoked_at=?,updated_at=? WHERE id=?").bind(isoNow(), isoNow(), invitationId).run();
-    return response({ code: "EMAIL_PROVIDER_ERROR", error: locale === "ru" ? "Приглашение не отправлено. Попробуйте позже." : "Taklif yuborilmadi. Keyinroq urinib ko‘ring." }, 502);
+    return response({ code: "EMAIL_PROVIDER_ERROR", error: copy.sendFailed }, 502);
   }
   await db.prepare(
     "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'invitation',?,'invitation_sent',?,?)",

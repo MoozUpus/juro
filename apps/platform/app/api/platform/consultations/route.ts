@@ -1,4 +1,5 @@
 import { parseJsonRequest } from "../../../../lib/auth/input";
+import { localizedRequestFormatError } from "../../../../lib/auth/request-locale";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import {
   assertSafeWrite,
@@ -46,19 +47,23 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!parsed.ok) {
     return response({
       code: parsed.error.toUpperCase(),
-      error: "Некорректные данные / Noto‘g‘ri ma’lumot.",
+      error: localizedRequestFormatError(request),
     }, parsed.error === "payload_too_large" ? 413 : 400);
   }
 
-  const ru = parsed.data.locale === "ru";
+  const locale = parsed.data.locale;
+  const message = (ru: string, uz: string, en: string) =>
+    locale === "ru" ? ru : locale === "uz" ? uz : en;
   const db = requireD1();
   const entitlements = await workspaceEntitlements(db, workspace.id);
   if (!entitlements.lawyerHandoff) {
     return response({
       code: "PLAN_LIMIT",
-      error: ru
-        ? "Передача специалисту недоступна на бесплатном плане."
-        : "Mutaxassisga topshirish bepul rejada mavjud emas.",
+      error: message(
+        "Передача специалисту недоступна на бесплатном плане.",
+        "Mutaxassisga topshirish bepul rejada mavjud emas.",
+        "Specialist handoff is not available on the free plan.",
+      ),
     }, 403);
   }
 
@@ -73,7 +78,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
     if (!accessible) {
       return response({
         code: "CONTEXT_UNAVAILABLE",
-        error: ru ? "Выбранный контекст недоступен." : "Tanlangan kontekst mavjud emas.",
+        error: message(
+          "Выбранный контекст недоступен.",
+          "Tanlangan kontekst mavjud emas.",
+          "The selected context is unavailable.",
+        ),
       }, 404);
     }
   }
@@ -88,7 +97,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
     if (!comparison) {
       return response({
         code: "CONTEXT_UNAVAILABLE",
-        error: ru ? "Выбранный контекст недоступен." : "Tanlangan kontekst mavjud emas.",
+        error: message(
+          "Выбранный контекст недоступен.",
+          "Tanlangan kontekst mavjud emas.",
+          "The selected context is unavailable.",
+        ),
       }, 404);
     }
   }
@@ -99,7 +112,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!slot) {
     return response({
       code: "SLOT_UNAVAILABLE",
-      error: ru ? "Этот слот больше недоступен." : "Bu vaqt endi mavjud emas.",
+      error: message(
+        "Этот слот больше недоступен.",
+        "Bu vaqt endi mavjud emas.",
+        "This time slot is no longer available.",
+      ),
     }, 409);
   }
 
@@ -159,9 +176,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
     if (!unavailable || unavailable.status !== "available" || unavailable.activeBookings > 0) {
       return response({
         code: "SLOT_UNAVAILABLE",
-        error: ru
-          ? "Этот слот уже занят. Выберите другое время."
-          : "Bu vaqt band. Boshqa vaqtni tanlang.",
+        error: message(
+          "Этот слот уже занят. Выберите другое время.",
+          "Bu vaqt band. Boshqa vaqtni tanlang.",
+          "This time slot has already been booked. Choose another time.",
+        ),
       }, 409);
     }
     throw error;

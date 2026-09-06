@@ -3,6 +3,7 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { PlatformLocale } from "../../lib/platform/routing";
 
 function safeLink(value: string | undefined, allowedLinks?: ReadonlySet<string>): string | null {
   if (!value) return null;
@@ -32,7 +33,7 @@ export function SafeMarkdown({
   children?: string;
   allowedLinks?: readonly string[];
   className?: string;
-  locale?: "ru" | "uz";
+  locale?: PlatformLocale;
 }) {
   const allowlist = allowedLinks ? new Set(allowedLinks.flatMap((value) => {
     const safe = safeLink(value);
@@ -62,7 +63,7 @@ export function SafeMarkdown({
         li: ({ children: value }) => <li>{value}</li>,
         table: ({ children: value, node, ...props }) => {
           void node;
-          return <Table {...props} label={locale === "ru" ? "Прокручиваемая таблица" : "Aylantiriladigan jadval"}>{value}</Table>;
+          return <Table {...props} label={{ ru: "Прокручиваемая таблица", uz: "Aylantiriladigan jadval", en: "Scrollable table" }[locale]}>{value}</Table>;
         },
         thead: ({ children: value }) => <thead>{value}</thead>,
         tbody: ({ children: value }) => <tbody>{value}</tbody>,

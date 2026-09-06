@@ -1085,7 +1085,7 @@ export const emailChangeChallenges = sqliteTable(
   (table) => [
     check(
       "email_change_challenges_locale_check",
-      sql`${table.locale} IN ('ru','uz')`,
+      sql`${table.locale} IN ('ru','uz','en')`,
     ),
     check(
       "email_change_challenges_attempts_check",
@@ -1235,7 +1235,7 @@ export const securityNotificationJobs = sqliteTable(
     ),
     check(
       "security_notification_jobs_locale_check",
-      sql`${table.locale} IN ('ru','uz')`,
+      sql`${table.locale} IN ('ru','uz','en')`,
     ),
     check(
       "security_notification_jobs_status_check",
@@ -1970,10 +1970,13 @@ export const knowledgeBaseArticleVersions = sqliteTable("knowledge_base_article_
   versionNumber: integer("version_number").notNull(),
   titleRu: text("title_ru").notNull(),
   titleUz: text("title_uz").notNull(),
+  titleEn: text("title_en"),
   summaryRu: text("summary_ru").notNull(),
   summaryUz: text("summary_uz").notNull(),
+  summaryEn: text("summary_en"),
   bodyRuJson: text("body_ru_json").notNull(),
   bodyUzJson: text("body_uz_json").notNull(),
+  bodyEnJson: text("body_en_json"),
   relatedSlugsJson: text("related_slugs_json").notNull().default("[]"),
   contentSha256: text("content_sha256").notNull(),
   createdAt: text("created_at").notNull(),
@@ -1988,6 +1991,10 @@ export const knowledgeBaseArticleVersions = sqliteTable("knowledge_base_article_
   index("knowledge_base_article_versions_published_idx").on(table.articleId, table.publishedAt, table.versionNumber),
   check("knowledge_base_article_versions_number_check", sql`${table.versionNumber} >= 1`),
   check("knowledge_base_article_versions_hash_check", sql`length(${table.contentSha256}) = 64`),
+  check("knowledge_base_article_versions_body_ru_check", sql`json_valid(${table.bodyRuJson})`),
+  check("knowledge_base_article_versions_body_uz_check", sql`json_valid(${table.bodyUzJson})`),
+  check("knowledge_base_article_versions_body_en_check", sql`${table.bodyEnJson} IS NULL OR json_valid(${table.bodyEnJson})`),
+  check("knowledge_base_article_versions_related_check", sql`json_valid(${table.relatedSlugsJson})`),
 ]);
 export const knowledgeBaseFeedback = sqliteTable("knowledge_base_feedback", {
   id: text("id").primaryKey(),
@@ -2082,7 +2089,11 @@ export const aiDocumentPrefillHandoffs = sqliteTable("ai_document_prefill_handof
   idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
   createdAt: text("created_at").notNull(),
 }, (table) => [
-  check("ai_document_prefill_handoffs_locale_check", sql`${table.locale} IN ('ru','uz')`),
+  check("ai_document_prefill_handoffs_locale_check", sql`${table.locale} IN ('ru','uz','en')`),
+  check(
+    "ai_document_prefill_handoffs_fields_check",
+    sql`json_valid(${table.selectedFieldIdsJson}) AND json_type(${table.selectedFieldIdsJson}) = 'array' AND length(${table.selectedFieldIdsJson}) BETWEEN 2 AND 10000`,
+  ),
   check("ai_document_prefill_handoffs_hash_check", sql`length(${table.selectionSha256}) = 64 AND length(${table.idempotencyKeySha256}) = 64`),
   uniqueIndex("ai_document_prefill_handoffs_request_uidx").on(table.workspaceId, table.userId, table.idempotencyKeySha256),
   uniqueIndex("ai_document_prefill_handoffs_document_uidx").on(table.documentId),
@@ -2239,7 +2250,7 @@ export const guestAiSessions = sqliteTable("guest_ai_sessions", {
   consumedAt: text("consumed_at"),
   ...timestamps,
 }, (table) => [
-  check("guest_ai_sessions_locale_check", sql`${table.locale} IN ('ru','uz')`),
+  check("guest_ai_sessions_locale_check", sql`${table.locale} IN ('ru','uz','en')`),
   check("guest_ai_sessions_state_check", sql`${table.state} IN ('available','reserved','consumed')`),
   check("guest_ai_sessions_request_count_check", sql`${table.requestCount} BETWEEN 0 AND 5`),
   check("guest_ai_sessions_answer_count_check", sql`${table.answerCount} BETWEEN 0 AND 1`),
@@ -2904,6 +2915,7 @@ export const subscriptionPlanVersions = sqliteTable("subscription_plan_versions"
   approvedAt: text("approved_at"),
   createdByUserId: text("created_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
   createdAt: text("created_at").notNull(),
+  nameEn: text("name_en"),
 }, (table) => [
   uniqueIndex("subscription_plan_versions_plan_version_uidx").on(table.planId, table.version),
   index("subscription_plan_versions_effective_idx").on(table.approvalStatus, table.effectiveFrom, table.effectiveTo),
@@ -2953,6 +2965,7 @@ export const orderItems = sqliteTable("order_items", {
   totalAmountMinor: integer("total_amount_minor").notNull(),
   currency: text("currency").notNull().default("UZS"),
   createdAt: text("created_at").notNull(),
+  titleEn: text("title_en"),
 }, (table) => [
   index("order_items_order_idx").on(table.orderId, table.createdAt),
   check("order_items_quantity_check", sql`${table.quantity} > 0`),
@@ -3213,13 +3226,9 @@ export const accountDeletionChallenges = sqliteTable(
     userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
     sessionId: text("session_id").references(() => authSessions.id, { onDelete: "set null" }),
     emailHash: text("email_hash").notNull(),
-    emailLookupHash: text("email_lookup_hash"),
-    emailLookupKeyVersion: text("email_lookup_key_version"),
     locale: text("locale").notNull(),
     codeSalt: text("code_salt").notNull(),
     codeHash: text("code_hash").notNull(),
-    codeHmac: text("code_hmac"),
-    codeKeyVersion: text("code_key_version"),
     attemptCount: integer("attempt_count").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(5),
     expiresAt: text("expires_at").notNull(),
@@ -3227,11 +3236,15 @@ export const accountDeletionChallenges = sqliteTable(
     consumedByOperationId: text("consumed_by_operation_id"),
     invalidatedAt: text("invalidated_at"),
     createdAt: text("created_at").notNull(),
+    emailLookupHash: text("email_lookup_hash"),
+    emailLookupKeyVersion: text("email_lookup_key_version"),
+    codeHmac: text("code_hmac"),
+    codeKeyVersion: text("code_key_version"),
   },
   (table) => [
     check(
       "account_deletion_challenges_locale_check",
-      sql`${table.locale} IN ('ru','uz')`,
+      sql`${table.locale} IN ('ru','uz','en')`,
     ),
     check(
       "account_deletion_challenges_attempts_check",
@@ -3426,9 +3439,17 @@ export const builderDocumentAnalysisHandoffs = sqliteTable("builder_document_ana
   index("builder_analysis_document_idx").on(table.documentId, table.createdAt),
   check("builder_analysis_revision_check", sql`${table.documentRevision}>0`),
   check("builder_analysis_mode_check", sql`${table.mode} IN ('quick','full','expert')`),
-  check("builder_analysis_locale_check", sql`${table.locale} IN ('ru','uz')`),
+  check("builder_analysis_locale_check", sql`${table.locale} IN ('ru','uz','en')`),
   check("builder_analysis_status_check", sql`${table.status} IN ('pending','ready')`),
   check("builder_analysis_attempt_check", sql`${table.attemptCount}>=0`),
+  check(
+    "builder_analysis_hash_check",
+    sql`length(${table.documentContentSha256}) = 64 AND length(${table.idempotencyKeySha256}) = 64`,
+  ),
+  check(
+    "builder_analysis_state_check",
+    sql`${table.status} = 'pending' OR (${table.status} = 'ready' AND ${table.lastErrorCode} IS NULL)`,
+  ),
 ]);
 
 export const analysisCaseLinkEvents = sqliteTable("analysis_case_link_events", {

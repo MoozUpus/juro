@@ -715,7 +715,7 @@ export async function createPasswordMfaProof(
   db: D1Database,
   input: {
     email: string;
-    locale: "ru" | "uz";
+    locale: "ru" | "uz" | "en";
     accountType: "individual" | "entrepreneur" | "lawyer";
     now?: Date;
   },

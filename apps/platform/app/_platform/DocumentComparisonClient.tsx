@@ -59,6 +59,8 @@ type Progress = {
   errorCode?: string | null;
 };
 
+type ComparisonCopy = (typeof comparisonText)[PlatformLocale];
+
 const stageOrder = [
   "uploaded",
   "extracting_version_one",
@@ -76,7 +78,6 @@ export function DocumentComparisonClient({
   accountType: AccountType;
 }) {
   const copy = comparisonText[locale];
-  const ru = locale === "ru";
   const router = useRouter();
   const base = usePlatformBasePath();
   const [first, setFirst] = useState<FileSelection>(null);
@@ -92,13 +93,16 @@ export function DocumentComparisonClient({
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/platform/document-comparisons", { cache: "no-store" });
+      const response = await fetch("/api/platform/document-comparisons", {
+        cache: "no-store",
+        headers: { "x-juro-locale": locale },
+      });
       const body = await response.json() as {
         comparisons?: RecentComparison[];
         reusableFiles?: ReusableFile[];
         error?: string;
       };
-      if (!response.ok) throw new Error(body.error || (ru ? "Сравнения не загрузились." : "Taqqoslashlar yuklanmadi."));
+      if (!response.ok) throw new Error(body.error || copy.loadError);
       setComparisons(body.comparisons ?? []);
       setReusableFiles(body.reusableFiles ?? []);
     } catch (value) {
@@ -106,7 +110,7 @@ export function DocumentComparisonClient({
     } finally {
       setLoading(false);
     }
-  }, [ru]);
+  }, [copy.loadError, locale]);
 
   useEffect(() => {
     void load();
@@ -114,7 +118,10 @@ export function DocumentComparisonClient({
 
   async function pollComparison(id: string) {
     try {
-      const response = await fetch(`/api/platform/document-comparisons/${encodeURIComponent(id)}`, { cache: "no-store" });
+      const response = await fetch(
+        `/api/platform/document-comparisons/${encodeURIComponent(id)}`,
+        { cache: "no-store", headers: { "x-juro-locale": locale } },
+      );
       const body = await response.json() as { comparison?: Progress; error?: string };
       if (response.ok && body.comparison) setProgress(body.comparison);
     } catch {
@@ -137,7 +144,7 @@ export function DocumentComparisonClient({
       setFormSelection(form, "versionTwo", "versionTwoFileId", second);
       const createdResponse = await fetch("/api/platform/document-comparisons", {
         method: "POST",
-        headers: { "x-juro-csrf": "1" },
+        headers: { "x-juro-csrf": "1", "x-juro-locale": locale },
         body: form,
       });
       const created = await createdResponse.json() as {
@@ -146,14 +153,14 @@ export function DocumentComparisonClient({
         error?: string;
       };
       if (!createdResponse.ok || !created.comparison) {
-        throw new Error(created.error || (ru ? "Сравнение не создано." : "Taqqoslash yaratilmadi."));
+        throw new Error(created.error || copy.createError);
       }
       setProgress(created.comparison);
       if (created.warning) setWarning(created.warning);
       interval = setInterval(() => void pollComparison(created.comparison!.id), 900);
       const processedResponse = await fetch(
         `/api/platform/document-comparisons/${encodeURIComponent(created.comparison.id)}/process`,
-        { method: "POST", headers: { "x-juro-csrf": "1" } },
+        { method: "POST", headers: { "x-juro-csrf": "1", "x-juro-locale": locale } },
       );
       const processed = await processedResponse.json() as {
         comparison?: Progress;
@@ -161,7 +168,7 @@ export function DocumentComparisonClient({
       };
       if (processed.comparison) setProgress(processed.comparison);
       if (!processedResponse.ok) {
-        throw new Error(processed.error || (ru ? "Сравнение не завершено." : "Taqqoslash yakunlanmadi."));
+        throw new Error(processed.error || copy.processError);
       }
       router.push(`${base}/documents/comparisons/${created.comparison.id}`);
     } catch (value) {
@@ -182,10 +189,10 @@ export function DocumentComparisonClient({
       interval = setInterval(() => void pollComparison(item.id), 900);
       const response = await fetch(
         `/api/platform/document-comparisons/${encodeURIComponent(item.id)}/process`,
-        { method: "POST", headers: { "x-juro-csrf": "1" } },
+        { method: "POST", headers: { "x-juro-csrf": "1", "x-juro-locale": locale } },
       );
       const body = await response.json() as { comparison?: Progress; error?: string };
-      if (!response.ok) throw new Error(body.error || (ru ? "Повторная обработка не завершена." : "Qayta ishlash yakunlanmadi."));
+      if (!response.ok) throw new Error(body.error || copy.retryError);
       router.push(`${base}/documents/comparisons/${item.id}`);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -208,7 +215,6 @@ export function DocumentComparisonClient({
             onChange={setFirst}
             reusableFiles={reusableFiles}
             copy={copy}
-            locale={locale}
           />
           <ComparisonFileSlot
             label={copy.versionTwo}
@@ -216,7 +222,6 @@ export function DocumentComparisonClient({
             onChange={setSecond}
             reusableFiles={reusableFiles}
             copy={copy}
-            locale={locale}
           />
           <button
             className="comparison-swap"
@@ -245,8 +250,8 @@ export function DocumentComparisonClient({
 
       <section className="comparison-recent">
         <header>
-          <div><h2>{copy.recent}</h2><p>{ru ? "Результаты сохраняются и повторно открываются в вашем пространстве." : "Natijalar makoningizda saqlanadi va qayta ochiladi."}</p></div>
-          <button onClick={() => void load()} aria-label={ru ? "Обновить сравнения" : "Taqqoslashlarni yangilash"}><RefreshCcw className={loading ? "spin" : ""} /></button>
+          <div><h2>{copy.recent}</h2><p>{copy.savedDescription}</p></div>
+          <button onClick={() => void load()} aria-label={copy.refreshAria}><RefreshCcw className={loading ? "spin" : ""} /></button>
         </header>
         {loading ? <div className="comparison-list-loading"><LoaderCircle className="spin" /></div> : comparisons.length ? (
           <div className="comparison-recent-list">
@@ -257,8 +262,8 @@ export function DocumentComparisonClient({
                   <FileDiff />
                   <div>
                     <strong>{item.versionOneName}</strong>
-                    <span>{ru ? "с" : "va"} {item.versionTwoName}</span>
-                    <small>{stageLabel(item.stage, copy)} · {formatDate(item.updatedAt, ru)}</small>
+                    <span>{copy.comparedWith} {item.versionTwoName}</span>
+                    <small>{stageLabel(item.stage, copy)} · {formatDate(item.updatedAt, locale)}</small>
                   </div>
                   {item.status === "failed" ? (
                     <button onClick={() => void retry(item)} disabled={submitting}><RefreshCcw />{copy.retry}</button>
@@ -281,14 +286,12 @@ function ComparisonFileSlot({
   onChange,
   reusableFiles,
   copy,
-  locale,
 }: {
   label: string;
   selection: FileSelection;
   onChange: (selection: FileSelection) => void;
   reusableFiles: ReusableFile[];
-  copy: typeof comparisonText.ru | typeof comparisonText.uz;
-  locale: PlatformLocale;
+  copy: ComparisonCopy;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -325,7 +328,7 @@ function ComparisonFileSlot({
         {selection ? (
           <>
             <span className="comparison-file-icon"><FileText /></span>
-            <div><strong>{selectedName}</strong><small>{formatSize(selectedSize || 0)} · {selection.kind === "stored" ? (locale === "ru" ? "из хранилища JURO" : "JURO omboridan") : (locale === "ru" ? "с устройства" : "qurilmadan")}</small></div>
+            <div><strong>{selectedName}</strong><small>{formatSize(selectedSize || 0)} · {selection.kind === "stored" ? copy.fromStorage : copy.fromDevice}</small></div>
             <span className="comparison-file-actions">
               <button type="button" onClick={() => inputRef.current?.click()}><Upload /><span>{copy.replace}</span></button>
               <button type="button" onClick={() => onChange(null)} aria-label={copy.remove}><X /></button>
@@ -361,7 +364,7 @@ function ProcessingProgress({
   copy,
 }: {
   progress: Progress;
-  copy: typeof comparisonText.ru | typeof comparisonText.uz;
+  copy: ComparisonCopy;
 }) {
   const current = Math.max(stageOrder.indexOf(progress.stage as typeof stageOrder[number]), 0);
   return (
@@ -384,7 +387,7 @@ function setFormSelection(form: FormData, uploadField: string, storedField: stri
   else form.set(storedField, selection.file.id);
 }
 
-function stageLabel(stage: string, copy: typeof comparisonText.ru | typeof comparisonText.uz) {
+function stageLabel(stage: string, copy: ComparisonCopy) {
   return copy.stages[stage as keyof typeof copy.stages] || stage;
 }
 
@@ -394,8 +397,9 @@ function formatSize(bytes: number) {
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-function formatDate(value: string, ru: boolean) {
-  return new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", {
+function formatDate(value: string, locale: PlatformLocale) {
+  const intlLocale = locale === "ru" ? "ru-RU" : locale === "uz" ? "uz-UZ" : "en-GB";
+  return new Intl.DateTimeFormat(intlLocale, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Tashkent",

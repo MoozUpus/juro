@@ -6,6 +6,7 @@ import {
   revealIdentityValue,
   type IdentityKeyring,
 } from "../auth/keyring";
+import type { PlatformLocale } from "../platform/routing";
 
 export const VOICE_MAX_BYTES = 25 * 1024 * 1024;
 export const VOICE_MAX_DURATION_MS = 5 * 60 * 1_000;
@@ -24,7 +25,7 @@ const voiceIntentSchema = z.object({
   sizeBytes: z.number().int().min(1).max(VOICE_MAX_BYTES),
   durationMs: z.number().int().min(1).max(VOICE_MAX_DURATION_MS),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
 }).strict();
 
 const transcriptSchema = z.object({
@@ -48,7 +49,7 @@ export type VoiceRecordingRow = {
   sizeBytes: number;
   durationMs: number;
   sha256: string;
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
   status: string;
   transcriptCiphertext: string | null;
   transcriptIv: string | null;
@@ -296,10 +297,12 @@ export async function transcribeVoiceRecording(input: {
   form.append("file", new Blob([await object.arrayBuffer()], { type: input.recording.mimeType }), `recording.${extensionForMime(input.recording.mimeType)}`);
   form.append("model", input.model?.trim() || "gpt-4o-transcribe");
   form.append("response_format", "json");
-  if (input.recording.locale === "ru") form.append("language", "ru");
-  form.append("prompt", input.recording.locale === "ru"
-    ? "Юридический вопрос по законодательству Республики Узбекистан. Сохраняй имена и юридические термины точно."
-    : "O‘zbekiston Respublikasi qonunchiligiga oid yuridik savol. Ismlar va yuridik atamalarni aniq saqla.");
+  form.append("language", input.recording.locale);
+  form.append("prompt", {
+    ru: "Юридический вопрос по законодательству Республики Узбекистан. Сохраняй имена и юридические термины точно.",
+    uz: "O‘zbekiston Respublikasi qonunchiligiga oid yuridik savol. Ismlar va yuridik atamalarni aniq saqla.",
+    en: "A legal question about the laws of the Republic of Uzbekistan. Preserve names and legal terminology accurately.",
+  }[input.recording.locale]);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
   try {
@@ -445,7 +448,7 @@ export async function synthesizeAssistantSpeech(input: {
   model: string | null | undefined;
   voice: "marin" | "cedar";
   text: string;
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
   fetcher?: typeof fetch;
   signal?: AbortSignal;
 }): Promise<Response> {
@@ -461,9 +464,11 @@ export async function synthesizeAssistantSpeech(input: {
       model: input.model?.trim() || "gpt-4o-mini-tts",
       voice: input.voice,
       input: text,
-      instructions: input.locale === "ru"
-        ? "Говори спокойно, профессионально и ясно. Это AI-озвучивание юридического ответа JURO."
-        : "Tinch, professional va aniq gapir. Bu JURO yuridik javobining AI ovozidir.",
+      instructions: {
+        ru: "Говори спокойно, профессионально и ясно. Это AI-озвучивание юридического ответа JURO.",
+        uz: "Tinch, professional va aniq gapir. Bu JURO yuridik javobining AI ovozidir.",
+        en: "Speak calmly, professionally and clearly. This is an AI narration of a JURO legal response.",
+      }[input.locale],
       response_format: "mp3",
     }),
     signal: input.signal,

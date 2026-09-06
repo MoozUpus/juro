@@ -12,8 +12,14 @@ import {
 } from "../../../../lib/auth/input";
 import { reserveOtpChallenge } from "../../../../lib/auth/otp-request";
 import {
+  completePasswordLoginAttempt,
+  failPasswordLoginAttempt,
   passwordCredentialWriteStatement,
+  passwordCredentialForUser,
+  passwordLoginRateLimit,
   preparePasswordCredential,
+  reservePasswordLoginAttempt,
+  verifyPassword,
 } from "../../../../lib/auth/password";
 import {
   pendingRegistrationUpsertStatement,
@@ -90,11 +96,10 @@ export const POST = withApiErrors(async function POST(request: Request) {
     remoteIp: connectingIp,
     expectedHostname: new URL(request.url).hostname,
     expectedActions: purpose === "register"
-      ? [
-          authTurnstileActions.registration,
-          authTurnstileActions.registrationResend,
-        ]
-      : [
+      ? [authTurnstileActions.registration]
+      : purpose === "registration_resend"
+        ? [authTurnstileActions.registrationResend]
+        : [
           authTurnstileActions.passwordReset,
           authTurnstileActions.passwordResetResend,
         ],
@@ -116,6 +121,99 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
+  const id = crypto.randomUUID();
+  let challengeAccountType = accountType;
+
+  if (purpose === "registration_resend") {
+    const passwordLimit = await passwordLoginRateLimit(db, {
+      email,
+      requestIp: connectingIp,
+    });
+    if (!passwordLimit.allowed) {
+      return json({
+        code: "AUTH_RATE_LIMITED",
+        retryAfterSeconds: passwordLimit.retryAfterSeconds,
+        error: localized(locale, {
+          ru: "Слишком много запросов. Повторите позднее.",
+          uz: "Juda ko‘p so‘rov. Keyinroq qayta urinib ko‘ring.",
+          en: "Too many requests. Try again later.",
+        }),
+      }, 429);
+    }
+    const attempt = await reservePasswordLoginAttempt(db, {
+      email,
+      requestIp: connectingIp,
+    });
+    if (!attempt.allowed) {
+      return json({
+        code: "AUTH_RATE_LIMITED",
+        retryAfterSeconds: attempt.retryAfterSeconds,
+        error: localized(locale, {
+          ru: "Слишком много запросов. Повторите позднее.",
+          uz: "Juda ko‘p so‘rov. Keyinroq qayta urinib ko‘ring.",
+          en: "Too many requests. Try again later.",
+        }),
+      }, 429);
+    }
+
+    const existingUserId = await userIdByEmail(db, identityContext, email);
+    const existing = existingUserId
+      ? await db.prepare(
+        `SELECT profile.id,profile.account_type AS accountType,
+           profile.email_verified_at AS emailVerifiedAt,
+           EXISTS(
+             SELECT 1 FROM auth_pending_registrations pending
+             WHERE pending.user_id=profile.id AND pending.expires_at>?
+           ) AS pendingRegistration
+         FROM user_profiles profile WHERE profile.id=? LIMIT 1`,
+      ).bind(now, existingUserId).first<{
+        id: string;
+        accountType: string;
+        emailVerifiedAt: string | null;
+        pendingRegistration: number | boolean;
+      }>()
+      : null;
+    const credential = existing
+      ? await passwordCredentialForUser(db, existing.id)
+      : null;
+    const authenticated = await verifyPassword(parsed.data.password, credential);
+    if (!authenticated || !existing || existing.emailVerifiedAt) {
+      if (authenticated) {
+        await completePasswordLoginAttempt(db, attempt.reservation);
+      } else {
+        await failPasswordLoginAttempt(db, attempt.reservation);
+      }
+      // Keep the public response indistinguishable for missing, verified, and
+      // password-mismatched accounts. A real challenge is sent only after the
+      // password and pending-registration state are both verified.
+      return json({
+        ok: true,
+        challengeId: id,
+        expiresInSeconds: 600,
+        resendAfterSeconds: 60,
+      });
+    }
+    await completePasswordLoginAttempt(db, attempt.reservation);
+    if (
+      existing.accountType === "individual"
+      || existing.accountType === "entrepreneur"
+      || existing.accountType === "lawyer"
+    ) {
+      challengeAccountType = existing.accountType;
+    }
+    if (!existing.pendingRegistration) {
+      return json({
+        code: "REGISTRATION_RESTART_REQUIRED",
+        accountType: challengeAccountType,
+        error: localized(locale, {
+          ru: "Срок регистрации истёк. Продолжите регистрацию заново — существующий аккаунт будет безопасно обновлён.",
+          uz: "Ro‘yxatdan o‘tish muddati tugadi. Ro‘yxatdan o‘tishni qayta davom ettiring — mavjud hisob xavfsiz yangilanadi.",
+          en: "Your registration session expired. Continue registration again and your existing account will be updated safely.",
+        }),
+      }, 409);
+    }
+  }
+
   // Run the same slow password work for every registration address. The
   // resulting credential is persisted only after the OTP reservation wins,
   // so a cooldown/rate-limited request cannot replace an in-flight user's
@@ -124,7 +222,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ? await preparePasswordCredential(parsed.data.password, new Date(now))
     : null;
 
-  const id = crypto.randomUUID();
   const code = randomOtp();
   const salt = randomToken(16);
   const expiresAt = new Date(nowMs + 10 * 60 * 1000).toISOString();
@@ -133,9 +230,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
     id,
     email,
     requestIp: connectingIp,
-    purpose,
+    purpose: purpose === "password_reset" ? "password_reset" : "register",
     locale,
-    accountType,
+    accountType: challengeAccountType,
     codeSalt: salt,
     code,
     expiresAt,
@@ -273,7 +370,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
 
   const message = renderJuroAuthEmail({
     locale,
-    purpose: purpose === "register"
+    purpose: purpose === "register" || purpose === "registration_resend"
       ? "registration"
       : "password_reset",
     code,
@@ -293,5 +390,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
       en: "The email could not be sent. Try again later.",
     }) }, 502);
   }
-  return json({ ok: true, challengeId: id, expiresInSeconds: 600, resendAfterSeconds: 60 });
+  return json({
+    ok: true,
+    challengeId: id,
+    expiresInSeconds: 600,
+    resendAfterSeconds: 60,
+    ...(purpose === "registration_resend"
+      ? { accountType: challengeAccountType }
+      : {}),
+  });
 });

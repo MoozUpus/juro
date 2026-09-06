@@ -42,6 +42,17 @@ const copy = {
     integrity: "Jurnalga kirish o‘zgarmas zanjirga yozildi", event: "Kirish hodisasi",
     created: "Vaqt", entity: "Obyekt", identifiers: "Identifikatorlar", navJobs: "Vazifalar", navSecurity: "Funksiyalar", navCosts: "Xarajatlar",
   },
+  en: {
+    skip: "Skip to main content", secure: "Secure workspace", fresh: "Recent 2FA",
+    eyebrow: "Security and evidence", title: "Platform audit log",
+    description: "Only technical identifiers and states are shown. User text, documents and provider payloads are excluded.",
+    source: "Source", severity: "Severity", action: "Action contains", actor: "Actor ID",
+    scope: "Workspace / scope", from: "From", to: "To", all: "All", apply: "Apply",
+    refresh: "Refresh", export: "Export CSV", loading: "Loading audit log…", empty: "No events match these filters.",
+    offline: "You are offline. The audit log was not loaded.", failed: "The audit log could not be loaded.",
+    integrity: "Audit access was recorded in the immutable chain", event: "Access event",
+    created: "Time", entity: "Entity", identifiers: "Identifiers", navJobs: "Jobs", navSecurity: "Features", navCosts: "Costs",
+  },
 } as const;
 
 function timestamp(value: string): string {
@@ -83,6 +94,7 @@ function subscribeOnline(callback: () => void): () => void {
 
 export function AuditLogConsole({ locale, staffName }: { locale: OperationalLocale; staffName: string }) {
   const t = copy[locale];
+  const nextLocale: OperationalLocale = locale === "ru" ? "uz" : locale === "uz" ? "en" : "ru";
   const [rows, setRows] = useState<PlatformAuditRow[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -152,7 +164,7 @@ export function AuditLogConsole({ locale, staffName }: { locale: OperationalLoca
 
   return <div className="staff-console audit-console" aria-busy={busy}>
     <a className="staff-skip" href="#audit-main">{t.skip}</a>
-    <header className="staff-topbar"><div className="staff-brand"><ShieldCheck aria-hidden="true"/><span><b>JURO</b><small>{t.secure}</small></span></div><div className="staff-session"><span>{t.fresh}</span><b>{staffName}</b></div><a href={`/${locale === "ru" ? "uz" : "ru"}/admin/audit-log`} hrefLang={locale === "ru" ? "uz" : "ru"}>{locale === "ru" ? "UZ" : "RU"}</a></header>
+    <header className="staff-topbar"><div className="staff-brand"><ShieldCheck aria-hidden="true"/><span><b>JURO</b><small>{t.secure}</small></span></div><div className="staff-session"><span>{t.fresh}</span><b>{staffName}</b></div><a href={`/${nextLocale}/admin/audit-log`} hrefLang={nextLocale}>{nextLocale.toUpperCase()}</a></header>
     <main id="audit-main" className="staff-main audit-main">
       <section className="staff-heading"><div><span>{t.eyebrow}</span><h1>{t.title}</h1><p>{t.description}</p></div><nav className="audit-nav" aria-label="Admin"><a href={`/${locale}/admin/jobs`}>{t.navJobs}</a><a href={`/${locale}/admin/feature-flags`}>{t.navSecurity}</a><a href={`/${locale}/admin/costs`}>{t.navCosts}</a></nav></section>
       <p className="sr-only" aria-live="polite">{busy ? t.loading : accessEventId ? `${t.integrity}: ${accessEventId}` : ""}</p>

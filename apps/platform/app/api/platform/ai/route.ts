@@ -83,6 +83,7 @@ import {
 } from "../../../../lib/ai/provider-cost-control";
 import { recordProviderUsage } from "../../../../lib/ai/provider-usage";
 import { resolveAiRuntimeSettings } from "../../../../lib/ai/runtime-settings";
+import { aiDiscoveryLocale, aiText, parseAiOutputLocale, type AiOutputLocale } from "../../../../lib/ai/localization";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -92,7 +93,10 @@ import {
 
 const INSTRUCTION_VERSION = "juro-legal-chat-v4-grounded-tiered-retrieval";
 
-function matchingDocumentTemplates(question: string, locale: "ru" | "uz") {
+function matchingDocumentTemplates(question: string, locale: AiOutputLocale) {
+  // The document registry currently has reviewed RU/UZ titles and questionnaire
+  // copy only. Do not expose a mixed-language template handoff in English.
+  if (locale === "en") return [];
   const terms = [...new Set(question.toLocaleLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])].slice(0, 20);
   return getPublishedDocuments()
     .map((definition) => {
@@ -285,7 +289,8 @@ async function executePostWithinBudget(
     voiceRecordingId?: string;
     legalContextDate?: string;
   } | null;
-  const locale = body?.locale === "uz" ? "uz" : "ru";
+  const locale = parseAiOutputLocale(body?.locale);
+  const discoveryLocale = aiDiscoveryLocale(locale);
   const db = requireD1();
   let preliminaryAtMs: number | null = null;
   let providerFirstDeltaAtMs: number | null = null;
@@ -316,23 +321,31 @@ async function executePostWithinBudget(
   if (body?.legalContextDate && !applicableAt) {
     return response({
       code: "INVALID_LEGAL_CONTEXT_DATE",
-      error: locale === "ru"
-        ? "Укажите существующую дату события не позднее сегодняшнего дня."
-        : "Bugungi kundan kech bo‘lmagan haqiqiy voqea sanasini kiriting.",
+      error: aiText(
+        locale,
+        "Укажите существующую дату события не позднее сегодняшнего дня.",
+        "Bugungi kundan kech bo‘lmagan haqiqiy voqea sanasini kiriting.",
+        "Enter a valid event date that is not later than today.",
+      ),
     }, 400);
   }
   const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
   if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
     return response({
       code: "INVALID_IDEMPOTENCY_KEY",
-      error: locale === "ru" ? "Повторите отправку: идентификатор запроса отсутствует или некорректен." : "Qayta yuboring: so‘rov identifikatori yo‘q yoki noto‘g‘ri.",
+      error: aiText(
+        locale,
+        "Повторите отправку: идентификатор запроса отсутствует или некорректен.",
+        "Qayta yuboring: so‘rov identifikatori yo‘q yoki noto‘g‘ri.",
+        "Send the request again: its request identifier is missing or invalid.",
+      ),
     }, 400);
   }
   if (body?.operation !== "regenerate" && (!submittedQuestion || submittedQuestion.length < 5)) {
-    return response({ error: locale === "ru" ? "Опишите ситуацию чуть подробнее." : "Vaziyatni biroz batafsil yozing." }, 400);
+    return response({ error: aiText(locale, "Опишите ситуацию чуть подробнее.", "Vaziyatni biroz batafsil yozing.", "Describe the situation in a little more detail.") }, 400);
   }
   if (submittedQuestion && submittedQuestion.length > 8_000) {
-    return response({ error: locale === "ru" ? "Сообщение слишком длинное. Сократите его до 8 000 символов." : "Xabar juda uzun. Uni 8 000 belgigacha qisqartiring." }, 413);
+    return response({ error: aiText(locale, "Сообщение слишком длинное. Сократите его до 8 000 символов.", "Xabar juda uzun. Uni 8 000 belgigacha qisqartiring.", "This message is too long. Shorten it to 8,000 characters or fewer.") }, 413);
   }
 
   const appEnvironment = runtimeEnv().APP_ENV;
@@ -344,7 +357,7 @@ async function executePostWithinBudget(
   );
   if (body?.caseId) {
     const accessible = await db.prepare("SELECT id FROM cases WHERE id=? AND workspace_id=? LIMIT 1").bind(body.caseId, workspace.id).first();
-    if (!accessible) return response({ code: "ACCESS_DENIED", error: locale === "ru" ? "Дело не найдено в этом пространстве." : "Bu makonda ish topilmadi." }, 404);
+    if (!accessible) return response({ code: "ACCESS_DENIED", error: aiText(locale, "Дело не найдено в этом пространстве.", "Bu makonda ish topilmadi.", "This matter was not found in the current workspace.") }, 404);
   }
   const conversationId = body?.conversationId || `conversation_${(await sha256Json({
     workspaceId: workspace.id,
@@ -356,7 +369,7 @@ async function executePostWithinBudget(
     const accessible = await db.prepare(
       "SELECT id FROM conversations WHERE id=? AND workspace_id=? AND owner_user_id=? LIMIT 1",
     ).bind(conversationId, workspace.id, user.id).first();
-    if (!accessible) return response({ code: "ACCESS_DENIED", error: locale === "ru" ? "Диалог не найден." : "Suhbat topilmadi." }, 404);
+    if (!accessible) return response({ code: "ACCESS_DENIED", error: aiText(locale, "Диалог не найден.", "Suhbat topilmadi.", "This conversation was not found.") }, 404);
   }
 
   let branchInput: Awaited<ReturnType<typeof resolveAiBranchInput>>;
@@ -375,8 +388,8 @@ async function executePostWithinBudget(
     return response({
       code: error.code,
       error: error.code === "SOURCE_MESSAGE_NOT_FOUND"
-        ? (locale === "ru" ? "Исходное сообщение не найдено в этом диалоге." : "Boshlang‘ich xabar bu suhbatda topilmadi.")
-        : (locale === "ru" ? "Некорректная операция с версией ответа." : "Javob versiyasi bilan amal noto‘g‘ri."),
+        ? aiText(locale, "Исходное сообщение не найдено в этом диалоге.", "Boshlang‘ich xabar bu suhbatda topilmadi.", "The original message was not found in this conversation.")
+        : aiText(locale, "Некорректная операция с версией ответа.", "Javob versiyasi bilan amal noto‘g‘ri.", "The requested answer-version operation is invalid."),
     }, error.code === "SOURCE_MESSAGE_NOT_FOUND" ? 404 : 400);
   }
   const question = branchInput.question;
@@ -422,9 +435,12 @@ async function executePostWithinBudget(
   if (!provider || !providerStatus.model) {
     return response({
       code: "AI_PROVIDER_UNAVAILABLE",
-      error: locale === "ru"
-        ? "AI-провайдер пока не подключён. Сообщение не отправлено и не показано как успешно обработанное."
-        : "AI-provayder hozircha ulanmagan. Xabar yuborilmadi va muvaffaqiyatli qayta ishlangan deb ko‘rsatilmadi.",
+      error: aiText(
+        locale,
+        "AI-провайдер пока не подключён. Сообщение не отправлено и не показано как успешно обработанное.",
+        "AI-provayder hozircha ulanmagan. Xabar yuborilmadi va muvaffaqiyatli qayta ishlangan deb ko‘rsatilmadi.",
+        "The AI provider is not connected yet. Your message was not sent or marked as successfully processed.",
+      ),
     }, 503);
   }
   const gateway = createLegalAiGateway(provider);
@@ -432,7 +448,7 @@ async function executePostWithinBudget(
   let voiceRecording: VoiceRecordingRow | null = null;
   if (body?.voiceRecordingId) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.voiceRecordingId)) {
-      return response({ code: "INVALID_VOICE_REQUEST", error: locale === "ru" ? "Некорректная голосовая запись." : "Ovozli yozuv noto‘g‘ri." }, 400);
+      return response({ code: "INVALID_VOICE_REQUEST", error: aiText(locale, "Некорректная голосовая запись.", "Ovozli yozuv noto‘g‘ri.", "This voice recording is invalid.") }, 400);
     }
     try {
       voiceRecording = await assertVoiceTranscriptMatches({
@@ -445,7 +461,7 @@ async function executePostWithinBudget(
       });
     } catch (error) {
       if (!(error instanceof VoiceRecordingError)) throw error;
-      return response({ code: error.code, error: error.message }, error.status);
+      return response({ code: error.code, error: localizedVoiceError(locale, error.code) }, error.status);
     }
   }
   const rewrite = gateway.rewriteFollowUp({ question, locale, conversationHistory });
@@ -575,7 +591,7 @@ async function executePostWithinBudget(
         workspaceId: workspace.id,
         userId: user.id,
         query: retrievalUnderstanding.standaloneQuestion,
-        locale,
+        locale: discoveryLocale,
         limit: 3,
       }, { signal: privateDocumentStage.signal });
       privateDocumentStage.complete();
@@ -609,7 +625,7 @@ async function executePostWithinBudget(
       const result = await retrieveCorpusAwareLegalSources({
         env: { ...runtimeEnv(), DB: db },
         query: rewrite.query,
-        locale,
+        locale: discoveryLocale,
         indexQueries: retrievalUnderstandingPromise.then((understanding) => understanding.corpusQueries),
         rerankingQuestion: retrievalUnderstandingPromise.then((understanding) => understanding.standaloneQuestion),
         requiredConcepts: retrievalUnderstandingPromise.then((understanding) => understanding.requiredConcepts),
@@ -768,7 +784,7 @@ async function executePostWithinBudget(
         const result = await retrieveSecondaryInternetSources({
           db,
           query: retrievalUnderstanding.webSearchQuery,
-          locale,
+          locale: discoveryLocale,
           requestId: `${idempotencyKey}:secondary`,
           safetyIdentifier,
           signal: internetStage.signal,
@@ -882,8 +898,8 @@ async function executePostWithinBudget(
       return response({
         code: error.code,
         error: error.code === "PLAN_LIMIT"
-          ? (locale === "ru" ? "Месячный лимит AI-ответов исчерпан." : "Oylik AI-javoblar limiti tugadi.")
-          : (locale === "ru" ? "Этот идентификатор уже использован для другого запроса." : "Bu identifikator boshqa so‘rov uchun ishlatilgan."),
+          ? aiText(locale, "Месячный лимит AI-ответов исчерпан.", "Oylik AI-javoblar limiti tugadi.", "Your monthly AI answer limit has been reached.")
+          : aiText(locale, "Этот идентификатор уже использован для другого запроса.", "Bu identifikator boshqa so‘rov uchun ishlatilgan.", "This request identifier has already been used for a different request."),
       }, error.code === "PLAN_LIMIT" ? 429 : 409);
     }
     throw error;
@@ -899,9 +915,12 @@ async function executePostWithinBudget(
     return response({
       code: "AI_RUN_EXPIRED",
       runId: reservation.runId,
-      error: locale === "ru"
-        ? "Предыдущий запрос не завершился вовремя. Отправьте его ещё раз — будет создан новый защищённый запрос."
-        : "Oldingi so‘rov vaqtida yakunlanmadi. Uni yana yuboring — yangi himoyalangan so‘rov yaratiladi.",
+      error: aiText(
+        locale,
+        "Предыдущий запрос не завершился вовремя. Отправьте его ещё раз — будет создан новый защищённый запрос.",
+        "Oldingi so‘rov vaqtida yakunlanmadi. Uni yana yuboring — yangi himoyalangan so‘rov yaratiladi.",
+        "The previous request did not finish in time. Send it again to create a new protected request.",
+      ),
     }, 409);
   }
   if (reservation.kind === "failed") {
@@ -909,9 +928,12 @@ async function executePostWithinBudget(
       code: "AI_RUN_FAILED",
       runId: reservation.runId,
       previousErrorCode: publicAiFailureCode(reservation.errorCode),
-      error: locale === "ru"
-        ? "Предыдущая попытка завершилась ошибкой и не списала лимит. Можно безопасно создать новый запрос."
-        : "Oldingi urinish xato bilan yakunlandi va limit yechilmadi. Yangi so‘rovni xavfsiz yaratish mumkin.",
+      error: aiText(
+        locale,
+        "Предыдущая попытка завершилась ошибкой и не списала лимит. Можно безопасно создать новый запрос.",
+        "Oldingi urinish xato bilan yakunlandi va limit yechilmadi. Yangi so‘rovni xavfsiz yaratish mumkin.",
+        "The previous attempt failed and did not use your allowance. You can safely create a new request.",
+      ),
     }, 409);
   }
 
@@ -1200,9 +1222,12 @@ async function executePostWithinBudget(
     return response({
       code: "AI_RUN_EXPIRED",
       runId: reservation.runId,
-      error: locale === "ru"
-        ? "Ответ не был сохранён: предыдущий запрос уже был безопасно закрыт. Отправьте вопрос ещё раз."
-        : "Javob saqlanmadi: oldingi so‘rov xavfsiz yopilgan. Savolni yana yuboring.",
+      error: aiText(
+        locale,
+        "Ответ не был сохранён: предыдущий запрос уже был безопасно закрыт. Отправьте вопрос ещё раз.",
+        "Javob saqlanmadi: oldingi so‘rov xavfsiz yopilgan. Savolni yana yuboring.",
+        "The answer was not saved because the previous request had already been closed safely. Send your question again.",
+      ),
     }, 409);
   }
 
@@ -1648,7 +1673,7 @@ async function completeNonChargeableIntent(input: {
   conversationId: string;
   existingConversation: boolean;
   question: string;
-  locale: "ru" | "uz";
+  locale: AiOutputLocale;
   answerMode: "short" | "detailed";
   reasoningMode: "fast" | "deep";
   idempotencyKey: string;
@@ -1672,16 +1697,22 @@ async function completeNonChargeableIntent(input: {
   const assistantMessageId = `intent_assistant_${keyHash}`;
   const branchId = `intent_branch_${keyHash}`;
   const messageVersionId = `intent_version_${keyHash}`;
-  const greeting = input.locale === "ru"
-    ? "Здравствуйте! Я помогу разобраться в правовом вопросе Узбекистана, подготовить план действий или перейти к существующему конструктору документов JURO. Опишите ситуацию простыми словами."
-    : "Assalomu alaykum! O‘zbekiston huquqi bo‘yicha masalani tushuntirish, harakatlar rejasini tuzish yoki JURO hujjat konstruktoriga o‘tishda yordam beraman. Vaziyatni oddiy so‘zlar bilan yozing.";
-  const outOfScope = input.locale === "ru"
-    ? "Этот запрос выходит за безопасные возможности AI-юриста JURO. Я могу помочь с правовым вопросом Узбекистана, официальными основаниями Lex.uz, планом действий или существующим шаблоном документа."
-    : "Bu so‘rov JURO AI-yuristining xavfsiz imkoniyatlaridan tashqarida. O‘zbekiston huquqi, Lex.uz rasmiy asoslari, harakatlar rejasi yoki mavjud hujjat shabloni bo‘yicha yordam bera olaman.";
+  const greeting = aiText(
+    input.locale,
+    "Здравствуйте! Я помогу разобраться в правовом вопросе Узбекистана, подготовить план действий или перейти к существующему конструктору документов JURO. Опишите ситуацию простыми словами.",
+    "Assalomu alaykum! O‘zbekiston huquqi bo‘yicha masalani tushuntirish, harakatlar rejasini tuzish yoki JURO hujjat konstruktoriga o‘tishda yordam beraman. Vaziyatni oddiy so‘zlar bilan yozing.",
+    "Hello! I can help you understand a legal issue under Uzbek law, prepare an action plan, or continue with an existing JURO document workflow. Describe the situation in your own words.",
+  );
+  const outOfScope = aiText(
+    input.locale,
+    "Этот запрос выходит за безопасные возможности AI-юриста JURO. Я могу помочь с правовым вопросом Узбекистана, официальными основаниями Lex.uz, планом действий или существующим шаблоном документа.",
+    "Bu so‘rov JURO AI-yuristining xavfsiz imkoniyatlaridan tashqarida. O‘zbekiston huquqi, Lex.uz rasmiy asoslari, harakatlar rejasi yoki mavjud hujjat shabloni bo‘yicha yordam bera olaman.",
+    "This request is outside the safe scope of JURO AI Lawyer. I can help with Uzbek law, official Lex.uz grounds, an action plan, or an available document template.",
+  );
   const answer = input.intent === "conversation" ? greeting : outOfScope;
   const result = parseLegalChatResponse({
     responseKind: "answer",
-    summary: input.locale === "ru" ? "Чем может помочь JURO" : "JURO qanday yordam beradi",
+    summary: aiText(input.locale, "Чем может помочь JURO", "JURO qanday yordam beradi", "How JURO can help"),
     answer,
     language: input.locale,
     jurisdiction: "UZ",
@@ -1782,7 +1813,7 @@ async function usageSummary(db: D1Database, workspaceId: string, userId: string,
   return { used: row?.used ?? 0, limit, periodEnd };
 }
 
-function localizedProviderError(locale: "ru" | "uz", code: string) {
+function localizedProviderError(locale: AiOutputLocale, code: string) {
   const ru: Record<string, string> = {
     PROVIDER_TIMEOUT: "AI не успел завершить ответ. Лимит не списан; попробуйте ещё раз.",
     INVALID_AI_OUTPUT: "AI вернул результат, который не прошёл проверку структуры. Лимит не списан.",
@@ -1799,7 +1830,65 @@ function localizedProviderError(locale: "ru" | "uz", code: string) {
     PROVIDER_CIRCUIT_OPEN: "AI xarajat nazorati tomonidan vaqtincha to‘xtatildi. Limit yechilmadi.",
     AI_CANCELLED: "Javob yaratish to‘xtatildi. Limit yechilmadi.",
   };
-  return (locale === "ru" ? ru : uz)[code] || (locale === "ru" ? ru.PROVIDER_UNAVAILABLE : uz.PROVIDER_UNAVAILABLE);
+  const en: Record<string, string> = {
+    PROVIDER_TIMEOUT: "The AI did not finish the answer in time. Your allowance was not used; try again.",
+    INVALID_AI_OUTPUT: "The AI response did not pass the required structure checks. Your allowance was not used.",
+    AI_REFUSED: "The AI could not process this request. Your allowance was not used.",
+    PROVIDER_UNAVAILABLE: "The AI provider is temporarily unavailable. Your allowance was not used.",
+    PROVIDER_CIRCUIT_OPEN: "AI is temporarily paused by the cost-control system. Your allowance was not used.",
+    AI_CANCELLED: "Answer generation was stopped. Your allowance was not used.",
+  };
+  const messages = locale === "en" ? en : locale === "uz" ? uz : ru;
+  return messages[code] || messages.PROVIDER_UNAVAILABLE;
+}
+
+function localizedVoiceError(locale: AiOutputLocale, code: VoiceRecordingError["code"]): string {
+  const ru: Record<VoiceRecordingError["code"], string> = {
+    INVALID_VOICE_REQUEST: "Некорректные параметры голосовой записи.",
+    INVALID_IDEMPOTENCY_KEY: "Некорректный идентификатор загрузки.",
+    VOICE_IDEMPOTENCY_CONFLICT: "Повторная загрузка не совпадает с исходной.",
+    VOICE_RECORDING_NOT_FOUND: "Голосовая запись недоступна.",
+    VOICE_UPLOAD_STATE_INVALID: "Голосовая запись уже обработана или недоступна.",
+    VOICE_UPLOAD_INTEGRITY_FAILED: "Не удалось подтвердить целостность голосовой записи.",
+    VOICE_FORMAT_UNSUPPORTED: "Формат аудио не поддерживается.",
+    VOICE_TRANSCRIPTION_BUSY: "Аудио уже распознаётся.",
+    VOICE_TRANSCRIPTION_UNAVAILABLE: "Распознавание речи временно недоступно.",
+    VOICE_SPEECH_UNAVAILABLE: "Озвучивание временно недоступно.",
+    VOICE_TRANSCRIPT_INVALID: "Проверьте распознанный текст перед отправкой.",
+    VOICE_TRANSCRIPT_MISMATCH: "Сначала подтвердите изменённый текст голосовой записи.",
+    VOICE_ENCRYPTION_UNAVAILABLE: "Защищённая обработка голосовой записи временно недоступна.",
+  };
+  const uz: Record<VoiceRecordingError["code"], string> = {
+    INVALID_VOICE_REQUEST: "Ovozli yozuv parametrlari noto‘g‘ri.",
+    INVALID_IDEMPOTENCY_KEY: "Yuklash identifikatori noto‘g‘ri.",
+    VOICE_IDEMPOTENCY_CONFLICT: "Takroriy yuklash asl yozuvga mos kelmaydi.",
+    VOICE_RECORDING_NOT_FOUND: "Ovozli yozuv mavjud emas.",
+    VOICE_UPLOAD_STATE_INVALID: "Ovozli yozuv allaqachon qayta ishlangan yoki mavjud emas.",
+    VOICE_UPLOAD_INTEGRITY_FAILED: "Ovozli yozuv yaxlitligini tasdiqlab bo‘lmadi.",
+    VOICE_FORMAT_UNSUPPORTED: "Audio formati qo‘llab-quvvatlanmaydi.",
+    VOICE_TRANSCRIPTION_BUSY: "Audio allaqachon matnga aylantirilmoqda.",
+    VOICE_TRANSCRIPTION_UNAVAILABLE: "Nutqni aniqlash vaqtincha ishlamayapti.",
+    VOICE_SPEECH_UNAVAILABLE: "Ovozli o‘qish vaqtincha ishlamayapti.",
+    VOICE_TRANSCRIPT_INVALID: "Yuborishdan oldin aniqlangan matnni tekshiring.",
+    VOICE_TRANSCRIPT_MISMATCH: "Avval ovozli yozuvning o‘zgartirilgan matnini tasdiqlang.",
+    VOICE_ENCRYPTION_UNAVAILABLE: "Ovozli yozuvni himoyalangan tarzda qayta ishlash vaqtincha ishlamayapti.",
+  };
+  const en: Record<VoiceRecordingError["code"], string> = {
+    INVALID_VOICE_REQUEST: "The voice-recording details are invalid.",
+    INVALID_IDEMPOTENCY_KEY: "The upload identifier is invalid.",
+    VOICE_IDEMPOTENCY_CONFLICT: "The repeated upload does not match the original recording.",
+    VOICE_RECORDING_NOT_FOUND: "This voice recording is unavailable.",
+    VOICE_UPLOAD_STATE_INVALID: "This voice recording has already been processed or is unavailable.",
+    VOICE_UPLOAD_INTEGRITY_FAILED: "The integrity of the voice recording could not be verified.",
+    VOICE_FORMAT_UNSUPPORTED: "This audio format is not supported.",
+    VOICE_TRANSCRIPTION_BUSY: "This audio is already being transcribed.",
+    VOICE_TRANSCRIPTION_UNAVAILABLE: "Speech recognition is temporarily unavailable.",
+    VOICE_SPEECH_UNAVAILABLE: "Text-to-speech is temporarily unavailable.",
+    VOICE_TRANSCRIPT_INVALID: "Review the transcript before sending it.",
+    VOICE_TRANSCRIPT_MISMATCH: "Confirm the edited voice transcript before sending it.",
+    VOICE_ENCRYPTION_UNAVAILABLE: "Protected voice processing is temporarily unavailable.",
+  };
+  return locale === "en" ? en[code] : locale === "uz" ? uz[code] : ru[code];
 }
 
 function publicAiFailureCode(code: string) {

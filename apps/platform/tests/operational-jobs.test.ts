@@ -234,5 +234,7 @@ test("jobs console requires fresh operational staff access and avoids content/pa
   assert.match(ui, /aria-live="polite"/);
   assert.match(ui, /staff-skip/);
   assert.match(ui, /minLength=\{10\}/);
+  assert.match(ui, /en:\s*\{/);
+  assert.match(ui, /nextLocale/);
   assert.doesNotMatch(service, /SELECT\s+\*|payload|content|envelope_hash AS/);
 });

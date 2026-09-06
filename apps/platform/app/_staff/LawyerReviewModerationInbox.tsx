@@ -2,8 +2,9 @@
 
 import { Check, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { lawyerIntlLocale } from "../../lib/platform/lawyer-localization";
+import type { PlatformLocale } from "../../lib/platform/routing";
 
-type Locale = "ru" | "uz";
 type ReviewStatus = "pending" | "approved" | "rejected";
 type Review = {
   id: string; lawyerRequestId: string; lawyerName: string; body: string | null;
@@ -13,28 +14,35 @@ type Review = {
 
 const copy = {
   ru: {
-    title: "Модерация отзывов о юристах", description: "Private review queue. Одобрение не публикует отзыв автоматически; исходный текст остаётся неизменным в журнале.",
+    title: "Модерация отзывов о юристах", description: "Закрытая очередь проверки. Одобрение не публикует отзыв автоматически; исходный текст остаётся неизменным в журнале.",
     refresh: "Обновить", pending: "Ожидают", approved: "Одобрены", rejected: "Отклонены", none: "По выбранному статусу отзывов нет.",
     ratings: "Оценки", comment: "Исходный отзыв", noComment: "Пользователь не оставил комментарий.", moderate: "Проверить", decision: "Решение", approve: "Одобрить", reject: "Отклонить",
     edited: "Текст после удаления персональных данных (необязательно)", reason: "Основание решения", reasonHint: "Не менее 1 символа. Укажите, что было проверено.", save: "Сохранить решение", cancel: "Отмена",
-    success: "Решение сохранено в защищённом журнале.", error: "Не удалось выполнить запрос.", protected: "Защищённый контур · свежая 2FA", status: "Статус",
+    success: "Решение сохранено в защищённом журнале.", error: "Не удалось выполнить запрос.", protected: "Защищённый контур · свежая 2FA", status: "Статус", skip: "К очереди", replies: "Ответы юристов", language: "Язык интерфейса",
   },
   uz: {
-    title: "Yuristlar haqidagi fikrlarni moderatsiya qilish", description: "Private review queue. Tasdiqlash fikrni avtomatik nashr qilmaydi; asl matn jurnalga o‘zgarmas holda saqlanadi.",
+    title: "Yuristlar haqidagi fikrlarni moderatsiya qilish", description: "Yopiq tekshiruv navbati. Tasdiqlash fikrni avtomatik nashr qilmaydi; asl matn jurnalga o‘zgarmas holda saqlanadi.",
     refresh: "Yangilash", pending: "Kutilmoqda", approved: "Tasdiqlangan", rejected: "Rad etilgan", none: "Tanlangan holat bo‘yicha fikrlar yo‘q.",
     ratings: "Baholar", comment: "Asl fikr", noComment: "Foydalanuvchi izoh qoldirmadi.", moderate: "Tekshirish", decision: "Qaror", approve: "Tasdiqlash", reject: "Rad etish",
     edited: "Shaxsiy ma’lumotlar olib tashlangan matn (ixtiyoriy)", reason: "Qaror asosi", reasonHint: "Kamida 1 belgi. Nima tekshirilganini ko‘rsating.", save: "Qarorni saqlash", cancel: "Bekor qilish",
-    success: "Qaror himoyalangan jurnalga saqlandi.", error: "So‘rov bajarilmadi.", protected: "Himoyalangan kontur · yangi 2FA", status: "Holat",
+    success: "Qaror himoyalangan jurnalga saqlandi.", error: "So‘rov bajarilmadi.", protected: "Himoyalangan kontur · yangi 2FA", status: "Holat", skip: "Navbatga o‘tish", replies: "Yurist javoblari", language: "Interfeys tili",
+  },
+  en: {
+    title: "Lawyer review moderation", description: "Private moderation queue. Approval does not publish a review automatically, and the original text remains unchanged in the audit record.",
+    refresh: "Refresh", pending: "Pending", approved: "Approved", rejected: "Rejected", none: "There are no reviews with the selected status.",
+    ratings: "Ratings", comment: "Original review", noComment: "The client did not leave a written review.", moderate: "Review", decision: "Decision", approve: "Approve", reject: "Reject",
+    edited: "Redacted text after removing personal data (optional)", reason: "Decision rationale", reasonHint: "Enter at least one character and state what was checked.", save: "Save decision", cancel: "Cancel",
+    success: "The decision was saved to the protected audit record.", error: "We could not complete the request.", protected: "Protected workspace · recent 2FA", status: "Status", skip: "Skip to moderation queue", replies: "Lawyer replies", language: "Interface language",
   },
 } as const;
 
-async function json<T>(response: Response): Promise<T> {
-  const payload = await response.json() as T & { error?: string };
-  if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+async function json<T>(response: Response, fallback: string): Promise<T> {
+  const payload = await response.json() as T;
+  if (!response.ok) throw new Error(fallback);
   return payload;
 }
 
-export function LawyerReviewModerationInbox({ locale, reviewerName }: { locale: Locale; reviewerName: string }) {
+export function LawyerReviewModerationInbox({ locale, reviewerName }: { locale: PlatformLocale; reviewerName: string }) {
   const t = copy[locale];
   const [status, setStatus] = useState<ReviewStatus>("pending");
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -50,7 +58,7 @@ export function LawyerReviewModerationInbox({ locale, reviewerName }: { locale: 
     setBusy(true); setError("");
     try {
       const response = await fetch(`/api/platform/admin/lawyer-reviews?status=${encodeURIComponent(status)}`, { cache: "no-store" });
-      const payload = await json<{ reviews: Review[] }>(response);
+      const payload = await json<{ reviews: Review[] }>(response, t.error);
       setReviews(payload.reviews); setSelected(null); setAnnouncement("");
     } catch (value) { setError(value instanceof Error ? value.message : t.error); }
     finally { setBusy(false); }
@@ -65,18 +73,18 @@ export function LawyerReviewModerationInbox({ locale, reviewerName }: { locale: 
       await json(await fetch(`/api/platform/admin/lawyer-reviews/${encodeURIComponent(selected.id)}`, {
         method: "PATCH", headers: { "content-type": "application/json", "x-juro-csrf": "1" },
         body: JSON.stringify({ decision, moderatedBody: moderatedBody.trim() || undefined, reason: reason.trim(), locale }),
-      }));
+      }), t.error);
       setAnnouncement(t.success); await load();
     } catch (value) { setError(value instanceof Error ? value.message : t.error); }
     finally { setBusy(false); }
   };
-  const date = (value: string) => new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(value));
+  const date = (value: string) => new Intl.DateTimeFormat(lawyerIntlLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(value));
   const label = (value: ReviewStatus) => t[value];
   return <div className="staff-console">
-    <a className="staff-skip" href="#staff-main">{locale === "ru" ? "К очереди" : "Navbatga o‘tish"}</a>
-    <header className="staff-topbar"><div className="staff-brand"><ShieldCheck aria-hidden="true"/><span><b>JURO</b><small>LEGAL OPERATIONS</small></span></div><div className="staff-session"><span>{t.protected}</span><b>{reviewerName}</b></div><a href={`/${locale === "ru" ? "uz" : "ru"}/admin/lawyer-reviews`} hrefLang={locale === "ru" ? "uz" : "ru"}>{locale === "ru" ? "UZ" : "RU"}</a></header>
+    <a className="staff-skip" href="#staff-main">{t.skip}</a>
+    <header className="staff-topbar"><div className="staff-brand"><ShieldCheck aria-hidden="true"/><span><b>JURO</b><small>LEGAL OPERATIONS</small></span></div><div className="staff-session"><span>{t.protected}</span><b>{reviewerName}</b></div><nav className="staff-locale-links" aria-label={t.language}>{(["ru", "uz", "en"] as const).map((value) => <a key={value} href={`/${value}/admin/lawyer-reviews`} hrefLang={value} aria-current={value === locale ? "page" : undefined}>{value.toUpperCase()}</a>)}</nav></header>
     <main id="staff-main" className="staff-main">
-      <section className="staff-heading"><div><span>JURO · REVIEW SAFETY</span><h1>{t.title}</h1><p>{t.description}</p></div><div className="staff-review-toolbar"><a href={`/${locale}/admin/lawyer-review-replies`}>{locale === "ru" ? "Ответы юристов" : "Yurist javoblari"}</a><button type="button" onClick={() => void load()} disabled={busy}><RefreshCw aria-hidden="true"/>{t.refresh}</button></div></section>
+      <section className="staff-heading"><div><span>JURO · REVIEW SAFETY</span><h1>{t.title}</h1><p>{t.description}</p></div><div className="staff-review-toolbar"><a href={`/${locale}/admin/lawyer-review-replies`}>{t.replies}</a><button type="button" onClick={() => void load()} disabled={busy}><RefreshCw aria-hidden="true"/>{t.refresh}</button></div></section>
       <div className="staff-filters"><label>{t.status}<select value={status} onChange={(event) => setStatus(event.target.value as ReviewStatus)}><option value="pending">{t.pending}</option><option value="approved">{t.approved}</option><option value="rejected">{t.rejected}</option></select></label></div>
       {error && <p className="staff-error" role="alert">{error}<button type="button" onClick={() => void load()}>{t.refresh}</button></p>}
       {announcement && <p role="status" className="staff-verified"><Check aria-hidden="true"/>{announcement}</p>}

@@ -94,7 +94,10 @@ export async function requireChatGPTUser(
   const user = await getChatGPTUser();
   if (user) return user;
   const safeReturnTo = safeRelativeReturnPath(returnTo);
-  const locale = /^\/ru(?:\/|$)/.test(safeReturnTo) ? "ru" : "uz";
+  const routeLocale = safeReturnTo.match(/^\/(ru|uz|en)(?:\/|$)/u)?.[1];
+  const locale = routeLocale === "ru" || routeLocale === "uz" || routeLocale === "en"
+    ? routeLocale
+    : "ru";
   redirect(
     `/${locale}/auth/login?returnTo=${encodeURIComponent(safeReturnTo)}`,
   );

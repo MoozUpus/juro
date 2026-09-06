@@ -1,5 +1,5 @@
 import { getChatGPTUser } from "../../../../chatgpt-auth";
-import { isLocale, isWorkspaceId } from "../../../../../lib/platform/routing";
+import { isLocale, isWorkspaceId, type PlatformLocale } from "../../../../../lib/platform/routing";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ function documentReviewTarget(
 
 function loginTarget(
   request: Request,
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
   returnTo: URL,
 ): URL {
   const login = new URL(`/${locale}/auth/login`, request.url);

@@ -21,8 +21,9 @@ import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const NOW = "2026-08-04T12:00:00.000Z";
 
-test("voice API errors honor the explicit RU/UZ locale without exposing internal messages", async () => {
+test("voice API errors honor the explicit RU/UZ/EN locale without exposing internal messages", async () => {
   assert.equal(voiceLocale(new Request("https://app.juro.uz/api", { headers: { "x-juro-locale": "uz" } })), "uz");
+  assert.equal(voiceLocale(new Request("https://app.juro.uz/api", { headers: { "x-juro-locale": "en" } })), "en");
   const response = voiceErrorResponse(
     new VoiceRecordingError("VOICE_TRANSCRIPTION_UNAVAILABLE", 503, "internal provider detail"),
     "uz",
@@ -33,6 +34,22 @@ test("voice API errors honor the explicit RU/UZ locale without exposing internal
     code: "VOICE_TRANSCRIPTION_UNAVAILABLE",
     error: "Nutqni matnga aylantirish vaqtincha mavjud emas.",
   });
+  const english = voiceErrorResponse(
+    new VoiceRecordingError("VOICE_TRANSCRIPTION_UNAVAILABLE", 503, "internal provider detail"),
+    "en",
+  );
+  assert.ok(english);
+  assert.deepEqual(await english.json(), {
+    code: "VOICE_TRANSCRIPTION_UNAVAILABLE",
+    error: "Speech transcription is temporarily unavailable.",
+  });
+  assert.equal(parseVoiceIntent({
+    mimeType: "audio/webm",
+    sizeBytes: 8,
+    durationMs: 1_000,
+    sha256: "a".repeat(64),
+    locale: "en",
+  }).locale, "en");
 });
 
 function encodedKey(seed: number): string {
@@ -240,6 +257,24 @@ test("TTS is server-side, bounded to a configured model/voice, and returns provi
     model: "gpt-4o-mini-tts", voice: "marin", responseFormat: "mp3",
   });
   assert.match(String(body.instructions), /AI-озвучивание/);
+});
+
+test("English TTS sends an explicit English voice instruction", async () => {
+  let providerRequest: Request | null = null;
+  await synthesizeAssistantSpeech({
+    apiKey: "test-openai-key",
+    model: "gpt-4o-mini-tts",
+    voice: "cedar",
+    text: "A concise legal answer",
+    locale: "en",
+    fetcher: async (input, init) => {
+      providerRequest = new Request(input, init);
+      return new Response(Uint8Array.from([0x49, 0x44, 0x33]), { headers: { "content-type": "audio/mpeg" } });
+    },
+  });
+  assert.ok(providerRequest);
+  const body = JSON.parse(await (providerRequest as Request).text()) as Record<string, unknown>;
+  assert.match(String(body.instructions), /Speak calmly, professionally and clearly/);
 });
 
 test("voice retention is inert before migration 0066", async () => {

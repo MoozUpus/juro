@@ -1,6 +1,7 @@
 import { requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
 import { userIdentityById } from "../../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../../lib/auth/identity-runtime";
+import { authLocaleFromRequest } from "../../../../../lib/auth/request-locale";
 import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
 import {
@@ -10,8 +11,9 @@ import {
   UserMemoryError,
 } from "../../../../../lib/ai/user-memory";
 
-export const GET = withApiErrors(async function GET() {
-  const user = await requireApiUser();
+export const GET = withApiErrors(async function GET(request: Request) {
+  const locale = authLocaleFromRequest(request);
+  const user = await requireApiUser(request);
   const workspace = await workspaceForUser(user);
   const db = requireD1();
   const identity = await userIdentityById(
@@ -36,7 +38,11 @@ export const GET = withApiErrors(async function GET() {
     if (error instanceof UserMemoryError) {
       return Response.json({
         code: error.code,
-        error: "Зашифрованная память временно недоступна; неполный экспорт не создан. / Shifrlangan xotira vaqtincha mavjud emas; to‘liq bo‘lmagan eksport yaratilmadi.",
+        error: {
+          ru: "Зашифрованная память временно недоступна; неполный экспорт не создан.",
+          uz: "Shifrlangan xotira vaqtincha mavjud emas; to‘liq bo‘lmagan eksport yaratilmadi.",
+          en: "Encrypted memory is temporarily unavailable, so an incomplete export was not created.",
+        }[locale],
       }, {
         status: 503,
         headers: { "cache-control": "private, no-store", pragma: "no-cache" },
@@ -64,7 +70,11 @@ export const GET = withApiErrors(async function GET() {
   ]);
   const body = JSON.stringify({
     exportedAt: new Date().toISOString(),
-    scope: "user-owned metadata and workspace activity visible to the requester",
+    scope: {
+      ru: "принадлежащие пользователю метаданные и доступная ему активность пространства",
+      uz: "foydalanuvchiga tegishli metama’lumotlar va unga ko‘rinadigan makon faoliyati",
+      en: "user-owned metadata and workspace activity visible to the requester",
+    }[locale],
     profile: profile.results[0] && identity
       ? { ...profile.results[0], email: identity.email, phone: identity.phone }
       : null,
@@ -80,7 +90,11 @@ export const GET = withApiErrors(async function GET() {
       entries: memories,
     },
     auditEvents: audit.results,
-    note: "File bodies and third-party confidential content are excluded. Active memory entries visible in the current workspace are decrypted only for this authenticated export.",
+    note: {
+      ru: "Содержимое файлов и конфиденциальные данные третьих лиц исключены. Активные записи памяти, доступные в текущем пространстве, расшифровываются только для этого авторизованного экспорта.",
+      uz: "Fayllar mazmuni va uchinchi shaxslarning maxfiy ma’lumotlari kiritilmaydi. Joriy makonda ko‘rinadigan faol xotira yozuvlari faqat shu autentifikatsiyalangan eksport uchun shifrdan chiqariladi.",
+      en: "File contents and third-party confidential data are excluded. Active memory entries visible in the current workspace are decrypted only for this authenticated export.",
+    }[locale],
   }, null, 2);
   return new Response(body, {
     headers: {

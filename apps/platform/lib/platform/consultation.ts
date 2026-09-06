@@ -6,7 +6,7 @@ export const consultationBookingSchema = z.object({
   planStepId: z.string().uuid().optional(),
   comparisonId: z.string().uuid().optional(),
   consent: z.literal(true),
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
 }).strict().superRefine((value, context) => {
   if (value.planStepId && !value.caseId) {
     context.addIssue({

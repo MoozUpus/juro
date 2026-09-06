@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import type { PlatformLocale } from "../../lib/platform/routing";
 
 export function AdminConsoleLaunch({
   locale,
   environment,
 }: {
-  locale: "ru" | "uz";
+  locale: PlatformLocale;
   environment: "production" | "staging";
 }) {
   const [state, setState] = useState<"idle" | "working" | "error">("idle");
@@ -18,11 +19,17 @@ export function AdminConsoleLaunch({
         button: "Открыть защищённую консоль",
         error: "Не удалось открыть отдельную сессию. Обновите TOTP/MFA и повторите попытку.",
       }
-    : {
+    : locale === "uz" ? {
         title: "Ajratilgan administrator konsoli",
         body: `Alohida ${isProduction ? "production" : "staging"} domeni 15 daqiqalik mustaqil admin-sessiya bilan ochiladi. Rol va yangi TOTP har bir so‘rovda qayta tekshiriladi.`,
         button: "Himoyalangan konsolni ochish",
         error: "Alohida sessiyani ochib bo‘lmadi. TOTP/MFA ni yangilang va qayta urinib ko‘ring.",
+      }
+    : {
+        title: "Isolated administrator console",
+        body: `A separate ${isProduction ? "production" : "staging"} domain will open with an independent 15-minute admin session. Your role and recent TOTP are checked again on every request.`,
+        button: "Open secure console",
+        error: "The separate session could not be opened. Refresh TOTP/MFA and try again.",
       };
 
   async function launch() {

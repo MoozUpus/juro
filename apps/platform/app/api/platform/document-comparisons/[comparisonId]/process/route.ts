@@ -1,3 +1,4 @@
+import { authLocaleFromRequest } from "../../../../../../lib/auth/request-locale";
 import { AiUnavailableError } from "../../../../../../lib/document-builder/ai/openai";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
@@ -6,6 +7,10 @@ import { requireD1 } from "../../../../../../lib/document-builder/storage/runtim
 import { compareDocuments, summarizeChanges } from "../../../../../../lib/document-comparison/diff";
 import { extractDocument } from "../../../../../../lib/document-comparison/extract";
 import { enrichComparisonChanges, type ComparisonLegalSource } from "../../../../../../lib/document-comparison/legal-analysis";
+import {
+  comparisonProcessingErrorMessage,
+  comparisonRouteErrorMessage,
+} from "../../../../../../lib/document-comparison/localization";
 import {
   assertComparisonFileScanEvidence,
   assertComparisonSourceFilesClean,
@@ -19,6 +24,7 @@ import {
 import { ComparisonProcessingError, type ComparisonChange, type ComparisonLocale } from "../../../../../../lib/document-comparison/types";
 import { ArchiveInspectionError, verifyArchiveBytes } from "../../../../../../lib/document-analysis/archive-inspector";
 import { workspaceForContentEditor } from "../../../../../../lib/platform/workspace";
+import { isLocale } from "../../../../../../lib/platform/routing";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -33,9 +39,14 @@ async function updateStage(db: D1Database, comparisonId: string, workspaceId: st
   ).bind(stage, isoNow(), comparisonId, workspaceId).run();
 }
 
-async function fileBytes(file: ComparisonFileRecord) {
+async function fileBytes(file: ComparisonFileRecord, locale: ComparisonLocale) {
   const object = await getPrivateObject(file.r2Key);
-  if (!object) throw new ComparisonProcessingError("CORRUPT_FILE", "Одна из версий отсутствует в приватном хранилище.");
+  if (!object) {
+    throw new ComparisonProcessingError(
+      "CORRUPT_FILE",
+      comparisonProcessingErrorMessage("CORRUPT_FILE", locale),
+    );
+  }
   assertComparisonFileScanEvidence(file, object);
   const bytes = new Uint8Array(await object.arrayBuffer());
   if (file.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
@@ -48,7 +59,10 @@ async function fileBytes(file: ComparisonFileRecord) {
       });
     } catch (error) {
       if (error instanceof ArchiveInspectionError) {
-        throw new ComparisonProcessingError("CORRUPT_FILE", "DOCX не прошёл безопасную проверку распаковки.");
+        throw new ComparisonProcessingError(
+          "CORRUPT_FILE",
+          comparisonProcessingErrorMessage("CORRUPT_FILE", locale),
+        );
       }
       throw error;
     }
@@ -83,12 +97,18 @@ export const POST = withApiErrors(async function POST(
   context: { params: Promise<{ comparisonId: string }> },
 ) {
   assertSafeWrite(request);
+  const requestedLocale = authLocaleFromRequest(request);
   const user = await requireApiUser();
   const workspace = await workspaceForContentEditor(user);
   const { comparisonId } = await context.params;
   const db = requireD1();
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
-  if (!comparison) return response({ error: "Сравнение не найдено." }, 404);
+  if (!comparison) {
+    return response({
+      error: comparisonRouteErrorMessage("COMPARISON_NOT_FOUND", requestedLocale),
+    }, 404);
+  }
+  const locale = isLocale(comparison.locale) ? comparison.locale : requestedLocale;
   let sourceFiles: [ComparisonFileRecord, ComparisonFileRecord];
   try {
     sourceFiles = await assertComparisonSourceFilesClean(db, {
@@ -103,7 +123,9 @@ export const POST = withApiErrors(async function POST(
       "UPDATE document_comparisons SET status='failed',error_code=?,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
     ).bind(code, isoNow(), comparisonId, workspace.id, user.id).run();
     return response({
-      error: error instanceof ComparisonProcessingError ? error.message : "Сравнение недоступно.",
+      error: error instanceof ComparisonProcessingError
+        ? comparisonProcessingErrorMessage(error.code, locale)
+        : comparisonRouteErrorMessage("COMPARISON_UNAVAILABLE", locale),
       code,
       comparison: { id: comparisonId, status: "failed", stage: comparison.stage },
     }, 422);
@@ -115,14 +137,18 @@ export const POST = withApiErrors(async function POST(
      WHERE id=? AND workspace_id=? AND owner_user_id=? AND deleted_at IS NULL
        AND (status!='processing' OR updated_at<?)`,
   ).bind(isoNow(), comparisonId, workspace.id, user.id, staleBefore).run();
-  if (!lock.meta.changes) return response({ error: "Сравнение уже обрабатывается." }, 409);
+  if (!lock.meta.changes) {
+    return response({
+      error: comparisonRouteErrorMessage("COMPARISON_ALREADY_PROCESSING", locale),
+    }, 409);
+  }
 
   try {
     const [versionOneFile, versionTwoFile] = sourceFiles;
     let versionOne = await loadExtractedDocument(comparison.versionOneJsonKey);
     if (!versionOne) {
       await updateStage(db, comparisonId, workspace.id, "extracting_version_one");
-      const firstFile = await fileBytes(versionOneFile);
+      const firstFile = await fileBytes(versionOneFile, locale);
       versionOne = await extractDocument(firstFile);
       const versionOneJsonKey = `workspaces/${workspace.id}/comparisons/${comparisonId}/version-one.json`;
       await putPrivateObject(versionOneJsonKey, new TextEncoder().encode(JSON.stringify(versionOne)), "application/json", {
@@ -136,7 +162,7 @@ export const POST = withApiErrors(async function POST(
     let versionTwo = await loadExtractedDocument(comparison.versionTwoJsonKey);
     if (!versionTwo) {
       await updateStage(db, comparisonId, workspace.id, "extracting_version_two");
-      const secondFile = await fileBytes(versionTwoFile);
+      const secondFile = await fileBytes(versionTwoFile, locale);
       versionTwo = await extractDocument(secondFile);
       const versionTwoJsonKey = `workspaces/${workspace.id}/comparisons/${comparisonId}/version-two.json`;
       await putPrivateObject(versionTwoJsonKey, new TextEncoder().encode(JSON.stringify(versionTwo)), "application/json", {
@@ -148,7 +174,6 @@ export const POST = withApiErrors(async function POST(
     }
 
     await updateStage(db, comparisonId, workspace.id, "structuring");
-    const locale = (comparison.locale === "uz" ? "uz" : "ru") as ComparisonLocale;
     await updateStage(db, comparisonId, workspace.id, "diffing");
     let result = compareDocuments(versionOne, versionTwo, locale);
     result = {
@@ -230,7 +255,7 @@ export const POST = withApiErrors(async function POST(
       "SELECT stage FROM document_comparisons WHERE id=? AND workspace_id=? LIMIT 1",
     ).bind(comparisonId, workspace.id).first<{ stage: string }>();
     return response({
-      error: error instanceof ComparisonProcessingError ? error.message : "Сравнение не завершено. Повторите обработку.",
+      error: comparisonProcessingErrorMessage(code, locale),
       code,
       comparison: { id: comparisonId, status: "failed", stage: failedState?.stage || comparison.stage },
     }, 422);

@@ -11,14 +11,23 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import {
+  accountDeletionChallenges,
+  aiDocumentPrefillHandoffs,
   authMfaAttemptReservations,
   authMfaChallenges,
   authPendingRegistrations,
   authPasswordAttemptReservations,
   authPasswordRateLimits,
   authSessionHandoffs,
+  builderDocumentAnalysisHandoffs,
+  emailChangeChallenges,
+  guestAiSessions,
+  knowledgeBaseArticleVersions,
+  orderItems,
   policyDocuments,
   securityEmailJobs,
+  securityNotificationJobs,
+  subscriptionPlanVersions,
   userPasswordCredentials,
   userProfiles,
 } from "../db/schema";
@@ -69,6 +78,15 @@ const migratedTables = [
   authSessionHandoffs,
   policyDocuments,
   securityEmailJobs,
+  emailChangeChallenges,
+  securityNotificationJobs,
+  accountDeletionChallenges,
+  aiDocumentPrefillHandoffs,
+  builderDocumentAnalysisHandoffs,
+  guestAiSessions,
+  knowledgeBaseArticleVersions,
+  subscriptionPlanVersions,
+  orderItems,
 ] as const;
 
 function statements(sql: string): string[] {
@@ -78,8 +96,8 @@ function statements(sql: string): string[] {
     .filter(Boolean);
 }
 
-function applyMigrationsThrough0153(db: DatabaseSync): void {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 153)) {
+function applyMigrationsThrough0154(db: DatabaseSync): void {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 154)) {
     const migration = readFileSync(
       new URL(`${entry.tag}.sql`, drizzleRoot),
       "utf8",
@@ -214,11 +232,11 @@ function assertColumnParity(
   assert.deepEqual(declared, migrated);
 }
 
-test("db/schema.ts stays in parity with authentication migrations 0150-0153", () => {
+test("db/schema.ts stays in parity with locale and authentication migrations 0150-0154", () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    applyMigrationsThrough0153(db);
+    applyMigrationsThrough0154(db);
 
     for (const table of migratedTables) {
       const tableName = getTableName(table);

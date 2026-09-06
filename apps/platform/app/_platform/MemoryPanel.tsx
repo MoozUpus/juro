@@ -37,8 +37,107 @@ const categories: Category[] = [
   "typical_requisite",
 ];
 
+const memoryCopy = {
+  ru: {
+    title: "Память JURO",
+    loading: "Загрузка памяти…",
+    loadError: "Память не загрузилась.",
+    changeError: "Память не изменена.",
+    updated: "Настройки памяти обновлены.",
+    description: "JURO может учитывать только сохранённые здесь устойчивые факты и предпочтения. Пароли, коды и платёжные данные не сохраняются.",
+    automatic: "Автоматически сохранять безопасные факты",
+    unavailable: "Зашифрованная память сейчас недоступна. Автоматическое сохранение можно отключить; новые записи не принимаются, а AI-чат продолжает работать без памяти.",
+    add: "Добавить запись",
+    category: "Категория",
+    scope: "Область",
+    wholeAccount: "Весь аккаунт",
+    currentWorkspace: "Текущее пространство",
+    thisWorkspace: "Это пространство",
+    remember: "Что запомнить",
+    sensitiveCreate: "Явно разрешаю сохранить эту запись, если она содержит чувствительные обстоятельства. Пароли и коды всё равно будут отклонены.",
+    saveMemory: "Сохранить в память",
+    savedEntries: "Сохранённые записи",
+    empty: "Память пуста. JURO не переносит обстоятельства между чатами.",
+    automaticSource: "Сохранено автоматически",
+    manualSource: "Добавлено вами",
+    statement: "Запись",
+    sensitiveEdit: "Явно разрешаю сохранить чувствительные обстоятельства в этой редакции. Пароли и коды всё равно запрещены.",
+    save: "Сохранить",
+    remove: "Удалить",
+    clear: "Очистить доступную память",
+    clearAria: "Подтверждение очистки памяти",
+    clearDescription: "Будут удалены глобальные и доступные записи текущего пространства.",
+    confirmClear: "Подтвердить очистку",
+    cancel: "Отмена",
+  },
+  uz: {
+    title: "JURO xotirasi",
+    loading: "Xotira yuklanmoqda…",
+    loadError: "Xotira yuklanmadi.",
+    changeError: "Xotira o‘zgartirilmadi.",
+    updated: "Xotira sozlamalari yangilandi.",
+    description: "JURO faqat shu yerda saqlangan barqaror ma’lumot va afzalliklarni hisobga oladi. Parollar, kodlar va to‘lov ma’lumotlari saqlanmaydi.",
+    automatic: "Xavfsiz faktlarni avtomatik saqlash",
+    unavailable: "Shifrlangan xotira hozir mavjud emas. Avtomatik saqlashni o‘chirish mumkin; yangi yozuvlar qabul qilinmaydi, AI chat esa xotirasiz ishlashda davom etadi.",
+    add: "Yozuv qo‘shish",
+    category: "Toifa",
+    scope: "Doira",
+    wholeAccount: "Butun hisob",
+    currentWorkspace: "Joriy makon",
+    thisWorkspace: "Shu makon",
+    remember: "Nimani eslab qolish",
+    sensitiveCreate: "Agar yozuv maxfiy holatlarni o‘z ichiga olsa, uni saqlashga aniq ruxsat beraman. Parol va kodlar baribir rad etiladi.",
+    saveMemory: "Xotirada saqlash",
+    savedEntries: "Saqlangan yozuvlar",
+    empty: "Xotira bo‘sh. JURO holatlarni suhbatlar orasida ko‘chirmaydi.",
+    automaticSource: "Avtomatik saqlandi",
+    manualSource: "Siz qo‘shgansiz",
+    statement: "Yozuv",
+    sensitiveEdit: "Ushbu tahrirdagi maxfiy holatlarni saqlashga aniq ruxsat beraman. Parol va kodlar baribir taqiqlanadi.",
+    save: "Saqlash",
+    remove: "O‘chirish",
+    clear: "Mavjud xotirani tozalash",
+    clearAria: "Xotirani tozalashni tasdiqlash",
+    clearDescription: "Global va joriy makondagi mavjud yozuvlar o‘chiriladi.",
+    confirmClear: "Tozalashni tasdiqlash",
+    cancel: "Bekor qilish",
+  },
+  en: {
+    title: "JURO memory",
+    loading: "Loading memory…",
+    loadError: "Memory could not be loaded.",
+    changeError: "Memory could not be updated.",
+    updated: "Memory settings updated.",
+    description: "JURO can use only the stable facts and preferences saved here. Passwords, verification codes and payment details are never stored.",
+    automatic: "Automatically save safe facts",
+    unavailable: "Encrypted memory is currently unavailable. You can turn off automatic saving; new entries will not be accepted, and AI chat will continue without memory.",
+    add: "Add entry",
+    category: "Category",
+    scope: "Scope",
+    wholeAccount: "Entire account",
+    currentWorkspace: "Current workspace",
+    thisWorkspace: "This workspace",
+    remember: "What should JURO remember?",
+    sensitiveCreate: "I explicitly allow this entry to be saved if it contains sensitive circumstances. Passwords and codes will still be rejected.",
+    saveMemory: "Save to memory",
+    savedEntries: "Saved entries",
+    empty: "Memory is empty. JURO does not carry circumstances between chats.",
+    automaticSource: "Saved automatically",
+    manualSource: "Added by you",
+    statement: "Entry",
+    sensitiveEdit: "I explicitly allow sensitive circumstances in this revision to be saved. Passwords and codes remain prohibited.",
+    save: "Save",
+    remove: "Delete",
+    clear: "Clear available memory",
+    clearAria: "Confirm memory deletion",
+    clearDescription: "Global entries and entries available in this workspace will be deleted.",
+    confirmClear: "Confirm deletion",
+    cancel: "Cancel",
+  },
+} as const;
+
 export function MemoryPanel({ locale }: { locale: PlatformLocale }) {
-  const ru = locale === "ru";
+  const t = memoryCopy[locale];
   const [data, setData] = useState<MemoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -60,10 +159,10 @@ export function MemoryPanel({ locale }: { locale: PlatformLocale }) {
     });
     const body = await response.json() as MemoryResponse;
     if (!response.ok) {
-      throw new Error(body.error || (ru ? "Память не загрузилась." : "Xotira yuklanmadi."));
+      throw new Error(body.error || t.loadError);
     }
     return body;
-  }, [locale, ru]);
+  }, [locale, t.loadError]);
 
   const load = useCallback(async () => {
     try {
@@ -102,8 +201,8 @@ export function MemoryPanel({ locale }: { locale: PlatformLocale }) {
         body: JSON.stringify({ ...body, locale }),
       });
       const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error || (ru ? "Память не изменена." : "Xotira o‘zgartirilmadi."));
-      setNotice(ru ? "Настройки памяти обновлены." : "Xotira sozlamalari yangilandi.");
+      if (!response.ok) throw new Error(result.error || t.changeError);
+      setNotice(t.updated);
       await load();
       return true;
     } catch (value) {
@@ -134,18 +233,16 @@ export function MemoryPanel({ locale }: { locale: PlatformLocale }) {
 
   if (loading) {
     return <section className="memory-panel" aria-labelledby="memory-heading">
-      <h2 id="memory-heading"><Brain aria-hidden="true" />{ru ? "Память JURO" : "JURO xotirasi"}</h2>
-      <p role="status"><LoaderCircle className="spin" aria-hidden="true" />{ru ? "Загрузка памяти…" : "Xotira yuklanmoqda…"}</p>
+      <h2 id="memory-heading"><Brain aria-hidden="true" />{t.title}</h2>
+      <p role="status"><LoaderCircle className="spin" aria-hidden="true" />{t.loading}</p>
     </section>;
   }
 
   return <section className="memory-panel" aria-labelledby="memory-heading">
     <div className="memory-panel-heading">
       <div>
-        <h2 id="memory-heading"><Brain aria-hidden="true" />{ru ? "Память JURO" : "JURO xotirasi"}</h2>
-        <p>{ru
-          ? "JURO может учитывать только сохранённые здесь устойчивые факты и предпочтения. Пароли, коды и платёжные данные не сохраняются."
-          : "JURO faqat shu yerda saqlangan barqaror ma’lumot va afzalliklarni hisobga oladi. Parollar, kodlar va to‘lov ma’lumotlari saqlanmaydi."}</p>
+        <h2 id="memory-heading"><Brain aria-hidden="true" />{t.title}</h2>
+        <p>{t.description}</p>
       </div>
       {data && <label className="memory-toggle">
         <input
@@ -154,7 +251,7 @@ export function MemoryPanel({ locale }: { locale: PlatformLocale }) {
           disabled={Boolean(busy)}
           onChange={(event) => void mutate({ action: "settings", automaticEnabled: event.target.checked }, "settings")}
         />
-        <span>{ru ? "Автоматически сохранять безопасные факты" : "Xavfsiz faktlarni avtomatik saqlash"}</span>
+        <span>{t.automatic}</span>
       </label>}
     </div>
 
@@ -163,61 +260,55 @@ export function MemoryPanel({ locale }: { locale: PlatformLocale }) {
 
     {data && !data.available && <p className="memory-unavailable" role="status">
       <CircleAlert aria-hidden="true" />
-      <span>{ru
-        ? "Зашифрованная память сейчас недоступна. Автоматическое сохранение можно отключить; новые записи не принимаются, а AI-чат продолжает работать без памяти."
-        : "Shifrlangan xotira hozir mavjud emas. Avtomatik saqlashni o‘chirish mumkin; yangi yozuvlar qabul qilinmaydi, AI chat esa xotirasiz ishlashda davom etadi."}</span>
+      <span>{t.unavailable}</span>
     </p>}
 
     {data?.available && <>
       <form className="memory-create" onSubmit={createMemory}>
-        <h3>{ru ? "Добавить запись" : "Yozuv qo‘shish"}</h3>
+        <h3>{t.add}</h3>
         <div className="memory-fields">
-          <label>{ru ? "Категория" : "Toifa"}
+          <label>{t.category}
             <select value={create.category} onChange={(event) => setCreate(current => ({ ...current, category: event.target.value as Category }))}>
-              {categories.map(category => <option value={category} key={category}>{categoryLabel(category, ru)}</option>)}
+              {categories.map(category => <option value={category} key={category}>{categoryLabel(category, locale)}</option>)}
             </select>
           </label>
-          <label>{ru ? "Область" : "Doira"}
+          <label>{t.scope}
             <select value={create.scope} onChange={(event) => setCreate(current => ({ ...current, scope: event.target.value as "global" | "workspace" }))}>
-              <option value="global">{ru ? "Весь аккаунт" : "Butun hisob"}</option>
-              <option value="workspace">{ru ? "Текущее пространство" : "Joriy makon"}</option>
+              <option value="global">{t.wholeAccount}</option>
+              <option value="workspace">{t.currentWorkspace}</option>
             </select>
           </label>
         </div>
-        <label>{ru ? "Что запомнить" : "Nimani eslab qolish"}
+        <label>{t.remember}
           <textarea required minLength={2} maxLength={500} value={create.statement} onChange={(event) => setCreate(current => ({ ...current, statement: event.target.value }))} />
         </label>
         <label className="memory-sensitive-confirmation">
           <input type="checkbox" checked={create.confirmSensitive} onChange={(event) => setCreate(current => ({ ...current, confirmSensitive: event.target.checked }))} />
-          <span>{ru
-            ? "Явно разрешаю сохранить эту запись, если она содержит чувствительные обстоятельства. Пароли и коды всё равно будут отклонены."
-            : "Agar yozuv maxfiy holatlarni o‘z ichiga olsa, uni saqlashga aniq ruxsat beraman. Parol va kodlar baribir rad etiladi."}</span>
+          <span>{t.sensitiveCreate}</span>
         </label>
         <button type="submit" disabled={Boolean(busy) || create.statement.trim().length < 2} aria-busy={busy === "create"}>
           {busy === "create" ? <LoaderCircle className="spin" aria-hidden="true" /> : <Plus aria-hidden="true" />}
-          {ru ? "Сохранить в память" : "Xotirada saqlash"}
+          {t.saveMemory}
         </button>
       </form>
 
       <div className="memory-list" aria-live="polite">
-        <h3>{ru ? `Сохранённые записи: ${data.memories.length}` : `Saqlangan yozuvlar: ${data.memories.length}`}</h3>
-        {data.memories.length === 0 && <p className="memory-empty">{ru
-          ? "Память пуста. JURO не переносит обстоятельства между чатами."
-          : "Xotira bo‘sh. JURO holatlarni suhbatlar orasida ko‘chirmaydi."}</p>}
+        <h3>{t.savedEntries}: {data.memories.length}</h3>
+        {data.memories.length === 0 && <p className="memory-empty">{t.empty}</p>}
         {data.memories.map(memory => {
           const draft = drafts[memory.id] ?? { category: memory.category, statement: memory.statement, confirmSensitive: false };
           return <article className="memory-row" key={memory.id}>
             <div className="memory-row-meta">
-              <span>{memory.scope === "global" ? (ru ? "Весь аккаунт" : "Butun hisob") : (ru ? "Это пространство" : "Shu makon")}</span>
-              <span>{memory.sourceKind === "automatic" ? (ru ? "Сохранено автоматически" : "Avtomatik saqlandi") : (ru ? "Добавлено вами" : "Siz qo‘shgansiz")}</span>
-              <time dateTime={memory.updatedAt}>{formatDate(memory.updatedAt, ru)}</time>
+              <span>{memory.scope === "global" ? t.wholeAccount : t.thisWorkspace}</span>
+              <span>{memory.sourceKind === "automatic" ? t.automaticSource : t.manualSource}</span>
+              <time dateTime={memory.updatedAt}>{formatDate(memory.updatedAt, locale)}</time>
             </div>
-            <label className="memory-category">{ru ? "Категория" : "Toifa"}
+            <label className="memory-category">{t.category}
               <select value={draft.category} onChange={(event) => setDrafts(current => ({ ...current, [memory.id]: { ...draft, category: event.target.value as Category } }))}>
-                {categories.map(category => <option value={category} key={category}>{categoryLabel(category, ru)}</option>)}
+                {categories.map(category => <option value={category} key={category}>{categoryLabel(category, locale)}</option>)}
               </select>
             </label>
-            <label className="memory-statement">{ru ? "Запись" : "Yozuv"}
+            <label className="memory-statement">{t.statement}
               <textarea maxLength={500} value={draft.statement} onChange={(event) => setDrafts(current => ({ ...current, [memory.id]: { ...draft, statement: event.target.value } }))} />
             </label>
             <label className="memory-sensitive-confirmation memory-row-confirmation">
@@ -229,16 +320,14 @@ export function MemoryPanel({ locale }: { locale: PlatformLocale }) {
                   [memory.id]: { ...draft, confirmSensitive: event.target.checked },
                 }))}
               />
-              <span>{ru
-                ? "Явно разрешаю сохранить чувствительные обстоятельства в этой редакции. Пароли и коды всё равно запрещены."
-                : "Ushbu tahrirdagi maxfiy holatlarni saqlashga aniq ruxsat beraman. Parol va kodlar baribir taqiqlanadi."}</span>
+              <span>{t.sensitiveEdit}</span>
             </label>
             <div className="memory-row-actions">
               <button type="button" disabled={Boolean(busy) || draft.statement.trim().length < 2} onClick={() => void updateMemory(memory)}>
-                {busy === memory.id ? <LoaderCircle className="spin" aria-hidden="true" /> : <Save aria-hidden="true" />}{ru ? "Сохранить" : "Saqlash"}
+                {busy === memory.id ? <LoaderCircle className="spin" aria-hidden="true" /> : <Save aria-hidden="true" />}{t.save}
               </button>
               <button className="danger-outline" type="button" disabled={Boolean(busy)} onClick={() => void mutate({ action: "delete", memoryId: memory.id }, `delete:${memory.id}`)}>
-                <Trash2 aria-hidden="true" />{ru ? "Удалить" : "O‘chirish"}
+                <Trash2 aria-hidden="true" />{t.remove}
               </button>
             </div>
           </article>;
@@ -247,29 +336,29 @@ export function MemoryPanel({ locale }: { locale: PlatformLocale }) {
 
       {data.memories.length > 0 && <div className="memory-clear">
         {!clearArmed
-          ? <button className="danger-outline" type="button" onClick={() => setClearArmed(true)}>{ru ? "Очистить доступную память" : "Mavjud xotirani tozalash"}</button>
-          : <div role="group" aria-label={ru ? "Подтверждение очистки памяти" : "Xotirani tozalashni tasdiqlash"}>
-            <p>{ru ? "Будут удалены глобальные и доступные записи текущего пространства." : "Global va joriy makondagi mavjud yozuvlar o‘chiriladi."}</p>
-            <button className="danger-outline" type="button" disabled={Boolean(busy)} onClick={() => void mutate({ action: "clear", confirmation: "CLEAR" }, "clear")}>{ru ? "Подтвердить очистку" : "Tozalashni tasdiqlash"}</button>
-            <button type="button" disabled={Boolean(busy)} onClick={() => setClearArmed(false)}>{ru ? "Отмена" : "Bekor qilish"}</button>
+          ? <button className="danger-outline" type="button" onClick={() => setClearArmed(true)}>{t.clear}</button>
+          : <div role="group" aria-label={t.clearAria}>
+            <p>{t.clearDescription}</p>
+            <button className="danger-outline" type="button" disabled={Boolean(busy)} onClick={() => void mutate({ action: "clear", confirmation: "CLEAR" }, "clear")}>{t.confirmClear}</button>
+            <button type="button" disabled={Boolean(busy)} onClick={() => setClearArmed(false)}>{t.cancel}</button>
           </div>}
       </div>}
     </>}
   </section>;
 }
 
-function categoryLabel(category: Category, ru: boolean) {
+function categoryLabel(category: Category, locale: PlatformLocale) {
   const labels = {
-    profile_name: ["Имя", "Ism"],
-    language: ["Язык", "Til"],
-    company: ["Компания", "Kompaniya"],
-    answer_style: ["Стиль ответа", "Javob uslubi"],
-    user_instruction: ["Инструкция", "Ko‘rsatma"],
-    counterparty: ["Контрагент", "Kontragent"],
-    legal_context: ["Юридический контекст", "Huquqiy kontekst"],
-    typical_requisite: ["Типовой реквизит", "Doimiy rekvizit"],
-  } satisfies Record<Category, [string, string]>;
-  return labels[category][ru ? 0 : 1];
+    profile_name: { ru: "Имя", uz: "Ism", en: "Name" },
+    language: { ru: "Язык", uz: "Til", en: "Language" },
+    company: { ru: "Компания", uz: "Kompaniya", en: "Company" },
+    answer_style: { ru: "Стиль ответа", uz: "Javob uslubi", en: "Answer style" },
+    user_instruction: { ru: "Инструкция", uz: "Ko‘rsatma", en: "Instruction" },
+    counterparty: { ru: "Контрагент", uz: "Kontragent", en: "Counterparty" },
+    legal_context: { ru: "Юридический контекст", uz: "Huquqiy kontekst", en: "Legal context" },
+    typical_requisite: { ru: "Типовой реквизит", uz: "Doimiy rekvizit", en: "Standard detail" },
+  } satisfies Record<Category, Record<PlatformLocale, string>>;
+  return labels[category][locale];
 }
 
 function draftsFor(memories: Memory[]): Record<string, { category: Category; statement: string; confirmSensitive: boolean }> {
@@ -280,8 +369,8 @@ function draftsFor(memories: Memory[]): Record<string, { category: Category; sta
   }]));
 }
 
-function formatDate(value: string, ru: boolean) {
-  return new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", {
+function formatDate(value: string, locale: PlatformLocale) {
+  return new Intl.DateTimeFormat({ ru: "ru-RU", uz: "uz-UZ", en: "en-GB" }[locale], {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Tashkent",

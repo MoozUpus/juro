@@ -2,8 +2,10 @@
 
 import { RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { platformIntlLocale } from "../../lib/platform/date-time";
+import type { PlatformLocale } from "../../lib/platform/routing";
 
-type Locale = "ru" | "uz";
+type Locale = PlatformLocale;
 type Health = {
   state: "fresh" | "degraded" | "stale" | "unknown";
   alertCode: string | null;
@@ -14,10 +16,13 @@ type Health = {
 
 const copy = {
   ru: {
-    eyebrow: "Query-scoped direct retrieval", title: "Доступность официальных endpoints", description: "Проверка касается только доступности robots endpoints. Она не подтверждает актуальность закона, содержание страницы или полноту правовой базы; страницы законов и сценариев не сохраняются.", check: "Проверить сейчас", fresh: "Endpoints доступны", degraded: "Один или несколько endpoints недоступны", stale: "Проверка устарела", unknown: "Проверка ещё не запускалась", last: "Последняя проверка", latency: "Задержка", unavailable: "Защищённый status сейчас недоступен.", never: "нет данных", noAlert: "Активных предупреждений нет", alert: "Требуется проверка источника",
+    skip: "К содержанию", eyebrow: "Query-scoped direct retrieval", title: "Доступность официальных endpoints", description: "Проверка касается только доступности robots endpoints. Она не подтверждает актуальность закона, содержание страницы или полноту правовой базы; страницы законов и сценариев не сохраняются.", check: "Проверить сейчас", fresh: "Endpoints доступны", degraded: "Один или несколько endpoints недоступны", stale: "Проверка устарела", unknown: "Проверка ещё не запускалась", last: "Последняя проверка", latency: "Задержка", unavailable: "Защищённый status сейчас недоступен.", never: "нет данных", noAlert: "Активных предупреждений нет", alert: "Требуется проверка источника", healthy: "Доступен", sourceUnavailable: "Недоступен",
   },
   uz: {
-    eyebrow: "So‘rov doirasidagi bevosita olish", title: "Rasmiy endpointlar mavjudligi", description: "Tekshiruv faqat robots endpointlari mavjudligini ko‘rsatadi. U qonunning dolzarbligi, sahifa mazmuni yoki huquqiy baza to‘liqligini tasdiqlamaydi; qonun va ssenariy sahifalari saqlanmaydi.", check: "Hozir tekshirish", fresh: "Endpointlar mavjud", degraded: "Bir yoki bir nechta endpoint mavjud emas", stale: "Tekshiruv eskirgan", unknown: "Tekshiruv hali boshlanmagan", last: "Oxirgi tekshiruv", latency: "Kechikish", unavailable: "Himoyalangan holat hozir mavjud emas.", never: "ma’lumot yo‘q", noAlert: "Faol ogohlantirish yo‘q", alert: "Manbani tekshirish kerak",
+    skip: "Tarkibga o‘tish", eyebrow: "So‘rov doirasidagi bevosita olish", title: "Rasmiy endpointlar mavjudligi", description: "Tekshiruv faqat robots endpointlari mavjudligini ko‘rsatadi. U qonunning dolzarbligi, sahifa mazmuni yoki huquqiy baza to‘liqligini tasdiqlamaydi; qonun va ssenariy sahifalari saqlanmaydi.", check: "Hozir tekshirish", fresh: "Endpointlar mavjud", degraded: "Bir yoki bir nechta endpoint mavjud emas", stale: "Tekshiruv eskirgan", unknown: "Tekshiruv hali boshlanmagan", last: "Oxirgi tekshiruv", latency: "Kechikish", unavailable: "Himoyalangan holat hozir mavjud emas.", never: "ma’lumot yo‘q", noAlert: "Faol ogohlantirish yo‘q", alert: "Manbani tekshirish kerak", healthy: "Mavjud", sourceUnavailable: "Mavjud emas",
+  },
+  en: {
+    skip: "Skip to content", eyebrow: "Query-scoped direct retrieval", title: "Official endpoint availability", description: "This check covers only the availability of robots endpoints. It does not confirm that legislation is current, validate page content or establish coverage of the legal corpus; legislation and scenario pages are not retained.", check: "Check now", fresh: "Endpoints are available", degraded: "One or more endpoints are unavailable", stale: "The check is stale", unknown: "The check has not run yet", last: "Last check", latency: "Latency", unavailable: "Secure status is currently unavailable.", never: "no data", noAlert: "No active alerts", alert: "Source review required", healthy: "Available", sourceUnavailable: "Unavailable",
   },
 } as const;
 
@@ -42,11 +47,11 @@ export function DirectLegalSourceHealthPanel({ locale }: { locale: Locale }) {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-  const date = (value: string | null) => value ? new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(value)) : l.never;
+  const date = (value: string | null) => value ? new Intl.DateTimeFormat(platformIntlLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(value)) : l.never;
   const status = health?.state ?? "unknown";
   const title = status === "fresh" ? l.fresh : status === "degraded" ? l.degraded : status === "stale" ? l.stale : l.unknown;
-  return <main className="staff-console"><a className="staff-skip" href="#direct-source-health">{locale === "ru" ? "К содержанию" : "Tarkibga"}</a><div className="staff-main" id="direct-source-health">
+  return <main className="staff-console"><a className="staff-skip" href="#direct-source-health">{l.skip}</a><div className="staff-main" id="direct-source-health">
     <section className="staff-heading"><div><span>{l.eyebrow}</span><h1>{l.title}</h1><p>{l.description}</p></div><button type="button" onClick={() => void load(true)} disabled={busy}>{busy ? <RefreshCw className="is-spinning" aria-hidden="true"/> : <RefreshCw aria-hidden="true"/>}{l.check}</button></section>
-    {error ? <p className="staff-error" role="alert">{error}</p> : <section className="staff-health" aria-busy={busy} aria-live="polite"><div className={`staff-health-state state-${status}`}>{status === "fresh" ? <ShieldCheck aria-hidden="true"/> : <ShieldAlert aria-hidden="true"/>}<div><b>{title}</b><small>{l.last}: {date(health?.checkedAt ?? null)}</small></div></div><div className={health?.alertCode ? "staff-health-alert" : "staff-health-clear"}><b>{health?.alertCode ? l.alert : l.noAlert}</b><small>{health?.alertCode ?? "—"}</small></div><div className="staff-health-grid">{health?.sources.map((source) => <article key={source.sourceKind}><span>lex.uz</span><b>{source.status}</b><small>{date(source.checkedAt)} · {l.latency}: {source.latencyMs} ms{source.errorCode ? ` · ${source.errorCode}` : ""}</small></article>)}</div></section>}
+    {error ? <p className="staff-error" role="alert">{error}</p> : <section className="staff-health" aria-busy={busy} aria-live="polite"><div className={`staff-health-state state-${status}`}>{status === "fresh" ? <ShieldCheck aria-hidden="true"/> : <ShieldAlert aria-hidden="true"/>}<div><b>{title}</b><small>{l.last}: {date(health?.checkedAt ?? null)}</small></div></div><div className={health?.alertCode ? "staff-health-alert" : "staff-health-clear"}><b>{health?.alertCode ? l.alert : l.noAlert}</b><small>{health?.alertCode ?? "—"}</small></div><div className="staff-health-grid">{health?.sources.map((source) => <article key={source.sourceKind}><span>lex.uz</span><b>{source.status === "healthy" ? l.healthy : l.sourceUnavailable}</b><small>{date(source.checkedAt)} · {l.latency}: {source.latencyMs} ms{source.errorCode ? ` · ${source.errorCode}` : ""}</small></article>)}</div></section>}
   </div></main>;
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { strFromU8, unzipSync } from "fflate";
+import { PDFDocument } from "pdf-lib";
 import { AnalysisExportError } from "../lib/document-analysis/exporter";
 import {
   comparisonExportForDownload,
@@ -109,6 +110,59 @@ for (const format of ["pdf", "docx"] as const) {
   });
 }
 
+test("English comparison exports keep report chrome, DOCX metadata and footer fully English", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  try {
+    seed(sqlite);
+    seedEnglishComparison(sqlite);
+    bucket.objects.set("safe/one", cleanSourceObject("1".repeat(64)));
+    bucket.objects.set("safe/two", cleanSourceObject("2".repeat(64)));
+
+    for (const format of ["pdf", "docx"] as const) {
+      const requested = await requestComparisonExport({
+        db: d1,
+        comparisonId: "comparison-a",
+        workspaceId: "workspace-a",
+        userId: "user-a",
+        format,
+        idempotencyKey: `comparison-en-${format}-export-0001`,
+      });
+      await executeComparisonExportJob(
+        { DB: d1, BUCKET: bucket as unknown as R2Bucket, ASSETS: new FakeAssets() as unknown as Fetcher },
+        requested.record.id,
+        "workspace-a",
+      );
+      const record = await comparisonExportForDownload(d1, {
+        exportId: requested.record.id,
+        workspaceId: "workspace-a",
+        userId: "user-a",
+      });
+      const object = await verifyComparisonExportObject(bucket as unknown as R2Bucket, record);
+      const bytes = new Uint8Array(await object.arrayBuffer());
+      if (format === "pdf") {
+        const pdf = await PDFDocument.load(bytes);
+        assert.equal(pdf.getTitle(), "JURO — Document Comparison Report");
+      } else {
+        const files = unzipSync(bytes);
+        const documentXml = strFromU8(files["word/document.xml"]);
+        const footerXml = strFromU8(files["word/footer1.xml"]);
+        const coreXml = strFromU8(files["docProps/core.xml"]);
+        assert.match(documentXml, /DOCUMENT COMPARISON REPORT/);
+        assert.match(documentXml, /Before \(deleted\)/);
+        assert.match(documentXml, /After \(inserted\)/);
+        assert.match(documentXml, /w:lang w:val="en-GB"/);
+        assert.match(footerXml, /Created in JURO/);
+        assert.match(footerXml, /> of </);
+        assert.match(coreXml, /JURO — Document Comparison Report/);
+        assert.doesNotMatch(`${documentXml}\n${footerXml}\n${coreXml}`, /[\u0400-\u04ff]/);
+      }
+    }
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("comparison export migration rejects source mismatch and incomplete completion", () => {
   const { sqlite } = sqliteD1Fixture();
   try {
@@ -155,6 +209,39 @@ function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]) {
      VALUES ('change-a','comparison-a',1,'changed','2.1','2.1','Срок','Срок','Срок — 5 дней','Срок — 10 дней',
       '[]','Срок увеличен','Изменён срок исполнения','Заказчик','increased','medium','Проверить приемлемость срока','[]',95,0,?)`,
   ).run(now);
+}
+
+function seedEnglishComparison(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]) {
+  const summary = {
+    totalChanges: 1,
+    materialChanges: 1,
+    riskIncreased: 1,
+    riskDecreased: 0,
+    added: 0,
+    removed: 0,
+    changed: 1,
+    moved: 0,
+    renumbered: 0,
+    formatting: 0,
+    unchanged: 0,
+    changedSections: ["Term"],
+    similarityPercent: 85,
+    likelyDifferentDocuments: false,
+    overallRisk: "medium",
+    aiStatus: "not_required",
+    sourceStatus: "unverified",
+    model: null,
+    generatedAt: now,
+  };
+  sqlite.prepare("UPDATE document_comparisons SET locale='en',summary_json=? WHERE id='comparison-a'")
+    .run(JSON.stringify(summary));
+  sqlite.prepare(
+    `UPDATE comparison_changes
+     SET before_heading='Term',after_heading='Term',before_text='Term — 5 days',after_text='Term — 10 days',
+       summary='The performance period increased',legal_effect='The performance deadline changed',
+       affected_party='Customer',recommendation='Confirm that the revised deadline is acceptable'
+     WHERE id='change-a'`,
+  ).run();
 }
 
 async function sha256Hex(value: Uint8Array): Promise<string> {

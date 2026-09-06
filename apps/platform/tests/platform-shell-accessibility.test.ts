@@ -127,7 +127,9 @@ test("canonical document routes load the builder styles and keep folder controls
     readFile(businessDocumentsLayout, "utf8"),
   ]);
 
-  assert.match(css, /\.dbt-folders button \{ min-height: 44px; min-width: 44px;/);
+  assert.match(css, /:where\(\.dbt-root, \.dbt-signed-access\) :where\(button, a, select, textarea,[^}]+\) \{ min-height: 44px; \}/);
+  assert.match(css, /:where\(\.dbt-root, \.dbt-signed-access\) :where\(button, a\) \{ min-width: 44px; \}/);
+  assert.match(css, /\.dbt-folders button \{/);
   assert.match(css, /@media \(max-width: 1180px\) \{\s+\.platform-shell \.dbt-docs-layout \{ grid-template-columns: 1fr; \}/);
   assert.match(css, /\.platform-shell \.dbt-doc-filters \{ grid-template-columns: 1fr 1fr; \}/);
   assert.match(accountLayout, /import "\.\.\/\.\.\/\.\.\/_document-builder\/document-builder\.css";/);
@@ -145,7 +147,9 @@ test("mobile AI, notification, and privacy actions retain 44px touch targets", a
 
   assert.match(ai, /\.ai-composer-options > summary \{[\s\S]*?min-height: 44px;/);
   assert.match(ai, /@media \(max-width: 520px\) \{[\s\S]*?\.ai-composer-mode button \{ width: 44px; min-width: 44px;/);
-  assert.match(documents, /\.dbt-notification-list article > a, \.dbt-notification-list article > button \{ min-width: 44px; min-height: 44px;/);
+  assert.match(documents, /:where\(\.dbt-root, \.dbt-signed-access\) :where\(button, a, select, textarea,[^}]+\) \{ min-height: 44px; \}/);
+  assert.match(documents, /:where\(\.dbt-root, \.dbt-signed-access\) :where\(button, a\) \{ min-width: 44px; \}/);
+  assert.match(documents, /\.dbt-notification-list article > a, \.dbt-notification-list article > button \{/);
   assert.match(documents, /\.dbt-notification-list article > a, \.dbt-notification-list article > button \{ grid-column: 2; justify-self: start; \}/);
   assert.match(accountNotifications, /import "\.\.\/\.\.\/\.\.\/_document-builder\/document-builder\.css";/);
   assert.match(businessNotifications, /import "\.\.\/\.\.\/\.\.\/\.\.\/_document-builder\/document-builder\.css";/);

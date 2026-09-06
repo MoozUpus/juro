@@ -5,27 +5,29 @@ import {
   saveAiActionPlanInputSchema,
   saveAiActionPlanToCase,
 } from "../../../../../lib/ai/action-plan-save";
+import { aiText, parseAiOutputLocale, type AiOutputLocale } from "../../../../../lib/ai/localization";
 import { workspaceForContentEditor } from "../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
 }
 
-function localizedError(locale: "ru" | "uz", code: string): string {
-  const ru = locale === "ru";
-  if (code === "INVALID_AI_ACTION_PLAN_REQUEST") return ru ? "Некорректный запрос сохранения плана." : "Rejani saqlash so‘rovi noto‘g‘ri.";
-  if (code === "AI_ACTION_PLAN_NOT_FOUND") return ru ? "Сохранённый AI-план не найден." : "Saqlangan AI-reja topilmadi.";
-  if (code === "AI_ACTION_PLAN_CASE_NOT_FOUND") return ru ? "Выбранное дело недоступно." : "Tanlangan ish mavjud emas.";
-  if (code === "AI_ACTION_PLAN_PERSISTENCE_FAILED") return ru ? "План временно не удалось сохранить. Повторите попытку." : "Rejani vaqtincha saqlab bo‘lmadi. Qayta urinib ko‘ring.";
-  return ru ? "План нельзя сохранить в дело." : "Rejani ishga saqlab bo‘lmaydi.";
+function localizedError(locale: AiOutputLocale, code: string): string {
+  if (code === "INVALID_AI_ACTION_PLAN_REQUEST") return aiText(locale, "Некорректный запрос сохранения плана.", "Rejani saqlash so‘rovi noto‘g‘ri.", "The request to save the action plan is invalid.");
+  if (code === "AI_ACTION_PLAN_NOT_FOUND") return aiText(locale, "Сохранённый AI-план не найден.", "Saqlangan AI-reja topilmadi.", "The saved AI action plan was not found.");
+  if (code === "AI_ACTION_PLAN_CASE_NOT_FOUND") return aiText(locale, "Выбранное дело недоступно.", "Tanlangan ish mavjud emas.", "The selected matter is unavailable.");
+  if (code === "AI_ACTION_PLAN_PERSISTENCE_FAILED") return aiText(locale, "План временно не удалось сохранить. Повторите попытку.", "Rejani vaqtincha saqlab bo‘lmadi. Qayta urinib ko‘ring.", "The action plan could not be saved. Please try again.");
+  return aiText(locale, "План нельзя сохранить в дело.", "Rejani ishga saqlab bo‘lmaydi.", "The action plan cannot be saved to this matter.");
 }
 
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
   const workspace = await workspaceForContentEditor(user);
-  const parsed = saveAiActionPlanInputSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return response({ code: "INVALID_AI_ACTION_PLAN_REQUEST", error: localizedError("uz", "INVALID_AI_ACTION_PLAN_REQUEST") }, 400);
+  const raw = await request.json().catch(() => null);
+  const locale = parseAiOutputLocale(raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as { locale?: unknown }).locale : undefined);
+  const parsed = saveAiActionPlanInputSchema.safeParse(raw);
+  if (!parsed.success) return response({ code: "INVALID_AI_ACTION_PLAN_REQUEST", error: localizedError(locale, "INVALID_AI_ACTION_PLAN_REQUEST") }, 400);
   try {
     const result = await saveAiActionPlanToCase({
       db: requireD1(),

@@ -24,6 +24,8 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { platformApiError } from "../../content/platform-ui";
+import { CASE_SCENARIOS, isCaseScenarioId } from "../../lib/platform/case-create";
 import {
   CASE_SECTIONS,
   type CaseSection,
@@ -71,11 +73,15 @@ const sectionIcons: Record<CaseSection, typeof FileText> = {
   access: LockKeyhole,
 };
 
+function text(locale: PlatformLocale, ru: string, uz: string, en: string) {
+  return { ru, uz, en }[locale];
+}
+
 function date(value: string | null | undefined, locale: PlatformLocale) {
-  if (!value) return locale === "ru" ? "Не назначен" : "Belgilanmagan";
+  if (!value) return text(locale, "Не назначен", "Belgilanmagan", "Not set");
   const parsed = new Date(value.length === 10 ? `${value}T12:00:00.000Z` : value);
-  if (Number.isNaN(parsed.getTime())) return locale === "ru" ? "Не назначен" : "Belgilanmagan";
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(parsed);
+  if (Number.isNaN(parsed.getTime())) return text(locale, "Не назначен", "Belgilanmagan", "Not set");
+  return new Intl.DateTimeFormat({ ru: "ru-RU", uz: "uz-UZ", en: "en-GB" }[locale], { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(parsed);
 }
 
 export function CaseWorkspaceClient({
@@ -87,7 +93,6 @@ export function CaseWorkspaceClient({
   caseId: string;
   section?: CaseSection;
 }) {
-  const ru = locale === "ru";
   const router = useRouter();
   const base = usePlatformBasePath();
   const caseBase = `${base}/cases/${encodeURIComponent(caseId)}`;
@@ -120,8 +125,8 @@ export function CaseWorkspaceClient({
     return () => { cancelled = true; };
   }, [caseId]);
 
-  if (loading) return <div className="case-workspace-loading" aria-live="polite"><LoaderCircle />{ru ? "Загружаем дело…" : "Ish yuklanmoqda…"}</div>;
-  if (error || !item) return <section className="case-workspace-empty"><CircleAlert /><h1>{ru ? "Дело недоступно" : "Ish mavjud emas"}</h1><p>{ru ? "Оно не найдено в текущем пространстве или доступ к нему изменён." : "U joriy makonda topilmadi yoki unga kirish o‘zgardi."}</p><Link href={`${base}/cases`}>{ru ? "К списку дел" : "Ishlar ro‘yxatiga"}</Link></section>;
+  if (loading) return <div className="case-workspace-loading" aria-live="polite"><LoaderCircle />{text(locale, "Загружаем дело…", "Ish yuklanmoqda…", "Loading matter…")}</div>;
+  if (error || !item) return <section className="case-workspace-empty"><CircleAlert /><h1>{text(locale, "Дело недоступно", "Ish mavjud emas", "Matter unavailable")}</h1><p>{text(locale, "Оно не найдено в текущем пространстве или доступ к нему изменён.", "U joriy makonda topilmadi yoki unga kirish o‘zgardi.", "It was not found in the current workspace, or your access has changed.")}</p><Link href={`${base}/cases`}>{text(locale, "К списку дел", "Ishlar ro‘yxatiga", "Back to matters")}</Link></section>;
 
   const complete = item.steps?.filter((step) => step.status === "completed").length ?? 0;
 
@@ -129,9 +134,12 @@ export function CaseWorkspaceClient({
     const unresolvedTasks = tasks.filter((task) => !["completed", "cancelled"].includes(task.status)).length;
     const unresolvedSteps = (item?.steps ?? []).filter((step) => !["completed", "cancelled"].includes(step.status)).length;
     if (action === "complete" && (unresolvedTasks || unresolvedSteps)) {
-      const accepted = window.confirm(ru
-        ? `Останутся незавершёнными: задач — ${unresolvedTasks}, шагов плана — ${unresolvedSteps}. Завершить дело?`
-        : `Yakunlanmaganlari qoladi: vazifalar — ${unresolvedTasks}, reja qadamlari — ${unresolvedSteps}. Ish yakunlansinmi?`);
+      const accepted = window.confirm(text(
+        locale,
+        `Останутся незавершёнными: задач — ${unresolvedTasks}, шагов плана — ${unresolvedSteps}. Завершить дело?`,
+        `Yakunlanmaganlari qoladi: vazifalar — ${unresolvedTasks}, reja qadamlari — ${unresolvedSteps}. Ish yakunlansinmi?`,
+        `This will leave ${unresolvedTasks} tasks and ${unresolvedSteps} plan steps unfinished. Complete the matter?`,
+      ));
       if (!accepted) return;
     }
     const idempotencyKey = lifecycleKeys.current.get(action) ?? `case-${action}-${crypto.randomUUID()}`;
@@ -153,41 +161,40 @@ export function CaseWorkspaceClient({
       }
       setItem((current) => current ? { ...current, status: body.status ?? current.status, archivedAt: body.archivedAt ?? null, completedAt: body.completedAt ?? null, lifecycleRevision: body.lifecycleRevision ?? current.lifecycleRevision } : current);
     } catch (cause) {
-      setLifecycleError(localizedLifecycleError(cause instanceof Error ? cause.message : String(cause), ru));
+      setLifecycleError(localizedLifecycleError(cause instanceof Error ? cause.message : String(cause), locale));
     } finally {
       setLifecycleBusy("");
     }
   }
 
   return <section className="case-workspace" aria-labelledby="case-title">
-    <header><div><p>JURO · {ru ? "Дело" : "Ish"}</p><h1 id="case-title">{item.title}</h1><span>{item.legalArea} · {statusLabel(item.status, ru)}</span>{item.description && <p className="case-workspace-description">{item.description}</p>}</div><div className="case-workspace-actions"><Link href={`${caseBase}/plan`}><ListChecks />{ru ? "План действий" : "Harakatlar rejasi"}</Link><Link href={`${caseBase}/calendar`}><CalendarDays />{ru ? "Сроки" : "Muddatlar"}</Link>{item.status === "completed" ? <><button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => void changeLifecycle("reopen")}><RotateCcw />{ru ? "Вернуть в работу" : "Ishga qaytarish"}</button><button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => void changeLifecycle("archive")}><Archive />{ru ? "В архив" : "Arxivga"}</button></> : <button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => void changeLifecycle("complete")}><CheckCircle2 />{ru ? "Завершить дело" : "Ishni yakunlash"}</button>}</div></header>
+    <header><div><p>JURO · {text(locale, "Дело", "Ish", "Matter")}</p><h1 id="case-title">{item.title}</h1><span>{legalAreaLabel(item.legalArea, locale)} · {statusLabel(item.status, locale)}</span>{item.description && <p className="case-workspace-description">{item.description}</p>}</div><div className="case-workspace-actions"><Link href={`${caseBase}/plan`}><ListChecks />{text(locale, "План действий", "Harakatlar rejasi", "Action plan")}</Link><Link href={`${caseBase}/calendar`}><CalendarDays />{text(locale, "Сроки", "Muddatlar", "Deadlines")}</Link>{item.status === "completed" ? <><button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => void changeLifecycle("reopen")}><RotateCcw />{text(locale, "Вернуть в работу", "Ishga qaytarish", "Reopen")}</button><button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => void changeLifecycle("archive")}><Archive />{text(locale, "В архив", "Arxivga", "Archive")}</button></> : <button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => void changeLifecycle("complete")}><CheckCircle2 />{text(locale, "Завершить дело", "Ishni yakunlash", "Complete matter")}</button>}</div></header>
     {lifecycleError && <p className="case-lifecycle-error" role="alert"><CircleAlert />{lifecycleError}</p>}
-    <div className="case-workspace-summary"><article><small>{ru ? "Прогресс плана" : "Reja jarayoni"}</small><strong>{item.progressPercent ?? 0}%</strong><span>{complete}/{item.steps?.length ?? 0} {ru ? "шагов завершено" : "qadam yakunlandi"}</span></article><article><small>{ru ? "Ближайший срок" : "Eng yaqin muddat"}</small><strong>{date(item.nextDeadlineAt, locale)}</strong><span>{ru ? "из активного плана" : "faol rejadan"}</span></article><article><small>{ru ? "Подтверждённые задачи" : "Tasdiqlangan vazifalar"}</small><strong>{tasks.length}</strong><span>{ru ? "реальные записи дела" : "ishning haqiqiy yozuvlari"}</span></article></div>
-    <nav className="case-workspace-tabs" aria-label={ru ? "Разделы дела" : "Ish bo‘limlari"}>{CASE_SECTIONS.map((name) => {
+    <div className="case-workspace-summary"><article><small>{text(locale, "Прогресс плана", "Reja jarayoni", "Plan progress")}</small><strong>{item.progressPercent ?? 0}%</strong><span>{complete}/{item.steps?.length ?? 0} {text(locale, "шагов завершено", "qadam yakunlandi", "steps completed")}</span></article><article><small>{text(locale, "Ближайший срок", "Eng yaqin muddat", "Nearest deadline")}</small><strong>{date(item.nextDeadlineAt, locale)}</strong><span>{text(locale, "из активного плана", "faol rejadan", "from the active plan")}</span></article><article><small>{text(locale, "Подтверждённые задачи", "Tasdiqlangan vazifalar", "Confirmed tasks")}</small><strong>{tasks.length}</strong><span>{text(locale, "реальные записи дела", "ishning haqiqiy yozuvlari", "actual matter records")}</span></article></div>
+    <nav className="case-workspace-tabs" aria-label={text(locale, "Разделы дела", "Ish bo‘limlari", "Matter sections")}>{CASE_SECTIONS.map((name) => {
       const Icon = sectionIcons[name];
       const href = name === "overview" ? caseBase : `${caseBase}/${name}`;
-      return <Link key={name} href={href} aria-current={section === name ? "page" : undefined}><Icon aria-hidden="true" />{sectionLabel(name, ru)}</Link>;
+      return <Link key={name} href={href} aria-current={section === name ? "page" : undefined}><Icon aria-hidden="true" />{sectionLabel(name, locale)}</Link>;
     })}</nav>
     <CaseSectionPanel section={section} locale={locale} base={base} item={item} tasks={tasks} data={workspaceData} />
   </section>;
 }
 
 function CaseSectionPanel({ section, locale, base, item, tasks, data }: { section: CaseSection; locale: PlatformLocale; base: string; item: CaseRecord; tasks: Task[]; data: CaseWorkspaceData }) {
-  const ru = locale === "ru";
   if (section === "overview") return <div className="case-workspace-grid"><PlanSteps item={item} locale={locale} base={base} /><TaskList tasks={tasks} locale={locale} /></div>;
-  if (section === "plan") return <section className="case-workspace-tab-panel"><PanelHeading icon={ListChecks} title={ru ? "План и задачи" : "Reja va vazifalar"} action={<Link href={`${base}/action-plan/${encodeURIComponent(item.id)}`}>{ru ? "Редактировать план" : "Rejani tahrirlash"}<ArrowUpRight /></Link>} /><div className="case-workspace-grid case-workspace-grid-inset"><PlanSteps item={item} locale={locale} base={base} embedded /><TaskList tasks={tasks} locale={locale} embedded /></div></section>;
-  if (section === "calendar") return <SimpleList icon={CalendarDays} title={ru ? "Сроки этого дела" : "Ushbu ish muddatlari"} empty={ru ? "В подтверждённых задачах пока нет сроков." : "Tasdiqlangan vazifalarda hozircha muddat yo‘q."} items={tasks.filter((task) => task.dueAt).map((task) => ({ id: task.id, title: task.title, meta: `${date(task.dueAt, locale)} · ${statusLabel(task.status, ru)}`, trailing: task.safeDueAt ? (ru ? `Безопасная дата: ${date(task.safeDueAt, locale)}` : `Xavfsiz sana: ${date(task.safeDueAt, locale)}`) : undefined }))} action={<Link href={`${base}/calendar?caseId=${encodeURIComponent(item.id)}`}>{ru ? "Открыть календарь" : "Kalendarni ochish"}<ArrowUpRight /></Link>} />;
-  if (section === "documents") return <SimpleList icon={FileText} title={ru ? "Документы дела" : "Ish hujjatlari"} empty={ru ? "В дело ещё не привязаны документы." : "Ishga hali hujjatlar biriktirilmagan."} items={(data.documents ?? []).map((document) => ({ id: document.id, title: document.title, meta: `${statusLabel(document.status, ru)} · ${document.language}`, href: `${base}/documents/${encodeURIComponent(document.id)}` }))} action={<Link href={`${base}/document-builder?caseId=${encodeURIComponent(item.id)}`}>{ru ? "Создать документ" : "Hujjat yaratish"}<ArrowUpRight /></Link>} />;
-  if (section === "chat") return <SimpleList icon={MessageSquareText} title={ru ? "Диалоги по делу" : "Ish suhbatlari"} empty={ru ? "К делу ещё не привязан AI-диалог." : "Ishga hali AI suhbati biriktirilmagan."} items={(data.conversations ?? []).map((conversation) => ({ id: conversation.id, title: conversation.title, meta: `${statusLabel(conversation.status, ru)} · ${date(conversation.updatedAt, locale)}`, href: `${base}/ai-lawyer/chat/${encodeURIComponent(conversation.id)}` }))} action={<Link href={`${base}/ai-lawyer/new?caseId=${encodeURIComponent(item.id)}`}>{ru ? "Задать вопрос по делу" : "Ish bo‘yicha savol berish"}<ArrowUpRight /></Link>} />;
-  if (section === "analyses") return <SimpleList icon={FileSearch2} title={ru ? "Анализы и сравнения" : "Tahlil va taqqoslashlar"} empty={ru ? "К делу ещё не привязаны анализы или сравнения документов." : "Ishga hali hujjat tahlili yoki taqqoslash biriktirilmagan."} items={[
-    ...(data.analyses ?? []).map((analysis) => ({ id: `analysis:${analysis.id}`, title: analysis.fileName, meta: `${statusLabel(analysis.status, ru)} · ${date(analysis.updatedAt, locale)}`, href: `${base}/document-review?analysisId=${encodeURIComponent(analysis.id)}&caseId=${encodeURIComponent(item.id)}` })),
-    ...(data.comparisons ?? []).map((comparison) => ({ id: `comparison:${comparison.id}`, title: ru ? "Сравнение версий документа" : "Hujjat nusxalarini taqqoslash", meta: `${statusLabel(comparison.status, ru)}${comparison.overallRisk ? ` · ${riskLabel(comparison.overallRisk, ru)}` : ""} · ${date(comparison.updatedAt, locale)}`, href: `${base}/documents/comparisons/${encodeURIComponent(comparison.id)}` })),
-  ]} action={<Link href={`${base}/document-review?caseId=${encodeURIComponent(item.id)}`}>{ru ? "Анализировать документ" : "Hujjatni tahlil qilish"}<ArrowUpRight /></Link>} />;
+  if (section === "plan") return <section className="case-workspace-tab-panel"><PanelHeading icon={ListChecks} title={text(locale, "План и задачи", "Reja va vazifalar", "Plan and tasks")} action={<Link href={`${base}/action-plan/${encodeURIComponent(item.id)}`}>{text(locale, "Редактировать план", "Rejani tahrirlash", "Edit plan")}<ArrowUpRight /></Link>} /><div className="case-workspace-grid case-workspace-grid-inset"><PlanSteps item={item} locale={locale} base={base} embedded /><TaskList tasks={tasks} locale={locale} embedded /></div></section>;
+  if (section === "calendar") return <SimpleList icon={CalendarDays} title={text(locale, "Сроки этого дела", "Ushbu ish muddatlari", "Matter deadlines")} empty={text(locale, "В подтверждённых задачах пока нет сроков.", "Tasdiqlangan vazifalarda hozircha muddat yo‘q.", "Confirmed tasks do not have any deadlines yet.")} items={tasks.filter((task) => task.dueAt).map((task) => ({ id: task.id, title: task.title, meta: `${date(task.dueAt, locale)} · ${statusLabel(task.status, locale)}`, trailing: task.safeDueAt ? `${text(locale, "Безопасная дата", "Xavfsiz sana", "Safe date")}: ${date(task.safeDueAt, locale)}` : undefined }))} action={<Link href={`${base}/calendar?caseId=${encodeURIComponent(item.id)}`}>{text(locale, "Открыть календарь", "Kalendarni ochish", "Open calendar")}<ArrowUpRight /></Link>} />;
+  if (section === "documents") return <SimpleList icon={FileText} title={text(locale, "Документы дела", "Ish hujjatlari", "Matter documents")} empty={text(locale, "В дело ещё не привязаны документы.", "Ishga hali hujjatlar biriktirilmagan.", "No documents are linked to this matter yet.")} items={(data.documents ?? []).map((document) => ({ id: document.id, title: document.title, meta: `${statusLabel(document.status, locale)} · ${document.language}`, href: `${base}/documents/${encodeURIComponent(document.id)}` }))} action={<Link href={`${base}/document-builder?caseId=${encodeURIComponent(item.id)}`}>{text(locale, "Создать документ", "Hujjat yaratish", "Create document")}<ArrowUpRight /></Link>} />;
+  if (section === "chat") return <SimpleList icon={MessageSquareText} title={text(locale, "Диалоги по делу", "Ish suhbatlari", "Matter conversations")} empty={text(locale, "К делу ещё не привязан AI-диалог.", "Ishga hali AI suhbati biriktirilmagan.", "No AI conversation is linked to this matter yet.")} items={(data.conversations ?? []).map((conversation) => ({ id: conversation.id, title: conversation.title, meta: `${statusLabel(conversation.status, locale)} · ${date(conversation.updatedAt, locale)}`, href: `${base}/ai-lawyer/chat/${encodeURIComponent(conversation.id)}` }))} action={<Link href={`${base}/ai-lawyer/new?caseId=${encodeURIComponent(item.id)}`}>{text(locale, "Задать вопрос по делу", "Ish bo‘yicha savol berish", "Ask about this matter")}<ArrowUpRight /></Link>} />;
+  if (section === "analyses") return <SimpleList icon={FileSearch2} title={text(locale, "Анализы и сравнения", "Tahlil va taqqoslashlar", "Analyses and comparisons")} empty={text(locale, "К делу ещё не привязаны анализы или сравнения документов.", "Ishga hali hujjat tahlili yoki taqqoslash biriktirilmagan.", "No document analyses or comparisons are linked to this matter yet.")} items={[
+    ...(data.analyses ?? []).map((analysis) => ({ id: `analysis:${analysis.id}`, title: analysis.fileName, meta: `${statusLabel(analysis.status, locale)} · ${date(analysis.updatedAt, locale)}`, href: `${base}/document-review?analysisId=${encodeURIComponent(analysis.id)}&caseId=${encodeURIComponent(item.id)}` })),
+    ...(data.comparisons ?? []).map((comparison) => ({ id: `comparison:${comparison.id}`, title: text(locale, "Сравнение версий документа", "Hujjat nusxalarini taqqoslash", "Document version comparison"), meta: `${statusLabel(comparison.status, locale)}${comparison.overallRisk ? ` · ${riskLabel(comparison.overallRisk, locale)}` : ""} · ${date(comparison.updatedAt, locale)}`, href: `${base}/documents/comparisons/${encodeURIComponent(comparison.id)}` })),
+  ]} action={<Link href={`${base}/document-review?caseId=${encodeURIComponent(item.id)}`}>{text(locale, "Анализировать документ", "Hujjatni tahlil qilish", "Analyze document")}<ArrowUpRight /></Link>} />;
   if (section === "sources") return <CaseSourcesPanel locale={locale} sources={data.sources ?? []} initialBookmarks={data.bookmarks ?? []} />;
-  if (section === "participants") return <SimpleList icon={UsersRound} title={ru ? "Участники пространства" : "Makon ishtirokchilari"} empty={ru ? "Активных участников нет." : "Faol ishtirokchilar yo‘q."} note={ru ? "Сейчас доступ к делу наследуется от активного workspace. Отдельные временные права юриста показаны в разделе «Доступ»." : "Hozir ishga kirish faol workspace orqali meros bo‘ladi. Yuristning alohida vaqtinchalik huquqlari «Ruxsat» bo‘limida ko‘rsatiladi."} items={(data.participants ?? []).map((participant) => ({ id: participant.userId, title: participant.currentUser ? `${participant.displayName} · ${ru ? "вы" : "siz"}` : participant.displayName, meta: `${roleLabel(participant.role, ru)} · ${date(participant.joinedAt, locale)}` }))} />;
-  if (section === "lawyer") return <SimpleList icon={Scale} title={ru ? "Живой юрист" : "Jonli yurist"} empty={ru ? "По этому делу ещё нет заявки юристу." : "Bu ish bo‘yicha yuristga so‘rov yo‘q."} items={(data.lawyerRequests ?? []).map((request) => ({ id: request.id, title: request.lawyerName || (ru ? "Назначение юриста ожидается" : "Yurist tayinlanishi kutilmoqda"), meta: `${statusLabel(request.status, ru)} · ${date(request.updatedAt, locale)}`, trailing: request.activeGrantId ? (ru ? "Доступ активен" : "Ruxsat faol") : undefined }))} action={<Link href={`${base}/lawyers?caseId=${encodeURIComponent(item.id)}`}>{ru ? "Выбрать юриста" : "Yurist tanlash"}<ArrowUpRight /></Link>} />;
-  if (section === "access") return <section className="case-workspace-tab-panel"><PanelHeading icon={ShieldCheck} title={ru ? "Доступ к делу" : "Ishga ruxsat"} /><p className="case-workspace-note">{ru ? "Базовый доступ имеют активные участники текущего workspace. Временный доступ юриста выдаётся только после отдельного подтверждения и может быть отозван." : "Asosiy ruxsat joriy workspace faol ishtirokchilariga beriladi. Yuristga vaqtinchalik ruxsat faqat alohida tasdiqdan keyin beriladi va bekor qilinishi mumkin."}</p><div className="case-access-grid"><SimpleListContent items={(data.participants ?? []).map((participant) => ({ id: participant.userId, title: participant.currentUser ? `${participant.displayName} · ${ru ? "вы" : "siz"}` : participant.displayName, meta: `${roleLabel(participant.role, ru)} · ${ru ? "доступ через workspace" : "workspace orqali ruxsat"}` }))} empty={ru ? "Активных участников нет." : "Faol ishtirokchilar yo‘q."} /><SimpleListContent items={(data.lawyerRequests ?? []).filter((request) => request.activeGrantId).map((request) => ({ id: request.id, title: request.lawyerName || (ru ? "Назначенный юрист" : "Tayinlangan yurist"), meta: `${ru ? "Предоставлен" : "Berilgan"}: ${date(request.grantedAt, locale)}`, trailing: request.expiresAt ? `${ru ? "до" : "gacha"} ${date(request.expiresAt, locale)}` : (ru ? "до отзыва" : "bekor qilinguncha") }))} empty={ru ? "Активного доступа юриста нет." : "Yuristning faol ruxsati yo‘q."} /></div></section>;
-  return <SimpleList icon={History} title={ru ? "Активность дела" : "Ish faolligi"} empty={ru ? "Событий пока нет." : "Hozircha hodisalar yo‘q."} items={(data.activity ?? []).map((event, index) => ({ id: `${event.createdAt}-${index}`, title: activityLabel(event.eventType, ru), meta: date(event.createdAt, locale) }))} />;
+  if (section === "participants") return <SimpleList icon={UsersRound} title={text(locale, "Участники пространства", "Makon ishtirokchilari", "Workspace members")} empty={text(locale, "Активных участников нет.", "Faol ishtirokchilar yo‘q.", "No active members.")} note={text(locale, "Сейчас доступ к делу наследуется от активного workspace. Отдельные временные права юриста показаны в разделе «Доступ».", "Hozir ishga kirish faol workspace orqali meros bo‘ladi. Yuristning alohida vaqtinchalik huquqlari «Ruxsat» bo‘limida ko‘rsatiladi.", "Matter access currently inherits from the active workspace. Separate temporary lawyer permissions appear under Access.")} items={(data.participants ?? []).map((participant) => ({ id: participant.userId, title: participant.currentUser ? `${participant.displayName} · ${text(locale, "вы", "siz", "you")}` : participant.displayName, meta: `${roleLabel(participant.role, locale)} · ${date(participant.joinedAt, locale)}` }))} />;
+  if (section === "lawyer") return <SimpleList icon={Scale} title={text(locale, "Живой юрист", "Jonli yurist", "Lawyer")} empty={text(locale, "По этому делу ещё нет заявки юристу.", "Bu ish bo‘yicha yuristga so‘rov yo‘q.", "No lawyer request has been made for this matter yet.")} items={(data.lawyerRequests ?? []).map((request) => ({ id: request.id, title: request.lawyerName || text(locale, "Назначение юриста ожидается", "Yurist tayinlanishi kutilmoqda", "Awaiting lawyer assignment"), meta: `${statusLabel(request.status, locale)} · ${date(request.updatedAt, locale)}`, trailing: request.activeGrantId ? text(locale, "Доступ активен", "Ruxsat faol", "Access active") : undefined }))} action={<Link href={`${base}/lawyers?caseId=${encodeURIComponent(item.id)}`}>{text(locale, "Выбрать юриста", "Yurist tanlash", "Choose a lawyer")}<ArrowUpRight /></Link>} />;
+  if (section === "access") return <section className="case-workspace-tab-panel"><PanelHeading icon={ShieldCheck} title={text(locale, "Доступ к делу", "Ishga ruxsat", "Matter access")} /><p className="case-workspace-note">{text(locale, "Базовый доступ имеют активные участники текущего workspace. Временный доступ юриста выдаётся только после отдельного подтверждения и может быть отозван.", "Asosiy ruxsat joriy workspace faol ishtirokchilariga beriladi. Yuristga vaqtinchalik ruxsat faqat alohida tasdiqdan keyin beriladi va bekor qilinishi mumkin.", "Active members of the current workspace have standard access. Temporary lawyer access requires separate confirmation and can be revoked.")}</p><div className="case-access-grid"><SimpleListContent items={(data.participants ?? []).map((participant) => ({ id: participant.userId, title: participant.currentUser ? `${participant.displayName} · ${text(locale, "вы", "siz", "you")}` : participant.displayName, meta: `${roleLabel(participant.role, locale)} · ${text(locale, "доступ через workspace", "workspace orqali ruxsat", "access via workspace")}` }))} empty={text(locale, "Активных участников нет.", "Faol ishtirokchilar yo‘q.", "No active members.")} /><SimpleListContent items={(data.lawyerRequests ?? []).filter((request) => request.activeGrantId).map((request) => ({ id: request.id, title: request.lawyerName || text(locale, "Назначенный юрист", "Tayinlangan yurist", "Assigned lawyer"), meta: `${text(locale, "Предоставлен", "Berilgan", "Granted")}: ${date(request.grantedAt, locale)}`, trailing: request.expiresAt ? `${text(locale, "до", "gacha", "until")} ${date(request.expiresAt, locale)}` : text(locale, "до отзыва", "bekor qilinguncha", "until revoked") }))} empty={text(locale, "Активного доступа юриста нет.", "Yuristning faol ruxsati yo‘q.", "No active lawyer access.")} /></div></section>;
+  return <SimpleList icon={History} title={text(locale, "Активность дела", "Ish faolligi", "Matter activity")} empty={text(locale, "Событий пока нет.", "Hozircha hodisalar yo‘q.", "No events yet.")} items={(data.activity ?? []).map((event, index) => ({ id: `${event.createdAt}-${index}`, title: activityLabel(event.eventType, locale), meta: date(event.createdAt, locale) }))} />;
 }
 
 function PanelHeading({ icon: Icon, title, action }: { icon: typeof FileText; title: string; action?: ReactNode }) {
@@ -206,7 +213,6 @@ function SimpleListContent({ items, empty }: { items: SimpleItem[]; empty: strin
 }
 
 function CaseSourcesPanel({ locale, sources, initialBookmarks }: { locale: PlatformLocale; sources: CaseSource[]; initialBookmarks: CaseBookmark[] }) {
-  const ru = locale === "ru";
   const [bookmarks, setBookmarks] = useState(initialBookmarks);
   const [busyId, setBusyId] = useState("");
   const [status, setStatus] = useState("");
@@ -225,9 +231,9 @@ function CaseSourcesPanel({ locale, sources, initialBookmarks }: { locale: Platf
         body: JSON.stringify({ revision: bookmark.revision }),
       });
       const body = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(body.error || (ru ? "Закладка не удалена." : "Xatcho‘p olib tashlanmadi."));
+      if (!response.ok) throw new Error(platformApiError(locale, body.error, text(locale, "Закладка не удалена.", "Xatcho‘p olib tashlanmadi.", "The bookmark could not be removed.")));
       setBookmarks((current) => current.filter((item) => item.bookmarkId !== bookmark.bookmarkId));
-      setStatus(ru ? "Закладка удалена из дела." : "Xatcho‘p ishdan olib tashlandi.");
+      setStatus(text(locale, "Закладка удалена из дела.", "Xatcho‘p ishdan olib tashlandi.", "Bookmark removed from the matter."));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -236,70 +242,90 @@ function CaseSourcesPanel({ locale, sources, initialBookmarks }: { locale: Platf
   }
 
   return <section className="case-workspace-tab-panel case-sources-panel">
-    <PanelHeading icon={BookOpenCheck} title={ru ? "Источники дела" : "Ish manbalari"} />
-    <p className="case-workspace-note">{ru
-      ? "Сохранённые нормы закреплены за проверенной версией. JURO не заменяет их новой редакцией без вашего ведома."
-      : "Saqlangan normalar tekshirilgan versiyaga biriktiriladi. JURO ularni siz bilmasdan yangi tahrir bilan almashtirmaydi."}</p>
+    <PanelHeading icon={BookOpenCheck} title={text(locale, "Источники дела", "Ish manbalari", "Matter sources")} />
+    <p className="case-workspace-note">{text(locale, "Сохранённые нормы закреплены за проверенной версией. JURO не заменяет их новой редакцией без вашего ведома.", "Saqlangan normalar tekshirilgan versiyaga biriktiriladi. JURO ularni siz bilmasdan yangi tahrir bilan almashtirmaydi.", "Saved legal rules remain attached to the verified version. JURO will not replace them with a newer revision without telling you.")}</p>
     <output className="case-bookmark-status" aria-live="polite">{status}</output>
-    {bookmarks.length > 0 && <div className="case-bookmark-group"><h3>{ru ? "Мои закладки" : "Mening xatcho‘plarim"}</h3><ul className="case-bookmark-list">{bookmarks.map((bookmark) => <li key={bookmark.bookmarkId}>
+    {bookmarks.length > 0 && <div className="case-bookmark-group"><h3>{text(locale, "Мои закладки", "Mening xatcho‘plarim", "My bookmarks")}</h3><ul className="case-bookmark-list">{bookmarks.map((bookmark) => <li key={bookmark.bookmarkId}>
       <div>
         <strong>{bookmark.actTitle}</strong>
-        <span>{bookmark.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")} · {bookmark.isCurrentVersion ? (ru ? "текущая версия" : "joriy versiya") : (ru ? "сохранённая историческая версия" : "saqlangan tarixiy versiya")}</span>
+        <span>{bookmark.actIdentifier || text(locale, "Официальный источник", "Rasmiy manba", "Official source")} · {bookmark.isCurrentVersion ? text(locale, "текущая версия", "joriy versiya", "current version") : text(locale, "сохранённая историческая версия", "saqlangan tarixiy versiya", "saved historical version")}</span>
         {bookmark.comment && <p>{bookmark.comment}</p>}
       </div>
       <div className="case-bookmark-actions">
-        {safeOfficialUrl(bookmark.officialUrl) && <a href={bookmark.officialUrl} target="_blank" rel="noreferrer"><ArrowUpRight /><span className="sr-only">{ru ? "Открыть официальный источник" : "Rasmiy manbani ochish"}</span></a>}
-        <button type="button" disabled={busyId === bookmark.bookmarkId} aria-label={ru ? `Удалить закладку «${bookmark.actTitle}»` : `«${bookmark.actTitle}» xatcho‘pini olib tashlash`} onClick={() => void removeBookmark(bookmark)}><Trash2 /></button>
+        {safeOfficialUrl(bookmark.officialUrl) && <a href={bookmark.officialUrl} target="_blank" rel="noreferrer"><ArrowUpRight /><span className="sr-only">{text(locale, "Открыть официальный источник", "Rasmiy manbani ochish", "Open official source")}</span></a>}
+        <button type="button" disabled={busyId === bookmark.bookmarkId} aria-label={text(locale, `Удалить закладку «${bookmark.actTitle}»`, `«${bookmark.actTitle}» xatcho‘pini olib tashlash`, `Remove bookmark “${bookmark.actTitle}”`)} onClick={() => void removeBookmark(bookmark)}><Trash2 /></button>
       </div>
     </li>)}</ul></div>}
-    <div className="case-bookmark-group"><h3>{ru ? "Источники из AI-диалогов дела" : "Ishdagi AI suhbatlari manbalari"}</h3><SimpleListContent items={sources.map((source) => ({ id: source.id, title: source.actTitle, meta: `${source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")} · ${date(source.lastCheckedAt, locale)}`, externalHref: safeOfficialUrl(source.officialUrl) ? source.officialUrl : undefined }))} empty={ru ? "Подтверждённых источников в диалогах этого дела пока нет." : "Bu ish suhbatlarida hozircha tasdiqlangan manba yo‘q."} /></div>
+    <div className="case-bookmark-group"><h3>{text(locale, "Источники из AI-диалогов дела", "Ishdagi AI suhbatlari manbalari", "Sources from this matter's AI conversations")}</h3><SimpleListContent items={sources.map((source) => ({ id: source.id, title: source.actTitle, meta: `${source.actIdentifier || text(locale, "Официальный источник", "Rasmiy manba", "Official source")} · ${date(source.lastCheckedAt, locale)}`, externalHref: safeOfficialUrl(source.officialUrl) ? source.officialUrl : undefined }))} empty={text(locale, "Подтверждённых источников в диалогах этого дела пока нет.", "Bu ish suhbatlarida hozircha tasdiqlangan manba yo‘q.", "No verified sources appear in this matter's conversations yet.")} /></div>
   </section>;
 }
 
 function PlanSteps({ item, locale, base, embedded = false }: { item: CaseRecord; locale: PlatformLocale; base: string; embedded?: boolean }) {
-  const ru = locale === "ru";
-  return <section className={embedded ? "case-workspace-embedded" : undefined}><PanelHeading icon={FilePenLine} title={ru ? "Следующие шаги" : "Keyingi qadamlar"} action={!embedded ? <Link href={`${base}/action-plan/${encodeURIComponent(item.id)}`}>{ru ? "Открыть план" : "Rejani ochish"}</Link> : undefined} />{item.steps?.length ? <ol className="case-workspace-steps">{item.steps.map((step) => <li key={step.id}><CheckCircle2 className={step.status === "completed" ? "done" : undefined} /><div><strong>{step.title}</strong><span>{date(step.dueAt, locale)} · {statusLabel(step.status, ru)}</span></div></li>)}</ol> : <p className="case-workspace-muted">{ru ? "В плане пока нет шагов." : "Rejada hozircha qadam yo‘q."}</p>}</section>;
+  return <section className={embedded ? "case-workspace-embedded" : undefined}><PanelHeading icon={FilePenLine} title={text(locale, "Следующие шаги", "Keyingi qadamlar", "Next steps")} action={!embedded ? <Link href={`${base}/action-plan/${encodeURIComponent(item.id)}`}>{text(locale, "Открыть план", "Rejani ochish", "Open plan")}</Link> : undefined} />{item.steps?.length ? <ol className="case-workspace-steps">{item.steps.map((step) => <li key={step.id}><CheckCircle2 className={step.status === "completed" ? "done" : undefined} /><div><strong>{step.title}</strong><span>{date(step.dueAt, locale)} · {statusLabel(step.status, locale)}</span></div></li>)}</ol> : <p className="case-workspace-muted">{text(locale, "В плане пока нет шагов.", "Rejada hozircha qadam yo‘q.", "The plan has no steps yet.")}</p>}</section>;
 }
 
 function TaskList({ tasks, locale, embedded = false }: { tasks: Task[]; locale: PlatformLocale; embedded?: boolean }) {
-  const ru = locale === "ru";
-  return <section className={embedded ? "case-workspace-embedded" : undefined}><PanelHeading icon={ListChecks} title={ru ? "Задачи" : "Vazifalar"} />{tasks.length ? <ul className="case-workspace-tasks">{tasks.map((task) => <li key={task.id}><div className="case-workspace-task-copy"><strong>{task.title}</strong>{task.description && <p>{task.description}</p>}<span>{date(task.dueAt, locale)}</span>{Boolean(task.comments?.length) && <ol className="case-workspace-task-comments" aria-label={ru ? "Комментарии юриста" : "Yurist izohlari"}>{task.comments?.map((comment) => <li key={comment.id}><MessageSquareText aria-hidden="true" /><div><strong>{comment.authorName || (ru ? "Юрист" : "Yurist")}</strong><p>{comment.body}</p><time>{date(comment.createdAt, locale)}</time></div></li>)}</ol>}</div><b>{statusLabel(task.status, ru)}</b></li>)}</ul> : <p className="case-workspace-muted">{ru ? "Подтвердите план, чтобы создать задачи и напоминания." : "Vazifalar va eslatmalar yaratish uchun rejani tasdiqlang."}</p>}</section>;
+  return <section className={embedded ? "case-workspace-embedded" : undefined}><PanelHeading icon={ListChecks} title={text(locale, "Задачи", "Vazifalar", "Tasks")} />{tasks.length ? <ul className="case-workspace-tasks">{tasks.map((task) => <li key={task.id}><div className="case-workspace-task-copy"><strong>{task.title}</strong>{task.description && <p>{task.description}</p>}<span>{date(task.dueAt, locale)}</span>{Boolean(task.comments?.length) && <ol className="case-workspace-task-comments" aria-label={text(locale, "Комментарии юриста", "Yurist izohlari", "Lawyer comments")}>{task.comments?.map((comment) => <li key={comment.id}><MessageSquareText aria-hidden="true" /><div><strong>{comment.authorName || text(locale, "Юрист", "Yurist", "Lawyer")}</strong><p>{comment.body}</p><time>{date(comment.createdAt, locale)}</time></div></li>)}</ol>}</div><b>{statusLabel(task.status, locale)}</b></li>)}</ul> : <p className="case-workspace-muted">{text(locale, "Подтвердите план, чтобы создать задачи и напоминания.", "Vazifalar va eslatmalar yaratish uchun rejani tasdiqlang.", "Confirm the plan to create tasks and reminders.")}</p>}</section>;
 }
 
-function sectionLabel(section: CaseSection, ru: boolean) {
-  const labels: Record<CaseSection, [string, string]> = {
-    overview: ["Обзор", "Umumiy"], chat: ["Чат", "Suhbat"], documents: ["Документы", "Hujjatlar"], analyses: ["Анализы", "Tahlillar"], plan: ["План", "Reja"], calendar: ["Сроки", "Muddatlar"], sources: ["Источники", "Manbalar"], participants: ["Участники", "Ishtirokchilar"], lawyer: ["Юрист", "Yurist"], activity: ["Активность", "Faollik"], access: ["Доступ", "Ruxsat"],
+function sectionLabel(section: CaseSection, locale: PlatformLocale) {
+  const labels: Record<CaseSection, Record<PlatformLocale, string>> = {
+    overview: { ru: "Обзор", uz: "Umumiy", en: "Overview" }, chat: { ru: "Чат", uz: "Suhbat", en: "Chat" }, documents: { ru: "Документы", uz: "Hujjatlar", en: "Documents" }, analyses: { ru: "Анализы", uz: "Tahlillar", en: "Analyses" }, plan: { ru: "План", uz: "Reja", en: "Plan" }, calendar: { ru: "Сроки", uz: "Muddatlar", en: "Deadlines" }, sources: { ru: "Источники", uz: "Manbalar", en: "Sources" }, participants: { ru: "Участники", uz: "Ishtirokchilar", en: "Members" }, lawyer: { ru: "Юрист", uz: "Yurist", en: "Lawyer" }, activity: { ru: "Активность", uz: "Faollik", en: "Activity" }, access: { ru: "Доступ", uz: "Ruxsat", en: "Access" },
   };
-  return labels[section][ru ? 0 : 1];
+  return labels[section][locale];
 }
 
-function activityLabel(eventType: string, ru: boolean) {
-  const labels: Record<string, [string, string]> = { case_created: ["Дело создано", "Ish yaratildi"], step_updated: ["Шаг плана обновлён", "Reja qadami yangilandi"], plan_changes_confirmed: ["Изменения плана подтверждены", "Reja o‘zgarishlari tasdiqlandi"], tasks_created: ["Задачи из плана подтверждены", "Rejadagi vazifalar tasdiqlandi"], document_created: ["Документ добавлен", "Hujjat qo‘shildi"], document_linked: ["Документ добавлен в дело", "Hujjat ishga qo‘shildi"], document_unlinked: ["Документ удалён из дела", "Hujjat ishdan olib tashlandi"], analysis_linked: ["Анализ добавлен в дело", "Tahlil ishga qo‘shildi"], analysis_unlinked: ["Анализ удалён из дела", "Tahlil ishdan olib tashlandi"], legal_bookmark_saved: ["Правовой источник сохранён", "Huquqiy manba saqlandi"], legal_bookmark_removed: ["Правовая закладка удалена", "Huquqiy xatcho‘p olib tashlandi"], lawyer_task_created: ["Юрист добавил задачу", "Yurist vazifa qo‘shdi"], lawyer_task_updated: ["Юрист обновил задачу", "Yurist vazifani yangiladi"], lawyer_task_comment_added: ["Юрист добавил комментарий", "Yurist izoh qo‘shdi"], lawyer_document_requested: ["Юрист запросил документ", "Yurist hujjat so‘radi"], lawyer_document_provided: ["Клиент предоставил документ", "Mijoz hujjat taqdim etdi"], lawyer_document_request_cancelled: ["Запрос документа отменён", "Hujjat so‘rovi bekor qilindi"] };
-  return labels[eventType]?.[ru ? 0 : 1] || (ru ? "Дело обновлено" : "Ish yangilandi");
-}
-
-function statusLabel(status: string, ru: boolean) {
-  const labels: Record<string, [string, string]> = {
-    open: ["Открыто", "Ochiq"], active: ["Активно", "Faol"], completed: ["Завершено", "Yakunlangan"], archived: ["В архиве", "Arxivda"], not_started: ["Не начато", "Boshlanmagan"], in_progress: ["В работе", "Jarayonda"], waiting_information: ["Ожидает данных", "Ma’lumot kutilmoqda"], cancelled: ["Отменено", "Bekor qilingan"], queued: ["В очереди", "Navbatda"], processing: ["Обрабатывается", "Qayta ishlanmoqda"], failed: ["Ошибка", "Xato"], unassigned: ["Ожидает назначения", "Tayinlash kutilmoqda"], conflict_check_pending: ["Проверка конфликта", "Manfaatlar to‘qnashuvi tekshirilmoqda"], awaiting_user_consent: ["Ожидает подтверждения", "Tasdiq kutilmoqda"], access_granted: ["Доступ предоставлен", "Ruxsat berilgan"], access_revoked: ["Доступ отозван", "Ruxsat bekor qilingan"],
+function activityLabel(eventType: string, locale: PlatformLocale) {
+  const labels: Record<string, Record<PlatformLocale, string>> = {
+    case_created: { ru: "Дело создано", uz: "Ish yaratildi", en: "Matter created" },
+    step_updated: { ru: "Шаг плана обновлён", uz: "Reja qadami yangilandi", en: "Plan step updated" },
+    plan_changes_confirmed: { ru: "Изменения плана подтверждены", uz: "Reja o‘zgarishlari tasdiqlandi", en: "Plan changes confirmed" },
+    tasks_created: { ru: "Задачи из плана подтверждены", uz: "Rejadagi vazifalar tasdiqlandi", en: "Plan tasks confirmed" },
+    document_created: { ru: "Документ добавлен", uz: "Hujjat qo‘shildi", en: "Document added" },
+    document_linked: { ru: "Документ добавлен в дело", uz: "Hujjat ishga qo‘shildi", en: "Document linked to matter" },
+    document_unlinked: { ru: "Документ удалён из дела", uz: "Hujjat ishdan olib tashlandi", en: "Document removed from matter" },
+    analysis_linked: { ru: "Анализ добавлен в дело", uz: "Tahlil ishga qo‘shildi", en: "Analysis linked to matter" },
+    analysis_unlinked: { ru: "Анализ удалён из дела", uz: "Tahlil ishdan olib tashlandi", en: "Analysis removed from matter" },
+    legal_bookmark_saved: { ru: "Правовой источник сохранён", uz: "Huquqiy manba saqlandi", en: "Legal source saved" },
+    legal_bookmark_removed: { ru: "Правовая закладка удалена", uz: "Huquqiy xatcho‘p olib tashlandi", en: "Legal bookmark removed" },
+    lawyer_task_created: { ru: "Юрист добавил задачу", uz: "Yurist vazifa qo‘shdi", en: "Lawyer added a task" },
+    lawyer_task_updated: { ru: "Юрист обновил задачу", uz: "Yurist vazifani yangiladi", en: "Lawyer updated a task" },
+    lawyer_task_comment_added: { ru: "Юрист добавил комментарий", uz: "Yurist izoh qo‘shdi", en: "Lawyer added a comment" },
+    lawyer_document_requested: { ru: "Юрист запросил документ", uz: "Yurist hujjat so‘radi", en: "Lawyer requested a document" },
+    lawyer_document_provided: { ru: "Клиент предоставил документ", uz: "Mijoz hujjat taqdim etdi", en: "Client provided a document" },
+    lawyer_document_request_cancelled: { ru: "Запрос документа отменён", uz: "Hujjat so‘rovi bekor qilindi", en: "Document request cancelled" },
   };
-  return labels[status]?.[ru ? 0 : 1] || status.replaceAll("_", " ");
+  return labels[eventType]?.[locale] || text(locale, "Дело обновлено", "Ish yangilandi", "Matter updated");
 }
 
-function localizedLifecycleError(code: string, ru: boolean) {
-  if (code.includes("CASE_LIFECYCLE_INVALID")) return ru ? "Это действие недоступно в текущем состоянии дела." : "Bu amal ishning joriy holatida mavjud emas.";
-  if (code.includes("CASE_LIFECYCLE_CONFLICT")) return ru ? "Дело уже изменилось. Обновите страницу и повторите." : "Ish allaqachon o‘zgargan. Sahifani yangilab, qayta urinib ko‘ring.";
-  if (code.includes("CASE_UNAVAILABLE")) return ru ? "Дело не найдено в текущем пространстве." : "Ish joriy makonda topilmadi.";
-  return ru ? "Не удалось изменить состояние дела." : "Ish holatini o‘zgartirib bo‘lmadi.";
+function statusLabel(status: string, locale: PlatformLocale) {
+  const labels: Record<string, Record<PlatformLocale, string>> = {
+    open: { ru: "Открыто", uz: "Ochiq", en: "Open" }, active: { ru: "Активно", uz: "Faol", en: "Active" }, completed: { ru: "Завершено", uz: "Yakunlangan", en: "Completed" }, archived: { ru: "В архиве", uz: "Arxivda", en: "Archived" }, not_started: { ru: "Не начато", uz: "Boshlanmagan", en: "Not started" }, in_progress: { ru: "В работе", uz: "Jarayonda", en: "In progress" }, waiting_information: { ru: "Ожидает данных", uz: "Ma’lumot kutilmoqda", en: "Awaiting information" }, cancelled: { ru: "Отменено", uz: "Bekor qilingan", en: "Cancelled" }, queued: { ru: "В очереди", uz: "Navbatda", en: "Queued" }, processing: { ru: "Обрабатывается", uz: "Qayta ishlanmoqda", en: "Processing" }, failed: { ru: "Ошибка", uz: "Xato", en: "Failed" }, unassigned: { ru: "Ожидает назначения", uz: "Tayinlash kutilmoqda", en: "Awaiting assignment" }, conflict_check_pending: { ru: "Проверка конфликта", uz: "Manfaatlar to‘qnashuvi tekshirilmoqda", en: "Conflict check" }, awaiting_user_consent: { ru: "Ожидает подтверждения", uz: "Tasdiq kutilmoqda", en: "Awaiting confirmation" }, access_granted: { ru: "Доступ предоставлен", uz: "Ruxsat berilgan", en: "Access granted" }, access_revoked: { ru: "Доступ отозван", uz: "Ruxsat bekor qilingan", en: "Access revoked" },
+  };
+  return labels[status]?.[locale] || status.replaceAll("_", " ");
 }
 
-function roleLabel(role: string, ru: boolean) {
-  if (role === "owner") return ru ? "Владелец" : "Egasi";
-  return ru ? "Участник" : "Ishtirokchi";
+function legalAreaLabel(legalArea: string, locale: PlatformLocale) {
+  return isCaseScenarioId(legalArea)
+    ? CASE_SCENARIOS[legalArea].label[locale]
+    : legalArea.replaceAll("-", " ");
 }
 
-function riskLabel(risk: string, ru: boolean) {
-  const labels: Record<string, [string, string]> = { critical: ["Критический риск", "Kritik xavf"], high: ["Высокий риск", "Yuqori xavf"], medium: ["Средний риск", "O‘rta xavf"], low: ["Низкий риск", "Past xavf"] };
-  return labels[risk]?.[ru ? 0 : 1] || risk;
+function localizedLifecycleError(code: string, locale: PlatformLocale) {
+  if (code.includes("CASE_LIFECYCLE_INVALID")) return text(locale, "Это действие недоступно в текущем состоянии дела.", "Bu amal ishning joriy holatida mavjud emas.", "This action is unavailable in the matter's current state.");
+  if (code.includes("CASE_LIFECYCLE_CONFLICT")) return text(locale, "Дело уже изменилось. Обновите страницу и повторите.", "Ish allaqachon o‘zgargan. Sahifani yangilab, qayta urinib ko‘ring.", "The matter has already changed. Refresh the page and try again.");
+  if (code.includes("CASE_UNAVAILABLE")) return text(locale, "Дело не найдено в текущем пространстве.", "Ish joriy makonda topilmadi.", "The matter was not found in the current workspace.");
+  return text(locale, "Не удалось изменить состояние дела.", "Ish holatini o‘zgartirib bo‘lmadi.", "We could not change the matter status.");
+}
+
+function roleLabel(role: string, locale: PlatformLocale) {
+  if (role === "owner") return text(locale, "Владелец", "Egasi", "Owner");
+  return text(locale, "Участник", "Ishtirokchi", "Member");
+}
+
+function riskLabel(risk: string, locale: PlatformLocale) {
+  const labels: Record<string, Record<PlatformLocale, string>> = { critical: { ru: "Критический риск", uz: "Kritik xavf", en: "Critical risk" }, high: { ru: "Высокий риск", uz: "Yuqori xavf", en: "High risk" }, medium: { ru: "Средний риск", uz: "O‘rta xavf", en: "Medium risk" }, low: { ru: "Низкий риск", uz: "Past xavf", en: "Low risk" } };
+  return labels[risk]?.[locale] || risk;
 }
 
 function safeOfficialUrl(value: string) {

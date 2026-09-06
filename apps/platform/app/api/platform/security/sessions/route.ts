@@ -13,6 +13,7 @@ import {
   localSessionFromCookie,
   revokeSessions,
 } from "../../../../../lib/auth/session-management";
+import { authLocaleFromRequest } from "../../../../../lib/auth/request-locale";
 
 function response(body: unknown, status = 200, headers?: HeadersInit) {
   return Response.json(body, {
@@ -22,7 +23,7 @@ function response(body: unknown, status = 200, headers?: HeadersInit) {
 }
 
 export const GET = withApiErrors(async function GET(request: Request) {
-  const user = await requireApiUser();
+  const user = await requireApiUser(request);
   const db = requireD1();
   const now = new Date().toISOString();
   const current = await localSessionFromCookie(
@@ -37,7 +38,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
        s.last_seen_at AS lastSeenAt,s.expires_at AS expiresAt,
        s.idle_expires_at AS idleExpiresAt,s.auth_method AS authMethod,
        s.assurance_level AS assuranceLevel,
-       coalesce(d.display_name,'Unknown device') AS deviceName,
+       d.display_name AS deviceName,
        continuity.last_country_code AS countryCode,
        continuity.last_region_code AS regionCode,
        CASE WHEN s.id=? THEN 1 ELSE 0 END AS isCurrent
@@ -70,14 +71,19 @@ export const GET = withApiErrors(async function GET(request: Request) {
 
 export const DELETE = withApiErrors(async function DELETE(request: Request) {
   assertSafeWrite(request);
-  const user = await requireApiUser();
+  const locale = authLocaleFromRequest(request);
+  const user = await requireApiUser(request);
   const url = new URL(request.url);
   const scope = url.searchParams.get("scope") ?? "all";
   if (scope !== "all" && scope !== "others") {
     return response(
       {
         code: "INVALID_SCOPE",
-        error: "Неизвестная область завершения сессий.",
+        error: {
+          ru: "Неизвестная область завершения сессий.",
+          uz: "Sessiyalarni yakunlash sohasi noma’lum.",
+          en: "Unknown session termination scope.",
+        }[locale],
       },
       400,
     );
@@ -92,7 +98,11 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
     return response(
       {
         code: "LOCAL_SESSION_REQUIRED",
-        error: "Для этого действия нужна текущая JURO email-сессия.",
+        error: {
+          ru: "Для этого действия нужна текущая локальная сессия JURO.",
+          uz: "Bu amal uchun joriy mahalliy JURO sessiyasi kerak.",
+          en: "Your current local JURO session is required for this action.",
+        }[locale],
       },
       409,
     );

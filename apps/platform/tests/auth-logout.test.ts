@@ -228,7 +228,7 @@ test("unsafe cross-origin logout is rejected before cookies or D1 are touched", 
 
 test("same-origin form navigation clears HttpOnly state and replaces the protected page", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
-  const now = new Date("2026-09-04T12:00:00.000Z");
+  const now = new Date();
   sqlite.prepare(
     `INSERT INTO user_profiles (id,email,locale,created_at,updated_at)
      VALUES ('navigation-user','navigation@example.test','en',?,?)`,

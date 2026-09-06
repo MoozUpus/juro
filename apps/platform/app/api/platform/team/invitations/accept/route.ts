@@ -12,6 +12,7 @@ import {
   workspaceInvitationRedirect,
   type WorkspaceInvitationLocale,
 } from "../../../../../../lib/platform/workspace-invitation";
+import { isLocale } from "../../../../../../lib/platform/routing";
 
 function response(body: unknown, status = 200, accountType?: string) {
   const headers = new Headers({
@@ -28,11 +29,17 @@ function response(body: unknown, status = 200, accountType?: string) {
 }
 
 function requestLocale(request: Request): WorkspaceInvitationLocale {
-  return new URL(request.url).searchParams.get("lang") === "uz" ? "uz" : "ru";
+  const requested = new URL(request.url).searchParams.get("lang") ?? "";
+  return isLocale(requested) ? requested : "ru";
 }
 
-function message(locale: WorkspaceInvitationLocale, ru: string, uz: string) {
-  return locale === "uz" ? uz : ru;
+function message(
+  locale: WorkspaceInvitationLocale,
+  ru: string,
+  uz: string,
+  en: string,
+) {
+  return locale === "uz" ? uz : locale === "en" ? en : ru;
 }
 
 export const POST = withApiErrors(async function POST(request: Request) {
@@ -55,6 +62,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         fallbackLocale,
         "Проверьте формат приглашения.",
         "Taklif formatini tekshiring.",
+        "Check the invitation format.",
       ),
     }, status);
   }
@@ -81,25 +89,26 @@ export const POST = withApiErrors(async function POST(request: Request) {
         locale,
         "Приглашение не найдено для этого аккаунта.",
         "Bu hisob uchun taklif topilmadi.",
+        "No invitation was found for this account.",
       ),
     }, 403);
   }
   if (invitation.revokedAt) {
     return response({
       code: "INVITATION_REVOKED",
-      error: message(locale, "Приглашение отозвано.", "Taklif bekor qilingan."),
+      error: message(locale, "Приглашение отозвано.", "Taklif bekor qilingan.", "The invitation has been revoked."),
     }, 410);
   }
   if (invitation.acceptedAt) {
     return response({
       code: "INVITATION_ACCEPTED",
-      error: message(locale, "Приглашение уже принято.", "Taklif allaqachon qabul qilingan."),
+      error: message(locale, "Приглашение уже принято.", "Taklif allaqachon qabul qilingan.", "The invitation has already been accepted."),
     }, 409);
   }
   if (Date.parse(invitation.expiresAt) <= Date.now()) {
     return response({
       code: "INVITATION_EXPIRED",
-      error: message(locale, "Срок действия приглашения истёк.", "Taklif muddati tugagan."),
+      error: message(locale, "Срок действия приглашения истёк.", "Taklif muddati tugagan.", "The invitation has expired."),
     }, 410);
   }
   const now = isoNow();
@@ -119,6 +128,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         locale,
         "Приглашение уже изменено. Обновите страницу.",
         "Taklif holati o‘zgargan. Sahifani yangilang.",
+        "The invitation has changed. Refresh the page.",
       ),
     }, 409);
   }

@@ -120,7 +120,8 @@ test("mobile chrome keeps both sign-in and registration available", () => {
   assert.match(chrome, /platformAuthHref\(locale, "login"\)/u);
   assert.match(chrome, /platformRegistrationHref\(locale\)/u);
   assert.match(platformHrefs, /\$\{PLATFORM_ORIGIN\}\/\$\{locale\}\/auth\/\$\{mode\}/u);
-  assert.match(platformHrefs, /locale === "en"\) return platformAuthHref\(locale, "login"\)/u);
+  assert.match(platformHrefs, /\$\{PLATFORM_ORIGIN\}\/\$\{locale\}\/individual\$\{normalizedPath\}/u);
+  assert.doesNotMatch(platformHrefs, /locale === "en"/u);
   assert.doesNotMatch(chrome + platformHrefs, /locale === "en" \? "ru"/u);
 });
 

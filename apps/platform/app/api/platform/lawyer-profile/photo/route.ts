@@ -27,7 +27,7 @@ type ImageSpec = {
 type ProfileForPhoto = {
   id: string;
   marketplaceStatus: string;
-  locale: "ru" | "uz";
+  locale: "ru" | "uz" | "en";
   displayName: string;
   specialtiesJson: string;
   languagesJson: string;
@@ -171,7 +171,7 @@ async function ownProfile(userId: string): Promise<ProfileForPhoto | null> {
   return requireD1()
     .prepare(
       `SELECT p.id,p.marketplace_status AS marketplaceStatus,
-      CASE WHEN u.locale='uz' THEN 'uz' ELSE 'ru' END AS locale,
+      CASE WHEN u.locale='uz' THEN 'uz' WHEN u.locale='en' THEN 'en' ELSE 'ru' END AS locale,
       p.display_name AS displayName,p.specialties_json AS specialtiesJson,
       p.languages_json AS languagesJson,p.experience_years AS experienceYears,
       p.price_description AS priceDescription,p.availability_status AS availabilityStatus,

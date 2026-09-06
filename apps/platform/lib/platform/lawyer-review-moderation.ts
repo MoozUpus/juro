@@ -19,7 +19,7 @@ export const lawyerReviewModerationInputSchema = z.object(moderationFields).stri
 
 export const lawyerReviewModerationSchema = z.object({
   ...moderationFields,
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
 }).strict().superRefine(validateModeratedBody);
 
 export const lawyerReviewModerationListSchema = z.object({

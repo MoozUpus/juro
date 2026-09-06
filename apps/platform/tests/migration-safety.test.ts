@@ -73,6 +73,7 @@ const caseLifecycleHashGuardEntry = journal.entries.find(({ idx }) => idx === 10
 const englishPolicyEvidenceEntry = journal.entries.find(({ idx }) => idx === 151);
 const passwordChangedEmailRetryEntry = journal.entries.find(({ idx }) => idx === 152);
 const pendingRegistrationRetentionEntry = journal.entries.find(({ idx }) => idx === 153);
+const englishLocaleFoundationEntry = journal.entries.find(({ idx }) => idx === 154);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -204,6 +205,10 @@ assert.ok(
   pendingRegistrationRetentionEntry,
   "Drizzle journal must contain migration 0153",
 );
+assert.ok(
+  englishLocaleFoundationEntry,
+  "Drizzle journal must contain migration 0154",
+);
 
 
 function migrationSql(entry: JournalEntry): string {
@@ -221,6 +226,26 @@ function applyMigration(db: DatabaseSync, entry: JournalEntry): void {
   for (const statement of statements(migrationSql(entry))) {
     db.exec(statement);
   }
+}
+
+function applyMigrationInTransaction(
+  db: DatabaseSync,
+  entry: JournalEntry,
+): void {
+  db.exec("BEGIN");
+  try {
+    applyMigration(db, entry);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function orderedRows(db: DatabaseSync, table: string): object[] {
+  const escaped = table.replaceAll('"', '""');
+  return db.prepare(`SELECT * FROM "${escaped}" ORDER BY id`).all()
+    .map((row) => ({ ...row }));
 }
 
 function tableDefinitions(db: DatabaseSync): Map<string, string> {
@@ -4794,6 +4819,516 @@ test("0153 adds a constrained pending-registration marker and strictly backfills
       { quick_check: "ok" },
     );
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0154 preserves legacy locale data and enables English without weakening constraints", () => {
+  const sql = migrationSql(englishLocaleFoundationEntry);
+  assert.match(sql, /PRAGMA\s+defer_foreign_keys\s*=\s*ON/u);
+  assert.match(sql, /PRAGMA\s+defer_foreign_keys\s*=\s*OFF/u);
+  assert.doesNotMatch(sql, /PRAGMA\s+foreign_keys\s*=\s*OFF/u);
+  assert.match(sql, /english_locale_foundation_shadow_guard_check/u);
+  for (const [table, prefix] of [
+    ["email_change_challenges", "__juro_v0154_email__"],
+    ["account_deletion_challenges", "__juro_v0154_delete__"],
+    ["guest_ai_sessions", "__juro_v0154_guest__"],
+    ["knowledge_base_article_versions", "__juro_v0154_kb__"],
+  ] as const) {
+    assert.match(
+      sql,
+      new RegExp(
+        `UPDATE .${table}.\\s+SET .id.='${prefix}' \\|\\| .id.`,
+        "u",
+      ),
+    );
+  }
+
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 154)) {
+      applyMigration(db, entry);
+    }
+
+    const createdAt = "2026-09-05T00:00:00.000Z";
+    const expiresAt = "2026-09-06T00:00:00.000Z";
+    db.prepare(`
+      INSERT INTO guest_ai_sessions (
+        id,token_hmac,token_key_version,ip_hmac,locale,state,request_count,
+        answer_count,expires_at,created_at,updated_at
+      ) VALUES (?,?,?,?,?,'available',0,0,?,?,?)
+    `).run(
+      "guest-v0154-legacy",
+      "token-hmac",
+      "v1",
+      "ip-hmac",
+      "uz",
+      expiresAt,
+      createdAt,
+      createdAt,
+    );
+    db.prepare(`
+      INSERT INTO user_profiles (id,email,created_at,updated_at)
+      VALUES ('status-owner-v0154','status-owner-v0154@example.com',?,?)
+    `).run(createdAt, createdAt);
+    db.prepare(`
+      INSERT INTO workspaces (id,type,name,locale,created_at,updated_at)
+      VALUES ('v0154-workspace','individual','V0154','ru',?,?)
+    `).run(createdAt, createdAt);
+    db.prepare(`
+      INSERT INTO auth_sessions (
+        id,user_id,token_hash,auth_method,assurance_level,authenticated_at,
+        expires_at,created_at,last_seen_at
+      ) VALUES (
+        'v0154-session','status-owner-v0154',?,'email_otp','primary',?,?,?,?
+      )
+    `).run("a".repeat(64), createdAt, expiresAt, createdAt, createdAt);
+    db.prepare(`
+      INSERT INTO email_change_challenges (
+        id,user_id,session_id,current_email_hash,new_email,current_code_salt,
+        current_code_hash,new_code_salt,new_code_hash,locale,attempt_count,
+        max_attempts,expires_at,created_at
+      ) VALUES (
+        'v0154-email','status-owner-v0154','v0154-session','current-hash',
+        'next@example.test','salt-current','hash-current','salt-next',
+        'hash-next','ru',0,5,?,?
+      )
+    `).run(expiresAt, createdAt);
+    db.prepare(`
+      INSERT INTO security_email_jobs (
+        id,user_id,challenge_id,event_type,locale,recipient_ciphertext,
+        recipient_iv,recipient_key_version,status,attempt_count,created_at,
+        updated_at
+      ) VALUES (
+        'v0154-email-job','status-owner-v0154','v0154-email',
+        'email_changed_previous_address','ru','recipient-ciphertext-v0154',
+        '1234567890123456','v1','pending',0,?,?
+      )
+    `).run(createdAt, createdAt);
+    db.prepare(`
+      INSERT INTO account_deletion_challenges (
+        id,user_id,session_id,email_hash,locale,code_salt,code_hash,
+        attempt_count,max_attempts,expires_at,consumed_at,
+        consumed_by_operation_id,created_at
+      ) VALUES (
+        'v0154-delete','status-owner-v0154','v0154-session','email-hash','ru',
+        'code-salt','code-hash',0,5,?,'2026-09-05T00:01:00.000Z',
+        'v0154-delete-operation',?
+      )
+    `).run(expiresAt, createdAt);
+    db.prepare(`
+      INSERT INTO account_deletion_requests (
+        id,user_id,status,requested_at,verification_challenge_id,
+        requested_session_id,verification_method,verified_at
+      ) VALUES (
+        'v0154-delete-request','status-owner-v0154','requested',?,
+        'v0154-delete','v0154-session','email_otp',
+        '2026-09-05T00:01:00.000Z'
+      )
+    `).run(createdAt);
+    db.prepare(`
+      INSERT INTO guest_ai_runs (
+        id,session_id,idempotency_key,request_hash,correlation_id,provider,
+        model,status,request_ciphertext,request_iv,request_key_version,
+        legal_database_as_of,instruction_hash,source_version_hash,expires_at,
+        started_at,created_at,updated_at
+      ) VALUES (
+        'v0154-guest-run','guest-v0154-legacy','idempotency-v0154',?,
+        'correlation-v0154','openai','test','processing','ciphertext-v0154',
+        'iv-v0154','v1','2026-09-05',?,?,?, ?,?,?
+      )
+    `).run(
+      "b".repeat(64),
+      "c".repeat(64),
+      "d".repeat(64),
+      expiresAt,
+      createdAt,
+      createdAt,
+      createdAt,
+    );
+    db.prepare(`
+      INSERT INTO legal_source_references (
+        id,guest_run_id,source_kind,source_locale,source_url,canonical_url,
+        title,retrieved_at,validated_at,content_sha256,fetch_status,
+        citation_validation_status,source_access_mode,created_at
+      ) VALUES (
+        'v0154-legal-source','v0154-guest-run','lex','ru',
+        'https://lex.uz/docs/1','https://lex.uz/docs/1','Official source',
+        ?,?,?, 'success','validated','direct',?
+      )
+    `).run(createdAt, createdAt, "e".repeat(64), createdAt);
+
+    const knowledgeBaseVersion = db.prepare(`
+      SELECT id,article_id AS articleId
+      FROM knowledge_base_article_versions ORDER BY id LIMIT 1
+    `).get() as { id: string; articleId: string } | undefined;
+    assert.ok(knowledgeBaseVersion);
+    db.prepare(`
+      INSERT INTO knowledge_base_feedback (
+        id,article_id,version_id,workspace_id,user_id,helpful,revision,
+        created_at,updated_at
+      ) VALUES (
+        'v0154-feedback',?,?,'v0154-workspace','status-owner-v0154',1,1,?,?
+      )
+    `).run(
+      knowledgeBaseVersion.articleId,
+      knowledgeBaseVersion.id,
+      createdAt,
+      createdAt,
+    );
+    db.prepare(`
+      INSERT INTO knowledge_base_feedback_events (
+        id,feedback_id,article_id,version_id,workspace_id,user_id,helpful,
+        revision,idempotency_key,created_at
+      ) VALUES (
+        'v0154-feedback-event','v0154-feedback',?,?,'v0154-workspace',
+        'status-owner-v0154',1,1,'v0154-feedback-idempotency',?
+      )
+    `).run(knowledgeBaseVersion.articleId, knowledgeBaseVersion.id, createdAt);
+    db.prepare(`
+      INSERT INTO knowledge_base_authoring_events (
+        id,article_id,version_id,actor_user_id,action,metadata_json,created_at
+      ) VALUES (
+        'v0154-authoring',?,?,'status-owner-v0154','article_updated','{}',?
+      )
+    `).run(knowledgeBaseVersion.articleId, knowledgeBaseVersion.id, createdAt);
+    db.prepare(`
+      INSERT INTO system_status_incidents (
+        id,public_reference,state,severity,title_ru,title_uz,summary_ru,summary_uz,
+        current_update_id,started_at,resolved_at,created_by_user_id,created_at,updated_at
+      ) VALUES (
+        'status-incident-v0154','INC-A1B2C3D4E5F6','investigating','degraded',
+        'Проверка сервиса','Xizmat tekshiruvi',
+        'Проводится проверка доступности сервиса.',
+        'Xizmat mavjudligi tekshirilmoqda.',
+        'status-update-v0154',?,NULL,'status-owner-v0154',?,?
+      )
+    `).run(
+      "2026-09-05T00:00:00.000Z",
+      "2026-09-05T00:00:00.000Z",
+      "2026-09-05T00:00:00.000Z",
+    );
+    db.prepare(`
+      INSERT INTO system_status_updates (
+        id,incident_id,state,message_ru,message_uz,created_by_user_id,created_at
+      ) VALUES (
+        'status-update-v0154','status-incident-v0154','investigating',
+        'Команда проверяет доступность сервиса.',
+        'Jamoa xizmat mavjudligini tekshirmoqda.',
+        'status-owner-v0154',?
+      )
+    `).run("2026-09-05T00:00:00.000Z");
+
+    const rebuiltTables = [
+      "email_change_challenges",
+      "security_notification_jobs",
+      "account_deletion_challenges",
+      "ai_document_prefill_handoffs",
+      "builder_document_analysis_handoffs",
+      "voice_recordings",
+      "guest_ai_sessions",
+      "knowledge_base_article_versions",
+      "system_status_incidents",
+      "system_status_updates",
+    ];
+    const dependentTables = [
+      "security_email_jobs",
+      "account_deletion_requests",
+      "guest_ai_runs",
+      "legal_source_references",
+      "knowledge_base_feedback",
+      "knowledge_base_feedback_events",
+      "knowledge_base_authoring_events",
+    ];
+    const countsBefore = new Map(rebuiltTables.map((table) => [
+      table,
+      (db.prepare(`SELECT count(*) AS total FROM "${table}"`).get() as {
+        total: number;
+      }).total,
+    ]));
+    const idsBefore = new Map(rebuiltTables.map((table) => [
+      table,
+      db.prepare(`SELECT id FROM "${table}" ORDER BY id`).all()
+        .map((row) => ({ ...row })),
+    ]));
+    const dependentRowsBefore = new Map(dependentTables.map((table) => [
+      table,
+      orderedRows(db, table),
+    ]));
+    const knowledgeBaseBefore = db.prepare(`
+      SELECT id,content_sha256 AS contentSha256
+      FROM knowledge_base_article_versions ORDER BY id
+    `).all().map((row) => ({ ...row }));
+
+    applyMigrationInTransaction(db, englishLocaleFoundationEntry);
+
+    for (const table of rebuiltTables) {
+      assert.equal(
+        (db.prepare(`SELECT count(*) AS total FROM "${table}"`).get() as {
+          total: number;
+        }).total,
+        countsBefore.get(table),
+        `${table} row count changed`,
+      );
+      assert.deepEqual(
+        db.prepare(`SELECT id FROM "${table}" ORDER BY id`).all()
+          .map((row) => ({ ...row })),
+        idsBefore.get(table),
+        `${table} IDs changed`,
+      );
+    }
+    for (const table of dependentTables) {
+      assert.deepEqual(
+        orderedRows(db, table),
+        dependentRowsBefore.get(table),
+        `${table} dependent rows changed`,
+      );
+    }
+    assert.deepEqual(
+      db.prepare(`
+        SELECT id,content_sha256 AS contentSha256
+        FROM knowledge_base_article_versions ORDER BY id
+      `).all().map((row) => ({ ...row })),
+      knowledgeBaseBefore,
+    );
+    assert.deepEqual(
+      { ...db.prepare(`
+        SELECT locale,state,request_count AS requestCount,
+          answer_count AS answerCount
+        FROM guest_ai_sessions WHERE id='guest-v0154-legacy'
+      `).get() },
+      { locale: "uz", state: "available", requestCount: 0, answerCount: 0 },
+    );
+
+    for (const table of rebuiltTables.slice(0, 7)) {
+      const row = db.prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+      ).get(table) as { sql: string };
+      assert.match(row.sql, /IN\s*\(\s*'ru'\s*,\s*'uz'\s*,\s*'en'\s*\)/u);
+    }
+    db.prepare(`
+      INSERT INTO guest_ai_sessions (
+        id,token_hmac,token_key_version,ip_hmac,locale,state,request_count,
+        answer_count,expires_at,created_at,updated_at
+      ) VALUES (?,?,?,?,?,'available',0,0,?,?,?)
+    `).run(
+      "guest-v0154-en",
+      "token-hmac-en",
+      "v1",
+      "ip-hmac-en",
+      "en",
+      "2026-09-06T00:00:00.000Z",
+      "2026-09-05T00:00:00.000Z",
+      "2026-09-05T00:00:00.000Z",
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO guest_ai_sessions (
+          id,token_hmac,token_key_version,ip_hmac,locale,state,request_count,
+          answer_count,expires_at,created_at,updated_at
+        ) VALUES (?,?,?,?,?,'available',0,0,?,?,?)
+      `).run(
+        "guest-v0154-unknown",
+        "token-hmac-unknown",
+        "v1",
+        "ip-hmac-unknown",
+        "de",
+        "2026-09-06T00:00:00.000Z",
+        "2026-09-05T00:00:00.000Z",
+        "2026-09-05T00:00:00.000Z",
+      ),
+      /guest_ai_sessions_locale_check/u,
+    );
+
+    const knowledgeBaseColumns = db.prepare(
+      "PRAGMA table_info('knowledge_base_article_versions')",
+    ).all() as Array<{ name: string }>;
+    assert.deepEqual(
+      knowledgeBaseColumns
+        .map(({ name }) => name)
+        .filter((name) => ["title_en", "summary_en", "body_en_json"].includes(name)),
+      ["title_en", "summary_en", "body_en_json"],
+    );
+    assert.equal(
+      (db.prepare(`
+        SELECT count(*) AS total FROM knowledge_base_article_versions
+        WHERE title_en IS NOT NULL OR summary_en IS NOT NULL OR body_en_json IS NOT NULL
+      `).get() as { total: number }).total,
+      0,
+    );
+    for (const trigger of [
+      "account_deletion_requests_verification_guard",
+      "builder_version_writes_insert_guard",
+      "knowledge_base_articles_identity_update_guard",
+      "knowledge_base_articles_status_guard",
+    ]) {
+      assert.ok(db.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='trigger' AND name=?",
+      ).get(trigger), `missing recreated trigger ${trigger}`);
+    }
+    const draftTrigger = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='knowledge_base_versions_draft_update_guard'",
+    ).get() as { sql: string };
+    assert.match(draftTrigger.sql, /title_en/u);
+    assert.match(draftTrigger.sql, /body_en_json/u);
+
+    const englishStatusColumns = [
+      ["system_status_incidents", ["title_en", "summary_en"]],
+      ["system_status_updates", ["message_en"]],
+    ] as const;
+    for (const [table, expectedColumns] of englishStatusColumns) {
+      const columns = db.prepare(`PRAGMA table_info('${table}')`).all() as Array<{
+        name: string;
+      }>;
+      assert.deepEqual(
+        columns
+          .map(({ name }) => name)
+          .filter((name) => expectedColumns.includes(name as never)),
+        [...expectedColumns],
+      );
+    }
+    const statusIncidentGuard = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='system_status_incident_update_guard'",
+    ).get() as { sql: string };
+    assert.match(statusIncidentGuard.sql, /title_en/u);
+    assert.match(statusIncidentGuard.sql, /summary_en/u);
+    assert.deepEqual(
+      { ...db.prepare(`
+        SELECT title_en AS titleEn,summary_en AS summaryEn
+        FROM system_status_incidents WHERE id='status-incident-v0154'
+      `).get() },
+      { titleEn: null, summaryEn: null },
+    );
+    assert.deepEqual(
+      { ...db.prepare(`
+        SELECT message_en AS messageEn
+        FROM system_status_updates WHERE id='status-update-v0154'
+      `).get() },
+      { messageEn: null },
+    );
+    assert.throws(
+      () => db.prepare(`
+        UPDATE system_status_incidents SET title_en='Service check'
+        WHERE id='status-incident-v0154'
+      `).run(),
+      /SYSTEM_STATUS_INCIDENT_UPDATE_FORBIDDEN/u,
+    );
+    db.prepare(`
+      INSERT INTO system_status_incidents (
+        id,public_reference,state,severity,title_ru,title_uz,title_en,
+        summary_ru,summary_uz,summary_en,current_update_id,started_at,resolved_at,
+        created_by_user_id,created_at,updated_at
+      ) VALUES (
+        'status-incident-v0154-en','INC-F6E5D4C3B2A1','investigating','degraded',
+        'Проверка сервиса','Xizmat tekshiruvi','Service availability check',
+        'Проводится проверка доступности сервиса.',
+        'Xizmat mavjudligi tekshirilmoqda.',
+        'We are checking the availability of the service.',
+        'status-update-v0154-en',?,NULL,'status-owner-v0154',?,?
+      )
+    `).run(
+      "2026-09-05T00:01:00.000Z",
+      "2026-09-05T00:01:00.000Z",
+      "2026-09-05T00:01:00.000Z",
+    );
+    db.prepare(`
+      INSERT INTO system_status_updates (
+        id,incident_id,state,message_ru,message_uz,message_en,
+        created_by_user_id,created_at
+      ) VALUES (
+        'status-update-v0154-en','status-incident-v0154-en','investigating',
+        'Команда проверяет доступность сервиса.',
+        'Jamoa xizmat mavjudligini tekshirmoqda.',
+        'Our team is checking service availability.',
+        'status-owner-v0154',?
+      )
+    `).run("2026-09-05T00:01:00.000Z");
+
+    assert.deepEqual(
+      { ...db.prepare("PRAGMA quick_check").get() },
+      { quick_check: "ok" },
+    );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+    assert.deepEqual(
+      { ...db.prepare("PRAGMA defer_foreign_keys").get() },
+      { defer_foreign_keys: 0 },
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test("0154 shadow-ID collision fails closed and rolls the migration back atomically", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 154)) {
+      applyMigration(db, entry);
+    }
+
+    db.prepare(`
+      INSERT INTO guest_ai_sessions (
+        id,token_hmac,token_key_version,ip_hmac,locale,state,request_count,
+        answer_count,expires_at,created_at,updated_at
+      ) VALUES (?,?,?,?,?,'available',0,0,?,?,?)
+    `).run(
+      "__juro_v0154_guest__collision",
+      "token-hmac-v0154-collision",
+      "v1",
+      "ip-hmac-v0154-collision",
+      "ru",
+      "2026-09-06T00:00:00.000Z",
+      "2026-09-05T00:00:00.000Z",
+      "2026-09-05T00:00:00.000Z",
+    );
+    const schemaBefore = db.prepare(`
+      SELECT type,name,tbl_name AS tableName,sql
+      FROM sqlite_master
+      WHERE name NOT LIKE 'sqlite_%'
+      ORDER BY type,name
+    `).all().map((row) => ({ ...row }));
+    const collisionRowBefore = orderedRows(db, "guest_ai_sessions");
+
+    assert.throws(
+      () => applyMigrationInTransaction(db, englishLocaleFoundationEntry),
+      /english_locale_foundation_shadow_guard_check/u,
+    );
+
+    assert.deepEqual(
+      db.prepare(`
+        SELECT type,name,tbl_name AS tableName,sql
+        FROM sqlite_master
+        WHERE name NOT LIKE 'sqlite_%'
+        ORDER BY type,name
+      `).all().map((row) => ({ ...row })),
+      schemaBefore,
+    );
+    assert.deepEqual(orderedRows(db, "guest_ai_sessions"), collisionRowBefore);
+    assert.equal(
+      (db.prepare(`
+        SELECT count(*) AS total
+        FROM pragma_table_info('plans') WHERE name='name_en'
+      `).get() as { total: number }).total,
+      0,
+    );
+    assert.equal(
+      (db.prepare(`
+        SELECT count(*) AS total FROM sqlite_master
+        WHERE type='table' AND name='__v0154_shadow_id_guard'
+      `).get() as { total: number }).total,
+      0,
+    );
+    assert.deepEqual(
+      { ...db.prepare("PRAGMA quick_check").get() },
+      { quick_check: "ok" },
+    );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+    assert.deepEqual(
+      { ...db.prepare("PRAGMA defer_foreign_keys").get() },
+      { defer_foreign_keys: 0 },
+    );
   } finally {
     db.close();
   }

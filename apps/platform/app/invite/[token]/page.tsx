@@ -1,4 +1,5 @@
 import { requireChatGPTUser } from "../../chatgpt-auth";
+import { isLocale } from "../../../lib/platform/routing";
 import { InviteAcceptClient } from "./InviteAcceptClient";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,8 @@ export default async function InvitePage({
 }) {
   const { token } = await params;
   const query = await searchParams;
-  const locale = query.lang === "uz" ? "uz" : "ru";
+  const requestedLocale = typeof query.lang === "string" ? query.lang : "";
+  const locale = isLocale(requestedLocale) ? requestedLocale : "ru";
   await requireChatGPTUser(
     `/invite/${encodeURIComponent(token)}?lang=${locale}`,
   );

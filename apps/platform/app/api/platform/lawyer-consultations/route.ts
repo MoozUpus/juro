@@ -5,6 +5,10 @@ import {
   withApiErrors,
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { lawyerText } from "../../../../lib/platform/lawyer-localization";
+import type { PlatformLocale } from "../../../../lib/platform/routing";
+
+const locale = z.enum(["ru", "uz", "en"]);
 
 const consultationInput = z.discriminatedUnion("action", [
   z.object({
@@ -14,15 +18,18 @@ const consultationInput = z.discriminatedUnion("action", [
     endsAt: z.string().datetime({ offset: true }),
     format: z.enum(["video", "phone", "office"]),
     internalNote: z.string().trim().max(1_000).optional(),
+    locale,
   }),
   z.object({
     action: z.enum(["confirm", "start", "cancel"]),
     requestId: z.string().uuid(),
+    locale,
   }),
   z.object({
     action: z.literal("complete"),
     requestId: z.string().uuid(),
     resultNote: z.string().trim().min(1).max(4_000),
+    locale,
   }),
 ]);
 
@@ -32,6 +39,8 @@ type Handoff = {
   clientUserId: string;
   lawyerProfileId: string;
   lawyerUserId: string;
+  clientLocale: PlatformLocale;
+  lawyerLocale: PlatformLocale;
   profileStatus: string;
   marketplaceStatus: string;
   grantId: string | null;
@@ -50,9 +59,13 @@ async function handoffForRequest(requestId: string): Promise<Handoff | null> {
     .prepare(
       `SELECT r.workspace_id AS workspaceId,r.case_id AS caseId,r.requester_user_id AS clientUserId,
       p.id AS lawyerProfileId,p.user_id AS lawyerUserId,p.status AS profileStatus,
+      CASE client.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS clientLocale,
+      CASE lawyer.locale WHEN 'uz' THEN 'uz' WHEN 'en' THEN 'en' ELSE 'ru' END AS lawyerLocale,
       p.marketplace_status AS marketplaceStatus,g.id AS grantId
      FROM lawyer_requests r
      JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id
+     JOIN user_profiles client ON client.id=r.requester_user_id
+     JOIN user_profiles lawyer ON lawyer.id=p.user_id
      LEFT JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.lawyer_user_id=p.user_id
        AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
      WHERE r.id=? LIMIT 1`,
@@ -69,7 +82,6 @@ export const GET = withApiErrors(async function GET(request: Request) {
     return response(
       {
         code: "INVALID_REQUEST_ID",
-        error: "Некорректная заявка / Noto‘g‘ri so‘rov.",
       },
       400,
     );
@@ -118,7 +130,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "INVALID_INPUT",
-        error: "Некорректные данные / Noto‘g‘ri ma’lumot.",
       },
       400,
     );
@@ -128,8 +139,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "INVALID_INPUT",
-        error:
-          "Проверьте дату и формат консультации / Sana va formatni tekshiring.",
       },
       400,
     );
@@ -139,7 +148,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "REQUEST_UNAVAILABLE",
-        error: "Заявка недоступна / So‘rov mavjud emas.",
+        error: lawyerText(parsed.data.locale, "Заявка недоступна.", "So‘rov mavjud emas.", "The request is unavailable."),
       },
       404,
     );
@@ -149,7 +158,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "REQUEST_UNAVAILABLE",
-        error: "Заявка недоступна / So‘rov mavjud emas.",
+        error: lawyerText(parsed.data.locale, "Заявка недоступна.", "So‘rov mavjud emas.", "The request is unavailable."),
       },
       404,
     );
@@ -179,8 +188,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return response(
         {
           code: "CONSULTATION_FORBIDDEN",
-          error:
+          error: lawyerText(
+            parsed.data.locale,
             "Предложение доступно только одобренному юристу с активным доступом к делу.",
+            "Taklif faqat tasdiqlangan va ishga faol kirish huquqiga ega yurist uchun mavjud.",
+            "Only an approved lawyer with active access to the case can propose a consultation.",
+          ),
         },
         403,
       );
@@ -196,8 +209,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return response(
         {
           code: "INVALID_CONSULTATION_TIME",
-          error:
+          error: lawyerText(
+            parsed.data.locale,
             "Выберите будущее время и длительность от 15 минут до 8 часов.",
+            "Kelajakdagi vaqtni va 15 daqiqadan 8 soatgacha davomiylikni tanlang.",
+            "Choose a future time and a duration between 15 minutes and 8 hours.",
+          ),
         },
         400,
       );
@@ -214,7 +231,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return response(
         {
           code: "CONSULTATION_OVERLAP",
-          error: "Это время пересекается с другой консультацией.",
+          error: lawyerText(parsed.data.locale, "Это время пересекается с другой консультацией.", "Bu vaqt boshqa maslahat bilan to‘qnashadi.", "This time overlaps another consultation."),
         },
         409,
       );
@@ -281,7 +298,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         crypto.randomUUID(),
         handoff.clientUserId,
         handoff.clientUserId,
-        "Юрист предложил время консультации / Yurist maslahat vaqtini taklif qildi",
+        lawyerText(handoff.clientLocale, "Юрист предложил время консультации", "Yurist maslahat vaqtini taklif qildi", "A lawyer proposed a consultation time"),
         startsAt,
         now,
       ),
@@ -293,7 +310,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "CONSULTATION_NOT_FOUND",
-        error: "Консультация не найдена / Konsultatsiya topilmadi.",
+        error: lawyerText(parsed.data.locale, "Консультация не найдена.", "Konsultatsiya topilmadi.", "The consultation was not found."),
       },
       404,
     );
@@ -305,7 +322,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "INVALID_CONSULTATION_TRANSITION",
-        error: "Подтвердить предложенное время может только клиент.",
+        error: lawyerText(parsed.data.locale, "Подтвердить предложенное время может только клиент.", "Taklif qilingan vaqtni faqat mijoz tasdiqlashi mumkin.", "Only the client can confirm the proposed time."),
       },
       409,
     );
@@ -317,7 +334,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "INVALID_CONSULTATION_TRANSITION",
-        error: "Начать можно только подтверждённую консультацию.",
+        error: lawyerText(parsed.data.locale, "Начать можно только подтверждённую консультацию.", "Faqat tasdiqlangan maslahatni boshlash mumkin.", "Only a confirmed consultation can be started."),
       },
       409,
     );
@@ -329,7 +346,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "INVALID_CONSULTATION_TRANSITION",
-        error: "Эту консультацию уже нельзя отменить.",
+        error: lawyerText(parsed.data.locale, "Эту консультацию уже нельзя отменить.", "Bu maslahatni endi bekor qilib bo‘lmaydi.", "This consultation can no longer be cancelled."),
       },
       409,
     );
@@ -341,7 +358,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return response(
       {
         code: "INVALID_CONSULTATION_TRANSITION",
-        error: "Завершить можно только подтверждённую консультацию.",
+        error: lawyerText(parsed.data.locale, "Завершить можно только подтверждённую консультацию.", "Faqat tasdiqlangan maslahatni yakunlash mumkin.", "Only a confirmed or active consultation can be completed."),
       },
       409,
     );
@@ -355,6 +372,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
           ? "cancelled"
           : "completed";
   const recipientUserId = isLawyer ? handoff.clientUserId : handoff.lawyerUserId;
+  const recipientLocale = isLawyer ? handoff.clientLocale : handoff.lawyerLocale;
   await db.batch([
     db
       .prepare(
@@ -403,10 +421,26 @@ export const POST = withApiErrors(async function POST(request: Request) {
       recipientUserId,
       recipientUserId,
       `lawyer_consultation_${status}`,
-      `Консультация: ${status} / Konsultatsiya: ${status}`,
+      consultationStatusNotification(status, recipientLocale),
       parsed.data.action === "complete" ? parsed.data.resultNote : "",
       now,
     ),
   ]);
   return response({ ok: true, id: existing.id, status });
 });
+
+function consultationStatusNotification(
+  status: string,
+  selectedLocale: PlatformLocale,
+): string {
+  const labels: Record<string, [string, string, string]> = {
+    confirmed: ["Консультация подтверждена", "Maslahat tasdiqlandi", "Consultation confirmed"],
+    in_progress: ["Консультация началась", "Maslahat boshlandi", "Consultation started"],
+    cancelled: ["Консультация отменена", "Maslahat bekor qilindi", "Consultation cancelled"],
+    completed: ["Консультация завершена", "Maslahat yakunlandi", "Consultation completed"],
+  };
+  const value = labels[status];
+  return value
+    ? lawyerText(selectedLocale, value[0], value[1], value[2])
+    : lawyerText(selectedLocale, "Статус консультации изменён", "Maslahat holati o‘zgardi", "Consultation status updated");
+}

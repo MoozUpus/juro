@@ -2,6 +2,7 @@ import { parseJsonRequest } from "../../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../../lib/auth/safe-write";
 import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../../lib/auth/staff-http";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { lawyerText } from "../../../../../../lib/platform/lawyer-localization";
 import { assertReviewId, lawyerReviewModerationSchema } from "../../../../../../lib/platform/lawyer-review-moderation";
 import { LawyerReviewModerationServiceError, moderateLawyerReview } from "../../../../../../lib/platform/lawyer-review-moderation-service";
 
@@ -26,7 +27,15 @@ async function patchLawyerReview(request: Request, context: Context) {
     return Response.json({ ok: true, status: result.status }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     if (error instanceof LawyerReviewModerationServiceError && error.code === "LIKELY_PERSONAL_DATA") {
-      return Response.json({ code: error.code, error: "Remove personal data before approval." }, { status: 400 });
+      return Response.json({
+        code: error.code,
+        error: lawyerText(
+          parsed.data.locale,
+          "Перед одобрением удалите персональные данные.",
+          "Tasdiqlashdan oldin shaxsiy ma’lumotlarni olib tashlang.",
+          "Remove personal data before approval.",
+        ),
+      }, { status: 400 });
     }
     return Response.json({ code: "REVIEW_UNAVAILABLE" }, { status: 409 });
   }

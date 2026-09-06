@@ -12,14 +12,22 @@ import {
   withApiErrors,
 } from "../../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { isLocale } from "../../../../../../lib/platform/routing";
 
-function requestLocale(request: Request): MfaLocale {
-  return new URL(request.url).searchParams.get("lang") === "ru" ? "ru" : "uz";
+function requestLocale(request: Request): MfaLocale | null {
+  const value = new URL(request.url).searchParams.get("lang") ?? "ru";
+  return isLocale(value) ? value : null;
 }
 
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const locale = requestLocale(request);
+  if (!locale) {
+    return jsonNoStore({
+      code: "INVALID_LOCALE",
+      error: "Choose a supported interface language.",
+    }, 400);
+  }
   const now = new Date();
   let session;
   try {
@@ -34,8 +42,10 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return jsonNoStore({
       code: "LOCAL_SESSION_REQUIRED",
       error: locale === "ru"
-        ? "Войдите через email-код JURO, чтобы обновить сессию."
-        : "Sessiyani yangilash uchun JURO email-kodi orqali kiring.",
+        ? "Войдите в JURO, чтобы обновить сессию."
+        : locale === "uz"
+          ? "Sessiyani yangilash uchun JURO hisobiga kiring."
+          : "Sign in to JURO to refresh your session.",
     }, 401);
   }
 
@@ -50,7 +60,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
       code: "SESSION_STATE_CHANGED",
       error: locale === "ru"
         ? "Состояние сессии изменилось. Повторите запрос."
-        : "Sessiya holati o‘zgardi. So‘rovni takrorlang.",
+        : locale === "uz"
+          ? "Sessiya holati o‘zgardi. So‘rovni takrorlang."
+          : "The session state changed. Try the request again.",
     }, 409);
   }
   if (result.status === "not_due") {

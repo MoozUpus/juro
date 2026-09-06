@@ -1,3 +1,6 @@
+import { lawyerText } from "./lawyer-localization";
+import type { PlatformLocale } from "./routing";
+
 export type LawyerProfileNotificationStatus =
   | "profile_incomplete"
   | "pending_review"
@@ -9,12 +12,17 @@ export type LawyerProfileNotificationStatus =
   | "archived";
 
 export function localizedLawyerProfileStatusNotification(
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
   status: LawyerProfileNotificationStatus,
   reason?: string,
 ) {
   const suffix = reason?.trim()
-    ? locale === "uz" ? ` Izoh: ${reason.trim()}` : ` Комментарий: ${reason.trim()}`
+    ? lawyerText(
+        locale,
+        ` Комментарий: ${reason.trim()}`,
+        ` Izoh: ${reason.trim()}`,
+        ` Note: ${reason.trim()}`,
+      )
     : "";
   if (locale === "uz") {
     const messages: Record<LawyerProfileNotificationStatus, { title: string; body: string }> = {
@@ -49,6 +57,43 @@ export function localizedLawyerProfileStatusNotification(
       archived: {
         title: "Yurist profilingiz arxivlandi",
         body: `Profil marketpleysdan olib tashlandi.${suffix}`,
+      },
+    };
+    return messages[status];
+  }
+  if (locale === "en") {
+    const messages: Record<LawyerProfileNotificationStatus, { title: string; body: string }> = {
+      profile_incomplete: {
+        title: "Your lawyer profile has been created",
+        body: "Complete the required fields to submit your profile to the marketplace.",
+      },
+      pending_review: {
+        title: "Your lawyer profile is under review",
+        body: "A JURO moderator will review your profile. You cannot accept new client requests until the review is complete.",
+      },
+      public_approved: {
+        title: "Your lawyer profile has been approved",
+        body: `Your profile is now approved for the JURO marketplace.${suffix}`,
+      },
+      changes_requested: {
+        title: "Your lawyer profile needs changes",
+        body: `Update the requested details before submitting the profile for review again.${suffix}`,
+      },
+      rejected: {
+        title: "Your lawyer profile was not approved",
+        body: `The profile has not been published in the marketplace.${suffix}`,
+      },
+      suspended: {
+        title: "Your lawyer profile has been temporarily hidden",
+        body: `The profile has been temporarily removed from the marketplace and cannot receive new client requests.${suffix}`,
+      },
+      blocked: {
+        title: "Your lawyer profile has been blocked",
+        body: `The profile is not visible in the marketplace and cannot receive new client requests.${suffix}`,
+      },
+      archived: {
+        title: "Your lawyer profile has been archived",
+        body: `The profile has been removed from the marketplace.${suffix}`,
       },
     };
     return messages[status];

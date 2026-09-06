@@ -31,11 +31,13 @@ import {
   assertSafeWrite,
   withApiErrors,
 } from "../../../../../lib/document-builder/auth/api";
+import { localizedRequestFormatError } from "../../../../../lib/auth/request-locale";
 import {
   requireD1,
   runtimeEnv,
 } from "../../../../../lib/document-builder/storage/runtime";
 import { ensureDefaultWorkspace } from "../../../../../lib/platform/workspace";
+import type { PlatformLocale } from "../../../../../lib/platform/routing";
 import { dispatchOutbox } from "../../../../../worker/platform-outbox";
 import type { PlatformJobEnv } from "../../../../../worker/platform-jobs";
 
@@ -50,26 +52,35 @@ function sessionCookiesToClear(request: Request): string[] {
   ];
 }
 
-function requestError(locale: "ru" | "uz", code: string, status: number) {
-  const ru = locale === "ru";
-  const messages: Record<string, [string, string]> = {
+function localized(
+  locale: PlatformLocale,
+  values: Record<PlatformLocale, string>,
+): string {
+  return values[locale];
+}
+
+function requestError(locale: PlatformLocale, code: string, status: number) {
+  const messages: Record<string, [string, string, string]> = {
     LOCAL_SESSION_REQUIRED: [
-      "Запрос удаления доступен только из JURO email-сессии.",
-      "O‘chirish so‘rovi faqat JURO email sessiyasida mavjud.",
+      "Запрос удаления доступен только из локальной сессии JURO.",
+      "O‘chirish so‘rovi faqat mahalliy JURO sessiyasida mavjud.",
+      "Account deletion can only be requested from a local JURO session.",
     ],
     SESSION_NOT_RECENT: [
       "Для удаления войдите в JURO заново и повторите запрос.",
       "O‘chirish uchun JURO hisobiga qayta kirib, so‘rovni takrorlang.",
+      "To delete your account, sign in to JURO again and repeat the request.",
     ],
   };
-  const [ruMessage, uzMessage] = messages[code] ?? [
+  const [ruMessage, uzMessage, enMessage] = messages[code] ?? [
     "Запрос не выполнен.",
     "So‘rov bajarilmadi.",
+    "The request could not be completed.",
   ];
   return jsonNoStore(
     {
       code,
-      error: ru ? ruMessage : uzMessage,
+      error: localized(locale, { ru: ruMessage, uz: uzMessage, en: enMessage }),
     },
     status,
   );
@@ -77,7 +88,7 @@ function requestError(locale: "ru" | "uz", code: string, status: number) {
 
 function authErrorResponse(
   error: unknown,
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
 ): Response | null {
   if (!(error instanceof MfaError)) return null;
   if (error.code === "LOCAL_SESSION_REQUIRED") {
@@ -90,6 +101,7 @@ function authErrorResponse(
 }
 
 function invalidInputResponse(
+  request: Request,
   error:
     | "invalid_content_type"
     | "invalid_json"
@@ -105,7 +117,7 @@ function invalidInputResponse(
   return jsonNoStore(
     {
       code: error.toLocaleUpperCase(),
-      error: "Проверьте формат запроса.",
+      error: localizedRequestFormatError(request),
     },
     status,
   );
@@ -125,16 +137,17 @@ function confirmationError(
       status: "confirmed";
     }
   >,
-  locale: "ru" | "uz",
+  locale: PlatformLocale,
 ): Response {
-  const ru = locale === "ru";
   if (result.status === "existing_request") {
     return jsonNoStore(
       {
         code: "DELETION_REQUEST_EXISTS",
-        error: ru
-          ? "Запрос на удаление уже зарегистрирован."
-          : "O‘chirish so‘rovi allaqachon ro‘yxatdan o‘tgan.",
+        error: localized(locale, {
+          ru: "Запрос на удаление уже зарегистрирован.",
+          uz: "O‘chirish so‘rovi allaqachon ro‘yxatdan o‘tgan.",
+          en: "An account deletion request has already been submitted.",
+        }),
         request: result.request,
       },
       409,
@@ -142,50 +155,56 @@ function confirmationError(
   }
   const values: Record<
     Exclude<typeof result.status, "existing_request">,
-    [number, string, string, string]
+    [number, string, string, string, string]
   > = {
     invalid: [
       400,
       "DELETION_CODE_INVALID",
       "Проверка недействительна.",
       "Tekshiruv yaroqsiz.",
+      "The verification is invalid.",
     ],
     used: [
       409,
       "DELETION_CODE_USED",
       "Этот код уже использован.",
       "Bu kod allaqachon ishlatilgan.",
+      "This code has already been used.",
     ],
     replaced: [
       400,
       "DELETION_CODE_REPLACED",
       "Код заменён новым. Используйте последнее письмо.",
       "Kod yangisi bilan almashtirilgan. Oxirgi xatdan foydalaning.",
+      "A newer code has been issued. Use the most recent email.",
     ],
     expired: [
       400,
       "DELETION_CODE_EXPIRED",
       "Срок действия кода истёк.",
       "Kod muddati tugagan.",
+      "This code has expired.",
     ],
     attempts_exceeded: [
       429,
       "DELETION_ATTEMPTS_EXCEEDED",
       "Попытки закончились. Запросите новый код.",
       "Urinishlar tugadi. Yangi kod so‘rang.",
+      "No attempts remain. Request a new code.",
     ],
     incorrect: [
       400,
       "DELETION_CODE_INCORRECT",
       "Неверный код.",
       "Kod noto‘g‘ri.",
+      "The code is incorrect.",
     ],
   };
-  const [status, code, ruMessage, uzMessage] = values[result.status];
+  const [status, code, ruMessage, uzMessage, enMessage] = values[result.status];
   return jsonNoStore(
     {
       code,
-      error: ru ? ruMessage : uzMessage,
+      error: localized(locale, { ru: ruMessage, uz: uzMessage, en: enMessage }),
       ...(result.status === "incorrect"
         ? {
             attemptsRemaining: Math.max(
@@ -202,7 +221,7 @@ function confirmationError(
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const parsed = await parseJsonRequest(request, accountDeletionInputSchema);
-  if (!parsed.ok) return invalidInputResponse(parsed.error);
+  if (!parsed.ok) return invalidInputResponse(request, parsed.error);
   const body = parsed.data;
   const locale = body.locale;
   let session;
@@ -224,10 +243,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return jsonNoStore(
       {
         code: "IDENTITY_KEYRING_UNAVAILABLE",
-        error:
-          locale === "ru"
-            ? "Защищённое удаление аккаунта временно недоступно."
-            : "Hisobni himoyalangan tarzda o‘chirish vaqtincha mavjud emas.",
+        error: localized(locale, {
+          ru: "Защищённое удаление аккаунта временно недоступно.",
+          uz: "Hisobni himoyalangan tarzda o‘chirish vaqtincha mavjud emas.",
+          en: "Secure account deletion is temporarily unavailable.",
+        }),
       },
       503,
     );
@@ -240,10 +260,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return jsonNoStore(
         {
           code: "EMAIL_NOT_CONFIGURED",
-          error:
-            locale === "ru"
-              ? "Отправка кода временно не настроена."
-              : "Kod yuborish vaqtincha sozlanmagan.",
+          error: localized(locale, {
+            ru: "Отправка кода временно не настроена.",
+            uz: "Kod yuborish vaqtincha sozlanmagan.",
+            en: "Code delivery is temporarily unavailable.",
+          }),
         },
         503,
       );
@@ -281,10 +302,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
           {
             code: "DELETION_CODE_COOLDOWN",
             retryAfterSeconds,
-            error:
-              locale === "ru"
-                ? `Новый код можно запросить через ${retryAfterSeconds} сек.`
-                : `Yangi kodni ${retryAfterSeconds} soniyadan keyin so‘rash mumkin.`,
+            error: localized(locale, {
+              ru: `Новый код можно запросить через ${retryAfterSeconds} сек.`,
+              uz: `Yangi kodni ${retryAfterSeconds} soniyadan keyin so‘rash mumkin.`,
+              en: `You can request a new code in ${retryAfterSeconds} seconds.`,
+            }),
           },
           429,
         );
@@ -292,10 +314,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return jsonNoStore(
         {
           code: "DELETION_CODE_RATE_LIMIT",
-          error:
-            locale === "ru"
-              ? "Слишком много запросов. Попробуйте позже."
-              : "Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.",
+          error: localized(locale, {
+            ru: "Слишком много запросов. Попробуйте позже.",
+            uz: "Juda ko‘p so‘rov. Keyinroq urinib ko‘ring.",
+            en: "Too many requests. Try again later.",
+          }),
         },
         429,
       );
@@ -323,10 +346,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return jsonNoStore(
         {
           code: "EMAIL_PROVIDER_ERROR",
-          error:
-            locale === "ru"
-              ? "Не удалось отправить письмо. Попробуйте позже."
-              : "Xat yuborilmadi. Keyinroq urinib ko‘ring.",
+          error: localized(locale, {
+            ru: "Не удалось отправить письмо. Попробуйте позже.",
+            uz: "Xat yuborilmadi. Keyinroq urinib ko‘ring.",
+            en: "We could not send the email. Try again later.",
+          }),
         },
         502,
       );
@@ -370,18 +394,23 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return jsonNoStore(
       {
         code,
-        error:
-          locale === "ru"
-            ? result.status === "completed"
-              ? "Удаление аккаунта уже завершено."
-              : result.status === "not_cancelable"
-                ? "Этот запрос уже нельзя отменить."
-                : "Запрос удаления не найден."
-            : result.status === "completed"
-              ? "Hisobni o‘chirish allaqachon yakunlangan."
-              : result.status === "not_cancelable"
-                ? "Bu so‘rovni endi bekor qilib bo‘lmaydi."
-                : "O‘chirish so‘rovi topilmadi.",
+        error: localized(locale, result.status === "completed"
+          ? {
+              ru: "Удаление аккаунта уже завершено.",
+              uz: "Hisobni o‘chirish allaqachon yakunlangan.",
+              en: "Account deletion has already been completed.",
+            }
+          : result.status === "not_cancelable"
+            ? {
+                ru: "Этот запрос уже нельзя отменить.",
+                uz: "Bu so‘rovni endi bekor qilib bo‘lmaydi.",
+                en: "This request can no longer be cancelled.",
+              }
+            : {
+                ru: "Запрос удаления не найден.",
+                uz: "O‘chirish so‘rovi topilmadi.",
+                en: "The account deletion request was not found.",
+              }),
       },
       result.status === "completed"
         ? 410
@@ -423,18 +452,23 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return jsonNoStore(
       {
         code,
-        error:
-          locale === "ru"
-            ? result.status === "completed"
-              ? "Удаление аккаунта уже завершено."
-              : result.status === "not_retryable"
-                ? "Этот запрос сейчас нельзя запустить повторно."
-                : "Запрос удаления не найден."
-            : result.status === "completed"
-              ? "Hisobni o‘chirish allaqachon yakunlangan."
-              : result.status === "not_retryable"
-                ? "Bu so‘rovni hozir qayta ishga tushirib bo‘lmaydi."
-                : "O‘chirish so‘rovi topilmadi.",
+        error: localized(locale, result.status === "completed"
+          ? {
+              ru: "Удаление аккаунта уже завершено.",
+              uz: "Hisobni o‘chirish allaqachon yakunlangan.",
+              en: "Account deletion has already been completed.",
+            }
+          : result.status === "not_retryable"
+            ? {
+                ru: "Этот запрос сейчас нельзя запустить повторно.",
+                uz: "Bu so‘rovni hozir qayta ishga tushirib bo‘lmaydi.",
+                en: "This request cannot be retried at the moment.",
+              }
+            : {
+                ru: "Запрос удаления не найден.",
+                uz: "O‘chirish so‘rovi topilmadi.",
+                en: "The account deletion request was not found.",
+              }),
       },
       result.status === "completed"
         ? 410

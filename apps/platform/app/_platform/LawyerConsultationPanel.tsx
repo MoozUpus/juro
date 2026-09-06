@@ -4,6 +4,7 @@
 
 import { CalendarClock, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { lawyerIntlLocale, lawyerText } from "../../lib/platform/lawyer-localization";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
 type Consultation = {
@@ -27,7 +28,10 @@ export function LawyerConsultationPanel({
   requestId: string;
   role: "client" | "lawyer";
 }) {
-  const ru = locale === "ru";
+  const text = useCallback(
+    (russian: string, uzbek: string, english: string) => lawyerText(locale, russian, uzbek, english),
+    [locale],
+  );
   const [consultation, setConsultation] = useState<Consultation | null>(null);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
@@ -45,9 +49,8 @@ export function LawyerConsultationPanel({
     );
     const body = (await response.json()) as {
       consultations?: Consultation[];
-      error?: string;
     };
-    if (!response.ok) throw new Error(body.error || "Ошибка");
+    if (!response.ok) throw new Error(text("Не удалось загрузить консультацию.", "Konsultatsiyani yuklab bo‘lmadi.", "We could not load the consultation."));
     const next = body.consultations?.[0] || null;
     setConsultation(next);
     if (next && role === "lawyer") {
@@ -57,7 +60,7 @@ export function LawyerConsultationPanel({
       setInternalNote(next.internalNote || "");
       setResultNote(next.resultNote || "");
     }
-  }, [requestId, role]);
+  }, [requestId, role, text]);
 
   useEffect(() => {
     void load()
@@ -74,10 +77,9 @@ export function LawyerConsultationPanel({
       const response = await fetch("/api/platform/lawyer-consultations", {
         method: "POST",
         headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-        body: JSON.stringify({ requestId, ...payload }),
+        body: JSON.stringify({ requestId, locale, ...payload }),
       });
-      const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error || "Ошибка");
+      if (!response.ok) throw new Error(text("Не удалось обновить консультацию.", "Konsultatsiyani yangilab bo‘lmadi.", "We could not update the consultation."));
       await load();
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -104,7 +106,7 @@ export function LawyerConsultationPanel({
         <LoaderCircle
           className="spin"
           aria-label={
-            ru ? "Загрузка консультации" : "Konsultatsiya yuklanmoqda"
+            text("Загрузка консультации", "Konsultatsiya yuklanmoqda", "Loading consultation")
           }
         />
       </div>
@@ -113,17 +115,17 @@ export function LawyerConsultationPanel({
   return (
     <section
       className="lawyer-consultation-panel"
-      aria-label={ru ? "Консультация" : "Konsultatsiya"}
+      aria-label={text("Консультация", "Konsultatsiya", "Consultation")}
     >
       <header>
         <CalendarClock aria-hidden="true" />
         <div>
-          <strong>{ru ? "Консультация" : "Konsultatsiya"}</strong>
-          <small>{ru ? "Время Asia/Tashkent" : "Asia/Tashkent vaqti"}</small>
+          <strong>{text("Консультация", "Konsultatsiya", "Consultation")}</strong>
+          <small>{text("Время Asia/Tashkent", "Asia/Tashkent vaqti", "Times shown in Asia/Tashkent")}</small>
         </div>
         {consultation && (
           <span data-status={consultation.status}>
-            {statusLabel(consultation.status, ru)}
+            {statusLabel(consultation.status, locale)}
           </span>
         )}
       </header>
@@ -138,7 +140,7 @@ export function LawyerConsultationPanel({
             {formatDate(consultation.startsAt, locale)}
           </time>
           <span>
-            {formatLabel(consultation.format, ru)} ·{" "}
+            {formatLabel(consultation.format, locale)} ·{" "}
             {formatTime(consultation.startsAt, locale)}–
             {formatTime(consultation.endsAt, locale)}
           </span>
@@ -146,7 +148,7 @@ export function LawyerConsultationPanel({
       )}
       {consultation?.status === "completed" && consultation.resultNote && (
         <div className="lawyer-consultation-result">
-          <strong>{ru ? "Итог консультации" : "Konsultatsiya yakuni"}</strong>
+          <strong>{text("Итог консультации", "Konsultatsiya yakuni", "Consultation outcome")}</strong>
           <p>{consultation.resultNote}</p>
         </div>
       )}
@@ -154,9 +156,7 @@ export function LawyerConsultationPanel({
         <>
           {!consultation && (
             <p>
-              {ru
-                ? "Юрист ещё не предложил время."
-                : "Yurist hali vaqt taklif qilmagan."}
+              {text("Юрист ещё не предложил время.", "Yurist hali vaqt taklif qilmagan.", "The lawyer has not proposed a time yet.")}
             </p>
           )}
           {consultation?.status === "proposed" && (
@@ -167,7 +167,7 @@ export function LawyerConsultationPanel({
                 onClick={() => void mutate({ action: "confirm" })}
               >
                 {busy && <LoaderCircle className="spin" />}
-                {ru ? "Подтвердить время" : "Vaqtni tasdiqlash"}
+                {text("Подтвердить время", "Vaqtni tasdiqlash", "Confirm time")}
               </button>
               <button
                 className="secondary"
@@ -175,7 +175,7 @@ export function LawyerConsultationPanel({
                 disabled={busy}
                 onClick={() => void mutate({ action: "cancel" })}
               >
-                {ru ? "Отклонить" : "Rad etish"}
+                {text("Отклонить", "Rad etish", "Decline")}
               </button>
             </div>
           )}
@@ -186,7 +186,7 @@ export function LawyerConsultationPanel({
               disabled={busy}
               onClick={() => void mutate({ action: "cancel" })}
             >
-              {ru ? "Отменить консультацию" : "Konsultatsiyani bekor qilish"}
+              {text("Отменить консультацию", "Konsultatsiyani bekor qilish", "Cancel consultation")}
             </button>
           )}
         </>
@@ -200,7 +200,7 @@ export function LawyerConsultationPanel({
                 onClick={() => void mutate({ action: "start" })}
               >
                 {busy && <LoaderCircle className="spin" />}
-                {ru ? "Начать консультацию" : "Konsultatsiyani boshlash"}
+                {text("Начать консультацию", "Konsultatsiyani boshlash", "Start consultation")}
               </button>
               <button
                 className="secondary"
@@ -208,14 +208,14 @@ export function LawyerConsultationPanel({
                 disabled={busy}
                 onClick={() => void mutate({ action: "cancel" })}
               >
-                {ru ? "Отменить" : "Bekor qilish"}
+                {text("Отменить", "Bekor qilish", "Cancel")}
               </button>
             </div>
           )}
           {consultation?.status === "in_progress" && (
             <div className="lawyer-consultation-completion">
               <label>
-                {ru ? "Итоговый комментарий клиенту" : "Mijoz uchun yakuniy izoh"}
+                {text("Итоговый комментарий клиенту", "Mijoz uchun yakuniy izoh", "Outcome note for the client")}
                 <textarea
                   required
                   maxLength={4_000}
@@ -229,7 +229,7 @@ export function LawyerConsultationPanel({
                   disabled={busy || !resultNote.trim()}
                   onClick={() => void mutate({ action: "complete", resultNote: resultNote.trim() })}
                 >
-                  {ru ? "Завершить консультацию" : "Konsultatsiyani yakunlash"}
+                  {text("Завершить консультацию", "Konsultatsiyani yakunlash", "Complete consultation")}
                 </button>
               </div>
             </div>
@@ -240,7 +240,7 @@ export function LawyerConsultationPanel({
             <form onSubmit={(event) => void propose(event)}>
               <div>
                 <label>
-                  {ru ? "Начало" : "Boshlanishi"}
+                  {text("Начало", "Boshlanishi", "Starts")}
                   <input
                     type="datetime-local"
                     required
@@ -249,7 +249,7 @@ export function LawyerConsultationPanel({
                   />
                 </label>
                 <label>
-                  {ru ? "Окончание" : "Tugashi"}
+                  {text("Окончание", "Tugashi", "Ends")}
                   <input
                     type="datetime-local"
                     required
@@ -259,20 +259,20 @@ export function LawyerConsultationPanel({
                 </label>
               </div>
               <label>
-                {ru ? "Формат" : "Format"}
+                {text("Формат", "Format", "Format")}
                 <select
                   value={format}
                   onChange={(event) =>
                     setFormat(event.target.value as Consultation["format"])
                   }
                 >
-                  <option value="video">{ru ? "Видеосвязь" : "Video"}</option>
-                  <option value="phone">{ru ? "Телефон" : "Telefon"}</option>
-                  <option value="office">{ru ? "В офисе" : "Ofisda"}</option>
+                  <option value="video">{text("Видеосвязь", "Video", "Video call")}</option>
+                  <option value="phone">{text("Телефон", "Telefon", "Phone")}</option>
+                  <option value="office">{text("В офисе", "Ofisda", "In person")}</option>
                 </select>
               </label>
               <label>
-                {ru ? "Внутренняя заметка" : "Ichki izoh"}
+                {text("Внутренняя заметка", "Ichki izoh", "Internal note")}
                 <textarea
                   maxLength={1_000}
                   value={internalNote}
@@ -282,12 +282,8 @@ export function LawyerConsultationPanel({
               <button type="submit" disabled={busy || !startsAt || !endsAt}>
                 {busy && <LoaderCircle className="spin" />}
                 {consultation?.status === "proposed"
-                  ? ru
-                    ? "Изменить предложение"
-                    : "Taklifni o‘zgartirish"
-                  : ru
-                    ? "Предложить время"
-                    : "Vaqt taklif qilish"}
+                  ? text("Изменить предложение", "Taklifni o‘zgartirish", "Update proposed time")
+                  : text("Предложить время", "Vaqt taklif qilish", "Propose time")}
               </button>
             </form>
           )}
@@ -304,33 +300,33 @@ function toLocalInput(value: string) {
     .slice(0, 16);
 }
 function formatDate(value: string, locale: PlatformLocale) {
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", {
+  return new Intl.DateTimeFormat(lawyerIntlLocale(locale), {
     dateStyle: "medium",
     timeZone: "Asia/Tashkent",
   }).format(new Date(value));
 }
 function formatTime(value: string, locale: PlatformLocale) {
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", {
+  return new Intl.DateTimeFormat(lawyerIntlLocale(locale), {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Asia/Tashkent",
   }).format(new Date(value));
 }
-function statusLabel(status: Consultation["status"], ru: boolean) {
-  const labels: Record<Consultation["status"], [string, string]> = {
-    proposed: ["Ожидает подтверждения", "Tasdiq kutilmoqda"],
-    confirmed: ["Подтверждена", "Tasdiqlangan"],
-    in_progress: ["Идёт", "Davom etmoqda"],
-    completed: ["Завершена", "Yakunlangan"],
-    cancelled: ["Отменена", "Bekor qilingan"],
+function statusLabel(status: Consultation["status"], locale: PlatformLocale) {
+  const labels: Record<Consultation["status"], [string, string, string]> = {
+    proposed: ["Ожидает подтверждения", "Tasdiq kutilmoqda", "Awaiting confirmation"],
+    confirmed: ["Подтверждена", "Tasdiqlangan", "Confirmed"],
+    in_progress: ["Идёт", "Davom etmoqda", "In progress"],
+    completed: ["Завершена", "Yakunlangan", "Completed"],
+    cancelled: ["Отменена", "Bekor qilingan", "Cancelled"],
   };
-  return labels[status][ru ? 0 : 1];
+  return lawyerText(locale, labels[status][0], labels[status][1], labels[status][2]);
 }
-function formatLabel(format: Consultation["format"], ru: boolean) {
-  const labels: Record<Consultation["format"], [string, string]> = {
-    video: ["Видеосвязь", "Video"],
-    phone: ["Телефон", "Telefon"],
-    office: ["В офисе", "Ofisda"],
+function formatLabel(format: Consultation["format"], locale: PlatformLocale) {
+  const labels: Record<Consultation["format"], [string, string, string]> = {
+    video: ["Видеосвязь", "Video", "Video call"],
+    phone: ["Телефон", "Telefon", "Phone"],
+    office: ["В офисе", "Ofisda", "In person"],
   };
-  return labels[format][ru ? 0 : 1];
+  return lawyerText(locale, labels[format][0], labels[format][1], labels[format][2]);
 }

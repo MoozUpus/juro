@@ -117,6 +117,9 @@ test("operational environment and locale parsing do not silently cross environme
     headers: { referer: "https://app.juro.uz/uz/individual/dashboard" },
   })), "uz");
   assert.equal(operationalLocaleFromRequest(new Request("https://app.juro.uz/api", {
+    headers: { referer: "https://app.juro.uz/en/individual/dashboard" },
+  })), "en");
+  assert.equal(operationalLocaleFromRequest(new Request("https://app.juro.uz/api", {
     headers: { "accept-language": "ru-RU,ru;q=0.9" },
   })), "ru");
 });
@@ -153,6 +156,8 @@ test("operational controls use fresh MFA and enforce server-side route boundarie
   assert.doesNotMatch(ui, /dangerouslySetInnerHTML|transition:\s*all|window\.confirm/);
   assert.match(ui, /aria-live="polite"/);
   assert.match(ui, /staff-skip/);
+  assert.match(ui, /en:\s*\{/);
+  assert.match(ui, /nextLocale/);
   assert.match(ui, /hrefLang=/);
   assert.match(ui, /minLength=\{10\}/);
 });

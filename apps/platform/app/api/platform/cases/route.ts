@@ -27,7 +27,7 @@ export const POST = withApiErrors(async function POST(request:Request){
   const {title,description,legalArea,locale}=parsed.data;
   const now=isoNow(); const caseId=crypto.randomUUID(); const planId=crypto.randomUUID();
   const steps=caseScenarioSteps(legalArea,locale).map((stepTitle,ordinal)=>({id:crypto.randomUUID(),title:stepTitle,ordinal:ordinal+1,status:"not_started"}));
-  const planTitle=locale==="ru" ? "План: "+title : "Reja: "+title;
+  const planTitle=`${{ ru: "План", uz: "Reja", en: "Plan" }[locale]}: ${title}`;
   const initialSnapshot=JSON.stringify({version:1,title:planTitle,status:"in_progress",progressPercent:0,steps});
   const db=requireD1();
   const workspace=await workspaceForContentEditor(user);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { matchesGlob } from "node:path";
 import test from "node:test";
 import {
   ATTACHED_PLATFORM_QUEUE_BINDINGS,
@@ -53,6 +54,54 @@ const source = JSON.parse(
 ) as WranglerConfig;
 
 const environments = ["development", "staging", "production"] as const;
+
+const productionMigrationPattern =
+  "./drizzle/{0121,012[4-9],01[3-9][0-9],0[2-9][0-9][0-9],[1-9][0-9][0-9][0-9]}_*.sql";
+
+type ProductionD1MigrationBinding = {
+  binding: string;
+  database_name: string;
+  database_id: string;
+  migrations_dir: string;
+  migrations_pattern: string;
+};
+
+test("platform and legal-corpus Workers share future-safe production migration discovery", () => {
+  const legalCorpusConfig = JSON.parse(
+    readFileSync(new URL("../wrangler.legal-corpus.jsonc", import.meta.url), "utf8"),
+  ) as {
+    env: {
+      production: {
+        d1_databases: ProductionD1MigrationBinding[];
+      };
+    };
+  };
+  const platformDatabase = source.env.production
+    .d1_databases[0] as ProductionD1MigrationBinding;
+  const legalCorpusDatabase = legalCorpusConfig.env.production.d1_databases[0];
+
+  assert.deepEqual(legalCorpusDatabase, platformDatabase);
+  assert.equal(platformDatabase.migrations_pattern, productionMigrationPattern);
+
+  for (const migrationPath of [
+    "./drizzle/0121_fix.sql",
+    "./drizzle/0124_foundation.sql",
+    "./drizzle/0154_locale.sql",
+    "./drizzle/0200_future.sql",
+    "./drizzle/9999_future.sql",
+  ]) {
+    assert.equal(matchesGlob(migrationPath, productionMigrationPattern), true, migrationPath);
+  }
+  for (const migrationPath of [
+    "./drizzle/0120_historical.sql",
+    "./drizzle/0122_staging_only.sql",
+    "./drizzle/0123_staging_only.sql",
+    "./drizzle/10000_wrong_width.sql",
+    "./drizzle/0154_locale.txt",
+  ]) {
+    assert.equal(matchesGlob(migrationPath, productionMigrationPattern), false, migrationPath);
+  }
+});
 
 test("local staging-corpus mode remotes only a separately named corpus D1 binding", () => {
   const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
@@ -259,7 +308,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     assert.equal(
       config.d1_databases[0]?.migrations_pattern,
       environment === "production"
-        ? "./drizzle/{0121,012[4-9],013[0-9],014[0-9],015[0-3]}_*.sql"
+        ? productionMigrationPattern
         : undefined,
     );
     assert.deepEqual(

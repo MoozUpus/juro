@@ -22,7 +22,7 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
      JOIN conflict_checks c ON c.lawyer_request_id=r.id AND c.lawyer_profile_id=p.id
      WHERE r.id=? LIMIT 1`,
   ).bind(user.id, requestId).first();
-  if (!result) return response({ code: "REQUEST_UNAVAILABLE", error: "Заявка недоступна / So‘rov mavjud emas." }, 404);
+  if (!result) return response({ code: "REQUEST_UNAVAILABLE" }, 404);
   // The user sees only an anonymized summary until the requester explicitly grants access.
   return response({ request: result });
 });

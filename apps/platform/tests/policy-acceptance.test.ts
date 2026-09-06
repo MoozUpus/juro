@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { APP_LEGAL_OPERATOR_EMAIL } from "../content/app-legal";
 import { recordRegistrationAcceptances } from "../lib/legal/acceptance";
 import {
   policyRegistry,
@@ -10,6 +11,11 @@ import {
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 test("every displayed RU/UZ/EN policy has a locked version and content digest", async () => {
+  const privacyUpdated = {
+    ru: "5 сентября 2026",
+    uz: "2026-yil 5-sentabr",
+    en: "5 September 2026",
+  } as const;
   for (const locale of ["ru", "uz", "en"] as const) {
     const registry = await policyRegistry(locale);
     assert.equal(registry.length, 5);
@@ -18,9 +24,21 @@ test("every displayed RU/UZ/EN policy has a locked version and content digest", 
       policySlugs,
     );
     for (const policy of registry) {
-      assert.equal(policy.documentVersion, "2026-09-04.draft.2");
+      assert.equal(
+        policy.documentVersion,
+        policy.slug === "privacy"
+          ? "2026-09-05.draft.3"
+          : "2026-09-04.draft.2",
+      );
       assert.equal(policy.status, "draft");
       assert.match(policy.contentSha256, /^[a-f0-9]{64}$/);
+      assert.doesNotMatch(JSON.stringify(policy.content), /\{OPERATOR_EMAIL\}/u);
+      if (policy.slug === "privacy") {
+        assert.equal(policy.content.updated, privacyUpdated[locale]);
+        assert.ok(
+          JSON.stringify(policy.content).includes(APP_LEGAL_OPERATOR_EMAIL),
+        );
+      }
       assert.deepEqual(
         await verifiedPolicyDocument(locale, policy.slug),
         policy,
@@ -97,7 +115,12 @@ test("registration records exact policy evidence and separates marketing consent
       ["personal-data-processing", "privacy-policy", "terms"],
     );
     for (const acceptance of acceptances) {
-      assert.equal(acceptance.documentVersion, "2026-09-04.draft.2");
+      assert.equal(
+        acceptance.documentVersion,
+        acceptance.documentKey === "privacy-policy"
+          ? "2026-09-05.draft.3"
+          : "2026-09-04.draft.2",
+      );
       assert.equal(acceptance.locale, "ru");
       assert.equal(acceptance.contentSha256, acceptance.policyDigest);
       assert.equal(
@@ -158,7 +181,7 @@ test("English registration records English policy evidence without a language fa
   }
 });
 
-test("a new immutable policy version coexists with production-era acceptance rows", async () => {
+test("a new immutable privacy version coexists with production-era acceptance rows", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     const acceptedAt = "2026-09-04T13:00:00.000Z";
@@ -203,17 +226,28 @@ test("a new immutable policy version coexists with production-era acceptance row
        ORDER BY document_key,document_version`,
     ).all() as Array<{ documentKey: string; documentVersion: string }>;
     assert.equal(versions.length, 6);
-    assert.equal(
+    assert.deepEqual(
       versions.filter(({ documentVersion }) =>
-        documentVersion === "2026-09-04.draft.2"
-      ).length,
-      3,
+        documentVersion !== "2026-07-26.draft.1"
+      ).map((row) => ({ ...row })),
+      [
+        { documentKey: "personal-data-processing", documentVersion: "2026-09-04.draft.2" },
+        { documentKey: "privacy-policy", documentVersion: "2026-09-05.draft.3" },
+        { documentKey: "terms", documentVersion: "2026-09-04.draft.2" },
+      ],
     );
     const accepted = sqlite.prepare(
-      `SELECT count(*) AS total FROM user_acceptances
-       WHERE user_id=? AND document_version='2026-09-04.draft.2'`,
-    ).get("policy-version-user") as { total: number };
-    assert.equal(accepted.total, 3);
+      `SELECT document_key AS documentKey,document_version AS documentVersion
+       FROM user_acceptances WHERE user_id=? ORDER BY document_key`,
+    ).all("policy-version-user") as Array<{
+      documentKey: string;
+      documentVersion: string;
+    }>;
+    assert.deepEqual(accepted.map((row) => ({ ...row })), [
+      { documentKey: "personal-data-processing", documentVersion: "2026-09-04.draft.2" },
+      { documentKey: "privacy-policy", documentVersion: "2026-09-05.draft.3" },
+      { documentKey: "terms", documentVersion: "2026-09-04.draft.2" },
+    ]);
   } finally {
     sqlite.close();
   }

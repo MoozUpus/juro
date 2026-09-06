@@ -10,7 +10,7 @@ import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFea
 const requestSchema = z.object({
   assistantMessageId: z.string().uuid(),
   voice: z.enum(["marin", "cedar"]),
-  locale: z.enum(["ru", "uz"]),
+  locale: z.enum(["ru", "uz", "en"]),
 }).strict();
 
 export const POST = withApiErrors(async function POST(request: Request) {

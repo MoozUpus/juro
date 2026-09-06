@@ -178,6 +178,8 @@ test("renders the complete English public landing and keeps product actions on E
   assert.match(html, /<link rel="canonical" href="https:\/\/juro\.uz\/en"/);
   assert.match(html, /Tell us/);
   assert.match(html, /Get a clear next step/);
+  assert.match(html, /aria-label="Case stages"/);
+  assert.doesNotMatch(html, /aria-label="Ish bosqichlari"/);
   assert.match(html, /https:\/\/app\.juro\.uz\/en\/auth\/register\?accountType=individual/);
   assert.doesNotMatch(html, /https:\/\/app\.juro\.uz\/ru\/auth/u);
   for (const route of ["/en/video", "/en/lawyers", "/en/legal", "/en/trust"]) assert.match(html, new RegExp(`href="${route}"`));

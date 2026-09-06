@@ -14,6 +14,7 @@ import type {
 } from "../../lib/platform/routing";
 import {
   INTERNAL_REQUEST_PATH_HEADER,
+  isAuthenticatedPlatformLocaleReady,
   platformBasePath,
   platformPath,
   safeWorkspaceReturnPath,
@@ -39,6 +40,7 @@ export async function WorkspaceShellLayout({
   accountType: AccountType;
   requestedWorkspaceId?: string;
 }) {
+  if (!isAuthenticatedPlatformLocaleReady(locale)) notFound();
   const fallbackReturnTo = platformPath(
     locale,
     accountType,

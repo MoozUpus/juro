@@ -184,5 +184,7 @@ test("audit-log route is POST-only, CSRF/fresh-MFA protected and UI is metadata-
   assert.match(client, /x-juro-csrf/);
   assert.match(client, /aria-live="polite"/);
   assert.match(client, /staff-skip/);
+  assert.match(client, /en:\s*\{/);
+  assert.match(client, /nextLocale/);
   assert.doesNotMatch(client, /dangerouslySetInnerHTML|metadataJson|ipHash|provider_message|message_ru/);
 });
