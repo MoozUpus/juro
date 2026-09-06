@@ -85,6 +85,7 @@ export type CustomCurrentMaterializedItem = {
   documentFieldLengths: Array<{
     itemOrdinal: number;
     itemKey: string;
+    segmentId: string;
     title: number;
     hierarchy: number;
     article: number;
@@ -145,12 +146,15 @@ function epoch(value: string): number {
 
 export async function materializeCustomCurrentItem(input: {
   releaseId: string;
+  segmentId?: string;
   planItem: CustomCurrentSourcePlanItem;
   evidenceBytes: Uint8Array;
   acceptedMetadata?: { documentTitle: string; articleNumber: string;
     articleTitle: string | null; hierarchy: string[] };
 }): Promise<CustomCurrentMaterializedItem> {
   const source = sourcePlanItemSchema.parse(input.planItem);
+  const segmentId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$/u)
+    .parse(input.segmentId ?? "current-base-v1");
   if (input.evidenceBytes.byteLength !== source.evidenceByteCount
     || await customCurrentSha256(input.evidenceBytes) !== source.evidenceSha256) {
     throw new TypeError("CUSTOM_CURRENT_EVIDENCE_INTEGRITY_FAILED");
@@ -236,7 +240,7 @@ export async function materializeCustomCurrentItem(input: {
       inputTokens: chunk.embeddingTokenCount,
     });
     const sparse = await buildCustomBm25IntermediateRecords({
-      segmentId: "current-base-v1",
+      segmentId,
       itemKey: chunk.id,
       language: chunk.language,
       documentType: chunk.documentType,
@@ -250,7 +254,7 @@ export async function materializeCustomCurrentItem(input: {
       },
     }, itemOrdinal);
     sparseRecords.push(...sparse.records);
-    documentFieldLengths.push({ itemOrdinal, itemKey: chunk.id, ...sparse.fieldLengths });
+    documentFieldLengths.push({ itemOrdinal, itemKey: chunk.id, segmentId, ...sparse.fieldLengths });
   }
   return { source, chunks, denseItems, sparseRecords, documentFieldLengths };
 }

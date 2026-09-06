@@ -34,7 +34,8 @@ test("container reducer uses deterministic external sort and scoped virtual R2 o
 
 test("container reducer overlaps bounded page reads without losing document identities", async (context) => {
   const objects = new Map<string, Buffer>();
-  const releaseId = "release:staging:current:custom-v1:2026-09-03";
+  const releaseId = "release:staging:history:custom-v1:2026-09-06";
+  const segmentId = "history-base-v1";
   const put = (key: string, value: unknown) => {
     const bytes = Buffer.from(`${JSON.stringify(value)}\n`);
     objects.set(key, bytes);
@@ -42,7 +43,7 @@ test("container reducer overlaps bounded page reads without losing document iden
   };
   const inputs = Array.from({ length: 24 }, (_, ordinal) => put(`page-${ordinal}`, {
     schemaVersion: 1, releaseId, documents: [{ ordinal, itemKey: `chunk-${ordinal}`,
-      segmentId: "current-base-v1", fieldLengths: { title: 1, hierarchy: 0, article: 0, text: 2 } }],
+      segmentId, fieldLengths: { title: 1, hierarchy: 0, article: 0, text: 2 } }],
   }));
   const plan = put("plan", { schemaVersion: 1, releaseId, inputs });
   let active = 0, peak = 0;
@@ -74,12 +75,13 @@ test("container reducer overlaps bounded page reads without losing document iden
   let stdout = "", stderr = "";
   child.stdout.setEncoding("utf8").on("data", value => { stdout += value; });
   child.stderr.setEncoding("utf8").on("data", value => { stderr += value; });
-  child.stdin.end(JSON.stringify({ schemaVersion: 1, releaseId, mode: "documents", plan,
+  child.stdin.end(JSON.stringify({ schemaVersion: 1, releaseId, segmentId, mode: "documents", plan,
     outputPrefix: `search-releases/${releaseId}/sparse/word-v1/reduced` }));
   const [code] = await once(child, "close");
   assert.equal(code, 0, stderr);
   const report = JSON.parse(stdout);
   const artifact = JSON.parse(objects.get(report.artifact.key)!.toString("utf8"));
+  assert.equal(artifact.segmentId, segmentId);
   assert.deepEqual(artifact.documents.map((document: { ordinal: number }) => document.ordinal),
     Array.from({ length: 24 }, (_, ordinal) => ordinal));
   assert.ok(peak > 1 && peak <= 6, `expected bounded overlap, observed ${peak}`);
@@ -158,7 +160,7 @@ test("container reducer builds documents, hashed postings, lexicon and manifest"
     schemaVersion: 1, releaseId, inputs: [documentPage],
   });
   const documents = await run({
-    schemaVersion: 1, releaseId, mode: "documents", outputPrefix, plan: documentPlan,
+    schemaVersion: 1, releaseId, segmentId: "current-base-v1", mode: "documents", outputPrefix, plan: documentPlan,
   });
   assert.equal(documents.statistics.documentCount, 1);
   const termHash = "a".repeat(64);
@@ -170,7 +172,7 @@ test("container reducer builds documents, hashed postings, lexicon and manifest"
     schemaVersion: 1, releaseId, partition: "a", inputs: [partitionPage],
   });
   const partition = await run({
-    schemaVersion: 1, releaseId, mode: "partition", partition: "a", outputPrefix,
+    schemaVersion: 1, releaseId, segmentId: "current-base-v1", mode: "partition", partition: "a", outputPrefix,
     plan: partitionPlan, documents: documents.artifact,
   });
   assert.equal(partition.sourceRecordCount, 1);
@@ -182,7 +184,7 @@ test("container reducer builds documents, hashed postings, lexicon and manifest"
     partitions: "0123456789abcdef".split("").map((value) => ({ ...partition, partition: value })),
   });
   const manifest = await run({
-    schemaVersion: 1, releaseId, mode: "manifest", outputPrefix, plan: manifestPlan,
+    schemaVersion: 1, releaseId, segmentId: "current-base-v1", mode: "manifest", outputPrefix, plan: manifestPlan,
   });
   const manifestValue = JSON.parse(objects.get(manifest.artifact.key)!.toString("utf8"));
   assert.equal(manifestValue.schemaVersion, "custom-bm25-manifest-v1");

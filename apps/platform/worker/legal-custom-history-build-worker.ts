@@ -6,9 +6,15 @@ import {
 } from "cloudflare:workers";
 import { Container, getContainer } from "@cloudflare/containers";
 export { ContainerProxy } from "@cloudflare/containers";
-import type { CustomCurrentBindings } from "./legal-custom-current-env";
-import { acceptedCurrentManifestSchema, acceptedCurrentPageSchema, readAcceptedObject,
-  readAcceptedCurrentMetadata } from "../lib/legal-corpus/accepted-current-inputs";
+import type { CustomHistoryBindings } from "./legal-custom-history-env";
+import {
+  acceptedHistoricalManifestSchema,
+  acceptedHistoricalPageSchema,
+  acceptedHistoricalPlanItems,
+  readAcceptedHistoricalDocumentTitles,
+  readAcceptedHistoricalMetadata,
+  readAcceptedObject,
+} from "../lib/legal-corpus/accepted-current-inputs";
 import { DocumentEmbeddingLedger, ensureDocumentEmbeddings, importDocumentEmbedding,
   readDocumentEmbedding, type DocumentEmbeddingInput } from "../lib/legal-corpus/document-embedding-build";
 import { requestGatewayDocumentEmbeddings } from "../lib/legal-corpus/document-embedding-build";
@@ -21,7 +27,6 @@ import {
   partitionCustomBm25IntermediateRecords,
   serializeCustomCurrentArtifact,
   type CustomCurrentDenseItem,
-  type CustomCurrentSourcePlanItem,
 } from "../lib/legal-corpus/custom-current-build";
 import {
   deserializeNormalizedEmbedding,
@@ -42,14 +47,15 @@ import { CUSTOM_SEARCH_PATH, handleCustomSearchRequest }
   from "../lib/legal-corpus/custom-search-service";
 import { CUSTOM_CURRENT_REDUCER_PROGRAM } from "./legal-custom-bm25-reducer-program";
 
-const RELEASE_ID = "release:staging:current:custom-v2:2026-09-05";
-const SOURCE_SNAPSHOT_ID = "snapshot:staging:current:source-snapshot-v1";
-const SOURCE_RELEASE_ID = "release:staging:current:source-snapshot-v1";
-const SOURCE_BUILD_ID = "build:staging:current:source-snapshot-qualification-v2";
-const SOURCE_ROOT_SHA256 = "7af8b19bdb27a719d47f9d9522129e69d7b61b3a75cc8a1f54ba80d76b3ade4b";
-const EXPECTED_SOURCE_COUNT = 160_978;
+const RELEASE_ID = "release:staging:history:custom-v1:2026-09-06";
+const SOURCE_SNAPSHOT_ID = "ticket29:cutoff-20260831:complete-corpus-v2";
+const SOURCE_ROOT_SHA256 = "9d904b7ef4ba3efe6299731ad421e4800a6d12c1ac78db5509f1e6ef58701f33";
+const EXPECTED_SOURCE_COUNT = 1_295_149;
 const PLAN_PAGE_SIZE = 500;
-const MATERIALIZE_BATCH_SIZE = 10;
+// The accepted pages bound this at 561 chunks and 334,442 recorded tokens per unit.
+// It also keeps 12,952 reducer references below the proven current build's 16,098.
+const MATERIALIZE_BATCH_SIZE = 100;
+const SEGMENT_ID = "history-base-v1" as const;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$/u;
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -84,19 +90,29 @@ type SourcePlanPage = {
   sourceSnapshotId: typeof SOURCE_SNAPSHOT_ID;
   sourceOrdinalStart: number;
   acceptedInputManifestSha256: string;
-  items: CustomCurrentSourcePlanItem[];
+  items: ReturnType<typeof acceptedHistoricalPlanItems>;
 };
 
-type CurrentBuildEnv = Pick<CustomCurrentBindings, "AI" | "AI_GATEWAY_ID" | "DOCUMENT_EMBEDDINGS_ENABLED"
+type DispatchCheckpoint = {
+  schemaVersion: 1;
+  releaseId: typeof RELEASE_ID;
+  sourceRootSha256: typeof SOURCE_ROOT_SHA256;
+  acceptedPageSha256: string;
+  planPage: { key: string; sha256: string; count: number; start: number };
+};
+
+type HistoryBuildEnv = Pick<CustomHistoryBindings, "AI" | "AI_GATEWAY_ID" | "DOCUMENT_EMBEDDINGS_ENABLED"
   | "ACCEPTED_INPUT_MANIFEST_KEY" | "ACCEPTED_INPUT_MANIFEST_SHA256" | "OPENAI_REQUESTS_PER_MINUTE"
   | "OPENAI_TOKENS_PER_MINUTE" | "AUTHORIZED_PROVIDER_TOKENS" | "AUTHORIZED_EMBEDDING_RECONCILIATION_SHA256" | "SOURCE_DB" | "REUSABLE_ARTIFACTS"
-  | "LEGAL_DB" | "EVIDENCE" | "ARTIFACTS" | "COORDINATOR" | "REDUCER"> & {
+  | "EVIDENCE" | "ARTIFACTS"> & {
   APP_ENV: "staging";
   // The shared runtime declarations retain the legacy VectorizeIndex name; this index uses asynchronous V2 mutations.
   DENSE: Vectorize;
   BUILD_QUEUE: Queue<MaterializeMessage>;
   BUILD_WORKFLOW: Workflow<BuildWorkflowPayload>;
   REDUCE_WORKFLOW: Workflow<ReduceWorkflowPayload>;
+  COORDINATOR: DurableObjectNamespace<CustomHistoryBuildCoordinator>;
+  REDUCER: DurableObjectNamespace<CustomHistoryBm25ReducerContainer>;
   CATALOG_DB: D1Database;
   CUSTOM_SEARCH_RELEASE_ID: string;
   CUSTOM_SEARCH_INSTANCE_ID: string;
@@ -105,22 +121,40 @@ type CurrentBuildEnv = Pick<CustomCurrentBindings, "AI" | "AI_GATEWAY_ID" | "DOC
   CUSTOM_RUNTIME_DESCRIPTOR_SHA256: string;
 };
 
-function requireBuildEnabled(env: CurrentBuildEnv): void {
+function requireBuildEnabled(env: HistoryBuildEnv): void {
   if (env.DOCUMENT_EMBEDDINGS_ENABLED !== "true" || env.APP_ENV !== "staging"
     || env.AI_GATEWAY_ID !== "juro-ai-search-staging") throw new CustomIndexPipelineError("CUSTOM_EMBEDDING_DISABLED");
 }
 
-async function acceptedManifest(env: CurrentBuildEnv) {
+async function loadAcceptedManifest(env: HistoryBuildEnv) {
   const bytes = await readAcceptedObject(env.ARTIFACTS,
     { key: env.ACCEPTED_INPUT_MANIFEST_KEY, sha256: env.ACCEPTED_INPUT_MANIFEST_SHA256 }, 1024 * 1024);
-  const manifest = acceptedCurrentManifestSchema.parse(JSON.parse(decoder.decode(bytes)));
-  if (manifest.sourceRootSha256 !== SOURCE_ROOT_SHA256 || manifest.sourceCount !== EXPECTED_SOURCE_COUNT
+  const manifest = acceptedHistoricalManifestSchema.parse(JSON.parse(decoder.decode(bytes)));
+  if (manifest.completeCorpusRunId !== SOURCE_SNAPSHOT_ID
+    || manifest.sourceRootSha256 !== SOURCE_ROOT_SHA256 || manifest.sourceCount !== EXPECTED_SOURCE_COUNT
     || manifest.auditReportSha256 !== "96fdd22c289d9ff0f35eb380dcfbb1bb94cf54b9b43b9db0dc0bbb6d2ea6ef4d"
     || manifest.inputInventorySha256 !== "a7e317302c0221e200f73b65a11506e781eae3e782e939d31b96554a19bae90f"
     || manifest.mappingSha256 !== "78b50ad87998cb8b6ccda6dcde28cf17f6a6a3542afd918f7a485edf0d619905"
+    || manifest.canonicalSha256 !== "e527fa5221acf6063defa5f944d9ef54ca7e8b2667c47df34ba8135ef879f830"
     || manifest.reconstructionSha256 !== "01a5603aea2b3b20272c53bf72affc5127bf8d63a845be08bd572078b60c09b7"
-    || manifest.missingTokens !== 94508602) throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_ROOT_MISMATCH");
+    || manifest.historyManifestSha256 !== "07c0486d91c64e6a0e1d33b3fce63402063f0ba26a7e32f3558c0a880dfc2997"
+    || manifest.chunkCount !== 1_725_068 || manifest.missingTokens !== 15_042_720) {
+    throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_ROOT_MISMATCH");
+  }
   return manifest;
+}
+
+let acceptedManifestPromise: ReturnType<typeof loadAcceptedManifest> | undefined;
+function acceptedManifest(env: HistoryBuildEnv) {
+  return acceptedManifestPromise ??= loadAcceptedManifest(env);
+}
+
+let acceptedTitlesPromise: ReturnType<typeof readAcceptedHistoricalDocumentTitles> | undefined;
+async function acceptedTitles(env: HistoryBuildEnv) {
+  const manifest = await acceptedManifest(env);
+  return acceptedTitlesPromise ??= readAcceptedHistoricalDocumentTitles(
+    env.ARTIFACTS, manifest.documentTitles, SOURCE_ROOT_SHA256,
+  );
 }
 
 function planPageKey(sourceOrdinalStart: number): string {
@@ -129,6 +163,10 @@ function planPageKey(sourceOrdinalStart: number): string {
 
 function receiptKey(batchId: string): string {
   return `search-releases/${RELEASE_ID}/receipts/${batchId}.json`;
+}
+
+function dispatchCheckpointKey(sourceOrdinalStart: number, acceptedPageSha256: string): string {
+  return `search-releases/${RELEASE_ID}/plan/dispatch/${String(sourceOrdinalStart).padStart(7, "0")}-${acceptedPageSha256}.json`;
 }
 
 function parsePositiveInteger(value: string, code: string): number {
@@ -149,11 +187,33 @@ async function verifiedJson<T>(bucket: R2Bucket, key: string, expectedSha256: st
   return JSON.parse(decoder.decode(bytes)) as T;
 }
 
+async function existingDispatchCheckpoint(
+  bucket: R2Bucket,
+  key: string,
+): Promise<DispatchCheckpoint | null> {
+  const object = await bucket.get(key);
+  if (!object) return null;
+  const sha256 = object.customMetadata?.sha256;
+  if (!sha256 || !SHA256.test(sha256)) {
+    throw new CustomIndexPipelineError("CUSTOM_HISTORY_DISPATCH_CHECKPOINT_CORRUPT");
+  }
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (await customCurrentSha256(bytes) !== sha256) {
+    throw new CustomIndexPipelineError("CUSTOM_HISTORY_DISPATCH_CHECKPOINT_CORRUPT");
+  }
+  const checkpoint = JSON.parse(decoder.decode(bytes)) as DispatchCheckpoint;
+  if (checkpoint.schemaVersion !== 1 || checkpoint.releaseId !== RELEASE_ID
+    || checkpoint.sourceRootSha256 !== SOURCE_ROOT_SHA256) {
+    throw new CustomIndexPipelineError("CUSTOM_HISTORY_DISPATCH_CHECKPOINT_CORRUPT");
+  }
+  return checkpoint;
+}
+
 type ReducerArtifactReference = { key: string; sizeBytes: number; sha256: string };
 type ReducerRequest = {
   schemaVersion: 1;
   releaseId: typeof RELEASE_ID;
-  segmentId: "current-base-v1";
+  segmentId: typeof SEGMENT_ID;
   mode: "documents" | "partition" | "manifest";
   outputPrefix: string;
   plan: ReducerArtifactReference;
@@ -198,7 +258,7 @@ function sha256Bytes(value: string): Uint8Array {
 }
 
 async function reducerR2Outbound(request: Request, untypedEnv: Cloudflare.Env): Promise<Response> {
-  const env = untypedEnv as unknown as CurrentBuildEnv;
+  const env = untypedEnv as unknown as HistoryBuildEnv;
   const url = new URL(request.url);
   const [operation, encodedKey, extra] = url.pathname.slice(1).split("/");
   if (extra !== undefined || !encodedKey || url.search || url.hash) {
@@ -255,7 +315,7 @@ async function reducerR2Outbound(request: Request, untypedEnv: Cloudflare.Env): 
   return new Response(null, { status: 405 });
 }
 
-export class CustomCurrentBm25ReducerContainer extends Container {
+export class CustomHistoryBm25ReducerContainer extends Container {
   entrypoint = ["sh", "-c", "while :; do sleep 3600; done"];
   enableInternet = false;
   sleepAfter = "10m";
@@ -286,7 +346,7 @@ export class CustomCurrentBm25ReducerContainer extends Container {
   }
 }
 
-CustomCurrentBm25ReducerContainer.outboundByHost = {
+CustomHistoryBm25ReducerContainer.outboundByHost = {
   "artifacts.r2": reducerR2Outbound,
 };
 
@@ -306,11 +366,11 @@ function parseMessage(raw: unknown): MaterializeMessage {
   return value as MaterializeMessage;
 }
 
-function coordinator(env: CurrentBuildEnv): DurableObjectStub<CustomCurrentBuildCoordinator> {
+function coordinator(env: HistoryBuildEnv): DurableObjectStub<CustomHistoryBuildCoordinator> {
   return env.COORDINATOR.getByName(RELEASE_ID);
 }
 
-export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv> {
+export class CustomHistoryBuildCoordinator extends DurableObject<HistoryBuildEnv> {
   async reconcileEmbeddings(input: { decisionJson: string; supplementalInputs: DocumentEmbeddingInput[] }) {
     requireBuildEnabled(this.env);
     return reconcileDocumentEmbeddings({ ...input, authorizedDecisionSha256: this.env.AUTHORIZED_EMBEDDING_RECONCILIATION_SHA256,
@@ -334,7 +394,7 @@ export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv
     }
     const manifest = await acceptedManifest(this.env);
     const authorizedTokens = parsePositiveInteger(this.env.AUTHORIZED_PROVIDER_TOKENS, "CUSTOM_EMBEDDING_COST_STOP");
-    if (authorizedTokens > manifest.missingTokens) throw new CustomIndexPipelineError("CUSTOM_EMBEDDING_COST_STOP");
+    if (authorizedTokens !== manifest.missingTokens) throw new CustomIndexPipelineError("CUSTOM_EMBEDDING_COST_STOP");
     for (const reference of manifest.reuse) {
       if (input.items.some(item => item.inputSha256 === reference.inputSha256)) {
         await importDocumentEmbedding(this.env.ARTIFACTS, this.env.REUSABLE_ARTIFACTS, reference);
@@ -462,18 +522,6 @@ export class CustomCurrentBuildCoordinator extends DurableObject<CurrentBuildEnv
   }
 }
 
-type SourcePlanRow = {
-  provisionRenditionId: string;
-  snapshotProvisionId: string;
-  evidenceR2Key: string;
-  evidenceByteCount: number;
-  evidenceSha256: string;
-  language: "uz-Latn" | "uz-Cyrl" | "ru" | "en";
-  documentType: string;
-  validFrom: string;
-  validTo: string | null;
-};
-
 function assertWorkflowPayload(payload: BuildWorkflowPayload): void {
   if (payload.schemaVersion !== 1 || payload.releaseId !== RELEASE_ID
     || payload.sourceSnapshotId !== SOURCE_SNAPSHOT_ID
@@ -482,37 +530,7 @@ function assertWorkflowPayload(payload: BuildWorkflowPayload): void {
   }
 }
 
-async function sourcePlanRows(env: CurrentBuildEnv, cursor: string): Promise<SourcePlanRow[]> {
-  const packet = await env.LEGAL_DB.prepare(`SELECT
-      member.provision_rendition_id AS provisionRenditionId,
-      provision.id AS snapshotProvisionId,locator.r2_key AS evidenceR2Key,
-      locator.byte_count AS evidenceByteCount,locator.sha256 AS evidenceSha256,
-      item.language,item.document_type AS documentType,item.valid_from AS validFrom,
-      item.valid_to AS validTo
-    FROM legal_corpus_snapshot_members member
-    JOIN legal_snapshot_provisions provision
-      ON provision.legacy_provision_rendition_id=member.provision_rendition_id
-    JOIN legal_evidence_locators locator ON locator.id=member.locator_id
-    JOIN legal_retrieval_eligibility eligibility
-      ON eligibility.snapshot_provision_id=provision.id
-      AND eligibility.build_id=? AND eligibility.capability='current'
-      AND eligibility.status='eligible'
-      AND eligibility.official_source_verified=1
-      AND eligibility.d1_r2_integrity_verified=1
-      AND eligibility.extraction_verified=1 AND eligibility.identity_stable=1
-      AND eligibility.current_pointer_verified=1 AND eligibility.temporal_state_supported=1
-      AND eligibility.privacy_verified=1 AND eligibility.quarantine_clear=1
-      AND eligibility.canonicalization_clear=1
-    JOIN legal_search_release_items item
-      ON item.search_release_id=? AND item.provision_rendition_id=member.provision_rendition_id
-    WHERE member.corpus_snapshot_id=? AND member.provision_rendition_id>?
-    ORDER BY member.provision_rendition_id LIMIT ?`)
-    .bind(SOURCE_BUILD_ID, SOURCE_RELEASE_ID, SOURCE_SNAPSHOT_ID, cursor, PLAN_PAGE_SIZE)
-    .all<SourcePlanRow>();
-  return packet.results;
-}
-
-export class CustomCurrentBuildWorkflow extends WorkflowEntrypoint<CurrentBuildEnv, BuildWorkflowPayload> {
+export class CustomHistoryBuildWorkflow extends WorkflowEntrypoint<HistoryBuildEnv, BuildWorkflowPayload> {
   override async run(event: Readonly<WorkflowEvent<BuildWorkflowPayload>>, step: WorkflowStep): Promise<unknown> {
     requireBuildEnabled(this.env);
     const payload = typeof event.payload === "string"
@@ -521,14 +539,35 @@ export class CustomCurrentBuildWorkflow extends WorkflowEntrypoint<CurrentBuildE
     assertWorkflowPayload(payload);
     const frozen = await step.do("verify frozen source and off-side identity", async () => {
       const [snapshot, release] = await Promise.all([
-        this.env.LEGAL_DB.prepare(`SELECT id,corpus_hash AS corpusHash,member_count AS memberCount,status
-          FROM legal_corpus_snapshots WHERE id=?`).bind(SOURCE_SNAPSHOT_ID)
-          .first<{ id: string; corpusHash: string; memberCount: number; status: string }>(),
-        this.env.LEGAL_DB.prepare("SELECT id FROM legal_search_releases WHERE id=?")
+        this.env.CATALOG_DB.prepare(`SELECT run.status,run.source_canonical_sha256 AS canonicalSha256,
+            run.final_reconstruction_sha256 AS reconstructionSha256,
+            history.record_count AS memberCount,history.root_sha256 AS corpusHash,
+            history.manifest_sha256 AS historyManifestSha256,
+            gaps.record_count AS temporalGapCount,acceptance.result_sha256 AS acceptanceSha256,
+            selected.current_release_id AS activeCurrentReleaseId
+          FROM legal_historical_metadata_acceptances acceptance
+          JOIN legal_complete_corpus_runs run ON run.id=acceptance.complete_corpus_run_id
+          JOIN legal_complete_corpus_manifests history
+            ON history.run_id=run.id AND history.membership='history'
+          JOIN legal_complete_corpus_manifests gaps
+            ON gaps.run_id=run.id AND gaps.membership='gaps'
+          JOIN legal_active_activation_sets active ON active.environment=acceptance.environment
+          JOIN legal_activation_sets selected ON selected.id=active.activation_set_id
+          WHERE acceptance.environment='staging'`)
+          .first<{ status: string; canonicalSha256: string; reconstructionSha256: string;
+            memberCount: number; corpusHash: string; historyManifestSha256: string;
+            temporalGapCount: number; acceptanceSha256: string; activeCurrentReleaseId: string }>(),
+        this.env.CATALOG_DB.prepare("SELECT id FROM legal_search_releases WHERE id=?")
           .bind(RELEASE_ID).first<{ id: string }>(),
       ]);
       if (!snapshot || snapshot.corpusHash !== SOURCE_ROOT_SHA256
-        || snapshot.memberCount !== EXPECTED_SOURCE_COUNT || snapshot.status !== "frozen"
+        || snapshot.memberCount !== EXPECTED_SOURCE_COUNT || snapshot.status !== "materialized"
+        || snapshot.canonicalSha256 !== "e527fa5221acf6063defa5f944d9ef54ca7e8b2667c47df34ba8135ef879f830"
+        || snapshot.reconstructionSha256 !== "01a5603aea2b3b20272c53bf72affc5127bf8d63a845be08bd572078b60c09b7"
+        || snapshot.historyManifestSha256 !== "07c0486d91c64e6a0e1d33b3fce63402063f0ba26a7e32f3558c0a880dfc2997"
+        || snapshot.temporalGapCount !== 4_679
+        || snapshot.acceptanceSha256 !== "2fed46f06271c4b71f4e330ef30bf7cbbd4c87d4e3ed4416d27fe39d63e23bcc"
+        || snapshot.activeCurrentReleaseId !== "release:staging:current:custom-v2:2026-09-05"
         || release) {
         throw new CustomIndexPipelineError("CUSTOM_CURRENT_SOURCE_NOT_FROZEN_OFFSIDE");
       }
@@ -552,35 +591,33 @@ export class CustomCurrentBuildWorkflow extends WorkflowEntrypoint<CurrentBuildE
     }, async () => {
       requireBuildEnabled(this.env);
       const accepted = await acceptedManifest(this.env);
-      let cursor = "";
       let sourceOrdinal = 0;
       const pageReferences: Array<{ key: string; sha256: string; count: number; start: number }> = [];
-      for (;;) {
-        const rows = await sourcePlanRows(this.env, cursor);
-        if (rows.length === 0) break;
-        const reference = accepted.pages[pageReferences.length];
-        if (!reference || reference.start !== sourceOrdinal || reference.count !== rows.length) {
+      for (const reference of accepted.pages) {
+        if (reference.start !== sourceOrdinal
+          || reference.count !== Math.min(PLAN_PAGE_SIZE, EXPECTED_SOURCE_COUNT - sourceOrdinal)) {
           throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_PAGE_MISMATCH");
         }
-        const acceptedPage = acceptedCurrentPageSchema.parse(JSON.parse(decoder.decode(
+        const dispatchKey = dispatchCheckpointKey(sourceOrdinal, reference.sha256);
+        const dispatched = await existingDispatchCheckpoint(this.env.ARTIFACTS, dispatchKey);
+        if (dispatched) {
+          if (dispatched.acceptedPageSha256 !== reference.sha256
+            || dispatched.planPage.start !== sourceOrdinal
+            || dispatched.planPage.count !== reference.count
+            || dispatched.planPage.key !== planPageKey(sourceOrdinal)
+            || !SHA256.test(dispatched.planPage.sha256)) {
+            throw new CustomIndexPipelineError("CUSTOM_HISTORY_DISPATCH_CHECKPOINT_CONFLICT");
+          }
+          pageReferences.push(dispatched.planPage);
+          sourceOrdinal += reference.count;
+          continue;
+        }
+        const acceptedPage = acceptedHistoricalPageSchema.parse(JSON.parse(decoder.decode(
           await readAcceptedObject(this.env.ARTIFACTS, reference, 8 * 1024 * 1024))));
-        if (acceptedPage.start !== sourceOrdinal || acceptedPage.items.length !== rows.length
-          || rows.some((row, index) => row.provisionRenditionId !== acceptedPage.items[index]?.legacyRenditionId)) {
+        if (acceptedPage.start !== sourceOrdinal || acceptedPage.items.length !== reference.count) {
           throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_PAGE_MISMATCH");
         }
-        const items = rows.map((row, index): CustomCurrentSourcePlanItem => ({
-          sourceOrdinal: sourceOrdinal + index,
-          snapshotProvisionId: row.snapshotProvisionId,
-          provisionRenditionId: row.provisionRenditionId,
-          evidenceR2Key: acceptedPage.items[index]!.provision.key,
-          evidenceByteCount: acceptedPage.items[index]!.provision.sizeBytes,
-          evidenceSha256: acceptedPage.items[index]!.provision.sha256,
-          language: row.language,
-          documentType: "unknown",
-          validFrom: row.validFrom,
-          validTo: row.validTo,
-          accepted: acceptedPage.items[index]!,
-        }));
+        const items = acceptedHistoricalPlanItems(acceptedPage);
         const page: SourcePlanPage = {
           schemaVersion: 1,
           releaseId: RELEASE_ID,
@@ -596,7 +633,8 @@ export class CustomCurrentBuildWorkflow extends WorkflowEntrypoint<CurrentBuildE
           contentType: "application/json",
           customMetadata: { kind: "source-plan-page", sourceRootSha256: SOURCE_ROOT_SHA256 },
         });
-        pageReferences.push({ key, sha256: digest, count: items.length, start: sourceOrdinal });
+        const planPage = { key, sha256: digest, count: items.length, start: sourceOrdinal };
+        pageReferences.push(planPage);
         const messages: Array<{ body: MaterializeMessage }> = [];
         for (let offset = 0; offset < items.length; offset += MATERIALIZE_BATCH_SIZE) {
           const sourceCount = Math.min(MATERIALIZE_BATCH_SIZE, items.length - offset);
@@ -605,7 +643,7 @@ export class CustomCurrentBuildWorkflow extends WorkflowEntrypoint<CurrentBuildE
             schemaVersion: 1,
             kind: "materialize",
             releaseId: RELEASE_ID,
-            batchId: `source-${String(start).padStart(6, "0")}`,
+            batchId: `source-${String(start).padStart(7, "0")}`,
             sourceOrdinalStart: start,
             sourceCount,
             planPageKey: key,
@@ -616,9 +654,18 @@ export class CustomCurrentBuildWorkflow extends WorkflowEntrypoint<CurrentBuildE
         for (let offset = 0; offset < messages.length; offset += 100) {
           await this.env.BUILD_QUEUE.sendBatch(messages.slice(offset, offset + 100));
         }
+        const checkpointBytes = serializeCustomCurrentArtifact({
+          schemaVersion: 1,
+          releaseId: RELEASE_ID,
+          sourceRootSha256: SOURCE_ROOT_SHA256,
+          acceptedPageSha256: reference.sha256,
+          planPage,
+        } satisfies DispatchCheckpoint);
+        await putImmutableCustomArtifact(this.env.ARTIFACTS, dispatchKey, checkpointBytes, {
+          contentType: "application/json",
+          customMetadata: { kind: "source-plan-dispatch-checkpoint" },
+        });
         sourceOrdinal += items.length;
-        cursor = rows.at(-1)!.provisionRenditionId;
-        if (rows.length < PLAN_PAGE_SIZE) break;
       }
       if (sourceOrdinal !== frozen.expectedSourceCount) {
         throw new CustomIndexPipelineError("CUSTOM_CURRENT_PLAN_MEMBER_COUNT_MISMATCH");
@@ -650,7 +697,7 @@ export class CustomCurrentBuildWorkflow extends WorkflowEntrypoint<CurrentBuildE
   }
 }
 
-async function existingReceipt(env: CurrentBuildEnv, message: MaterializeMessage): Promise<CustomReleasePageReceipt | null> {
+async function existingReceipt(env: HistoryBuildEnv, message: MaterializeMessage): Promise<CustomReleasePageReceipt | null> {
   const object = await env.ARTIFACTS.get(receiptKey(message.batchId));
   if (!object) return null;
   const bytes = new Uint8Array(await object.arrayBuffer());
@@ -669,7 +716,7 @@ async function existingReceipt(env: CurrentBuildEnv, message: MaterializeMessage
 
 
 async function embedAndUpsert(
-  env: CurrentBuildEnv,
+  env: HistoryBuildEnv,
   denseItems: CustomCurrentDenseItem[],
   ownerId: string,
   reportStage: (stage: CustomMaterializationStage) => void,
@@ -743,7 +790,7 @@ async function embedAndUpsert(
 }
 
 async function processMaterializeMessage(
-  env: CurrentBuildEnv,
+  env: HistoryBuildEnv,
   raw: unknown,
   reportStage: (stage: CustomMaterializationStage) => void,
 ): Promise<{ duplicate: boolean; receipt: CustomReleasePageReceipt; mutationCount: number }> {
@@ -769,15 +816,23 @@ async function processMaterializeMessage(
     throw new CustomIndexPipelineError("CUSTOM_CURRENT_PLAN_PAGE_RANGE_INVALID");
   }
   reportStage("evidence");
+  const acceptedSources = planItems.map(item => {
+    if (!item.accepted) throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_SOURCE_MISSING");
+    return item.accepted;
+  });
+  const acceptedMetadata = await readAcceptedHistoricalMetadata(
+    acceptedSources, await acceptedTitles(env), env.SOURCE_DB,
+  );
   const materialized: Awaited<ReturnType<typeof materializeCustomCurrentItem>>[] = [];
   for (const planItem of planItems) {
     if (!planItem.accepted) throw new CustomIndexPipelineError("CUSTOM_CURRENT_ACCEPTED_SOURCE_MISSING");
     const evidenceBytes = await readAcceptedObject(env.EVIDENCE, planItem.accepted.provision, 8 * 1024 * 1024);
     materialized.push(await materializeCustomCurrentItem({
       releaseId: RELEASE_ID,
+      segmentId: SEGMENT_ID,
       planItem,
       evidenceBytes,
-      acceptedMetadata: await readAcceptedCurrentMetadata(planItem.accepted, env.EVIDENCE, env.SOURCE_DB),
+      acceptedMetadata: acceptedMetadata.get(planItem.accepted.sourceId),
     }));
   }
   const chunks = materialized.flatMap((item) => item.chunks);
@@ -946,7 +1001,7 @@ async function processMaterializeMessage(
   return { duplicate: false, receipt, mutationCount: dense.mutationCount };
 }
 
-async function listReceipts(env: CurrentBuildEnv): Promise<CustomReleasePageReceipt[]> {
+async function listReceipts(env: HistoryBuildEnv): Promise<CustomReleasePageReceipt[]> {
   const values: CustomReleasePageReceipt[] = [];
   let cursor: string | undefined;
   do {
@@ -989,7 +1044,7 @@ function assertReducerReference(value: unknown): asserts value is ReducerArtifac
 }
 
 async function writeReducerPlan(
-  env: CurrentBuildEnv,
+  env: HistoryBuildEnv,
   identity: string,
   value: unknown,
 ): Promise<ReducerArtifactReference> {
@@ -1003,7 +1058,7 @@ async function writeReducerPlan(
 }
 
 async function prepareSparseReducerPlans(
-  env: CurrentBuildEnv,
+  env: HistoryBuildEnv,
   receipts: readonly CustomReleasePageReceipt[],
 ): Promise<{
   documents: ReducerArtifactReference;
@@ -1061,7 +1116,7 @@ async function prepareSparseReducerPlans(
 }
 
 async function invokeSparseReducer(
-  env: CurrentBuildEnv,
+  env: HistoryBuildEnv,
   input: ReducerRequest,
 ): Promise<ReducerReport> {
   const rpcValue = await getContainer(env.REDUCER, RELEASE_ID).reduce(input);
@@ -1070,7 +1125,7 @@ async function invokeSparseReducer(
   return JSON.parse(JSON.stringify(rpcValue)) as ReducerReport;
 }
 
-export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuildEnv, ReduceWorkflowPayload> {
+export class CustomHistoryReduceWorkflow extends WorkflowEntrypoint<HistoryBuildEnv, ReduceWorkflowPayload> {
   override async run(event: Readonly<WorkflowEvent<ReduceWorkflowPayload>>, step: WorkflowStep): Promise<unknown> {
     requireBuildEnabled(this.env);
     const payload = typeof event.payload === "string"
@@ -1146,7 +1201,7 @@ export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuild
       timeout: "30 minutes",
     }, async () => invokeSparseReducer(this.env, {
       schemaVersion: 1, releaseId: RELEASE_ID, mode: "documents", outputPrefix,
-      segmentId: "current-base-v1",
+      segmentId: SEGMENT_ID,
       plan: prepared.documents,
     }));
     assertReducerReference(documents.artifact);
@@ -1159,7 +1214,7 @@ export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuild
         retries: { limit: 3, delay: "2 minutes", backoff: "exponential" },
         timeout: "30 minutes",
       }, async () => invokeSparseReducer(this.env, {
-        schemaVersion: 1, releaseId: RELEASE_ID, segmentId: "current-base-v1", mode: "partition", partition, outputPrefix,
+        schemaVersion: 1, releaseId: RELEASE_ID, segmentId: SEGMENT_ID, mode: "partition", partition, outputPrefix,
         plan: prepared.partitions[partition]!, documents: documents.artifact!,
       }));
       assertReducerReference(report.postings);
@@ -1182,7 +1237,7 @@ export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuild
       retries: { limit: 3, delay: "2 minutes", backoff: "exponential" },
       timeout: "30 minutes",
     }, async () => invokeSparseReducer(this.env, {
-      schemaVersion: 1, releaseId: RELEASE_ID, segmentId: "current-base-v1", mode: "manifest", outputPrefix,
+      schemaVersion: 1, releaseId: RELEASE_ID, segmentId: SEGMENT_ID, mode: "manifest", outputPrefix,
       plan: manifestPlan,
     }));
     assertReducerReference(manifest.artifact);
@@ -1228,13 +1283,13 @@ export class CustomCurrentReduceWorkflow extends WorkflowEntrypoint<CurrentBuild
 }
 
 export default {
-  async fetch(request: Request, env: CurrentBuildEnv): Promise<Response> {
+  async fetch(request: Request, env: HistoryBuildEnv): Promise<Response> {
     if (new URL(request.url).pathname === CUSTOM_SEARCH_PATH) {
       return handleCustomSearchRequest(request, env);
     }
     return new Response(null, { status: 404, headers: { "cache-control": "private, no-store" } });
   },
-  async queue(batch: MessageBatch<unknown>, env: CurrentBuildEnv): Promise<void> {
+  async queue(batch: MessageBatch<unknown>, env: HistoryBuildEnv): Promise<void> {
     for (const message of batch.messages) {
       let releaseId = RELEASE_ID;
       let sourceOrdinalStart: number | undefined;
@@ -1273,4 +1328,4 @@ export default {
       }
     }
   },
-} satisfies ExportedHandler<CurrentBuildEnv, unknown>;
+} satisfies ExportedHandler<HistoryBuildEnv, unknown>;

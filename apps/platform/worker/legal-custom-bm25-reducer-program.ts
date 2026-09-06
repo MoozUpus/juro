@@ -14,6 +14,7 @@ const FIELD_NAMES=["title","hierarchy","article","text"];
 const FIELD_WEIGHTS={title:2,hierarchy:1.5,article:1.5,text:1};
 const SHA=/^[a-f0-9]{64}$/;
 const NIBBLE=/^[a-f0-9]$/;
+const SEGMENT=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$/;
 const ARTIFACT_HOST=process.env.JURO_ARTIFACT_HOST||"http://artifacts.r2";
 
 function fail(code){ process.stderr.write(code+"\n"); process.exit(64); }
@@ -66,6 +67,7 @@ function validatePlan(plan,input){
   }
 }
 async function reduceDocuments(input,directory){
+  if(!SEGMENT.test(input.segmentId||"")) fail("REDUCER_SEGMENT_INVALID");
   const plan=await getJson(input.plan); validatePlan(plan,input);
   const documents=[];
   for await(const page of getPages(plan.inputs)){
@@ -77,7 +79,7 @@ async function reduceDocuments(input,directory){
   const totals={title:0,hierarchy:0,article:0,text:0};
   for(const document of documents){
     if(!Number.isSafeInteger(document.ordinal) || document.ordinal<0 || typeof document.itemKey!=="string"
-      || document.segmentId!=="current-base-v1" || ordinals.has(document.ordinal) || itemKeys.has(document.itemKey)) {
+      || document.segmentId!==input.segmentId || ordinals.has(document.ordinal) || itemKeys.has(document.itemKey)) {
       fail("REDUCER_DOCUMENT_IDENTITY_INVALID");
     }
     ordinals.add(document.ordinal); itemKeys.add(document.itemKey);
@@ -88,11 +90,11 @@ async function reduceDocuments(input,directory){
   }
   if(documents.length===0) fail("REDUCER_DOCUMENTS_EMPTY");
   const averageFieldLengths=Object.fromEntries(FIELD_NAMES.map(field=>[field,totals[field]/documents.length]));
-  const value={schemaVersion:1,releaseId:input.releaseId,segmentId:"current-base-v1",
+  const value={schemaVersion:1,releaseId:input.releaseId,segmentId:input.segmentId,
     statistics:{documentCount:documents.length,averageFieldLengths},documents};
   const file=path.join(directory,"documents.json"); writeJsonFile(file,value);
   const sha256=await shaFile(file);
-  const artifact=await putFile(file,outputKey(input,"documents","current-base-v1",sha256),sha256);
+  const artifact=await putFile(file,outputKey(input,"documents",input.segmentId,sha256),sha256);
   return {schemaVersion:1,kind:"documents",releaseId:input.releaseId,artifact,statistics:value.statistics};
 }
 function scorePosting(posting,df,statistics,document){
@@ -107,10 +109,11 @@ function scorePosting(posting,df,statistics,document){
   return score;
 }
 async function reducePartition(input,directory){
+  if(!SEGMENT.test(input.segmentId||"")) fail("REDUCER_SEGMENT_INVALID");
   if(!NIBBLE.test(input.partition||"")) fail("REDUCER_PARTITION_INVALID");
   const plan=await getJson(input.plan); validatePlan(plan,input);
   const documentPage=await getJson(input.documents);
-  if(documentPage.releaseId!==input.releaseId || !Array.isArray(documentPage.documents)
+  if(documentPage.releaseId!==input.releaseId || documentPage.segmentId!==input.segmentId || !Array.isArray(documentPage.documents)
     || documentPage.statistics?.documentCount!==documentPage.documents.length) fail("REDUCER_DOCUMENT_ARTIFACT_INVALID");
   const documents=new Map(documentPage.documents.map(value=>[value.ordinal,value]));
   const raw=path.join(directory,"records.tsv"), sorted=path.join(directory,"records.sorted.tsv");
@@ -188,18 +191,19 @@ async function reducePartition(input,directory){
     sourceRecordCount,termCount,postingCount,postings:postingsArtifact,lexicon};
 }
 async function reduceManifest(input,directory){
+  if(!SEGMENT.test(input.segmentId||"")) fail("REDUCER_SEGMENT_INVALID");
   const plan=await getJson(input.plan);
   if(!plan || plan.schemaVersion!==1 || plan.releaseId!==input.releaseId || !Array.isArray(plan.partitions)
     || plan.partitions.length!==16) fail("REDUCER_MANIFEST_PLAN_INVALID");
   const documentPage=await getJson(plan.documents);
-  if(documentPage.releaseId!==input.releaseId || documentPage.segmentId!=="current-base-v1") fail("REDUCER_MANIFEST_DOCUMENTS_INVALID");
+  if(documentPage.releaseId!==input.releaseId || documentPage.segmentId!==input.segmentId) fail("REDUCER_MANIFEST_DOCUMENTS_INVALID");
   const ordered=[...plan.partitions].sort((a,b)=>a.partition.localeCompare(b.partition));
   if(ordered.map(value=>value.partition).join("")!=="0123456789abcdef") fail("REDUCER_MANIFEST_PARTITIONS_INVALID");
   const postings=Object.fromEntries(ordered.map(value=>[value.partition,value.postings]));
   const lexicons=Object.fromEntries(ordered.map(value=>[value.partition,value.lexicon]));
   const manifest={schemaVersion:"custom-bm25-manifest-v1",analyzer:"word-v1",
     statistics:documentPage.statistics,documents:documentPage.documents,
-    segments:[{id:"current-base-v1",postings,lexicons}]};
+    segments:[{id:input.segmentId,postings,lexicons}]};
   const file=path.join(directory,"manifest.json"); writeJsonFile(file,manifest);
   const sha256=await shaFile(file);
   const artifact=await putFile(file,outputKey(input,"manifest","word-v1",sha256),sha256);

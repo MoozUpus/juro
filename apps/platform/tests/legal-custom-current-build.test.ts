@@ -137,8 +137,9 @@ test("accepted complete-corpus locators preserve audited metadata and stop input
         provision: { key, sha256: digest, sizeBytes: bytes.length, envelope },
         normalized: { key: "normalized", sha256: "b".repeat(64), sizeBytes: 100 }, chunks: expected } };
     const materialize = (metadata = acceptedMetadata) => materializeCustomCurrentItem({ releaseId, planItem,
-      evidenceBytes: bytes, acceptedMetadata: metadata });
+      evidenceBytes: bytes, acceptedMetadata: metadata, segmentId: "history-base-v1" });
     const result = await materialize();
+    assert.ok(result.documentFieldLengths.every(record => record.segmentId === "history-base-v1"));
     assert.deepEqual(result.chunks[0]?.hierarchy, acceptedMetadata.hierarchy);
     assert.equal(result.denseItems[0]?.structuredInputSha256, expected[0]?.inputSha256);
     assert.equal(result.denseItems[0]?.inputTokens, expected[0]?.inputTokens);
