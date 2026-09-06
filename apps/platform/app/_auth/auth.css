@@ -366,6 +366,15 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 20%, transparent);
 }
 
+.auth-card input[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--danger) 72%, var(--border-strong));
+}
+
+.auth-card input[aria-invalid="true"]:focus-visible {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
 .auth-password-control {
   position: relative;
   display: block;
@@ -521,6 +530,20 @@
 .auth-consents {
   display: grid;
   gap: 7px;
+}
+
+.auth-consent-field {
+  display: grid;
+  gap: 2px;
+}
+
+.auth-consent-field > .auth-field-error {
+  padding-left: 30px;
+}
+
+.auth-consent-field input[aria-invalid="true"] {
+  outline: 2px solid color-mix(in srgb, var(--danger) 42%, transparent);
+  outline-offset: 2px;
 }
 
 .auth-submit {

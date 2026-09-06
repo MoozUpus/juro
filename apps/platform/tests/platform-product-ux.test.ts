@@ -232,5 +232,5 @@ test("document builder confirmations stay localized and own keyboard focus", asy
   assert.match(builder, /allowNavigationRef\.current = true;[\s\S]*?window\.location\.assign\(decision\.href\)/);
   assert.match(builder, /agreementWarningShown\.current = true;[\s\S]*?pending\?\.\(\)/);
   assert.match(builder, /onChange=\{\(event\) => changeTitle\(event\.target\.value\)\}/);
-  assert.match(styles, /\.dbt-confirm-dialog > button\.confirm \{[^}]*background: var\(--dbt-navy\);/);
+  assert.match(styles, /\.dbt-confirm-dialog > button\.confirm \{[^}]*background: var\(--dbt-cta\);/);
 });

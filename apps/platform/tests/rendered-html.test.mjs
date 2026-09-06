@@ -804,18 +804,48 @@ test("admin handoff rejects missing CSRF proof without an empty 500", async () =
   });
 });
 
-test("serves app-specific legal pages in both languages with noindex", async () => {
+test("serves app-specific legal pages in all three languages with noindex", async () => {
   const worker = await createWorker();
-  for (const route of ["/legal/terms?lang=ru", "/legal/privacy?lang=uz", "/legal/cookies?lang=ru", "/legal/ai-rules?lang=uz", "/legal/personal-data?lang=ru"]) {
+  for (const route of [
+    "/legal/terms?lang=ru",
+    "/legal/privacy?lang=ru",
+    "/legal/privacy?lang=uz",
+    "/legal/privacy?lang=en",
+    "/legal/cookies?lang=ru",
+    "/legal/ai-rules?lang=uz",
+    "/legal/personal-data?lang=ru",
+  ]) {
     const response = await worker.fetch(new Request(`http://localhost${route}`, { headers: { accept: "text/html" } }), runtime, context);
     assert.equal(response.status, 200, route);
     assert.match(response.headers.get("x-robots-tag") ?? "", /noindex/, route);
     const html = await response.text();
     assert.match(html, /JURO/);
-    assert.match(html, /Условия|Политика|cookies|AIdan|Shaxsiy|maxfiylik|cookie|qoidalari/);
-    assert.match(html, /2026-09-04\.draft\.2/);
+    assert.match(html, /Условия|Политика|Privacy|cookies|AIdan|Shaxsiy|maxfiylik|cookie|qoidalari/);
+    assert.match(
+      html,
+      route.startsWith("/legal/privacy")
+        ? /2026-09-05\.draft\.3/
+        : /2026-09-04\.draft\.2/,
+      route,
+    );
     assert.match(html, /SHA-256/);
-    assert.match(html, /Проект для юридического утверждения|Yuridik tasdiqlash uchun loyiha/);
+    assert.match(html, /Проект для юридического утверждения|Yuridik tasdiqlash uchun loyiha|Draft pending legal approval/);
+    assert.doesNotMatch(html, /\{OPERATOR_EMAIL\}/u, route);
+    if (route.startsWith("/legal/privacy")) {
+      assert.match(html, /muzaffarbekmurodoff@gmail\.com/u, route);
+      const locale = new URL(route, "http://localhost").searchParams.get("lang");
+      const updated = {
+        ru: "5 сентября 2026",
+        uz: "2026-yil 5-sentabr",
+        en: "5 September 2026",
+      }[locale];
+      assert.ok(updated && html.includes(updated), route);
+      assert.match(
+        html,
+        /href="mailto:muzaffarbekmurodoff%40gmail\.com"/u,
+        route,
+      );
+    }
   }
 });
 

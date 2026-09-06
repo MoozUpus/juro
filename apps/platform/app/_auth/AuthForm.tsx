@@ -23,11 +23,17 @@ import {
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ThemeSwitcher } from "../_theme/ThemeSwitcher";
+import {
+  consentFieldError,
+  emailFieldError,
+  firstNameFieldError,
+  type AuthFieldErrorCode,
+} from "./auth-field-validation";
 import { TurnstileWidget } from "./TurnstileWidget";
 
 type AccountType = "individual" | "entrepreneur" | "lawyer";
 type Locale = "ru" | "uz" | "en";
-type Step = "details" | "verification" | "mfa" | "recovery-request" | "recovery-code" | "recovery-success";
+type Step = "details" | "verification-request" | "verification" | "mfa" | "recovery-request" | "recovery-code" | "recovery-success";
 
 type Props = {
   mode: "login" | "register";
@@ -48,6 +54,7 @@ type Handoff = {
 };
 
 type AuthResponse = {
+  accountType?: AccountType;
   challengeId?: string;
   expiresInSeconds?: number;
   resendAfterSeconds?: number;
@@ -70,6 +77,36 @@ const AUTH_HANDOFF_LOCALES = new Set<Locale>(["ru", "uz", "en"]);
 
 function copy(locale: Locale, value: Copy): string {
   return value[locale];
+}
+
+function fieldErrorMessage(
+  locale: Locale,
+  code: AuthFieldErrorCode | null,
+): string | null {
+  if (!code) return null;
+  const messages: Record<AuthFieldErrorCode, Copy> = {
+    email_required: {
+      ru: "Укажите электронную почту.",
+      uz: "Elektron pochta manzilini kiriting.",
+      en: "Enter your email address.",
+    },
+    email_invalid: {
+      ru: "Проверьте формат электронной почты.",
+      uz: "Elektron pochta manzili formatini tekshiring.",
+      en: "Check the email address format.",
+    },
+    first_name_required: {
+      ru: "Укажите имя.",
+      uz: "Ismingizni kiriting.",
+      en: "Enter your first name.",
+    },
+    consent_required: {
+      ru: "Подтвердите обязательное согласие.",
+      uz: "Majburiy rozilikni tasdiqlang.",
+      en: "Confirm this required consent.",
+    },
+  };
+  return copy(locale, messages[code]);
 }
 
 function safeReturnPath(value?: string): string | null {
@@ -165,6 +202,7 @@ function PasswordField({
   autoComplete,
   describedBy,
   invalid = false,
+  disabled = false,
 }: {
   locale: Locale;
   id: string;
@@ -175,6 +213,7 @@ function PasswordField({
   autoComplete: "current-password" | "new-password";
   describedBy?: string;
   invalid?: boolean;
+  disabled?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
@@ -208,6 +247,7 @@ function PasswordField({
           autoComplete={autoComplete}
           aria-describedby={descriptionIds}
           aria-invalid={invalid || tooLong || undefined}
+          disabled={disabled}
         />
         <button
           type="button"
@@ -216,6 +256,7 @@ function PasswordField({
           aria-controls={id}
           aria-label={toggleLabel}
           aria-pressed={visible}
+          disabled={disabled}
         >
           {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
         </button>
@@ -253,6 +294,8 @@ export function AuthForm({
   const [accountType, setAccountType] = useState<AccountType>(initialAccountType);
   const [step, setStep] = useState<Step>("details");
   const [challengeId, setChallengeId] = useState("");
+  const [challengeEmail, setChallengeEmail] = useState("");
+  const [challengeAccountType, setChallengeAccountType] = useState<AccountType>(initialAccountType);
   const [email, setEmail] = useState(seededEmail);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -267,13 +310,23 @@ export function AuthForm({
   const [turnstileReset, setTurnstileReset] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [errorCode, setErrorCode] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [registrationRestartMessage, setRegistrationRestartMessage] = useState("");
   const [cooldown, setCooldown] = useState(0);
+  const [validationAttemptedFor, setValidationAttemptedFor] = useState<Step | null>(null);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [firstNameTouched, setFirstNameTouched] = useState(false);
+  const [termsTouched, setTermsTouched] = useState(false);
+  const [privacyTouched, setPrivacyTouched] = useState(false);
   const previousStep = useRef(step);
   const emailInput = useRef<HTMLInputElement>(null);
+  const firstNameInput = useRef<HTMLInputElement>(null);
+  const termsInput = useRef<HTMLInputElement>(null);
+  const privacyInput = useRef<HTMLInputElement>(null);
   const otpInput = useRef<HTMLInputElement>(null);
   const mfaInput = useRef<HTMLInputElement>(null);
+  const verificationRequestHeading = useRef<HTMLHeadingElement>(null);
+  const requestGeneration = useRef(0);
   const successPanel = useRef<HTMLDivElement>(null);
   const lawyerProduct = initialAccountType === "lawyer";
   const explicitReturnTo = safeReturnPath(returnTo);
@@ -281,6 +334,31 @@ export function AuthForm({
   const strength = passwordScore(password);
   const passwordsMatch = password === confirmPassword;
   const passwordValid = password.length >= 8 && password.length <= 256;
+  const currentEmailError = fieldErrorMessage(locale, emailFieldError(email));
+  const currentFirstNameError = fieldErrorMessage(
+    locale,
+    firstNameFieldError(firstName),
+  );
+  const currentTermsError = fieldErrorMessage(
+    locale,
+    consentFieldError(acceptTerms),
+  );
+  const currentPrivacyError = fieldErrorMessage(
+    locale,
+    consentFieldError(acceptPrivacy),
+  );
+  const emailError = emailTouched || validationAttemptedFor === step
+    ? currentEmailError
+    : null;
+  const firstNameError = firstNameTouched || validationAttemptedFor === step
+    ? currentFirstNameError
+    : null;
+  const termsError = termsTouched || validationAttemptedFor === step
+    ? currentTermsError
+    : null;
+  const privacyError = privacyTouched || validationAttemptedFor === step
+    ? currentPrivacyError
+    : null;
   const legalLocale = locale;
   const authNotice = authenticationNotice({
     locale,
@@ -289,9 +367,11 @@ export function AuthForm({
     handoff: searchParams.get("handoff"),
   });
   const masked = useMemo(() => {
-    const [name, domain] = email.split("@");
-    return domain ? `${name.slice(0, 2)}•••@${domain}` : email;
-  }, [email]);
+    const visibleEmail = challengeEmail || email;
+    const [name, domain] = visibleEmail.split("@");
+    return domain ? `${name.slice(0, 2)}•••@${domain}` : visibleEmail;
+  }, [challengeEmail, email]);
+  const registrationRestartHref = `/${locale}/auth/register?email=${encodeURIComponent(challengeEmail || normalizeEmailInput(email))}&accountType=${challengeAccountType}`;
 
   const localeHref = (nextLocale: Locale): string => {
     const localePath = pathname.replace(/^\/(?:ru|uz|en)(?=\/|$)/u, `/${nextLocale}`);
@@ -306,11 +386,19 @@ export function AuthForm({
     return () => window.clearInterval(timer);
   }, [cooldown]);
 
+  useEffect(() => () => {
+    requestGeneration.current += 1;
+  }, []);
+
   useEffect(() => {
     if (previousStep.current === step) return;
     previousStep.current = step;
     if (step === "recovery-success") {
       successPanel.current?.focus();
+      return;
+    }
+    if (step === "verification-request") {
+      verificationRequestHeading.current?.focus();
       return;
     }
     const target = step === "details" || step === "recovery-request"
@@ -330,17 +418,22 @@ export function AuthForm({
 
   function clearFeedback() {
     setError("");
-    setErrorCode("");
     setSuccessMessage("");
+    setRegistrationRestartMessage("");
   }
 
   function returnToDetails() {
+    requestGeneration.current += 1;
+    setPending(false);
     clearFeedback();
     setStep("details");
     setChallengeId("");
+    setChallengeEmail("");
+    setChallengeAccountType(initialAccountType);
     setCode("");
     setMfaCode("");
     setCooldown(0);
+    setValidationAttemptedFor(null);
     resetTurnstile();
   }
 
@@ -378,13 +471,20 @@ export function AuthForm({
   async function login(event: FormEvent) {
     event.preventDefault();
     clearFeedback();
+    setValidationAttemptedFor("details");
+    const normalizedEmail = normalizeEmailInput(email);
+    setEmail(normalizedEmail);
+    if (emailFieldError(normalizedEmail)) {
+      emailInput.current?.focus();
+      return;
+    }
     if (!turnstileToken) {
       setError(tr({ ru: "Дождитесь завершения проверки безопасности.", uz: "Xavfsizlik tekshiruvi tugashini kuting.", en: "Wait for the security check to finish." }));
       return;
     }
     setPending(true);
-    const normalizedEmail = normalizeEmailInput(email);
-    setEmail(normalizedEmail);
+    const generation = requestGeneration.current + 1;
+    requestGeneration.current = generation;
     try {
       const response = await fetch("/api/auth/password-login", {
         method: "POST",
@@ -392,8 +492,16 @@ export function AuthForm({
         body: JSON.stringify({ email: normalizedEmail, password, locale, rememberMe, turnstileToken }),
       });
       const data = await readResponse(response);
+      if (requestGeneration.current !== generation) return;
       if (!response.ok) {
-        setErrorCode(data.code ?? "");
+        if (data.code === "EMAIL_NOT_VERIFIED") {
+          setError("");
+          setValidationAttemptedFor(null);
+          setChallengeEmail(normalizedEmail);
+          setChallengeAccountType(accountType);
+          setStep("verification-request");
+          return;
+        }
         throw new Error(data.error || tr({ ru: "Не удалось войти. Проверьте электронную почту и пароль.", uz: "Kirish amalga oshmadi. Email va parolni tekshiring.", en: "We could not sign you in. Check your email and password." }));
       }
       if (data.requiresTwoFactor) {
@@ -403,14 +511,19 @@ export function AuthForm({
       }
       completeAuthentication(data);
     } catch (value) {
+      if (requestGeneration.current !== generation) return;
       setError(value instanceof Error ? value.message : String(value));
     } finally {
-      resetTurnstile();
-      setPending(false);
+      if (requestGeneration.current === generation) {
+        resetTurnstile();
+        setPending(false);
+      }
     }
   }
 
-  async function requestEmailCode(purpose: "register" | "password_reset") {
+  async function requestEmailCode(
+    purpose: "register" | "registration_resend" | "password_reset",
+  ) {
     clearFeedback();
     if (!emailAuthEnabled || !turnstileToken) {
       setError(tr({ ru: "Дождитесь завершения проверки безопасности.", uz: "Xavfsizlik tekshiruvi tugashini kuting.", en: "Wait for the security check to finish." }));
@@ -421,7 +534,14 @@ export function AuthForm({
       return;
     }
     setPending(true);
-    const normalizedEmail = normalizeEmailInput(email);
+    const generation = requestGeneration.current + 1;
+    requestGeneration.current = generation;
+    const normalizedEmail = purpose === "registration_resend" && challengeEmail
+      ? challengeEmail
+      : normalizeEmailInput(email);
+    const requestedAccountType = purpose === "registration_resend"
+      ? challengeAccountType
+      : accountType;
     setEmail(normalizedEmail);
     try {
       const body = purpose === "register"
@@ -429,7 +549,7 @@ export function AuthForm({
             purpose,
             email: normalizedEmail,
             locale,
-            accountType,
+            accountType: requestedAccountType,
             password,
             firstName: firstName.trim(),
             lastName: lastName.trim() || undefined,
@@ -439,38 +559,119 @@ export function AuthForm({
             marketing: false,
             turnstileToken,
           }
-        : { purpose, email: normalizedEmail, locale, accountType, turnstileToken };
+        : purpose === "registration_resend"
+          ? {
+              purpose,
+              email: normalizedEmail,
+              locale,
+              accountType: requestedAccountType,
+              password,
+              acceptTerms,
+              acceptPrivacy,
+              acceptPersonalData: acceptPrivacy,
+              turnstileToken,
+            }
+        : { purpose, email: normalizedEmail, locale, accountType: requestedAccountType, turnstileToken };
       const response = await fetch("/api/auth/request-otp", {
         method: "POST",
         headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify(body),
       });
       const data = await readResponse(response);
+      if (requestGeneration.current !== generation) return;
       if (!response.ok || !data.challengeId) {
+        if (purpose === "registration_resend" && data.code === "REGISTRATION_RESTART_REQUIRED") {
+          const authoritativeAccountType = data.accountType;
+          if (authoritativeAccountType === "individual" || authoritativeAccountType === "entrepreneur" || authoritativeAccountType === "lawyer") {
+            setChallengeAccountType(authoritativeAccountType);
+          }
+          setChallengeEmail(normalizedEmail);
+          setChallengeId("");
+          setCode("");
+          setCooldown(0);
+          setRegistrationRestartMessage(data.error || tr({
+            ru: "Срок регистрации истёк. Продолжите регистрацию заново — новый аккаунт создан не будет.",
+            uz: "Ro‘yxatdan o‘tish muddati tugadi. Ro‘yxatdan o‘tishni qayta davom ettiring — yangi hisob yaratilmaydi.",
+            en: "Your registration session expired. Continue registration again; no duplicate account will be created.",
+          }));
+          setStep("verification-request");
+          return;
+        }
         if (data.retryAfterSeconds) setCooldown(data.retryAfterSeconds);
-        setErrorCode(data.code ?? "");
         throw new Error(data.error || tr({ ru: "Не удалось отправить письмо.", uz: "Xatni yuborib bo‘lmadi.", en: "The email could not be sent." }));
       }
       setChallengeId(data.challengeId);
+      setChallengeEmail(normalizedEmail);
+      if (data.accountType === "individual" || data.accountType === "entrepreneur" || data.accountType === "lawyer") {
+        setChallengeAccountType(data.accountType);
+      } else {
+        setChallengeAccountType(requestedAccountType);
+      }
       setCode("");
-      setStep(purpose === "register" ? "verification" : "recovery-code");
+      setStep(purpose === "password_reset" ? "recovery-code" : "verification");
       setCooldown(data.resendAfterSeconds ?? 60);
     } catch (value) {
+      if (requestGeneration.current !== generation) return;
       setError(value instanceof Error ? value.message : String(value));
     } finally {
-      resetTurnstile();
-      setPending(false);
+      if (requestGeneration.current === generation) {
+        resetTurnstile();
+        setPending(false);
+      }
     }
   }
 
   async function register(event: FormEvent) {
     event.preventDefault();
+    clearFeedback();
+    setValidationAttemptedFor("details");
+    const normalizedEmail = normalizeEmailInput(email);
+    setEmail(normalizedEmail);
+    if (firstNameFieldError(firstName)) {
+      firstNameInput.current?.focus();
+      return;
+    }
+    if (emailFieldError(normalizedEmail)) {
+      emailInput.current?.focus();
+      return;
+    }
+    if (consentFieldError(acceptTerms)) {
+      termsInput.current?.focus();
+      return;
+    }
+    if (consentFieldError(acceptPrivacy)) {
+      privacyInput.current?.focus();
+      return;
+    }
     await requestEmailCode("register");
   }
 
   async function requestRecovery(event: FormEvent) {
     event.preventDefault();
+    clearFeedback();
+    setValidationAttemptedFor("recovery-request");
+    const normalizedEmail = normalizeEmailInput(email);
+    setEmail(normalizedEmail);
+    if (emailFieldError(normalizedEmail)) {
+      emailInput.current?.focus();
+      return;
+    }
     await requestEmailCode("password_reset");
+  }
+
+  async function resendRegistrationConfirmation(event: FormEvent) {
+    event.preventDefault();
+    clearFeedback();
+    setValidationAttemptedFor("verification-request");
+    if (consentFieldError(acceptTerms)) {
+      termsInput.current?.focus();
+      return;
+    }
+    if (consentFieldError(acceptPrivacy)) {
+      privacyInput.current?.focus();
+      return;
+    }
+    await requestEmailCode("registration_resend");
   }
 
   async function verifyRegistration(event: FormEvent) {
@@ -483,11 +684,11 @@ export function AuthForm({
         headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
         body: JSON.stringify({
           challengeId,
-          email: normalizeEmailInput(email),
+          email: challengeEmail,
           code,
           purpose: "register",
           locale,
-          accountType,
+          accountType: challengeAccountType,
           acceptTerms: true,
           acceptPrivacy: true,
           acceptPersonalData: true,
@@ -497,7 +698,6 @@ export function AuthForm({
       });
       const data = await readResponse(response);
       if (!response.ok) {
-        setErrorCode(data.code ?? "");
         if (["OTP_USED", "REGISTRATION_RESTART_REQUIRED"].includes(data.code ?? "")) {
           setStep("details");
           setChallengeId("");
@@ -531,11 +731,10 @@ export function AuthForm({
       const response = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
-        body: JSON.stringify({ challengeId, email: normalizeEmailInput(email), code, password, locale }),
+        body: JSON.stringify({ challengeId, email: challengeEmail, code, password, locale }),
       });
       const data = await readResponse(response);
       if (!response.ok) {
-        setErrorCode(data.code ?? "");
         throw new Error(data.error || tr({ ru: "Не удалось обновить пароль.", uz: "Parolni yangilab bo‘lmadi.", en: "The password could not be updated." }));
       }
       setSuccessMessage(data.message ?? "");
@@ -607,13 +806,13 @@ export function AuthForm({
         {authNotice && <AuthNotice {...authNotice} />}
 
         {step === "details" && mode === "login" && (
-          <form onSubmit={login}>
+          <form onSubmit={login} noValidate>
             <AuthHeading icon={<KeyRound aria-hidden="true" />} eyebrow={tr({ ru: "Безопасная сессия", uz: "Xavfsiz sessiya", en: "Secure session" })} title={tr({ ru: "Войдите в JURO", uz: "JURO hisobiga kiring", en: "Sign in to JURO" })} description={tr({ ru: "Используйте email и пароль. Код понадобится только для особых проверок.", uz: "Email va paroldan foydalaning. Kod faqat maxsus tekshiruvlar uchun kerak.", en: "Use your email and password. A code is only needed for special checks." })} />
-            <label htmlFor="auth-email"><span>Email</span><input ref={emailInput} id="auth-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} onBlur={() => setEmail(normalizeEmailInput(email))} required autoComplete="username" autoCapitalize="none" inputMode="email" enterKeyHint="next" placeholder="name@example.com" spellCheck={false} /></label>
-            <PasswordField locale={locale} id="auth-password" name="password" label={tr({ ru: "Пароль", uz: "Parol", en: "Password" })} value={password} onChange={setPassword} autoComplete="current-password" />
+            <AuthTextField inputRef={emailInput} id="auth-email" name="email" label="Email" type="email" value={email} onChange={setEmail} onBlur={() => { setEmailTouched(true); setEmail(normalizeEmailInput(email)); }} required autoComplete="username" autoCapitalize="none" inputMode="email" enterKeyHint="next" placeholder="name@example.com" spellCheck={false} maxLength={254} error={emailError} disabled={pending} />
+            <PasswordField locale={locale} id="auth-password" name="password" label={tr({ ru: "Пароль", uz: "Parol", en: "Password" })} value={password} onChange={setPassword} autoComplete="current-password" disabled={pending} />
             <div className="auth-form-options">
-              <label className="auth-check auth-remember"><input name="remember-me" type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>{tr({ ru: "Запомнить на 30 дней", uz: "30 kun eslab qolish", en: "Remember for 30 days" })}</span></label>
-              <button type="button" className="auth-text-button" onClick={() => { clearFeedback(); setPassword(""); setConfirmPassword(""); setStep("recovery-request"); resetTurnstile(); }}>{tr({ ru: "Забыли пароль?", uz: "Parolni unutdingizmi?", en: "Forgot password?" })}</button>
+              <label className="auth-check auth-remember"><input name="remember-me" type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} disabled={pending} /><span>{tr({ ru: "Запомнить на 30 дней", uz: "30 kun eslab qolish", en: "Remember for 30 days" })}</span></label>
+              <button type="button" className="auth-text-button" disabled={pending} onClick={() => { requestGeneration.current += 1; clearFeedback(); setPassword(""); setConfirmPassword(""); setStep("recovery-request"); resetTurnstile(); }}>{tr({ ru: "Забыли пароль?", uz: "Parolni unutdingizmi?", en: "Forgot password?" })}</button>
             </div>
             {turnstileSiteKey && <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_password_login" />}
             <SubmitButton pending={pending} disabled={!turnstileToken || !passwordValid} label={tr({ ru: "Войти", uz: "Kirish", en: "Sign in" })} />
@@ -622,24 +821,24 @@ export function AuthForm({
         )}
 
         {step === "details" && mode === "register" && (
-          <form onSubmit={register}>
+          <form onSubmit={register} noValidate>
             <AuthHeading icon={<Sparkles aria-hidden="true" />} eyebrow={tr({ ru: "Один компактный экран", uz: "Bitta ixcham ekran", en: "One compact screen" })} title={tr({ ru: "Создайте аккаунт", uz: "Hisob yarating", en: "Create your account" })} description={tr({ ru: "Только данные, необходимые для безопасного старта. Остальное — позже в профиле.", uz: "Xavfsiz boshlash uchun zarur ma’lumotlargina. Qolganini keyin profilga qo‘shasiz.", en: "Only what is needed for a secure start. Add everything else later in your profile." })} />
-            {!lawyerProduct && <AccountTypePicker locale={locale} value={accountType} onChange={setAccountType} />}
+            {!lawyerProduct && <AccountTypePicker locale={locale} value={accountType} onChange={setAccountType} disabled={pending} />}
             <div className="auth-row">
-              <label htmlFor="first-name"><span>{tr({ ru: "Имя", uz: "Ism", en: "First name" })}</span><input id="first-name" name="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value.slice(0, 80))} required autoComplete="given-name" /></label>
-              <label htmlFor="last-name"><span>{tr({ ru: "Фамилия (необязательно)", uz: "Familiya (ixtiyoriy)", en: "Last name (optional)" })}</span><input id="last-name" name="family-name" value={lastName} onChange={(event) => setLastName(event.target.value.slice(0, 80))} autoComplete="family-name" /></label>
+              <AuthTextField inputRef={firstNameInput} id="first-name" name="given-name" label={tr({ ru: "Имя", uz: "Ism", en: "First name" })} value={firstName} onChange={setFirstName} onBlur={() => { setFirstNameTouched(true); setFirstName(firstName.trim()); }} required autoComplete="given-name" enterKeyHint="next" maxLength={80} error={firstNameError} disabled={pending} />
+              <AuthTextField id="last-name" name="family-name" label={tr({ ru: "Фамилия (необязательно)", uz: "Familiya (ixtiyoriy)", en: "Last name (optional)" })} value={lastName} onChange={setLastName} onBlur={() => setLastName(lastName.trim())} autoComplete="family-name" enterKeyHint="next" maxLength={80} disabled={pending} />
             </div>
-            <label htmlFor="auth-email"><span>Email</span><input ref={emailInput} id="auth-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} onBlur={() => setEmail(normalizeEmailInput(email))} required autoComplete="username" autoCapitalize="none" inputMode="email" enterKeyHint="next" placeholder="name@example.com" spellCheck={false} /></label>
-            <PasswordField locale={locale} id="new-password" name="password" label={tr({ ru: "Пароль", uz: "Parol", en: "Password" })} value={password} onChange={setPassword} autoComplete="new-password" describedBy="password-strength" />
+            <AuthTextField inputRef={emailInput} id="auth-email" name="email" label="Email" type="email" value={email} onChange={setEmail} onBlur={() => { setEmailTouched(true); setEmail(normalizeEmailInput(email)); }} required autoComplete="username" autoCapitalize="none" inputMode="email" enterKeyHint="next" placeholder="name@example.com" spellCheck={false} maxLength={254} error={emailError} disabled={pending} />
+            <PasswordField locale={locale} id="new-password" name="password" label={tr({ ru: "Пароль", uz: "Parol", en: "Password" })} value={password} onChange={setPassword} autoComplete="new-password" describedBy="password-strength" disabled={pending} />
             <PasswordStrength locale={locale} password={password} score={strength} />
-            <PasswordField locale={locale} id="confirm-password" name="password-confirmation" label={tr({ ru: "Подтвердите пароль", uz: "Parolni tasdiqlang", en: "Confirm password" })} value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" describedBy="password-match" invalid={Boolean(confirmPassword) && !passwordsMatch} />
+            <PasswordField locale={locale} id="confirm-password" name="password-confirmation" label={tr({ ru: "Подтвердите пароль", uz: "Parolni tasdiqlang", en: "Confirm password" })} value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" describedBy="password-match" invalid={Boolean(confirmPassword) && !passwordsMatch} disabled={pending} />
             {confirmPassword && <small id="password-match" className={passwordsMatch ? "auth-valid" : "auth-field-error"}>{passwordsMatch ? tr({ ru: "Пароли совпадают", uz: "Parollar mos", en: "Passwords match" }) : tr({ ru: "Пароли не совпадают", uz: "Parollar mos emas", en: "Passwords do not match" })}</small>}
             <div className="auth-consents">
-              <Consent name="accept-terms" checked={acceptTerms} onChange={setAcceptTerms}>
+              <Consent name="accept-terms" checked={acceptTerms} onChange={setAcceptTerms} onTouched={() => setTermsTouched(true)} inputRef={termsInput} error={termsError} disabled={pending}>
                 {tr({ ru: "Принимаю", uz: "", en: "I accept the" })}{locale === "uz" ? null : " "}
                 <a href={`/legal/terms?lang=${legalLocale}`} target="_blank" rel="noreferrer">{tr({ ru: "Условия использования", uz: "Foydalanish shartlarini", en: "Terms of Use" })}</a>{locale === "uz" ? " qabul qilaman" : ""}
               </Consent>
-              <Consent name="accept-privacy" checked={acceptPrivacy} onChange={setAcceptPrivacy}>
+              <Consent name="accept-privacy" checked={acceptPrivacy} onChange={setAcceptPrivacy} onTouched={() => setPrivacyTouched(true)} inputRef={privacyInput} error={privacyError} disabled={pending}>
                 {tr({ ru: "Ознакомлен(а) с", uz: "Men", en: "I have read the" })}{" "}
                 <a href={`/legal/privacy?lang=${legalLocale}`} target="_blank" rel="noreferrer">{tr({ ru: "Политикой конфиденциальности", uz: "Maxfiylik siyosati", en: "Privacy Policy" })}</a>{" "}
                 {tr({ ru: "и согласен(на) на", uz: "bilan tanishdim va", en: "and consent to" })}{" "}
@@ -647,40 +846,67 @@ export function AuthForm({
               </Consent>
             </div>
             {turnstileSiteKey && <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_registration" />}
-            <SubmitButton pending={pending} disabled={!turnstileToken || !firstName.trim() || !passwordValid || !passwordsMatch || !acceptTerms || !acceptPrivacy} label={tr({ ru: "Создать аккаунт", uz: "Hisob yaratish", en: "Create account" })} />
+            <SubmitButton pending={pending} disabled={!turnstileToken || !passwordValid || !passwordsMatch} label={tr({ ru: "Создать аккаунт", uz: "Hisob yaratish", en: "Create account" })} />
           </form>
         )}
 
         {step === "recovery-request" && (
-          <form onSubmit={requestRecovery}>
-            <BackButton onClick={returnToDetails} label={tr({ ru: "Назад ко входу", uz: "Kirishga qaytish", en: "Back to sign in" })} />
+          <form onSubmit={requestRecovery} noValidate>
+            <BackButton onClick={returnToDetails} label={tr({ ru: "Назад ко входу", uz: "Kirishga qaytish", en: "Back to sign in" })} disabled={pending} />
             <AuthHeading icon={<LockKeyhole aria-hidden="true" />} eyebrow={tr({ ru: "Восстановление", uz: "Tiklash", en: "Recovery" })} title={tr({ ru: "Восстановите пароль", uz: "Parolni tiklang", en: "Reset your password" })} description={tr({ ru: "Укажите email. Мы отправим одноразовый код, если он связан с аккаунтом.", uz: "Emailni kiriting. Agar u hisob bilan bog‘langan bo‘lsa, bir martalik kod yuboramiz.", en: "Enter your email. We will send a one-time code if it belongs to an account." })} />
-            <label htmlFor="recovery-email"><span>Email</span><input ref={emailInput} id="recovery-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} onBlur={() => setEmail(normalizeEmailInput(email))} required autoComplete="username" autoCapitalize="none" inputMode="email" enterKeyHint="send" placeholder="name@example.com" spellCheck={false} /></label>
+            <AuthTextField inputRef={emailInput} id="recovery-email" name="email" label="Email" type="email" value={email} onChange={setEmail} onBlur={() => { setEmailTouched(true); setEmail(normalizeEmailInput(email)); }} required autoComplete="username" autoCapitalize="none" inputMode="email" enterKeyHint="send" placeholder="name@example.com" spellCheck={false} maxLength={254} error={emailError} disabled={pending} />
             {emailAuthEnabled && turnstileSiteKey ? <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_password_reset" /> : <p className="auth-error" role="status">{tr({ ru: "Восстановление временно недоступно.", uz: "Tiklash vaqtincha mavjud emas.", en: "Password recovery is temporarily unavailable." })}</p>}
             <SubmitButton pending={pending} disabled={!emailAuthEnabled || !turnstileToken} label={tr({ ru: "Отправить код", uz: "Kod yuborish", en: "Send code" })} />
           </form>
         )}
 
+        {step === "verification-request" && (
+          <form onSubmit={resendRegistrationConfirmation} noValidate aria-labelledby="verification-request-title">
+            <BackButton onClick={returnToDetails} label={tr({ ru: "Назад ко входу", uz: "Kirishga qaytish", en: "Back to sign in" })} disabled={pending} />
+            <AuthHeading titleId="verification-request-title" titleRef={verificationRequestHeading} icon={<CheckCircle2 aria-hidden="true" />} eyebrow={tr({ ru: "Email не подтверждён", uz: "Email tasdiqlanmagan", en: "Email not confirmed" })} title={tr({ ru: "Получите новый код", uz: "Yangi kodni oling", en: "Get a new code" })} description={tr({ ru: `После проверки безопасности отправим код на ${masked}. Новый аккаунт создавать не нужно.`, uz: `Xavfsizlik tekshiruvidan so‘ng ${masked} manziliga kod yuboramiz. Yangi hisob yaratish shart emas.`, en: `After the security check, we will send a code to ${masked}. You do not need to create another account.` })} />
+            <input className="auth-password-manager-username" name="username" type="email" value={challengeEmail} readOnly autoComplete="username" tabIndex={-1} aria-hidden="true" />
+            {registrationRestartMessage ? <>
+              <AuthNotice title={tr({ ru: "Продолжите регистрацию", uz: "Ro‘yxatdan o‘tishni davom ettiring", en: "Continue registration" })} body={registrationRestartMessage} tone="warning" />
+              <Link className="auth-submit" href={registrationRestartHref}><ArrowRight aria-hidden="true" />{tr({ ru: "Продолжить без нового аккаунта", uz: "Yangi hisobsiz davom ettirish", en: "Continue without a new account" })}</Link>
+            </> : <>
+            <div className="auth-consents">
+              <Consent name="accept-terms" checked={acceptTerms} onChange={setAcceptTerms} onTouched={() => setTermsTouched(true)} inputRef={termsInput} error={termsError} disabled={pending}>
+                {tr({ ru: "Принимаю", uz: "", en: "I accept the" })}{locale === "uz" ? null : " "}
+                <a href={`/legal/terms?lang=${legalLocale}`} target="_blank" rel="noreferrer">{tr({ ru: "Условия использования", uz: "Foydalanish shartlarini", en: "Terms of Use" })}</a>{locale === "uz" ? " qabul qilaman" : ""}
+              </Consent>
+              <Consent name="accept-privacy" checked={acceptPrivacy} onChange={setAcceptPrivacy} onTouched={() => setPrivacyTouched(true)} inputRef={privacyInput} error={privacyError} disabled={pending}>
+                {tr({ ru: "Ознакомлен(а) с", uz: "Men", en: "I have read the" })}{" "}
+                <a href={`/legal/privacy?lang=${legalLocale}`} target="_blank" rel="noreferrer">{tr({ ru: "Политикой конфиденциальности", uz: "Maxfiylik siyosati", en: "Privacy Policy" })}</a>{" "}
+                {tr({ ru: "и согласен(на) на", uz: "bilan tanishdim va", en: "and consent to" })}{" "}
+                <a href={`/legal/personal-data?lang=${legalLocale}`} target="_blank" rel="noreferrer">{tr({ ru: "обработку персональных данных", uz: "shaxsiy ma’lumotlarni qayta ishlashga", en: "personal data processing" })}</a>{locale === "uz" ? " roziman" : ""}.
+              </Consent>
+            </div>
+            {emailAuthEnabled && turnstileSiteKey ? <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_registration_resend" /> : <p className="auth-error" role="status">{tr({ ru: "Повторная отправка временно недоступна.", uz: "Qayta yuborish vaqtincha mavjud emas.", en: "Resending is temporarily unavailable." })}</p>}
+            <SubmitButton pending={pending} disabled={!emailAuthEnabled || !turnstileToken} label={tr({ ru: "Отправить новый код", uz: "Yangi kod yuborish", en: "Send a new code" })} />
+            </>}
+          </form>
+        )}
+
         {step === "verification" && (
           <form onSubmit={verifyRegistration}>
-            <BackButton onClick={returnToDetails} label={tr({ ru: "Изменить данные", uz: "Ma’lumotlarni o‘zgartirish", en: "Edit details" })} />
+            <BackButton onClick={returnToDetails} label={mode === "login" ? tr({ ru: "Назад ко входу", uz: "Kirishga qaytish", en: "Back to sign in" }) : tr({ ru: "Изменить данные", uz: "Ma’lumotlarni o‘zgartirish", en: "Edit details" })} disabled={pending} />
             <AuthHeading icon={<CheckCircle2 aria-hidden="true" />} eyebrow={tr({ ru: "Техническое подтверждение", uz: "Texnik tasdiqlash", en: "Technical confirmation" })} title={tr({ ru: "Подтвердите email", uz: "Emailni tasdiqlang", en: "Confirm your email" })} description={tr({ ru: `Код отправлен на ${masked} и действует 10 минут.`, uz: `Kod ${masked} manziliga yuborildi va 10 daqiqa amal qiladi.`, en: `We sent a code to ${masked}. It is valid for 10 minutes.` })} />
-            <OtpField locale={locale} value={code} onChange={setCode} inputRef={otpInput} />
+            <OtpField locale={locale} value={code} onChange={setCode} inputRef={otpInput} disabled={pending} />
             <SubmitButton pending={pending} disabled={code.length !== 6} label={tr({ ru: "Подтвердить и продолжить", uz: "Tasdiqlash va davom etish", en: "Confirm and continue" })} />
-            <ResendControl locale={locale} pending={pending} cooldown={cooldown} enabled={Boolean(turnstileToken)} onResend={() => void requestEmailCode("register")} />
+            <ResendControl locale={locale} pending={pending} cooldown={cooldown} enabled={Boolean(turnstileToken)} onResend={() => void requestEmailCode("registration_resend")} />
             {cooldown <= 0 && turnstileSiteKey && <TurnstileWidget siteKey={turnstileSiteKey} locale={locale} resetSignal={turnstileReset} onToken={setTurnstileToken} action="auth_registration_resend" />}
           </form>
         )}
 
         {step === "recovery-code" && (
           <form onSubmit={resetPassword}>
-            <BackButton onClick={() => { clearFeedback(); setStep("recovery-request"); setChallengeId(""); setCode(""); setCooldown(0); resetTurnstile(); }} label={tr({ ru: "Изменить email", uz: "Emailni o‘zgartirish", en: "Change email" })} />
+            <BackButton onClick={() => { requestGeneration.current += 1; clearFeedback(); setPending(false); setStep("recovery-request"); setChallengeId(""); setChallengeEmail(""); setCode(""); setCooldown(0); resetTurnstile(); }} label={tr({ ru: "Изменить email", uz: "Emailni o‘zgartirish", en: "Change email" })} disabled={pending} />
             <AuthHeading icon={<LockKeyhole aria-hidden="true" />} eyebrow={tr({ ru: "Код действует 10 минут", uz: "Kod 10 daqiqa amal qiladi", en: "Code valid for 10 minutes" })} title={tr({ ru: "Установите новый пароль", uz: "Yangi parol o‘rnating", en: "Set a new password" })} description={tr({ ru: `Введите код из письма для ${masked}.`, uz: `${masked} uchun xatdagi kodni kiriting.`, en: `Enter the code from the email sent to ${masked}.` })} />
-            <input className="auth-password-manager-username" name="username" type="email" value={email} readOnly autoComplete="username" tabIndex={-1} aria-hidden="true" />
-            <OtpField locale={locale} value={code} onChange={setCode} inputRef={otpInput} />
-            <PasswordField locale={locale} id="reset-password" name="password" label={tr({ ru: "Новый пароль", uz: "Yangi parol", en: "New password" })} value={password} onChange={setPassword} autoComplete="new-password" describedBy="password-strength" />
+            <input className="auth-password-manager-username" name="username" type="email" value={challengeEmail} readOnly autoComplete="username" tabIndex={-1} aria-hidden="true" />
+            <OtpField locale={locale} value={code} onChange={setCode} inputRef={otpInput} disabled={pending} />
+            <PasswordField locale={locale} id="reset-password" name="password" label={tr({ ru: "Новый пароль", uz: "Yangi parol", en: "New password" })} value={password} onChange={setPassword} autoComplete="new-password" describedBy="password-strength" disabled={pending} />
             <PasswordStrength locale={locale} password={password} score={strength} />
-            <PasswordField locale={locale} id="reset-password-confirm" name="password-confirmation" label={tr({ ru: "Подтвердите новый пароль", uz: "Yangi parolni tasdiqlang", en: "Confirm new password" })} value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" describedBy="reset-password-match" invalid={Boolean(confirmPassword) && !passwordsMatch} />
+            <PasswordField locale={locale} id="reset-password-confirm" name="password-confirmation" label={tr({ ru: "Подтвердите новый пароль", uz: "Yangi parolni tasdiqlang", en: "Confirm new password" })} value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" describedBy="reset-password-match" invalid={Boolean(confirmPassword) && !passwordsMatch} disabled={pending} />
             {confirmPassword && <small id="reset-password-match" className={passwordsMatch ? "auth-valid" : "auth-field-error"}>{passwordsMatch ? tr({ ru: "Пароли совпадают", uz: "Parollar mos", en: "Passwords match" }) : tr({ ru: "Пароли не совпадают", uz: "Parollar mos emas", en: "Passwords do not match" })}</small>}
             <SubmitButton pending={pending} disabled={code.length !== 6 || !passwordValid || !passwordsMatch} label={tr({ ru: "Обновить пароль", uz: "Parolni yangilash", en: "Update password" })} />
             <ResendControl locale={locale} pending={pending} cooldown={cooldown} enabled={Boolean(turnstileToken)} onResend={() => void requestEmailCode("password_reset")} />
@@ -699,15 +925,15 @@ export function AuthForm({
 
         {step === "mfa" && (
           <form onSubmit={verifySecondFactor}>
-            <BackButton onClick={returnToDetails} label={tr({ ru: "Начать вход заново", uz: "Kirishni qaytadan boshlash", en: "Start sign-in again" })} />
+            <BackButton onClick={returnToDetails} label={tr({ ru: "Начать вход заново", uz: "Kirishni qaytadan boshlash", en: "Start sign-in again" })} disabled={pending} />
             <AuthHeading icon={<ShieldCheck aria-hidden="true" />} eyebrow="2FA" title={tr({ ru: "Подтвердите второй фактор", uz: "Ikkinchi omilni tasdiqlang", en: "Confirm your second factor" })} description={tr({ ru: "Введите код из приложения-аутентификатора или один резервный код.", uz: "Autentifikator ilovasidagi kodni yoki bitta zaxira kodni kiriting.", en: "Enter a code from your authenticator app or one backup code." })} />
-            <label htmlFor="mfa-code"><span>{tr({ ru: "Код подтверждения", uz: "Tasdiqlash kodi", en: "Verification code" })}</span><input ref={mfaInput} id="mfa-code" name="mfa-code" className="auth-code auth-mfa-code" value={mfaCode} onChange={(event) => setMfaCode(event.target.value.toUpperCase().replace(/[^A-Z0-9 -]/gu, "").slice(0, 64))} required inputMode="text" autoComplete="one-time-code" autoCapitalize="characters" maxLength={64} aria-describedby="mfa-hint" /></label>
+            <label htmlFor="mfa-code"><span>{tr({ ru: "Код подтверждения", uz: "Tasdiqlash kodi", en: "Verification code" })}</span><input ref={mfaInput} id="mfa-code" name="mfa-code" className="auth-code auth-mfa-code" value={mfaCode} onChange={(event) => setMfaCode(event.target.value.toUpperCase().replace(/[^A-Z0-9 -]/gu, "").slice(0, 64))} required inputMode="text" autoComplete="one-time-code" autoCapitalize="characters" maxLength={64} aria-describedby="mfa-hint" disabled={pending} /></label>
             <small id="mfa-hint" className="auth-hint">{tr({ ru: "TOTP-код содержит 6 цифр. Резервный код можно вводить с дефисами или без.", uz: "TOTP kodi 6 raqamdan iborat. Zaxira kodni chiziqcha bilan yoki chiziqchasiz kiriting.", en: "A TOTP code has 6 digits. Enter a backup code with or without hyphens." })}</small>
             <SubmitButton pending={pending} disabled={mfaCode.trim().length < 6} label={tr({ ru: "Завершить вход", uz: "Kirishni yakunlash", en: "Finish sign-in" })} />
           </form>
         )}
 
-        {error && <div className="auth-error" role="alert"><span>{error}</span>{errorCode === "EMAIL_NOT_VERIFIED" && <Link href={`/${locale}/auth/register?accountType=${accountType}&email=${encodeURIComponent(email)}`}>{tr({ ru: "Завершить подтверждение", uz: "Tasdiqlashni yakunlash", en: "Finish verification" })}</Link>}</div>}
+        {error && <div className="auth-error" role="alert"><span>{error}</span></div>}
 
         {step === "details" && <div className="auth-switch">
           {mode === "register"
@@ -727,20 +953,88 @@ function AuthUtilities({ locale, hrefFor }: { locale: Locale; hrefFor: (locale: 
   return <div className="auth-utilities"><ThemeSwitcher locale={locale} compact persistAccount={false} /><LanguageSwitch locale={locale} hrefFor={hrefFor} /></div>;
 }
 
-function AuthHeading({ icon, eyebrow, title, description }: { icon: React.ReactNode; eyebrow: string; title: string; description: string }) {
-  return <header className="auth-heading"><span className="auth-heading-icon">{icon}</span><div><small>{eyebrow}</small><h2>{title}</h2><p>{description}</p></div></header>;
+function AuthHeading({ icon, eyebrow, title, description, titleId, titleRef }: { icon: React.ReactNode; eyebrow: string; title: string; description: string; titleId?: string; titleRef?: React.RefObject<HTMLHeadingElement | null> }) {
+  return <header className="auth-heading"><span className="auth-heading-icon">{icon}</span><div><small>{eyebrow}</small><h2 id={titleId} ref={titleRef} tabIndex={titleRef ? -1 : undefined}>{title}</h2><p>{description}</p></div></header>;
+}
+
+function AuthTextField({
+  inputRef,
+  id,
+  name,
+  label,
+  type = "text",
+  value,
+  onChange,
+  onBlur,
+  error,
+  required = false,
+  autoComplete,
+  autoCapitalize,
+  inputMode,
+  enterKeyHint,
+  placeholder,
+  spellCheck,
+  maxLength,
+  disabled = false,
+}: {
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  id: string;
+  name: string;
+  label: string;
+  type?: "text" | "email";
+  value: string;
+  onChange: (value: string) => void;
+  onBlur?: () => void;
+  error?: string | null;
+  required?: boolean;
+  autoComplete?: string;
+  autoCapitalize?: React.HTMLAttributes<HTMLInputElement>["autoCapitalize"];
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  enterKeyHint?: React.HTMLAttributes<HTMLInputElement>["enterKeyHint"];
+  placeholder?: string;
+  spellCheck?: boolean;
+  maxLength?: number;
+  disabled?: boolean;
+}) {
+  const errorId = `${id}-error`;
+  return (
+    <label className="auth-field" htmlFor={id}>
+      <span>{label}</span>
+      <input
+        ref={inputRef}
+        id={id}
+        name={name}
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        required={required}
+        autoComplete={autoComplete}
+        autoCapitalize={autoCapitalize}
+        inputMode={inputMode}
+        enterKeyHint={enterKeyHint}
+        placeholder={placeholder}
+        spellCheck={spellCheck}
+        maxLength={maxLength}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        disabled={disabled}
+      />
+      {error && <small id={errorId} className="auth-field-error" role="alert">{error}</small>}
+    </label>
+  );
 }
 
 function SubmitButton({ pending, disabled, label }: { pending: boolean; disabled: boolean; label: string }) {
   return <button className="auth-submit" disabled={pending || disabled} aria-busy={pending}>{pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}<span>{label}</span></button>;
 }
 
-function BackButton({ onClick, label }: { onClick: () => void; label: string }) {
-  return <button type="button" className="auth-back" onClick={onClick}><ArrowLeft aria-hidden="true" />{label}</button>;
+function BackButton({ onClick, label, disabled = false }: { onClick: () => void; label: string; disabled?: boolean }) {
+  return <button type="button" className="auth-back" onClick={onClick} disabled={disabled}><ArrowLeft aria-hidden="true" />{label}</button>;
 }
 
-function OtpField({ locale, value, onChange, inputRef }: { locale: Locale; value: string; onChange: (value: string) => void; inputRef: React.RefObject<HTMLInputElement | null> }) {
-  return <label htmlFor="otp-code"><span>{copy(locale, { ru: "Шестизначный код", uz: "Olti xonali kod", en: "Six-digit code" })}</span><input ref={inputRef} id="otp-code" name="one-time-code" className="auth-code" value={value} onChange={(event) => onChange(event.target.value.replace(/\D/gu, "").slice(0, 6))} required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} aria-describedby="otp-hint" /><small id="otp-hint" className="auth-hint">{copy(locale, { ru: "Никому не сообщайте этот код. Сотрудники JURO никогда его не запрашивают.", uz: "Bu kodni hech kimga bermang. JURO xodimlari uni hech qachon so‘ramaydi.", en: "Never share this code. JURO staff will never ask for it." })}</small></label>;
+function OtpField({ locale, value, onChange, inputRef, disabled = false }: { locale: Locale; value: string; onChange: (value: string) => void; inputRef: React.RefObject<HTMLInputElement | null>; disabled?: boolean }) {
+  return <label htmlFor="otp-code"><span>{copy(locale, { ru: "Шестизначный код", uz: "Olti xonali kod", en: "Six-digit code" })}</span><input ref={inputRef} id="otp-code" name="one-time-code" className="auth-code" value={value} onChange={(event) => onChange(event.target.value.replace(/\D/gu, "").slice(0, 6))} required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} aria-describedby="otp-hint" disabled={disabled} /><small id="otp-hint" className="auth-hint">{copy(locale, { ru: "Никому не сообщайте этот код. Сотрудники JURO никогда его не запрашивают.", uz: "Bu kodni hech kimga bermang. JURO xodimlari uni hech qachon so‘ramaydi.", en: "Never share this code. JURO staff will never ask for it." })}</small></label>;
 }
 
 function PasswordStrength({ locale, password, score }: { locale: Locale; password: string; score: number }) {
@@ -755,13 +1049,13 @@ function PasswordStrength({ locale, password, score }: { locale: Locale; passwor
   return <div className="auth-strength" id="password-strength" data-score={tooLong ? 0 : score}><span role="progressbar" aria-label={copy(locale, { ru: "Надёжность пароля", uz: "Parol ishonchliligi", en: "Password strength" })} aria-valuemin={0} aria-valuemax={4} aria-valuenow={tooLong ? 0 : score}><i /></span><small className={tooLong ? "auth-field-error" : undefined}>{tooLong ? copy(locale, { ru: "Пароль не должен превышать 256 символов — значение не было обрезано.", uz: "Parol 256 belgidan oshmasligi kerak — qiymat qisqartirilmadi.", en: "The password must not exceed 256 characters—the value was not truncated." }) : <>{password ? labels[score] : labels[0]}. {copy(locale, { ru: "Длинная фраза лучше сложного короткого пароля.", uz: "Uzun ibora murakkab qisqa paroldan yaxshiroq.", en: "A long passphrase is better than a short complex password." })}</>}</small></div>;
 }
 
-function AccountTypePicker({ locale, value, onChange }: { locale: Locale; value: AccountType; onChange: (value: AccountType) => void }) {
+function AccountTypePicker({ locale, value, onChange, disabled = false }: { locale: Locale; value: AccountType; onChange: (value: AccountType) => void; disabled?: boolean }) {
   const options = [
     ["individual", UserRound, { ru: "Для себя", uz: "O‘zim uchun", en: "Personal" }],
     ["entrepreneur", BriefcaseBusiness, { ru: "Предприниматель", uz: "Tadbirkor", en: "Business owner" }],
     ["lawyer", Scale, { ru: "Юрист", uz: "Yurist", en: "Lawyer" }],
   ] as const;
-  return <div className="auth-account-type" role="group" aria-label={copy(locale, { ru: "Тип профиля", uz: "Profil turi", en: "Profile type" })}>{options.map(([option, Icon, label]) => <button key={option} type="button" className={value === option ? "active" : ""} aria-pressed={value === option} onClick={() => onChange(option)}><Icon aria-hidden="true" /><span>{copy(locale, label)}</span></button>)}</div>;
+  return <div className="auth-account-type" role="group" aria-label={copy(locale, { ru: "Тип профиля", uz: "Profil turi", en: "Profile type" })}>{options.map(([option, Icon, label]) => <button key={option} type="button" className={value === option ? "active" : ""} aria-pressed={value === option} onClick={() => onChange(option)} disabled={disabled}><Icon aria-hidden="true" /><span>{copy(locale, label)}</span></button>)}</div>;
 }
 
 function ResendControl({ locale, pending, cooldown, enabled, onResend }: { locale: Locale; pending: boolean; cooldown: number; enabled: boolean; onResend: () => void }) {
@@ -795,8 +1089,9 @@ function LanguageSwitch({ locale, hrefFor }: { locale: Locale; hrefFor: (value: 
   return <nav className="auth-language" aria-label={copy(locale, { ru: "Язык интерфейса", uz: "Interfeys tili", en: "Interface language" })}><Languages aria-hidden="true" />{(["ru", "uz", "en"] as const).map((value) => <Link key={value} href={hrefFor(value)} className={locale === value ? "active" : ""} aria-current={locale === value ? "page" : undefined} hrefLang={value}>{value.toUpperCase()}</Link>)}</nav>;
 }
 
-function Consent({ name, checked, onChange, children }: { name: string; checked: boolean; onChange: (value: boolean) => void; children: React.ReactNode }) {
-  return <label className="auth-check"><input name={name} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} required /><span>{children}</span></label>;
+function Consent({ name, checked, onChange, onTouched, inputRef, error, disabled = false, children }: { name: string; checked: boolean; onChange: (value: boolean) => void; onTouched: () => void; inputRef: React.RefObject<HTMLInputElement | null>; error?: string | null; disabled?: boolean; children: React.ReactNode }) {
+  const errorId = `${name}-error`;
+  return <div className="auth-consent-field"><label className="auth-check"><input ref={inputRef} name={name} type="checkbox" checked={checked} onChange={(event) => { onTouched(); onChange(event.target.checked); }} onBlur={onTouched} required aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} disabled={disabled} /><span>{children}</span></label>{error && <small id={errorId} className="auth-field-error" role="alert">{error}</small>}</div>;
 }
 
 type AuthNoticeCopy = { title: string; body: string; tone: "info" | "warning" };

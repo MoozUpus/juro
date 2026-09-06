@@ -40,6 +40,14 @@ export const requestOtpInputSchema = z.discriminatedUnion("purpose", [
     acceptPersonalData: z.literal(true),
     marketing: z.boolean().default(false),
   }).strict(),
+  z.object({
+    ...otpRequestBase,
+    purpose: z.literal("registration_resend"),
+    password: passwordInput,
+    acceptTerms: z.literal(true),
+    acceptPrivacy: z.literal(true),
+    acceptPersonalData: z.literal(true),
+  }).strict(),
 ]);
 
 export const verifyOtpInputSchema = z.object({

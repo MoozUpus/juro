@@ -57,8 +57,63 @@ test("registration, recovery, resend, and MFA retain distinct guarded actions", 
   assert.match(form, /setChallengeId\(data\.challengeId\)/);
   assert.match(form, /setCooldown\(data\.resendAfterSeconds \?\? 60\)/);
   assert.match(form, /disabled=\{pending \|\| cooldown > 0 \|\| !enabled\}/);
+  assert.match(form, /step === "verification-request"/);
+  assert.match(form, /requestEmailCode\("registration_resend"\)/);
+  assert.doesNotMatch(form, /auth\/register\?accountType=.*Finish verification/u);
   assert.match(form, /step === "mfa"/);
   assert.match(form, /name="mfa-code"[\s\S]{0,600}?autoComplete="one-time-code"/);
+});
+
+test("auth requests bind challenge verification to a stable submitted snapshot", () => {
+  const form = source("app/_auth/AuthForm.tsx");
+
+  assert.match(form, /const requestGeneration = useRef\(0\)/u);
+  assert.match(form, /useEffect\(\(\) => \(\) => \{\s*requestGeneration\.current \+= 1;\s*\}, \[\]\);/u);
+  assert.match(form, /if \(requestGeneration\.current !== generation\) return;/u);
+  assert.match(form, /setChallengeEmail\(normalizedEmail\)/u);
+  assert.match(form, /email: challengeEmail,[\s\S]{0,180}?purpose: "register"/u);
+  assert.match(form, /body: JSON\.stringify\(\{ challengeId, email: challengeEmail, code, password, locale \}\)/u);
+  assert.match(form, /function BackButton[\s\S]{0,300}?disabled=\{disabled\}/u);
+  assert.match(form, /function AccountTypePicker[\s\S]{0,800}?disabled=\{disabled\}/u);
+  assert.match(form, /function Consent[\s\S]{0,900}?disabled=\{disabled\}/u);
+  assert.match(form, /disabled=\{pending\}/u);
+});
+
+test("expired registration recovery has a localized restart path and named focus target", () => {
+  const form = source("app/_auth/AuthForm.tsx");
+  const otpRoute = source("app/api/auth/request-otp/route.ts");
+
+  assert.match(otpRoute, /if \(!existing\.pendingRegistration\)[\s\S]{0,700}?code: "REGISTRATION_RESTART_REQUIRED"/u);
+  assert.match(otpRoute, /ru: "Срок регистрации истёк\./u);
+  assert.match(otpRoute, /uz: "Ro‘yxatdan o‘tish muddati tugadi\./u);
+  assert.match(otpRoute, /en: "Your registration session expired\./u);
+  assert.match(form, /aria-labelledby="verification-request-title"/u);
+  assert.match(form, /titleId="verification-request-title" titleRef=\{verificationRequestHeading\}/u);
+  assert.match(form, /verificationRequestHeading\.current\?\.focus\(\)/u);
+  assert.match(
+    form,
+    /purpose === "registration_resend" && data\.code === "REGISTRATION_RESTART_REQUIRED"[\s\S]{0,1400}?setStep\("verification-request"\)/u,
+  );
+  assert.doesNotMatch(form, /verificationRequestPanel/u);
+  assert.ok(form.includes(
+    "const registrationRestartHref = `/${locale}/auth/register?email=${encodeURIComponent(challengeEmail || normalizeEmailInput(email))}&accountType=${challengeAccountType}`;",
+  ));
+});
+
+test("auth details expose localized inline validation and accessible error ownership", () => {
+  const form = source("app/_auth/AuthForm.tsx");
+  const styles = source("app/_auth/auth.css");
+
+  assert.match(form, /ru: "Укажите имя\."[\s\S]*uz: "Ismingizni kiriting\."[\s\S]*en: "Enter your first name\."/u);
+  assert.match(form, /ru: "Проверьте формат электронной почты\."[\s\S]*uz: "Elektron pochta manzili formatini tekshiring\."[\s\S]*en: "Check the email address format\."/u);
+  assert.match(form, /aria-invalid=\{error \? true : undefined\}/u);
+  assert.match(form, /aria-describedby=\{error \? errorId : undefined\}/u);
+  assert.match(form, /firstNameInput\.current\?\.focus\(\)/u);
+  assert.match(form, /termsInput\.current\?\.focus\(\)/u);
+  assert.match(form, /privacyInput\.current\?\.focus\(\)/u);
+  assert.match(form, /autoComplete="given-name"/u);
+  assert.match(form, /autoComplete="family-name"/u);
+  assert.match(styles, /input\[aria-invalid="true"\]/u);
 });
 
 test("auth feedback is localized and does not make the whole card live", () => {

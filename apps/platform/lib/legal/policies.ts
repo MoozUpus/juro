@@ -41,6 +41,7 @@ export const MARKETING_CONSENT_VERSION = "2026-07-26.1";
 // acceptance rows are append-only and must continue to reference the exact
 // text the user accepted.
 const POLICY_VERSION = "2026-09-04.draft.2";
+const PRIVACY_POLICY_VERSION = "2026-09-05.draft.3";
 
 const policyDefinitions = [
   {
@@ -58,13 +59,13 @@ const policyDefinitions = [
   {
     slug: "privacy",
     documentKey: "privacy-policy",
-    documentVersion: POLICY_VERSION,
+    documentVersion: PRIVACY_POLICY_VERSION,
     status: "draft",
     mandatoryAtRegistration: true,
     contentSha256: {
-      ru: "e83be3984be664d174ac76ee137799cf4f5f4631a58be40e538104a8f8c9fc48",
-      uz: "66a93f80ef14041dd841a861ab03f795b7527491c177ccc71ed0905d14da81cd",
-      en: "7b0e7fe1e1c8f25df8a3d01404f04feb57d5fcce309cfa1a8fa4053f46b14787",
+      ru: "4604e5fafabf31567403a2c2d6935177807ac0086fc7edf60415197b77771e8b",
+      uz: "8064d87d943cf15439ae1a8cafcb39e9c8df1d6f447ed68b070512a0a89f6dc5",
+      en: "335ede6d6690233970a0b5dab5b43ac412d2b4cd5eada0a4c5e0e2a6cf6686dd",
     },
   },
   {

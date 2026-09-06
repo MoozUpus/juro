@@ -1,12 +1,41 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { AppLegalSlug } from "../../../content/app-legal";
+import {
+  APP_LEGAL_OPERATOR_EMAIL,
+  type AppLegalSlug,
+} from "../../../content/app-legal";
 import {
   policySlugs,
   verifiedPolicyDocument,
 } from "../../../lib/legal/policies";
 
 export const metadata = { robots: { index: false, follow: false } };
+
+const operatorEmailHref = `mailto:${encodeURIComponent(
+  APP_LEGAL_OPERATOR_EMAIL,
+)}`;
+
+function LegalParagraph({ paragraph }: { paragraph: string }) {
+  const parts = paragraph.split(APP_LEGAL_OPERATOR_EMAIL);
+  if (parts.length === 1) return <p>{paragraph}</p>;
+  return (
+    <p>
+      {parts.map((part, index) => (
+        <Fragment key={`${index}:${part}`}>
+          {index > 0
+            ? (
+              <a href={operatorEmailHref}>
+                {APP_LEGAL_OPERATOR_EMAIL}
+              </a>
+            )
+            : null}
+          {part}
+        </Fragment>
+      ))}
+    </p>
+  );
+}
 
 export default async function AppLegalPage({
   params,
@@ -98,7 +127,7 @@ export default async function AppLegalPage({
           <section key={section.heading}>
             <h2>{section.heading}</h2>
             {section.paragraphs.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
+              <LegalParagraph key={paragraph} paragraph={paragraph} />
             ))}
           </section>
         ))}
