@@ -170,6 +170,139 @@ test("registration is one payload and password login/reset have strict contracts
   }).success, false, "ordinary login codes must not remain a public auth path");
 });
 
+test("new registration persists its pending account and sends one confirmation email", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const workerEnv = env as unknown as Record<string, unknown>;
+  const envKeys = [
+    "DB",
+    "APP_ENV",
+    "IDENTITY_PROTECTION_MODE",
+    "IDENTITY_KEYRING",
+    "TURNSTILE_SECRET_KEY",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+  ];
+  const previousEnv = new Map(envKeys.map(key => [key, workerEnv[key]]));
+  const originalFetch = globalThis.fetch;
+  const email = "new-registration@example.test";
+  const password = "a durable new registration passphrase";
+  const requestIp = "203.0.113.91";
+
+  Object.assign(workerEnv, {
+    DB: d1,
+    APP_ENV: "production",
+    IDENTITY_PROTECTION_MODE: "dual_write",
+    IDENTITY_KEYRING: PASSWORD_RESET_KEYRING,
+    TURNSTILE_SECRET_KEY: "turnstile-server-secret",
+    RESEND_API_KEY: "resend-api-key",
+    EMAIL_FROM: "JURO <no-reply@juro.uz>",
+  });
+  let emailRequests = 0;
+  globalThis.fetch = async (input, init) => {
+    if (String(input) === "https://challenges.cloudflare.com/turnstile/v0/siteverify") {
+      const payload = JSON.parse(String(init?.body)) as {
+        secret?: string;
+        response?: string;
+      };
+      assert.equal(payload.secret, "turnstile-server-secret");
+      assert.equal(payload.response, "turnstile-registration-token");
+      return Response.json({
+        success: true,
+        hostname: "app.juro.uz",
+        action: "auth_registration",
+      });
+    }
+    assert.equal(String(input), "https://api.resend.com/emails");
+    emailRequests += 1;
+    const payload = JSON.parse(String(init?.body)) as {
+      from?: string;
+      to?: string[];
+      subject?: string;
+    };
+    assert.equal(payload.from, "JURO <no-reply@juro.uz>");
+    assert.deepEqual(payload.to, [email]);
+    assert.match(payload.subject ?? "", /JURO/u);
+    return Response.json({ id: "resend_new_registration" });
+  };
+
+  try {
+    const response = await requestOtp(new Request(
+      "https://app.juro.uz/api/auth/request-otp",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://app.juro.uz",
+          "sec-fetch-site": "same-origin",
+          "x-juro-csrf": "1",
+          "cf-connecting-ip": requestIp,
+        },
+        body: JSON.stringify({
+          purpose: "register",
+          email,
+          password,
+          firstName: "New",
+          lastName: "Registration",
+          locale: "en",
+          accountType: "individual",
+          acceptTerms: true,
+          acceptPrivacy: true,
+          acceptPersonalData: true,
+          turnstileToken: "turnstile-registration-token",
+        }),
+      },
+    ));
+    assert.equal(response.status, 200);
+    const body = await response.json() as {
+      ok?: boolean;
+      challengeId?: string;
+      expiresInSeconds?: number;
+      resendAfterSeconds?: number;
+    };
+    assert.equal(body.ok, true);
+    assert.ok(body.challengeId);
+    const challengeId = body.challengeId;
+    assert.match(challengeId, /^[0-9a-f-]{36}$/u);
+    assert.equal(body.expiresInSeconds, 600);
+    assert.equal(body.resendAfterSeconds, 60);
+    assert.equal(emailRequests, 1);
+
+    const profile = sqlite.prepare(`
+      SELECT id,email,full_name AS fullName,email_verified_at AS emailVerifiedAt
+      FROM user_profiles WHERE email=?
+    `).get(email) as {
+      id: string;
+      email: string;
+      fullName: string;
+      emailVerifiedAt: string | null;
+    };
+    assert.equal(profile.email, email);
+    assert.equal(profile.fullName, "New Registration");
+    assert.equal(profile.emailVerifiedAt, null);
+    assert.ok(await passwordCredentialForUser(d1, profile.id));
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM auth_pending_registrations WHERE user_id=?",
+      ).get(profile.id) as { total: number }).total,
+      1,
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM auth_otp_challenges WHERE id=? AND purpose='register' AND invalidated_at IS NULL",
+      ).get(challengeId) as { total: number }).total,
+      1,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const key of envKeys) {
+      const previous = previousEnv.get(key);
+      if (previous === undefined) delete workerEnv[key];
+      else workerEnv[key] = previous;
+    }
+    sqlite.close();
+  }
+});
+
 test("registration persists its password only after OTP reservation succeeds", () => {
   const route = readFileSync(
     new URL("../app/api/auth/request-otp/route.ts", import.meta.url),
