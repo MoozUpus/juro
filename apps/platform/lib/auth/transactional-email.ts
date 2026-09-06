@@ -17,6 +17,19 @@ export type AuthEmailDetail = {
   value: string;
 };
 
+/**
+ * Safe delivery metadata for operational logs. It intentionally contains no
+ * recipient, message content, API key, or provider response body.
+ */
+export type AuthEmailDeliveryResult =
+  | { ok: true; attempts: number }
+  | {
+    ok: false;
+    attempts: number;
+    failure: "network_or_timeout" | "provider_rejected";
+    providerStatus: number | null;
+  };
+
 type Copy = {
   subject: string;
   title: string;
@@ -138,28 +151,59 @@ export async function sendJuroAuthEmail(input: {
   to: string;
   idempotencyKey: string;
   message: { subject: string; html: string; text: string };
-}): Promise<boolean> {
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${input.apiKey}`,
-        "content-type": "application/json",
-        "idempotency-key": input.idempotencyKey,
-      },
-      body: JSON.stringify({
-        from: input.from,
-        to: [input.to],
-        subject: input.message.subject,
-        html: input.message.html,
-        text: input.message.text,
-      }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    const accepted = response.ok;
-    await response.body?.cancel();
-    return accepted;
-  } catch {
-    return false;
+}): Promise<AuthEmailDeliveryResult> {
+  // A single retry covers short-lived provider/edge failures. Reusing the
+  // idempotency key ensures that a delayed successful first request cannot
+  // result in two verification emails.
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${input.apiKey}`,
+          "content-type": "application/json",
+          "idempotency-key": input.idempotencyKey,
+        },
+        body: JSON.stringify({
+          from: input.from,
+          to: [input.to],
+          subject: input.message.subject,
+          html: input.message.html,
+          text: input.message.text,
+        }),
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (response.ok) {
+        await response.body?.cancel();
+        return { ok: true, attempts: attempt };
+      }
+      const retryable = response.status === 429 || response.status >= 500;
+      const providerStatus = response.status;
+      await response.body?.cancel();
+      if (!retryable || attempt === 2) {
+        return {
+          ok: false,
+          attempts: attempt,
+          failure: "provider_rejected",
+          providerStatus,
+        };
+      }
+    } catch {
+      if (attempt === 2) {
+        return {
+          ok: false,
+          attempts: attempt,
+          failure: "network_or_timeout",
+          providerStatus: null,
+        };
+      }
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, 250 * attempt));
   }
+  return {
+    ok: false,
+    attempts: 2,
+    failure: "network_or_timeout",
+    providerStatus: null,
+  };
 }

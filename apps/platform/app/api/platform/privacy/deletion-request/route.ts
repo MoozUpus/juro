@@ -336,7 +336,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       idempotencyKey: `juro_account_deletion_${id}`,
       message,
     });
-    if (!sent) {
+    if (!sent.ok) {
       await invalidateAccountDeletionChallenge(db, {
         id,
         userId: session.userId,

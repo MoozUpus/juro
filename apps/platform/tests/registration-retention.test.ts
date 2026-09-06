@@ -172,7 +172,7 @@ test("only a reserved registration refreshes retention and provider failure keep
   );
   const atomicWrite = route.indexOf("await db.batch(statements)", marker);
   const send = route.indexOf("const sent = await sendJuroAuthEmail", atomicWrite);
-  const providerFailure = route.indexOf("if (!sent)", send);
+  const providerFailure = route.indexOf("if (!sent.ok)", send);
   assert.ok(blockedGate >= 0);
   assert.ok(marker > blockedGate);
   assert.ok(atomicWrite > marker);
