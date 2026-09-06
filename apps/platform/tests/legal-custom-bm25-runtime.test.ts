@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import { buildCustomBm25Artifacts, customBm25TermHash } from "../lib/legal-corpus/custom-bm25";
-import { buildCustomBm25RuntimeArtifacts, queryCustomBm25Runtime }
+import { buildCustomBm25RuntimeArtifacts, queryCustomBm25Runtime,
+  resolveCustomBm25RuntimeItemKeys, resolveCustomBm25RuntimeMembership,
+  resolveCustomBm25RuntimeMembershipEntries }
   from "../lib/legal-corpus/custom-bm25-runtime";
 import { stableSourceSnapshotJson } from "../lib/legal-corpus/source-snapshot";
 
@@ -48,9 +50,16 @@ test("runtime BM25 projection preserves durable ordinals without loading the JSO
   const runtime = await buildCustomBm25RuntimeArtifacts({
     releaseId: "release:test:current:custom-v1", sparseManifestSha256: "a".repeat(64),
     manifest: built.manifest,
+    resolveLegalIdentitySha256: async (itemKeys) => new Map(itemKeys.map((itemKey, index) =>
+      [itemKey, String(index + 1).padStart(64, "0")])),
   });
   const bucket = new MemoryR2();
   bucket.objects.set(runtime.documentsReference.key, runtime.documentsBytes);
+  for (const page of runtime.ordinalMappingPages) {
+    bucket.objects.set(page.reference.key, page.bytes);
+  }
+  bucket.objects.set(runtime.membership.reference.key, runtime.membership.bytes);
+  for (const page of runtime.membership.pages) bucket.objects.set(page.reference.key, page.bytes);
   bucket.objects.set(postingReference.key, postingBytes);
   bucket.objects.set(lexiconReference.key, lexiconBytes);
 
@@ -60,5 +69,15 @@ test("runtime BM25 projection preserves durable ordinals without loading the JSO
   assert.equal(runtime.documentsBytes.byteLength, 16 + 2 * 32);
   assert.equal(runtime.documentsReference.sha256,
     createHash("sha256").update(runtime.documentsBytes).digest("hex"));
+  assert.deepEqual(await resolveCustomBm25RuntimeItemKeys(
+    bucket as unknown as R2Bucket, runtime.descriptor, [8_000_002, 1_000]),
+  ["chunk-b", "chunk-a"]);
+  assert.equal(await resolveCustomBm25RuntimeMembership(bucket as unknown as R2Bucket,
+    runtime.descriptor.releaseId, runtime.membership.reference.sha256, ["chunk-a"]), true);
+  assert.equal(await resolveCustomBm25RuntimeMembership(bucket as unknown as R2Bucket,
+    runtime.descriptor.releaseId, runtime.membership.reference.sha256, ["chunk-missing"]), false);
+  assert.equal((await resolveCustomBm25RuntimeMembershipEntries(bucket as unknown as R2Bucket,
+    runtime.descriptor.releaseId, runtime.membership.reference.sha256,
+    ["chunk-a"]))?.get("chunk-a")?.legalIdentitySha256, "1".padStart(64, "0"));
   assert.equal(termHash.length, 64);
 });

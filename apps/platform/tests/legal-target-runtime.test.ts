@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
@@ -220,6 +221,7 @@ test("runtime custom provider keeps its pinned release after activation changes,
   const currentAt = "2026-09-06T00:00:00.000Z";
   let activeReleaseId = releaseId;
   const provider = createRuntimeCustomSearchProvider({
+    capability: "current",
     environment: "staging",
     gatewayIdentity: "juro-ai-search-staging",
     projectIdentity: "juro-openai-staging",
@@ -252,6 +254,42 @@ test("runtime custom provider keeps its pinned release after activation changes,
   await assert.rejects(() => provider.search({ instanceIds: ["custom-current-staging-v1"],
     query: "Article 1", endpoint: { kind: "current" }, maxResults: 50, vectorThreshold: 0 }),
   /CUSTOM_SEARCH_PINNED_RELEASE_REQUIRED/u);
+
+  const historyRequests: Request[] = [];
+  const history = createRuntimeCustomSearchProvider({
+    capability: "history",
+    environment: "staging",
+    gatewayIdentity: "juro-ai-search-staging",
+    projectIdentity: "juro-openai-staging",
+    db: { prepare() { return { bind(_environment: string, pinnedId: string) {
+      return { async first() { return { id: pinnedId,
+        configurationIdentity: "custom-hybrid-staging-v1" }; } };
+    } }; } } as unknown as D1Database,
+    service: { async fetch(input, init) {
+      const request = new Request(input, init);
+      historyRequests.push(request);
+      return Response.json({ hits: [], errors: [],
+        searchedInstanceIds: ["custom-history-staging-v1"], tokenUsage: 2 });
+    } } as Fetcher,
+  });
+  assert.equal((await history.attest("custom-history-staging-v1",
+    "release:staging:history:custom-v1:2026-09-06")).identity,
+  "custom-hybrid-staging-v1");
+  const instant = "2020-01-01T00:00:00.000Z";
+  await history.search({ releaseId: "release:staging:history:custom-v1:2026-09-06",
+    currentAt, instanceIds: ["custom-history-staging-v1"], query: "Article 1",
+    endpoint: { kind: "timestamp", instant }, maxResults: 50, vectorThreshold: 0 });
+  assert.equal(historyRequests.length, 1);
+  assert.deepEqual(await historyRequests[0]?.json(), {
+    releaseId: "release:staging:history:custom-v1:2026-09-06", currentAt,
+    instanceIds: ["custom-history-staging-v1"], query: "Article 1",
+    endpoint: { kind: "timestamp", instant }, maxResults: 50, vectorThreshold: 0,
+  });
+  await assert.rejects(() => history.search({
+    releaseId: "release:staging:history:custom-v1:2026-09-06", currentAt,
+    instanceIds: ["custom-history-staging-v1"], query: "Article 1",
+    endpoint: { kind: "current" }, maxResults: 50, vectorThreshold: 0,
+  }), /CUSTOM_SEARCH_REQUEST_REJECTED/u);
 });
 
 test("custom catalog rejects future and expired records even when candidate lanes returned them", async () => {
@@ -261,7 +299,8 @@ test("custom catalog rejects future and expired records even when candidate lane
     CREATE TABLE legal_custom_search_runtime_components (search_release_id TEXT,complete_corpus_run_id TEXT);
     CREATE TABLE legal_complete_corpus_records (run_id TEXT,legal_identity_sha256 TEXT,
       provision_rendition_id TEXT,text_revision_id TEXT,provision_concept_id TEXT,
-      language TEXT,textual_authority TEXT,valid_from TEXT,valid_to TEXT,current_eligible INTEGER,quarantined INTEGER);`);
+      language TEXT,textual_authority TEXT,valid_from TEXT,valid_to TEXT,current_eligible INTEGER,
+      historical_eligible INTEGER,quarantined INTEGER);`);
   const release = parsePinnedCandidateRelease({ id: "release-custom", environment: "staging",
     capability: "current", instances: [{ id: "custom-current-staging-v1", shardId: "current-base-v1" }],
     configuration: { identity: "custom-v1", embeddingModel: "openai/text-embedding-3-large",
@@ -288,11 +327,91 @@ test("custom catalog rejects future and expired records even when candidate lane
       ["2026-01-01T00:00:00.000Z", at, false], [null, null, false],
     ] as const) {
       sqlite.exec("DELETE FROM legal_complete_corpus_records");
-      sqlite.prepare("INSERT INTO legal_complete_corpus_records VALUES (?,?,?,?,?,?,?,?,?,1,0)")
+      sqlite.prepare("INSERT INTO legal_complete_corpus_records VALUES (?,?,?,?,?,?,?,?,?,1,1,0)")
         .run("run", "identity", "rendition", "revision", "concept", "ru", "unknown", from, to);
       const result = catalog.revalidate(packet, { kind: "current" }, release, at);
       if (valid) assert.equal((await result).length, 1);
       else await assert.rejects(() => result, /SOURCE_UNAVAILABILITY/u);
     }
+    const historyRelease = parsePinnedCandidateRelease({ ...release,
+      id: "release-custom-history", capability: "history",
+      instances: [{ id: "custom-history-staging-v1", shardId: "history-base-v1" }] });
+    const historyKey = `search-releases/${historyRelease.id}/retrieval-chunk-v1:one`;
+    sqlite.prepare("INSERT INTO legal_custom_search_runtime_items VALUES (?,?,?,?)")
+      .run(historyRelease.id, historyKey, "retrieval-chunk-v1:one", "identity");
+    sqlite.prepare("INSERT INTO legal_custom_search_runtime_components VALUES (?,?)")
+      .run(historyRelease.id, "run");
+    const historicalAt = "2020-01-01T00:00:00.000Z";
+    const historyPacket = parseCandidatePacket({ ...packet, releaseId: historyRelease.id,
+      endpoint: { kind: "timestamp", instant: historicalAt },
+      requiredInstanceIds: ["custom-history-staging-v1"],
+      candidates: packet.candidates.map((candidate) => ({ ...candidate, itemKey: historyKey,
+        instanceId: "custom-history-staging-v1", shardId: "history-base-v1" })) });
+    sqlite.exec("DELETE FROM legal_complete_corpus_records");
+    sqlite.prepare("INSERT INTO legal_complete_corpus_records VALUES (?,?,?,?,?,?,?,?,?,0,1,0)")
+      .run("run", "identity", "rendition", "revision", "concept", "ru", "unknown",
+        "2019-01-01T00:00:00.000Z", "2021-01-01T00:00:00.000Z");
+    assert.equal((await catalog.revalidate(historyPacket,
+      { kind: "timestamp", instant: historicalAt }, historyRelease,
+      "2026-09-09T00:00:00.000Z")).length, 1);
   } finally { sqlite.close(); }
+});
+
+test("custom catalog revalidates hash-anchored membership without a D1 item mapping", async () => {
+  const release = parsePinnedCandidateRelease({ id: "release-custom-history-r2", environment: "staging",
+    capability: "history", instances: [{ id: "custom-history-staging-v1", shardId: "history-base-v1" }],
+    configuration: { identity: "custom-v1", embeddingModel: "openai/text-embedding-3-large",
+      dimensions: 1536, keywordTokenizer: "porter", metadataSchema: ["language", "document_type", "valid_from", "valid_to"],
+      gatewayIdentity: "gateway", providerProjectIdentity: "project", gatewayPayloadLogging: false,
+      gatewayCaching: false, similarityCaching: false } });
+  const canonicalChunkId = `retrieval-chunk-v1:${"b".repeat(64)}`;
+  const itemKey = `search-releases/${release.id}/${canonicalChunkId}`;
+  const identity = "a".repeat(64);
+  const pageBytes = new TextEncoder().encode(`${JSON.stringify({ schemaVersion: 1,
+    releaseId: release.id, partition: "2e",
+    items: [{ itemKey: canonicalChunkId, ordinal: 0, legalIdentitySha256: identity }] })}\n`);
+  const pageSha256 = createHash("sha256").update(pageBytes).digest("hex");
+  const pageKey = `search-releases/${release.id}/runtime/membership/2e-${pageSha256}.json`;
+  const membershipBytes = new TextEncoder().encode(`${JSON.stringify({ schemaVersion: 1,
+    releaseId: release.id, partitions: [{ key: pageKey, sizeBytes: pageBytes.byteLength,
+      sha256: pageSha256, partition: "2e", count: 1 }] })}\n`);
+  const mappingInventorySha256 = createHash("sha256").update(membershipBytes).digest("hex");
+  const objects = new Map([
+    [pageKey, { bytes: pageBytes, customMetadata: {} }],
+    [`search-releases/${release.id}/runtime/mappings-${mappingInventorySha256}.json`,
+      { bytes: membershipBytes, customMetadata: {} }],
+  ]);
+  const bucket = { async get(key: string, options?: { range?: { offset: number; length: number } }) {
+    const stored = objects.get(key);
+    if (!stored) return null;
+    const value = options?.range ? stored.bytes.slice(options.range.offset,
+      options.range.offset + options.range.length) : stored.bytes;
+    return { size: value.byteLength, customMetadata: stored.customMetadata,
+      async bytes() { return value.slice(); },
+      async arrayBuffer() { return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength); } };
+  } };
+  const db = { prepare(sql: string) {
+    return { bind(...values: string[]) {
+      if (sql.includes("mapping_inventory_sha256")) {
+        assert.deepEqual(values, [release.id]);
+        return { async first() { return { mappingInventorySha256 }; } };
+      }
+      assert.doesNotMatch(sql, /legal_custom_search_runtime_items/u);
+      assert.deepEqual(values, [release.id, identity]);
+      return { async all() { return { results: [{ itemKey: identity, canonicalChunkId: "",
+        provisionRenditionId: "rendition", textRevisionId: "revision",
+        provisionConceptId: "concept", languageTag: "ru", textualAuthority: "controlling",
+        validFrom: "2019-01-01T00:00:00.000Z", validTo: "2021-01-01T00:00:00.000Z" }] }; } };
+    } };
+  } } as unknown as D1Database;
+  const packet = parseCandidatePacket({ availability: "available", releaseId: release.id,
+    endpoint: { kind: "timestamp", instant: "2020-01-01T00:00:00.000Z" },
+    requiredInstanceIds: ["custom-history-staging-v1"], partialErrors: [], candidates: [{ itemKey,
+      instanceId: "custom-history-staging-v1", shardId: "history-base-v1", formulationId: "formulation",
+      readingIds: ["reading"], requirementIds: ["requirement"], vectorRank: 1, vectorScore: 1,
+      keywordRank: 1, keywordScore: 1, fusionScore: 1 }] });
+  const result = await createRuntimeCandidateCatalog(db, bucket as never).revalidate(packet,
+    { kind: "timestamp", instant: "2020-01-01T00:00:00.000Z" }, release,
+    "2026-09-06T00:00:00.000Z");
+  assert.equal(result[0]?.canonicalChunkId, canonicalChunkId);
 });

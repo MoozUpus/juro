@@ -1192,7 +1192,8 @@ type CompleteCorpusEvidenceRow = Pick<EvidenceRow,
   | "provisionBytes"
   | "provisionSha256"
   | "sourceNormalizedSha256"
-> & { legacyCurrentRenditionId: string; validFrom: string | null; validTo: string | null };
+> & { capability: "current" | "history"; legacyCurrentRenditionId: string;
+  provisionMediaType: string; validFrom: string | null; validTo: string | null };
 
 export async function resolveProvisionRendition(
   dependencies: { db: D1Database; bucket: Pick<LegalEvidenceBucket, "get"> },
@@ -1411,7 +1412,7 @@ export function assertCompleteCorpusCurrentInterval(
   }
 }
 
-export async function resolveCompleteCorpusCurrentEvidence(
+export async function resolveCompleteCorpusEvidence(
   dependencies: { db: D1Database; bucket: Pick<LegalEvidenceBucket, "get">;
     environment: z.infer<typeof legalEnvironmentSchema>; releaseId: string; currentAt: string },
   provisionRenditionId: string,
@@ -1420,54 +1421,86 @@ export async function resolveCompleteCorpusCurrentEvidence(
   const id = provisionRenditionIdSchema.parse(provisionRenditionId);
   const releaseId = searchReleaseIdSchema.parse(dependencies.releaseId);
   const endpoint = temporalEndpointSchema.parse(untrustedEndpoint);
-  if (endpoint.kind !== "current") throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  const capability = endpoint.kind === "current" ? "current" : "history";
+  const eligibility = endpoint.kind === "current" ? "current_eligible" : "historical_eligible";
   const row = await dependencies.db.prepare(`SELECT
+      release.capability AS capability,
       record.instrument_id AS legalInstrumentId,
       record.official_expression_id AS officialExpressionId,
       record.text_revision_id AS textRevisionId,
       record.provision_concept_id AS provisionConceptId,
       record.provision_rendition_id AS provisionRenditionId,
       record.legacy_current_rendition_id AS legacyCurrentRenditionId,
-      record.language AS languageTag,record.script,record.textual_authority AS textualAuthority,
+      record.language AS languageTag,record.script,
+      authority_revision.textual_authority AS textualAuthority,
       record.provision_source_url AS sourceUrl,
       record.provision_object_r2_key AS provisionKey,
       record.provision_object_sha256 AS provisionSha256,
       record.normalized_source_sha256 AS sourceNormalizedSha256,
       record.valid_from AS validFrom,record.valid_to AS validTo,
-      object.byte_count AS provisionBytes
+      object.byte_count AS provisionBytes,object.media_type AS provisionMediaType
     FROM legal_search_releases release
     JOIN legal_custom_search_runtime_components runtime
       ON runtime.search_release_id=release.id
     JOIN legal_complete_corpus_records record
       ON record.run_id=runtime.complete_corpus_run_id
+    JOIN legal_provision_renditions authority_rendition
+      ON authority_rendition.id=record.provision_rendition_id
+      AND authority_rendition.provision_concept_id=record.provision_concept_id
+      AND authority_rendition.text_revision_id=record.text_revision_id
+    JOIN legal_text_revisions authority_revision
+      ON authority_revision.id=authority_rendition.text_revision_id
+      AND authority_revision.official_expression_id=record.official_expression_id
+      AND authority_revision.textual_authority='controlling'
+      AND authority_revision.authority_evidence_json IS NOT NULL
+    JOIN legal_official_expressions authority_expression
+      ON authority_expression.id=authority_revision.official_expression_id
+      AND authority_expression.textual_authority='controlling'
+      AND authority_expression.controlling_on_conflict=1
     JOIN legal_complete_corpus_objects object
       ON object.run_id=record.run_id AND object.object_kind='provision_rendition'
       AND object.r2_key=record.provision_object_r2_key
       AND object.sha256=record.provision_object_sha256
     WHERE release.environment=? AND release.id=? AND release.status='sealed'
       AND record.provision_rendition_id=?
-      AND record.current_eligible=1 AND record.quarantined=0
+      AND record.${eligibility}=1 AND record.quarantined=0
     LIMIT 2`).bind(dependencies.environment, releaseId, id).all<CompleteCorpusEvidenceRow>();
   if (row.results.length !== 1) throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
   const record = row.results[0]!;
-  assertCompleteCorpusCurrentInterval(record, dependencies.currentAt);
+  if (record.capability !== capability) throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  if (record.textualAuthority !== "controlling") {
+    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  }
+  assertCompleteCorpusCurrentInterval(record,
+    endpoint.kind === "timestamp" ? endpoint.instant : dependencies.currentAt);
   const provisionBytes = await readAndVerifyObject(dependencies.bucket, {
     r2Key: record.provisionKey,
     byteCount: Number(record.provisionBytes),
     sha256: record.provisionSha256,
   });
-  let provision: z.infer<typeof provisionObjectSchema>;
-  try {
-    provision = provisionObjectSchema.parse(JSON.parse(new TextDecoder().decode(provisionBytes)) as unknown);
-  } catch {
-    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
-  }
-  if (provision.provisionRenditionId !== record.legacyCurrentRenditionId
-    || provision.languageTag !== record.languageTag || provision.script !== record.script
-    || provision.sourceNormalizedSha256 !== record.sourceNormalizedSha256
-    || provision.sourceUrl !== record.sourceUrl) {
-    throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
-  }
+  let provisionText: string;
+  let citationLabel = "Official provision";
+  if (record.provisionMediaType === "text/plain;charset=utf-8") {
+    try { provisionText = new TextDecoder("utf-8", { fatal: true }).decode(provisionBytes); }
+    catch { throw new LegalEvidenceError("SOURCE_UNAVAILABILITY"); }
+    if (provisionText.length === 0) throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  } else if (record.provisionMediaType === "application/json;charset=utf-8") {
+    let provision: z.infer<typeof provisionObjectSchema>;
+    try {
+      provision = provisionObjectSchema.parse(JSON.parse(new TextDecoder("utf-8", { fatal: true })
+        .decode(provisionBytes)) as unknown);
+    } catch {
+      throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+    }
+    if (provision.provisionRenditionId !== record.legacyCurrentRenditionId
+      || provision.languageTag !== record.languageTag || provision.script !== record.script
+      || provision.sourceNormalizedSha256 !== record.sourceNormalizedSha256
+      || provision.sourceUrl !== record.sourceUrl) {
+      throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+    }
+    provisionText = provision.provisionText;
+    citationLabel = `${provision.actTitle} — Article ${provision.articleNumber}`;
+  } else throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
   const evidence = resolvedEvidenceSchema.parse({
     legalInstrumentId: record.legalInstrumentId,
     officialExpressionId: record.officialExpressionId,
@@ -1477,9 +1510,8 @@ export async function resolveCompleteCorpusCurrentEvidence(
     languageTag: record.languageTag,
     script: record.script,
     textualAuthority: record.textualAuthority,
-    provisionText: provision.provisionText,
-    officialCitation: { label: `${provision.actTitle} — Article ${provision.articleNumber}`,
-      url: provision.sourceUrl },
+    provisionText,
+    officialCitation: { label: citationLabel, url: record.sourceUrl },
     evidence: { provisionRenditionId: record.provisionRenditionId,
       r2Key: record.provisionKey, byteCount: Number(record.provisionBytes),
       sha256: record.provisionSha256, sourceNormalizedSha256: record.sourceNormalizedSha256,
@@ -1488,6 +1520,9 @@ export async function resolveCompleteCorpusCurrentEvidence(
   return controllingResolutionSchema.parse({ controlling: evidence,
     materialCitation: evidence.officialCitation });
 }
+
+/** Compatibility name for callers that only select current complete-corpus releases. */
+export const resolveCompleteCorpusCurrentEvidence = resolveCompleteCorpusEvidence;
 
 export async function handleOfficialEvidenceRequest(
   request: Request,

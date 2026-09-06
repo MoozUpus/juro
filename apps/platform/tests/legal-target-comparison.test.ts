@@ -103,11 +103,23 @@ function comparisonRetriever(
     evidenceUrl: "https://lex.uz/docs/990",
     reviewState: "accepted",
   }],
+  comparisonPins?: Array<[TemporalEndpoint, TemporalEndpoint]>,
 ) {
   return createTargetLegalAnswerRetriever({
     environment: "development",
     interpreter: { interpret: async () => comparisonPlan(left, right) },
-    releaseResolver: { resolve: async (endpoint) => release(endpoint) },
+    releaseResolver: {
+      resolve: async (endpoint) => {
+        if (comparisonPins) assert.fail("comparison endpoints must use the pinned release pair");
+        return release(endpoint);
+      },
+      ...(comparisonPins ? { resolveComparison: async (
+        pinnedLeft: TemporalEndpoint, pinnedRight: TemporalEndpoint,
+      ) => {
+        comparisonPins.push([pinnedLeft, pinnedRight]);
+        return { left: release(pinnedLeft), right: release(pinnedRight) };
+      } } : {}),
+    },
     candidateIndex: createInMemoryCandidateIndex(async (formulation, endpoint, pinned) => {
       calls.push(endpoint);
       const side = endpoint.kind === "current" ? "current" : endpoint.instant.slice(0, 4);
@@ -171,6 +183,17 @@ function comparisonRetriever(
     lineageResolver: { resolve: lineage },
   });
 }
+
+test("comparison pins both endpoint releases from one resolver decision", async () => {
+  const calls: TemporalEndpoint[] = [];
+  const pins: Array<[TemporalEndpoint, TemporalEndpoint]> = [];
+  const result = await comparisonRetriever(current, past, calls, undefined, pins).answer({
+    id: "question-pinned-comparison",
+    question: "How did the rule change?",
+  });
+  assert.equal(result.kind, "comparison_answer");
+  assert.deepEqual(pins, [[current, past]]);
+});
 
 for (const [label, left, right] of [
   ["current/current", current, current],

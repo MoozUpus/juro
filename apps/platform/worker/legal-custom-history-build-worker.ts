@@ -114,6 +114,7 @@ type HistoryBuildEnv = Pick<CustomHistoryBindings, "AI" | "AI_GATEWAY_ID" | "DOC
   COORDINATOR: DurableObjectNamespace<CustomHistoryBuildCoordinator>;
   REDUCER: DurableObjectNamespace<CustomHistoryBm25ReducerContainer>;
   CATALOG_DB: D1Database;
+  CUSTOM_SEARCH_CAPABILITY: "history";
   CUSTOM_SEARCH_RELEASE_ID: string;
   CUSTOM_SEARCH_INSTANCE_ID: string;
   CUSTOM_SEARCH_SHARD_ID: string;

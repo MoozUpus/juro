@@ -48,7 +48,8 @@ interface __BaseEnv_LegalCorpusDevelopmentEnv {
 	QDRANT_SERVICE?: Fetcher /* juro-platform-staging */;
 	LEGAL_CORPUS_EMBEDDING_SERVICE?: Fetcher /* juro-platform-staging */;
 	LEGAL_CORPUS_REASONING_SERVICE: Fetcher /* juro-platform-staging */ | Fetcher /* juro */ | Fetcher /* juro-platform-development */;
-	LEGAL_CUSTOM_SEARCH_SERVICE?: Fetcher /* juro-legal-current-custom-20260903 */;
+	LEGAL_CUSTOM_SEARCH_SERVICE?: Fetcher /* juro-legal-current-custom-pair-20260906 */;
+	LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE?: Fetcher /* juro-legal-history-custom-20260906 */;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
@@ -102,7 +103,8 @@ declare namespace Cloudflare {
 		QDRANT_SERVICE: Fetcher /* juro-platform-staging */;
 		LEGAL_CORPUS_EMBEDDING_SERVICE: Fetcher /* juro-platform-staging */;
 		LEGAL_CORPUS_REASONING_SERVICE: Fetcher /* juro-platform-staging */;
-		LEGAL_CUSTOM_SEARCH_SERVICE: Fetcher /* juro-legal-current-custom-20260903 */;
+		LEGAL_CUSTOM_SEARCH_SERVICE: Fetcher /* juro-legal-current-custom-pair-20260906 */;
+		LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE: Fetcher /* juro-legal-history-custom-20260906 */;
 	}
 	interface ProductionEnv {
 		BUCKET: R2Bucket;

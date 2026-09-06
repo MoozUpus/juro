@@ -98,6 +98,7 @@ type CurrentBuildEnv = Pick<CustomCurrentBindings, "AI" | "AI_GATEWAY_ID" | "DOC
   BUILD_WORKFLOW: Workflow<BuildWorkflowPayload>;
   REDUCE_WORKFLOW: Workflow<ReduceWorkflowPayload>;
   CATALOG_DB: D1Database;
+  CUSTOM_SEARCH_CAPABILITY: "current";
   CUSTOM_SEARCH_RELEASE_ID: string;
   CUSTOM_SEARCH_INSTANCE_ID: string;
   CUSTOM_SEARCH_SHARD_ID: string;

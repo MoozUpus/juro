@@ -220,6 +220,10 @@ type Dependencies = {
   };
   releaseResolver: {
     resolve(endpoint: TemporalEndpoint): Promise<PinnedCandidateRelease | null>;
+    resolveComparison?(
+      left: TemporalEndpoint,
+      right: TemporalEndpoint,
+    ): Promise<{ left: PinnedCandidateRelease; right: PinnedCandidateRelease } | null>;
   };
   candidateIndex: LegalCandidateIndex;
   candidateCatalog: {
@@ -417,18 +421,29 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       if (plan.comparison) {
         const { comparison, temporalEndpoint, ...sharedPlan } = plan;
         void temporalEndpoint;
-        const runEndpoint = async (endpoint: TemporalEndpoint) => createTargetLegalAnswerRetriever({
+        let pinned: { left: PinnedCandidateRelease; right: PinnedCandidateRelease } | null = null;
+        if (dependencies.releaseResolver.resolveComparison) {
+          try {
+            pinned = await dependencies.releaseResolver.resolveComparison(comparison.left, comparison.right);
+          } catch {
+            return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
+          }
+          if (!pinned) return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
+        }
+        const runEndpoint = async (endpoint: TemporalEndpoint, release?: PinnedCandidateRelease) =>
+          createTargetLegalAnswerRetriever({
           ...dependencies,
           now: () => Date.parse(currentAt),
+          releaseResolver: release ? { resolve: async () => release } : dependencies.releaseResolver,
           interpreter: {
             interpret: async () => ({ ...sharedPlan, temporalEndpoint: endpoint }),
           },
         }).answer(request);
-        const left = await runEndpoint(comparison.left);
+        const left = await runEndpoint(comparison.left, pinned?.left);
         if (left.kind !== "legal_answer" && left.kind !== "conditional_answer") {
           return left;
         }
-        const right = await runEndpoint(comparison.right);
+        const right = await runEndpoint(comparison.right, pinned?.right);
         if (right.kind !== "legal_answer" && right.kind !== "conditional_answer") {
           return right;
         }

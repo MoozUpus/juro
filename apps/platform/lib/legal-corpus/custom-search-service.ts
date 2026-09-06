@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { queryCustomBm25Runtime, parseCustomBm25RuntimeDescriptor }
+import { queryCustomBm25Runtime, parseCustomBm25RuntimeDescriptor,
+  resolveCustomBm25RuntimeItemKeys }
   from "./custom-bm25-runtime";
 import { queryCustomDenseLane, buildCustomVectorizeFilter, type CustomVectorSearchIndex }
   from "./custom-candidate-index";
@@ -17,7 +18,10 @@ export const CUSTOM_SEARCH_PATH = "/internal/legal-corpus/custom-search";
 export const CUSTOM_SEARCH_SERVICE_MARKER = "custom-search-runtime-v1";
 const QUERY_RESERVATION_USD_MICROS = 1_065;
 
-const endpointSchema = z.object({ kind: z.literal("current") }).strict();
+const endpointSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("current") }).strict(),
+  z.object({ kind: z.literal("timestamp"), instant: utcInstantSchema }).strict(),
+]);
 const requestSchema = z.object({
   releaseId: searchReleaseIdSchema,
   instanceIds: z.array(z.string().min(1).max(64)).length(1),
@@ -51,6 +55,7 @@ export type CustomSearchEnv = {
   DENSE: CustomVectorSearchIndex;
   ARTIFACTS: R2Bucket;
   CATALOG_DB: D1Database;
+  CUSTOM_SEARCH_CAPABILITY: "current" | "history";
   CUSTOM_SEARCH_RELEASE_ID: string;
   CUSTOM_SEARCH_INSTANCE_ID: string;
   CUSTOM_SEARCH_SHARD_ID: string;
@@ -154,26 +159,36 @@ export async function executeCustomSearch(env: CustomSearchEnv, raw: unknown) {
   if (env.APP_ENV !== "staging" && env.APP_ENV !== "production") {
     throw new TypeError("CUSTOM_SEARCH_ENVIRONMENT_REJECTED");
   }
+  const capability = z.enum(["current", "history"]).safeParse(env.CUSTOM_SEARCH_CAPABILITY);
+  if (!capability.success) throw new TypeError("CUSTOM_SEARCH_CAPABILITY_REJECTED");
   if (input.releaseId !== env.CUSTOM_SEARCH_RELEASE_ID
-    || input.instanceIds[0] !== env.CUSTOM_SEARCH_INSTANCE_ID) {
+    || input.instanceIds[0] !== env.CUSTOM_SEARCH_INSTANCE_ID
+    || (capability.data === "current" && input.endpoint.kind !== "current")
+    || (capability.data === "history" && input.endpoint.kind !== "timestamp")) {
     throw new TypeError("CUSTOM_SEARCH_RELEASE_REJECTED");
   }
   const descriptor = await loadDescriptor(env, input.releaseId);
+  const denseMetadataReleaseId = descriptor.denseMetadataReleaseId ?? input.releaseId;
   await reserveQueryBudget(env, input.releaseId);
-  const atEpoch = Math.floor(new Date(input.currentAt).getTime() / 1_000);
+  const atEpoch = Math.floor(new Date(input.endpoint.kind === "timestamp"
+    ? input.endpoint.instant : input.currentAt).getTime() / 1_000);
   const embedding = await queryEmbedding(env, input.query);
   const [sparse, dense] = await Promise.all([
     queryCustomBm25Runtime(env.ARTIFACTS, descriptor,
       { text: input.query, atEpoch, topK: input.maxResults }),
     queryCustomDenseLane(env.DENSE, {
-      releaseId: input.releaseId,
+      releaseId: denseMetadataReleaseId,
       vector: embedding.vector,
-      filter: buildCustomVectorizeFilter({ releaseId: input.releaseId, atEpoch }),
+      filter: buildCustomVectorizeFilter({ releaseId: denseMetadataReleaseId, atEpoch }),
       topK: input.maxResults,
     }),
   ]);
-  const sparseKeys = await itemKeysForOrdinals(env, input.releaseId,
-    sparse.map((entry) => entry.ordinal));
+  const sparseOrdinals = sparse.map((entry) => entry.ordinal);
+  const runtimeKeys = await resolveCustomBm25RuntimeItemKeys(env.ARTIFACTS, descriptor,
+    sparseOrdinals);
+  const sparseKeys = runtimeKeys
+    ? runtimeKeys.map((key) => `search-releases/${input.releaseId}/${key}`)
+    : await itemKeysForOrdinals(env, input.releaseId, sparseOrdinals);
   const denseKeys = dense.map((entry) =>
     `search-releases/${input.releaseId}/${entry.itemKey}`);
   const fused = fuseCustomRankedLanes([sparseKeys, denseKeys], { k: 60, topK: input.maxResults });

@@ -36,6 +36,13 @@ export class ReleaseLifecycleError extends Error {
   }
 }
 
+export function compatibleReleaseCorpora(
+  current: { corpusSnapshotId: string },
+  history: { corpusSnapshotId: string },
+): boolean {
+  return current.corpusSnapshotId === history.corpusSnapshotId;
+}
+
 function ownedBytes(value: string): Uint8Array<ArrayBuffer> {
   const encoded = new TextEncoder().encode(value);
   const owned = new Uint8Array(encoded.byteLength);
@@ -583,12 +590,14 @@ export function createReleaseLifecycle(dependencies: { db: D1Database }) {
       }>();
       const current = releases.results.find((release) => release.id === input.currentReleaseId);
       const history = releases.results.find((release) => release.id === input.historyReleaseId);
+      const compatibleCorpus = Boolean(current && history
+        && compatibleReleaseCorpora(current, history));
       if (!current || !history
         || current.environment !== input.environment || history.environment !== input.environment
         || current.capability !== "current" || history.capability !== "history"
         || current.status !== "sealed" || history.status !== "sealed"
         || current.snapshotStatus !== "frozen" || history.snapshotStatus !== "frozen"
-        || current.corpusSnapshotId !== history.corpusSnapshotId
+        || !compatibleCorpus
         || current.retrievalPolicyVersion !== history.retrievalPolicyVersion
         || current.configurationIdentity !== history.configurationIdentity
         || Number(current.itemCount) <= 0 || Number(history.itemCount) <= 0) {
@@ -732,6 +741,9 @@ export function createReleaseLifecycle(dependencies: { db: D1Database }) {
     resolveActiveCapability(capability: z.infer<typeof capabilitySchema>, environment: z.infer<typeof legalEnvironmentSchema>) {
       return resolveActiveCapability(db, environment, capability);
     },
+    resolveActiveComparison(environment: z.infer<typeof legalEnvironmentSchema>) {
+      return resolveActiveComparison(db, environment);
+    },
   };
 }
 
@@ -747,6 +759,63 @@ const capabilityResolutionSchema = z.discriminatedUnion("availability", [
     nextTier: z.literal("live_official_search"),
   }).strict(),
 ]);
+
+const comparisonResolutionSchema = z.discriminatedUnion("availability", [
+  z.object({ availability: z.literal("available"), current: searchReleaseSchema,
+    history: searchReleaseSchema }).strict(),
+  z.object({ availability: z.literal("unsupported"),
+    nextTier: z.literal("live_official_search") }).strict(),
+]);
+
+async function resolveActiveComparison(
+  db: D1Database,
+  environment: z.infer<typeof legalEnvironmentSchema>,
+): Promise<z.infer<typeof comparisonResolutionSchema>> {
+  const row = await db.prepare(`SELECT
+      current.id AS currentId,current.environment AS currentEnvironment,
+      current.capability AS currentCapability,current.corpus_snapshot_id AS currentCorpusSnapshotId,
+      current.status AS currentStatus,current.item_count AS currentItemCount,
+      current.retrieval_policy_version AS currentRetrievalPolicyVersion,
+      current.configuration_identity AS currentConfigurationIdentity,
+      current.sealed_reconciliation_run_id AS currentReconciliationRunId,
+      current.sealed_at AS currentSealedAt,
+      history.id AS historyId,history.environment AS historyEnvironment,
+      history.capability AS historyCapability,history.corpus_snapshot_id AS historyCorpusSnapshotId,
+      history.status AS historyStatus,history.item_count AS historyItemCount,
+      history.retrieval_policy_version AS historyRetrievalPolicyVersion,
+      history.configuration_identity AS historyConfigurationIdentity,
+      history.sealed_reconciliation_run_id AS historyReconciliationRunId,
+      history.sealed_at AS historySealedAt
+    FROM legal_active_activation_sets active
+    JOIN legal_activation_sets selected ON selected.id=active.activation_set_id
+      AND selected.environment=active.environment
+    JOIN legal_search_releases current ON current.id=selected.comparison_current_release_id
+      AND current.environment=active.environment AND current.status='sealed'
+      AND current.capability='current'
+    JOIN legal_search_releases history ON history.id=selected.comparison_history_release_id
+      AND history.environment=active.environment AND history.status='sealed'
+      AND history.capability='history'
+    WHERE active.environment=?`).bind(environment).first<Record<string, unknown>>();
+  if (!row) return { availability: "unsupported", nextTier: "live_official_search" };
+  try {
+    const release = (prefix: "current" | "history") => searchReleaseSchema.parse({
+      id: row[`${prefix}Id`], environment: row[`${prefix}Environment`],
+      capability: row[`${prefix}Capability`], corpusSnapshotId: row[`${prefix}CorpusSnapshotId`],
+      status: row[`${prefix}Status`], itemCount: row[`${prefix}ItemCount`],
+      retrievalPolicyVersion: row[`${prefix}RetrievalPolicyVersion`],
+      configurationIdentity: row[`${prefix}ConfigurationIdentity`],
+      reconciliationRunId: row[`${prefix}ReconciliationRunId`], sealedAt: row[`${prefix}SealedAt`],
+    });
+    const current = release("current");
+    const history = release("history");
+    if (current.capability !== "current" || history.capability !== "history") {
+      throw new TypeError("COMPARISON_RELEASE_CAPABILITY_MISMATCH");
+    }
+    return comparisonResolutionSchema.parse({ availability: "available", current, history });
+  } catch {
+    throw new ReleaseLifecycleError("RELEASE_SOURCE_UNAVAILABILITY");
+  }
+}
 
 async function resolveActiveCapability(
   db: D1Database,

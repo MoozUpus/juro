@@ -17,7 +17,16 @@ const MAGIC = new TextEncoder().encode("JBM25RT1");
 const HEADER_SIZE = 16;
 const RECORD_SIZE = 32;
 const MAX_POSTING_BLOCK_BYTES = 16 * 1024 * 1024;
+const ORDINAL_MAPPING_PAGE_SIZE = 32_768;
+const MEMBERSHIP_PARTITIONS = 64;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+
+async function membershipPartition(itemKey: string): Promise<string> {
+  const match = /^retrieval-chunk-v1:([a-f0-9]{64})$/u.exec(itemKey);
+  const identity = match?.[1] ?? await customCurrentSha256(itemKey);
+  return Math.floor(Number.parseInt(identity.slice(0, 2), 16) / 4)
+    .toString(16).padStart(2, "0");
+}
 const artifactReferenceSchema = z.object({
   key: z.string().min(1).max(1_024),
   sizeBytes: z.number().int().positive(),
@@ -32,6 +41,7 @@ const postingLocatorSchema = artifactReferenceSchema.extend({
 const descriptorSchema = z.object({
   schemaVersion: z.literal("custom-bm25-runtime-v1"),
   releaseId: z.string().min(1).max(300),
+  denseMetadataReleaseId: z.string().min(1).max(300).optional(),
   sparseManifestSha256: digest,
   analyzer: z.literal("word-v1"),
   statistics: z.object({
@@ -44,6 +54,14 @@ const descriptorSchema = z.object({
     }).strict(),
   }).strict(),
   documents: artifactReferenceSchema,
+  ordinalMappings: z.object({
+    pageSize: z.literal(ORDINAL_MAPPING_PAGE_SIZE),
+    pages: z.array(artifactReferenceSchema.extend({
+      firstOrdinal: z.number().int().nonnegative(),
+      lastOrdinal: z.number().int().nonnegative(),
+      count: z.number().int().positive(),
+    }).strict()),
+  }).strict().optional(),
   segments: z.array(z.object({
     id: z.string().min(1).max(300),
     lexicons: z.record(z.string().length(1), artifactReferenceSchema),
@@ -87,14 +105,29 @@ function encodeRuntimeDocuments(manifest: CustomBm25Manifest): Uint8Array {
 
 export async function buildCustomBm25RuntimeArtifacts(input: {
   releaseId: string;
+  denseMetadataReleaseId?: string;
   sparseManifestSha256: string;
   manifest: CustomBm25Manifest;
+  resolveLegalIdentitySha256?: (
+    itemKeys: readonly string[],
+  ) => Promise<ReadonlyMap<string, string>>;
 }): Promise<{
   descriptor: CustomBm25RuntimeDescriptor;
   descriptorBytes: Uint8Array;
   documentsBytes: Uint8Array;
   descriptorReference: { key: string; sizeBytes: number; sha256: string };
   documentsReference: { key: string; sizeBytes: number; sha256: string };
+  ordinalMappingPages: Array<{
+    reference: { key: string; sizeBytes: number; sha256: string;
+      firstOrdinal: number; lastOrdinal: number; count: number };
+    bytes: Uint8Array;
+  }>;
+  membership: {
+    reference: { key: string; sizeBytes: number; sha256: string };
+    bytes: Uint8Array;
+    pages: Array<{ reference: { key: string; sizeBytes: number; sha256: string;
+      partition: string; count: number }; bytes: Uint8Array }>;
+  };
 }> {
   const sparseManifestSha256 = digest.parse(input.sparseManifestSha256);
   const documentsBytes = encodeRuntimeDocuments(input.manifest);
@@ -104,13 +137,77 @@ export async function buildCustomBm25RuntimeArtifacts(input: {
     sizeBytes: documentsBytes.byteLength,
     sha256: documentsSha256,
   };
+  const sortedDocuments = [...input.manifest.documents]
+    .sort((left, right) => left.ordinal - right.ordinal);
+  const ordinalMappingPages = [] as Array<{
+    reference: { key: string; sizeBytes: number; sha256: string;
+      firstOrdinal: number; lastOrdinal: number; count: number };
+    bytes: Uint8Array;
+  }>;
+  for (let offset = 0; offset < sortedDocuments.length; offset += ORDINAL_MAPPING_PAGE_SIZE) {
+    const documents = sortedDocuments.slice(offset, offset + ORDINAL_MAPPING_PAGE_SIZE);
+    const bytes = serializeCustomCurrentArtifact({ schemaVersion: 1,
+      releaseId: input.releaseId,
+      items: documents.map(({ ordinal, itemKey }) => ({ ordinal, itemKey })) });
+    const sha256 = await customCurrentSha256(bytes);
+    ordinalMappingPages.push({ bytes, reference: {
+      key: `search-releases/${input.releaseId}/runtime/ordinal-mappings/${String(offset)
+        .padStart(10, "0")}-${sha256}.json`,
+      sizeBytes: bytes.byteLength, sha256, firstOrdinal: documents[0]!.ordinal,
+      lastOrdinal: documents.at(-1)!.ordinal, count: documents.length,
+    } });
+  }
+  const membership = new Map<string, Array<{ itemKey: string; ordinal: number }>>();
+  for (const document of sortedDocuments) {
+    const partition = await membershipPartition(document.itemKey);
+    const entries = membership.get(partition) ?? [];
+    entries.push({ itemKey: document.itemKey, ordinal: document.ordinal });
+    membership.set(partition, entries);
+  }
+  const membershipPages = [] as Array<{ reference: { key: string; sizeBytes: number;
+    sha256: string; partition: string; count: number }; bytes: Uint8Array }>;
+  for (const partition of [...membership.keys()].sort()) {
+    const items = membership.get(partition)!.sort((left, right) =>
+      left.itemKey.localeCompare(right.itemKey));
+    const legalIdentities = input.resolveLegalIdentitySha256
+      ? await input.resolveLegalIdentitySha256(items.map(({ itemKey }) => itemKey)) : null;
+    if (legalIdentities && (legalIdentities.size !== items.length
+      || items.some(({ itemKey }) => !digest.safeParse(legalIdentities.get(itemKey)).success))) {
+      throw new TypeError("CUSTOM_BM25_RUNTIME_MEMBERSHIP_INVALID");
+    }
+    const bytes = serializeCustomCurrentArtifact({ schemaVersion: 1,
+      releaseId: input.releaseId, partition,
+      items: items.map((item) => ({ ...item,
+        ...(legalIdentities
+          ? { legalIdentitySha256: legalIdentities.get(item.itemKey)! } : {}) })) });
+    const sha256 = await customCurrentSha256(bytes);
+    membershipPages.push({ bytes, reference: {
+      key: `search-releases/${input.releaseId}/runtime/membership/${partition}-${sha256}.json`,
+      sizeBytes: bytes.byteLength, sha256, partition, count: items.length,
+    } });
+  }
+  if (membershipPages.length > MEMBERSHIP_PARTITIONS) {
+    throw new TypeError("CUSTOM_BM25_RUNTIME_MEMBERSHIP_INVALID");
+  }
+  const membershipBytes = serializeCustomCurrentArtifact({ schemaVersion: 1,
+    releaseId: input.releaseId,
+    partitions: membershipPages.map(({ reference }) => reference) });
+  const membershipSha256 = await customCurrentSha256(membershipBytes);
+  const membershipReference = {
+    key: `search-releases/${input.releaseId}/runtime/mappings-${membershipSha256}.json`,
+    sizeBytes: membershipBytes.byteLength, sha256: membershipSha256,
+  };
   const descriptor = descriptorSchema.parse({
     schemaVersion: "custom-bm25-runtime-v1",
     releaseId: input.releaseId,
+    ...(input.denseMetadataReleaseId
+      ? { denseMetadataReleaseId: input.denseMetadataReleaseId } : {}),
     sparseManifestSha256,
     analyzer: input.manifest.analyzer,
     statistics: input.manifest.statistics,
     documents: documentsReference,
+    ordinalMappings: { pageSize: ORDINAL_MAPPING_PAGE_SIZE,
+      pages: ordinalMappingPages.map(({ reference }) => reference) },
     segments: input.manifest.segments.map((segment) => ({
       id: segment.id,
       lexicons: segment.lexicons,
@@ -122,6 +219,9 @@ export async function buildCustomBm25RuntimeArtifacts(input: {
     descriptor,
     descriptorBytes,
     documentsBytes,
+    ordinalMappingPages,
+    membership: { reference: membershipReference, bytes: membershipBytes,
+      pages: membershipPages },
     descriptorReference: {
       key: `search-releases/${input.releaseId}/runtime/descriptor-${descriptorSha256}.json`,
       sizeBytes: descriptorBytes.byteLength,
@@ -134,14 +234,138 @@ export async function buildCustomBm25RuntimeArtifacts(input: {
 export async function putCustomBm25RuntimeArtifacts(
   bucket: R2Bucket,
   artifacts: Awaited<ReturnType<typeof buildCustomBm25RuntimeArtifacts>>,
-): Promise<{ descriptor: ImmutableCustomArtifactWrite; documents: ImmutableCustomArtifactWrite }> {
+): Promise<{ descriptor: ImmutableCustomArtifactWrite; documents: ImmutableCustomArtifactWrite;
+  ordinalMappings: ImmutableCustomArtifactWrite[]; membership: ImmutableCustomArtifactWrite;
+  membershipPages: ImmutableCustomArtifactWrite[] }> {
   const documents = await putImmutableCustomArtifact(bucket, artifacts.documentsReference.key,
     artifacts.documentsBytes, { contentType: "application/octet-stream",
       customMetadata: { kind: "custom-bm25-runtime-documents" } });
+  const ordinalMappings: ImmutableCustomArtifactWrite[] = [];
+  for (const page of artifacts.ordinalMappingPages) {
+    ordinalMappings.push(await putImmutableCustomArtifact(bucket, page.reference.key,
+      page.bytes, { contentType: "application/json",
+        customMetadata: { kind: "custom-bm25-runtime-ordinal-mapping" } }));
+  }
+  const membershipPages: ImmutableCustomArtifactWrite[] = [];
+  for (const page of artifacts.membership.pages) {
+    membershipPages.push(await putImmutableCustomArtifact(bucket, page.reference.key,
+      page.bytes, { contentType: "application/json",
+        customMetadata: { kind: "custom-bm25-runtime-membership-page" } }));
+  }
+  const membership = await putImmutableCustomArtifact(bucket, artifacts.membership.reference.key,
+    artifacts.membership.bytes, { contentType: "application/json",
+      customMetadata: { kind: "custom-bm25-runtime-membership" } });
   const descriptor = await putImmutableCustomArtifact(bucket, artifacts.descriptorReference.key,
     artifacts.descriptorBytes, { contentType: "application/json",
       customMetadata: { kind: "custom-bm25-runtime-descriptor" } });
-  return { descriptor, documents };
+  return { descriptor, documents, ordinalMappings, membership, membershipPages };
+}
+
+export async function resolveCustomBm25RuntimeMembership(
+  bucket: R2Bucket,
+  releaseId: string,
+  mappingInventorySha256: string,
+  itemKeys: readonly string[],
+): Promise<boolean | null> {
+  const entries = await resolveCustomBm25RuntimeMembershipEntries(
+    bucket,
+    releaseId,
+    mappingInventorySha256,
+    itemKeys,
+  );
+  return entries === null ? null : [...new Set(itemKeys)].every((itemKey) => entries.has(itemKey));
+}
+
+export async function resolveCustomBm25RuntimeMembershipEntries(
+  bucket: R2Bucket,
+  releaseId: string,
+  mappingInventorySha256: string,
+  itemKeys: readonly string[],
+): Promise<Map<string, { ordinal: number; legalIdentitySha256: string | null }> | null> {
+  const sha256 = digest.parse(mappingInventorySha256);
+  const key = `search-releases/${releaseId}/runtime/mappings-${sha256}.json`;
+  const object = await bucket.get(key);
+  if (!object) return null;
+  if (object.size > 256 * 1024) throw new TypeError("CUSTOM_BM25_RUNTIME_MEMBERSHIP_CORRUPT");
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (bytes.byteLength !== object.size || await customCurrentSha256(bytes) !== sha256) {
+    throw new TypeError("CUSTOM_BM25_RUNTIME_MEMBERSHIP_CORRUPT");
+  }
+  const manifest = z.object({ schemaVersion: z.literal(1), releaseId: z.literal(releaseId),
+    partitions: z.array(artifactReferenceSchema.extend({ partition: z.string().regex(/^[a-f0-9]{2}$/u),
+      count: z.number().int().positive() }).strict()).max(MEMBERSHIP_PARTITIONS) }).strict()
+    .parse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown);
+  const partitions = new Map(manifest.partitions.map((page) => [page.partition, page]));
+  if (partitions.size !== manifest.partitions.length) {
+    throw new TypeError("CUSTOM_BM25_RUNTIME_MEMBERSHIP_CORRUPT");
+  }
+  const requested = new Map<string, string[]>();
+  for (const itemKey of [...new Set(itemKeys)]) {
+    const partition = await membershipPartition(itemKey);
+    const group = requested.get(partition) ?? [];
+    group.push(itemKey);
+    requested.set(partition, group);
+  }
+  const resolved = new Map<string, { ordinal: number; legalIdentitySha256: string | null }>();
+  const groups = [...requested.entries()];
+  for (let offset = 0; offset < groups.length; offset += 6) {
+    await Promise.all(groups.slice(offset, offset + 6).map(async ([partition, keys]) => {
+      const reference = partitions.get(partition);
+      if (!reference) return false;
+      const page = z.object({ schemaVersion: z.literal(1), releaseId: z.literal(releaseId),
+        partition: z.literal(partition), items: z.array(z.object({ itemKey: z.string().min(1).max(700),
+          ordinal: z.number().int().nonnegative(), legalIdentitySha256: digest.optional() }).strict())
+          .length(reference.count) }).strict()
+        .parse(await readJson<unknown>(bucket, reference));
+      const members = new Map(page.items.map((item) => [item.itemKey, item]));
+      if (members.size !== page.items.length) {
+        throw new TypeError("CUSTOM_BM25_RUNTIME_MEMBERSHIP_CORRUPT");
+      }
+      for (const itemKey of keys) {
+        const item = members.get(itemKey);
+        if (item) resolved.set(itemKey, { ordinal: item.ordinal,
+          legalIdentitySha256: item.legalIdentitySha256 ?? null });
+      }
+    }));
+  }
+  return resolved;
+}
+
+export async function resolveCustomBm25RuntimeItemKeys(
+  bucket: R2Bucket,
+  rawDescriptor: CustomBm25RuntimeDescriptor,
+  ordinals: readonly number[],
+): Promise<string[] | null> {
+  const descriptor = descriptorSchema.parse(rawDescriptor);
+  if (!descriptor.ordinalMappings) return null;
+  const requested = [...new Set(ordinals)];
+  if (requested.some((ordinal) => !Number.isSafeInteger(ordinal) || ordinal < 0)) {
+    throw new TypeError("CUSTOM_BM25_RUNTIME_ORDINAL_INVALID");
+  }
+  const selected = new Map<number, string>();
+  const neededPages = new Map<string, typeof descriptor.ordinalMappings.pages[number]>();
+  for (const ordinal of requested) {
+    const page = descriptor.ordinalMappings.pages.find((candidate) =>
+      candidate.firstOrdinal <= ordinal && ordinal <= candidate.lastOrdinal);
+    if (!page) throw new TypeError("CUSTOM_BM25_RUNTIME_ORDINAL_MISSING");
+    neededPages.set(page.key, page);
+  }
+  const pages = [...neededPages.values()];
+  for (let offset = 0; offset < pages.length; offset += 6) {
+    const values = await Promise.all(pages.slice(offset, offset + 6).map(async (page) =>
+      z.object({ schemaVersion: z.literal(1), releaseId: z.literal(descriptor.releaseId),
+        items: z.array(z.object({ ordinal: z.number().int().nonnegative(),
+          itemKey: z.string().min(1).max(700) }).strict()).length(page.count) }).strict()
+        .parse(await readJson<unknown>(bucket, page))));
+    for (const value of values) for (const item of value.items) {
+        if (selected.has(item.ordinal)) throw new TypeError("CUSTOM_BM25_RUNTIME_ORDINAL_DUPLICATE");
+        selected.set(item.ordinal, item.itemKey);
+      }
+  }
+  if (requested.some((ordinal) => !selected.has(ordinal))) {
+    throw new TypeError("CUSTOM_BM25_RUNTIME_ORDINAL_MISSING");
+  }
+  return ordinals.map((ordinal) => selected.get(ordinal)!);
 }
 
 type RuntimeDocument = {

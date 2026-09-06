@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "juro-legal-current-custom-20260903",
+  "name": "juro-legal-current-custom-pair-20260906",
   "main": "./worker/legal-custom-current-build-worker.ts",
   "compatibility_date": "2026-09-03",
   "compatibility_flags": ["nodejs_compat"],
@@ -18,11 +18,11 @@
     "AUTHORIZED_PROVIDER_TOKENS": "94508602",
     "AUTHORIZED_EMBEDDING_RECONCILIATION_SHA256": "6fa89d9c5c47d8df3157fa9b4c8e46ac294107e2e35bf13a802f691aa94677ee",
     "CUSTOM_SEARCH_CAPABILITY": "current",
-    "CUSTOM_SEARCH_RELEASE_ID": "release:staging:current:custom-v2:2026-09-05",
+    "CUSTOM_SEARCH_RELEASE_ID": "release:staging:current:custom-v3:2026-09-06",
     "CUSTOM_SEARCH_INSTANCE_ID": "custom-current-staging-v1",
     "CUSTOM_SEARCH_SHARD_ID": "current-base-v1",
-    "CUSTOM_RUNTIME_DESCRIPTOR_KEY": "search-releases/release:staging:current:custom-v2:2026-09-05/runtime/descriptor-a2b47fdbe51acb0581bd652a2ee1845a43c6c4ad0ca8c092948bb1d899d31aad.json",
-    "CUSTOM_RUNTIME_DESCRIPTOR_SHA256": "a2b47fdbe51acb0581bd652a2ee1845a43c6c4ad0ca8c092948bb1d899d31aad"
+    "CUSTOM_RUNTIME_DESCRIPTOR_KEY": "search-releases/release:staging:current:custom-v3:2026-09-06/runtime/descriptor-77284490db2d4b18c572ecd1e0cfae1543e97edd4b011fb1d2e7cff370969710.json",
+    "CUSTOM_RUNTIME_DESCRIPTOR_SHA256": "77284490db2d4b18c572ecd1e0cfae1543e97edd4b011fb1d2e7cff370969710"
   },
   "ai": { "binding": "AI" },
   "d1_databases": [
@@ -63,73 +63,8 @@
       "index_name": "juro-legal-current-custom-20260903"
     }
   ],
-  "queues": {
-    "producers": [
-      {
-        "binding": "BUILD_QUEUE",
-        "queue": "juro-legal-current-custom-20260905"
-      }
-    ],
-    "consumers": [
-      {
-        "queue": "juro-legal-current-custom-20260905",
-        "max_batch_size": 1,
-        "max_batch_timeout": 1,
-        "max_retries": 5,
-        "retry_delay": 60,
-        "dead_letter_queue": "juro-legal-current-custom-20260905-dlq",
-        "max_concurrency": 32
-      }
-    ]
-  },
-  "workflows": [
-    {
-      "binding": "BUILD_WORKFLOW",
-      "name": "juro-legal-current-custom-build-20260903",
-      "class_name": "CustomCurrentBuildWorkflow"
-    },
-    {
-      "binding": "REDUCE_WORKFLOW",
-      "name": "juro-legal-current-custom-reduce-20260903",
-      "class_name": "CustomCurrentReduceWorkflow"
-    }
-  ],
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "COORDINATOR",
-        "class_name": "CustomCurrentBuildCoordinator"
-      },
-      {
-        "name": "REDUCER",
-        "class_name": "CustomCurrentBm25ReducerContainer"
-      }
-    ]
-  },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["CustomCurrentBuildCoordinator", "CustomCurrentBm25ReducerContainer"]
-    }
-  ],
-  "containers": [
-    {
-      "name": "juro-legal-current-custom-reducer-20260903",
-      "class_name": "CustomCurrentBm25ReducerContainer",
-      "image": "docker.io/library/node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5",
-      "max_instances": 1,
-      "instance_type": "standard-4",
-      "constraints": { "regions": ["APAC"] },
-      "ssh": { "enabled": false },
-      "rollout_step_percentage": 100
-    }
-  ],
   "observability": {
     "enabled": true,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "invocation_logs": true
-    }
+    "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": true }
   }
 }

@@ -188,7 +188,11 @@
         },
         {
           "binding": "LEGAL_CUSTOM_SEARCH_SERVICE",
-          "service": "juro-legal-current-custom-20260903"
+          "service": "juro-legal-current-custom-pair-20260906"
+        },
+        {
+          "binding": "LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE",
+          "service": "juro-legal-history-custom-20260906"
         }
       ]
     },

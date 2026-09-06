@@ -8,6 +8,7 @@ import { handleCustomSearchRequest, type CustomSearchEnv }
   from "../lib/legal-corpus/custom-search-service";
 
 const RELEASE_ID = "release:staging:current:custom-v1";
+const DENSE_METADATA_RELEASE_ID = "release:staging:current:custom-v0";
 const INSTANCE_ID = "custom-current-staging-v1";
 
 class MemoryR2 {
@@ -49,10 +50,12 @@ test(oversizedPosting
     oversizedLexicon = { key: reference.key, bytes };
   }
   const runtime = await buildCustomBm25RuntimeArtifacts({ releaseId: RELEASE_ID,
+    denseMetadataReleaseId: DENSE_METADATA_RELEASE_ID,
     sparseManifestSha256: "a".repeat(64), manifest: built.manifest });
   const bucket = new MemoryR2();
   bucket.objects.set(runtime.descriptorReference.key, runtime.descriptorBytes);
   bucket.objects.set(runtime.documentsReference.key, runtime.documentsBytes);
+  for (const page of runtime.ordinalMappingPages) bucket.objects.set(page.reference.key, page.bytes);
   for (const artifact of built.artifacts) bucket.objects.set(artifact.key, artifact.bytes);
   if (oversizedLexicon) bucket.objects.set(oversizedLexicon.key, oversizedLexicon.bytes);
   const calls: string[] = [];
@@ -83,12 +86,13 @@ test(oversizedPosting
     async query(_vector: number[], options: VectorizeQueryOptions) {
       observed.denseOptions = options;
       return { count: 1, matches: [{ id: "b".repeat(64), score: 0.9,
-        metadata: { item_key: "chunk-a", release_id: RELEASE_ID, language: "en",
+        metadata: { item_key: "chunk-a", release_id: DENSE_METADATA_RELEASE_ID, language: "en",
           document_type: "law", valid_from_epoch: 1, valid_to_epoch: 253_402_300_799 } }] };
     },
   } as unknown as VectorizeIndex;
   const env = {
     APP_ENV: "staging",
+    CUSTOM_SEARCH_CAPABILITY: "current",
     AI_GATEWAY_ID: "juro-ai-search-staging",
     CUSTOM_SEARCH_RELEASE_ID: RELEASE_ID,
     CUSTOM_SEARCH_INSTANCE_ID: INSTANCE_ID,
@@ -131,6 +135,35 @@ test(oversizedPosting
   assert.deepEqual(observed.denseOptions?.filter, {
     valid_from_epoch: { $lte: 1_788_566_400 },
     valid_to_epoch: { $gt: 1_788_566_400 },
+  });
+  const driftedCapabilityResponse = await handleCustomSearchRequest(new Request(
+    "http://legal-corpus.internal/internal/legal-corpus/custom-search", {
+      method: "POST", headers: { "content-type": "application/json",
+        "content-length": String(new TextEncoder().encode(body).byteLength),
+        "x-juro-service-binding": "custom-search-runtime-v1",
+        "x-juro-legal-environment": "staging" }, body,
+    }), { ...env, CUSTOM_SEARCH_CAPABILITY: "drifted" } as unknown as CustomSearchEnv);
+  assert.equal(driftedCapabilityResponse.status, 503);
+  const historyEnv: CustomSearchEnv = { ...env,
+    CUSTOM_SEARCH_CAPABILITY: "history",
+    CUSTOM_SEARCH_INSTANCE_ID: "custom-history-staging-v1",
+    CUSTOM_SEARCH_SHARD_ID: "history-base-v1" };
+  const historicalAt = "2026-01-15T00:00:00.000Z";
+  const historyBody = JSON.stringify({ releaseId: RELEASE_ID,
+    instanceIds: [historyEnv.CUSTOM_SEARCH_INSTANCE_ID], query: "work",
+    currentAt: "2026-09-05T00:00:00.000Z",
+    endpoint: { kind: "timestamp", instant: historicalAt }, maxResults: 50, vectorThreshold: 0 });
+  const historyResponse = await handleCustomSearchRequest(new Request(
+    "http://legal-corpus.internal/internal/legal-corpus/custom-search", {
+      method: "POST", headers: { "content-type": "application/json",
+        "content-length": String(new TextEncoder().encode(historyBody).byteLength),
+        "x-juro-service-binding": "custom-search-runtime-v1",
+        "x-juro-legal-environment": "staging" }, body: historyBody,
+    }), historyEnv);
+  assert.equal(historyResponse.status, 200);
+  assert.deepEqual(observed.denseOptions?.filter, {
+    valid_from_epoch: { $lte: 1_768_435_200 },
+    valid_to_epoch: { $gt: 1_768_435_200 },
   });
 });
 }

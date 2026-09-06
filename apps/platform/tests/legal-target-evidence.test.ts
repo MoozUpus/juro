@@ -7,6 +7,7 @@ import {
   handleOfficialEvidenceRequest,
   importProvisionRendition,
   importProvisionRevision,
+  resolveCompleteCorpusEvidence,
   resolveCompleteCorpusCurrentEvidence,
 } from "../lib/legal-corpus/target-evidence";
 import { recordProvisionTemporalEvidence } from "../lib/legal-corpus/target-temporal";
@@ -146,6 +147,63 @@ test("one provision imports idempotently and resolves only from hash-verified R2
   }
 });
 
+test("complete-corpus evidence resolves an eligible historical plain-text rendition at its timestamp", async () => {
+  const bucket = new MemoryEvidenceBucket();
+  const provisionText = "Historical controlling provision text.";
+  const bytes = new TextEncoder().encode(provisionText);
+  const target = {
+    legalInstrumentId: "instrument:historical",
+    officialExpressionId: "expression:historical",
+    textRevisionId: "revision:historical",
+    provisionConceptId: "concept:historical",
+    provisionRenditionId: "rendition:historical",
+  };
+  const key = `legal-corpus/provision/${sha256(bytes)}.txt`;
+  await bucket.put(key, bytes, { onlyIf: { etagDoesNotMatch: "*" }, customMetadata: {
+    sha256: sha256(bytes), schemaVersion: "1",
+  } });
+  let declaredSha256 = sha256(bytes);
+  let textualAuthority = "controlling";
+  const db = { prepare(sql: string) {
+    assert.match(sql, /release\.capability AS capability/u);
+    assert.match(sql, /record\.historical_eligible=1/u);
+    assert.match(sql, /authority_revision\.authority_evidence_json IS NOT NULL/u);
+    assert.match(sql, /authority_expression\.controlling_on_conflict=1/u);
+    return { bind(...values: string[]) {
+      assert.deepEqual(values, ["staging", "release:staging:history:pinned", target.provisionRenditionId]);
+      return { async all() { return { results: [{
+        ...target, capability: "history", legacyCurrentRenditionId: "legacy:historical",
+        languageTag: "uz-Latn", script: "Latn", textualAuthority,
+        sourceUrl: "https://lex.uz/docs/123", provisionKey: key,
+        provisionBytes: bytes.byteLength, provisionSha256: declaredSha256,
+        provisionMediaType: "text/plain;charset=utf-8", sourceNormalizedSha256: sha256("normalized"),
+        validFrom: "2020-01-01T00:00:00.000Z", validTo: "2022-01-01T00:00:00.000Z",
+      }] }; } }; } };
+  } } as unknown as D1Database;
+
+  const resolved = await resolveCompleteCorpusEvidence({
+    db, bucket, environment: "staging", releaseId: "release:staging:history:pinned",
+    currentAt: "2026-09-06T00:00:00.000Z",
+  }, target.provisionRenditionId, { kind: "timestamp", instant: "2021-06-01T00:00:00.000Z" });
+  assert.equal(resolved.controlling.provisionText, provisionText);
+  assert.equal(resolved.controlling.officialCitation.label, "Official provision");
+  for (const unsupportedAuthority of ["official_translation", "unknown"]) {
+    textualAuthority = unsupportedAuthority;
+    await assert.rejects(() => resolveCompleteCorpusEvidence({
+      db, bucket, environment: "staging", releaseId: "release:staging:history:pinned",
+      currentAt: "2026-09-06T00:00:00.000Z",
+    }, target.provisionRenditionId, { kind: "timestamp", instant: "2021-06-01T00:00:00.000Z" }),
+    /SOURCE_UNAVAILABILITY/u);
+  }
+  textualAuthority = "controlling";
+  declaredSha256 = "f".repeat(64);
+  await assert.rejects(() => resolveCompleteCorpusEvidence({
+    db, bucket, environment: "staging", releaseId: "release:staging:history:pinned",
+    currentAt: "2026-09-06T00:00:00.000Z",
+  }, target.provisionRenditionId, { kind: "timestamp", instant: "2021-06-01T00:00:00.000Z" }),
+  /SOURCE_UNAVAILABILITY/u);
+});
+
 test("complete-corpus evidence binds migrated identities to the sealed legacy provision object", async () => {
   const bucket = new MemoryEvidenceBucket();
   const provisionObject = {
@@ -200,14 +258,16 @@ test("complete-corpus evidence binds migrated identities to the sealed legacy pr
         return { async all() { return { results: [{
         ...target,
         ...interval,
+        capability: "current",
         legacyCurrentRenditionId: representativeProvision.provisionRenditionId,
         languageTag: representativeProvision.languageTag,
         script: representativeProvision.script,
-        textualAuthority: representativeProvision.textualAuthority,
+        textualAuthority: "controlling",
         sourceUrl: representativeProvision.sourceUrl,
         provisionKey: key,
         provisionBytes: bytes.byteLength,
         provisionSha256: objectSha256,
+        provisionMediaType: "application/json;charset=utf-8",
         sourceNormalizedSha256: provisionObject.sourceNormalizedSha256,
       }] }; } }; },
       };

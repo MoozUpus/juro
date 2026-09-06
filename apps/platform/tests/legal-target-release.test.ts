@@ -6,6 +6,7 @@ import { importProvisionRendition } from "../lib/legal-corpus/target-evidence";
 import { recordProvisionTemporalEvidence } from "../lib/legal-corpus/target-temporal";
 import { recordReleaseObservation } from "../lib/legal-corpus/target-governance";
 import {
+  compatibleReleaseCorpora,
   createReleaseLifecycle,
   createReleaseLifecycleClient,
   handleReleaseLifecycleRequest,
@@ -16,6 +17,17 @@ import {
   representativeProvision,
 } from "./helpers/legal-target";
 import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
+
+test("comparison corpus compatibility requires one Corpus Snapshot", () => {
+  assert.equal(compatibleReleaseCorpora(
+    { corpusSnapshotId: "snapshot-one" },
+    { corpusSnapshotId: "snapshot-one" },
+  ), true);
+  assert.equal(compatibleReleaseCorpora(
+    { corpusSnapshotId: "snapshot-current" },
+    { corpusSnapshotId: "snapshot-history" },
+  ), false);
+});
 
 function governedItem(
   imported: Awaited<ReturnType<typeof importProvisionRendition>>,
@@ -451,6 +463,12 @@ test("history and comparison activate only as a governed pair from one Corpus Sn
     assert.equal(activation.asOfReleaseId, "release-compatible-history-v1");
     assert.equal(activation.comparisonCurrentReleaseId, "release-compatible-current-v1");
     assert.equal(activation.comparisonHistoryReleaseId, "release-compatible-history-v1");
+    const pinnedPair = await lifecycle.resolveActiveComparison("development");
+    assert.equal(pinnedPair.availability, "available");
+    if (pinnedPair.availability === "available") {
+      assert.equal(pinnedPair.current.id, "release-compatible-current-v1");
+      assert.equal(pinnedPair.history.id, "release-compatible-history-v1");
+    }
     const rollback = await lifecycle.rollback({
       environment: "development",
       actor: "test-suite",

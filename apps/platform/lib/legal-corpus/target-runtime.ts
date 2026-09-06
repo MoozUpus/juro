@@ -13,8 +13,9 @@ import {
 import { CUSTOM_SEARCH_PATH, CUSTOM_SEARCH_SERVICE_MARKER, customSearchResponseSchema }
   from "./custom-search-service";
 import { customReleaseGovernanceSchema } from "./custom-release-governance";
+import { resolveCustomBm25RuntimeMembershipEntries } from "./custom-bm25-runtime";
 import { resolveCustomTrustedLegalTitles } from "./custom-search-trusted-titles";
-import { assertCompleteCorpusCurrentInterval, resolveCompleteCorpusCurrentEvidence, resolveControllingEvidence,
+import { assertCompleteCorpusCurrentInterval, resolveCompleteCorpusEvidence, resolveControllingEvidence,
   type LegalEvidenceBucket } from "./target-evidence";
 import { resolveProvisionLineage } from "./target-lineage";
 import { governedAiSearchConfigurationSchema } from "./target-governance";
@@ -46,6 +47,7 @@ export type TargetRetrievalRuntimeEnv = {
   LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME?: string;
   LEGAL_CORPUS_REASONING_SERVICE?: Fetcher;
   LEGAL_CUSTOM_SEARCH_SERVICE?: Fetcher;
+  LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE?: Fetcher;
   LEGAL_AI_GATEWAY_ID?: string;
   LEGAL_AI_PROVIDER_PROJECT_ID?: string;
 };
@@ -59,6 +61,10 @@ type RuntimeDependencies = {
 
 type RuntimeReleaseResolver = {
   resolve(endpoint: TemporalEndpoint): Promise<PinnedCandidateRelease | null>;
+  resolveComparison?(
+    left: TemporalEndpoint,
+    right: TemporalEndpoint,
+  ): Promise<{ left: PinnedCandidateRelease; right: PinnedCandidateRelease } | null>;
 };
 
 type RuntimeProviderGovernance = {
@@ -68,8 +74,8 @@ type RuntimeProviderGovernance = {
   providerNamespace: string;
 };
 
-async function sha256Hex(value: string): Promise<string> {
-  const encoded = new TextEncoder().encode(value);
+async function sha256Hex(value: string | Uint8Array): Promise<string> {
+  const encoded = typeof value === "string" ? new TextEncoder().encode(value) : value;
   const bytes = new Uint8Array(encoded.byteLength);
   bytes.set(encoded);
   const digest = await crypto.subtle.digest("SHA-256", bytes.buffer);
@@ -198,7 +204,53 @@ async function serviceJson(
   return response.json();
 }
 
-export function createRuntimeCandidateCatalog(db: D1Database) {
+const customChunkArtifactSchema = z.object({
+  schemaVersion: z.literal(1),
+  releaseId: z.string().min(1),
+  chunk: z.object({ id: z.string().min(1),
+    snapshotProvisionId: z.string().regex(/^audit:[a-f0-9]{64}$/u) }).passthrough(),
+  evidence: z.object({ snapshotProvisionId: z.string().regex(/^audit:[a-f0-9]{64}$/u) })
+    .passthrough(),
+}).passthrough();
+
+async function resolveCustomChunkIdentities(
+  bucket: Pick<LegalEvidenceBucket, "get">,
+  releaseId: string,
+  itemKeys: readonly string[],
+) {
+  const prefix = `search-releases/${releaseId}/`;
+  const output = new Map<string, { canonicalChunkId: string; legalIdentitySha256: string }>();
+  for (let offset = 0; offset < itemKeys.length; offset += 6) {
+    await Promise.all(itemKeys.slice(offset, offset + 6).map(async (itemKey) => {
+      if (!itemKey.startsWith(prefix)) throw new TypeError("TARGET_CUSTOM_CHUNK_IDENTITY_INVALID");
+      const canonicalChunkId = z.string().regex(/^retrieval-chunk-v1:[a-f0-9]{64}$/u)
+        .parse(itemKey.slice(prefix.length));
+      const object = await bucket.get(`search-releases/${releaseId}/chunks/${canonicalChunkId}.json`);
+      if (!object || !object.customMetadata?.sha256) {
+        throw new TypeError("TARGET_CUSTOM_CHUNK_ARTIFACT_MISSING");
+      }
+      const bytes = await object.bytes();
+      if (bytes.byteLength !== object.size || await sha256Hex(bytes) !== object.customMetadata.sha256) {
+        throw new TypeError("TARGET_CUSTOM_CHUNK_ARTIFACT_CORRUPT");
+      }
+      const artifact = customChunkArtifactSchema.parse(JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+      ) as unknown);
+      if (artifact.releaseId !== releaseId || artifact.chunk.id !== canonicalChunkId
+        || artifact.chunk.snapshotProvisionId !== artifact.evidence.snapshotProvisionId) {
+        throw new TypeError("TARGET_CUSTOM_CHUNK_IDENTITY_INVALID");
+      }
+      output.set(itemKey, { canonicalChunkId,
+        legalIdentitySha256: artifact.chunk.snapshotProvisionId.slice("audit:".length) });
+    }));
+  }
+  return output;
+}
+
+export function createRuntimeCandidateCatalog(
+  db: D1Database,
+  bucket?: Pick<LegalEvidenceBucket, "get">,
+) {
   return {
     async revalidate(
       packet: CandidatePacket,
@@ -223,14 +275,53 @@ export function createRuntimeCandidateCatalog(db: D1Database) {
       }> = [];
       const custom = packet.candidates.every((candidate) =>
         candidate.itemKey.startsWith(`search-releases/${release.id}/retrieval-chunk-v1:`));
-      if (custom && endpoint.kind !== "current") {
+      if (custom && ((release.capability === "current" && endpoint.kind !== "current")
+        || (release.capability === "history" && endpoint.kind !== "timestamp"))) {
         throw new TypeError("TARGET_CUSTOM_CANDIDATE_ENDPOINT_INVALID");
       }
+      const customEligibility = release.capability === "history"
+        ? "historical_eligible" : "current_eligible";
+      let compactMembership: Map<string, { ordinal: number;
+        legalIdentitySha256: string | null }> | null = null;
+      if (custom && bucket) {
+        const component = await db.prepare(`SELECT mapping_inventory_sha256 AS mappingInventorySha256
+          FROM legal_custom_search_runtime_components WHERE search_release_id=?`).bind(release.id)
+          .first<{ mappingInventorySha256: string }>();
+        if (!component) throw new TypeError("TARGET_CUSTOM_RUNTIME_COMPONENT_MISSING");
+        const prefix = `search-releases/${release.id}/`;
+        compactMembership = await resolveCustomBm25RuntimeMembershipEntries(bucket as R2Bucket, release.id,
+          component.mappingInventorySha256, uniqueKeys.map((key) => key.slice(prefix.length)));
+        if (compactMembership && compactMembership.size !== uniqueKeys.length) {
+          throw new TypeError("TARGET_CANDIDATE_NOT_IN_PINNED_RELEASE");
+        }
+      }
+      const prefix = `search-releases/${release.id}/`;
+      const anchoredIdentities = compactMembership
+        && [...compactMembership.values()].every(({ legalIdentitySha256 }) => legalIdentitySha256)
+        ? new Map(uniqueKeys.map((key) => {
+          const canonicalChunkId = key.slice(prefix.length);
+          return [key, { canonicalChunkId,
+            legalIdentitySha256: compactMembership!.get(canonicalChunkId)!.legalIdentitySha256! }];
+        })) : null;
+      const customIdentities = anchoredIdentities ?? (compactMembership && bucket
+        ? await resolveCustomChunkIdentities(bucket, release.id, uniqueKeys) : null);
       for (let offset = 0; offset < uniqueKeys.length; offset += 80) {
         const keys = uniqueKeys.slice(offset, offset + 80);
         if (keys.length === 0) continue;
-        const placeholders = keys.map(() => "?").join(",");
-        const result = await db.prepare(custom ? `SELECT item.item_key AS itemKey,
+        const identities = customIdentities
+          ? keys.map((key) => customIdentities.get(key)!.legalIdentitySha256) : keys;
+        const placeholders = identities.map(() => "?").join(",");
+        const result = await db.prepare(custom && customIdentities ? `SELECT
+            record.legal_identity_sha256 AS itemKey,'' AS canonicalChunkId,
+            record.provision_rendition_id AS provisionRenditionId,
+            record.text_revision_id AS textRevisionId,
+            record.provision_concept_id AS provisionConceptId,
+            record.language AS languageTag,record.textual_authority AS textualAuthority,
+            record.valid_from AS validFrom,record.valid_to AS validTo
+          FROM legal_custom_search_runtime_components runtime
+          JOIN legal_complete_corpus_records record ON record.run_id=runtime.complete_corpus_run_id
+          WHERE runtime.search_release_id=? AND record.legal_identity_sha256 IN (${placeholders})
+            AND record.${customEligibility}=1 AND record.quarantined=0` : custom ? `SELECT item.item_key AS itemKey,
             item.retrieval_chunk_id AS canonicalChunkId,
             record.provision_rendition_id AS provisionRenditionId,
             record.text_revision_id AS textRevisionId,
@@ -244,7 +335,7 @@ export function createRuntimeCandidateCatalog(db: D1Database) {
             ON record.run_id=runtime.complete_corpus_run_id
             AND record.legal_identity_sha256=item.legal_identity_sha256
           WHERE item.search_release_id=? AND item.item_key IN (${placeholders})
-            AND record.current_eligible=1 AND record.quarantined=0` : `SELECT item.item_key AS itemKey,
+            AND record.${customEligibility}=1 AND record.quarantined=0` : `SELECT item.item_key AS itemKey,
             item.canonical_chunk_id AS canonicalChunkId,
             rendition.id AS provisionRenditionId,rendition.text_revision_id AS textRevisionId,
             rendition.provision_concept_id AS provisionConceptId,
@@ -256,15 +347,24 @@ export function createRuntimeCandidateCatalog(db: D1Database) {
           JOIN legal_official_expressions expression ON expression.id=revision.official_expression_id
           WHERE item.search_release_id=? AND item.item_key IN (${placeholders})`).bind(
           release.id,
-          ...keys,
+          ...identities,
         ).all<typeof rows[number]>();
-        rows.push(...result.results);
+        if (customIdentities) {
+          const byIdentity = new Map(result.results.map((row) => [row.itemKey, row]));
+          for (const key of keys) {
+            const identity = customIdentities.get(key)!;
+            const record = byIdentity.get(identity.legalIdentitySha256);
+            if (record) rows.push({ ...record, itemKey: key,
+              canonicalChunkId: identity.canonicalChunkId });
+          }
+        } else rows.push(...result.results);
       }
       const byKey = new Map(rows.map((row) => [row.itemKey, row]));
       return parseRevalidatedCandidates(packet.candidates.map((candidate) => {
         const row = byKey.get(candidate.itemKey);
         if (!row) throw new TypeError("TARGET_CANDIDATE_NOT_IN_PINNED_RELEASE");
-        if (custom) assertCompleteCorpusCurrentInterval(row, currentAt);
+        if (custom) assertCompleteCorpusCurrentInterval(row,
+          endpoint.kind === "timestamp" ? endpoint.instant : currentAt);
         const languageFamily = row.languageTag.startsWith("uz-") ? "uz"
           : row.languageTag === "ru" ? "ru" : row.languageTag === "en" ? "en" : null;
         if (!languageFamily || !["controlling", "official_translation", "unknown"]
@@ -285,8 +385,10 @@ export function createRuntimeCandidateCatalog(db: D1Database) {
   };
 }
 
-const customInstanceId = (environment: string) => `custom-current-${environment}-v1`;
-const customShardId = "current-base-v1";
+type CustomSearchCapability = "current" | "history";
+const customInstanceId = (capability: CustomSearchCapability, environment: string) =>
+  `custom-${capability}-${environment}-v1`;
+const customShardId = (capability: CustomSearchCapability) => `${capability}-base-v1`;
 
 function customPinnedConfiguration(identityValue: string, gatewayIdentity: string,
   projectIdentity: string) {
@@ -307,6 +409,7 @@ function customPinnedConfiguration(identityValue: string, gatewayIdentity: strin
 export function createRuntimeCustomSearchProvider(input: {
   db: D1Database;
   service: Fetcher;
+  capability: CustomSearchCapability;
   environment: "development" | "staging" | "production";
   gatewayIdentity: string;
   projectIdentity: string;
@@ -316,14 +419,15 @@ export function createRuntimeCustomSearchProvider(input: {
     const row = await input.db.prepare(`SELECT release.id,release.configuration_identity AS configurationIdentity
       FROM legal_search_releases release
       JOIN legal_custom_search_runtime_components runtime ON runtime.search_release_id=release.id
-      WHERE release.environment=? AND release.id=? AND release.status='sealed'`).bind(input.environment, releaseId)
+      WHERE release.environment=? AND release.id=? AND release.capability=?
+        AND release.status='sealed'`).bind(input.environment, releaseId, input.capability)
       .first<{ id: string; configurationIdentity: string }>();
     if (!row) throw new TypeError("CUSTOM_SEARCH_ACTIVE_RELEASE_UNAVAILABLE");
     return row;
   };
   return {
     async attest(instanceId, releaseId) {
-      if (instanceId !== customInstanceId(input.environment)) {
+      if (instanceId !== customInstanceId(input.capability, input.environment)) {
         throw new TypeError("CUSTOM_SEARCH_INSTANCE_REJECTED");
       }
       const release = await pinned(releaseId);
@@ -331,9 +435,10 @@ export function createRuntimeCustomSearchProvider(input: {
         input.gatewayIdentity, input.projectIdentity);
     },
     async search(searchInput) {
-      if (searchInput.endpoint.kind !== "current"
+      if ((input.capability === "current" && searchInput.endpoint.kind !== "current")
+        || (input.capability === "history" && searchInput.endpoint.kind !== "timestamp")
         || searchInput.instanceIds.length !== 1
-        || searchInput.instanceIds[0] !== customInstanceId(input.environment)) {
+        || searchInput.instanceIds[0] !== customInstanceId(input.capability, input.environment)) {
         throw new TypeError("CUSTOM_SEARCH_REQUEST_REJECTED");
       }
       const release = await pinned(searchInput.releaseId);
@@ -407,11 +512,13 @@ function createRuntimeRetriever(
     },
     releaseResolver,
     candidateIndex,
-    candidateCatalog: createRuntimeCandidateCatalog(db),
+    candidateCatalog: createRuntimeCandidateCatalog(db, evidenceBucket),
     evidenceResolver: {
       async resolveControlling(provisionRenditionId, endpoint, context) {
-        if (context.release.instances.some((instance) => instance.id === customInstanceId(environment))) {
-          return resolveCompleteCorpusCurrentEvidence(
+        if (context.release.instances.some((instance) =>
+          instance.id === customInstanceId("current", environment)
+          || instance.id === customInstanceId("history", environment))) {
+          return resolveCompleteCorpusEvidence(
             { db, bucket: evidenceBucket, environment,
               releaseId: context.release.id, currentAt: context.currentAt }, provisionRenditionId, endpoint,
           );
@@ -462,33 +569,48 @@ export function createRuntimeTargetLegalAnswerRetriever(
       namespaceName: env.LEGAL_AI_SEARCH_NAMESPACE_NAME,
       sourceBucketName: env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME,
     }) : null;
-  const customProvider = env.LEGAL_CUSTOM_SEARCH_SERVICE && env.LEGAL_AI_GATEWAY_ID
-    && env.LEGAL_AI_PROVIDER_PROJECT_ID ? createRuntimeCustomSearchProvider({
-      db, service: env.LEGAL_CUSTOM_SEARCH_SERVICE, environment,
-      gatewayIdentity: env.LEGAL_AI_GATEWAY_ID,
-      projectIdentity: env.LEGAL_AI_PROVIDER_PROJECT_ID,
-    }) : null;
-  if (!aiProvider && !customProvider) throw new TypeError("TARGET_RETRIEVAL_RUNTIME_UNAVAILABLE");
+  const customProviders = new Map<CustomSearchCapability, AiSearchProvider>();
+  if (env.LEGAL_AI_GATEWAY_ID && env.LEGAL_AI_PROVIDER_PROJECT_ID) {
+    if (env.LEGAL_CUSTOM_SEARCH_SERVICE) customProviders.set("current",
+      createRuntimeCustomSearchProvider({
+        db, service: env.LEGAL_CUSTOM_SEARCH_SERVICE, capability: "current", environment,
+        gatewayIdentity: env.LEGAL_AI_GATEWAY_ID,
+        projectIdentity: env.LEGAL_AI_PROVIDER_PROJECT_ID,
+      }));
+    if (env.LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE) customProviders.set("history",
+      createRuntimeCustomSearchProvider({
+        db, service: env.LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE, capability: "history", environment,
+        gatewayIdentity: env.LEGAL_AI_GATEWAY_ID,
+        projectIdentity: env.LEGAL_AI_PROVIDER_PROJECT_ID,
+      }));
+  }
+  if (!aiProvider && customProviders.size === 0) {
+    throw new TypeError("TARGET_RETRIEVAL_RUNTIME_UNAVAILABLE");
+  }
+  const customProviderForInstance = (instanceId: string) =>
+    (["current", "history"] as const).map((capability) => ({
+      capability, provider: customProviders.get(capability),
+    })).find(({ capability, provider }) => provider
+      && instanceId === customInstanceId(capability, environment))?.provider;
   const provider: AiSearchProvider = {
     attest(instanceId, releaseId) {
-      return instanceId === customInstanceId(environment) && customProvider
-        ? customProvider.attest(instanceId, releaseId)
+      const custom = customProviderForInstance(instanceId);
+      return custom
+        ? custom.attest(instanceId, releaseId)
         : aiProvider?.attest(instanceId, releaseId)
           ?? Promise.reject(new TypeError("TARGET_CANDIDATE_PROVIDER_UNAVAILABLE"));
     },
     search(input) {
-      return input.instanceIds.every((id) => id === customInstanceId(environment)) && customProvider
-        ? customProvider.search(input)
+      const custom = input.instanceIds.length === 1
+        ? customProviderForInstance(input.instanceIds[0]!) : undefined;
+      return custom
+        ? custom.search(input)
         : aiProvider?.search(input)
           ?? Promise.reject(new TypeError("TARGET_CANDIDATE_PROVIDER_UNAVAILABLE"));
     },
   };
   const candidateIndex = createRuntimeCandidateIndex(dependencies, provider);
-  return createRuntimeRetriever(dependencies, candidateIndex, {
-      async resolve(endpoint) {
-        const capability = endpoint.kind === "current" ? "current" : "as_of";
-        const resolution = await releaseLifecycle.resolveActiveCapability(capability, environment);
-        if (resolution.availability !== "available") return null;
+  const resolvePinnedRelease = async (searchRelease: { id: string; capability: string }) => {
         const custom = await db.prepare(`SELECT
             release.configuration_identity AS configurationIdentity,
             release.item_count AS itemCount,component.chunk_count AS chunkCount,
@@ -505,13 +627,15 @@ export function createRuntimeTargetLegalAnswerRetriever(
             ON governance.search_release_id=release.id
             AND governance.status='passed' AND governance.failures_json='[]'
           WHERE release.id=? ORDER BY governance.recorded_at DESC LIMIT 1`).bind(
-          resolution.searchRelease.id,
+          searchRelease.id,
         ).first<{ configurationIdentity: string; itemCount: number; chunkCount: number;
           embeddingModel: string; embeddingDimensions: number; mappingCount: number;
           evidenceJson: string }>();
         if (custom) {
+          const capability = searchRelease.capability as CustomSearchCapability;
+          const customProvider = customProviders.get(capability);
           const evidence = customReleaseGovernanceSchema.parse(JSON.parse(custom.evidenceJson) as unknown);
-          if (evidence.releaseId !== resolution.searchRelease.id
+          if (evidence.releaseId !== searchRelease.id
             || custom.itemCount !== custom.chunkCount || custom.mappingCount !== custom.itemCount
             || custom.embeddingModel !== "text-embedding-3-large"
             || Number(custom.embeddingDimensions) !== 1_536
@@ -519,10 +643,11 @@ export function createRuntimeTargetLegalAnswerRetriever(
             return null;
           }
           return parsePinnedCandidateRelease({
-            id: resolution.searchRelease.id,
+            id: searchRelease.id,
             environment,
-            capability: resolution.searchRelease.capability,
-            instances: [{ id: customInstanceId(environment), shardId: customShardId }],
+            capability: searchRelease.capability,
+            instances: [{ id: customInstanceId(capability, environment),
+              shardId: customShardId(capability) }],
             configuration: customPinnedConfiguration(custom.configurationIdentity,
               env.LEGAL_AI_GATEWAY_ID, env.LEGAL_AI_PROVIDER_PROJECT_ID),
           });
@@ -531,7 +656,7 @@ export function createRuntimeTargetLegalAnswerRetriever(
           FROM legal_search_release_governance
           WHERE search_release_id=? AND status='passed'
           ORDER BY recorded_at DESC LIMIT 1`).bind(
-          resolution.searchRelease.id,
+          searchRelease.id,
         ).first<{ id: string; evidenceJson: string }>();
         const shards = await db.prepare(`SELECT shard.shard_id AS shardId,
             shard.sync_state AS syncState,
@@ -558,15 +683,34 @@ export function createRuntimeTargetLegalAnswerRetriever(
           || shard.providerNamespace !== evidence.configuration.providerNamespaceIdentity
           || Number(shard.scheduledIndexingPaused) !== 1)) return null;
         return parsePinnedCandidateRelease({
-          id: resolution.searchRelease.id,
+          id: searchRelease.id,
           environment,
-          capability: resolution.searchRelease.capability,
+          capability: searchRelease.capability,
           instances: shards.results.map(({ shardId, instanceId }) => ({
             id: instanceId!,
             shardId,
           })),
           configuration: toPinnedCandidateConfiguration(evidence.configuration),
         });
+  };
+  return createRuntimeRetriever(dependencies, candidateIndex, {
+      async resolve(endpoint) {
+        const capability = endpoint.kind === "current" ? "current" : "as_of";
+        const resolution = await releaseLifecycle.resolveActiveCapability(capability, environment);
+        return resolution.availability === "available"
+          ? resolvePinnedRelease(resolution.searchRelease) : null;
+      },
+      async resolveComparison(left, right) {
+        const resolution = await releaseLifecycle.resolveActiveComparison(environment);
+        if (resolution.availability !== "available") return null;
+        const [current, history] = await Promise.all([
+          resolvePinnedRelease(resolution.current), resolvePinnedRelease(resolution.history),
+        ]);
+        if (!current || !history) return null;
+        return {
+          left: left.kind === "current" ? current : history,
+          right: right.kind === "current" ? current : history,
+        };
       },
   });
 }
