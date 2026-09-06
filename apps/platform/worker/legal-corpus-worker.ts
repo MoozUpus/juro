@@ -73,7 +73,9 @@ import {
   type TargetRetrievalRuntimeEnv,
 } from "../lib/legal-corpus/target-runtime";
 import {
+  handleTargetActivationSetEvaluationRequest,
   handleTargetCandidateEvaluationRequest,
+  TARGET_ACTIVATION_SET_EVALUATION_PATH,
   TARGET_CANDIDATE_EVALUATION_PATH,
 } from "../lib/legal-corpus/target-evaluation";
 
@@ -633,6 +635,9 @@ const worker = {
       } catch {
         return response({ code: "TARGET_LEGAL_ANSWER_UNAVAILABLE" }, 503);
       }
+    }
+    if (url.pathname === TARGET_ACTIVATION_SET_EVALUATION_PATH) {
+      return handleTargetActivationSetEvaluationRequest(request, env);
     }
     if (url.pathname === TARGET_CANDIDATE_EVALUATION_PATH) {
       return handleTargetCandidateEvaluationRequest(request, env);

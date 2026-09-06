@@ -10,6 +10,7 @@ import {
   createReleaseLifecycle,
   createReleaseLifecycleClient,
   handleReleaseLifecycleRequest,
+  resolveStagingHistoryComparisonEvaluationSet,
 } from "../lib/legal-corpus/target-release";
 import {
   importCurrentRepresentativeProvision,
@@ -27,6 +28,96 @@ test("comparison corpus compatibility requires one Corpus Snapshot", () => {
     { corpusSnapshotId: "snapshot-current" },
     { corpusSnapshotId: "snapshot-history" },
   ), false);
+});
+
+function stagingEvaluationDb(overrides: {
+  activation?: Record<string, unknown>;
+  history?: Record<string, unknown>;
+  reconciliation?: Record<string, unknown>;
+  currentGovernance?: Record<string, unknown> | null;
+} = {}): D1Database {
+  const currentId = "release:staging:current:evaluation-v1";
+  const historyId = "release:staging:history:evaluation-v1";
+  const report = { releaseId: historyId, corpusSnapshotId: "snapshot:staging:evaluation-v1",
+    chunkCount: 20, materializationComplete: true, sparseReductionComplete: true,
+    vectorizeFullListReconciled: true, regularApiOnly: true, batchApiUsed: false };
+  const activation = { id: "activation:staging:evaluation-v1", environment: "staging",
+    currentReleaseId: currentId, asOfReleaseId: historyId,
+    comparisonCurrentReleaseId: currentId, comparisonHistoryReleaseId: historyId,
+    previousActivationSetId: "activation:staging:current-v2",
+    activeActivationSetId: "activation:staging:current-v2",
+    ...overrides.activation };
+  const current = { id: currentId, environment: "staging", capability: "current",
+    corpusSnapshotId: "snapshot:staging:evaluation-v1", status: "sealed", itemCount: 10,
+    retrievalPolicyVersion: "custom-hybrid-temporal-v1",
+    configurationIdentity: "custom-hybrid-staging-pair-v1", snapshotStatus: "frozen",
+    chunkCount: 10, mappingCount: 10, configurationSha256: "a".repeat(64) };
+  const history = { id: historyId, environment: "staging", capability: "history",
+    corpusSnapshotId: "snapshot:staging:evaluation-v1", status: "draft", itemCount: 20,
+    retrievalPolicyVersion: "custom-hybrid-temporal-v1",
+    configurationIdentity: "custom-hybrid-staging-pair-v1", snapshotStatus: "frozen",
+    chunkCount: 20, mappingCount: 20, configurationSha256: "a".repeat(64),
+    ...overrides.history };
+  const reconciliation = { environment: "staging", releaseId: historyId,
+    capability: "history", status: "clean",
+    reportSha256: createHash("sha256").update(`${JSON.stringify(report, null, 2)}\n`).digest("hex"),
+    reportJson: JSON.stringify(report), ...overrides.reconciliation };
+  return {
+    prepare(sql: string) {
+      return { bind() {
+        if (sql.includes("FROM legal_activation_sets candidate")) {
+          return { first: async () => activation };
+        }
+        if (sql.includes("FROM legal_search_releases release")) {
+          return { all: async () => ({ results: [current, history] }) };
+        }
+        if (sql.includes("FROM legal_search_release_governance")) {
+          return { first: async () => overrides.currentGovernance === undefined
+            ? { id: "governance:staging:current:evaluation-v1" }
+            : overrides.currentGovernance };
+        }
+        if (sql.includes("FROM legal_migration_reconciliation_reports")) {
+          return { first: async () => reconciliation };
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      } };
+    },
+  } as unknown as D1Database;
+}
+
+test("staging evaluation resolves one exact compatible off-side Activation Set", async () => {
+  const report = { releaseId: "release:staging:history:evaluation-v1",
+    corpusSnapshotId: "snapshot:staging:evaluation-v1", chunkCount: 20,
+    materializationComplete: true, sparseReductionComplete: true,
+    vectorizeFullListReconciled: true, regularApiOnly: true, batchApiUsed: false };
+  const input = { activationSetId: "activation:staging:evaluation-v1",
+    historyReconciliationRunId: "history-evaluation:staging:custom-v1",
+    historyReportSha256: createHash("sha256").update(`${JSON.stringify(report, null, 2)}\n`).digest("hex") };
+  const selected = await resolveStagingHistoryComparisonEvaluationSet(
+    stagingEvaluationDb(), input,
+  );
+  assert.equal(selected.current.status, "sealed");
+  assert.equal(selected.history.status, "draft");
+  assert.equal(selected.current.id, "release:staging:current:evaluation-v1");
+  await assert.rejects(() => resolveStagingHistoryComparisonEvaluationSet(
+    stagingEvaluationDb({ activation: { activeActivationSetId: input.activationSetId } }), input,
+  ), /ACTIVATION_REJECTED/u);
+  await assert.rejects(() => resolveStagingHistoryComparisonEvaluationSet(
+    stagingEvaluationDb({ activation: { activeActivationSetId: null } }), input,
+  ), /ACTIVATION_REJECTED/u);
+  await assert.rejects(() => resolveStagingHistoryComparisonEvaluationSet(
+    stagingEvaluationDb({ history: { corpusSnapshotId: "snapshot:staging:other-v1" } }), input,
+  ), /ACTIVATION_REJECTED/u);
+  await assert.rejects(() => resolveStagingHistoryComparisonEvaluationSet(
+    stagingEvaluationDb({ reconciliation: { reportSha256: "c".repeat(64) } }), input,
+  ), /ACTIVATION_REJECTED/u);
+  await assert.rejects(() => resolveStagingHistoryComparisonEvaluationSet(
+    stagingEvaluationDb({ reconciliation: { reportJson: JSON.stringify({ ...report, chunkCount: 19 }) } }),
+    input,
+  ), /ACTIVATION_REJECTED/u);
+  await assert.rejects(() => resolveStagingHistoryComparisonEvaluationSet(
+    stagingEvaluationDb({ currentGovernance: null }), input,
+  ), /ACTIVATION_REJECTED/u);
 });
 
 function governedItem(

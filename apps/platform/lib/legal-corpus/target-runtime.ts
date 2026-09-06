@@ -19,7 +19,7 @@ import { assertCompleteCorpusCurrentInterval, resolveCompleteCorpusEvidence, res
   type LegalEvidenceBucket } from "./target-evidence";
 import { resolveProvisionLineage } from "./target-lineage";
 import { governedAiSearchConfigurationSchema } from "./target-governance";
-import { createReleaseLifecycle } from "./target-release";
+import { createReleaseLifecycle, resolveStagingHistoryComparisonEvaluationSet } from "./target-release";
 import {
   createTargetLegalAnswerRetriever,
   parseQuestionInterpretationPlan,
@@ -406,6 +406,29 @@ function customPinnedConfiguration(identityValue: string, gatewayIdentity: strin
   });
 }
 
+function assertCustomSearchRequest(capability: CustomSearchCapability, environment: string,
+  input: Parameters<AiSearchProvider["search"]>[0]) {
+  if ((capability === "current" && input.endpoint.kind !== "current")
+    || (capability === "history" && input.endpoint.kind !== "timestamp")
+    || input.instanceIds.length !== 1
+    || input.instanceIds[0] !== customInstanceId(capability, environment)) {
+    throw new TypeError("CUSTOM_SEARCH_REQUEST_REJECTED");
+  }
+}
+
+async function requestCustomSearch(service: Fetcher, environment: string,
+  input: Parameters<AiSearchProvider["search"]>[0]) {
+  const response = await service.fetch(`http://legal-corpus.internal${CUSTOM_SEARCH_PATH}`, {
+    method: "POST",
+    headers: { "content-type": "application/json",
+      "x-juro-service-binding": CUSTOM_SEARCH_SERVICE_MARKER,
+      "x-juro-legal-environment": environment },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new TypeError("CUSTOM_SEARCH_SERVICE_UNAVAILABLE");
+  return customSearchResponseSchema.parse(await response.json());
+}
+
 export function createRuntimeCustomSearchProvider(input: {
   db: D1Database;
   service: Fetcher;
@@ -435,22 +458,41 @@ export function createRuntimeCustomSearchProvider(input: {
         input.gatewayIdentity, input.projectIdentity);
     },
     async search(searchInput) {
-      if ((input.capability === "current" && searchInput.endpoint.kind !== "current")
-        || (input.capability === "history" && searchInput.endpoint.kind !== "timestamp")
-        || searchInput.instanceIds.length !== 1
-        || searchInput.instanceIds[0] !== customInstanceId(input.capability, input.environment)) {
-        throw new TypeError("CUSTOM_SEARCH_REQUEST_REJECTED");
-      }
+      assertCustomSearchRequest(input.capability, input.environment, searchInput);
       const release = await pinned(searchInput.releaseId);
-      const response = await input.service.fetch(`http://legal-corpus.internal${CUSTOM_SEARCH_PATH}`, {
-        method: "POST",
-        headers: { "content-type": "application/json",
-          "x-juro-service-binding": CUSTOM_SEARCH_SERVICE_MARKER,
-          "x-juro-legal-environment": input.environment },
-        body: JSON.stringify({ ...searchInput, releaseId: release.id }),
-      });
-      if (!response.ok) throw new TypeError("CUSTOM_SEARCH_SERVICE_UNAVAILABLE");
-      return customSearchResponseSchema.parse(await response.json());
+      return requestCustomSearch(input.service, input.environment,
+        { ...searchInput, releaseId: release.id });
+    },
+  };
+}
+
+function createRuntimeEvaluationCustomSearchProvider(input: {
+  releaseId: string;
+  configurationIdentity: string;
+  service: Fetcher;
+  capability: CustomSearchCapability;
+  gatewayIdentity: string;
+  projectIdentity: string;
+}): AiSearchProvider {
+  const configuration = customPinnedConfiguration(input.configurationIdentity,
+    input.gatewayIdentity, input.projectIdentity);
+  const assertEvaluationRelease = (releaseId: string | undefined) => {
+    if (releaseId !== input.releaseId) {
+      throw new TypeError("CUSTOM_SEARCH_EVALUATION_RELEASE_REJECTED");
+    }
+  };
+  return {
+    async attest(instanceId, releaseId) {
+      if (instanceId !== customInstanceId(input.capability, "staging")) {
+        throw new TypeError("CUSTOM_SEARCH_INSTANCE_REJECTED");
+      }
+      assertEvaluationRelease(releaseId);
+      return configuration;
+    },
+    async search(searchInput) {
+      assertCustomSearchRequest(input.capability, "staging", searchInput);
+      assertEvaluationRelease(searchInput.releaseId);
+      return requestCustomSearch(input.service, "staging", searchInput);
     },
   };
 }
@@ -713,6 +755,118 @@ export function createRuntimeTargetLegalAnswerRetriever(
         };
       },
   });
+}
+
+export type TargetActivationSetEvaluationObservation = {
+  activationSetId: string;
+  historyReconciliationRunId: string;
+  historyReportSha256: string;
+  resolutions: Array<{
+    kind: "endpoint" | "comparison";
+    endpoint?: TemporalEndpoint;
+    left?: TemporalEndpoint;
+    right?: TemporalEndpoint;
+    releaseId?: string;
+    leftReleaseId?: string;
+    rightReleaseId?: string;
+  }>;
+};
+
+/** Opens one explicit off-side current/history pair for staging-only target evaluation. */
+export async function createRuntimeTargetActivationSetEvaluation(input: {
+  env: TargetRetrievalRuntimeEnv;
+  activationSetId: string;
+  historyReconciliationRunId: string;
+  historyReportSha256: string;
+}): Promise<{
+  answer(question: Parameters<TargetLegalAnswerRetriever["answer"]>[0]): Promise<{
+    result: Awaited<ReturnType<TargetLegalAnswerRetriever["answer"]>>;
+    observation: TargetActivationSetEvaluationObservation;
+  }>;
+}> {
+  const { env } = input;
+  if (env.APP_ENV !== "staging" || env.LEGAL_CORPUS_SHADOW_MODE !== "true"
+    || env.LEGAL_AI_SEARCH_PAUSED !== "true" || !env.LEGAL_DB || !env.LEGAL_EVIDENCE_BUCKET
+    || !env.LEGAL_CORPUS_REASONING_SERVICE || !env.LEGAL_CUSTOM_SEARCH_SERVICE
+    || !env.LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE || !env.LEGAL_AI_GATEWAY_ID
+    || !env.LEGAL_AI_PROVIDER_PROJECT_ID) {
+    throw new TypeError("TARGET_ACTIVATION_SET_EVALUATION_UNAVAILABLE");
+  }
+  const selected = await resolveStagingHistoryComparisonEvaluationSet(env.LEGAL_DB, {
+    activationSetId: input.activationSetId,
+    historyReconciliationRunId: input.historyReconciliationRunId,
+    historyReportSha256: input.historyReportSha256,
+  });
+  const dependencies: RuntimeDependencies = {
+    environment: "staging", db: env.LEGAL_DB, evidenceBucket: env.LEGAL_EVIDENCE_BUCKET,
+    reasoningService: env.LEGAL_CORPUS_REASONING_SERVICE,
+  };
+  const providers = new Map<CustomSearchCapability, AiSearchProvider>([
+    ["current", createRuntimeEvaluationCustomSearchProvider({
+      releaseId: selected.current.id, configurationIdentity: selected.current.configurationIdentity,
+      service: env.LEGAL_CUSTOM_SEARCH_SERVICE, capability: "current",
+      gatewayIdentity: env.LEGAL_AI_GATEWAY_ID, projectIdentity: env.LEGAL_AI_PROVIDER_PROJECT_ID,
+    })],
+    ["history", createRuntimeEvaluationCustomSearchProvider({
+      releaseId: selected.history.id, configurationIdentity: selected.history.configurationIdentity,
+      service: env.LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE, capability: "history",
+      gatewayIdentity: env.LEGAL_AI_GATEWAY_ID, projectIdentity: env.LEGAL_AI_PROVIDER_PROJECT_ID,
+    })],
+  ]);
+  const providerForInstance = (instanceId: string) =>
+    (["current", "history"] as const).find(capability =>
+      instanceId === customInstanceId(capability, "staging"));
+  const provider: AiSearchProvider = {
+    attest(instanceId, releaseId) {
+      const capability = providerForInstance(instanceId);
+      return capability
+        ? providers.get(capability)!.attest(instanceId, releaseId)
+        : Promise.reject(new TypeError("TARGET_CANDIDATE_PROVIDER_UNAVAILABLE"));
+    },
+    search(searchInput) {
+      const capability = searchInput.instanceIds.length === 1
+        ? providerForInstance(searchInput.instanceIds[0]!) : undefined;
+      return capability
+        ? providers.get(capability)!.search(searchInput)
+        : Promise.reject(new TypeError("TARGET_CANDIDATE_PROVIDER_UNAVAILABLE"));
+    },
+  };
+  const pinned = (release: typeof selected.current) => parsePinnedCandidateRelease({
+    id: release.id, environment: "staging", capability: release.capability,
+    instances: [{ id: customInstanceId(release.capability, "staging"),
+      shardId: customShardId(release.capability) }],
+    configuration: customPinnedConfiguration(release.configurationIdentity,
+      env.LEGAL_AI_GATEWAY_ID!, env.LEGAL_AI_PROVIDER_PROJECT_ID!),
+  });
+  const current = pinned(selected.current);
+  const history = pinned(selected.history);
+  return {
+    async answer(question) {
+      const observation: TargetActivationSetEvaluationObservation = {
+        activationSetId: selected.id,
+        historyReconciliationRunId: selected.historyReconciliationRunId,
+        historyReportSha256: selected.historyReportSha256,
+        resolutions: [],
+      };
+      const releaseResolver: RuntimeReleaseResolver = {
+        async resolve(endpoint) {
+          const release = endpoint.kind === "current" ? current : history;
+          observation.resolutions.push({ kind: "endpoint", endpoint, releaseId: release.id });
+          return release;
+        },
+        async resolveComparison(left, right) {
+          const leftRelease = left.kind === "current" ? current : history;
+          const rightRelease = right.kind === "current" ? current : history;
+          observation.resolutions.push({ kind: "comparison", left, right,
+            leftReleaseId: leftRelease.id, rightReleaseId: rightRelease.id });
+          return { left: leftRelease, right: rightRelease };
+        },
+      };
+      const retriever = createRuntimeRetriever(dependencies,
+        createRuntimeCandidateIndex(dependencies, provider), releaseResolver);
+      return { result: await retriever.answer(question), observation };
+    },
+  };
 }
 
 const qualificationIdentifier = z.string().trim().min(1).max(200)

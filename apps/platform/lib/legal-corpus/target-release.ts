@@ -140,6 +140,135 @@ const activationSetSchema = z.object({
   createdAt: utcInstantSchema,
 }).strict();
 
+const stagingEvaluationSetInputSchema = z.object({
+  activationSetId: legalIdentifierSchema,
+  historyReconciliationRunId: legalIdentifierSchema,
+  historyReportSha256: sha256Schema,
+}).strict();
+
+const stagingEvaluationReleaseSchema = z.object({
+  id: searchReleaseIdSchema,
+  environment: z.literal("staging"),
+  capability: z.enum(["current", "history"]),
+  corpusSnapshotId: corpusSnapshotIdSchema,
+  status: z.enum(["draft", "sealed"]),
+  itemCount: z.number().int().positive(),
+  retrievalPolicyVersion: legalIdentifierSchema,
+  configurationIdentity: legalIdentifierSchema,
+}).strict();
+
+export type StagingHistoryComparisonEvaluationSet = {
+  id: string;
+  current: z.infer<typeof stagingEvaluationReleaseSchema>;
+  history: z.infer<typeof stagingEvaluationReleaseSchema>;
+  historyReconciliationRunId: string;
+  historyReportSha256: string;
+};
+
+/**
+ * Resolves one immutable, off-side pair for pre-governance staging evaluation.
+ * This verifies but never changes the active pointer, and cannot admit a draft
+ * release outside the exact set and reconciliation supplied by the caller.
+ */
+export async function resolveStagingHistoryComparisonEvaluationSet(
+  db: D1Database,
+  untrustedInput: z.input<typeof stagingEvaluationSetInputSchema>,
+): Promise<StagingHistoryComparisonEvaluationSet> {
+  const input = stagingEvaluationSetInputSchema.parse(untrustedInput);
+  const selected = await db.prepare(`SELECT candidate.id,candidate.environment,
+      candidate.current_release_id AS currentReleaseId,
+      candidate.as_of_release_id AS asOfReleaseId,
+      candidate.comparison_current_release_id AS comparisonCurrentReleaseId,
+      candidate.comparison_history_release_id AS comparisonHistoryReleaseId,
+      candidate.previous_activation_set_id AS previousActivationSetId,
+      active.activation_set_id AS activeActivationSetId
+    FROM legal_activation_sets candidate
+    LEFT JOIN legal_active_activation_sets active ON active.environment=candidate.environment
+    WHERE candidate.id=? AND candidate.environment='staging'`).bind(input.activationSetId).first<{
+      id: string; environment: string; currentReleaseId: string | null; asOfReleaseId: string | null;
+      comparisonCurrentReleaseId: string | null; comparisonHistoryReleaseId: string | null;
+      previousActivationSetId: string | null; activeActivationSetId: string | null;
+    }>();
+  if (!selected || !selected.currentReleaseId || !selected.asOfReleaseId
+    || selected.currentReleaseId !== selected.comparisonCurrentReleaseId
+    || selected.asOfReleaseId !== selected.comparisonHistoryReleaseId
+    || !selected.activeActivationSetId
+    || selected.id === selected.activeActivationSetId
+    || selected.previousActivationSetId !== selected.activeActivationSetId) {
+    throw new ReleaseLifecycleError("ACTIVATION_REJECTED");
+  }
+  const releases = await db.prepare(`SELECT release.id,release.environment,release.capability,
+      release.corpus_snapshot_id AS corpusSnapshotId,release.status,
+      release.item_count AS itemCount,release.retrieval_policy_version AS retrievalPolicyVersion,
+      release.configuration_identity AS configurationIdentity,snapshot.status AS snapshotStatus,
+      component.chunk_count AS chunkCount,component.configuration_sha256 AS configurationSha256,
+      runtime.mapping_count AS mappingCount
+    FROM legal_search_releases release
+    JOIN legal_corpus_snapshots snapshot ON snapshot.id=release.corpus_snapshot_id
+    JOIN legal_custom_search_release_components component ON component.search_release_id=release.id
+    JOIN legal_custom_search_runtime_components runtime ON runtime.search_release_id=release.id
+    WHERE release.id IN (?,?) ORDER BY release.id`).bind(
+    selected.currentReleaseId,
+    selected.asOfReleaseId,
+  ).all<Record<string, unknown>>();
+  const currentRow = releases.results.find((row) => row.id === selected.currentReleaseId);
+  const historyRow = releases.results.find((row) => row.id === selected.asOfReleaseId);
+  const exactRelease = (row: Record<string, unknown> | undefined, capability: "current" | "history") => {
+    if (!row || row.snapshotStatus !== "frozen"
+      || Number(row.itemCount) !== Number(row.chunkCount)
+      || Number(row.itemCount) !== Number(row.mappingCount)) {
+      throw new ReleaseLifecycleError("ACTIVATION_REJECTED");
+    }
+    const release = stagingEvaluationReleaseSchema.parse({
+      id: row.id, environment: row.environment, capability: row.capability,
+      corpusSnapshotId: row.corpusSnapshotId, status: row.status, itemCount: Number(row.itemCount),
+      retrievalPolicyVersion: row.retrievalPolicyVersion,
+      configurationIdentity: row.configurationIdentity,
+    });
+    if (release.capability !== capability) throw new ReleaseLifecycleError("ACTIVATION_REJECTED");
+    return { release, configurationSha256: String(row.configurationSha256) };
+  };
+  const current = exactRelease(currentRow, "current");
+  const history = exactRelease(historyRow, "history");
+  if (current.release.status !== "sealed" || history.release.status !== "draft"
+    || current.release.corpusSnapshotId !== history.release.corpusSnapshotId
+    || current.release.retrievalPolicyVersion !== history.release.retrievalPolicyVersion
+    || current.release.configurationIdentity !== history.release.configurationIdentity
+    || current.configurationSha256 !== history.configurationSha256) {
+    throw new ReleaseLifecycleError("ACTIVATION_REJECTED");
+  }
+  const currentGovernance = await db.prepare(`SELECT id FROM legal_search_release_governance
+    WHERE search_release_id=? AND environment='staging' AND capability='current'
+      AND status='passed' AND failures_json='[]' LIMIT 1`).bind(current.release.id).first();
+  const reconciliation = await db.prepare(`SELECT environment,release_id AS releaseId,capability,
+      status,report_sha256 AS reportSha256,report_json AS reportJson
+    FROM legal_migration_reconciliation_reports WHERE run_id=?`).bind(
+    input.historyReconciliationRunId,
+  ).first<{ environment: string; releaseId: string; capability: string; status: string;
+    reportSha256: string; reportJson: string }>();
+  let report: Record<string, unknown> | null = null;
+  try {
+    report = reconciliation ? JSON.parse(reconciliation.reportJson) as Record<string, unknown> : null;
+  } catch {
+    report = null;
+  }
+  if (!currentGovernance || !reconciliation || reconciliation.environment !== "staging"
+    || reconciliation.releaseId !== history.release.id || reconciliation.capability !== "history"
+    || reconciliation.status !== "clean" || reconciliation.reportSha256 !== input.historyReportSha256
+    || await sha256(`${JSON.stringify(report, null, 2)}\n`) !== input.historyReportSha256
+    || report?.releaseId !== history.release.id
+    || report?.corpusSnapshotId !== history.release.corpusSnapshotId
+    || Number(report?.chunkCount) !== history.release.itemCount
+    || report?.materializationComplete !== true || report?.sparseReductionComplete !== true
+    || report?.vectorizeFullListReconciled !== true
+    || report?.regularApiOnly !== true || report?.batchApiUsed !== false) {
+    throw new ReleaseLifecycleError("ACTIVATION_REJECTED");
+  }
+  return { id: selected.id, current: current.release, history: history.release,
+    historyReconciliationRunId: input.historyReconciliationRunId,
+    historyReportSha256: input.historyReportSha256 };
+}
+
 type SnapshotMember = {
   provisionRenditionId: string;
   locatorId: string;
