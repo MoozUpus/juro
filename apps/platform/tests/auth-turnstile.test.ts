@@ -28,6 +28,13 @@ test("Turnstile delegates cross-origin messaging to the official explicit-render
   assert.match(turnstileWidget, /turnstileWindow\.turnstile\.remove\(/);
 });
 
+test("Turnstile exposes a recoverable challenge instead of an indefinite pending form", () => {
+  assert.match(turnstileWidget, /appearance:\s*"always"/);
+  assert.match(turnstileWidget, /verificationTimeout\s*=\s*window\.setTimeout/);
+  assert.match(turnstileWidget, /},\s*20_000\);/);
+  assert.match(turnstileWidget, /clearVerificationTimeout\(\);[\s\S]*?setStatus\("error"\);/);
+});
+
 test("CSP permits every browser channel required by the Turnstile challenge", () => {
   const challengeHost = "https://challenges.cloudflare.com";
   assert.match(
