@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { acceptedCurrentSourceSchema, customCurrentSha256, type AcceptedCurrentSource } from "./custom-current-build";
+import { acceptedCurrentSourceSchema, customCurrentSha256, type AcceptedCurrentSource,
+  type CustomCurrentSourcePlanItem } from "./custom-current-build";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const acceptedCurrentManifestSchema = z.object({
@@ -13,6 +14,57 @@ export const acceptedCurrentManifestSchema = z.object({
 }).strict();
 export const acceptedCurrentPageSchema = z.object({ schemaVersion: z.literal(1),
   start: z.number().int().nonnegative(), items: z.array(acceptedCurrentSourceSchema).min(1).max(500) }).strict();
+
+const productionCurrentArticleMetadataSchema = z.object({
+  articleNumber: z.string().trim().min(1), articleTitle: z.string().nullable(),
+  hierarchy: z.array(z.string().trim().min(1)),
+}).strict();
+export type ProductionCurrentArticleMetadata = z.infer<typeof productionCurrentArticleMetadataSchema>;
+export const productionCurrentMetadataPageSchema = z.object({
+  schemaVersion: z.literal(1), kind: z.literal("production-current-body-free-metadata-page"),
+  sourceRootSha256: digest, acceptedInputManifestSha256: digest, sourcePlanManifestSha256: digest,
+  start: z.number().int().nonnegative(),
+  items: z.array(z.object({ sourceOrdinal: z.number().int().nonnegative(), sourceId: z.string().min(1),
+    snapshotProvisionId: z.string().min(1), provisionRenditionId: z.string().min(1),
+    language: z.enum(["uz-Latn", "uz-Cyrl", "ru", "en"]),
+    validFrom: z.string().datetime({ offset: true }), validTo: z.string().datetime({ offset: true }).nullable(),
+    ...productionCurrentArticleMetadataSchema.shape }).strict()).min(1).max(500),
+}).strict();
+
+export function acceptedProductionCurrentPlanItems(rawMetadataPage: unknown, rawAcceptedPage: unknown): Array<{
+  planItem: CustomCurrentSourcePlanItem; acceptedMetadata: ProductionCurrentArticleMetadata;
+}> {
+  const metadataPage = productionCurrentMetadataPageSchema.parse(rawMetadataPage);
+  const acceptedPage = acceptedCurrentPageSchema.parse(rawAcceptedPage);
+  if (metadataPage.start !== acceptedPage.start || metadataPage.items.length !== acceptedPage.items.length) {
+    throw new TypeError("PRODUCTION_METADATA_PAGE_MISMATCH");
+  }
+  return metadataPage.items.map((metadata, index) => {
+    const accepted = acceptedPage.items[index]!;
+    if (metadata.sourceOrdinal !== metadataPage.start + index || metadata.sourceId !== accepted.sourceId
+      || metadata.provisionRenditionId !== accepted.legacyRenditionId) {
+      throw new TypeError("PRODUCTION_METADATA_PAGE_MISMATCH");
+    }
+    const { articleNumber, articleTitle, hierarchy } = metadata;
+    return {
+      planItem: { sourceOrdinal: metadata.sourceOrdinal, snapshotProvisionId: metadata.snapshotProvisionId,
+        provisionRenditionId: metadata.provisionRenditionId, evidenceR2Key: accepted.provision.key,
+        evidenceByteCount: accepted.provision.sizeBytes, evidenceSha256: accepted.provision.sha256,
+        language: metadata.language, documentType: "unknown", validFrom: metadata.validFrom,
+        validTo: metadata.validTo, accepted },
+      acceptedMetadata: { articleNumber, articleTitle, hierarchy },
+    };
+  });
+}
+
+export async function readAcceptedProductionCurrentMetadata(source: AcceptedCurrentSource,
+  evidence: R2Bucket, metadata: ProductionCurrentArticleMetadata) {
+  const acceptedMetadata = productionCurrentArticleMetadataSchema.parse(metadata);
+  const bytes = await readAcceptedObject(evidence, source.normalized, 32 * 1024 * 1024);
+  const normalized = z.object({ documentTitle: z.string().trim().min(1) })
+    .parse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
+  return { documentTitle: normalized.documentTitle, ...acceptedMetadata };
+}
 
 export const acceptedHistoricalSourceSchema = acceptedCurrentSourceSchema.extend({
   snapshotProvisionId: z.string().regex(/^audit:[a-f0-9]{64}$/u),
