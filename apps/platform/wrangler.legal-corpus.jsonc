@@ -163,6 +163,10 @@
           "bucket_name": "juro-legal-evidence-staging-green2-20260831"
         },
         {
+          "binding": "LEGAL_CUSTOM_ARTIFACT_BUCKET",
+          "bucket_name": "juro-legal-current-custom-20260903"
+        },
+        {
           "binding": "LEGAL_AI_SEARCH_SOURCE_BUCKET",
           "bucket_name": "juro-legal-ai-search-staging-20260902"
         }

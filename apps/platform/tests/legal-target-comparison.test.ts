@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
@@ -27,6 +28,13 @@ import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
 
 const current = { kind: "current" as const };
 const past = { kind: "timestamp" as const, instant: "2024-01-01T00:00:00.000Z" };
+
+const endpointIdentity = (endpoint: TemporalEndpoint) =>
+  endpoint.kind === "current" ? "current" : endpoint.instant.slice(0, 4);
+
+const endpointProvisionText = (endpoint: TemporalEndpoint) => endpoint.kind === "current"
+  ? "Current governing text."
+  : `Historical governing text for ${endpointIdentity(endpoint)}.`;
 
 const release = (endpoint: TemporalEndpoint): PinnedCandidateRelease => parsePinnedCandidateRelease({
   id: endpoint.kind === "current" ? "release-current-comparison" : "release-history-comparison",
@@ -122,7 +130,7 @@ function comparisonRetriever(
     },
     candidateIndex: createInMemoryCandidateIndex(async (formulation, endpoint, pinned) => {
       calls.push(endpoint);
-      const side = endpoint.kind === "current" ? "current" : endpoint.instant.slice(0, 4);
+      const side = endpointIdentity(endpoint);
       return [{
         itemKey: `search-releases/${pinned.id}/${side}/${side}-rendition.md`,
         instanceId: pinned.instances[0]!.id,
@@ -141,35 +149,37 @@ function comparisonRetriever(
       revalidate: async (packet, endpoint) => packet.candidates.map((candidate) => ({
         candidate,
         ...stableIdentity(
-          endpoint.kind === "current" ? "rendition-current" : "rendition-2024",
-          endpoint.kind === "current" ? "concept-current" : "concept-2024",
+          `rendition-${endpointIdentity(endpoint)}`,
+          `concept-${endpointIdentity(endpoint)}`,
         ),
       })),
     },
     evidenceResolver: {
-      resolveControlling: async (id, endpoint) => parseControllingEvidenceResolution({
-        controlling: {
+      resolveControlling: async (id, endpoint) => {
+        const identity = endpointIdentity(endpoint);
+        return parseControllingEvidenceResolution({ controlling: {
           legalInstrumentId: "instrument-comparison",
           officialExpressionId: "expression-comparison",
-          textRevisionId: endpoint.kind === "current" ? "revision-current" : "revision-2024",
-          provisionConceptId: endpoint.kind === "current" ? "concept-current" : "concept-2024",
+          textRevisionId: `revision-${identity}`,
+          provisionConceptId: `concept-${identity}`,
           provisionRenditionId: id,
           languageTag: "uz-Latn",
           script: "Latn",
           textualAuthority: "controlling",
-          provisionText: endpoint.kind === "current" ? "Current governing text." : "Historical governing text.",
+          provisionText: endpointProvisionText(endpoint),
           officialCitation: { label: "Act — Article 1", url: "https://lex.uz/docs/990" },
           evidence: {
             provisionRenditionId: id,
             r2Key: `corpus/provisions/${id}.json`,
             byteCount: 10,
-            sha256: (endpoint.kind === "current" ? "e" : "f").repeat(64),
+            sha256: createHash("sha256").update(`comparison-evidence-${identity}`).digest("hex"),
             sourceNormalizedSha256: "a".repeat(64),
             schemaVersion: 1,
           },
         },
         materialCitation: { label: "Act — Article 1", url: "https://lex.uz/docs/990" },
-      }),
+        });
+      },
     },
     provisionSelector: {
       select: async ({ candidates }) => ({
@@ -211,9 +221,15 @@ for (const [label, left, right] of [
     assert.deepEqual(calls, [left, right]);
     assert.deepEqual(result.temporalScope, { kind: "comparison", left, right });
     assert.equal(result.left.whatTheLawSays[0]?.controllingQuotation,
-      left.kind === "current" ? "Current governing text." : "Historical governing text.");
+      endpointProvisionText(left));
     assert.equal(result.right.whatTheLawSays[0]?.controllingQuotation,
-      right.kind === "current" ? "Current governing text." : "Historical governing text.");
+      endpointProvisionText(right));
+    const leftProvisionSetSha256 = createHash("sha256")
+      .update(JSON.stringify(result.left.whatTheLawSays)).digest("hex");
+    const rightProvisionSetSha256 = createHash("sha256")
+      .update(JSON.stringify(result.right.whatTheLawSays)).digest("hex");
+    if (label === "current/current") assert.equal(leftProvisionSetSha256, rightProvisionSetSha256);
+    else assert.notEqual(leftProvisionSetSha256, rightProvisionSetSha256);
     assert.equal(result.endpointFormulationSearches, 2);
     assert.equal(
       result.transitions[0]?.transition,

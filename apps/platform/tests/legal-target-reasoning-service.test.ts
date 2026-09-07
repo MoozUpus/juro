@@ -42,6 +42,48 @@ test("question interpretation uses the strict provider schema subset and normali
   assert.equal("comparison" in parsed, false);
 });
 
+test("question interpretation canonicalizes provider UTC instants that omit the zone marker", () => {
+  const base = {
+    id: "plan-provider-time",
+    originalLanguage: "en",
+    answerLanguage: "en",
+    readings: [{ id: "reading", statement: "Employment contract rules",
+      requirements: [{ id: "requirement", statement: "Governing rules" }] }],
+    formulations: [{ id: "formulation", text: "employment contract rules",
+      legalTitleSpans: [], privateNameSpans: [], readingIds: ["reading"],
+      requirementIds: ["requirement"], kind: "legal_register" }],
+    missingCaseFacts: [],
+  };
+  const endpoint = parseTargetInterpretationProviderOutput({
+    ...base,
+    temporalEndpoint: { kind: "timestamp", instant: "2025-01-01T00:00:00" },
+    comparison: null,
+  });
+  assert.deepEqual(endpoint.temporalEndpoint,
+    { kind: "timestamp", instant: "2025-01-01T00:00:00.000Z" });
+
+  const offsetEndpoint = parseTargetInterpretationProviderOutput({
+    ...base,
+    temporalEndpoint: { kind: "timestamp", instant: "2025-01-01T00:00:00+05:00" },
+    comparison: null,
+  });
+  assert.deepEqual(offsetEndpoint.temporalEndpoint,
+    { kind: "timestamp", instant: "2024-12-31T19:00:00.000Z" });
+
+  const comparison = parseTargetInterpretationProviderOutput({
+    ...base,
+    temporalEndpoint: null,
+    comparison: {
+      left: { kind: "timestamp", instant: "2020-01-01T00:00:00" },
+      right: { kind: "timestamp", instant: "2025-01-01T00:00:00.000Z" },
+    },
+  });
+  assert.deepEqual(comparison.comparison, {
+    left: { kind: "timestamp", instant: "2020-01-01T00:00:00.000Z" },
+    right: { kind: "timestamp", instant: "2025-01-01T00:00:00.000Z" },
+  });
+});
+
 async function computeFormulationSha256(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode([
     "juro.private-name-classification.v1",

@@ -42,6 +42,7 @@ export type TargetRetrievalRuntimeEnv = {
   LEGAL_AI_SEARCH_PAUSED?: string;
   LEGAL_DB?: D1Database;
   LEGAL_EVIDENCE_BUCKET?: Pick<LegalEvidenceBucket, "get">;
+  LEGAL_CUSTOM_ARTIFACT_BUCKET?: R2Bucket;
   LEGAL_AI_SEARCH_NAMESPACE?: AiSearchNamespace;
   LEGAL_AI_SEARCH_NAMESPACE_NAME?: string;
   LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME?: string;
@@ -56,6 +57,7 @@ type RuntimeDependencies = {
   environment: z.infer<typeof environmentSchema>;
   db: D1Database;
   evidenceBucket: Pick<LegalEvidenceBucket, "get">;
+  customArtifactBucket?: R2Bucket;
   reasoningService: Fetcher;
 };
 
@@ -537,7 +539,7 @@ function createRuntimeRetriever(
   candidateIndex: ReturnType<typeof createRuntimeCandidateIndex>,
   releaseResolver: RuntimeReleaseResolver,
 ): TargetLegalAnswerRetriever {
-  const { environment, db, evidenceBucket, reasoningService } = dependencies;
+  const { environment, db, evidenceBucket, customArtifactBucket, reasoningService } = dependencies;
   return createTargetLegalAnswerRetriever({
     environment,
     interpreter: {
@@ -554,7 +556,7 @@ function createRuntimeRetriever(
     },
     releaseResolver,
     candidateIndex,
-    candidateCatalog: createRuntimeCandidateCatalog(db, evidenceBucket),
+    candidateCatalog: createRuntimeCandidateCatalog(db, customArtifactBucket ?? evidenceBucket),
     evidenceResolver: {
       async resolveControlling(provisionRenditionId, endpoint, context) {
         if (context.release.instances.some((instance) =>
@@ -603,7 +605,8 @@ export function createRuntimeTargetLegalAnswerRetriever(
   const db = env.LEGAL_DB;
   const evidenceBucket = env.LEGAL_EVIDENCE_BUCKET;
   const reasoningService = env.LEGAL_CORPUS_REASONING_SERVICE;
-  const dependencies = { environment, db, evidenceBucket, reasoningService };
+  const dependencies = { environment, db, evidenceBucket,
+    customArtifactBucket: env.LEGAL_CUSTOM_ARTIFACT_BUCKET, reasoningService };
   const releaseLifecycle = createReleaseLifecycle({ db });
   const aiProvider = env.LEGAL_AI_SEARCH_NAMESPACE && env.LEGAL_AI_SEARCH_NAMESPACE_NAME
     && env.LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME ? createRuntimeAiSearchProvider({
@@ -787,6 +790,7 @@ export async function createRuntimeTargetActivationSetEvaluation(input: {
   const { env } = input;
   if (env.APP_ENV !== "staging" || env.LEGAL_CORPUS_SHADOW_MODE !== "true"
     || env.LEGAL_AI_SEARCH_PAUSED !== "true" || !env.LEGAL_DB || !env.LEGAL_EVIDENCE_BUCKET
+    || !env.LEGAL_CUSTOM_ARTIFACT_BUCKET
     || !env.LEGAL_CORPUS_REASONING_SERVICE || !env.LEGAL_CUSTOM_SEARCH_SERVICE
     || !env.LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE || !env.LEGAL_AI_GATEWAY_ID
     || !env.LEGAL_AI_PROVIDER_PROJECT_ID) {
@@ -799,6 +803,7 @@ export async function createRuntimeTargetActivationSetEvaluation(input: {
   });
   const dependencies: RuntimeDependencies = {
     environment: "staging", db: env.LEGAL_DB, evidenceBucket: env.LEGAL_EVIDENCE_BUCKET,
+    customArtifactBucket: env.LEGAL_CUSTOM_ARTIFACT_BUCKET,
     reasoningService: env.LEGAL_CORPUS_REASONING_SERVICE,
   };
   const providers = new Map<CustomSearchCapability, AiSearchProvider>([

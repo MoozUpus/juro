@@ -17,6 +17,13 @@ import { legalEnvironmentSchema, searchReleaseIdSchema, sha256Schema, utcInstant
 export const CUSTOM_SEARCH_PATH = "/internal/legal-corpus/custom-search";
 export const CUSTOM_SEARCH_SERVICE_MARKER = "custom-search-runtime-v1";
 const QUERY_RESERVATION_USD_MICROS = 1_065;
+let customSearchTail: Promise<void> = Promise.resolve();
+
+function serializeCustomSearch<T>(operation: () => Promise<T>): Promise<T> {
+  const result = customSearchTail.then(operation);
+  customSearchTail = result.then(() => undefined, () => undefined);
+  return result;
+}
 
 const endpointSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("current") }).strict(),
@@ -228,7 +235,8 @@ export async function handleCustomSearchRequest(request: Request, env: CustomSea
     if (!declaredRequestBodyWithinLimit(request, 4_096)) {
       throw new TypeError("CUSTOM_SEARCH_REQUEST_TOO_LARGE");
     }
-    return privateServiceJson(await executeCustomSearch(env, await request.json()));
+    const body = await request.json();
+    return privateServiceJson(await serializeCustomSearch(() => executeCustomSearch(env, body)));
   } catch {
     return privateServiceJson({ code: "CUSTOM_SEARCH_UNAVAILABLE" }, 503);
   }

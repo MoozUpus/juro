@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import {
@@ -16,10 +17,12 @@ import { customCurrentSha256, serializeCustomCurrentArtifact } from "./custom-cu
 const MAGIC = new TextEncoder().encode("JBM25RT1");
 const HEADER_SIZE = 16;
 const RECORD_SIZE = 32;
-const MAX_POSTING_BLOCK_BYTES = 16 * 1024 * 1024;
+const MAX_POSTING_BLOCK_BYTES = 1024 * 1024;
 const ORDINAL_MAPPING_PAGE_SIZE = 32_768;
 const MEMBERSHIP_PARTITIONS = 64;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+
+type RuntimeDocumentReference = { key: string; sizeBytes: number; sha256: string };
 
 async function membershipPartition(itemKey: string): Promise<string> {
   const match = /^retrieval-chunk-v1:([a-f0-9]{64})$/u.exec(itemKey);
@@ -374,38 +377,69 @@ type RuntimeDocument = {
   fieldLengths: { title: number; hierarchy: number; article: number; text: number };
 };
 
-function runtimeDocument(bytes: Uint8Array, ordinal: number): RuntimeDocument | null {
-  if (bytes.byteLength < HEADER_SIZE || !MAGIC.every((value, index) => bytes[index] === value)) {
+async function readRuntimeDocuments(bucket: R2Bucket, reference: RuntimeDocumentReference,
+  requested: ReadonlySet<number>): Promise<Map<number, RuntimeDocument>> {
+  const object = await bucket.get(reference.key);
+  if (!object || object.size !== reference.sizeBytes || !object.body) {
     throw new TypeError("CUSTOM_BM25_RUNTIME_DOCUMENTS_CORRUPT");
   }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const count = view.getUint32(12, true);
-  if (view.getUint32(8, true) !== 1 || bytes.byteLength !== HEADER_SIZE + count * RECORD_SIZE) {
-    throw new TypeError("CUSTOM_BM25_RUNTIME_DOCUMENTS_CORRUPT");
-  }
-  let low = 0;
-  let high = count - 1;
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    const offset = HEADER_SIZE + middle * RECORD_SIZE;
-    const candidate = view.getUint32(offset, true);
-    if (candidate < ordinal) low = middle + 1;
-    else if (candidate > ordinal) high = middle - 1;
-    else {
-      const validTo = view.getFloat64(offset + 12, true);
-      return {
-        validFromEpoch: view.getFloat64(offset + 4, true),
-        validToEpoch: validTo === -1 ? null : validTo,
-        fieldLengths: {
-          title: view.getUint16(offset + 20, true),
-          hierarchy: view.getUint16(offset + 22, true),
-          article: view.getUint16(offset + 24, true),
-          text: view.getUint16(offset + 26, true),
-        },
-      };
+  const hash = createHash("sha256");
+  const reader = object.body.getReader();
+  const selected = new Map<number, RuntimeDocument>();
+  let pending = new Uint8Array();
+  let totalBytes = 0;
+  let expectedRecords: number | undefined;
+  let records = 0;
+  let previousOrdinal = -1;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    hash.update(value);
+    totalBytes += value.byteLength;
+    const bytes = pending.byteLength === 0 ? value : (() => {
+      const joined = new Uint8Array(pending.byteLength + value.byteLength);
+      joined.set(pending); joined.set(value, pending.byteLength);
+      return joined;
+    })();
+    let offset = 0;
+    if (expectedRecords === undefined) {
+      if (bytes.byteLength < HEADER_SIZE) { pending = bytes.slice(); continue; }
+      if (!MAGIC.every((byte, index) => bytes[index] === byte)) {
+        throw new TypeError("CUSTOM_BM25_RUNTIME_DOCUMENTS_CORRUPT");
+      }
+      const header = new DataView(bytes.buffer, bytes.byteOffset, HEADER_SIZE);
+      if (header.getUint32(8, true) !== 1) {
+        throw new TypeError("CUSTOM_BM25_RUNTIME_DOCUMENTS_CORRUPT");
+      }
+      expectedRecords = header.getUint32(12, true);
+      offset = HEADER_SIZE;
     }
+    while (bytes.byteLength - offset >= RECORD_SIZE) {
+      const view = new DataView(bytes.buffer, bytes.byteOffset + offset, RECORD_SIZE);
+      const ordinal = view.getUint32(0, true);
+      if (ordinal <= previousOrdinal) throw new TypeError("CUSTOM_BM25_RUNTIME_DOCUMENTS_CORRUPT");
+      previousOrdinal = ordinal;
+      if (requested.has(ordinal)) {
+        const validTo = view.getFloat64(12, true);
+        selected.set(ordinal, {
+          validFromEpoch: view.getFloat64(4, true),
+          validToEpoch: validTo === -1 ? null : validTo,
+          fieldLengths: { title: view.getUint16(20, true), hierarchy: view.getUint16(22, true),
+            article: view.getUint16(24, true), text: view.getUint16(26, true) },
+        });
+      }
+      records++;
+      offset += RECORD_SIZE;
+    }
+    pending = bytes.slice(offset);
   }
-  return null;
+  if (pending.byteLength !== 0 || expectedRecords === undefined || records !== expectedRecords
+    || totalBytes !== reference.sizeBytes || hash.digest("hex") !== reference.sha256
+    || selected.size !== requested.size) {
+    throw new TypeError("CUSTOM_BM25_RUNTIME_DOCUMENTS_CORRUPT");
+  }
+  return selected;
 }
 
 const postingBlockSchema = z.object({
@@ -431,6 +465,44 @@ async function readJson<T>(bucket: R2Bucket, reference: {
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as T;
 }
 
+function bytesIndexOf(haystack: Uint8Array, needle: Uint8Array, start = 0): number {
+  for (let offset = haystack.indexOf(needle[0]!, start); offset >= 0;
+    offset = haystack.indexOf(needle[0]!, offset + 1)) {
+    if (needle.every((byte, index) => haystack[offset + index] === byte)) return offset;
+  }
+  return -1;
+}
+
+async function resolvePostingLocators(bucket: R2Bucket, reference: RuntimeDocumentReference,
+  termHashes: readonly string[]) {
+  const bytes = await readVerifiedCustomArtifactRange(bucket, {
+    key: reference.key, offset: 0, length: reference.sizeBytes, sha256: reference.sha256,
+  });
+  let final = bytes.length - 1;
+  while (final > 0 && (bytes[final] === 0x0a || bytes[final] === 0x0d
+    || bytes[final] === 0x20 || bytes[final] === 0x09)) final--;
+  if (bytes[0] !== 0x7b || bytes[final] !== 0x7d) {
+    throw new TypeError("CUSTOM_BM25_RUNTIME_LEXICON_CORRUPT");
+  }
+  const result = new Map<string, z.infer<typeof postingLocatorSchema>>();
+  for (const termHash of termHashes) {
+    const marker = new TextEncoder().encode(`"${termHash}":`);
+    const markerOffset = bytesIndexOf(bytes, marker);
+    if (markerOffset < 0) continue;
+    if (bytesIndexOf(bytes, marker, markerOffset + marker.length) >= 0) {
+      throw new TypeError("CUSTOM_BM25_RUNTIME_LEXICON_CORRUPT");
+    }
+    const valueOffset = markerOffset + marker.length;
+    if (bytes[valueOffset] !== 0x7b) throw new TypeError("CUSTOM_BM25_RUNTIME_LEXICON_CORRUPT");
+    const valueEnd = bytes.indexOf(0x7d, valueOffset + 1);
+    if (valueEnd < 0) throw new TypeError("CUSTOM_BM25_RUNTIME_LEXICON_CORRUPT");
+    result.set(termHash, postingLocatorSchema.parse(JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes.slice(valueOffset, valueEnd + 1)),
+    ) as unknown));
+  }
+  return result;
+}
+
 export async function queryCustomBm25Runtime(
   bucket: R2Bucket,
   rawDescriptor: CustomBm25RuntimeDescriptor,
@@ -439,33 +511,53 @@ export async function queryCustomBm25Runtime(
   const descriptor = descriptorSchema.parse(rawDescriptor);
   if (!Number.isSafeInteger(input.atEpoch) || !Number.isSafeInteger(input.topK)
     || input.topK < 1 || input.topK > 50) throw new TypeError("CUSTOM_BM25_RUNTIME_QUERY_INVALID");
-  const documents = await readVerifiedCustomArtifactRange(bucket, {
-    key: descriptor.documents.key, offset: 0, length: descriptor.documents.sizeBytes,
-    sha256: descriptor.documents.sha256,
-  });
-  const scores = new Map<number, number>();
-  for (const term of [...new Set(analyzeCustomWordTerms(input.text))].sort()) {
-    const termHash = await customBm25TermHash(term);
-    for (const segment of descriptor.segments) {
-      const lexiconReference = segment.lexicons[termHash[0]!];
-      if (!lexiconReference) continue;
-      const lexicon = z.record(digest, postingLocatorSchema)
-        .parse(await readJson<unknown>(bucket, lexiconReference));
-      const locator = lexicon[termHash];
+  const groups = new Map<string, { reference: RuntimeDocumentReference; termHashes: string[] }>();
+  const termHashes = await Promise.all([...new Set(analyzeCustomWordTerms(input.text))]
+    .sort().map(customBm25TermHash));
+  for (const termHash of termHashes) for (const segment of descriptor.segments) {
+    const reference = segment.lexicons[termHash[0]!];
+    if (!reference) continue;
+    const identity = `${reference.key}\n${reference.sha256}\n${reference.sizeBytes}`;
+    const group = groups.get(identity) ?? { reference, termHashes: [] };
+    group.termHashes.push(termHash);
+    groups.set(identity, group);
+  }
+  const located: Array<{ termHash: string; locator: z.infer<typeof postingLocatorSchema> }> = [];
+  for (const group of groups.values()) {
+    const locators = await resolvePostingLocators(bucket, group.reference, group.termHashes);
+    for (const termHash of group.termHashes) {
+      const locator = locators.get(termHash);
       if (!locator) continue;
       if (locator.length > MAX_POSTING_BLOCK_BYTES) {
-        throw new TypeError("CUSTOM_BM25_RUNTIME_POSTING_TOO_LARGE");
+        // High-frequency terms can exceed the bounded read size. Treat them as
+        // sparse stop words so rarer terms and the independent dense lane stay usable.
+        continue;
       }
-      const blockBytes = await readVerifiedCustomArtifactRange(bucket, locator);
-      const block = postingBlockSchema.parse(JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(blockBytes),
-      ) as unknown);
-      if (block.termHash !== termHash || block.documentFrequency !== locator.documentFrequency
-        || block.blockMaximum !== locator.blockMaximum) {
-        throw new TypeError("CUSTOM_BM25_RUNTIME_POSTING_LOCATOR_MISMATCH");
-      }
-      for (const posting of block.postings) {
-        const document = runtimeDocument(documents, posting.ordinal);
+      located.push({ termHash, locator });
+    }
+  }
+  if (located.length === 0) return [];
+  const blocks: Array<z.infer<typeof postingBlockSchema>> = [];
+  for (const { termHash, locator } of located) {
+    const blockBytes = await readVerifiedCustomArtifactRange(bucket, locator);
+    const block = postingBlockSchema.parse(JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(blockBytes),
+    ) as unknown);
+    if (block.termHash !== termHash || block.documentFrequency !== locator.documentFrequency
+      || block.blockMaximum !== locator.blockMaximum) {
+      throw new TypeError("CUSTOM_BM25_RUNTIME_POSTING_LOCATOR_MISMATCH");
+    }
+    blocks.push(block);
+  }
+  // Verify the immutable table as a stream and retain only records referenced by
+  // bounded posting blocks; the full historical table is larger than the Worker heap budget.
+  const requestedOrdinals = new Set(blocks.flatMap((block) =>
+    block.postings.map((posting) => posting.ordinal)));
+  const documents = await readRuntimeDocuments(bucket, descriptor.documents, requestedOrdinals);
+  const scores = new Map<number, number>();
+  for (const block of blocks) {
+    for (const posting of block.postings) {
+        const document = documents.get(posting.ordinal);
         if (!document) throw new TypeError("CUSTOM_BM25_RUNTIME_ORDINAL_MISSING");
         if (document.validFromEpoch > input.atEpoch
           || (document.validToEpoch !== null && input.atEpoch >= document.validToEpoch)) continue;
@@ -479,7 +571,6 @@ export async function queryCustomBm25Runtime(
           field,
         }), 0);
         scores.set(posting.ordinal, (scores.get(posting.ordinal) ?? 0) + score);
-      }
     }
   }
   return [...scores].map(([ordinal, score]) => ({ ordinal, score }))

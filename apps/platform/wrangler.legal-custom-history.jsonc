@@ -21,8 +21,8 @@
     "CUSTOM_SEARCH_RELEASE_ID": "release:staging:history:custom-v1:2026-09-06",
     "CUSTOM_SEARCH_INSTANCE_ID": "custom-history-staging-v1",
     "CUSTOM_SEARCH_SHARD_ID": "history-base-v1",
-    "CUSTOM_RUNTIME_DESCRIPTOR_KEY": "search-releases/release:staging:history:custom-v1:2026-09-06/runtime/pending.json",
-    "CUSTOM_RUNTIME_DESCRIPTOR_SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "CUSTOM_RUNTIME_DESCRIPTOR_KEY": "search-releases/release:staging:history:custom-v1:2026-09-06/runtime/descriptor-45104e9c45a52a24b11e5e43b86e0ac007da1dd71577aa4ae68ccfa7160806bb.json",
+    "CUSTOM_RUNTIME_DESCRIPTOR_SHA256": "45104e9c45a52a24b11e5e43b86e0ac007da1dd71577aa4ae68ccfa7160806bb"
   },
   "ai": { "binding": "AI" },
   "d1_databases": [

@@ -11,13 +11,17 @@ import { stableSourceSnapshotJson } from "../lib/legal-corpus/source-snapshot";
 
 class MemoryR2 {
   readonly objects = new Map<string, Uint8Array>();
+  readonly reads = new Map<string, number>();
   async get(key: string, options?: { range?: { offset: number; length: number } }) {
+    this.reads.set(key, (this.reads.get(key) ?? 0) + 1);
     const source = this.objects.get(key);
     if (!source) return null;
     const bytes = options?.range
       ? source.slice(options.range.offset, options.range.offset + options.range.length)
       : source;
-    return { size: bytes.byteLength, async arrayBuffer() { return bytes.buffer.slice(
+    return { size: bytes.byteLength, body: new ReadableStream({
+      start(controller) { controller.enqueue(bytes); controller.close(); },
+    }), async arrayBuffer() { return bytes.buffer.slice(
       bytes.byteOffset, bytes.byteOffset + bytes.byteLength); } };
   }
 }
@@ -63,9 +67,23 @@ test("runtime BM25 projection preserves durable ordinals without loading the JSO
   bucket.objects.set(postingReference.key, postingBytes);
   bucket.objects.set(lexiconReference.key, lexiconBytes);
 
-  const hits = await queryCustomBm25Runtime(bucket as unknown as R2Bucket, runtime.descriptor,
-    { text: "work", atEpoch: 2, topK: 5 });
-  assert.deepEqual(hits.map((hit) => hit.ordinal), [1_000]);
+  const concurrentHits = await Promise.all([1, 2, 3].map(() => queryCustomBm25Runtime(
+    bucket as unknown as R2Bucket, runtime.descriptor, { text: "work", atEpoch: 2, topK: 5 })));
+  assert.deepEqual(concurrentHits.map((hits) => hits.map((hit) => hit.ordinal)),
+    [[1_000], [1_000], [1_000]]);
+  assert.equal(bucket.reads.get(runtime.documentsReference.key), 3);
+  const oversizedLexiconBytes = encode({ [termHash]: { ...postingReference, offset: 0,
+    length: 1024 * 1024 + 1, documentFrequency: 1, blockMaximum: 1 } });
+  const oversizedLexiconReference = { key: "runtime-lexicon-oversized",
+    sizeBytes: oversizedLexiconBytes.byteLength,
+    sha256: createHash("sha256").update(oversizedLexiconBytes).digest("hex") };
+  const oversizedBucket = new MemoryR2();
+  oversizedBucket.objects.set(oversizedLexiconReference.key, oversizedLexiconBytes);
+  const oversizedDescriptor = structuredClone(runtime.descriptor);
+  oversizedDescriptor.segments[0]!.lexicons[termHash[0]!] = oversizedLexiconReference;
+  assert.deepEqual(await queryCustomBm25Runtime(oversizedBucket as unknown as R2Bucket,
+    oversizedDescriptor, { text: "work", atEpoch: 2, topK: 5 }), []);
+  assert.equal(oversizedBucket.reads.get(runtime.documentsReference.key), undefined);
   assert.equal(runtime.documentsBytes.byteLength, 16 + 2 * 32);
   assert.equal(runtime.documentsReference.sha256,
     createHash("sha256").update(runtime.documentsBytes).digest("hex"));

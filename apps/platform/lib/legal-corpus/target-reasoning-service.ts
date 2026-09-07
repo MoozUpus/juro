@@ -14,7 +14,7 @@ import {
   declaredRequestBodyWithinLimit,
   privateServiceJson,
 } from "./private-service-boundary";
-import { legalEnvironmentSchema, sha256Schema } from "./target-domain-schemas";
+import { legalEnvironmentSchema, sha256Schema, utcInstantSchema } from "./target-domain-schemas";
 
 export const TARGET_PRIVATE_NAME_CLASSIFICATION_PATH =
   "/internal/legal-corpus/privacy/classify-private-names";
@@ -53,23 +53,44 @@ const formulationProviderSchema = z.object({
   legalTitleSpans: questionInterpretationPlanSchema.shape.formulations.element.shape
     .legalTitleSpans.unwrap(),
 }).strict();
+const temporalEndpointProviderSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("current") }).strict(),
+  z.object({ kind: z.literal("timestamp"), instant: z.string().min(1).max(64) }).strict(),
+]);
+const offsetInstantProviderSchema = z.string().datetime({ offset: true });
 const interpretationProviderSchema = z.object({
   ...questionInterpretationPlanSchema.shape,
   formulations: z.array(formulationProviderSchema).min(1).max(64),
-  temporalEndpoint: questionInterpretationPlanSchema.shape.temporalEndpoint.unwrap().nullable(),
-  comparison: questionInterpretationPlanSchema.shape.comparison.unwrap().nullable(),
+  temporalEndpoint: temporalEndpointProviderSchema.nullable(),
+  comparison: z.object({
+    left: temporalEndpointProviderSchema,
+    right: temporalEndpointProviderSchema,
+  }).strict().nullable(),
 }).strict();
 export const targetInterpretationJsonSchema = z.toJSONSchema(interpretationProviderSchema, {
   io: "output",
 });
+
+function canonicalUtcEndpoint(endpoint: z.infer<typeof temporalEndpointProviderSchema>) {
+  if (endpoint.kind === "current") return endpoint;
+  const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/u.test(endpoint.instant)
+    ? `${endpoint.instant}Z`
+    : endpoint.instant;
+  if (!offsetInstantProviderSchema.safeParse(instant).success
+    || !utcInstantSchema.safeParse(new Date(instant).toISOString()).success) return endpoint;
+  return { ...endpoint, instant: new Date(instant).toISOString() };
+}
 
 export function parseTargetInterpretationProviderOutput(value: unknown): QuestionInterpretationPlan {
   const parsed = interpretationProviderSchema.parse(value);
   const { temporalEndpoint, comparison, ...required } = parsed;
   return questionInterpretationPlanSchema.parse({
     ...required,
-    ...(temporalEndpoint ? { temporalEndpoint } : {}),
-    ...(comparison ? { comparison } : {}),
+    ...(temporalEndpoint ? { temporalEndpoint: canonicalUtcEndpoint(temporalEndpoint) } : {}),
+    ...(comparison ? { comparison: {
+      left: canonicalUtcEndpoint(comparison.left),
+      right: canonicalUtcEndpoint(comparison.right),
+    } } : {}),
   });
 }
 
@@ -156,6 +177,7 @@ export async function interpretTargetQuestion(question: string): Promise<Questio
       "List direct personal names exactly in privateNameSpans and exact named legal instruments in legalTitleSpans.",
       "Use stable ASCII identifiers containing only letters, digits, dot, underscore, colon, or hyphen.",
       "Use an explicit timestamp only when the user supplied an unambiguous instant; otherwise record a material missing fact.",
+      "Represent a supplied calendar date as midnight UTC with millisecond precision, never infer a jurisdiction timezone offset.",
       "Use comparison only when two explicit temporal endpoints are requested.",
       "Return an empty legalTitleSpans array when no legal instrument is named, and null for unused temporalEndpoint or comparison fields.",
     ].join(" "),

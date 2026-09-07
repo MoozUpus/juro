@@ -19,14 +19,16 @@ class MemoryR2 {
     const bytes = options?.range
       ? source.slice(options.range.offset, options.range.offset + options.range.length)
       : source;
-    return { size: bytes.byteLength, async arrayBuffer() { return bytes.buffer.slice(
+    return { size: bytes.byteLength, body: new ReadableStream({
+      start(controller) { controller.enqueue(bytes); controller.close(); },
+    }), async arrayBuffer() { return bytes.buffer.slice(
       bytes.byteOffset, bytes.byteOffset + bytes.byteLength); } };
   }
 }
 
 for (const oversizedPosting of [false, true]) {
 test(oversizedPosting
-  ? "private custom search rejects an oversized matched posting despite successful dense retrieval"
+  ? "private custom search treats an oversized matched posting as a sparse stop word"
   : "private custom search reserves budget and fuses verified sparse and dense lanes", async () => {
   const built = await buildCustomBm25Artifacts([{
     segmentId: "current-base-v1", itemKey: "chunk-a", language: "en", documentType: "law",
@@ -40,7 +42,7 @@ test(oversizedPosting
     const artifact = built.artifacts.find((entry) => entry.key === reference.key)!;
     const lexicon = JSON.parse(new TextDecoder().decode(artifact.bytes)) as Record<string,
       { length: number; sizeBytes: number }>;
-    lexicon[termHash]!.length = 16 * 1024 * 1024 + 1;
+    lexicon[termHash]!.length = 1024 * 1024 + 1;
     lexicon[termHash]!.sizeBytes = lexicon[termHash]!.length;
     const bytes = new TextEncoder().encode(JSON.stringify(lexicon));
     built.manifest.segments[0]!.lexicons[termHash[0]!] = {
@@ -82,6 +84,8 @@ test(oversizedPosting
     },
   } as unknown as D1Database;
   const observed = { denseOptions: null as VectorizeQueryOptions | null };
+  let activeEmbeddingRequests = 0;
+  let maximumEmbeddingConcurrency = 0;
   const dense = {
     async query(_vector: number[], options: VectorizeQueryOptions) {
       observed.denseOptions = options;
@@ -102,6 +106,10 @@ test(oversizedPosting
     ARTIFACTS: bucket as unknown as R2Bucket,
     CATALOG_DB: database,
     AI: { gateway() { return { async run() {
+      activeEmbeddingRequests++;
+      maximumEmbeddingConcurrency = Math.max(maximumEmbeddingConcurrency, activeEmbeddingRequests);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      activeEmbeddingRequests--;
       assert.deepEqual(calls.slice(0, 3), ["component", "reserve", "ledger"]);
       return Response.json({ model: "text-embedding-3-large", object: "list",
         data: [{ object: "embedding", index: 0,
@@ -120,22 +128,30 @@ test(oversizedPosting
         "x-juro-service-binding": "custom-search-runtime-v1",
         "x-juro-legal-environment": "staging" }, body,
     }), env);
-  if (oversizedPosting) {
-    assert.equal(response.status, 503);
-    assert.deepEqual(await response.json(), { code: "CUSTOM_SEARCH_UNAVAILABLE" });
-    return;
-  }
   assert.equal(response.status, 200);
   const result = await response.json() as { hits: Array<{ itemKey: string; keywordRank: number;
     vectorRank: number }>; tokenUsage: number };
   assert.deepEqual(result.hits.map((hit) => hit.itemKey), [fullKey]);
-  assert.equal(result.hits[0]?.keywordRank, 1);
+  assert.equal(result.hits[0]?.keywordRank, oversizedPosting ? 1 : 1);
   assert.equal(result.hits[0]?.vectorRank, 1);
   assert.equal(result.tokenUsage, 1);
   assert.deepEqual(observed.denseOptions?.filter, {
     valid_from_epoch: { $lte: 1_788_566_400 },
     valid_to_epoch: { $gt: 1_788_566_400 },
   });
+  if (!oversizedPosting) {
+    activeEmbeddingRequests = 0;
+    maximumEmbeddingConcurrency = 0;
+    const concurrent = await Promise.all([1, 2].map(() => handleCustomSearchRequest(new Request(
+      "http://legal-corpus.internal/internal/legal-corpus/custom-search", {
+        method: "POST", headers: { "content-type": "application/json",
+          "content-length": String(new TextEncoder().encode(body).byteLength),
+          "x-juro-service-binding": "custom-search-runtime-v1",
+          "x-juro-legal-environment": "staging" }, body,
+      }), env)));
+    assert.deepEqual(concurrent.map((entry) => entry.status), [200, 200]);
+    assert.equal(maximumEmbeddingConcurrency, 1);
+  }
   const driftedCapabilityResponse = await handleCustomSearchRequest(new Request(
     "http://legal-corpus.internal/internal/legal-corpus/custom-search", {
       method: "POST", headers: { "content-type": "application/json",

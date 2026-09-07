@@ -175,6 +175,7 @@ function activationSetEvaluationEnv(plans: Record<string, unknown>): TargetRetri
   return { APP_ENV: "staging", LEGAL_CORPUS_SHADOW_MODE: "true",
     LEGAL_AI_SEARCH_PAUSED: "true", LEGAL_DB: db,
     LEGAL_EVIDENCE_BUCKET: { get: async () => null },
+    LEGAL_CUSTOM_ARTIFACT_BUCKET: { get: async () => null } as unknown as R2Bucket,
     LEGAL_CORPUS_REASONING_SERVICE: reasoning,
     LEGAL_CUSTOM_SEARCH_SERVICE: unavailable,
     LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE: unavailable,
