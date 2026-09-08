@@ -38,6 +38,12 @@ const governanceSchema = z.object({
   configuration: governedAiSearchConfigurationSchema,
 }).passthrough();
 
+function physicalRuntimeReleaseId(descriptorKey: string, logicalReleaseId: string): string {
+  const match = /^search-releases\/([^/]+)\/runtime\/descriptor-[a-f0-9]{64}\.json$/u
+    .exec(descriptorKey);
+  return match?.[1] ?? logicalReleaseId;
+}
+
 export type TargetRetrievalRuntimeEnv = {
   APP_ENV: string;
   LEGAL_CORPUS_SHADOW_MODE?: string;
@@ -301,18 +307,25 @@ export function createRuntimeCandidateCatalog(
       let compactMembership: Map<string, { ordinal: number;
         legalIdentitySha256: string | null; legalIdentity?: CustomRuntimeLegalIdentity }> | null = null;
       if (custom && bucket) {
-        const component = await db.prepare(`SELECT mapping_inventory_sha256 AS mappingInventorySha256
+        const component = await db.prepare(`SELECT mapping_inventory_sha256 AS mappingInventorySha256,
+            runtime_descriptor_r2_key AS descriptorKey
           FROM legal_custom_search_r2_runtime_roots WHERE search_release_id=?
-          UNION ALL
-          SELECT mapping_inventory_sha256 FROM legal_custom_search_runtime_components
+          UNION ALL SELECT mapping_inventory_sha256,runtime_descriptor_r2_key
+          FROM legal_custom_search_runtime_components
           WHERE search_release_id=? AND NOT EXISTS (
             SELECT 1 FROM legal_custom_search_r2_runtime_roots WHERE search_release_id=?)
           LIMIT 1`).bind(release.id, release.id, release.id)
-          .first<{ mappingInventorySha256: string }>();
+          .first<{ mappingInventorySha256: string; descriptorKey: string }>();
         if (!component) throw new TypeError("TARGET_CUSTOM_RUNTIME_COMPONENT_MISSING");
         const prefix = `search-releases/${release.id}/`;
         compactMembership = await resolveCustomBm25RuntimeMembershipEntries(bucket as R2Bucket, release.id,
           component.mappingInventorySha256, uniqueKeys.map((key) => key.slice(prefix.length)));
+        const physicalReleaseId = physicalRuntimeReleaseId(component.descriptorKey, release.id);
+        if (!compactMembership && physicalReleaseId !== release.id) {
+          compactMembership = await resolveCustomBm25RuntimeMembershipEntries(bucket as R2Bucket,
+            physicalReleaseId, component.mappingInventorySha256,
+            uniqueKeys.map((key) => key.slice(prefix.length)));
+        }
         if (compactMembership && compactMembership.size !== uniqueKeys.length) {
           throw new TypeError("TARGET_CANDIDATE_NOT_IN_PINNED_RELEASE");
         }

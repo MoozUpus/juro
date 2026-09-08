@@ -418,6 +418,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
 test("dedicated Worker is route-free, production-fail-closed and staging-bounded", () => {
   const config = JSON.parse(readFileSync(new URL("../wrangler.legal-corpus.jsonc", import.meta.url), "utf8")) as {
     main: string;
+    limits: { cpu_ms: number; subrequests: number };
     workers_dev: boolean;
     preview_urls: boolean;
     routes?: unknown[];
@@ -443,6 +444,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     }>;
   };
   assert.equal(config.main, "./worker/legal-corpus-worker.ts");
+  assert.deepEqual(config.limits, { cpu_ms: 120000, subrequests: 100000 });
   for (const environment of [config, config.env.staging, config.env.production]) {
     assert.equal(environment.workers_dev, false);
     assert.equal(environment.preview_urls, false);
@@ -474,9 +476,21 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     true,
   );
   assert.equal(
+    config.env.production.r2_buckets.some(({ binding, bucket_name }) =>
+      binding === "LEGAL_HISTORY_EVIDENCE_BUCKET"
+      && bucket_name === "juro-legal-evidence-staging-green2-20260831"),
+    true,
+  );
+  assert.equal(
     config.env.production.services.some(({ binding, service }) =>
       binding === "LEGAL_CUSTOM_SEARCH_SERVICE"
-      && service === "juro-legal-current-custom-production-20260908"),
+      && service === "juro-legal-current-search-production-20260909"),
+    true,
+  );
+  assert.equal(
+    config.env.production.services.some(({ binding, service }) =>
+      binding === "LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE"
+      && service === "juro-legal-history-custom-production-20260908"),
     true,
   );
   assert.equal(

@@ -54,7 +54,7 @@ function migrationProvision<T extends Record<string, unknown> = Record<never, ne
   };
 }
 
-test("R2-native runtime identity hydrates unchanged hash-verified legal evidence", async () => {
+test("R2-native runtime identity hydrates accepted immutable legal evidence formats", async () => {
   const { sqlite, d1 } = sqliteD1FixtureFromDirectory(
     new URL("../legal-drizzle/", import.meta.url),
   );
@@ -64,12 +64,7 @@ test("R2-native runtime identity hydrates unchanged hash-verified legal evidence
       textualAuthority: "controlling" as const, controllingOnConflict: true,
       derivedFromExpressionId: null };
     const imported = await importProvisionRendition({ db: d1, bucket }, controllingProvision);
-    bucket.objects.get(imported.provisionLocator.r2Key)!.customMetadata = {
-      sha256: imported.provisionLocator.sha256,
-      source: "evidence",
-      kind: "provision_rendition",
-    };
-    const result = await resolveR2NativeCustomEvidence({
+    const resolve = () => resolveR2NativeCustomEvidence({
       bucket,
       currentAt: "2026-06-01T00:00:00.000Z",
     }, {
@@ -96,8 +91,23 @@ test("R2-native runtime identity hydrates unchanged hash-verified legal evidence
         url: representativeProvision.sourceUrl },
     }, { kind: "current" });
 
-    assert.equal(result.controlling.provisionText, controllingProvision.provisionText);
-    assert.equal(result.controlling.evidence.sha256, imported.provisionLocator.sha256);
+    const acceptedMetadata: Record<string, string>[] = [{
+      schemaVersion: "complete-corpus-evidence-v1",
+      kind: "provision_rendition",
+      sha256: imported.provisionLocator.sha256,
+      byteCount: String(imported.provisionLocator.byteCount),
+      mediaType: "application/json; charset=utf-8",
+    }, {
+      sha256: imported.provisionLocator.sha256,
+      source: "evidence",
+      kind: "provision_rendition",
+    }];
+    for (const customMetadata of acceptedMetadata) {
+      bucket.objects.get(imported.provisionLocator.r2Key)!.customMetadata = customMetadata;
+      const result = await resolve();
+      assert.equal(result.controlling.provisionText, controllingProvision.provisionText);
+      assert.equal(result.controlling.evidence.sha256, imported.provisionLocator.sha256);
+    }
   } finally { sqlite.close(); }
 });
 

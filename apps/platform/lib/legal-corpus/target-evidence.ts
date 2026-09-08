@@ -349,8 +349,10 @@ async function readAndVerifyObject(
   const actual = await sha256(bytes);
   const metadataAccepted = object.customMetadata?.schemaVersion === "1"
     || (metadataPolicy === "sealed-production-evidence"
-      && object.customMetadata?.source === "evidence"
-      && object.customMetadata?.kind === "provision_rendition");
+      && object.customMetadata?.kind === "provision_rendition"
+      && (object.customMetadata?.source === "evidence"
+        || (object.customMetadata?.schemaVersion === "complete-corpus-evidence-v1"
+          && object.customMetadata?.byteCount === String(locator.byteCount))));
   if (
     bytes.byteLength !== locator.byteCount
     || actual.hex !== locator.sha256

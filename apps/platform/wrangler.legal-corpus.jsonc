@@ -7,6 +7,7 @@
   "keep_vars": true,
   "workers_dev": false,
   "preview_urls": false,
+  "limits": { "cpu_ms": 120000, "subrequests": 100000 },
   "vars": {
     "APP_ENV": "development",
     "LEGAL_CORPUS_ENABLED": "false",
@@ -265,6 +266,10 @@
           "bucket_name": "juro-legal-evidence-production-20260908"
         },
         {
+          "binding": "LEGAL_HISTORY_EVIDENCE_BUCKET",
+          "bucket_name": "juro-legal-evidence-staging-green2-20260831"
+        },
+        {
           "binding": "LEGAL_CUSTOM_ARTIFACT_BUCKET",
           "bucket_name": "juro-legal-current-custom-production-20260908"
         },
@@ -286,7 +291,11 @@
         },
         {
           "binding": "LEGAL_CUSTOM_SEARCH_SERVICE",
-          "service": "juro-legal-current-custom-production-20260908"
+          "service": "juro-legal-current-search-production-20260909"
+        },
+        {
+          "binding": "LEGAL_CUSTOM_HISTORY_SEARCH_SERVICE",
+          "service": "juro-legal-history-custom-production-20260908"
         }
       ]
     }

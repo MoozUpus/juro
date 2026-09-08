@@ -357,7 +357,7 @@ test("custom catalog rejects future and expired records even when candidate lane
   } finally { sqlite.close(); }
 });
 
-test("custom catalog revalidates hash-anchored membership without a D1 item mapping", async () => {
+test("custom catalog revalidates a logical release through hash-anchored physical membership", async () => {
   const release = parsePinnedCandidateRelease({ id: "release-custom-history-r2", environment: "staging",
     capability: "history", instances: [{ id: "custom-history-staging-v1", shardId: "history-base-v1" }],
     configuration: { identity: "custom-v1", embeddingModel: "openai/text-embedding-3-large",
@@ -366,19 +366,20 @@ test("custom catalog revalidates hash-anchored membership without a D1 item mapp
       gatewayCaching: false, similarityCaching: false } });
   const canonicalChunkId = `retrieval-chunk-v1:${"b".repeat(64)}`;
   const itemKey = `search-releases/${release.id}/${canonicalChunkId}`;
+  const physicalReleaseId = "release:staging:history:custom-v1:2026-09-06";
   const identity = "a".repeat(64);
   const pageBytes = new TextEncoder().encode(`${JSON.stringify({ schemaVersion: 1,
-    releaseId: release.id, partition: "2e",
+    releaseId: physicalReleaseId, partition: "2e",
     items: [{ itemKey: canonicalChunkId, ordinal: 0, legalIdentitySha256: identity }] })}\n`);
   const pageSha256 = createHash("sha256").update(pageBytes).digest("hex");
-  const pageKey = `search-releases/${release.id}/runtime/membership/2e-${pageSha256}.json`;
+  const pageKey = `search-releases/${physicalReleaseId}/runtime/membership/2e-${pageSha256}.json`;
   const membershipBytes = new TextEncoder().encode(`${JSON.stringify({ schemaVersion: 1,
-    releaseId: release.id, partitions: [{ key: pageKey, sizeBytes: pageBytes.byteLength,
+    releaseId: physicalReleaseId, partitions: [{ key: pageKey, sizeBytes: pageBytes.byteLength,
       sha256: pageSha256, partition: "2e", count: 1 }] })}\n`);
   const mappingInventorySha256 = createHash("sha256").update(membershipBytes).digest("hex");
   const objects = new Map([
     [pageKey, { bytes: pageBytes, customMetadata: {} }],
-    [`search-releases/${release.id}/runtime/mappings-${mappingInventorySha256}.json`,
+    [`search-releases/${physicalReleaseId}/runtime/mappings-${mappingInventorySha256}.json`,
       { bytes: membershipBytes, customMetadata: {} }],
   ]);
   const bucket = { async get(key: string, options?: { range?: { offset: number; length: number } }) {
@@ -394,7 +395,8 @@ test("custom catalog revalidates hash-anchored membership without a D1 item mapp
     return { bind(...values: string[]) {
       if (sql.includes("mapping_inventory_sha256")) {
         assert.deepEqual(values, [release.id, release.id, release.id]);
-        return { async first() { return { mappingInventorySha256 }; } };
+        return { async first() { return { mappingInventorySha256,
+          descriptorKey: `search-releases/${physicalReleaseId}/runtime/descriptor-${"c".repeat(64)}.json` }; } };
       }
       assert.doesNotMatch(sql, /legal_custom_search_runtime_items/u);
       assert.deepEqual(values, [release.id, identity]);
