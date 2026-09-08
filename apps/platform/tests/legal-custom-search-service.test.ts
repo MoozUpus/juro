@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { buildCustomBm25Artifacts, customBm25TermHash } from "../lib/legal-corpus/custom-bm25";
@@ -26,10 +27,17 @@ class MemoryR2 {
   }
 }
 
-for (const oversizedPosting of [false, true]) {
-test(oversizedPosting
-  ? "private custom search treats an oversized matched posting as a sparse stop word"
-  : "private custom search reserves budget and fuses verified sparse and dense lanes", async () => {
+for (const { oversizedPosting, physicalAlias } of [
+  { oversizedPosting: false, physicalAlias: false },
+  { oversizedPosting: true, physicalAlias: false },
+  { oversizedPosting: false, physicalAlias: true },
+]) {
+test(physicalAlias
+  ? "private custom search can reuse an immutable physical release behind a logical production release"
+  : oversizedPosting
+    ? "private custom search treats an oversized matched posting as a sparse stop word"
+    : "private custom search reserves budget and fuses verified sparse and dense lanes", async () => {
+  const physicalReleaseId = physicalAlias ? DENSE_METADATA_RELEASE_ID : RELEASE_ID;
   const built = await buildCustomBm25Artifacts([{
     segmentId: "current-base-v1", itemKey: "chunk-a", language: "en", documentType: "law",
     validFromEpoch: 1, validToEpoch: null,
@@ -51,8 +59,8 @@ test(oversizedPosting
     };
     oversizedLexicon = { key: reference.key, bytes };
   }
-  const runtime = await buildCustomBm25RuntimeArtifacts({ releaseId: RELEASE_ID,
-    denseMetadataReleaseId: DENSE_METADATA_RELEASE_ID,
+  const runtime = await buildCustomBm25RuntimeArtifacts({ releaseId: physicalReleaseId,
+    ...(physicalAlias ? {} : { denseMetadataReleaseId: DENSE_METADATA_RELEASE_ID }),
     sparseManifestSha256: "a".repeat(64), manifest: built.manifest });
   const bucket = new MemoryR2();
   bucket.objects.set(runtime.descriptorReference.key, runtime.descriptorBytes);
@@ -99,6 +107,7 @@ test(oversizedPosting
     CUSTOM_SEARCH_CAPABILITY: "current",
     AI_GATEWAY_ID: "juro-ai-search-staging",
     CUSTOM_SEARCH_RELEASE_ID: RELEASE_ID,
+    ...(physicalAlias ? { CUSTOM_SEARCH_PHYSICAL_RELEASE_ID: physicalReleaseId } : {}),
     CUSTOM_SEARCH_INSTANCE_ID: INSTANCE_ID,
     CUSTOM_SEARCH_SHARD_ID: "current-base-v1",
     CUSTOM_RUNTIME_DESCRIPTOR_KEY: runtime.descriptorReference.key,
@@ -193,4 +202,27 @@ test("custom search rejects public requests without reserving provider spend", a
     } as CustomSearchEnv);
   assert.equal(response.status, 404);
   assert.equal(prepared, false);
+});
+
+test("production history search reuses the accepted physical release without build bindings", async () => {
+  const config = JSON.parse(await readFile(
+    new URL("../wrangler.legal-custom-history-production.jsonc", import.meta.url), "utf8",
+  ));
+  assert.equal(config.name, "juro-legal-history-custom-production-20260908");
+  assert.equal(config.main, "./worker/legal-custom-search-worker.ts");
+  assert.equal(config.workers_dev, false);
+  assert.equal(config.preview_urls, false);
+  assert.equal(config.routes, undefined);
+  assert.equal(config.queues, undefined);
+  assert.equal(config.workflows, undefined);
+  assert.equal(config.vars.APP_ENV, "production");
+  assert.equal(config.vars.AI_GATEWAY_ID, "juro-ai-search-production");
+  assert.equal(config.vars.CUSTOM_SEARCH_RELEASE_ID,
+    "release:production:history:custom-v1:2026-09-08");
+  assert.equal(config.vars.CUSTOM_SEARCH_PHYSICAL_RELEASE_ID,
+    "release:staging:history:custom-v1:2026-09-06");
+  assert.equal(config.r2_buckets[0].bucket_name, "juro-legal-current-custom-20260903");
+  assert.equal(config.vectorize[0].index_name, "juro-legal-history-custom-20260906");
+  assert.equal(config.d1_databases[0].database_name,
+    "juro-legal-catalog-production-green-20260908");
 });

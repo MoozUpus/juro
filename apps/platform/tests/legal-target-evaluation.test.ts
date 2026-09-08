@@ -12,6 +12,7 @@ import {
 import {
   createRuntimeTargetActivationSetEvaluation,
   createRuntimeTargetCandidateEvaluationRetriever,
+  selectRuntimeEvidenceBucket,
   type TargetRetrievalRuntimeEnv,
 } from "../lib/legal-corpus/target-runtime";
 import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
@@ -58,6 +59,14 @@ const activationEvaluationReport = {
 };
 const activationEvaluationReportSha256 = createHash("sha256")
   .update(`${JSON.stringify(activationEvaluationReport, null, 2)}\n`).digest("hex");
+
+test("history retrieval selects its accepted R2 evidence bucket without changing current retrieval", () => {
+  const current = { get: async () => null };
+  const history = { get: async () => null };
+  assert.equal(selectRuntimeEvidenceBucket("current", current, history), current);
+  assert.equal(selectRuntimeEvidenceBucket("history", current, history), history);
+  assert.equal(selectRuntimeEvidenceBucket("history", current), current);
+});
 
 function qualificationRow(overrides: Record<string, unknown> = {}) {
   return {

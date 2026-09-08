@@ -44,6 +44,7 @@ export type TargetRetrievalRuntimeEnv = {
   LEGAL_AI_SEARCH_PAUSED?: string;
   LEGAL_DB?: D1Database;
   LEGAL_EVIDENCE_BUCKET?: Pick<LegalEvidenceBucket, "get">;
+  LEGAL_HISTORY_EVIDENCE_BUCKET?: Pick<LegalEvidenceBucket, "get">;
   LEGAL_CUSTOM_ARTIFACT_BUCKET?: R2Bucket;
   LEGAL_AI_SEARCH_NAMESPACE?: AiSearchNamespace;
   LEGAL_AI_SEARCH_NAMESPACE_NAME?: string;
@@ -59,6 +60,7 @@ type RuntimeDependencies = {
   environment: z.infer<typeof environmentSchema>;
   db: D1Database;
   evidenceBucket: Pick<LegalEvidenceBucket, "get">;
+  historyEvidenceBucket?: Pick<LegalEvidenceBucket, "get">;
   customArtifactBucket?: R2Bucket;
   reasoningService: Fetcher;
 };
@@ -77,6 +79,16 @@ type RuntimeProviderGovernance = {
   recordedAt: string;
   providerNamespace: string;
 };
+
+export function selectRuntimeEvidenceBucket<T>(
+  capability: "current" | "history",
+  evidenceBucket: T,
+  historyEvidenceBucket?: T,
+): T {
+  return capability === "history" && historyEvidenceBucket
+    ? historyEvidenceBucket
+    : evidenceBucket;
+}
 
 async function sha256Hex(value: string | Uint8Array): Promise<string> {
   const encoded = typeof value === "string" ? new TextEncoder().encode(value) : value;
@@ -555,7 +567,8 @@ function createRuntimeRetriever(
   candidateIndex: ReturnType<typeof createRuntimeCandidateIndex>,
   releaseResolver: RuntimeReleaseResolver,
 ): TargetLegalAnswerRetriever {
-  const { environment, db, evidenceBucket, customArtifactBucket, reasoningService } = dependencies;
+  const { environment, db, evidenceBucket, historyEvidenceBucket,
+    customArtifactBucket, reasoningService } = dependencies;
   const r2IdentityByRendition = new Map<string, CustomRuntimeLegalIdentity>();
   return createTargetLegalAnswerRetriever({
     environment,
@@ -583,12 +596,17 @@ function createRuntimeRetriever(
         if (context.release.instances.some((instance) =>
           instance.id === customInstanceId("current", environment)
           || instance.id === customInstanceId("history", environment))) {
+          const releaseEvidenceBucket = selectRuntimeEvidenceBucket(
+            context.release.capability,
+            evidenceBucket,
+            historyEvidenceBucket,
+          );
           const r2Identity = r2IdentityByRendition.get(provisionRenditionId);
           if (r2Identity) return resolveR2NativeCustomEvidence(
-            { bucket: evidenceBucket, currentAt: context.currentAt }, r2Identity, endpoint,
+            { bucket: releaseEvidenceBucket, currentAt: context.currentAt }, r2Identity, endpoint,
           );
           return resolveCompleteCorpusEvidence(
-            { db, bucket: evidenceBucket, environment,
+            { db, bucket: releaseEvidenceBucket, environment,
               releaseId: context.release.id, currentAt: context.currentAt }, provisionRenditionId, endpoint,
           );
         }
@@ -631,6 +649,7 @@ export function createRuntimeTargetLegalAnswerRetriever(
   const evidenceBucket = env.LEGAL_EVIDENCE_BUCKET;
   const reasoningService = env.LEGAL_CORPUS_REASONING_SERVICE;
   const dependencies = { environment, db, evidenceBucket,
+    historyEvidenceBucket: env.LEGAL_HISTORY_EVIDENCE_BUCKET,
     customArtifactBucket: env.LEGAL_CUSTOM_ARTIFACT_BUCKET, reasoningService };
   const releaseLifecycle = createReleaseLifecycle({ db });
   const aiProvider = env.LEGAL_AI_SEARCH_NAMESPACE && env.LEGAL_AI_SEARCH_NAMESPACE_NAME

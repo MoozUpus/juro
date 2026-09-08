@@ -64,6 +64,7 @@ export type CustomSearchEnv = {
   CATALOG_DB: D1Database;
   CUSTOM_SEARCH_CAPABILITY: "current" | "history";
   CUSTOM_SEARCH_RELEASE_ID: string;
+  CUSTOM_SEARCH_PHYSICAL_RELEASE_ID?: string;
   CUSTOM_SEARCH_INSTANCE_ID: string;
   CUSTOM_SEARCH_SHARD_ID: string;
   CUSTOM_RUNTIME_DESCRIPTOR_KEY: string;
@@ -121,6 +122,9 @@ async function queryEmbedding(env: CustomSearchEnv, query: string): Promise<{
 }
 
 async function loadDescriptor(env: CustomSearchEnv, releaseId: string) {
+  const physicalReleaseId = env.CUSTOM_SEARCH_PHYSICAL_RELEASE_ID
+    ? searchReleaseIdSchema.parse(env.CUSTOM_SEARCH_PHYSICAL_RELEASE_ID)
+    : releaseId;
   const expectedKey = z.string().min(1).max(1_024).parse(env.CUSTOM_RUNTIME_DESCRIPTOR_KEY);
   const expectedSha256 = sha256Schema.parse(env.CUSTOM_RUNTIME_DESCRIPTOR_SHA256);
   const component = await env.CATALOG_DB.prepare(`SELECT runtime_descriptor_r2_key AS descriptorKey,
@@ -143,7 +147,7 @@ async function loadDescriptor(env: CustomSearchEnv, releaseId: string) {
     throw new TypeError("CUSTOM_SEARCH_DESCRIPTOR_CORRUPT");
   }
   const descriptor = parseCustomBm25RuntimeDescriptor(JSON.parse(new TextDecoder().decode(bytes)));
-  if (descriptor.releaseId !== releaseId
+  if (descriptor.releaseId !== physicalReleaseId
     || descriptor.sparseManifestSha256 !== component.sparseManifestSha256) {
     throw new TypeError("CUSTOM_SEARCH_DESCRIPTOR_IDENTITY_MISMATCH");
   }
@@ -180,7 +184,7 @@ export async function executeCustomSearch(env: CustomSearchEnv, raw: unknown) {
     throw new TypeError("CUSTOM_SEARCH_RELEASE_REJECTED");
   }
   const descriptor = await loadDescriptor(env, input.releaseId);
-  const denseMetadataReleaseId = descriptor.denseMetadataReleaseId ?? input.releaseId;
+  const denseMetadataReleaseId = descriptor.denseMetadataReleaseId ?? descriptor.releaseId;
   await reserveQueryBudget(env, input.releaseId);
   const atEpoch = Math.floor(new Date(input.endpoint.kind === "timestamp"
     ? input.endpoint.instant : input.currentAt).getTime() / 1_000);
