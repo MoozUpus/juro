@@ -185,7 +185,7 @@ test("domain-general questions return hash-verified Legal Answers through the pr
       const retriever = createTargetLegalAnswerRetriever({
         environment: "development",
         interpreter: { interpret: async (question) => {
-          assert.equal(question, fixture.question);
+          assert.equal(question, `Resolved context: ${fixture.question}`);
           return plan;
         } },
         releaseResolver: { resolve: async () => release },
@@ -226,7 +226,11 @@ test("domain-general questions return hash-verified Legal Answers through the pr
       const result = await createTargetLegalAnswerClient({
         service,
         environment: "development",
-      }).answer({ id: `question-${fixture.id}`, question: fixture.question });
+      }).answer({
+        id: `question-${fixture.id}`,
+        question: fixture.question,
+        contextualQuestion: `Resolved context: ${fixture.question}`,
+      });
 
       assert.equal(result.kind, "conditionalQuestion" in fixture ? "conditional_answer" : "legal_answer");
       if (result.kind !== "legal_answer" && result.kind !== "conditional_answer") {
@@ -432,7 +436,7 @@ test("unavailable or incomplete indexed packets continue the strict Source Ladde
         endpoint: { kind: "current" as const },
         requiredInstanceIds: ["current-00"],
         candidates: [],
-        partialErrors: [{ code: "AI_SEARCH_PARTIAL_RESPONSE" as const, instanceId: "current-00" }],
+        partialErrors: [{ code: "CANDIDATE_PARTIAL_RESPONSE" as const, instanceId: "current-00" }],
       }),
     },
   });

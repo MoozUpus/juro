@@ -5,52 +5,15 @@ import test from "node:test";
 import {
   createTargetActivationSetEvaluationClient,
   handleTargetActivationSetEvaluationRequest,
-  handleTargetCandidateEvaluationRequest,
   TARGET_ACTIVATION_SET_EVALUATION_PATH,
-  TARGET_CANDIDATE_EVALUATION_PATH,
 } from "../lib/legal-corpus/target-evaluation";
 import {
   createRuntimeTargetActivationSetEvaluation,
-  createRuntimeTargetCandidateEvaluationRetriever,
   selectRuntimeEvidenceBucket,
   type TargetRetrievalRuntimeEnv,
 } from "../lib/legal-corpus/target-runtime";
 import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
 
-const releaseId = "release:staging:current:source-snapshot-v1";
-const configuration = {
-  identity: "ai-search-staging-v1",
-  metadataSchema: ["language", "document_type", "valid_from", "valid_to"],
-  fifthMetadataFieldReserved: true,
-  embeddingModel: "openai/text-embedding-3-large",
-  dimensions: 1_536,
-  keywordTokenizer: "porter",
-  gatewayIdentity: "juro-ai-search-staging",
-  providerProjectIdentity: "juro-openai-staging",
-  providerNamespaceIdentity: "juro-legal-staging",
-  sourcePrefix: `search-releases/${releaseId}/current/`,
-  serviceBindingIdentity: "LEGAL_CORPUS_SERVICE",
-  gatewayPayloadLogging: false,
-  gatewayCaching: false,
-  similarityCaching: false,
-  queryRewriting: false,
-  providerReranking: false,
-  providerGeneration: false,
-  contextExpansion: false,
-};
-const configurationJson = JSON.stringify(configuration);
-const configurationSha256 = createHash("sha256").update(configurationJson).digest("hex");
-const providerReconciliationJson = JSON.stringify({
-  instanceId: "juro-cur-porter-v1",
-  providerItems: 160_978,
-  uniqueItems: 160_978,
-  chunks: 170_000,
-  mismatches: {},
-  verifiedInventorySha256: "a".repeat(64),
-  ok: true,
-});
-const providerReconciliationSha256 = createHash("sha256")
-  .update(providerReconciliationJson).digest("hex");
 const activationEvaluationReport = {
   releaseId: "release:staging:history:evaluation-v1",
   corpusSnapshotId: "snapshot:staging:evaluation-v1", chunkCount: 20,
@@ -68,66 +31,8 @@ test("history retrieval selects its accepted R2 evidence bucket without changing
   assert.equal(selectRuntimeEvidenceBucket("history", current), current);
 });
 
-function qualificationRow(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "qualification-porter-v1",
-    searchReleaseId: releaseId,
-    environment: "staging",
-    capability: "current",
-    reconciliationRunId: "build:staging:current:source-snapshot-v1",
-    providerNamespace: "juro-legal-staging",
-    providerInstanceId: "juro-cur-porter-v1",
-    shardId: "00",
-    configurationJson,
-    configurationSha256,
-    providerItemCount: 160_978,
-    providerChunkCount: 170_000,
-    providerInventorySha256: "a".repeat(64),
-    providerReconciliationJson,
-    providerReconciliationSha256,
-    sourcePrefix: `search-releases/${releaseId}/current/`,
-    scheduledIndexingPaused: 1,
-    status: "qualified",
-    recordedAt: "2026-09-02T22:00:00.000Z",
-    releaseEnvironment: "staging",
-    releaseCapability: "current",
-    releaseStatus: "draft",
-    releaseItemCount: 160_978,
-    releaseConfigurationIdentity: "ai-search-staging-v1",
-    reconciliationStatus: "clean",
-    reconciliationEnvironment: "staging",
-    reconciliationReleaseId: releaseId,
-    reconciliationCapability: "current",
-    projectionStatus: "complete",
-    projectionEnvironment: "staging",
-    projectionExpectedItems: 160_978,
-    projectionCopiedItems: 160_978,
-    projectionBucketName: "juro-legal-ai-search-staging-20260902",
-    ...overrides,
-  };
-}
-
-function evaluationEnv(row = qualificationRow()): TargetRetrievalRuntimeEnv {
-  const db = {
-    prepare() {
-      return {
-        bind() {
-          return { first: async () => row };
-        },
-      };
-    },
-  } as unknown as D1Database;
-  return {
-    APP_ENV: "staging",
-    LEGAL_CORPUS_SHADOW_MODE: "true",
-    LEGAL_AI_SEARCH_PAUSED: "true",
-    LEGAL_DB: db,
-    LEGAL_EVIDENCE_BUCKET: { get: async () => null },
-    LEGAL_AI_SEARCH_NAMESPACE: {} as AiSearchNamespace,
-    LEGAL_AI_SEARCH_NAMESPACE_NAME: "juro-legal-staging",
-    LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME: "juro-legal-ai-search-staging-20260902",
-    LEGAL_CORPUS_REASONING_SERVICE: {} as Fetcher,
-  };
+function evaluationBoundaryEnv(): TargetRetrievalRuntimeEnv {
+  return { APP_ENV: "staging", LEGAL_CORPUS_SHADOW_MODE: "true" };
 }
 
 function activationSetEvaluationEnv(plans: Record<string, unknown>): TargetRetrievalRuntimeEnv {
@@ -181,8 +86,7 @@ function activationSetEvaluationEnv(plans: Record<string, unknown>): TargetRetri
   const unavailable = { async fetch() {
     return Response.json({ code: "INDEX_UNAVAILABLE" }, { status: 503 });
   } } as unknown as Fetcher;
-  return { APP_ENV: "staging", LEGAL_CORPUS_SHADOW_MODE: "true",
-    LEGAL_AI_SEARCH_PAUSED: "true", LEGAL_DB: db,
+  return { APP_ENV: "staging", LEGAL_CORPUS_SHADOW_MODE: "true", LEGAL_DB: db,
     LEGAL_EVIDENCE_BUCKET: { get: async () => null },
     LEGAL_CUSTOM_ARTIFACT_BUCKET: { get: async () => null } as unknown as R2Bucket,
     LEGAL_CORPUS_REASONING_SERVICE: reasoning,
@@ -215,64 +119,13 @@ test("candidate qualification storage is immutable and indexed by release", () =
   }
 });
 
-test("only an exact staging shadow qualification opens an off-side retriever", async () => {
-  const retriever = await createRuntimeTargetCandidateEvaluationRetriever(
-    evaluationEnv(),
-    "qualification-porter-v1",
-  );
-  assert.equal(typeof retriever.answer, "function");
-
-  await assert.rejects(
-    () => createRuntimeTargetCandidateEvaluationRetriever(
-      evaluationEnv(qualificationRow({ providerItemCount: 160_977 })),
-      "qualification-porter-v1",
-    ),
-    /TARGET_CANDIDATE_QUALIFICATION_REJECTED/u,
-  );
-  await assert.rejects(
-    () => createRuntimeTargetCandidateEvaluationRetriever({
-      ...evaluationEnv(), APP_ENV: "production",
-    }, "qualification-porter-v1"),
-    /TARGET_CANDIDATE_EVALUATION_UNAVAILABLE/u,
-  );
-});
-
-test("candidate evaluation route is private and fail-closed outside staging shadow mode", async () => {
-  const publicRequest = new Request(
-    `https://example.test${TARGET_CANDIDATE_EVALUATION_PATH}`,
-    { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
-  );
-  const publicResponse = await handleTargetCandidateEvaluationRequest(publicRequest, evaluationEnv());
-  assert.equal(publicResponse.status, 404);
-
-  const privateRequest = new Request(
-    `http://legal-corpus.internal${TARGET_CANDIDATE_EVALUATION_PATH}`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-juro-service-binding": "target-candidate-evaluation-v1",
-        "x-juro-legal-environment": "staging",
-      },
-      body: JSON.stringify({
-        qualificationId: "qualification-porter-v1",
-        question: { id: "question-1", question: "What is the current law?" },
-      }),
-    },
-  );
-  const disabledResponse = await handleTargetCandidateEvaluationRequest(privateRequest, {
-    ...evaluationEnv(), LEGAL_CORPUS_SHADOW_MODE: "false",
-  });
-  assert.equal(disabledResponse.status, 404);
-});
-
 test("activation-set evaluation has a distinct staging-only private boundary", async () => {
   const publicRequest = new Request(
     `https://example.test${TARGET_ACTIVATION_SET_EVALUATION_PATH}`,
     { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
   );
   assert.equal((await handleTargetActivationSetEvaluationRequest(
-    publicRequest, evaluationEnv(),
+    publicRequest, evaluationBoundaryEnv(),
   )).status, 404);
   const privateRequest = new Request(
     `http://legal-corpus.internal${TARGET_ACTIVATION_SET_EVALUATION_PATH}`,
@@ -286,16 +139,16 @@ test("activation-set evaluation has a distinct staging-only private boundary", a
     }) },
   );
   const unavailableResponse = await handleTargetActivationSetEvaluationRequest(
-    privateRequest.clone() as Request, evaluationEnv());
+    privateRequest.clone() as Request, evaluationBoundaryEnv());
   assert.equal(unavailableResponse.status, 503);
   assert.deepEqual(await unavailableResponse.json(), {
     code: "TARGET_ACTIVATION_SET_EVALUATION_UNAVAILABLE",
   });
   assert.equal((await handleTargetActivationSetEvaluationRequest(privateRequest, {
-    ...evaluationEnv(), LEGAL_CORPUS_SHADOW_MODE: "false",
+    ...evaluationBoundaryEnv(), LEGAL_CORPUS_SHADOW_MODE: "false",
   })).status, 404);
   assert.equal((await handleTargetActivationSetEvaluationRequest(privateRequest.clone() as Request, {
-    ...evaluationEnv(), APP_ENV: "production",
+    ...evaluationBoundaryEnv(), APP_ENV: "production",
   })).status, 404);
 });
 

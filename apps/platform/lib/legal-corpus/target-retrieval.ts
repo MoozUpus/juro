@@ -30,6 +30,8 @@ const SERVICE_BINDING_MARKER = "target-legal-answer-v1";
 const questionSchema = z.object({
   id: legalIdentifierSchema,
   question: z.string().trim().min(1).max(4_000),
+  contextualQuestion: z.string().trim().min(1).max(900).optional(),
+  applicableAt: utcInstantSchema.optional(),
 }).strict();
 const requirementSchema = z.object({
   id: legalIdentifierSchema,
@@ -403,7 +405,16 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       const request = questionSchema.parse(untrustedInput);
       let plan: QuestionInterpretationPlan;
       try {
-        plan = questionInterpretationPlanSchema.parse(await dependencies.interpreter.interpret(request.question));
+        plan = questionInterpretationPlanSchema.parse(await dependencies.interpreter.interpret(
+          request.contextualQuestion ?? request.question,
+        ));
+        if (request.applicableAt) {
+          plan = questionInterpretationPlanSchema.parse({
+            ...plan,
+            temporalEndpoint: { kind: "timestamp", instant: request.applicableAt },
+            comparison: undefined,
+          });
+        }
       } catch {
         return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
       }
@@ -706,6 +717,7 @@ export async function handleTargetLegalAnswerRequest(
 export function createTargetLegalAnswerClient(input: {
   service: Fetcher;
   environment: z.infer<typeof legalEnvironmentSchema>;
+  signal?: AbortSignal;
 }) {
   return {
     async answer(question: z.input<typeof questionSchema>): Promise<TargetLegalAnswerResult> {
@@ -719,6 +731,7 @@ export function createTargetLegalAnswerClient(input: {
             "x-juro-legal-environment": input.environment,
           },
           body: JSON.stringify(questionSchema.parse(question)),
+          signal: input.signal,
         },
       );
       if (!response.ok) throw new TypeError("TARGET_LEGAL_ANSWER_UNAVAILABLE");

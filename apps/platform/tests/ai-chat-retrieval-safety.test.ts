@@ -51,8 +51,8 @@ test("chat uses bounded model-understood queries across the authority ladder wit
   assert.match(route, /const retrievalUnderstandingPromise = \(async/u);
   assert.match(route, /queryUnderstandingFallback = true/u);
   assert.match(route, /fallbackLegalRetrievalUnderstanding\(rewrite\.query\)/u);
-  assert.match(route, /indexQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.corpusQueries\)/u);
   assert.match(route, /lexSearchQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.lexSearchQueries\)/u);
+  assert.doesNotMatch(route, /indexQueries:/u);
   assert.match(route, /const retrievalQuestion = retrievalUnderstanding\.standaloneQuestion/u);
   assert.match(route, /query: retrievalUnderstanding\.webSearchQuery/u);
   assert.match(route, /retrievalQuery: retrievalQuestion/u);

@@ -1,359 +1,6 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-
-import {
-  createLegalTargetReadinessClient,
-  handleLegalTargetReadinessRequest,
-  LEGAL_TARGET_READINESS_PATH,
-  type LegalTargetReadinessEnv,
-} from "../lib/legal-corpus/target-storage";
-import { serializeLegalEnvironmentControlObject } from "../lib/legal-corpus/target-domain-schemas";
-import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
-
-function targetEnv(
-  environment: "development" | "staging" | "production" = "staging",
-  suffix = "",
-):
-LegalTargetReadinessEnv {
-  const bucketName = `juro-legal-evidence-${environment}${suffix}`;
-  const bucketControlSha256 = createHash("sha256").update(
-    serializeLegalEnvironmentControlObject({
-    environment,
-    bucketName,
-    }),
-  ).digest("hex");
-  const aiSearchNamespace = {
-    get() { throw new Error("not used by readiness"); },
-    async list() {
-      return { result: [], result_info: { count: 0, page: 1, per_page: 100, total_count: 0 } };
-    },
-    async create() { throw new Error("not used by readiness"); },
-    async delete() { throw new Error("not used by readiness"); },
-    async search() { throw new Error("not used by readiness"); },
-    async chatCompletions() { throw new Error("not used by readiness"); },
-  } satisfies AiSearchNamespace;
-  return {
-    APP_ENV: environment,
-    LEGAL_EVIDENCE_BUCKET_NAME: bucketName,
-    LEGAL_AI_SEARCH_NAMESPACE_NAME: `juro-legal-${environment}`,
-    LEGAL_AI_SEARCH_CONFIGURATION_ID: `ai-search-${environment}-v1`,
-    LEGAL_AI_GATEWAY_ID: `juro-ai-search-${environment}`,
-    LEGAL_AI_PROVIDER_PROJECT_ID: `juro-openai-${environment}`,
-    LEGAL_AI_SEARCH_EMBEDDING_MODEL: "openai/text-embedding-3-large",
-    LEGAL_AI_SEARCH_DIMENSIONS: "1536",
-    LEGAL_AI_SEARCH_KEYWORD_TOKENIZER: "porter",
-    LEGAL_AI_SEARCH_METADATA_SCHEMA: "language:text,document_type:text,valid_from:datetime,valid_to:datetime",
-    LEGAL_AI_SEARCH_SOURCE_PREFIX: "search-releases/",
-    LEGAL_AI_SEARCH_MAX_RESULTS: "50",
-    LEGAL_AI_SEARCH_MAX_INSTANCES_PER_QUERY: "10",
-    LEGAL_AI_SEARCH_PAUSED: "true",
-    LEGAL_AI_SEARCH_GATEWAY_PAYLOAD_LOGGING: "false",
-    LEGAL_AI_SEARCH_GATEWAY_CACHE: "false",
-    LEGAL_AI_SEARCH_SIMILARITY_CACHE: "false",
-    LEGAL_AI_SEARCH_NAMESPACE: aiSearchNamespace,
-    LEGAL_DB: {
-      prepare() {
-        return {
-          async first() {
-            return {
-              environment,
-              migrationState: "initialized",
-              evidenceBucketName: bucketName,
-            };
-          },
-        };
-      },
-    },
-    LEGAL_EVIDENCE_BUCKET: {
-      async head(key: string) {
-        assert.equal(key, `control/environments/${environment}.json`);
-        return {
-          customMetadata: {
-            environment,
-            bucketName,
-            schemaVersion: "1",
-            sha256: bucketControlSha256,
-          },
-        };
-      },
-    },
-  };
-}
-
-function inProcessReadinessService(env: LegalTargetReadinessEnv): Fetcher {
-  return {
-    fetch(input: RequestInfo | URL, init?: RequestInit) {
-      return handleLegalTargetReadinessRequest(new Request(input, init), env);
-    },
-  } as Fetcher;
-}
-
-test("private service-binding readiness proves the isolated legal D1 and R2 stores", async () => {
-  const result = await createLegalTargetReadinessClient({
-    service: inProcessReadinessService(targetEnv()),
-    environment: "staging",
-  }).readiness();
-
-  assert.deepEqual(result, {
-    environment: "staging",
-    database: "ready",
-    evidenceBucket: "ready",
-    migrationState: "initialized",
-    aiSearchNamespace: "ready",
-    aiSearchInstanceCount: 0,
-    declaredConfigurationIdentity: "ai-search-staging-v1",
-    controlPlaneAttestation: "required",
-  });
-});
-
-test("private readiness accepts an environment-scoped blue-green storage identity", async () => {
-  const result = await createLegalTargetReadinessClient({
-    service: inProcessReadinessService(targetEnv("staging", "-green-20260831")),
-    environment: "staging",
-  }).readiness();
-
-  assert.equal(result.evidenceBucket, "ready");
-  assert.equal(result.environment, "staging");
-});
-
-test("R2 control serialization stays pinned to the immutable green2 evidence", () => {
-  const body = serializeLegalEnvironmentControlObject({
-    environment: "staging",
-    bucketName: "juro-legal-evidence-staging-green2-20260831",
-  });
-  assert.equal(
-    body,
-    "{\"environment\":\"staging\",\"bucketName\":\"juro-legal-evidence-staging-green2-20260831\",\"schemaVersion\":1}\n",
-  );
-  assert.equal(
-    createHash("sha256").update(body).digest("hex"),
-    "39dbc0ee45fdaedb394bd53607e46207d38490f22a3b1600116f5c7ef823452e",
-  );
-});
-
-test("target readiness rejects malformed R2 control integrity metadata", async () => {
-  const env = targetEnv("staging");
-  env.LEGAL_EVIDENCE_BUCKET = {
-    async head() {
-      return {
-        customMetadata: {
-          environment: "staging",
-          bucketName: "juro-legal-evidence-staging",
-          schemaVersion: "1",
-          sha256: "not-a-sha256",
-        },
-      };
-    },
-  };
-  await assertReadinessFailure(env, "LEGAL_TARGET_STORAGE_EVIDENCE_INVALID");
-});
-
-test("target readiness rejects a well-formed but incorrect R2 control hash", async () => {
-  const env = targetEnv("staging");
-  env.LEGAL_EVIDENCE_BUCKET = {
-    async head() {
-      return {
-        customMetadata: {
-          environment: "staging",
-          bucketName: "juro-legal-evidence-staging",
-          schemaVersion: "1",
-          sha256: "0".repeat(64),
-        },
-      };
-    },
-  };
-  await assertReadinessFailure(env, "LEGAL_TARGET_STORAGE_EVIDENCE_INVALID");
-});
-
-test("target control persists one exact lowercase blue-green resource identity", () => {
-  const { sqlite } = sqliteD1FixtureFromDirectory(
-    new URL("../legal-drizzle/", import.meta.url),
-  );
-  try {
-    const insert = sqlite.prepare(`INSERT INTO legal_target_control
-      (control_key,environment,migration_state,evidence_bucket_name,schema_version,
-        initialized_at,updated_at) VALUES ('environment','staging','migrating',?,1,?,?)`);
-    insert.run(
-      "juro-legal-evidence-staging-green-20260831",
-      "2026-08-31T10:11:58.807Z",
-      "2026-08-31T10:11:58.807Z",
-    );
-    assert.equal((sqlite.prepare(`SELECT evidence_bucket_name AS bucketName
-      FROM legal_target_control`).get() as { bucketName: string }).bucketName,
-    "juro-legal-evidence-staging-green-20260831");
-  } finally {
-    sqlite.close();
-  }
-});
-
-for (const invalidSuffix of ["-green--20260831", "-green-"]) {
-  test(`target control rejects malformed blue-green suffix ${invalidSuffix}`, () => {
-    const { sqlite } = sqliteD1FixtureFromDirectory(
-      new URL("../legal-drizzle/", import.meta.url),
-    );
-    try {
-      assert.throws(() => sqlite.prepare(`INSERT INTO legal_target_control
-        (control_key,environment,migration_state,evidence_bucket_name,schema_version,
-          initialized_at,updated_at) VALUES ('environment','staging','migrating',?,1,?,?)`).run(
-        `juro-legal-evidence-staging${invalidSuffix}`,
-        "2026-08-31T10:11:58.807Z",
-        "2026-08-31T10:11:58.807Z",
-      ), /constraint/u);
-    } finally {
-      sqlite.close();
-    }
-  });
-}
-
-test("target readiness rejects unbound, cross-environment, and public requests", async () => {
-  const env = targetEnv("staging");
-  const unbound = await handleLegalTargetReadinessRequest(
-    new Request(`http://legal-corpus.internal${LEGAL_TARGET_READINESS_PATH}`),
-    env,
-  );
-  assert.equal(unbound.status, 404);
-
-  const crossEnvironment = await handleLegalTargetReadinessRequest(
-    new Request(`http://legal-corpus.internal${LEGAL_TARGET_READINESS_PATH}`, {
-      headers: {
-        "x-juro-service-binding": "legal-target-storage-v1",
-        "x-juro-legal-environment": "production",
-      },
-    }),
-    env,
-  );
-  assert.equal(crossEnvironment.status, 404);
-
-  const publicRequest = await handleLegalTargetReadinessRequest(
-    new Request(`https://corpus.example.com${LEGAL_TARGET_READINESS_PATH}`, {
-      headers: {
-        "x-juro-service-binding": "legal-target-storage-v1",
-        "x-juro-legal-environment": "staging",
-      },
-    }),
-    env,
-  );
-  assert.equal(publicRequest.status, 404);
-});
-
-async function assertReadinessFailure(
-  env: LegalTargetReadinessEnv,
-  errorCode: string,
-): Promise<void> {
-  const errors: string[] = [];
-  const originalError = console.error;
-  console.error = (message?: unknown) => errors.push(String(message));
-  try {
-    await assert.rejects(() => createLegalTargetReadinessClient({
-      service: inProcessReadinessService(env),
-      environment: "staging",
-    }).readiness(), new RegExp(errorCode, "u"));
-  } finally {
-    console.error = originalError;
-  }
-  assert.equal(errors.length, 1);
-  assert.deepEqual(JSON.parse(errors[0]!) as unknown, {
-    service: "legal-corpus-worker",
-    event: "legal_target.readiness_unavailable",
-    environment: "staging",
-    errorCode,
-  });
-  assert.doesNotMatch(errors[0]!, /provider details|database details|bucket details/u);
-}
-
-const readinessFailureCases: Array<{
-  name: string;
-  errorCode: string;
-  mutate(env: LegalTargetReadinessEnv): void;
-}> = [
-  {
-    name: "declared configuration drift",
-    errorCode: "LEGAL_TARGET_CONFIGURATION_DRIFT",
-    mutate: (env) => { Reflect.set(env, "LEGAL_AI_SEARCH_GATEWAY_CACHE", "true"); },
-  },
-  {
-    name: "database rejection",
-    errorCode: "LEGAL_TARGET_DATABASE_UNAVAILABLE",
-    mutate: (env) => {
-      env.LEGAL_DB = { prepare: () => ({
-        async first() { throw new Error("database details must not escape"); },
-      }) };
-    },
-  },
-  {
-    name: "evidence bucket rejection",
-    errorCode: "LEGAL_TARGET_EVIDENCE_BUCKET_UNAVAILABLE",
-    mutate: (env) => {
-      env.LEGAL_EVIDENCE_BUCKET = {
-        async head() { throw new Error("bucket details must not escape"); },
-      };
-    },
-  },
-  {
-    name: "namespace rejection",
-    errorCode: "LEGAL_TARGET_AI_SEARCH_NAMESPACE_UNAVAILABLE",
-    mutate: (env) => {
-      env.LEGAL_AI_SEARCH_NAMESPACE!.list = async () => {
-        throw new Error("provider details must not escape");
-      };
-    },
-  },
-  {
-    name: "invalid persisted evidence",
-    errorCode: "LEGAL_TARGET_STORAGE_EVIDENCE_INVALID",
-    mutate: (env) => {
-      env.LEGAL_EVIDENCE_BUCKET = { async head() { return null; } };
-    },
-  },
-  {
-    name: "unexpected dependency response",
-    errorCode: "LEGAL_TARGET_DEPENDENCY_UNAVAILABLE",
-    mutate: (env) => {
-      Reflect.set(env.LEGAL_AI_SEARCH_NAMESPACE!, "list", async () => null);
-    },
-  },
-];
-
-for (const failure of readinessFailureCases) {
-  test(`target readiness reports ${failure.name} without leaking payloads`, async () => {
-    const env = targetEnv("staging");
-    failure.mutate(env);
-    await assertReadinessFailure(env, failure.errorCode);
-  });
-}
-
-test("an immediate readiness failure is not held open by a pending peer", async () => {
-  const env = targetEnv("staging");
-  env.LEGAL_DB = { prepare: () => ({
-    async first() { throw new Error("database details must not escape"); },
-  }) };
-  env.LEGAL_EVIDENCE_BUCKET = {
-    head: () => new Promise(() => undefined),
-  };
-  await Promise.race([
-    assertReadinessFailure(env, "LEGAL_TARGET_DATABASE_UNAVAILABLE"),
-    new Promise<never>((_resolve, reject) => setTimeout(
-      () => reject(new Error("READINESS_FAILURE_DEADLINE_EXCEEDED")),
-      100,
-    )),
-  ]);
-});
-
-test("readiness reports the first observed dependency failure", async () => {
-  const env = targetEnv("staging");
-  env.LEGAL_DB = { prepare: () => ({
-    async first() {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      throw new Error("database details must not escape");
-    },
-  }) };
-  env.LEGAL_EVIDENCE_BUCKET = {
-    async head() { throw new Error("bucket details must not escape"); },
-  };
-  await assertReadinessFailure(env, "LEGAL_TARGET_EVIDENCE_BUCKET_UNAVAILABLE");
-});
 
 test("the first legal-D1 migration is control-only and body-free", () => {
   const migration = readFileSync(
@@ -366,17 +13,17 @@ test("the first legal-D1 migration is control-only and body-free", () => {
   assert.doesNotMatch(migration, /content_text|exact_quote|body_text|sparse_postings/iu);
 });
 
-test("every environment declares a route-free, isolated target storage and binding identity", () => {
+test("every target environment is R2-native and has no legacy read or AI Search binding", () => {
   const corpusConfigText = readFileSync(
     new URL("../wrangler.legal-corpus.jsonc", import.meta.url),
     "utf8",
   );
   const corpusConfig = JSON.parse(corpusConfigText) as {
     vars: Record<string, string>;
-    ai_search_namespaces: Array<{ binding: string; namespace: string }>;
+    ai_search_namespaces?: unknown[];
     env: Record<"staging" | "production", {
       vars: Record<string, string>;
-      ai_search_namespaces: Array<{ binding: string; namespace: string }>;
+      ai_search_namespaces?: unknown[];
     }>;
   };
   const platformConfig = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
@@ -384,9 +31,6 @@ test("every environment declares a route-free, isolated target storage and bindi
     assert.match(corpusConfigText, new RegExp(`juro-legal-catalog-${environment}`, "u"));
     assert.match(corpusConfigText, new RegExp(`juro-legal-evidence-${environment}`, "u"));
   }
-  assert.match(platformConfig, /juro-legal-corpus-development/u);
-  assert.match(platformConfig, /juro-legal-corpus-staging/u);
-  assert.match(platformConfig, /"service": "juro-legal-corpus"/u);
   assert.match(corpusConfigText, /"binding": "LEGAL_DB"/u);
   assert.match(corpusConfigText, /"binding": "LEGAL_EVIDENCE_BUCKET"/u);
   const environmentConfigs = {
@@ -395,29 +39,14 @@ test("every environment declares a route-free, isolated target storage and bindi
     production: corpusConfig.env.production,
   };
   for (const [environment, config] of Object.entries(environmentConfigs)) {
-    assert.deepEqual(config.ai_search_namespaces, [{
-      binding: "LEGAL_AI_SEARCH_NAMESPACE",
-      namespace: `juro-legal-${environment}`,
-    }]);
-    assert.equal(config.vars.LEGAL_AI_SEARCH_NAMESPACE_NAME, `juro-legal-${environment}`);
+    assert.deepEqual(config.ai_search_namespaces ?? [], []);
     assert.equal(config.vars.LEGAL_AI_GATEWAY_ID, `juro-ai-search-${environment}`);
     assert.equal(config.vars.LEGAL_AI_PROVIDER_PROJECT_ID, `juro-openai-${environment}`);
-    assert.equal(config.vars.LEGAL_AI_SEARCH_GATEWAY_PAYLOAD_LOGGING, "false");
-    assert.equal(config.vars.LEGAL_AI_SEARCH_GATEWAY_CACHE, "false");
-    assert.equal(config.vars.LEGAL_AI_SEARCH_SIMILARITY_CACHE, "false");
-    assert.equal(config.vars.LEGAL_AI_SEARCH_EMBEDDING_MODEL, "openai/text-embedding-3-large");
-    assert.equal(config.vars.LEGAL_AI_SEARCH_DIMENSIONS, "1536");
-    assert.equal(config.vars.LEGAL_AI_SEARCH_KEYWORD_TOKENIZER, "porter");
-    assert.equal(config.vars.LEGAL_AI_SEARCH_PAUSED, "true");
+    for (const key of Object.keys(config.vars)) assert.doesNotMatch(key, /^LEGAL_AI_SEARCH_/u);
   }
-  for (const key of [
-    "LEGAL_AI_SEARCH_NAMESPACE_NAME",
-    "LEGAL_AI_GATEWAY_ID",
-    "LEGAL_AI_PROVIDER_PROJECT_ID",
-  ]) {
-    assert.equal(new Set(Object.values(environmentConfigs).map((config) => config.vars[key])).size, 3);
-  }
-  assert.match(platformConfig, /"binding": "LEGAL_CORPUS_READ_SERVICE"/u);
+  assert.doesNotMatch(platformConfig, /LEGAL_CORPUS_READ_SERVICE/u);
+  assert.match(platformConfig, /"binding": "LEGAL_RETRIEVAL_SERVICE"/u);
+  assert.doesNotMatch(corpusConfigText, /LEGAL_AI_SEARCH_NAMESPACE|LEGAL_AI_SEARCH_SOURCE_BUCKET/u);
   assert.match(corpusConfigText, /"workers_dev": false/u);
   assert.match(corpusConfigText, /"preview_urls": false/u);
   assert.doesNotMatch(corpusConfigText, /"routes"\s*:\s*\[[^\]]+\]/u);

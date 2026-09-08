@@ -1,11 +1,7 @@
-# Rollback
+# Huquq AI integration rollback
 
-1. Set the legal-intelligence feature flag to disabled or zero rollout; retain the
-   pre-existing answer path.
-2. Stop legal source queue consumers before changing index data.
-3. Restore the last validated D1 source manifest, private-R2 Qdrant collection
-   snapshot and private-document Vectorize state only in a non-production
-   rehearsal first. Verify the manifest and object SHA-256 before Qdrant upload.
-4. Verify a known source hash, version, status, article link and access control.
-5. Re-enable shadow mode before any controlled rollout. Do not deploy or change DNS as
-   part of this document.
+Status: superseded — 2026-09-09
+
+Do not restore or re-enable the retired D1 body/posting, Qdrant, AI Search, owner-promotion or scheduled acquisition paths.
+
+Use the current [legal corpus rollback runbook](../../operations/legal-corpus-rollback.md): atomically select a complete prior R2-native Activation Set, or fail the indexed stage closed and continue the strict Source Ladder.

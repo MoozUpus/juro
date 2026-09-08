@@ -1,22 +1,9 @@
 # Huquq AI integration
 
-JURO uses selected, MIT-compatible **behavioural ideas** from Huquq AI while retaining
-its own React/Next.js frontend, Cloudflare Worker, D1/R2, authorization, tenant
-boundaries and OpenAI/Anthropic provider policy. It is not a fork and does not expose
-Huquq AI branding, source corpus, screenshots, payment demo or Gemini integration.
+Status: historical reference integration; runtime superseded — 2026-09-09
 
-The legal-answer path is: intent and language normalization → official source
-retrieval → D1 BM25 plus optional Qdrant dense/sparse candidate fusion → D1
-version/scope rehydration → bounded ranking → coverage and exact-span
-validation → OpenAI primary/retry or Anthropic fallback → citation-filtered answer.
+JURO reused selected MIT-compatible behavioral ideas from the pinned Huquq AI audit while keeping JURO branding, security boundaries and source provenance. No Huquq AI corpus, screenshots, payment demo, Gemini integration or product identity was imported.
 
-Read [the matrix](ADOPTION_MATRIX.md) before changing the retrieval path. Rollout stays
-feature-gated. Bounded official-source acquisition and sparse shadow retrieval are
-enabled only in staging; Qdrant dense retrieval and every production corpus flag
-remain disabled pending the reproducible release gate.
+The current official-corpus runtime is the implemented [R2-native custom hybrid architecture](../../legal-corpus/target-search-architecture.md). The former D1 body/posting, Qdrant, AI Search and scheduled acquisition integration described by the original release evidence is retired and must not be restored as a live path.
 
-The 2026-08-15 infrastructure deployment, D1 restore evidence, Worker versions
-and authenticated browser smoke are recorded in
-[FULL_LEGAL_CORPUS_RELEASE_EVIDENCE_2026-08-15.md](FULL_LEGAL_CORPUS_RELEASE_EVIDENCE_2026-08-15.md).
-The reproducible npm licence-family scan is recorded in
-[DEPENDENCY_LICENSES.md](DEPENDENCY_LICENSES.md).
+Historical adoption, provenance, licensing and dated evidence files in this directory remain immutable audit context. They do not override the current architecture or runbooks.

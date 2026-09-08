@@ -8,7 +8,6 @@ import {
   legalIdentifierSchema,
   providerProjectIdSchema,
   searchReleaseIdSchema,
-  sha256Schema,
   utcInstantSchema,
 } from "./target-domain-schemas";
 
@@ -28,17 +27,11 @@ const interpretationSchema = z.object({
   id: legalIdentifierSchema,
   formulations: z.array(formulationSchema).min(1).max(6),
 }).strict();
-export const AI_SEARCH_METADATA_SCHEMA = [
+export const CANDIDATE_METADATA_SCHEMA = [
   "language",
   "document_type",
   "valid_from",
   "valid_to",
-] as const;
-export const AI_SEARCH_TYPED_METADATA_SCHEMA = [
-  { field_name: "language", data_type: "text" },
-  { field_name: "document_type", data_type: "text" },
-  { field_name: "valid_from", data_type: "datetime" },
-  { field_name: "valid_to", data_type: "datetime" },
 ] as const;
 const providerItemMetadataSchema = z.object({
   language: z.enum(["uz-Latn", "uz-Cyrl", "ru", "en"]),
@@ -131,11 +124,11 @@ export const candidateSchema = z.object({
 }).strict();
 const packetErrorSchema = z.object({
   code: z.enum([
-    "AI_SEARCH_CONFIGURATION_DRIFT",
-    "AI_SEARCH_MISSING_INSTANCE",
-    "AI_SEARCH_PARTIAL_RESPONSE",
-    "AI_SEARCH_UNKNOWN_INSTANCE",
-    "AI_SEARCH_WRONG_RELEASE",
+    "CANDIDATE_CONFIGURATION_DRIFT",
+    "CANDIDATE_MISSING_INSTANCE",
+    "CANDIDATE_PARTIAL_RESPONSE",
+    "CANDIDATE_UNKNOWN_INSTANCE",
+    "CANDIDATE_WRONG_RELEASE",
     "CANDIDATE_INTERPRETATION_INVALID",
     "CANDIDATE_PROVIDER_UNAVAILABLE",
     "PRIVACY_TRANSFORM_REJECTED",
@@ -260,14 +253,13 @@ export function createCallbackCandidateIndex(
 }
 
 export const createInMemoryCandidateIndex = createCallbackCandidateIndex;
-export const createQdrantCandidateIndex = createCallbackCandidateIndex;
 
-type AiSearchHit = Omit<NormalizedCandidateInput, "instanceId" | "shardId"> & {
+type ProviderCandidateHit = Omit<NormalizedCandidateInput, "instanceId" | "shardId"> & {
   instanceId: string;
   shardId: string;
   candidateText?: string;
 };
-export type AiSearchProvider = {
+export type LegalCandidateProvider = {
   attest(instanceId: string, releaseId?: string): Promise<CandidateConfiguration>;
   search(input: {
     releaseId?: string;
@@ -278,182 +270,12 @@ export type AiSearchProvider = {
     maxResults: 50;
     vectorThreshold: 0;
   }): Promise<{
-    hits: AiSearchHit[];
+    hits: ProviderCandidateHit[];
     errors: Array<{ code: string; instanceId?: string }>;
     searchedInstanceIds: string[];
     tokenUsage?: number;
   }>;
 };
-
-type CloudflareAiSearchProviderOptions = {
-  namespaceIdentity: string;
-  sourceBucketName: string;
-  sourcePrefix: string;
-  shardByInstance: Readonly<Record<string, string>>;
-  configuration: PinnedCandidateConfiguration;
-  attestManagement(instanceId: string): Promise<{
-    instanceId: string;
-    configuration: PinnedCandidateConfiguration;
-    evidenceSha256: string;
-    observedAt: string;
-  }>;
-};
-
-function providerMetadataSchema(info: AiSearchInstanceInfo): Array<{
-  field_name: string;
-  data_type: string;
-}> {
-  return (info.custom_metadata ?? []).map((field) => ({
-    field_name: field.field_name,
-    data_type: field.data_type,
-  })).sort((left, right) => left.field_name.localeCompare(right.field_name));
-}
-
-function providerSourcePrefix(info: AiSearchInstanceInfo): string | null {
-  const sourceParams = info.source_params;
-  if (!sourceParams || typeof sourceParams !== "object") return null;
-  const prefix = (sourceParams as Record<string, unknown>).prefix;
-  return typeof prefix === "string" ? prefix : null;
-}
-
-function providerPublicEndpointDisabled(info: AiSearchInstanceInfo): boolean {
-  const params = info.public_endpoint_params;
-  if (!params || typeof params !== "object") return false;
-  const values = params as Record<string, unknown>;
-  const customDomains = values.custom_domains;
-  return values.enabled === false
-    && (customDomains === undefined || (Array.isArray(customDomains) && customDomains.length === 0));
-}
-
-/**
- * Adapts the native Workers AI Search namespace binding to the provider-neutral
- * candidate contract. Configuration is attested from the provider immediately
- * before every governed retrieval; candidate excerpts never leave this seam.
- */
-export function createCloudflareAiSearchProvider(
-  namespace: AiSearchNamespace,
-  rawOptions: CloudflareAiSearchProviderOptions,
-): AiSearchProvider {
-  const options = {
-    namespaceIdentity: legalIdentifierSchema.parse(rawOptions.namespaceIdentity),
-    sourceBucketName: z.string().min(3).max(200).parse(rawOptions.sourceBucketName),
-    sourcePrefix: z.string().min(1).max(500).parse(rawOptions.sourcePrefix),
-    shardByInstance: z.record(candidateInstanceIdSchema, candidateShardIdSchema)
-      .parse(rawOptions.shardByInstance),
-    configuration: pinnedCandidateConfigurationSchema.parse(rawOptions.configuration),
-    attestManagement: rawOptions.attestManagement,
-  };
-  const expectedMetadata = [...AI_SEARCH_TYPED_METADATA_SCHEMA]
-    .sort((left, right) => left.field_name.localeCompare(right.field_name));
-  return {
-    async attest(instanceId) {
-      const parsedInstanceId = candidateInstanceIdSchema.parse(instanceId);
-      const [info, management] = await Promise.all([
-        namespace.get(parsedInstanceId).info(),
-        options.attestManagement(parsedInstanceId),
-      ]);
-      const managementConfiguration = pinnedCandidateConfigurationSchema
-        .parse(management.configuration);
-      const matches = info.id === instanceId
-        && info.namespace === options.namespaceIdentity
-        && info.type === "r2"
-        && info.source === options.sourceBucketName
-        && info.paused === true
-        && info.embedding_model === options.configuration.embeddingModel
-        && info.ai_gateway_id === options.configuration.gatewayIdentity
-        && info.rewrite_query === false
-        && info.reranking === false
-        && info.index_method?.vector === true
-        && info.index_method?.keyword === true
-        && info.fusion_method === "rrf"
-        && info.indexing_options?.keyword_tokenizer === options.configuration.keywordTokenizer
-        && info.retrieval_options?.keyword_match_mode === "or"
-        && info.max_num_results === 50
-        && info.score_threshold === 0
-        && info.cache === false
-        && info.chunk === true
-        && info.chunk_size === 4_096
-        && info.chunk_overlap === 0
-        && providerPublicEndpointDisabled(info)
-        && info.sync_interval === 86_400
-        && providerSourcePrefix(info) === options.sourcePrefix
-        && JSON.stringify(providerMetadataSchema(info)) === JSON.stringify(expectedMetadata)
-        && management.instanceId === parsedInstanceId
-        && sha256Schema.safeParse(management.evidenceSha256).success
-        && utcInstantSchema.safeParse(management.observedAt).success
-        && (typeof info.modified_at !== "string"
-          || (Number.isFinite(Date.parse(info.modified_at))
-            && Date.parse(management.observedAt) >= Date.parse(info.modified_at)))
-        && JSON.stringify(managementConfiguration) === JSON.stringify(options.configuration);
-      if (!matches) throw new TypeError("AI_SEARCH_CONFIGURATION_DRIFT");
-      return managementConfiguration;
-    },
-    async search(input) {
-      if (input.endpoint.kind !== "current") {
-        throw new TypeError("AI_SEARCH_CURRENT_RELEASE_ENDPOINT_REQUIRED");
-      }
-      const instanceIds = input.instanceIds.map((id) => candidateInstanceIdSchema.parse(id));
-      const response = await namespace.search({
-        query: input.query,
-        ai_search_options: {
-          instance_ids: instanceIds,
-          retrieval: {
-            retrieval_type: "hybrid",
-            fusion_method: "rrf",
-            max_num_results: input.maxResults,
-            match_threshold: input.vectorThreshold,
-            context_expansion: 0,
-            metadata_only: true,
-            return_on_failure: false,
-          },
-          query_rewrite: { enabled: false },
-          reranking: { enabled: false },
-          cache: { enabled: false },
-        },
-      });
-      const errors = (response.errors ?? []).map((error) => ({
-        code: "AI_SEARCH_INSTANCE_UNAVAILABLE",
-        instanceId: error.instance_id,
-      }));
-      const hits = response.chunks.map((chunk) => {
-        const details = chunk.scoring_details;
-        if (!details
-          || !Number.isInteger(details.vector_rank) || details.vector_rank! < 1
-          || !Number.isFinite(details.vector_score)
-          || !Number.isInteger(details.keyword_rank) || details.keyword_rank! < 1
-          || !Number.isFinite(details.keyword_score)
-          || !Number.isFinite(chunk.score)) {
-          throw new TypeError("AI_SEARCH_HYBRID_SCORING_DETAILS_REQUIRED");
-        }
-        const instanceId = candidateInstanceIdSchema.parse(chunk.instance_id);
-        const shardId = options.shardByInstance[instanceId];
-        if (!shardId) throw new TypeError("AI_SEARCH_INSTANCE_SHARD_MAPPING_REQUIRED");
-        const metadata = providerItemMetadataSchema.parse({
-          ...chunk.item.metadata,
-          valid_to: chunk.item.metadata?.valid_to ?? null,
-        });
-        return {
-          itemKey: z.string().min(1).max(700).parse(chunk.item.key),
-          instanceId,
-          shardId,
-          vectorRank: details.vector_rank!,
-          vectorScore: details.vector_score!,
-          keywordRank: details.keyword_rank!,
-          keywordScore: details.keyword_score!,
-          fusionScore: chunk.score,
-          providerMetadata: metadata,
-        };
-      });
-      return {
-        hits,
-        errors,
-        searchedInstanceIds: errors.length === 0 ? instanceIds : [
-          ...new Set(hits.map((hit) => hit.instanceId)),
-        ],
-      };
-    },
-  };
-}
 
 const providerStatusSchema = z.enum(["ok", "unavailable", "rejected"]);
 const safeErrorClassSchema = z.enum([
@@ -513,8 +335,8 @@ function chunks<T>(values: readonly T[], size: number): T[][] {
   return result;
 }
 
-export function createAiSearchCandidateIndex(
-  provider: AiSearchProvider,
+export function createProviderCandidateIndex(
+  provider: LegalCandidateProvider,
   options: CandidateIndexOptions,
 ): LegalCandidateIndex {
   return {
@@ -565,7 +387,7 @@ export function createAiSearchCandidateIndex(
         if (drift) {
           emitOutcome("unavailable", "configuration_drift");
           return unavailable(release, endpoint, [{
-            code: "AI_SEARCH_CONFIGURATION_DRIFT",
+            code: "CANDIDATE_CONFIGURATION_DRIFT",
             instanceId: drift.instanceId,
           }]);
         }
@@ -597,7 +419,7 @@ export function createAiSearchCandidateIndex(
             return unavailable(release, endpoint, search.response.errors.map((error) => {
               const instanceId = candidateInstanceIdSchema.safeParse(error.instanceId);
               return {
-                code: "AI_SEARCH_PARTIAL_RESPONSE" as const,
+                code: "CANDIDATE_PARTIAL_RESPONSE" as const,
                 ...(instanceId.success ? { instanceId: instanceId.data } : {}),
               };
             }));
@@ -605,7 +427,7 @@ export function createAiSearchCandidateIndex(
           const searched = search.response.searchedInstanceIds;
           if (!Array.isArray(searched) || searched.length !== new Set(searched).size) {
             emitOutcome("unavailable", "integrity_failure");
-            return unavailable(release, endpoint, [{ code: "AI_SEARCH_PARTIAL_RESPONSE" }]);
+            return unavailable(release, endpoint, [{ code: "CANDIDATE_PARTIAL_RESPONSE" }]);
           }
           const requested = new Set<string>(search.instanceIds);
           const unknown = searched.find((instanceId) => !requested.has(instanceId));
@@ -613,7 +435,7 @@ export function createAiSearchCandidateIndex(
             const unknownId = candidateInstanceIdSchema.safeParse(unknown);
             emitOutcome("unavailable", "integrity_failure");
             return unavailable(release, endpoint, [{
-              code: "AI_SEARCH_UNKNOWN_INSTANCE",
+              code: "CANDIDATE_UNKNOWN_INSTANCE",
               ...(unknownId.success ? { instanceId: unknownId.data } : {}),
             }]);
           }
@@ -622,7 +444,7 @@ export function createAiSearchCandidateIndex(
           if (missing) {
             emitOutcome("unavailable", "integrity_failure");
             return unavailable(release, endpoint, [{
-              code: "AI_SEARCH_MISSING_INSTANCE",
+              code: "CANDIDATE_MISSING_INSTANCE",
               instanceId: missing,
             }]);
           }
@@ -632,7 +454,7 @@ export function createAiSearchCandidateIndex(
             if (!hitInstanceId.success || !shardId || !requested.has(hit.instanceId)) {
               emitOutcome("unavailable", "integrity_failure");
               return unavailable(release, endpoint, [{
-                code: "AI_SEARCH_UNKNOWN_INSTANCE",
+                code: "CANDIDATE_UNKNOWN_INSTANCE",
                 ...(hitInstanceId.success ? { instanceId: hitInstanceId.data } : {}),
               }]);
             }
@@ -642,7 +464,7 @@ export function createAiSearchCandidateIndex(
             ) {
               emitOutcome("unavailable", "integrity_failure");
               return unavailable(release, endpoint, [{
-                code: "AI_SEARCH_WRONG_RELEASE",
+                code: "CANDIDATE_WRONG_RELEASE",
                 instanceId: hitInstanceId.data,
               }]);
             }

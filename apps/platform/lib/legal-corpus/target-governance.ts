@@ -2,10 +2,10 @@ import { z } from "zod";
 
 import { legalEvaluationCorpus } from "../../evaluation/legal-evaluation-corpus";
 import {
-  AI_SEARCH_METADATA_SCHEMA,
+  CANDIDATE_METADATA_SCHEMA,
   candidateConfigurationSchema,
 } from "./legal-candidate-index";
-import { LEGAL_CORPUS_RELEASE_THRESHOLDS } from "./release-gate";
+import { TARGET_RELEASE_THRESHOLDS } from "./target-release-thresholds";
 import { assertSearchReleaseMetadataParity } from "./target-temporal";
 import { customReleaseGovernanceSchema } from "./custom-release-governance";
 
@@ -128,7 +128,7 @@ const candidateReconciliationSchema = z.object({
   verifiedInventorySha256: sha,
   ok: z.literal(true),
 }).passthrough();
-export const governedAiSearchConfigurationSchema = candidateConfigurationSchema.extend({
+export const governedCandidateConfigurationSchema = candidateConfigurationSchema.extend({
   metadataSchema: z.array(z.string().min(1).max(40)).max(5),
   fifthMetadataFieldReserved: z.boolean(),
   embeddingModel: z.string().min(1).max(200),
@@ -149,7 +149,7 @@ const evidenceSchema = z.object({
   capability,
   reconciliationRunId: identifier,
   recordedAt: instant,
-  configuration: governedAiSearchConfigurationSchema,
+  configuration: governedCandidateConfigurationSchema,
   /** Legacy evidence remains readable for already-sealed releases. */
   privacy: legacyPrivacyEvidenceSchema.optional(),
   queryProcessing: queryProcessingEvidenceSchema.optional(),
@@ -239,32 +239,32 @@ function maximum(failures: string[], label: string, actual: number, threshold: n
 }
 
 function evaluateMetrics(failures: string[], prefix: string, row: z.infer<typeof metricSchema>): void {
-  minimum(failures, `${prefix}:RECALL_AT_5`, row.recallAt5, LEGAL_CORPUS_RELEASE_THRESHOLDS.recallAt5);
-  minimum(failures, `${prefix}:RECALL_AT_10`, row.recallAt10, LEGAL_CORPUS_RELEASE_THRESHOLDS.recallAt10);
-  minimum(failures, `${prefix}:MRR`, row.mrr, LEGAL_CORPUS_RELEASE_THRESHOLDS.mrr);
+  minimum(failures, `${prefix}:RECALL_AT_5`, row.recallAt5, TARGET_RELEASE_THRESHOLDS.recallAt5);
+  minimum(failures, `${prefix}:RECALL_AT_10`, row.recallAt10, TARGET_RELEASE_THRESHOLDS.recallAt10);
+  minimum(failures, `${prefix}:MRR`, row.mrr, TARGET_RELEASE_THRESHOLDS.mrr);
   minimum(failures, `${prefix}:CITATION_PRECISION`, row.citationPrecision,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.citationPrecision);
+    TARGET_RELEASE_THRESHOLDS.citationPrecision);
   minimum(failures, `${prefix}:CITATION_RECALL`, row.citationRecall,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.citationRecall);
+    TARGET_RELEASE_THRESHOLDS.citationRecall);
   minimum(failures, `${prefix}:ARTICLE_EXACTNESS`, row.articleExactness,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.articleExactness);
+    TARGET_RELEASE_THRESHOLDS.articleExactness);
   minimum(failures, `${prefix}:DOCUMENT_EXACTNESS`, row.documentExactness,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.documentExactness);
+    TARGET_RELEASE_THRESHOLDS.documentExactness);
   minimum(failures, `${prefix}:ABSTENTION_CORRECTNESS`, row.abstentionCorrectness,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.abstentionAccuracy);
+    TARGET_RELEASE_THRESHOLDS.abstentionAccuracy);
   minimum(failures, `${prefix}:PARTIAL_ANSWER_CORRECTNESS`, row.partialAnswerCorrectness,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.partialAnswerAccuracy);
+    TARGET_RELEASE_THRESHOLDS.partialAnswerAccuracy);
   minimum(failures, `${prefix}:GROUNDEDNESS`, row.groundedness,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.groundedness);
+    TARGET_RELEASE_THRESHOLDS.groundedness);
   maximum(failures, `${prefix}:STALE_INVALID_LINKS`, row.staleInvalidLinkCount, 0);
   maximum(failures, `${prefix}:SOURCE_UNAVAILABILITY`, row.sourceUnavailabilityRate,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.maximumTechnicalUnavailabilityRate);
+    TARGET_RELEASE_THRESHOLDS.maximumTechnicalUnavailabilityRate);
   maximum(failures, `${prefix}:INDEXED_P95`, row.indexedP95Ms,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.p95RetrievalMs);
+    TARGET_RELEASE_THRESHOLDS.p95RetrievalMs);
   maximum(failures, `${prefix}:ANSWER_P95`, row.answerP95Ms,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.p95CompleteAnswerMs);
+    TARGET_RELEASE_THRESHOLDS.p95CompleteAnswerMs);
   maximum(failures, `${prefix}:EVALUATION_COST`, row.providerCostUsd,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.maximumProviderCostUsd);
+    TARGET_RELEASE_THRESHOLDS.maximumProviderCostUsd);
 }
 
 export async function recordSearchReleaseGovernance(
@@ -301,7 +301,7 @@ export async function recordSearchReleaseGovernance(
     || reconciliation.capability !== evidence.capability) failures.push("RECONCILIATION_NOT_CLEAN");
 
   if (JSON.stringify(evidence.configuration.metadataSchema)
-      !== JSON.stringify(AI_SEARCH_METADATA_SCHEMA)
+      !== JSON.stringify(CANDIDATE_METADATA_SCHEMA)
     || !evidence.configuration.fifthMetadataFieldReserved) failures.push("METADATA_SCHEMA_DRIFT");
   if (evidence.configuration.embeddingModel !== "openai/text-embedding-3-large"
     || evidence.configuration.dimensions !== 1_536
@@ -417,11 +417,11 @@ export async function recordSearchReleaseGovernance(
     }
     for (const shard of evidence.shards) {
       const qualification = qualificationByInstance.get(shard.providerInstanceId);
-      let parsedConfiguration: z.infer<typeof governedAiSearchConfigurationSchema> | null = null;
+      let parsedConfiguration: z.infer<typeof governedCandidateConfigurationSchema> | null = null;
       let parsedReconciliation: z.infer<typeof candidateReconciliationSchema> | null = null;
       try {
         parsedConfiguration = qualification
-          ? governedAiSearchConfigurationSchema.parse(
+          ? governedCandidateConfigurationSchema.parse(
             JSON.parse(qualification.configurationJson) as unknown,
           )
           : null;
@@ -529,7 +529,7 @@ export async function recordSearchReleaseGovernance(
   }
   maximum(failures, "EVALUATION_PROVIDER_COST_EXCEEDED",
     evidence.evaluation.providerCostUsd,
-    LEGAL_CORPUS_RELEASE_THRESHOLDS.maximumProviderCostUsd);
+    TARGET_RELEASE_THRESHOLDS.maximumProviderCostUsd);
   const recordedAt = Date.parse(evidence.recordedAt);
   for (const [name, value] of Object.entries({
     officialChangeValidatedAt: evidence.operations.officialChangeValidatedAt,

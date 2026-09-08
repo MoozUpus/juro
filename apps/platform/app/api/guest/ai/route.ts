@@ -34,7 +34,6 @@ import {
 } from "../../../../lib/legal-corpus/chat-retrieval";
 import {
   fallbackLegalRetrievalUnderstanding,
-  rerankLegalCorpusCandidates,
   understandLegalRetrievalQuery,
 } from "../../../../lib/legal/legal-retrieval-understanding";
 import {
@@ -479,7 +478,6 @@ export async function POST(request: Request): Promise<Response> {
       fallbackFromProvider: null,
     };
     let retrievalUnderstanding = fallbackLegalRetrievalUnderstanding(effectiveQuestion);
-    let retrievalPlanningAvailable = false;
     const understandingStage = budget.beginStage("query_understanding", { timeoutMs: 6_200 });
     try {
       retrievalUnderstanding = await understandLegalRetrievalQuery({
@@ -491,7 +489,6 @@ export async function POST(request: Request): Promise<Response> {
         timeoutMs: 6_000,
         maxAttempts: 1,
       });
-      retrievalPlanningAvailable = true;
       understandingStage.complete();
     } catch (error) {
       understandingStage.fail();
@@ -499,57 +496,27 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     let retrieval;
-    const retrievalBudget = budget;
-    const retrievalStage = retrievalBudget.beginStage("live_lex_retrieval", { timeoutMs: 12_500 });
+    const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 12_500 });
     try {
       retrieval = await retrieveCorpusAwareLegalSources({
-        env: { ...runtimeEnv(), DB: db },
-        query: effectiveQuestion,
+        query: parsed.data.question,
         locale,
-        indexQueries: retrievalUnderstanding.corpusQueries,
-        rerankingQuestion: retrievalUnderstanding.standaloneQuestion,
-        requiredConcepts: retrievalUnderstanding.requiredConcepts,
-        coverageRequirements: retrievalUnderstanding.requiredConcepts.map((requirement, index) => ({
-          id: `requirement-${index + 1}`,
-          statement: requirement.statement,
-          alternatives: requirement.alternatives,
-        })),
-        planningAvailable: retrievalPlanningAvailable,
+        targetService: env.LEGAL_RETRIEVAL_SERVICE,
+        targetEnvironment: env.APP_ENV ?? "development",
+        targetQuestionId: idempotencyKey,
+        contextualQuestion: retrievalUnderstanding.standaloneQuestion,
+        applicableAt: applicableAt?.toISOString(),
         lexSearchQueries: retrievalUnderstanding.lexSearchQueries,
         signal: retrievalStage.signal,
         limit: 4,
         budgetMs: 12_000,
-        requireHybrid: true,
-        correlationId: idempotencyKey,
-        scope: { asOfDate: applicableAt ? parsed.data.legalContextDate ?? null : null },
-        rerankCandidates: async ({ question, requirements, candidates, limit }) => {
-          const rerankingStage = retrievalBudget.beginStage("corpus_reranking", { timeoutMs: 7_200 });
-          try {
-            const ranked = await rerankLegalCorpusCandidates({
-              question,
-              locale,
-              requirements,
-              candidates,
-              limit,
-              requestId: `${idempotencyKey}:corpus-reranking`,
-              safetyIdentifier,
-              signal: rerankingStage.signal,
-              timeoutMs: 7_000,
-            });
-            rerankingStage.complete();
-            return ranked;
-          } catch (error) {
-            rerankingStage.fail();
-            throw error;
-          }
-        },
       });
       retrievalStage.complete();
     } catch (error) {
       retrievalStage.fail();
       rethrowGuestCancellation(error, budget.signal);
       retrieval = await retrieveCorpusAwareLegalSources({
-        env: { ...runtimeEnv(), DB: db }, query: "", locale, limit: 1, budgetMs: 1,
+        query: "", locale, limit: 1, budgetMs: 1,
       });
     }
     const secondaryInternet: SecondaryInternetRetrieval = !applicableAt

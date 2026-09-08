@@ -70,7 +70,7 @@ class SqliteStatement {
 const drizzleRoot = new URL("../../drizzle/", import.meta.url);
 const journal = JSON.parse(
   readFileSync(new URL("meta/_journal.json", drizzleRoot), "utf8"),
-) as { entries: Array<{ tag: string }> };
+) as { entries: Array<{ idx: number; tag: string }> };
 
 function statements(sql: string): string[] {
   return sql.split("--> statement-breakpoint")
@@ -78,13 +78,13 @@ function statements(sql: string): string[] {
     .filter(Boolean);
 }
 
-export function sqliteD1Fixture(): {
+function createSqliteD1Fixture(lastMigrationIndex = Number.POSITIVE_INFINITY): {
   sqlite: DatabaseSync;
   d1: D1Database;
 } {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys = ON");
-  for (const entry of journal.entries) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= lastMigrationIndex)) {
     const sql = readFileSync(
       new URL(`${entry.tag}.sql`, drizzleRoot),
       "utf8",
@@ -145,6 +145,13 @@ export function sqliteD1FixtureFromDirectory(root: URL): {
     },
   } as unknown as D1Database;
   return { sqlite, d1 };
+}
+
+export function sqliteD1Fixture(): {
+  sqlite: DatabaseSync;
+  d1: D1Database;
+} {
+  return createSqliteD1Fixture();
 }
 
 export function batchBarrier(

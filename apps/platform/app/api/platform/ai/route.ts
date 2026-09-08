@@ -38,7 +38,6 @@ import {
 import { discoverOfficialLexUrls } from "../../../../lib/legal/openai-lex-discovery";
 import {
   fallbackLegalRetrievalUnderstanding,
-  rerankLegalCorpusCandidates,
   understandLegalRetrievalQuery,
 } from "../../../../lib/legal/legal-retrieval-understanding";
 import {
@@ -125,48 +124,6 @@ function legalSourceUnavailableResponse(locale: "ru" | "uz") {
       ? "Официальные источники временно недоступны. Лимит ответа не списан; повторите поиск."
       : "Rasmiy manbalar vaqtincha mavjud emas. Javob limiti yechilmadi; qidiruvni takrorlang.",
   }, 503);
-}
-
-const DEVELOPMENT_RETRIEVAL_CACHE_TTL_MS = 2 * 60_000;
-const DEVELOPMENT_RETRIEVAL_CACHE_LIMIT = 24;
-const LEGAL_RETRIEVAL_POLICY_VERSION = "coverage-mapped-v1";
-const developmentRetrievalCache = new Map<string, {
-  expiresAt: number;
-  result: LegalChatSourceRetrieval;
-}>();
-
-function cachedDevelopmentRetrieval(key: string | null) {
-  if (!key) return null;
-  const cached = developmentRetrievalCache.get(key);
-  if (!cached) return null;
-  if (cached.expiresAt <= Date.now()) {
-    developmentRetrievalCache.delete(key);
-    return null;
-  }
-  // Refresh insertion order so the bounded map behaves as a small LRU cache.
-  developmentRetrievalCache.delete(key);
-  developmentRetrievalCache.set(key, cached);
-  return cached.result;
-}
-
-function cacheDevelopmentRetrieval(key: string | null, result: LegalChatSourceRetrieval) {
-  if (
-    !key
-    || result.sourceValidationStatus !== "validated"
-    || result.sources.length === 0
-    || result.coverageStatus !== "good_coverage"
-    || result.retrievalTelemetry?.indexedAvailability === "unavailable"
-    || !["selected", "not_needed"].includes(result.retrievalTelemetry?.rerankingOutcome ?? "")
-  ) return;
-  developmentRetrievalCache.set(key, {
-    expiresAt: Date.now() + DEVELOPMENT_RETRIEVAL_CACHE_TTL_MS,
-    result,
-  });
-  while (developmentRetrievalCache.size > DEVELOPMENT_RETRIEVAL_CACHE_LIMIT) {
-    const oldest = developmentRetrievalCache.keys().next().value as string | undefined;
-    if (!oldest) break;
-    developmentRetrievalCache.delete(oldest);
-  }
 }
 
 /** Rejects on a stage deadline even when an underlying remote D1 call ignores AbortSignal. */
@@ -349,8 +306,6 @@ async function executePostWithinBudget(
   const requestHost = new URL(request.url).hostname.toLocaleLowerCase("en");
   const developmentTraceEnabled = runtimeEnv().APP_ENV === "development"
     && ["localhost", "127.0.0.1", "::1"].includes(requestHost);
-  const developmentRetrievalCacheRefresh = developmentTraceEnabled
-    && request.headers.get("x-juro-retrieval-cache") === "refresh";
   let preliminaryAtMs: number | null = null;
   let providerFirstDeltaAtMs: number | null = null;
   let fallbackFromProgress: "openai" | "anthropic" | null = null;
@@ -514,11 +469,8 @@ async function executePostWithinBudget(
   }
   const rewrite = gateway.rewriteFollowUp({ question, locale, conversationHistory });
   const bindings = runtimeEnv();
-  const remoteDevelopmentCorpus = bindings.APP_ENV === "development"
-    && bindings.LEGAL_CORPUS_REMOTE_READ_ENABLED === "true";
-  const remoteFastAnswer = remoteDevelopmentCorpus && reasoningMode === "fast";
   const understandingStage = budget.beginStage("query_understanding", {
-    timeoutMs: remoteDevelopmentCorpus ? 7_200 : 6_500,
+    timeoutMs: 6_500,
   });
   let queryUnderstandingFallback = false;
   const retrievalUnderstandingPromise = (async () => {
@@ -534,7 +486,7 @@ async function executePostWithinBudget(
         requestId: `${idempotencyKey}:understanding`,
         safetyIdentifier,
         signal: understandingStage.signal,
-        timeoutMs: Math.min(remoteDevelopmentCorpus ? 7_000 : 6_200, budget.remainingMs),
+        timeoutMs: Math.min(6_200, budget.remainingMs),
         // Retry one fast provider/network failure inside the existing stage
         // deadline. The planner remains fail-closed if neither attempt can
         // produce the bounded semantic plan.
@@ -662,88 +614,29 @@ async function executePostWithinBudget(
     }
   })();
 
-  // This progress stage refers to JURO's stored legal corpus, not to private
-  // uploads. The corpus retriever falls back to live Lex.uz only when indexed
-  // coverage is insufficient or stale.
+  // Private uploads are retrieved above. This authority branch calls the
+  // R2-native sparse+dense service first and uses validated live Lex only as
+  // the next Source Ladder rung.
   await emitProgress({ stage: "document_search_started" });
   const retrievalStartedAtMs = budget.elapsedMs;
   const retrievalStage = budget.beginStage("live_lex_retrieval", {
-    timeoutMs: remoteDevelopmentCorpus ? 22_000 : 13_000,
+    timeoutMs: 13_000,
   });
-  const developmentRetrievalKey = remoteDevelopmentCorpus ? JSON.stringify([
-    LEGAL_RETRIEVAL_POLICY_VERSION,
-    bindings.LEGAL_CORPUS_INDEX_VERSION ?? "unversioned-index",
-    bindings.LEGAL_RERANKER_VERSION ?? "reranker-v1",
-    workspace.id,
-    user.id,
-    body?.caseId ?? null,
-    applicableAt?.toISOString() ?? null,
-    locale,
-    rewrite.query,
-  ]) : null;
-  let developmentRetrievalCacheOutcome: "disabled" | "hit" | "miss" | "refresh" =
-    developmentRetrievalKey ? "miss" : "disabled";
   const retrievalResult: LegalChatSourceRetrieval | Response = await (async () => {
     try {
-      const cached = developmentRetrievalCacheRefresh
-        ? null
-        : cachedDevelopmentRetrieval(developmentRetrievalKey);
-      developmentRetrievalCacheOutcome = developmentRetrievalCacheRefresh
-        ? "refresh"
-        : cached ? "hit" : developmentRetrievalKey ? "miss" : "disabled";
-      const result = cached ?? await waitForStage(retrieveCorpusAwareLegalSources({
-        env: { ...runtimeEnv(), DB: db },
-        query: rewrite.query,
+      const result = await waitForStage(retrieveCorpusAwareLegalSources({
+        query: question,
         locale,
-        indexQueries: retrievalUnderstandingPromise.then((understanding) => understanding.corpusQueries),
-        rerankingQuestion: retrievalUnderstandingPromise.then((understanding) => understanding.standaloneQuestion),
-        requiredConcepts: retrievalUnderstandingPromise.then((understanding) => understanding.requiredConcepts),
-        coverageRequirements: retrievalUnderstandingPromise.then((understanding) =>
-          understanding.requiredConcepts.map((requirement, index) => ({
-            id: `requirement-${index + 1}`,
-            statement: requirement.statement,
-            alternatives: requirement.alternatives,
-          }))),
-        planningAvailable: retrievalUnderstandingPromise.then(() => !queryUnderstandingFallback),
+        targetService: bindings.LEGAL_RETRIEVAL_SERVICE,
+        targetEnvironment: bindings.APP_ENV ?? "development",
+        targetQuestionId: idempotencyKey,
+        contextualQuestion: retrievalUnderstandingPromise.then((understanding) => understanding.standaloneQuestion),
+        applicableAt: applicableAt?.toISOString(),
         lexSearchQueries: retrievalUnderstandingPromise.then((understanding) => understanding.lexSearchQueries),
         signal: retrievalStage.signal,
         limit: 12,
-        budgetMs: remoteDevelopmentCorpus ? 21_000 : 12_500,
-        scope: {
-          tenantId: workspace.id,
-          userId: user.id,
-          matterId: body?.caseId ?? null,
-          asOfDate: applicableAt ? body?.legalContextDate ?? null : null,
-        },
-        correlationId: idempotencyKey,
+        budgetMs: 12_500,
         onLiveSearchStarted: () => emitProgress({ stage: "lex_search_started" }),
-        hydrateExactWindows: true,
-        requireHybrid: true,
-        rerankCandidates: async ({ question: candidateQuestion, requirements, candidates, limit }) => {
-          if (budget.remainingMs < 5_500) throw new Error("RERANK_BUDGET_UNAVAILABLE");
-          const rerankingStage = budget.beginStage("corpus_reranking", { timeoutMs: 7_000 });
-          try {
-            const ranked = await rerankLegalCorpusCandidates({
-              question: candidateQuestion,
-              locale,
-              requirements,
-              candidates,
-              limit,
-              requestId: `${idempotencyKey}:corpus-reranking`,
-              safetyIdentifier,
-              // Candidate retrieval and semantic ranking are separate
-              // operations. A slow remote D1 read must not hand the reranker
-              // an already-aborted retrieval signal.
-              signal: rerankingStage.signal,
-              timeoutMs: Math.min(6_500, Math.max(1, budget.remainingMs - 2_000)),
-            });
-            rerankingStage.complete();
-            return ranked;
-          } catch (error) {
-            rerankingStage.fail();
-            throw error;
-          }
-        },
         discoverOfficialUrls: async (query, discoveryLocale, discoverySignal) => {
           const usage = await usageSummary(db, workspace.id, user.id, answerCycleLimit);
           if (usage.limit !== null && usage.used >= usage.limit) throw new Error("PLAN_LIMIT_PRECHECK");
@@ -789,7 +682,6 @@ async function executePostWithinBudget(
           });
         },
       }), retrievalStage.signal);
-      cacheDevelopmentRetrieval(developmentRetrievalKey, result);
       retrievalStage.complete();
       return result;
     } catch (error) {
@@ -807,12 +699,10 @@ async function executePostWithinBudget(
     await emitProgress({
       stage: "retrieval_trace",
       trace: {
-        indexVersion: retrieval.retrievalTelemetry?.indexVersion
-          ?? bindings.LEGAL_CORPUS_INDEX_VERSION ?? "unversioned-index",
-        rerankerVersion: retrieval.retrievalTelemetry?.rerankerVersion
-          ?? bindings.LEGAL_RERANKER_VERSION ?? "reranker-v1",
-        retrievalPolicyVersion: LEGAL_RETRIEVAL_POLICY_VERSION,
-        cacheOutcome: developmentRetrievalCacheOutcome,
+        indexVersion: "direct-lex",
+        rerankerVersion: "not-configured",
+        retrievalPolicyVersion: "direct-lex-v1",
+        cacheOutcome: "disabled",
         planningAvailable: !queryUnderstandingFallback,
         coverageStatus: retrieval.coverageStatus,
         queriesRun: retrieval.retrievalTelemetry?.queriesRun ?? 0,
@@ -833,12 +723,6 @@ async function executePostWithinBudget(
         selectedProvisions: retrieval.retrievalTelemetry?.selectedProvisions ?? [],
       },
     });
-  }
-  if (
-    retrieval.sources.length === 0
-    && retrieval.errors.some((item) => item.code === "LEGAL_CORPUS_READ_UNAVAILABLE")
-  ) {
-    return legalSourceUnavailableResponse(locale);
   }
   console.info(JSON.stringify({
     event: "ai.legal_retrieval_completed",
@@ -1076,9 +960,6 @@ async function executePostWithinBudget(
     }, {
       signal,
       budget,
-      providerTimeoutMs: remoteFastAnswer
-        ? Math.max(4_000, Math.min(10_000, 25_000 - budget.elapsedMs))
-        : undefined,
       onProgress: emitProgress,
       onGroundedPreliminary: async (preliminary) => {
         if (

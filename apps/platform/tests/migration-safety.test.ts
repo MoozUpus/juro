@@ -70,6 +70,8 @@ const verifiedCorpusFreshnessEntry = journal.entries.find(({ idx }) => idx === 9
 const documentEvaluationReviewsEntry = journal.entries.find(({ idx }) => idx === 92);
 const caseLifecycleEvidenceEntry = journal.entries.find(({ idx }) => idx === 93);
 const caseLifecycleHashGuardEntry = journal.entries.find(({ idx }) => idx === 104);
+const legacyOfficialCorpusRetirementEntry = journal.entries.find(({ idx }) => idx === 151);
+const legacyOfficialCorpusSchemaRemovalEntry = journal.entries.find(({ idx }) => idx === 152);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -188,6 +190,14 @@ assert.ok(
 assert.ok(
   caseLifecycleHashGuardEntry,
   "Drizzle journal must contain migration 0104",
+);
+assert.ok(
+  legacyOfficialCorpusRetirementEntry,
+  "Drizzle journal must contain migration 0150",
+);
+assert.ok(
+  legacyOfficialCorpusSchemaRemovalEntry,
+  "Drizzle journal must contain migration 0151",
 );
 
 
@@ -337,6 +347,115 @@ test("all migrations apply cleanly with foreign-key integrity", () => {
     for (const table of expectedTables) {
       assert.ok(tables.has(table));
     }
+  } finally {
+    db.close();
+  }
+});
+
+test("0150 retires only global Lex.uz bodies and legacy indexes", () => {
+  assert.match(legacyOfficialCorpusRetirementEntry.tag, /^0150_/u);
+  const sql = migrationSql(legacyOfficialCorpusRetirementEntry);
+  assert.match(sql, /LEGAL_CORPUS_RETIREMENT_PRIVATE_DATA_PRESENT/u);
+  assert.match(sql, /provider.*lex_uz[\s\S]*scope.*global[\s\S]*visibility.*global/u);
+  for (const table of [
+    "legal_corpus_provisions",
+    "legal_corpus_chunks",
+    "legal_corpus_sparse_terms",
+    "legal_corpus_sparse_postings",
+    "legal_corpus_search_index_manifests",
+  ]) {
+    assert.match(sql, new RegExp(`DROP TABLE [\\x60\"]?${table}[\\x60\"]?`, "u"));
+    assert.match(sql, new RegExp(`CREATE TABLE [\\x60\"]?${table}[\\x60\"]?`, "u"));
+  }
+  assert.doesNotMatch(sql, /DROP TABLE [`"]?legal_corpus_(?:documents|variants|versions)[`"]?/u);
+});
+
+test("0150 aborts atomically when private corpus ownership is present", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 151)) {
+      applyMigration(db, entry);
+    }
+    db.prepare(`INSERT INTO legal_corpus_documents (
+      id,provider,jurisdiction,source_class,scope,owner_user_id,visibility,title,
+      availability_status,trusted,verification_status,approval_required,created_at,updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "private-retirement-guard",
+      "user_upload",
+      "UZ",
+      "USER_TRUSTED_PRIVATE",
+      "user",
+      "owner-1",
+      "private",
+      "Private document",
+      "ready",
+      1,
+      "user_supplied",
+      0,
+      "2026-09-09T00:00:00.000Z",
+      "2026-09-09T00:00:00.000Z",
+    );
+    db.exec("BEGIN IMMEDIATE");
+    assert.throws(
+      () => applyMigration(db, legacyOfficialCorpusRetirementEntry),
+      /LEGAL_CORPUS_RETIREMENT_PRIVATE_DATA_PRESENT/u,
+    );
+    db.exec("ROLLBACK");
+    assert.equal(
+      db.prepare("SELECT count(*) AS count FROM legal_corpus_documents WHERE id=?")
+        .get("private-retirement-guard")?.count,
+      1,
+    );
+    assert.equal(
+      db.prepare("SELECT count(*) AS count FROM sqlite_master WHERE type='table' AND name='_legal_corpus_retirement_guard'")
+        .get()?.count,
+      0,
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test("0151 removes every empty legacy body, posting and Qdrant-era schema", () => {
+  assert.match(legacyOfficialCorpusSchemaRemovalEntry.tag, /^0151_/u);
+  const sql = migrationSql(legacyOfficialCorpusSchemaRemovalEntry);
+  assert.match(sql, /LEGAL_CORPUS_RETIRED_SCHEMA_REPOPULATED/u);
+  for (const table of [
+    "legal_corpus_provisions",
+    "legal_corpus_chunks",
+    "legal_corpus_sparse_terms",
+    "legal_corpus_sparse_term_dictionary",
+    "legal_corpus_sparse_chunk_keys",
+    "legal_corpus_sparse_postings",
+    "legal_corpus_search_index_builds",
+    "legal_corpus_search_index_manifests",
+    "legal_corpus_search_index_activations",
+  ]) {
+    assert.match(sql, new RegExp(`DROP TABLE (?:IF EXISTS )?[\\x60\"]?${table}[\\x60\"]?`, "u"));
+    assert.doesNotMatch(sql, new RegExp(`CREATE TABLE [\\x60\"]?${table}[\\x60\"]?`, "u"));
+  }
+  assert.doesNotMatch(sql, /DROP TABLE [`"]?legal_corpus_(?:documents|variants|versions)[`"]?/u);
+});
+
+test("0151 aborts atomically if a retired schema was repopulated", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 152)) applyMigration(db, entry);
+    db.prepare("INSERT INTO legal_corpus_sparse_term_dictionary (id,term) VALUES (?,?)")
+      .run(1, "repopulated");
+    db.exec("BEGIN IMMEDIATE");
+    assert.throws(
+      () => applyMigration(db, legacyOfficialCorpusSchemaRemovalEntry),
+      /LEGAL_CORPUS_RETIRED_SCHEMA_REPOPULATED/u,
+    );
+    db.exec("ROLLBACK");
+    assert.equal(
+      (db.prepare("SELECT count(*) AS count FROM legal_corpus_sparse_term_dictionary")
+        .get() as { count: number }).count,
+      1,
+    );
   } finally {
     db.close();
   }

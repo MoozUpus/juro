@@ -1,6 +1,6 @@
 # Custom hybrid target architecture for the Indexed Official Corpus
 
-Status: accepted detailed design; verification simplified by owner direction — 2026-09-05
+Status: implemented; legacy resources retired except final credential cleanup — 2026-09-09
 
 This architecture implements [ADR 0001](../adr/0001-strict-legal-source-ladder.md), [ADR 0003](../adr/0003-coverage-mapped-legal-provision-retrieval.md), [ADR 0005](../adr/0005-use-source-snapshot-retrieval-eligibility.md), and [ADR 0006](../adr/0006-own-hybrid-official-corpus-retrieval.md). ADR 0006 supersedes ADR 0004's Cloudflare AI Search selection. Source identity remains Source Document → Source Snapshot → Snapshot Provision → Retrieval Eligibility; legacy authority and translation records remain optional audit enrichment, never eligibility gates.
 
@@ -57,7 +57,7 @@ flowchart LR
     W -->|still insufficient| B[Secondary Web Research]
 ```
 
-The private route-free legal-corpus Worker owns R2, D1, Vectorize and authenticated AI Gateway bindings. The platform reaches it only through the existing private service binding. Provisioning credentials never enter application bindings.
+The private route-free legal-corpus Worker owns the Evidence R2 and body-free D1 boundary and binds the current/history custom search services. Those services own derivative-index R2 and Vectorize access. The former platform-to-corpus legacy read binding has been removed. Provisioning credentials never enter application bindings.
 
 ## Storage ownership
 
@@ -193,7 +193,7 @@ A Search Release seals only after Retrieval Chunks are complete and reproducible
 
 Current and history are separate releases. Current may activate alone. As-of requires history. Comparison requires compatible current/history releases from the same Corpus Snapshot and policy family. Activation and rollback are single D1 transactions preserving prior sets and immutable events.
 
-AI Search's partial Porter/trigram candidates remain historical non-authoritative evidence until custom staging current activation; the first implementation checkpoint pauses/cancels their jobs with exact readback. Qdrant and legacy D1 remain until the custom replacement works, their active readers/writers are removed and accessible recovery artifacts cover the exact retirement targets. No missing full-corpus Qdrant snapshot may be fabricated: evidence inventories it exactly and proves snapshot mechanics separately.
+AI Search's partial Porter/trigram candidates are historical non-authoritative evidence. Their instances and namespaces, the Qdrant application and the legacy D1 body/posting schemas were retired after current/history custom activation, exact reference checks and accepted recovery coverage. The accepted pre-retirement archive remains isolated historical evidence and must never be reattached to a live environment.
 
 ## Quality targets and focused acceptance
 
@@ -219,18 +219,11 @@ Cost circuits remain USD 50 current build, USD 450 complete migration and USD 25
 
 The recovery mechanism imports legal D1, opens the pinned BM25 manifest and reconstructs compatible Vectorize solely from hash-verified R2 embeddings, with terminal index membership checks. It never calls OpenAI or relies on container-local disk. Existing proof is reusable for unchanged formats and paths; changed recovery behavior uses bounded fixtures. A full remote restore is for actual recovery or an identified defect, not another routine build/activation/retirement gate.
 
-## Migration sequence
+## Completed migration sequence
 
-1. Preserve the qualified source snapshot and mark its AI Search qualification non-transferable.
-2. Pause/cancel partial AI Search work with exact readback; retain instances/evidence without activation.
-3. Prove Retrieval Chunk, BM25, embedding and query-reader contracts on representative current/history data.
-4. Build the Workflow/Queue pipeline, adding a Container reducer only if proved necessary.
-5. Build staging current once, check the new index once and activate after a bounded smoke set.
-6. Migrate missing historical metadata from accepted evidence and resolve only remaining canonical mapping gaps; reuse recovery coverage.
-7. Build staging history once, check its new index and activate the new temporal capabilities after focused checks.
-8. Copy missing production evidence and reusable embeddings, build each production index once and activate after environment/capability checks.
-9. Stop legacy writes and retire unused resources after exact target/reference and recovery-coverage checks; preserve immutable evidence and prior custom releases.
-10. Verify final resources, scrub the root Cloudflare token and require owner revocation.
+Steps 1–9 are complete: the qualified source snapshot was preserved; custom chunk, BM25, embedding and reader contracts were proved; current/history releases were built and activated in staging and production; legacy writes stopped; and unused D1/Qdrant/AI Search resources were retired with bounded checks. Immutable current/prior custom releases and the accepted recovery archive remain preserved.
+
+Step 10 is intentionally pending. After every other migration-program ticket is resolved, the credential checkpoint verifies final resources, removes only the root Cloudflare bootstrap token, scans for leakage and asks the owner to revoke it.
 
 ## Verified platform constraints
 
