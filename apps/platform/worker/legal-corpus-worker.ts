@@ -163,6 +163,7 @@ type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv
   EMBEDDING_MODEL?: string;
   LEGAL_CORPUS_INDEX_VERSION?: string;
   LEGAL_CORPUS_EMBEDDING_SERVICE?: Fetcher;
+  LEGAL_CORPUS_LEGACY_WRITES_ENABLED?: string;
 };
 
 type ClaimedRun = {
@@ -368,6 +369,15 @@ export async function handleLegalCorpusScheduled(
   if (controller.cron !== processCron(env) && controller.cron !== LEGAL_CORPUS_SEED_CRON) {
     log("error", {
       event: "legal_corpus.unknown_cron",
+      environment: env.APP_ENV,
+      cron: controller.cron,
+    });
+    controller.noRetry();
+    return;
+  }
+  if (env.LEGAL_CORPUS_LEGACY_WRITES_ENABLED === "false") {
+    log("info", {
+      event: "legal_corpus.legacy_writes_disabled",
       environment: env.APP_ENV,
       cron: controller.cron,
     });
@@ -614,9 +624,25 @@ function response(body: unknown, status = 200): Response {
   });
 }
 
+export function rejectDisabledLegacyCorpusWrite(
+  request: Request,
+  env: Pick<LegalCorpusWorkerEnv, "LEGAL_CORPUS_LEGACY_WRITES_ENABLED">,
+): Response | null {
+  if (env.LEGAL_CORPUS_LEGACY_WRITES_ENABLED !== "false") return null;
+  const pathname = new URL(request.url).pathname;
+  const isLegacyWrite = isLegalSearchIndexBuildPath(pathname)
+    || isAiSearchProjectionPath(pathname)
+    || pathname === AI_SEARCH_MANAGEMENT_PATH;
+  return isLegacyWrite
+    ? response({ code: "LEGAL_CORPUS_LEGACY_WRITES_DISABLED" }, 503)
+    : null;
+}
+
 const worker = {
   async fetch(request: Request, env: LegalCorpusWorkerEnv): Promise<Response> {
     const url = new URL(request.url);
+    const legacyWriteRejection = rejectDisabledLegacyCorpusWrite(request, env);
+    if (legacyWriteRejection) return legacyWriteRejection;
     if (url.pathname === LEGAL_TARGET_READINESS_PATH) {
       return handleLegalTargetReadinessRequest(request, env);
     }

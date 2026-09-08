@@ -176,7 +176,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.equal(
       config.vars.LEGAL_LEX_INGESTION_ENABLED,
-      environment === "development" ? "false" : "true",
+      "false",
     );
     assert.equal(
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
@@ -185,13 +185,6 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     const stagingCorpusFlags = new Set([
       "LEGAL_CORPUS_ENABLED",
       "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
-      "LEGAL_CORPUS_AUTO_INGEST_ENABLED",
-      "LEGAL_CORPUS_MULTILINGUAL_ENABLED",
-      "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST",
-      "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
-      "LEGAL_CORPUS_HISTORICAL_ENABLED",
-      "LEGAL_CORPUS_DENSE_ENABLED",
-      "LEGAL_CORPUS_SHADOW_MODE",
     ]);
     for (const flag of [
       "LEGAL_CORPUS_ENABLED",
@@ -216,11 +209,11 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     }
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
-      "true",
+      "false",
     );
     assert.equal(
       config.vars.LEGAL_LEX_METADATA_MONITOR_ENABLED,
-      "true",
+      "false",
     );
     assert.equal(
       config.vars.LEGAL_SOURCE_STAFF_API_ENABLED,

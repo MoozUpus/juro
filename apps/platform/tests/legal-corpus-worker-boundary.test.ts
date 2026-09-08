@@ -10,6 +10,7 @@ import {
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SEED_CRON,
   LEGAL_CORPUS_STAGING_PROCESS_CRON,
+  rejectDisabledLegacyCorpusWrite,
 } from "../worker/legal-corpus-worker";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -278,6 +279,38 @@ test("process schedule self-seeds a fresh corpus and begins the code-first phase
   assert.equal(scheduled.noRetryCalls(), 1);
 });
 
+test("legacy writer retirement fence blocks schedules and private mutation routes", async () => {
+  let databaseCalls = 0;
+  const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON);
+  const forbiddenDb = { prepare() {
+    databaseCalls += 1;
+    throw new Error("DB must remain untouched");
+  } } as unknown as D1Database;
+  const env = {
+    APP_ENV: "staging" as const,
+    LEGAL_CORPUS_LEGACY_WRITES_ENABLED: "false",
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+    LEGAL_CORPUS_DENSE_ENABLED: "true",
+    DB: forbiddenDb,
+    BUCKET: {} as R2Bucket,
+  };
+  await handleLegalCorpusScheduled(scheduled.value, env);
+  assert.equal(databaseCalls, 0);
+  assert.equal(scheduled.noRetryCalls(), 1);
+  for (const path of [
+    "/internal/legal-corpus/search-index-build/advance",
+    "/internal/legal-corpus/ai-search-projection/advance",
+    "/internal/legal-corpus/ai-search/configure-candidate",
+  ]) {
+    const rejection = rejectDisabledLegacyCorpusWrite(new Request(`https://worker.invalid${path}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+    }), env);
+    assert.equal(rejection?.status, 503);
+    assert.deepEqual(await rejection?.json(), { code: "LEGAL_CORPUS_LEGACY_WRITES_DISABLED" });
+  }
+});
+
 test("an unavailable pinned Qdrant candidate does not starve source ingestion", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON, Date.now());
@@ -453,7 +486,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
   }
   assert.equal(config.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
   assert.equal(config.env.production.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_DENSE_ENABLED, "true");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
   assert.deepEqual(
     config.env.production.d1_databases.find(({ binding }) => binding === "LEGAL_DB"),
     {
@@ -498,14 +531,8 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     "staging-20260830-provision-v1",
   );
   assert.deepEqual(config.triggers.crons, [LEGAL_CORPUS_PROCESS_CRON, LEGAL_CORPUS_SEED_CRON]);
-  assert.deepEqual(config.env.production.triggers.crons, [
-    LEGAL_CORPUS_PROCESS_CRON,
-    LEGAL_CORPUS_SEED_CRON,
-  ]);
-  assert.deepEqual(config.env.staging.triggers.crons, [
-    LEGAL_CORPUS_STAGING_PROCESS_CRON,
-    LEGAL_CORPUS_SEED_CRON,
-  ]);
+  assert.deepEqual(config.env.production.triggers.crons, []);
+  assert.deepEqual(config.env.staging.triggers.crons, []);
   for (const environment of [config, config.env.production]) {
     assert.equal(environment.vars.LEGAL_CORPUS_ENABLED, "false");
     assert.equal(environment.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
@@ -516,11 +543,13 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     "./drizzle/{0121,012[4-9],013[0-9],014[0-4]}_*.sql",
   );
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_ENABLED, "true");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_LEGACY_WRITES_ENABLED, "false");
+  assert.equal(config.env.production.vars.LEGAL_CORPUS_LEGACY_WRITES_ENABLED, "false");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_LIVE_LEXUZ_ENABLED, "true");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_MULTILINGUAL_ENABLED, "true");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_HISTORICAL_ENABLED, "true");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_MULTILINGUAL_ENABLED, "false");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_HISTORICAL_ENABLED, "false");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_SHADOW_MODE, "true");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST, "true");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST, "true");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST, "false");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST, "false");
 });

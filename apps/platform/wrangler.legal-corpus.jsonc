@@ -11,6 +11,7 @@
   "vars": {
     "APP_ENV": "development",
     "LEGAL_CORPUS_ENABLED": "false",
+    "LEGAL_CORPUS_LEGACY_WRITES_ENABLED": "false",
     "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
     "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "false",
     "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "false",
@@ -103,13 +104,14 @@
       "vars": {
         "APP_ENV": "staging",
         "LEGAL_CORPUS_ENABLED": "true",
-        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "true",
+        "LEGAL_CORPUS_LEGACY_WRITES_ENABLED": "false",
+        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
         "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "true",
-        "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "true",
-        "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "true",
-        "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "true",
-        "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
-        "LEGAL_CORPUS_DENSE_ENABLED": "true",
+        "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "false",
+        "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
+        "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
+        "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
+        "LEGAL_CORPUS_DENSE_ENABLED": "false",
         "LEGAL_CORPUS_SHADOW_MODE": "true",
         "LEGAL_EVIDENCE_BUCKET_NAME": "juro-legal-evidence-staging-green2-20260831",
         "LEGAL_AI_SEARCH_SOURCE_BUCKET_NAME": "juro-legal-ai-search-staging-20260902",
@@ -134,7 +136,7 @@
         "EMBEDDING_MODEL": "text-embedding-3-large"
       },
       "triggers": {
-        "crons": ["*/4 * * * *", "5 19 * * *"]
+        "crons": []
       },
       "d1_databases": [
         {
@@ -208,6 +210,7 @@
       "vars": {
         "APP_ENV": "production",
         "LEGAL_CORPUS_ENABLED": "false",
+        "LEGAL_CORPUS_LEGACY_WRITES_ENABLED": "false",
         "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
         "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "false",
         "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "false",
@@ -235,7 +238,7 @@
         "LEGAL_AI_SEARCH_SIMILARITY_CACHE": "false"
       },
       "triggers": {
-        "crons": ["*/5 * * * *", "5 19 * * *"]
+        "crons": []
       },
       "d1_databases": [
         {
