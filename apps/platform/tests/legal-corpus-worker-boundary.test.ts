@@ -431,8 +431,15 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
       routes?: unknown[];
       vars: Record<string, string>;
       triggers: { crons: string[] };
-      d1_databases: Array<{ migrations_dir: string; migrations_pattern?: string }>;
+      d1_databases: Array<{
+        binding: string;
+        database_name: string;
+        database_id?: string;
+        migrations_dir: string;
+        migrations_pattern?: string;
+      }>;
       r2_buckets: Array<{ binding: string; bucket_name: string }>;
+      services: Array<{ binding: string; service: string }>;
     }>;
   };
   assert.equal(config.main, "./worker/legal-corpus-worker.ts");
@@ -445,6 +452,33 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
   assert.equal(config.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
   assert.equal(config.env.production.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_DENSE_ENABLED, "true");
+  assert.deepEqual(
+    config.env.production.d1_databases.find(({ binding }) => binding === "LEGAL_DB"),
+    {
+      binding: "LEGAL_DB",
+      database_name: "juro-legal-catalog-production-green-20260908",
+      database_id: "4381cd22-4b1f-461c-9654-bc29789039c1",
+      migrations_dir: "./legal-drizzle",
+    },
+  );
+  assert.equal(
+    config.env.production.r2_buckets.some(({ binding, bucket_name }) =>
+      binding === "LEGAL_EVIDENCE_BUCKET"
+      && bucket_name === "juro-legal-evidence-production-20260908"),
+    true,
+  );
+  assert.equal(
+    config.env.production.r2_buckets.some(({ binding, bucket_name }) =>
+      binding === "LEGAL_CUSTOM_ARTIFACT_BUCKET"
+      && bucket_name === "juro-legal-current-custom-production-20260908"),
+    true,
+  );
+  assert.equal(
+    config.env.production.services.some(({ binding, service }) =>
+      binding === "LEGAL_CUSTOM_SEARCH_SERVICE"
+      && service === "juro-legal-current-custom-production-20260908"),
+    true,
+  );
   assert.equal(
     config.env.staging.vars.LEGAL_CORPUS_INDEX_VERSION,
     "staging-20260830-provision-v1",
