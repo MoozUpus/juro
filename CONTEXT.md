@@ -138,6 +138,10 @@ _Avoid_: environment variable, mutable manifest, all-or-nothing migration
 
 ### Retrieval and coverage
 
+**Retrieval Formulation**:
+The request-local interpreted legal query sent unchanged to both the Sparse Candidate Lane and Dense Candidate Lane. It may include any user-entered content and is never part of the Indexed Official Corpus or persisted by JURO's retrieval runtime.
+_Avoid_: privacy-transformed query, sanitized prompt, embedding prompt
+
 **Live Official Search**:
 Request-scoped retrieval from validated online Lex.uz pages when the Indexed Official Corpus does not provide sufficient current coverage.
 _Avoid_: web search, internet search, Lex fallback

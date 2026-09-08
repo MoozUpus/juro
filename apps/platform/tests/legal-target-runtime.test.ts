@@ -393,7 +393,7 @@ test("custom catalog revalidates hash-anchored membership without a D1 item mapp
   const db = { prepare(sql: string) {
     return { bind(...values: string[]) {
       if (sql.includes("mapping_inventory_sha256")) {
-        assert.deepEqual(values, [release.id]);
+        assert.deepEqual(values, [release.id, release.id, release.id]);
         return { async first() { return { mappingInventorySha256 }; } };
       }
       assert.doesNotMatch(sql, /legal_custom_search_runtime_items/u);

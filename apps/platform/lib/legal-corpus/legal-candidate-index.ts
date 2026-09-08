@@ -136,6 +136,7 @@ const packetErrorSchema = z.object({
     "AI_SEARCH_PARTIAL_RESPONSE",
     "AI_SEARCH_UNKNOWN_INSTANCE",
     "AI_SEARCH_WRONG_RELEASE",
+    "CANDIDATE_INTERPRETATION_INVALID",
     "CANDIDATE_PROVIDER_UNAVAILABLE",
     "PRIVACY_TRANSFORM_REJECTED",
   ]),
@@ -475,7 +476,8 @@ const candidateTelemetrySchema = z.object({
 
 export type CandidateTelemetryEvent = z.infer<typeof candidateTelemetrySchema>;
 type CandidateIndexOptions = {
-  attestPrivateNames: (input: {
+  /** Compatibility hook retained for callers created before unmodified retrieval formulations. */
+  attestPrivateNames?: (input: {
     text: string;
     formulationSha256: string;
     legalTitleSpans: readonly string[];
@@ -484,78 +486,6 @@ type CandidateIndexOptions = {
   now?: () => number;
   resolveTrustedLegalTitles?: (release: PinnedCandidateRelease) => Promise<readonly string[]>;
 };
-const privateNameAttestationSchema = z.object({
-  classifierVersion: z.literal("juro-local-pii-v1"),
-  formulationSha256: sha256Schema,
-  status: z.enum(["complete", "uncertain"]),
-  privateNameSpans: z.array(z.string().trim().min(1).max(300)).max(24),
-}).strict();
-
-const untransformableSecretPatterns = [
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/iu,
-  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/u,
-  /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}\b/u,
-  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/u,
-] as const;
-
-const removablePrivatePatterns = [
-  /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu,
-  /(?<!\d)\+?998(?:[\s()-]*\d){9}(?!\d)/gu,
-  /(?:JSHSHIR|PINFL|ПИНФЛ)\s*[:№#-]?\s*\d{14}\b/giu,
-  /(?:karta|card|карта)\s*[:№#-]?\s*(?:\d[ -]?){13,19}\b/giu,
-  /(?:case|document|account|дело|документ|сч[её]т|ish|hujjat|hisob)\s*(?:no\.?|number|№|#|raqami)?\s*[:№#-]?\s*[A-ZА-ЯЁ0-9][A-ZА-ЯЁ0-9._/-]{2,}\b/giu,
-  /(?:password|passcode|пароль|код доступа|maxfiy so['’]?z)\s*[:=-]\s*\S+/giu,
-  /(?:address|адрес|manzil)\s*:\s*[\s\S]*?(?=[.!?]\s+(?:I|My|Меня|Я|Men|Meni)(?:\s|$)|$)/giu,
-  /(?:irrelevant story|несущественная история|ahamiyatsiz hikoya)\s*:\s*[^.!?]*(?:[.!?]|$)/giu,
-  /(?:my name is|меня зовут|m[ea]ning ismim)\s+[\p{L}'’-]+(?:\s+[\p{L}'’-]+){0,3}[.!?]?/giu,
-  /(?<!\p{L})(?:на\s+)?(?:улиц[аеуы]?|ул\.?|street|st\.?|ko['’]?chasi|кўчаси)\s+[\p{L}\d .,'’\/-]{1,120}?(?=[.!?]|$)/giu,
-] as const;
-
-const unlabelledProperNamePattern = /(?<!\p{L})\p{Lu}\p{Ll}{1,}(?:\s+\p{Lu}\p{Ll}{1,}){1,7}(?!\p{L})/gu;
-type PrivacyTransform =
-  | { accepted: true; text: string }
-  | { accepted: false };
-
-function boundedLiteralPattern(value: string): RegExp {
-  const escaped = value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return new RegExp(`(?<!\\p{L})${escaped}(?!\\p{L})`, "gu");
-}
-
-function transformProviderQuery(
-  value: string,
-  declaredLegalTitles: readonly string[],
-  declaredPrivateNames: readonly string[],
-  trustedLegalTitles: ReadonlySet<string>,
-): PrivacyTransform {
-  if (untransformableSecretPatterns.some((pattern) => pattern.test(value))) {
-    return { accepted: false };
-  }
-  let transformed = value.normalize("NFC");
-  const protectedTitles = [...new Set(declaredLegalTitles.map((title) => title.normalize("NFC")))];
-  const privateNames = [...new Set(declaredPrivateNames.map((name) => name.normalize("NFC")))];
-  if (protectedTitles.some((title) => !trustedLegalTitles.has(title)
-    || !transformed.includes(title))) return { accepted: false };
-  if (privateNames.some((name) => !boundedLiteralPattern(name).test(transformed)
-    || protectedTitles.some((title) => title.includes(name) || name.includes(title)))) {
-    return { accepted: false };
-  }
-  const placeholders = new Map<string, string>();
-  for (const [index, title] of protectedTitles.entries()) {
-    const placeholder = `JURO_LEGAL_TITLE_${index}_TOKEN`;
-    transformed = transformed.replaceAll(title, placeholder);
-    placeholders.set(placeholder, title);
-  }
-  for (const name of privateNames) {
-    transformed = transformed.replace(boundedLiteralPattern(name), " ");
-  }
-  for (const pattern of removablePrivatePatterns) {
-    transformed = transformed.replace(pattern, " ");
-  }
-  transformed = transformed.replace(unlabelledProperNamePattern, " ");
-  for (const [placeholder, title] of placeholders) transformed = transformed.replaceAll(placeholder, title);
-  transformed = transformed.replace(/\s+/gu, " ").trim();
-  return transformed.length > 0 ? { accepted: true, text: transformed } : { accepted: false };
-}
 
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -571,7 +501,7 @@ function safeEmit(
   try {
     emit?.(candidateTelemetrySchema.parse(event));
   } catch {
-    // Candidate retrieval and privacy enforcement never depend on telemetry availability.
+    // Candidate retrieval never depends on telemetry availability.
   }
 }
 
@@ -622,89 +552,8 @@ export function createAiSearchCandidateIndex(
       });
       const formulationIds = interpretation.formulations.map((formulation) => formulation.id);
       if (new Set(formulationIds).size !== formulationIds.length) {
-        emitOutcome("rejected", "privacy_rejected");
-        return unavailable(release, endpoint, [{ code: "PRIVACY_TRANSFORM_REJECTED" }]);
-      }
-      if (interpretation.formulations.some((formulation) =>
-        untransformableSecretPatterns.some((pattern) => pattern.test(formulation.text)))) {
-        emitOutcome("rejected", "privacy_rejected");
-        return unavailable(release, endpoint, [{ code: "PRIVACY_TRANSFORM_REJECTED" }]);
-      }
-      let trustedLegalTitles: ReadonlySet<string> = new Set();
-      if (interpretation.formulations.some((formulation) =>
-        (formulation.legalTitleSpans?.length ?? 0) > 0)) {
-        try {
-          trustedLegalTitles = new Set((await options.resolveTrustedLegalTitles?.(release) ?? [])
-            .map((title) => title.normalize("NFC")));
-        } catch {
-          emitOutcome("unavailable", "privacy_rejected");
-          return unavailable(release, endpoint, [{ code: "PRIVACY_TRANSFORM_REJECTED" }]);
-        }
-      }
-      const titleSafeFormulations = interpretation.formulations.filter((formulation) => {
-        const text = formulation.text.normalize("NFC");
-        return (formulation.legalTitleSpans ?? []).every((title) => {
-          const normalizedTitle = title.normalize("NFC");
-          return trustedLegalTitles.has(normalizedTitle) && text.includes(normalizedTitle);
-        });
-      });
-      if (titleSafeFormulations.length !== interpretation.formulations.length) {
-        const coveredReadings = new Set(titleSafeFormulations.flatMap((formulation) =>
-          formulation.readingIds));
-        const coveredRequirements = new Set(titleSafeFormulations.flatMap((formulation) =>
-          formulation.requirementIds));
-        const requiredReadings = new Set(interpretation.formulations.flatMap((formulation) =>
-          formulation.readingIds));
-        const requiredRequirements = new Set(interpretation.formulations.flatMap((formulation) =>
-          formulation.requirementIds));
-        const allCoverageRetained = [...requiredReadings].every((id) => coveredReadings.has(id))
-          && [...requiredRequirements].every((id) => coveredRequirements.has(id));
-        if (!allCoverageRetained) {
-          emitOutcome("rejected", "privacy_rejected");
-          return unavailable(release, endpoint, [{ code: "PRIVACY_TRANSFORM_REJECTED" }]);
-        }
-      }
-      const attestedPrivateNames = new Map<string, readonly string[]>();
-      try {
-        for (const formulation of titleSafeFormulations) {
-          const text = formulation.text.normalize("NFC");
-          const formulationSha256 = await sha256Hex([
-            "juro.private-name-classification.v1",
-            text,
-          ].join("\n"));
-          const attestation = privateNameAttestationSchema.parse(
-            await options.attestPrivateNames({
-              text,
-              formulationSha256,
-              legalTitleSpans: formulation.legalTitleSpans ?? [],
-            }),
-          );
-          if (attestation.status !== "complete"
-            || attestation.formulationSha256 !== formulationSha256) {
-            emitOutcome("unavailable", "privacy_rejected");
-            return unavailable(release, endpoint, [{ code: "PRIVACY_TRANSFORM_REJECTED" }]);
-          }
-          attestedPrivateNames.set(formulation.id, attestation.privateNameSpans);
-        }
-      } catch {
-        emitOutcome("unavailable", "privacy_rejected");
-        return unavailable(release, endpoint, [{ code: "PRIVACY_TRANSFORM_REJECTED" }]);
-      }
-      const transformedFormulations = new Map<string, string>();
-      for (const formulation of titleSafeFormulations) {
-        const declaredTitles = formulation.legalTitleSpans ?? [];
-        const transformed = transformProviderQuery(
-          formulation.text,
-          declaredTitles,
-          [...formulation.privateNameSpans,
-            ...(attestedPrivateNames.get(formulation.id) ?? [])],
-          trustedLegalTitles,
-        );
-        if (!transformed.accepted) {
-          emitOutcome("rejected", "privacy_rejected");
-          return unavailable(release, endpoint, [{ code: "PRIVACY_TRANSFORM_REJECTED" }]);
-        }
-        transformedFormulations.set(formulation.id, transformed.text);
+        emitOutcome("rejected", "integrity_failure");
+        return unavailable(release, endpoint, [{ code: "CANDIDATE_INTERPRETATION_INVALID" }]);
       }
       try {
         const attestations = await Promise.all(requiredInstanceIds.map(async (instanceId) => ({
@@ -722,7 +571,7 @@ export function createAiSearchCandidateIndex(
         }
 
         const waves = chunks(requiredInstanceIds, 10);
-        const searches = await Promise.all(titleSafeFormulations.flatMap((formulation) =>
+        const searches = await Promise.all(interpretation.formulations.flatMap((formulation) =>
           waves.map(async (instanceIds) => ({
             formulation,
             instanceIds,
@@ -730,7 +579,7 @@ export function createAiSearchCandidateIndex(
               releaseId: release.id,
               currentAt: context?.currentAt ?? new Date(startedAt).toISOString(),
               instanceIds,
-              query: transformedFormulations.get(formulation.id)!,
+              query: formulation.text,
               endpoint,
               maxResults: 50,
               vectorThreshold: 0,

@@ -4,6 +4,20 @@ const identity = z.string().min(1).max(300).regex(/^[A-Za-z0-9._:-]+$/u);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const instant = z.string().datetime({ offset: true }).transform(value => new Date(value).toISOString());
 const reference = z.object({ key: z.string().min(1).max(1024), sha256: hash }).strict();
+const legacyPrivacyEvidence = z.object({
+  attestationSha256: hash,
+  deterministicTransformAttested: z.boolean(),
+  contentFreeTelemetryAttested: z.boolean(),
+  productionDisclosureAccepted: z.boolean(),
+  productionEmbeddingDataControlsApproved: z.boolean(),
+  stagingQueriesSyntheticOrNonPersonal: z.boolean(),
+}).strict();
+const queryProcessingEvidence = z.object({
+  attestationSha256: hash,
+  formulationPolicy: z.literal("unmodified-v1"),
+  contentFreeTelemetryAttested: z.boolean(),
+  standardProviderRetentionAccepted: z.literal(true),
+}).strict();
 
 export const customReleaseGovernanceSchema = z.object({
   policy: z.literal("legal-corpus-verification-20260905"),
@@ -36,14 +50,9 @@ export const customReleaseGovernanceSchema = z.object({
     dimensions: z.literal(1536),
     fusionPolicy: z.literal("equal-rrf-k60-v1"),
   }).strict(),
-  privacy: z.object({
-    attestationSha256: hash,
-    deterministicTransformAttested: z.boolean(),
-    contentFreeTelemetryAttested: z.boolean(),
-    productionDisclosureAccepted: z.boolean(),
-    productionEmbeddingDataControlsApproved: z.boolean(),
-    stagingQueriesSyntheticOrNonPersonal: z.boolean(),
-  }).strict(),
+  /** Legacy evidence remains readable for already-sealed releases. */
+  privacy: legacyPrivacyEvidence.optional(),
+  queryProcessing: queryProcessingEvidence.optional(),
   capacity: z.object({ databaseId: z.string().uuid(), projectedBytes: z.number().int().nonnegative() }).strict(),
   cost: z.object({
     authorizedCostUsd: z.number().finite().nonnegative(),
@@ -68,7 +77,11 @@ export const customReleaseGovernanceSchema = z.object({
       passed: z.boolean(),
     }).strict()).min(1).max(20),
   }).strict(),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if ((value.privacy === undefined) === (value.queryProcessing === undefined)) {
+    context.addIssue({ code: "custom", message: "Provide exactly one query-processing evidence form" });
+  }
+});
 
 export type CustomReleaseGovernance = z.input<typeof customReleaseGovernanceSchema>;
 
@@ -101,7 +114,7 @@ export async function recordCustomReleaseGovernance(
     || release.itemCount !== input.build.chunkCount || release.chunkCount !== input.build.chunkCount
     || release.configurationIdentity !== input.configuration.identity
     || release.configurationSha256 !== input.configuration.sha256
-    || release.privacySha256 !== input.privacy.attestationSha256
+    || release.privacySha256 !== (input.queryProcessing ?? input.privacy)!.attestationSha256
     || release.sourceRootSha256 !== input.build.sourceRootSha256
     || release.sparseManifestSha256 !== input.build.sparseManifestSha256
     || release.vectorInventorySha256 !== input.build.vectorInventorySha256
@@ -119,12 +132,8 @@ export async function recordCustomReleaseGovernance(
     || !input.build.vectorizeFullListReconciled) failures.push("CUSTOM_BUILD_INCOMPLETE");
   if (!input.configuration.gatewayAuthenticated || input.configuration.gatewayPayloadLogging
     || input.configuration.gatewayCaching) failures.push("CUSTOM_GATEWAY_PRIVACY_FAILED");
-  if (!input.privacy.deterministicTransformAttested || !input.privacy.contentFreeTelemetryAttested
-    || (input.environment === "production" && (!input.privacy.productionDisclosureAccepted
-      || !input.privacy.productionEmbeddingDataControlsApproved))
-    || (input.environment === "staging" && !input.privacy.stagingQueriesSyntheticOrNonPersonal)) {
-    failures.push("CUSTOM_QUERY_PRIVACY_FAILED");
-  }
+  const queryProcessing = input.queryProcessing ?? input.privacy!;
+  if (!queryProcessing.contentFreeTelemetryAttested) failures.push("CUSTOM_QUERY_PROCESSING_FAILED");
   if (input.capacity.projectedBytes >= 7_000_000_000) failures.push("CUSTOM_CATALOG_CAPACITY_FAILED");
   const cap = input.cost.migrationBudgetKind === "current" ? 50 : 450;
   if (input.cost.reservedCostUsd > input.cost.authorizedCostUsd || input.cost.authorizedCostUsd > cap

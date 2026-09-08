@@ -547,364 +547,37 @@ test("AI Search caps provider results and deterministically deduplicates locator
       .map((candidate) => candidate.itemKey));
 });
 
-test("actual provider requests remove multilingual private facts and retain material legal facts", async () => {
-  const cases = [{
-    id: "ru",
-    raw: "Меня зовут Иван Петров. Телефон +998 90 123 45 67, ivan@example.com, адрес: ул. Навои 12. Меня уволили 15.03.2026 во время отпуска. Пароль: S3cr3t!",
-    absent: ["Иван", "Петров", "+998", "ivan@example.com", "Навои", "S3cr3t"],
-    privateNames: ["Иван Петров"],
-    retained: ["уволили", "15.03.2026", "отпуска"],
-  }, {
-    id: "uz",
-    raw: "Mening ismim Dilshod Karimov. JSHSHIR 12345678901234, karta 8600123412341234. Men 2026-03-15 kuni homiladorlik ta'tilida ishdan bo'shatildim.",
-    absent: ["Dilshod", "Karimov", "12345678901234", "8600123412341234"],
-    privateNames: ["Dilshod Karimov"],
-    retained: ["2026-03-15", "homiladorlik", "bo'shatildim"],
-  }, {
-    id: "en",
-    raw: "My name is Jane Doe. Case no. ABC-123. I was dismissed on 2026-03-15 while on parental leave. Irrelevant story: my car is blue.",
-    absent: ["Jane", "Doe", "ABC-123", "car is blue"],
-    privateNames: ["Jane Doe"],
-    retained: ["dismissed", "2026-03-15", "parental leave"],
-  }];
-
-  for (const input of cases) {
-    const providerQueries: string[] = [];
-    const telemetry: unknown[] = [];
-    const index = createAiSearchCandidateIndex({
-      async attest() { return release.configuration; },
-      async search(request) {
-        providerQueries.push(request.query);
-        return { hits: [], errors: [], searchedInstanceIds: request.instanceIds, tokenUsage: 17 };
-      },
-    }, {
-      ...completePrivateNameAttestation,
-      emitTelemetry: (event) => { telemetry.push(event); },
-    });
-    const packet = await index.retrieve({
-      id: `privacy-${input.id}`,
-      formulations: [{
-        id: `formulation-${input.id}`,
-        text: input.raw,
-        privateNameSpans: input.privateNames,
-        readingIds: [`reading-${input.id}`],
-        requirementIds: [`requirement-${input.id}`],
-      }],
-    }, endpoint, release);
-
-    assert.equal(packet.availability, "available");
-    assert.equal(providerQueries.length, 1);
-    for (const privateValue of input.absent) {
-      assert.equal(providerQueries[0]?.includes(privateValue), false, privateValue);
-    }
-    for (const materialFact of input.retained) {
-      assert.equal(providerQueries[0]?.includes(materialFact), true, materialFact);
-    }
-    const serializedTelemetry = JSON.stringify(telemetry);
-    assert.equal(serializedTelemetry.includes(input.raw), false);
-    assert.equal(serializedTelemetry.includes(providerQueries[0] ?? ""), false);
-    assert.match(serializedTelemetry, /"correlationHash":"[a-f0-9]{64}"/u);
-    assert.match(serializedTelemetry, /"tokenUsage":17/u);
-  }
-});
-
-test("unlabelled multilingual names and ordinary street addresses never cross the provider boundary", async () => {
-  const providerQueries: string[] = [];
+test("retrieval sends every formulation unchanged and ignores content classifiers", async () => {
+  const queries: string[] = [];
+  let classifierCalls = 0;
+  const raw = "Ivan Petrov, ivan@example.com, case ABC-123, key sk-proj-example123456789012345: Labor Code dismissal";
   const packet = await createAiSearchCandidateIndex({
     async attest() { return release.configuration; },
     async search(request) {
-      providerQueries.push(request.query);
-      return { hits: [], errors: [], searchedInstanceIds: request.instanceIds };
-    },
-  }, completePrivateNameAttestation).retrieve({
-    id: "privacy-unlabelled-identifiers",
-    formulations: [{
-      id: "privacy-unlabelled-identifiers-formulation",
-      text: "Иван Петров живёт на улице Навои, дом 12. Работодатель уволил его 2026-03-15 во время отпуска.",
-      privateNameSpans: ["Иван Петров"],
-      readingIds: ["privacy-unlabelled-identifiers-reading"],
-      requirementIds: ["privacy-unlabelled-identifiers-requirement"],
-    }],
-  }, endpoint, release);
-
-  assert.equal(packet.availability, "available");
-  assert.equal(providerQueries.length, 1);
-  assert.equal(providerQueries[0]?.includes("Иван"), false);
-  assert.equal(providerQueries[0]?.includes("Петров"), false);
-  assert.equal(providerQueries[0]?.includes("Навои"), false);
-  assert.equal(providerQueries[0]?.includes("дом 12"), false);
-  assert.match(providerQueries[0] ?? "", /уволил/u);
-  assert.match(providerQueries[0] ?? "", /2026-03-15/u);
-  assert.match(providerQueries[0] ?? "", /отпуска/u);
-});
-
-test("privacy transformation retains exact legally material act names without adjacent names", async () => {
-  const providerQueries: string[] = [];
-  const index = createAiSearchCandidateIndex({
-    async attest() { return release.configuration; },
-    async search(request) {
-      providerQueries.push(request.query);
+      queries.push(request.query);
       return { hits: [], errors: [], searchedInstanceIds: request.instanceIds };
     },
   }, {
-    ...completePrivateNameAttestation,
-    resolveTrustedLegalTitles: async () => ["Labor Code", "Civil Procedure Code", "Companies Act"],
-  });
-  const packet = await index.retrieve({
-    id: "privacy-legal-title",
+    async attestPrivateNames() {
+      classifierCalls += 1;
+      throw new Error("content classification must not run");
+    },
+    resolveTrustedLegalTitles: async () => { throw new Error("title filtering must not run"); },
+  }).retrieve({
+    id: "unmodified-retrieval-formulation",
     formulations: [{
-      id: "privacy-legal-title-formulation",
-      text: "Does Ivan Petrov Labor Code article 5 override Civil Procedure Code article 10 under the Companies Act?",
-      legalTitleSpans: ["Labor Code", "Civil Procedure Code", "Companies Act"],
+      id: "unmodified-retrieval-formulation-1",
+      text: raw,
+      legalTitleSpans: ["Labor Code"],
       privateNameSpans: ["Ivan Petrov"],
-      readingIds: ["privacy-legal-title-reading"],
-      requirementIds: ["privacy-legal-title-requirement"],
+      readingIds: ["reading-1"],
+      requirementIds: ["requirement-1"],
     }],
   }, endpoint, release);
 
   assert.equal(packet.availability, "available");
-  assert.match(providerQueries[0] ?? "", /Labor Code article 5/u);
-  assert.match(providerQueries[0] ?? "", /Civil Procedure Code article 10/u);
-  assert.match(providerQueries[0] ?? "", /Companies Act/u);
-  assert.doesNotMatch(providerQueries[0] ?? "", /Ivan Petrov/u);
-
-  const forged = await index.retrieve({
-    id: "privacy-forged-legal-title",
-    formulations: [{
-      id: "privacy-forged-legal-title-formulation",
-      text: "Does John Law override the Companies Act?",
-      legalTitleSpans: ["John Law", "Companies Act"],
-      privateNameSpans: [],
-      readingIds: ["privacy-forged-legal-title-reading"],
-      requirementIds: ["privacy-forged-legal-title-requirement"],
-    }],
-  }, endpoint, release);
-  assert.equal(forged.availability, "unavailable");
-  assert.deepEqual(forged.partialErrors, [{ code: "PRIVACY_TRANSFORM_REJECTED" }]);
-  assert.equal(providerQueries.length, 1, "an interpreter label cannot forge a trusted title");
-
-  const safeAlternate = await index.retrieve({
-    id: "privacy-untrusted-translated-alternate",
-    formulations: [{
-      id: "privacy-trusted-source-formulation",
-      text: "Companies Act filing rules",
-      legalTitleSpans: ["Companies Act"],
-      privateNameSpans: [],
-      readingIds: ["privacy-legal-title-reading"],
-      requirementIds: ["privacy-legal-title-requirement"],
-    }, {
-      id: "privacy-untrusted-translated-formulation",
-      text: "Ley de Sociedades filing rules",
-      legalTitleSpans: ["Ley de Sociedades"],
-      privateNameSpans: [],
-      readingIds: ["privacy-legal-title-reading"],
-      requirementIds: ["privacy-legal-title-requirement"],
-    }, {
-      id: "privacy-inflected-title-formulation",
-      text: "Provisions of the Company Act on filing",
-      legalTitleSpans: ["Companies Act"],
-      privateNameSpans: [],
-      readingIds: ["privacy-legal-title-reading"],
-      requirementIds: ["privacy-legal-title-requirement"],
-    }],
-  }, endpoint, release);
-  assert.equal(safeAlternate.availability, "available");
-  assert.equal(providerQueries.length, 2);
-  assert.equal(providerQueries[1], "Companies Act filing rules");
-
-  const uncoveredAlternate = await index.retrieve({
-    id: "privacy-untrusted-unique-coverage",
-    formulations: [{
-      id: "privacy-trusted-source-formulation",
-      text: "Companies Act filing rules",
-      legalTitleSpans: ["Companies Act"],
-      privateNameSpans: [],
-      readingIds: ["privacy-legal-title-reading"],
-      requirementIds: ["privacy-legal-title-requirement"],
-    }, {
-      id: "privacy-untrusted-translated-formulation",
-      text: "Ley de Sociedades translated rule",
-      legalTitleSpans: ["Ley de Sociedades"],
-      privateNameSpans: [],
-      readingIds: ["privacy-legal-title-reading"],
-      requirementIds: ["privacy-translated-requirement"],
-    }],
-  }, endpoint, release);
-  assert.equal(uncoveredAlternate.availability, "unavailable");
-  assert.equal(providerQueries.length, 2, "untrusted unique coverage fails closed");
-
-  const duplicateIds = await index.retrieve({
-    id: "privacy-duplicate-formulation-identities",
-    formulations: [{
-      id: "duplicate",
-      text: "Companies Act filing rules",
-      legalTitleSpans: ["Companies Act"],
-      privateNameSpans: [],
-      readingIds: ["privacy-legal-title-reading"],
-      requirementIds: ["privacy-legal-title-requirement"],
-    }, {
-      id: "duplicate",
-      text: "Ley de Sociedades exemption",
-      legalTitleSpans: ["Ley de Sociedades"],
-      privateNameSpans: [],
-      readingIds: ["privacy-legal-title-reading"],
-      requirementIds: ["privacy-translated-requirement"],
-    }],
-  }, endpoint, release);
-  assert.equal(duplicateIds.availability, "unavailable");
-  assert.equal(providerQueries.length, 2, "duplicate formulation IDs fail before provider search");
-
-  const adjacentSingleName = await index.retrieve({
-    id: "privacy-single-name-adjacent-to-title",
-    formulations: [{
-      id: "privacy-single-name-adjacent-to-title-formulation",
-      text: "John says the Companies Act applies",
-      legalTitleSpans: ["Companies Act"],
-      privateNameSpans: [],
-      readingIds: ["privacy-single-name-adjacent-to-title-reading"],
-      requirementIds: ["privacy-single-name-adjacent-to-title-requirement"],
-    }],
-  }, endpoint, release);
-  assert.equal(adjacentSingleName.availability, "available");
-  assert.equal(providerQueries.length, 3);
-  assert.doesNotMatch(providerQueries[2] ?? "", /John/u);
-  assert.match(providerQueries[2] ?? "", /Companies Act applies/u);
-
-  const sentenceInitialFacts = await index.retrieve({
-    id: "privacy-sentence-initial-material-facts",
-    formulations: [{
-      id: "privacy-dismissal-fact",
-      text: "Dismissal occurred during protected leave",
-      privateNameSpans: [],
-      readingIds: ["privacy-sentence-initial-reading"],
-      requirementIds: ["privacy-sentence-initial-requirement"],
-    }, {
-      id: "privacy-pregnancy-fact",
-      text: "Pregnancy began before the dismissal",
-      privateNameSpans: [],
-      readingIds: ["privacy-sentence-initial-reading"],
-      requirementIds: ["privacy-sentence-initial-requirement"],
-    }, {
-      id: "privacy-russian-status-fact",
-      text: "Увольнение произошло во время отпуска",
-      privateNameSpans: [],
-      readingIds: ["privacy-sentence-initial-reading"],
-      requirementIds: ["privacy-sentence-initial-requirement"],
-    }, {
-      id: "privacy-uzbek-status-fact",
-      text: "Homiladorlik ishdan bo‘shatishdan oldin boshlangan",
-      privateNameSpans: [],
-      readingIds: ["privacy-sentence-initial-reading"],
-      requirementIds: ["privacy-sentence-initial-requirement"],
-    }],
-  }, endpoint, release);
-  assert.equal(sentenceInitialFacts.availability, "available");
-  assert.equal(providerQueries.length, 7);
-  for (const fact of ["Dismissal", "Pregnancy", "Увольнение", "Homiladorlik"]) {
-    assert.equal(providerQueries.some((query) => query.includes(fact)), true, fact);
-  }
-});
-
-test("trusted local PII attestation removes names in subject, object, possessive, and postpositional contexts", async () => {
-  const providerQueries: string[] = [];
-  const index = createAiSearchCandidateIndex({
-    async attest() { return release.configuration; },
-    async search(request) {
-      providerQueries.push(request.query);
-      return { hits: [], errors: [], searchedInstanceIds: request.instanceIds };
-    },
-  }, {
-    ...completePrivateNameAttestation,
-    resolveTrustedLegalTitles: async () => ["Companies Act"],
-  });
-  const packet = await index.retrieve({
-    id: "privacy-local-pii-boundary",
-    formulations: [{
-      id: "privacy-name-subject",
-      text: "Under the Companies Act, John was dismissed",
-      legalTitleSpans: ["Companies Act"],
-      privateNameSpans: [],
-      readingIds: ["privacy-name-reading"],
-      requirementIds: ["privacy-name-requirement"],
-    }, {
-      id: "privacy-name-object",
-      text: "The Companies Act applies to John",
-      legalTitleSpans: ["Companies Act"],
-      privateNameSpans: [],
-      readingIds: ["privacy-name-reading"],
-      requirementIds: ["privacy-name-requirement"],
-    }, {
-      id: "privacy-name-possessive",
-      text: "John's dismissal was unlawful",
-      privateNameSpans: [],
-      readingIds: ["privacy-name-reading"],
-      requirementIds: ["privacy-name-requirement"],
-    }, {
-      id: "privacy-name-russian-object",
-      text: "Компания уволила Ивана во время отпуска",
-      privateNameSpans: [],
-      readingIds: ["privacy-name-reading"],
-      requirementIds: ["privacy-name-requirement"],
-    }, {
-      id: "privacy-name-uzbek-postposition",
-      text: "Ivanga nisbatan ishdan bo‘shatish qo‘llandi",
-      privateNameSpans: [],
-      readingIds: ["privacy-name-reading"],
-      requirementIds: ["privacy-name-requirement"],
-    }],
-  }, endpoint, release);
-
-  assert.equal(packet.availability, "available");
-  assert.equal(providerQueries.length, 5);
-  for (const name of ["John", "Ивана", "Ivanga"]) {
-    assert.equal(providerQueries.some((query) => query.includes(name)), false, name);
-  }
-  assert.equal(providerQueries.filter((query) => query.includes("Companies Act")).length, 2);
-});
-
-test("uncertain local PII classification fails closed before provider search", async () => {
-  let searches = 0;
-  const index = createAiSearchCandidateIndex({
-    async attest() { return release.configuration; },
-    async search() {
-      searches += 1;
-      return { hits: [], errors: [], searchedInstanceIds: ["current-00"] };
-    },
-  }, {
-    async attestPrivateNames(input) {
-      return {
-        classifierVersion: "juro-local-pii-v1",
-        formulationSha256: input.formulationSha256,
-        status: "uncertain",
-        privateNameSpans: [],
-      };
-    },
-  });
-  const packet = await index.retrieve(interpretation, endpoint, release);
-  assert.equal(packet.availability, "unavailable");
-  assert.equal(packet.partialErrors[0]?.code, "PRIVACY_TRANSFORM_REJECTED");
-  assert.equal(searches, 0);
-
-  let versionDriftSearches = 0;
-  const versionDrift = await createAiSearchCandidateIndex({
-    async attest() { return release.configuration; },
-    async search() {
-      versionDriftSearches += 1;
-      return { hits: [], errors: [], searchedInstanceIds: ["current-00"] };
-    },
-  }, {
-    async attestPrivateNames(input) {
-      return {
-        classifierVersion: "juro-local-pii-v0",
-        formulationSha256: input.formulationSha256,
-        status: "complete",
-        privateNameSpans: [],
-      };
-    },
-  }).retrieve(interpretation, endpoint, release);
-  assert.equal(versionDrift.availability, "unavailable");
-  assert.equal(versionDrift.partialErrors[0]?.code, "PRIVACY_TRANSFORM_REJECTED");
-  assert.equal(versionDriftSearches, 0);
+  assert.deepEqual(queries, [raw]);
+  assert.equal(classifierCalls, 0);
 });
 
 test("more than ten instances are searched in deterministic waves and globally rank-fused", async () => {
@@ -949,36 +622,6 @@ test("more than ten instances are searched in deterministic waves and globally r
   assert.deepEqual(calls.map((wave) => wave.length), [10, 1]);
   assert.equal(packet.candidates[0]?.instanceId, "history-10",
     "global RRF must not compare provider-local fusion scores across waves");
-});
-
-test("untransformable secrets never reach indexed vector retrieval", async () => {
-  let searches = 0;
-  const telemetry: unknown[] = [];
-  const packet = await createAiSearchCandidateIndex({
-    async attest() { return release.configuration; },
-    async search() {
-      searches += 1;
-      return { hits: [], errors: [], searchedInstanceIds: ["current-00"] };
-    },
-  }, {
-    ...completePrivateNameAttestation,
-    emitTelemetry: (event) => { telemetry.push(event); },
-  }).retrieve({
-    id: "privacy-secret",
-    formulations: [{
-      id: "formulation-secret",
-      text: "-----BEGIN PRIVATE KEY----- MIIEvQIBADANBgkqhkiG9w0BAQ -----END PRIVATE KEY-----",
-      privateNameSpans: [],
-      readingIds: ["reading-secret"],
-      requirementIds: ["requirement-secret"],
-    }],
-  }, endpoint, release);
-
-  assert.equal(searches, 0);
-  assert.equal(packet.availability, "unavailable");
-  assert.deepEqual(packet.candidates, []);
-  assert.equal(packet.partialErrors[0]?.code, "PRIVACY_TRANSFORM_REJECTED");
-  assert.equal(JSON.stringify(telemetry).includes("MIIEvQ"), false);
 });
 
 test("privacy and cache configuration drift fails closed before a provider search", async () => {

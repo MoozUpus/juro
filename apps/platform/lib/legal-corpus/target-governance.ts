@@ -14,6 +14,18 @@ const instant = z.string().datetime().regex(/Z$/u);
 const sha = z.string().regex(/^[a-f0-9]{64}$/u);
 const environment = z.enum(["development", "staging", "production"]);
 const capability = z.enum(["current", "history"]);
+const legacyPrivacyEvidenceSchema = z.object({
+  deterministicTransformAttested: z.boolean(),
+  contentFreeTelemetryAttested: z.boolean(),
+  productionDisclosureAccepted: z.boolean(),
+  productionEmbeddingDataControlsApproved: z.boolean(),
+  stagingQueriesSyntheticOrNonPersonal: z.boolean(),
+}).strict();
+const queryProcessingEvidenceSchema = z.object({
+  formulationPolicy: z.literal("unmodified-v1"),
+  contentFreeTelemetryAttested: z.boolean(),
+  standardProviderRetentionAccepted: z.literal(true),
+}).strict();
 
 export const REQUIRED_RELEASE_EVALUATION_STRATA = [
   "exact_citation",
@@ -138,13 +150,9 @@ const evidenceSchema = z.object({
   reconciliationRunId: identifier,
   recordedAt: instant,
   configuration: governedAiSearchConfigurationSchema,
-  privacy: z.object({
-    deterministicTransformAttested: z.boolean(),
-    contentFreeTelemetryAttested: z.boolean(),
-    productionDisclosureAccepted: z.boolean(),
-    productionEmbeddingDataControlsApproved: z.boolean(),
-    stagingQueriesSyntheticOrNonPersonal: z.boolean(),
-  }).strict(),
+  /** Legacy evidence remains readable for already-sealed releases. */
+  privacy: legacyPrivacyEvidenceSchema.optional(),
+  queryProcessing: queryProcessingEvidenceSchema.optional(),
   sync: z.object({
     state: z.enum(["pending", "complete", "failed"]),
     scheduledIndexingPaused: z.boolean(),
@@ -209,6 +217,9 @@ const evidenceSchema = z.object({
       code: "custom",
       message: "Staging and production require immutable candidate qualifications",
     });
+  }
+  if ((value.privacy === undefined) === (value.queryProcessing === undefined)) {
+    context.addIssue({ code: "custom", message: "Provide exactly one query-processing evidence form" });
   }
 });
 
@@ -306,15 +317,8 @@ export async function recordSearchReleaseGovernance(
     providerGeneration: evidence.configuration.providerGeneration,
     contextExpansion: evidence.configuration.contextExpansion,
   })) if (value) failures.push(`CONFIGURATION_MUST_BE_DISABLED:${key}`);
-  if (!evidence.privacy.deterministicTransformAttested
-    || !evidence.privacy.contentFreeTelemetryAttested) failures.push("PRIVACY_ATTESTATION_FAILED");
-  if (evidence.environment === "production" && (!evidence.privacy.productionDisclosureAccepted
-    || !evidence.privacy.productionEmbeddingDataControlsApproved)) {
-    failures.push("PRODUCTION_PRIVACY_APPROVAL_MISSING");
-  }
-  if (evidence.environment === "staging" && !evidence.privacy.stagingQueriesSyntheticOrNonPersonal) {
-    failures.push("STAGING_QUERY_PRIVACY_FAILED");
-  }
+  const queryProcessing = evidence.queryProcessing ?? evidence.privacy!;
+  if (!queryProcessing.contentFreeTelemetryAttested) failures.push("QUERY_PROCESSING_ATTESTATION_FAILED");
   if (evidence.sync.state !== "complete" || !evidence.sync.scheduledIndexingPaused
     || evidence.sync.partialErrors !== 0) failures.push("PROVIDER_SYNC_INCOMPLETE");
   const shardIds = new Set(evidence.shards.map((shard) => shard.id));

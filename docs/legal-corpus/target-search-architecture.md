@@ -17,11 +17,11 @@ remain enforced.
 2. D1 owns legal facts, compact candidate-to-evidence mappings, release roots, gates, Activation Sets and rollback history. It owns no canonical body, term dictionary, posting list, position list or vector.
 3. Every General Legal Question requires a complete Sparse Candidate Lane and Dense Candidate Lane. Only an explicit unambiguous act-and-provision lookup may bypass them.
 4. One sealed Search Release pins both lanes and all policies needed to reproduce them. Missing declared components or partial results make the whole Candidate Packet unavailable.
-5. Candidate systems never decide law or provide evidence. D1 revalidates every returned identity and R2 hydrates and hash-verifies every quotation before Provision Set selection.
+5. Candidate systems never decide law or provide evidence. The pinned R2 runtime mapping revalidates every returned identity and Evidence R2 hydrates and hash-verifies every quotation before Provision Set selection.
 6. Retrieval Chunk boundaries are deterministic and JURO-owned. Each chunk belongs to exactly one Snapshot Provision; provider behavior never creates canonical chunks.
 7. Both lanes prefilter Temporal Scope before top-K. D1 remains final authority for applicability.
 8. Activation is atomic by capability through one Activation Set. Active and prior releases are immutable and immediately rollbackable.
-9. Provider-bound queries pass the deterministic privacy transform. Query text and vectors are request-local and absent from telemetry, logs and durable caches.
+9. Each Retrieval Formulation is sent unchanged to both candidate lanes. Query text and vectors are request-local and absent from JURO telemetry, logs and durable caches.
 10. Question Interpretation, Coverage Requirements, Provision Sets, Official Coverage, Official Citations, Legal Answer structure and the strict Source Ladder do not change.
 
 ## Architecture
@@ -95,7 +95,7 @@ R2 ranged reads fetch only required lexicon and posting blocks. Cache entries ar
 
 ### Legal D1
 
-D1 retains Source Documents, Source Snapshots, Snapshot Provisions, Retrieval Eligibility, applicability, provenance, lineage, compact evidence locators, Search Release component roots, build/gate results, Activation Sets and rollback events. Exhaustive component inventories and index internals live in R2. A release is blocked when measured projection would put any legal database above 7 GB; a provider-neutral `LegalCatalog` Interface allows deterministic sharding before that threshold rather than after a capacity incident.
+D1 retains body-free Search Release component roots, build/gate results, query budgets, Activation Sets and rollback events. Immutable candidate membership, legal identities, applicability and evidence locators seal in R2 with exhaustive component inventories and index internals. The live custom runtime does not depend on legacy complete-corpus tables. A release is blocked when measured projection would put any legal database above 7 GB; a provider-neutral `LegalCatalog` Interface allows deterministic sharding before that threshold rather than after a capacity incident.
 
 ## Sparse Candidate Lane
 
@@ -168,8 +168,8 @@ upsert. Completed artifacts are reused after restart. Workflow/Queue checkpoints
 retain only identities, locators, hashes, counts, safe states and accounting.
 OpenAI Batch and its Files lifecycle are outside this build contract.
 
-Live query formulations also use the regular API, with the existing privacy
-transform and separate query/evaluation circuits. Safe formulations are embedded
+Live Retrieval Formulations also use the regular API unchanged for both BM25 and
+dense search, with separate query/evaluation circuits. Formulations are embedded
 together when limits permit and reused across comparison endpoints within the
 request; query vectors are never persisted as document artifacts.
 
@@ -177,11 +177,11 @@ A current update creates chunks and embeddings only for changed content, emits a
 
 ## Credentials, privacy and telemetry
 
-The owner-approved OpenAI key in the ignored platform `.env` may bootstrap both environments. Staging and production nevertheless use distinct authenticated AI Gateways and encrypted secret bindings with payload logging and caching disabled. Application Workers receive gateway access, not the raw key. Production real-query embedding remains blocked until disclosure/DPA and approved ZDR/MAM evidence exist.
+The owner-approved OpenAI key in the ignored platform `.env` may bootstrap both environments. Staging and production nevertheless use distinct authenticated AI Gateways and encrypted secret bindings with payload logging and caching disabled. Application Workers receive gateway access, not the raw key. Standard OpenAI API processing and possible abuse-monitoring retention are accepted; ZDR, MAM, disclosure and DPA approval are not activation gates.
 
 The ignored root `CLOUDFLARE_API_TOKEN` is a local control-plane bootstrap only. It is never printed, committed, written to evidence or bound to a Worker. It remains until the migration program resolves. The final credential-retirement checkpoint then verifies the pinned account/resources, removes only that entry, deletes the file only when empty, scans for leakage and requires owner revocation.
 
-The provider privacy transform removes direct identifiers, contacts, addresses, account/case/document identifiers, secrets, payment data and irrelevant narrative while preserving material legal facts. Query vectors are request-local and never persisted.
+Retrieval does not redact, replace or content-reject names, contacts, account data, secrets or other user-entered content. The same unmodified Retrieval Formulation drives BM25 and query embedding. Query vectors are request-local and never persisted by JURO.
 
 Content-free telemetry may contain release/component/version identities, hashed correlation, counts, R2 operations/bytes/cache state, BM25 traversal/pruning, OpenAI tokens/latency/status, Vectorize latency/results/mutation checkpoint, fusion/revalidation/hydration latency and safe failure/Source Ladder outcomes. It contains no query/evidence text, vectors, postings, secrets or user-linked candidate IDs.
 
@@ -189,7 +189,7 @@ Content-free telemetry may contain release/component/version identities, hashed 
 
 The qualified source Corpus Snapshot may source the first custom release, but its draft AI Search Search Release identity may not. Changed chunk, sparse, embedding, Vectorize, filtering and fusion contracts require a new identity and fresh backend gates.
 
-A Search Release seals only after Retrieval Chunks are complete and reproducible; new sparse/embedding writes pass their byte/hash checks; and one exact ID/count/metadata comparison after the final Vectorize mutation confirms the new index inventory. Reuse those results during activation, with a bounded smoke set for the changed capability and the applicable privacy/cost/configuration checks. Unchanged source bodies and prior builds do not need another verification pass.
+A Search Release seals only after Retrieval Chunks are complete and reproducible; new sparse/embedding writes pass their byte/hash checks; and one exact ID/count/metadata comparison after the final Vectorize mutation confirms the new index inventory. Reuse those results during activation, with a bounded smoke set for the changed capability and the applicable query-processing, cost and configuration checks. Unchanged source bodies and prior builds do not need another verification pass.
 
 Current and history are separate releases. Current may activate alone. As-of requires history. Comparison requires compatible current/history releases from the same Corpus Snapshot and policy family. Activation and rollback are single D1 transactions preserving prior sets and immutable events.
 

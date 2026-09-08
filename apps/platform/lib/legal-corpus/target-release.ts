@@ -206,7 +206,13 @@ export async function resolveStagingHistoryComparisonEvaluationSet(
     FROM legal_search_releases release
     JOIN legal_corpus_snapshots snapshot ON snapshot.id=release.corpus_snapshot_id
     JOIN legal_custom_search_release_components component ON component.search_release_id=release.id
-    JOIN legal_custom_search_runtime_components runtime ON runtime.search_release_id=release.id
+    JOIN (SELECT search_release_id,mapping_count FROM legal_custom_search_r2_runtime_roots
+      UNION ALL
+      SELECT legacy.search_release_id,legacy.mapping_count
+      FROM legal_custom_search_runtime_components legacy
+      WHERE NOT EXISTS (SELECT 1 FROM legal_custom_search_r2_runtime_roots current
+        WHERE current.search_release_id=legacy.search_release_id)) runtime
+      ON runtime.search_release_id=release.id
     WHERE release.id IN (?,?) ORDER BY release.id`).bind(
     selected.currentReleaseId,
     selected.asOfReleaseId,

@@ -9,6 +9,7 @@ import {
   importProvisionRevision,
   resolveCompleteCorpusEvidence,
   resolveCompleteCorpusCurrentEvidence,
+  resolveR2NativeCustomEvidence,
 } from "../lib/legal-corpus/target-evidence";
 import { recordProvisionTemporalEvidence } from "../lib/legal-corpus/target-temporal";
 import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
@@ -52,6 +53,53 @@ function migrationProvision<T extends Record<string, unknown> = Record<never, ne
     },
   };
 }
+
+test("R2-native runtime identity hydrates unchanged hash-verified legal evidence", async () => {
+  const { sqlite, d1 } = sqliteD1FixtureFromDirectory(
+    new URL("../legal-drizzle/", import.meta.url),
+  );
+  const bucket = new MemoryEvidenceBucket();
+  try {
+    const controllingProvision = { ...representativeProvision,
+      textualAuthority: "controlling" as const, controllingOnConflict: true,
+      derivedFromExpressionId: null };
+    const imported = await importProvisionRendition({ db: d1, bucket }, controllingProvision);
+    bucket.objects.get(imported.provisionLocator.r2Key)!.customMetadata = {
+      sha256: imported.provisionLocator.sha256,
+      source: "evidence",
+      kind: "provision_rendition",
+    };
+    const result = await resolveR2NativeCustomEvidence({
+      bucket,
+      currentAt: "2026-06-01T00:00:00.000Z",
+    }, {
+      legalIdentitySha256: "a".repeat(64),
+      legalInstrumentId: representativeProvision.legalInstrumentId,
+      officialExpressionId: representativeProvision.officialExpressionId,
+      textRevisionId: representativeProvision.textRevisionId,
+      provisionConceptId: representativeProvision.provisionConceptId,
+      provisionRenditionId: representativeProvision.provisionRenditionId,
+      evidenceProvisionRenditionId: representativeProvision.provisionRenditionId,
+      languageTag: representativeProvision.languageTag,
+      script: representativeProvision.script,
+      textualAuthority: controllingProvision.textualAuthority,
+      validFrom: "2026-01-01T00:00:00.000Z",
+      validTo: null,
+      evidence: {
+        r2Key: imported.provisionLocator.r2Key,
+        byteCount: imported.provisionLocator.byteCount,
+        sha256: imported.provisionLocator.sha256,
+        sourceNormalizedSha256: sha256(representativeProvision.normalizedRevision),
+        mediaType: "application/json; charset=utf-8",
+      },
+      citation: { label: `${representativeProvision.actTitle} — Article ${representativeProvision.articleNumber}`,
+        url: representativeProvision.sourceUrl },
+    }, { kind: "current" });
+
+    assert.equal(result.controlling.provisionText, controllingProvision.provisionText);
+    assert.equal(result.controlling.evidence.sha256, imported.provisionLocator.sha256);
+  } finally { sqlite.close(); }
+});
 
 async function markCurrent(
   db: D1Database,

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { CustomRuntimeLegalIdentity } from "./custom-bm25-runtime";
+
 import type { TemporalEndpoint } from "./legal-candidate-index";
 import {
   acceptsPrivateServiceRequest,
@@ -218,6 +220,20 @@ const provisionObjectSchema = z.object({
   sourceNormalizedSha256: sha256Schema,
 }).strict();
 
+// R2-native mappings carry the canonical legal identity. Evidence hydration only
+// reads the stable, hash-bound fields needed to verify and present the original
+// provision object, so legacy object identifiers do not become runtime joins.
+const r2NativeProvisionEvidenceSchema = z.object({
+  provisionRenditionId: provisionRenditionIdSchema,
+  languageTag: importObjectSchema.shape.languageTag,
+  script: legalScriptSchema,
+  actTitle: importObjectSchema.shape.actTitle,
+  articleNumber: importObjectSchema.shape.articleNumber,
+  provisionText: importObjectSchema.shape.provisionText,
+  sourceUrl: lexDocumentUrlSchema,
+  sourceNormalizedSha256: sha256Schema,
+}).passthrough();
+
 const resolvedEvidenceSchema = z.object({
   legalInstrumentId: legalInstrumentIdSchema,
   officialExpressionId: officialExpressionIdSchema,
@@ -323,6 +339,7 @@ type Locator = {
 async function readAndVerifyObject(
   bucket: Pick<LegalEvidenceBucket, "get">,
   locator: Pick<Locator, "r2Key" | "byteCount" | "sha256">,
+  metadataPolicy: "schema-v1" | "sealed-production-evidence" = "schema-v1",
 ): Promise<Uint8Array> {
   const object = await bucket.get(locator.r2Key);
   if (!object || object.size !== locator.byteCount) {
@@ -330,11 +347,15 @@ async function readAndVerifyObject(
   }
   const bytes = await object.bytes();
   const actual = await sha256(bytes);
+  const metadataAccepted = object.customMetadata?.schemaVersion === "1"
+    || (metadataPolicy === "sealed-production-evidence"
+      && object.customMetadata?.source === "evidence"
+      && object.customMetadata?.kind === "provision_rendition");
   if (
     bytes.byteLength !== locator.byteCount
     || actual.hex !== locator.sha256
     || object.customMetadata?.sha256 !== locator.sha256
-    || object.customMetadata?.schemaVersion !== "1"
+    || !metadataAccepted
   ) {
     throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
   }
@@ -1516,6 +1537,70 @@ export async function resolveCompleteCorpusEvidence(
       r2Key: record.provisionKey, byteCount: Number(record.provisionBytes),
       sha256: record.provisionSha256, sourceNormalizedSha256: record.sourceNormalizedSha256,
       schemaVersion: 1 },
+  });
+  return controllingResolutionSchema.parse({ controlling: evidence,
+    materialCitation: evidence.officialCitation });
+}
+
+/** Resolves immutable evidence through the body-free R2-native runtime mapping. */
+export async function resolveR2NativeCustomEvidence(
+  dependencies: { bucket: Pick<LegalEvidenceBucket, "get">; currentAt: string },
+  identity: CustomRuntimeLegalIdentity,
+  untrustedEndpoint: TemporalEndpoint,
+): Promise<ControllingEvidenceResolution> {
+  const endpoint = temporalEndpointSchema.parse(untrustedEndpoint);
+  assertCompleteCorpusCurrentInterval(identity,
+    endpoint.kind === "timestamp" ? endpoint.instant : dependencies.currentAt);
+  const evidenceBytes = await readAndVerifyObject(dependencies.bucket, {
+    r2Key: identity.evidence.r2Key,
+    byteCount: identity.evidence.byteCount,
+    sha256: identity.evidence.sha256,
+  }, "sealed-production-evidence");
+  let provisionText: string;
+  let officialCitation = identity.citation;
+  if (identity.evidence.mediaType === "text/plain;charset=utf-8") {
+    try { provisionText = new TextDecoder("utf-8", { fatal: true }).decode(evidenceBytes); }
+    catch { throw new LegalEvidenceError("SOURCE_UNAVAILABILITY"); }
+    if (provisionText.length === 0) throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+  } else {
+    let provision: z.infer<typeof r2NativeProvisionEvidenceSchema>;
+    try {
+      provision = r2NativeProvisionEvidenceSchema.parse(JSON.parse(new TextDecoder("utf-8", { fatal: true })
+        .decode(evidenceBytes)) as unknown);
+    } catch {
+      throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+    }
+    if (provision.provisionRenditionId !== identity.evidenceProvisionRenditionId
+      || provision.languageTag !== identity.languageTag || provision.script !== identity.script
+      || provision.sourceNormalizedSha256 !== identity.evidence.sourceNormalizedSha256
+      || provision.sourceUrl !== identity.citation.url) {
+      throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
+    }
+    provisionText = provision.provisionText;
+    officialCitation = {
+      label: `${provision.actTitle} — Article ${provision.articleNumber}`,
+      url: provision.sourceUrl,
+    };
+  }
+  const evidence = resolvedEvidenceSchema.parse({
+    legalInstrumentId: identity.legalInstrumentId,
+    officialExpressionId: identity.officialExpressionId,
+    textRevisionId: identity.textRevisionId,
+    provisionConceptId: identity.provisionConceptId,
+    provisionRenditionId: identity.provisionRenditionId,
+    languageTag: identity.languageTag,
+    script: identity.script,
+    textualAuthority: identity.textualAuthority,
+    provisionText,
+    officialCitation,
+    evidence: {
+      provisionRenditionId: identity.provisionRenditionId,
+      r2Key: identity.evidence.r2Key,
+      byteCount: identity.evidence.byteCount,
+      sha256: identity.evidence.sha256,
+      sourceNormalizedSha256: identity.evidence.sourceNormalizedSha256,
+      schemaVersion: 1,
+    },
   });
   return controllingResolutionSchema.parse({ controlling: evidence,
     materialCitation: evidence.officialCitation });

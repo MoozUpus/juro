@@ -13,6 +13,13 @@ import {
   type ImmutableCustomArtifactWrite,
 } from "./custom-hybrid-index";
 import { customCurrentSha256, serializeCustomCurrentArtifact } from "./custom-current-build";
+import {
+  legalIdentifierSchema,
+  legalLanguageSchema,
+  legalScriptSchema,
+  sha256Schema,
+  utcInstantSchema,
+} from "./target-domain-schemas";
 
 const MAGIC = new TextEncoder().encode("JBM25RT1");
 const HEADER_SIZE = 16;
@@ -21,6 +28,33 @@ const MAX_POSTING_BLOCK_BYTES = 1024 * 1024;
 const ORDINAL_MAPPING_PAGE_SIZE = 32_768;
 const MEMBERSHIP_PARTITIONS = 64;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+
+export const customRuntimeLegalIdentitySchema = z.object({
+  legalIdentitySha256: sha256Schema,
+  legalInstrumentId: legalIdentifierSchema,
+  officialExpressionId: legalIdentifierSchema,
+  textRevisionId: legalIdentifierSchema,
+  provisionConceptId: legalIdentifierSchema,
+  provisionRenditionId: legalIdentifierSchema,
+  evidenceProvisionRenditionId: legalIdentifierSchema,
+  languageTag: legalLanguageSchema,
+  script: legalScriptSchema,
+  textualAuthority: z.enum(["controlling", "official_translation", "unknown"]),
+  validFrom: utcInstantSchema,
+  validTo: utcInstantSchema.nullable(),
+  evidence: z.object({
+    r2Key: z.string().min(1).max(1_024),
+    byteCount: z.number().int().positive(),
+    sha256: sha256Schema,
+    sourceNormalizedSha256: sha256Schema,
+    mediaType: z.enum(["application/json; charset=utf-8", "text/plain;charset=utf-8"]),
+  }).strict(),
+  citation: z.object({
+    label: z.string().min(1).max(2_300),
+    url: z.string().url().max(2_048),
+  }).strict(),
+}).strict();
+export type CustomRuntimeLegalIdentity = z.infer<typeof customRuntimeLegalIdentitySchema>;
 
 type RuntimeDocumentReference = { key: string; sizeBytes: number; sha256: string };
 
@@ -114,6 +148,9 @@ export async function buildCustomBm25RuntimeArtifacts(input: {
   resolveLegalIdentitySha256?: (
     itemKeys: readonly string[],
   ) => Promise<ReadonlyMap<string, string>>;
+  resolveRuntimeLegalIdentities?: (
+    itemKeys: readonly string[],
+  ) => Promise<ReadonlyMap<string, CustomRuntimeLegalIdentity>>;
 }): Promise<{
   descriptor: CustomBm25RuntimeDescriptor;
   descriptorBytes: Uint8Array;
@@ -174,15 +211,24 @@ export async function buildCustomBm25RuntimeArtifacts(input: {
       left.itemKey.localeCompare(right.itemKey));
     const legalIdentities = input.resolveLegalIdentitySha256
       ? await input.resolveLegalIdentitySha256(items.map(({ itemKey }) => itemKey)) : null;
+    const runtimeIdentities = input.resolveRuntimeLegalIdentities
+      ? await input.resolveRuntimeLegalIdentities(items.map(({ itemKey }) => itemKey)) : null;
     if (legalIdentities && (legalIdentities.size !== items.length
       || items.some(({ itemKey }) => !digest.safeParse(legalIdentities.get(itemKey)).success))) {
+      throw new TypeError("CUSTOM_BM25_RUNTIME_MEMBERSHIP_INVALID");
+    }
+    if (runtimeIdentities && (runtimeIdentities.size !== items.length
+      || items.some(({ itemKey }) => !customRuntimeLegalIdentitySchema
+        .safeParse(runtimeIdentities.get(itemKey)).success))) {
       throw new TypeError("CUSTOM_BM25_RUNTIME_MEMBERSHIP_INVALID");
     }
     const bytes = serializeCustomCurrentArtifact({ schemaVersion: 1,
       releaseId: input.releaseId, partition,
       items: items.map((item) => ({ ...item,
         ...(legalIdentities
-          ? { legalIdentitySha256: legalIdentities.get(item.itemKey)! } : {}) })) });
+          ? { legalIdentitySha256: legalIdentities.get(item.itemKey)! } : {}),
+        ...(runtimeIdentities
+          ? { legalIdentity: runtimeIdentities.get(item.itemKey)! } : {}) })) });
     const sha256 = await customCurrentSha256(bytes);
     membershipPages.push({ bytes, reference: {
       key: `search-releases/${input.releaseId}/runtime/membership/${partition}-${sha256}.json`,
@@ -284,7 +330,8 @@ export async function resolveCustomBm25RuntimeMembershipEntries(
   releaseId: string,
   mappingInventorySha256: string,
   itemKeys: readonly string[],
-): Promise<Map<string, { ordinal: number; legalIdentitySha256: string | null }> | null> {
+): Promise<Map<string, { ordinal: number; legalIdentitySha256: string | null;
+  legalIdentity?: CustomRuntimeLegalIdentity }> | null> {
   const sha256 = digest.parse(mappingInventorySha256);
   const key = `search-releases/${releaseId}/runtime/mappings-${sha256}.json`;
   const object = await bucket.get(key);
@@ -309,7 +356,8 @@ export async function resolveCustomBm25RuntimeMembershipEntries(
     group.push(itemKey);
     requested.set(partition, group);
   }
-  const resolved = new Map<string, { ordinal: number; legalIdentitySha256: string | null }>();
+  const resolved = new Map<string, { ordinal: number; legalIdentitySha256: string | null;
+    legalIdentity?: CustomRuntimeLegalIdentity }>();
   const groups = [...requested.entries()];
   for (let offset = 0; offset < groups.length; offset += 6) {
     await Promise.all(groups.slice(offset, offset + 6).map(async ([partition, keys]) => {
@@ -317,7 +365,8 @@ export async function resolveCustomBm25RuntimeMembershipEntries(
       if (!reference) return false;
       const page = z.object({ schemaVersion: z.literal(1), releaseId: z.literal(releaseId),
         partition: z.literal(partition), items: z.array(z.object({ itemKey: z.string().min(1).max(700),
-          ordinal: z.number().int().nonnegative(), legalIdentitySha256: digest.optional() }).strict())
+          ordinal: z.number().int().nonnegative(), legalIdentitySha256: digest.optional(),
+          legalIdentity: customRuntimeLegalIdentitySchema.optional() }).strict())
           .length(reference.count) }).strict()
         .parse(await readJson<unknown>(bucket, reference));
       const members = new Map(page.items.map((item) => [item.itemKey, item]));
@@ -327,7 +376,8 @@ export async function resolveCustomBm25RuntimeMembershipEntries(
       for (const itemKey of keys) {
         const item = members.get(itemKey);
         if (item) resolved.set(itemKey, { ordinal: item.ordinal,
-          legalIdentitySha256: item.legalIdentitySha256 ?? null });
+          legalIdentitySha256: item.legalIdentitySha256 ?? item.legalIdentity?.legalIdentitySha256 ?? null,
+          ...(item.legalIdentity ? { legalIdentity: item.legalIdentity } : {}) });
       }
     }));
   }

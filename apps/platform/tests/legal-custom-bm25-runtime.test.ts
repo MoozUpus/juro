@@ -56,6 +56,27 @@ test("runtime BM25 projection preserves durable ordinals without loading the JSO
     manifest: built.manifest,
     resolveLegalIdentitySha256: async (itemKeys) => new Map(itemKeys.map((itemKey, index) =>
       [itemKey, String(index + 1).padStart(64, "0")])),
+    resolveRuntimeLegalIdentities: async (itemKeys) => new Map(itemKeys.map((itemKey, index) => [
+      itemKey,
+      {
+        legalIdentitySha256: String(index + 1).padStart(64, "0"),
+        legalInstrumentId: `instrument-${index}`,
+        officialExpressionId: `expression-${index}`,
+        textRevisionId: `revision-${index}`,
+        provisionConceptId: `concept-${index}`,
+        provisionRenditionId: `rendition-${index}`,
+        evidenceProvisionRenditionId: `rendition-${index}`,
+        languageTag: "en" as const,
+        script: "Latn" as const,
+        textualAuthority: "controlling" as const,
+        validFrom: "2026-01-01T00:00:00.000Z",
+        validTo: null,
+        evidence: { r2Key: `evidence-${index}.json`, byteCount: 10,
+          sha256: "a".repeat(64), sourceNormalizedSha256: "b".repeat(64),
+          mediaType: "application/json; charset=utf-8" as const },
+        citation: { label: `Act ${index} — Article 1`, url: "https://lex.uz/docs/123" },
+      },
+    ])),
   });
   const bucket = new MemoryR2();
   bucket.objects.set(runtime.documentsReference.key, runtime.documentsBytes);
@@ -97,5 +118,8 @@ test("runtime BM25 projection preserves durable ordinals without loading the JSO
   assert.equal((await resolveCustomBm25RuntimeMembershipEntries(bucket as unknown as R2Bucket,
     runtime.descriptor.releaseId, runtime.membership.reference.sha256,
     ["chunk-a"]))?.get("chunk-a")?.legalIdentitySha256, "1".padStart(64, "0"));
+  assert.equal((await resolveCustomBm25RuntimeMembershipEntries(bucket as unknown as R2Bucket,
+    runtime.descriptor.releaseId, runtime.membership.reference.sha256,
+    ["chunk-a"]))?.get("chunk-a")?.legalIdentity?.provisionRenditionId, "rendition-0");
   assert.equal(termHash.length, 64);
 });

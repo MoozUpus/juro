@@ -13,9 +13,11 @@ import {
 import { CUSTOM_SEARCH_PATH, CUSTOM_SEARCH_SERVICE_MARKER, customSearchResponseSchema }
   from "./custom-search-service";
 import { customReleaseGovernanceSchema } from "./custom-release-governance";
-import { resolveCustomBm25RuntimeMembershipEntries } from "./custom-bm25-runtime";
+import { resolveCustomBm25RuntimeMembershipEntries, type CustomRuntimeLegalIdentity }
+  from "./custom-bm25-runtime";
 import { resolveCustomTrustedLegalTitles } from "./custom-search-trusted-titles";
 import { assertCompleteCorpusCurrentInterval, resolveCompleteCorpusEvidence, resolveControllingEvidence,
+  resolveR2NativeCustomEvidence,
   type LegalEvidenceBucket } from "./target-evidence";
 import { resolveProvisionLineage } from "./target-lineage";
 import { governedAiSearchConfigurationSchema } from "./target-governance";
@@ -252,6 +254,7 @@ async function resolveCustomChunkIdentities(
 export function createRuntimeCandidateCatalog(
   db: D1Database,
   bucket?: Pick<LegalEvidenceBucket, "get">,
+  r2IdentityByRendition = new Map<string, CustomRuntimeLegalIdentity>(),
 ) {
   return {
     async revalidate(
@@ -284,10 +287,15 @@ export function createRuntimeCandidateCatalog(
       const customEligibility = release.capability === "history"
         ? "historical_eligible" : "current_eligible";
       let compactMembership: Map<string, { ordinal: number;
-        legalIdentitySha256: string | null }> | null = null;
+        legalIdentitySha256: string | null; legalIdentity?: CustomRuntimeLegalIdentity }> | null = null;
       if (custom && bucket) {
         const component = await db.prepare(`SELECT mapping_inventory_sha256 AS mappingInventorySha256
-          FROM legal_custom_search_runtime_components WHERE search_release_id=?`).bind(release.id)
+          FROM legal_custom_search_r2_runtime_roots WHERE search_release_id=?
+          UNION ALL
+          SELECT mapping_inventory_sha256 FROM legal_custom_search_runtime_components
+          WHERE search_release_id=? AND NOT EXISTS (
+            SELECT 1 FROM legal_custom_search_r2_runtime_roots WHERE search_release_id=?)
+          LIMIT 1`).bind(release.id, release.id, release.id)
           .first<{ mappingInventorySha256: string }>();
         if (!component) throw new TypeError("TARGET_CUSTOM_RUNTIME_COMPONENT_MISSING");
         const prefix = `search-releases/${release.id}/`;
@@ -295,6 +303,25 @@ export function createRuntimeCandidateCatalog(
           component.mappingInventorySha256, uniqueKeys.map((key) => key.slice(prefix.length)));
         if (compactMembership && compactMembership.size !== uniqueKeys.length) {
           throw new TypeError("TARGET_CANDIDATE_NOT_IN_PINNED_RELEASE");
+        }
+      }
+      const r2NativeIdentities = compactMembership
+        && [...compactMembership.values()].every(({ legalIdentity }) => legalIdentity)
+        ? new Map(uniqueKeys.map((key) => [key, compactMembership!.get(
+          key.slice(`search-releases/${release.id}/`.length),
+        )!.legalIdentity!])) : null;
+      if (r2NativeIdentities) {
+        for (const key of uniqueKeys) {
+          const identity = r2NativeIdentities.get(key)!;
+          const canonicalChunkId = key.slice(`search-releases/${release.id}/`.length);
+          rows.push({ itemKey: key, canonicalChunkId,
+            provisionRenditionId: identity.provisionRenditionId,
+            textRevisionId: identity.textRevisionId,
+            provisionConceptId: identity.provisionConceptId,
+            languageTag: identity.languageTag,
+            textualAuthority: identity.textualAuthority,
+            validFrom: identity.validFrom, validTo: identity.validTo });
+          r2IdentityByRendition.set(identity.provisionRenditionId, identity);
         }
       }
       const prefix = `search-releases/${release.id}/`;
@@ -307,7 +334,7 @@ export function createRuntimeCandidateCatalog(
         })) : null;
       const customIdentities = anchoredIdentities ?? (compactMembership && bucket
         ? await resolveCustomChunkIdentities(bucket, release.id, uniqueKeys) : null);
-      for (let offset = 0; offset < uniqueKeys.length; offset += 80) {
+      for (let offset = 0; !r2NativeIdentities && offset < uniqueKeys.length; offset += 80) {
         const keys = uniqueKeys.slice(offset, offset + 80);
         if (keys.length === 0) continue;
         const identities = customIdentities
@@ -443,8 +470,11 @@ export function createRuntimeCustomSearchProvider(input: {
     if (!releaseId) throw new TypeError("CUSTOM_SEARCH_PINNED_RELEASE_REQUIRED");
     const row = await input.db.prepare(`SELECT release.id,release.configuration_identity AS configurationIdentity
       FROM legal_search_releases release
-      JOIN legal_custom_search_runtime_components runtime ON runtime.search_release_id=release.id
-      WHERE release.environment=? AND release.id=? AND release.capability=?
+      WHERE (EXISTS (SELECT 1 FROM legal_custom_search_r2_runtime_roots runtime
+          WHERE runtime.search_release_id=release.id)
+        OR EXISTS (SELECT 1 FROM legal_custom_search_runtime_components runtime
+          WHERE runtime.search_release_id=release.id))
+        AND release.environment=? AND release.id=? AND release.capability=?
         AND release.status='sealed'`).bind(input.environment, releaseId, input.capability)
       .first<{ id: string; configurationIdentity: string }>();
     if (!row) throw new TypeError("CUSTOM_SEARCH_ACTIVE_RELEASE_UNAVAILABLE");
@@ -512,24 +542,10 @@ export async function resolveRuntimeTrustedLegalTitles(db: D1Database, releaseId
   return result.results.map((row) => z.string().trim().min(3).max(300).parse(row.title));
 }
 
-function createRuntimeCandidateIndex(
-  dependencies: RuntimeDependencies,
-  provider: AiSearchProvider,
-) {
+function createRuntimeCandidateIndex(provider: AiSearchProvider) {
   return createAiSearchCandidateIndex(provider, {
-    async attestPrivateNames(input) {
-      return serviceJson(
-        dependencies.reasoningService,
-        dependencies.environment,
-        "/internal/legal-corpus/privacy/classify-private-names",
-        input,
-      );
-    },
     emitTelemetry(event) {
       console.log(JSON.stringify({ event: "legal_target_candidate", ...event }));
-    },
-    async resolveTrustedLegalTitles(release) {
-      return resolveRuntimeTrustedLegalTitles(dependencies.db, release.id);
     },
   });
 }
@@ -540,6 +556,7 @@ function createRuntimeRetriever(
   releaseResolver: RuntimeReleaseResolver,
 ): TargetLegalAnswerRetriever {
   const { environment, db, evidenceBucket, customArtifactBucket, reasoningService } = dependencies;
+  const r2IdentityByRendition = new Map<string, CustomRuntimeLegalIdentity>();
   return createTargetLegalAnswerRetriever({
     environment,
     interpreter: {
@@ -556,12 +573,20 @@ function createRuntimeRetriever(
     },
     releaseResolver,
     candidateIndex,
-    candidateCatalog: createRuntimeCandidateCatalog(db, customArtifactBucket ?? evidenceBucket),
+    candidateCatalog: createRuntimeCandidateCatalog(
+      db,
+      customArtifactBucket ?? evidenceBucket,
+      r2IdentityByRendition,
+    ),
     evidenceResolver: {
       async resolveControlling(provisionRenditionId, endpoint, context) {
         if (context.release.instances.some((instance) =>
           instance.id === customInstanceId("current", environment)
           || instance.id === customInstanceId("history", environment))) {
+          const r2Identity = r2IdentityByRendition.get(provisionRenditionId);
+          if (r2Identity) return resolveR2NativeCustomEvidence(
+            { bucket: evidenceBucket, currentAt: context.currentAt }, r2Identity, endpoint,
+          );
           return resolveCompleteCorpusEvidence(
             { db, bucket: evidenceBucket, environment,
               releaseId: context.release.id, currentAt: context.currentAt }, provisionRenditionId, endpoint,
@@ -654,7 +679,7 @@ export function createRuntimeTargetLegalAnswerRetriever(
           ?? Promise.reject(new TypeError("TARGET_CANDIDATE_PROVIDER_UNAVAILABLE"));
     },
   };
-  const candidateIndex = createRuntimeCandidateIndex(dependencies, provider);
+  const candidateIndex = createRuntimeCandidateIndex(provider);
   const resolvePinnedRelease = async (searchRelease: { id: string; capability: string }) => {
         const custom = await db.prepare(`SELECT
             release.configuration_identity AS configurationIdentity,
@@ -666,7 +691,13 @@ export function createRuntimeTargetLegalAnswerRetriever(
           FROM legal_search_releases release
           JOIN legal_custom_search_release_components component
             ON component.search_release_id=release.id
-          JOIN legal_custom_search_runtime_components runtime
+          JOIN (SELECT search_release_id,mapping_count
+            FROM legal_custom_search_r2_runtime_roots
+            UNION ALL
+            SELECT legacy.search_release_id,legacy.mapping_count
+            FROM legal_custom_search_runtime_components legacy
+            WHERE NOT EXISTS (SELECT 1 FROM legal_custom_search_r2_runtime_roots current
+              WHERE current.search_release_id=legacy.search_release_id)) runtime
             ON runtime.search_release_id=release.id
           JOIN legal_search_release_governance governance
             ON governance.search_release_id=release.id
@@ -868,7 +899,7 @@ export async function createRuntimeTargetActivationSetEvaluation(input: {
         },
       };
       const retriever = createRuntimeRetriever(dependencies,
-        createRuntimeCandidateIndex(dependencies, provider), releaseResolver);
+        createRuntimeCandidateIndex(provider), releaseResolver);
       return { result: await retriever.answer(question), observation };
     },
   };
@@ -1056,7 +1087,7 @@ export async function createRuntimeTargetCandidateEvaluationRetriever(
   };
   return createRuntimeRetriever(
     dependencies,
-    createRuntimeCandidateIndex(dependencies, provider),
+    createRuntimeCandidateIndex(provider),
     { resolve: async (endpoint) => endpoint.kind === "current" ? pinnedRelease : null },
   );
 }

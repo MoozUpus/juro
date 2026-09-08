@@ -125,7 +125,12 @@ async function loadDescriptor(env: CustomSearchEnv, releaseId: string) {
   const expectedSha256 = sha256Schema.parse(env.CUSTOM_RUNTIME_DESCRIPTOR_SHA256);
   const component = await env.CATALOG_DB.prepare(`SELECT runtime_descriptor_r2_key AS descriptorKey,
       runtime_descriptor_sha256 AS descriptorSha256,sparse_manifest_sha256 AS sparseManifestSha256
-    FROM legal_custom_search_runtime_components WHERE search_release_id=?`).bind(releaseId)
+    FROM legal_custom_search_r2_runtime_roots WHERE search_release_id=?
+    UNION ALL
+    SELECT runtime_descriptor_r2_key,runtime_descriptor_sha256,sparse_manifest_sha256
+    FROM legal_custom_search_runtime_components WHERE search_release_id=?
+      AND NOT EXISTS (SELECT 1 FROM legal_custom_search_r2_runtime_roots WHERE search_release_id=?)
+    LIMIT 1`).bind(releaseId, releaseId, releaseId)
     .first<{ descriptorKey: string; descriptorSha256: string; sparseManifestSha256: string }>();
   if (!component || component.descriptorKey !== expectedKey
     || component.descriptorSha256 !== expectedSha256) {

@@ -218,7 +218,7 @@ test("custom governance rejects changed roots, missing checks, unsafe privacy, a
     input => { input.smoke.checks[0]!.passed = false; },
     input => { input.smoke.completedAt = "2026-09-06T00:11:00.000Z"; },
     input => { input.configuration.gatewayPayloadLogging = true; },
-    input => { input.privacy.deterministicTransformAttested = false; },
+    input => { input.privacy!.contentFreeTelemetryAttested = false; },
     input => { input.cost.reservedCostUsd = 17; },
     input => { input.capacity.projectedBytes = 7_000_000_000; },
   ];
