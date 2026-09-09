@@ -64,7 +64,7 @@ const supportAssessmentProviderSchema = z.object({
   }).strict()).max(3),
 }).strict();
 const supportAssessmentJsonSchema = z.toJSONSchema(supportAssessmentProviderSchema, { io: "output" });
-const SUPPORT_ASSESSMENT_BATCH_SIZE = 8;
+const SUPPORT_ASSESSMENT_BATCH_SIZE = 6;
 
 const formulationProviderSchema = z.object({
   ...questionInterpretationPlanSchema.shape.formulations.element.shape,
@@ -303,8 +303,10 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       parse: (output) => supportAssessmentProviderSchema.parse(output),
       instructions: [
         "Assess whether each verified official provision directly supports each stated legal coverage requirement.",
+        "Assess every candidate independently and return every direct support mapping, not merely the best or shortest set.",
         "A search match, shared topic, title, actor, or procedural deadline is not support by itself.",
         "Mark support only when the supplied provision text entails or directly establishes the material legal proposition.",
+        "When both a directly governing codified provision and interpretive, procedural, or cross-referencing guidance support a requirement, retain both mappings; downstream selection decides priority.",
         "Do not answer the user's question, invent rules, infer missing article text, or use outside knowledge.",
         "A provision may support requirements from any retrieval formulation, and may support none.",
         "When a supporting provision explicitly cites another provision that is necessary to understand a supported requirement and no existing requirement covers it, add one concise additional requirement grounded only in that citation.",
@@ -325,11 +327,11 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       // grow with the complete selection pool.
       firstByteTimeoutMs: 10_000,
       totalResponseTimeoutMs: 12_000,
-      maxOutputTokens: 1_200,
+      maxOutputTokens: 2_400,
       // This is bounded textual entailment classification, not open-ended
       // legal reasoning. Starting output directly avoids spending the target
       // deadline on hidden reasoning before the first structured token.
-      reasoningEffort: "none",
+      reasoningEffort: "low",
       textVerbosity: "low",
     });
     return supportAssessmentProviderSchema.parse({
