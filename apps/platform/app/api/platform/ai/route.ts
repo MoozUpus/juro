@@ -38,7 +38,6 @@ import {
 import { discoverOfficialLexUrls } from "../../../../lib/legal/openai-lex-discovery";
 import {
   fallbackLegalRetrievalUnderstanding,
-  rerankLegalCorpusCandidates,
   understandLegalRetrievalQuery,
 } from "../../../../lib/legal/legal-retrieval-understanding";
 import {
@@ -122,6 +121,29 @@ function response(body: unknown, status = 200) {
   });
 }
 
+function legalSourceUnavailableResponse(locale: AiOutputLocale) {
+  return response({
+    code: "LEGAL_SOURCE_UNAVAILABLE",
+    error: aiText(locale,
+      "Официальные источники временно недоступны. Лимит ответа не списан; повторите поиск.",
+      "Rasmiy manbalar vaqtincha mavjud emas. Javob limiti yechilmadi; qidiruvni takrorlang.",
+      "Official sources are temporarily unavailable. Your answer limit was not charged; retry the search."),
+  }, 503);
+}
+
+/** Rejects on a stage deadline even when an underlying remote D1 call ignores AbortSignal. */
+function waitForStage<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    operation.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
 async function workspaceForAiRequest(
   request: Request,
   user: Awaited<ReturnType<typeof requireApiUser>>,
@@ -130,34 +152,6 @@ async function workspaceForAiRequest(
   if (!requestedWorkspaceId) return workspaceForUser(user);
   if (!isWorkspaceId(requestedWorkspaceId)) return null;
   return workspaceForUserById(user.id, requestedWorkspaceId);
-}
-
-function unavailableLegalRetrieval(code: string): LegalChatSourceRetrieval {
-  const freshness = legalDatabaseFreshnessFromAsOf("unavailable");
-  return {
-    sources: [],
-    freshness,
-    legalDatabaseAsOf: freshness.asOf,
-    sourceAccessMode: "approved_package",
-    sourcesRetrievedAt: null,
-    sourceValidationStatus: "unavailable",
-    errors: [{ code }],
-    evidence: [],
-    coverageStatus: "no_coverage",
-    retrievalTelemetry: {
-      indexedHitCount: 0,
-      liveHitCount: 0,
-      queriesRun: 0,
-      retrievedCandidateCount: 0,
-      rerankCandidateCount: 0,
-      rerankedCandidateCount: 0,
-      rerankingOutcome: "not_configured",
-      rerankingFailureCode: null,
-      exactWindowSuccesses: 0,
-      denseUnavailable: false,
-      fusionOutcome: "none",
-    },
-  };
 }
 
 export const GET = withApiErrors(async function GET(request: Request) {
@@ -231,6 +225,34 @@ type AiRouteProgress = LegalAiProgress
   | { stage: "internet_search_started" }
   | { stage: "source_verified" }
   | {
+  stage: "retrieval_trace";
+  trace: {
+    indexVersion: string;
+    rerankerVersion: string;
+    retrievalPolicyVersion: string;
+    cacheOutcome: "disabled" | "hit" | "miss" | "refresh";
+    planningAvailable: boolean;
+    coverageStatus: LegalChatSourceRetrieval["coverageStatus"];
+    queriesRun: number;
+    retrievedCandidateCount: number;
+    rerankCandidateCount: number;
+    rerankedCandidateCount: number;
+    repairQueriesRun: number;
+    rerankingOutcome: string;
+    rerankingFailureCode: string | null;
+    denseUnavailable: boolean;
+    targetOutcome: string | null;
+    targetFailureCode: string | null;
+    targetLatencyMs: number | null;
+    contextualPlanningLatencyMs: number | null;
+    targetBudgetMs: number | null;
+    fusionOutcome: string;
+    indexedRetrievalMs: number;
+    requirements: Array<{ id: string; status: string; provisionIds: string[] }>;
+    selectedProvisions: NonNullable<LegalChatSourceRetrieval["retrievalTelemetry"]>["selectedProvisions"];
+  };
+}
+  | {
   stage: "preliminary";
   preliminary: GroundedLegalPreliminary;
 };
@@ -292,6 +314,9 @@ async function executePostWithinBudget(
   const locale = parseAiOutputLocale(body?.locale);
   const discoveryLocale = aiDiscoveryLocale(locale);
   const db = requireD1();
+  const requestHost = new URL(request.url).hostname.toLocaleLowerCase("en");
+  const developmentTraceEnabled = runtimeEnv().APP_ENV === "development"
+    && ["localhost", "127.0.0.1", "::1"].includes(requestHost);
   let preliminaryAtMs: number | null = null;
   let providerFirstDeltaAtMs: number | null = null;
   let fallbackFromProgress: "openai" | "anthropic" | null = null;
@@ -466,10 +491,8 @@ async function executePostWithinBudget(
   }
   const rewrite = gateway.rewriteFollowUp({ question, locale, conversationHistory });
   const bindings = runtimeEnv();
-  const remoteDevelopmentCorpus = bindings.APP_ENV === "development"
-    && bindings.LEGAL_CORPUS_REMOTE_READ_ENABLED === "true";
   const understandingStage = budget.beginStage("query_understanding", {
-    timeoutMs: remoteDevelopmentCorpus ? 14_500 : 6_500,
+    timeoutMs: 6_500,
   });
   let queryUnderstandingFallback = false;
   const retrievalUnderstandingPromise = (async () => {
@@ -485,8 +508,11 @@ async function executePostWithinBudget(
         requestId: `${idempotencyKey}:understanding`,
         safetyIdentifier,
         signal: understandingStage.signal,
-        timeoutMs: Math.min(remoteDevelopmentCorpus ? 14_200 : 6_200, budget.remainingMs),
-        maxAttempts: remoteDevelopmentCorpus ? 2 : 1,
+        timeoutMs: Math.min(6_200, budget.remainingMs),
+        // Retry one fast provider/network failure inside the existing stage
+        // deadline. The planner remains fail-closed if neither attempt can
+        // produce the bounded semantic plan.
+        maxAttempts: 2,
         onTelemetry: async (event) => {
           try {
             const completedAt = isoNow();
@@ -610,100 +636,29 @@ async function executePostWithinBudget(
     }
   })();
 
-  // This progress stage refers to JURO's stored legal corpus, not to private
-  // uploads. The corpus retriever falls back to live Lex.uz only when indexed
-  // coverage is insufficient or stale.
+  // Private uploads are retrieved above. This authority branch calls the
+  // R2-native sparse+dense service first and uses validated live Lex only as
+  // the next Source Ladder rung.
   await emitProgress({ stage: "document_search_started" });
+  const retrievalStartedAtMs = budget.elapsedMs;
   const retrievalStage = budget.beginStage("live_lex_retrieval", {
-    // Four bounded staging-D1 reads can take about forty seconds over the
-    // remote binding. Leave enough room for them to finish without poisoning
-    // the separate semantic-reranking signal below.
-    timeoutMs: remoteDevelopmentCorpus ? 55_000 : 13_000,
+    timeoutMs: 13_000,
   });
-  const retrieval: LegalChatSourceRetrieval = await (async () => {
+  const retrievalResult: LegalChatSourceRetrieval | Response = await (async () => {
     try {
-      const result = await retrieveCorpusAwareLegalSources({
-        env: { ...runtimeEnv(), DB: db },
-        query: rewrite.query,
+      const result = await waitForStage(retrieveCorpusAwareLegalSources({
+        query: question,
         locale: discoveryLocale,
-        indexQueries: retrievalUnderstandingPromise.then((understanding) => understanding.corpusQueries),
-        rerankingQuestion: retrievalUnderstandingPromise.then((understanding) => understanding.standaloneQuestion),
-        requiredConcepts: retrievalUnderstandingPromise.then((understanding) => understanding.requiredConcepts),
+        targetService: bindings.LEGAL_RETRIEVAL_SERVICE,
+        targetEnvironment: bindings.APP_ENV ?? "development",
+        targetQuestionId: idempotencyKey,
+        contextualQuestion: retrievalUnderstandingPromise.then((understanding) => understanding.standaloneQuestion),
+        applicableAt: applicableAt?.toISOString(),
         lexSearchQueries: retrievalUnderstandingPromise.then((understanding) => understanding.lexSearchQueries),
         signal: retrievalStage.signal,
-        limit: 8,
-        budgetMs: remoteDevelopmentCorpus ? 36_000 : 12_500,
-        scope: {
-          tenantId: workspace.id,
-          userId: user.id,
-          matterId: body?.caseId ?? null,
-          asOfDate: applicableAt ? body?.legalContextDate ?? null : null,
-        },
-        correlationId: idempotencyKey,
+        limit: 12,
+        budgetMs: 12_500,
         onLiveSearchStarted: () => emitProgress({ stage: "lex_search_started" }),
-        rerankCandidates: async ({ question: candidateQuestion, candidates, limit }) => {
-          if (budget.remainingMs < 9_000) throw new Error("RERANK_BUDGET_UNAVAILABLE");
-          // The bounded 12-passage packet is substantially larger than query
-          // understanding. Provider response-start latency can legitimately
-          // exceed seven seconds, so give this independent gate a realistic
-          // window while keeping it strictly bounded.
-          const rerankingStage = budget.beginStage("corpus_reranking", { timeoutMs: 14_500 });
-          try {
-            const usage = await usageSummary(db, workspace.id, user.id, answerCycleLimit);
-            if (usage.limit !== null && usage.used >= usage.limit) throw new Error("PLAN_LIMIT_PRECHECK");
-            await assertProviderCallAllowed({ db, environment: providerEnvironment, provider: "openai" });
-            const startedAt = isoNow();
-            const ranked = await rerankLegalCorpusCandidates({
-              question: candidateQuestion,
-              locale,
-              candidates,
-              limit,
-              requestId: `${idempotencyKey}:corpus-reranking`,
-              safetyIdentifier,
-              // Candidate retrieval and semantic ranking are separate
-              // operations. A slow remote D1 read must not hand the reranker
-              // an already-aborted retrieval signal.
-              signal: rerankingStage.signal,
-              timeoutMs: Math.min(14_000, Math.max(1, budget.remainingMs - 3_000)),
-              onTelemetry: async (event) => {
-                try {
-                  const completedAt = isoNow();
-                  const eventHash = (await sha256Json({
-                    idempotencyKey,
-                    providerResponseId: event.providerResponseId,
-                    startedAt,
-                    tier: "corpus_reranking",
-                  })).slice(0, 48);
-                  await recordProviderUsage({
-                    db,
-                    environment: providerEnvironment,
-                    workspaceId: workspace.id,
-                    userId: user.id,
-                    feature: "legal_chat",
-                    operation: "responses",
-                    provider: "openai",
-                    model: event.model,
-                    providerRequestId: event.providerResponseId,
-                    inputTokens: event.inputTokens,
-                    outputTokens: event.outputTokens,
-                    cachedInputTokens: 0,
-                    status: "succeeded",
-                    startedAt,
-                    completedAt,
-                    eventId: `provider_usage_corpus_reranking_${eventHash}`,
-                  });
-                } catch {
-                  console.warn(JSON.stringify({ event: "ai.corpus_reranking_usage_deferred" }));
-                }
-              },
-            });
-            rerankingStage.complete();
-            return ranked;
-          } catch (error) {
-            rerankingStage.fail();
-            throw error;
-          }
-        },
         discoverOfficialUrls: async (query, discoveryLocale, discoverySignal) => {
           const usage = await usageSummary(db, workspace.id, user.id, answerCycleLimit);
           if (usage.limit !== null && usage.used >= usage.limit) throw new Error("PLAN_LIMIT_PRECHECK");
@@ -748,20 +703,64 @@ async function executePostWithinBudget(
             },
           });
         },
-      });
+      }), retrievalStage.signal);
       retrievalStage.complete();
       return result;
     } catch (error) {
       retrievalStage.fail();
       if (signal.aborted) throw error;
-      // A timed-out remote D1 request may still be finishing below the
-      // platform boundary. Starting the same corpus search again here doubled
-      // latency and could consume the shared provider deadline. Fail closed
-      // with a typed empty packet; the normal answer path will ask for facts
-      // and will not publish model knowledge as law.
-      return unavailableLegalRetrieval("LEGAL_RETRIEVAL_UNAVAILABLE");
+      // An operational retrieval failure is not evidence that the applicable
+      // law is absent. Stop before reserving/persisting an answer or consuming
+      // quota, and let the client offer a fresh, explicit research retry.
+      return legalSourceUnavailableResponse(locale);
     }
   })();
+  if (retrievalResult instanceof Response) return retrievalResult;
+  const retrieval = retrievalResult;
+  if (developmentTraceEnabled) {
+    await emitProgress({
+      stage: "retrieval_trace",
+      trace: {
+        indexVersion: "direct-lex",
+        rerankerVersion: "not-configured",
+        retrievalPolicyVersion: "direct-lex-v1",
+        cacheOutcome: "disabled",
+        planningAvailable: !queryUnderstandingFallback,
+        coverageStatus: retrieval.coverageStatus,
+        queriesRun: retrieval.retrievalTelemetry?.queriesRun ?? 0,
+        retrievedCandidateCount: retrieval.retrievalTelemetry?.retrievedCandidateCount ?? 0,
+        rerankCandidateCount: retrieval.retrievalTelemetry?.rerankCandidateCount ?? 0,
+        rerankedCandidateCount: retrieval.retrievalTelemetry?.rerankedCandidateCount ?? 0,
+        repairQueriesRun: retrieval.retrievalTelemetry?.repairQueriesRun ?? 0,
+        rerankingOutcome: retrieval.retrievalTelemetry?.rerankingOutcome ?? "not_configured",
+        rerankingFailureCode: retrieval.retrievalTelemetry?.rerankingFailureCode ?? null,
+        denseUnavailable: retrieval.retrievalTelemetry?.denseUnavailable ?? false,
+        targetOutcome: retrieval.retrievalTelemetry?.targetOutcome ?? null,
+        targetFailureCode: retrieval.retrievalTelemetry?.targetFailureCode ?? null,
+        targetLatencyMs: retrieval.retrievalTelemetry?.targetLatencyMs ?? null,
+        contextualPlanningLatencyMs: retrieval.retrievalTelemetry?.contextualPlanningLatencyMs ?? null,
+        targetBudgetMs: retrieval.retrievalTelemetry?.targetBudgetMs ?? null,
+        fusionOutcome: retrieval.retrievalTelemetry?.fusionOutcome ?? "none",
+        indexedRetrievalMs: Math.max(0, Math.round(budget.elapsedMs - retrievalStartedAtMs)),
+        requirements: (retrieval.retrievalTelemetry?.coverageRequirements ?? []).map((requirement) => ({
+          id: requirement.requirementId,
+          status: requirement.status,
+          provisionIds: requirement.provisionIds,
+        })),
+        selectedProvisions: retrieval.retrievalTelemetry?.selectedProvisions ?? [],
+      },
+    });
+  }
+  console.info(JSON.stringify({
+    event: "ai.legal_retrieval_completed",
+    coverageStatus: retrieval.coverageStatus,
+    sourceValidationStatus: retrieval.sourceValidationStatus,
+    sourceCount: retrieval.sources.length,
+    errorCodes: retrieval.errors.map((item) => item.code).slice(0, 4),
+    telemetry: retrieval.retrievalTelemetry ?? null,
+    elapsedMs: Math.round(budget.elapsedMs),
+    stages: budget.snapshot().stages,
+  }));
 
   const retrievalUnderstanding = await retrievalUnderstandingPromise;
   const retrievalQuestion = retrievalUnderstanding.standaloneQuestion;
@@ -1293,7 +1292,9 @@ async function executePostWithinBudget(
   const branchId = crypto.randomUUID();
   const messageVersionId = crypto.randomUUID();
   const contentSha256 = await sha256Json(question);
-  const facts = result.assumptions.map((assumption) => ({ id: crypto.randomUUID(), statement: assumption.statement, status: "proposed" as const }));
+  // Legal findings and model uncertainty are not Case Facts. Facts are added
+  // only through an explicit user/document confirmation workflow.
+  const facts: Array<{ id: string; statement: string; status: "proposed" | "confirmed" | "rejected" }> = [];
   const statements = [
     ...(existingConversation ? [] : [db.prepare(
       "INSERT INTO conversations (id,workspace_id,owner_user_id,case_id,title,locale,status,created_at,updated_at) VALUES (?,?,?,?,?,?,'active',?,?)",
@@ -1309,9 +1310,6 @@ async function executePostWithinBudget(
       "INSERT INTO message_versions (id,conversation_id,branch_id,message_id,source_message_id,created_by_user_id,operation,version_number,content_sha256,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
     ).bind(messageVersionId, conversationId, branchId, userMessageId, branchInput.sourceMessageId, user.id, branchInput.operation, branchInput.versionNumber, contentSha256, now),
     db.prepare("UPDATE conversations SET updated_at=? WHERE id=? AND workspace_id=?").bind(now, conversationId, workspace.id),
-    ...facts.map((fact) => db.prepare(
-      "INSERT INTO confirmed_facts (id,conversation_id,case_id,statement,status,created_at,updated_at) VALUES (?,?,?,?,'proposed',?,?)",
-    ).bind(fact.id, conversationId, body?.caseId || null, fact.statement, now, now)),
     ...legalCitationStatements({
       db,
       sources,
@@ -1362,6 +1360,11 @@ async function executePostWithinBudget(
       rerankingFailureCode: retrieval.retrievalTelemetry?.rerankingFailureCode ?? null,
       exactWindowSuccesses: retrieval.retrievalTelemetry?.exactWindowSuccesses ?? 0,
       denseSearchUnavailable: retrieval.retrievalTelemetry?.denseUnavailable ?? false,
+      targetOutcome: retrieval.retrievalTelemetry?.targetOutcome ?? null,
+      targetFailureCode: retrieval.retrievalTelemetry?.targetFailureCode ?? null,
+      targetLatencyMs: retrieval.retrievalTelemetry?.targetLatencyMs ?? null,
+      contextualPlanningLatencyMs: retrieval.retrievalTelemetry?.contextualPlanningLatencyMs ?? null,
+      targetBudgetMs: retrieval.retrievalTelemetry?.targetBudgetMs ?? null,
       gatewayRefusalReason: result.responseKind === "clarification_required" ? "no_usable_evidence" : null,
       evidenceMode: result.evidenceMode ?? "none",
       coverageStatus,

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { matchesGlob } from "node:path";
 import test from "node:test";
 import {
   ATTACHED_PLATFORM_QUEUE_BINDINGS,
@@ -54,70 +53,14 @@ const source = JSON.parse(
 ) as WranglerConfig;
 
 const environments = ["development", "staging", "production"] as const;
-
 const productionMigrationPattern =
-  "./drizzle/{0121,012[4-9],01[3-9][0-9],0[2-9][0-9][0-9],[1-9][0-9][0-9][0-9]}_*.sql";
+  "./drizzle/{0121,012[4-9],013[0-9],014[0-9]}_*.sql";
 
-type ProductionD1MigrationBinding = {
-  binding: string;
-  database_name: string;
-  database_id: string;
-  migrations_dir: string;
-  migrations_pattern: string;
-};
-
-test("platform and legal-corpus Workers share future-safe production migration discovery", () => {
-  const legalCorpusConfig = JSON.parse(
-    readFileSync(new URL("../wrangler.legal-corpus.jsonc", import.meta.url), "utf8"),
-  ) as {
-    env: {
-      production: {
-        d1_databases: ProductionD1MigrationBinding[];
-      };
-    };
-  };
-  const platformDatabase = source.env.production
-    .d1_databases[0] as ProductionD1MigrationBinding;
-  const legalCorpusDatabase = legalCorpusConfig.env.production.d1_databases[0];
-
-  assert.deepEqual(legalCorpusDatabase, platformDatabase);
-  assert.equal(platformDatabase.migrations_pattern, productionMigrationPattern);
-
-  for (const migrationPath of [
-    "./drizzle/0121_fix.sql",
-    "./drizzle/0124_foundation.sql",
-    "./drizzle/0154_locale.sql",
-    "./drizzle/0200_future.sql",
-    "./drizzle/9999_future.sql",
-  ]) {
-    assert.equal(matchesGlob(migrationPath, productionMigrationPattern), true, migrationPath);
-  }
-  for (const migrationPath of [
-    "./drizzle/0120_historical.sql",
-    "./drizzle/0122_staging_only.sql",
-    "./drizzle/0123_staging_only.sql",
-    "./drizzle/10000_wrong_width.sql",
-    "./drizzle/0154_locale.txt",
-  ]) {
-    assert.equal(matchesGlob(migrationPath, productionMigrationPattern), false, migrationPath);
-  }
-});
-
-test("local staging-corpus mode remotes only a separately named corpus D1 binding", () => {
+test("local development has no retired staging corpus mode or binding", () => {
   const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
   const taskRunner = readFileSync(new URL("../scripts/platform-tasks.mjs", import.meta.url), "utf8");
-  assert.match(viteConfig, /JURO_STAGING_CORPUS_READS/u);
-  assert.match(viteConfig, /binding: "LEGAL_CORPUS_READ_DB"/u);
-  assert.match(viteConfig, /database_name: "juro-staging"/u);
-  assert.match(viteConfig, /database_id: "bb716a96-b2fb-4823-90d6-6c228fed181a"/u);
-  assert.match(viteConfig, /remote: true/u);
-  assert.doesNotMatch(viteConfig, /binding: "DB"[\s\S]{0,100}remote: true/u);
-  assert.match(taskRunner, /case "dev-staging-corpus"/u);
-  assert.match(taskRunner, /JURO_STAGING_CORPUS_READS: "true"/u);
-  assert.doesNotMatch(
-    taskRunner.slice(taskRunner.indexOf('case "dev-staging-corpus"'), taskRunner.indexOf('case "start"')),
-    /CLOUDFLARE_ENV/u,
-  );
+  assert.doesNotMatch(viteConfig, /JURO_STAGING_CORPUS_READS|LEGAL_CORPUS_READ_DB/u);
+  assert.doesNotMatch(taskRunner, /dev-staging-corpus|JURO_STAGING_CORPUS_READS/u);
 });
 
 const queueContract = [
@@ -225,50 +168,35 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.equal(
       config.vars.LEGAL_LEX_INGESTION_ENABLED,
-      environment === "development" ? "false" : "true",
+      "false",
     );
     assert.equal(
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
       "true",
     );
-    const stagingCorpusFlags = new Set([
-      "LEGAL_CORPUS_ENABLED",
-      "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
-      "LEGAL_CORPUS_AUTO_INGEST_ENABLED",
-      "LEGAL_CORPUS_MULTILINGUAL_ENABLED",
-      "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST",
-      "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
-      "LEGAL_CORPUS_HISTORICAL_ENABLED",
-      "LEGAL_CORPUS_SHADOW_MODE",
-    ]);
     for (const flag of [
       "LEGAL_CORPUS_ENABLED",
       "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
       "LEGAL_CORPUS_AUTO_INGEST_ENABLED",
       "LEGAL_CORPUS_MULTILINGUAL_ENABLED",
-      "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST",
-      "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
       "LEGAL_CORPUS_HISTORICAL_ENABLED",
       "LEGAL_CORPUS_DENSE_ENABLED",
       "LEGAL_CORPUS_SHADOW_MODE",
     ]) {
-      const expected = environment === "staging" && stagingCorpusFlags.has(flag)
-        && flag !== "LEGAL_CORPUS_SHADOW_MODE"
-        ? "true"
-        : "false";
       assert.equal(
         config.vars[flag],
-        expected,
-        `${environment} must configure ${flag} as ${expected}`,
+        undefined,
+        `${environment} must not configure retired ${flag}`,
       );
     }
+    assert.equal(config.vars.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST, "false");
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
-      "true",
+      "false",
     );
     assert.equal(
       config.vars.LEGAL_LEX_METADATA_MONITOR_ENABLED,
-      "true",
+      "false",
     );
     assert.equal(
       config.vars.LEGAL_SOURCE_STAFF_API_ENABLED,

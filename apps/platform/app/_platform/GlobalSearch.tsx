@@ -1,7 +1,5 @@
 "use client";
 
-import { usePlatformBasePath } from "./PlatformRouteContext";
-
 /* eslint-disable react-hooks/set-state-in-effect -- search state is synchronized with a debounced authenticated request */
 
 import {
@@ -9,21 +7,26 @@ import {
   Bot,
   BriefcaseBusiness,
   CheckSquare,
+  Clock3,
   FileDiff,
   FilePenLine,
   Files,
   FileSearch,
   LoaderCircle,
   Search,
+  Sparkles,
   X,
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { platformApiError } from "../../content/platform-ui";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
+import { globalSearchGroupScore, globalSearchQueryMode } from "../../lib/platform/global-search-policy";
+import { usePlatformBasePath } from "./PlatformRouteContext";
 
 const searchCopy = {
   ru: {
@@ -79,6 +82,7 @@ type SearchResult = {
   caseId?: string;
   analysisId?: string;
   officialUrl?: string;
+  searchScore?: number;
 };
 
 const icons = {
@@ -94,13 +98,17 @@ const icons = {
   source: BookOpenCheck,
 } as const;
 
-export function GlobalSearch({
-  locale,
-}: {
-  locale: PlatformLocale;
-  accountType: AccountType;
-}) {
+const groupOrder: Array<{ key: string; types: SearchResult["type"][] }> = [
+  { key: "conversations", types: ["conversation"] },
+  { key: "cases", types: ["case", "task"] },
+  { key: "documents", types: ["document", "document-content", "comparison", "analysis", "template"] },
+  { key: "people", types: ["lawyer"] },
+  { key: "sources", types: ["source"] },
+];
+
+export function GlobalSearch({ locale }: { locale: PlatformLocale; accountType: AccountType }) {
   const copy = searchCopy[locale];
+  const text = (ru: string, uz: string, en: string) => locale === "ru" ? ru : locale === "uz" ? uz : en;
   const router = useRouter();
   const dialogRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -109,10 +117,21 @@ export function GlobalSearch({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [resultsQuery, setResultsQuery] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [active, setActive] = useState(0);
+  const [shortcutLabel, setShortcutLabel] = useState("Ctrl K");
   const base = usePlatformBasePath();
+  const queryMode = globalSearchQueryMode(query);
+  const expectedResultsQuery = queryMode === "recent" ? "" : queryMode === "search" ? query.trim() : null;
+  const visibleResults = useMemo(
+    () => resultsQuery === expectedResultsQuery ? results : [],
+    [expectedResultsQuery, results, resultsQuery],
+  );
+
+  useEffect(() => {
+    setShortcutLabel(/Mac|iPhone|iPad/u.test(navigator.platform) ? "⌘K" : "Ctrl K");
+  }, []);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -129,6 +148,12 @@ export function GlobalSearch({
 
   useEffect(() => {
     if (!open) return;
+    const shell = document.querySelector<HTMLElement>(".platform-shell");
+    const previousOverflow = document.body.style.overflow;
+    const previousAriaHidden = shell?.getAttribute("aria-hidden");
+    document.body.style.overflow = "hidden";
+    shell?.setAttribute("inert", "");
+    shell?.setAttribute("aria-hidden", "true");
     inputRef.current?.focus();
     const trapFocus = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
@@ -146,54 +171,84 @@ export function GlobalSearch({
       }
     };
     document.addEventListener("keydown", trapFocus);
-    return () => document.removeEventListener("keydown", trapFocus);
+    return () => {
+      document.removeEventListener("keydown", trapFocus);
+      document.body.style.overflow = previousOverflow;
+      shell?.removeAttribute("inert");
+      if (previousAriaHidden === null || previousAriaHidden === undefined) shell?.removeAttribute("aria-hidden");
+      else shell?.setAttribute("aria-hidden", previousAriaHidden);
+    };
   }, [open]);
 
   useEffect(() => {
-    if (!open && wasOpenRef.current) triggerRef.current?.focus();
+    if (!open && wasOpenRef.current) {
+      setQuery("");
+      setResults([]);
+      setResultsQuery(null);
+      setLoading(false);
+      setError("");
+      triggerRef.current?.focus();
+    }
     wasOpenRef.current = open;
   }, [open]);
 
   useEffect(() => {
-    if (!open || query.trim().length < 2) {
-      setResults([]);
+    if (!open) return;
+    const controller = new AbortController();
+    const normalizedQuery = query.trim();
+    const mode = globalSearchQueryMode(normalizedQuery);
+    setResults([]);
+    setResultsQuery(null);
+    setError("");
+    if (mode === "incomplete") {
       setLoading(false);
-      setError("");
       return;
     }
-    const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setLoading(true);
-      setError("");
       try {
-        const response = await fetch(
-          `/api/platform/search?q=${encodeURIComponent(query.trim())}&locale=${locale}`,
-          { cache: "no-store", signal: controller.signal },
-        );
+        const params = new URLSearchParams({ locale });
+        if (mode === "search") params.set("q", normalizedQuery);
+        const response = await fetch(`/api/platform/search?${params}`, { cache: "no-store", signal: controller.signal });
         const body = await response.json() as { results?: SearchResult[]; error?: string };
         if (!response.ok) throw new Error(platformApiError(locale, body.error, copy.unavailable));
         setResults(body.results ?? []);
-        setActive(0);
+        setResultsQuery(mode === "recent" ? "" : normalizedQuery);
       } catch (value) {
         if (value instanceof DOMException && value.name === "AbortError") return;
         setError(value instanceof Error ? value.message : String(value));
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
-    }, 220);
+    }, mode === "search" ? 180 : 0);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
   }, [copy.unavailable, locale, open, query]);
 
-  const resultLinks = useMemo(() => results.map((result) => ({
-    result,
-    href: resultHref(result, base, query),
-  })), [base, query, results]);
+  const groupedLinks = useMemo(() => {
+    const links = visibleResults.map((result) => ({
+      result,
+      href: resultHref(result, base, query),
+    }));
+    const groups = groupOrder.map((group) => ({
+      ...group,
+      items: links.filter(({ result }) => group.types.includes(result.type)),
+    })).filter((group) => group.items.length > 0);
+    if (queryMode === "search") {
+      for (const group of groups) {
+        group.items.sort((left, right) => (right.result.searchScore ?? 0) - (left.result.searchScore ?? 0));
+      }
+      groups.sort((left, right) => globalSearchGroupScore(right.items.map(({ result }) => result))
+        - globalSearchGroupScore(left.items.map(({ result }) => result)));
+    }
+    return groups;
+  }, [base, query, queryMode, visibleResults]);
 
-  function openActive() {
-    const item = resultLinks[active];
+  const resultLinks = useMemo(() => groupedLinks.flatMap((group) => group.items), [groupedLinks]);
+
+  function openResult(item: (typeof resultLinks)[number] | undefined) {
     if (!item) return;
     if (item.result.type === "source") {
       if (safeOfficialUrl(item.href)) {
@@ -206,69 +261,98 @@ export function GlobalSearch({
     }
   }
 
-  return (
-    <>
-      <button ref={triggerRef} className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={copy.globalSearch} aria-expanded={open} aria-controls="global-search-workspace">
-        <Search /><span>{copy.search}</span><kbd>⌘K</kbd>
-      </button>
-      {open && (
-        <div className="global-search-layer">
-          <button className="global-search-backdrop" type="button" onClick={() => setOpen(false)} aria-label={copy.closeSearch} />
-          <section id="global-search-workspace" ref={dialogRef} className="global-search-dialog" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
-            <header>
-              <Search />
-              <h2 id="global-search-title" className="sr-only">{copy.title}</h2>
-              <input
-                ref={inputRef}
-                type="text"
-                inputMode="search"
-                autoComplete="off"
-                value={query}
-                onChange={(event) => setQuery(event.target.value.slice(0, 120))}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown") { event.preventDefault(); setActive((current) => Math.min(current + 1, resultLinks.length - 1)); }
-                  if (event.key === "ArrowUp") { event.preventDefault(); setActive((current) => Math.max(current - 1, 0)); }
-                  if (event.key === "Enter") { event.preventDefault(); openActive(); }
-                }}
-                placeholder={copy.placeholder}
-                aria-controls="global-search-results"
-                aria-activedescendant={resultLinks[active] ? `global-search-result-${active}` : undefined}
-              />
-              {loading ? <LoaderCircle className="spin" /> : <button type="button" onClick={() => setOpen(false)} aria-label={copy.close}><X /></button>}
-            </header>
-            <div id="global-search-results" className="global-search-results" role="listbox">
-              {error ? <p className="global-search-message error" role="alert">{error}</p> : query.trim().length < 2 ? (
-                <p className="global-search-message">{copy.minimum}</p>
-              ) : !loading && !resultLinks.length ? (
-                <p className="global-search-message">{copy.empty}</p>
-              ) : resultLinks.map(({ result, href }, index) => {
-                const Icon = icons[result.type as keyof typeof icons] ?? Search;
-                const external = result.type === "source";
-                return (
-                  <Link
-                    id={`global-search-result-${index}`}
-                    role="option"
-                    aria-selected={active === index}
-                    className={active === index ? "active" : ""}
-                    href={href}
-                    target={external ? "_blank" : undefined}
-                    rel={external ? "noreferrer" : undefined}
-                    key={`${result.type}-${result.id}`}
-                    onMouseEnter={() => setActive(index)}
-                    onClick={() => setOpen(false)}
-                  >
-                    <span><Icon /></span>
-                    <div><strong>{result.title}</strong><small>{typeLabel(result.type, locale)}{result.subtitle ? ` · ${result.subtitle}` : ""}</small></div>
-                  </Link>
-                );
-              })}
-            </div>
-            <footer><span>↑↓ {copy.select}</span><span>Enter {copy.open}</span><span>Esc {copy.closeHint}</span></footer>
-          </section>
+  function focusRelativeItem(direction: -1 | 1) {
+    const items = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("[data-global-search-item]") ?? []);
+    if (!items.length) return;
+    const currentIndex = items.findIndex((item) => item === document.activeElement);
+    const nextIndex = currentIndex < 0
+      ? (direction === 1 ? 0 : items.length - 1)
+      : Math.min(items.length - 1, Math.max(0, currentIndex + direction));
+    items[nextIndex]?.focus();
+    items[nextIndex]?.scrollIntoView({ block: "nearest" });
+  }
+
+  const palette = open ? createPortal(
+    <div className="global-search-layer">
+      <button className="global-search-backdrop" type="button" onClick={() => setOpen(false)} aria-label={copy.closeSearch} />
+      <section
+        id="global-search-workspace"
+        ref={dialogRef}
+        className="global-search-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="global-search-title"
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            focusRelativeItem(event.key === "ArrowDown" ? 1 : -1);
+          } else if (event.key === "Enter" && event.target === inputRef.current) {
+            event.preventDefault();
+            if (!loading && queryMode === "search") openResult(resultLinks[0]);
+          }
+        }}
+      >
+        <header>
+          <Search aria-hidden="true" />
+          <h2 id="global-search-title" className="sr-only">{copy.title}</h2>
+          <input
+            ref={inputRef}
+            type="search"
+            inputMode="search"
+            autoComplete="off"
+            aria-label={copy.title}
+            value={query}
+            onChange={(event) => setQuery(event.target.value.slice(0, 120))}
+            placeholder={copy.placeholder}
+            aria-controls="global-search-results"
+          />
+          <span className="global-search-header-actions">
+            {loading ? <LoaderCircle className="spin" aria-label={copy.search} /> : null}
+            {query ? <button type="button" onClick={() => setQuery("")} aria-label={text("Очистить запрос", "So‘rovni tozalash", "Clear query")}><X /></button> : null}
+            <button type="button" onClick={() => setOpen(false)} aria-label={copy.close}><X /></button>
+          </span>
+        </header>
+        <div id="global-search-results" className="global-search-results" aria-live="polite" aria-busy={loading}>
+          {queryMode === "recent" && <nav className="global-search-destinations" aria-label={text("Быстрые действия", "Tezkor amallar", "Quick actions")}>
+            <Link data-global-search-item href={`${base}/ai-chat`} onClick={() => setOpen(false)}><Sparkles /><span><strong>{text("Спросить AI", "AI’dan so‘rash", "Ask AI")}</strong><small>{text("Новый юридический вопрос", "Yangi huquqiy savol", "New legal question")}</small></span></Link>
+            <Link data-global-search-item href={`${base}/cases`} onClick={() => setOpen(false)}><BriefcaseBusiness /><span><strong>{text("Мои дела", "Mening ishlarim", "My matters")}</strong><small>{text("Открыть дела и задачи", "Ishlar va vazifalarni ochish", "Open matters and tasks")}</small></span></Link>
+            <Link data-global-search-item href={`${base}/documents`} onClick={() => setOpen(false)}><Files /><span><strong>{text("Документы", "Hujjatlar", "Documents")}</strong><small>{text("Создать или открыть документ", "Hujjat yaratish yoki ochish", "Create or open a document")}</small></span></Link>
+          </nav>}
+          {error ? <p className="global-search-message error" role="alert">{error}</p> : queryMode === "incomplete" ? (
+            <p className="global-search-message">{text("Введите минимум два буквенно-цифровых символа.", "Kamida ikkita harf yoki raqam kiriting.", "Enter at least two letters or numbers.")}</p>
+          ) : !loading && !resultLinks.length ? (
+            <p className="global-search-message">{queryMode === "search" ? copy.empty : text("Недавние элементы появятся здесь.", "So‘nggi elementlar shu yerda paydo bo‘ladi.", "Recent items will appear here.")}</p>
+          ) : groupedLinks.map((group) => <section className="global-search-group" key={group.key} aria-labelledby={`global-search-group-${group.key}`}>
+            <h3 id={`global-search-group-${group.key}`}>{queryMode === "search" ? <Search aria-hidden="true" /> : <Clock3 aria-hidden="true" />}{groupLabel(group.key, locale, queryMode === "search")}</h3>
+            <div>{group.items.map(({ result, href }) => {
+              const Icon = icons[result.type] ?? Search;
+              const external = result.type === "source";
+              return <Link
+                data-global-search-item
+                href={href}
+                target={external ? "_blank" : undefined}
+                rel={external ? "noreferrer" : undefined}
+                key={`${result.type}-${result.id}`}
+                onClick={() => setOpen(false)}
+              >
+                <span><Icon /></span>
+                <div><strong>{result.title}</strong><small>{typeLabel(result.type, locale)}{result.subtitle ? ` · ${result.subtitle}` : ""}</small></div>
+              </Link>;
+            })}</div>
+          </section>)}
         </div>
-      )}
-    </>
-  );
+        <footer><span>↑↓ {copy.select}</span><span>Enter {copy.open}</span><span>Esc {copy.closeHint}</span></footer>
+      </section>
+    </div>,
+    document.body,
+  ) : null;
+
+  return <>
+    <button ref={triggerRef} className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={copy.globalSearch} aria-expanded={open} aria-controls="global-search-workspace">
+      <Search /><span>{copy.search}</span><kbd>{shortcutLabel}</kbd>
+    </button>
+    {palette}
+  </>;
 }
 
 function resultHref(result: SearchResult, base: string, query: string) {
@@ -285,25 +369,28 @@ function resultHref(result: SearchResult, base: string, query: string) {
 }
 
 function safeOfficialUrl(value: string) {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
+}
+
+function groupLabel(key: string, locale: PlatformLocale, searching: boolean) {
+  const labels: Record<string, [string, string, string]> = {
+    conversations: ["Диалоги", "Suhbatlar", "Conversations"],
+    cases: ["Дела и задачи", "Ishlar va vazifalar", "Matters and tasks"],
+    documents: ["Документы", "Hujjatlar", "Documents"],
+    people: ["Юристы", "Yuristlar", "Lawyers"],
+    sources: ["Официальные источники", "Rasmiy manbalar", "Official sources"],
+  };
+  const label = labels[key] ?? ["Результаты", "Natijalar", "Results"];
+  const index = locale === "ru" ? 0 : locale === "uz" ? 1 : 2;
+  const recent = locale === "ru" ? "Недавние · " : locale === "uz" ? "So‘nggi · " : "Recent · ";
+  return `${searching ? "" : recent}${label[index]}`;
 }
 
 function typeLabel(type: SearchResult["type"], locale: PlatformLocale) {
   const labels = {
-    case: { ru: "Дело", uz: "Ish", en: "Matter" },
-    document: { ru: "Документ", uz: "Hujjat", en: "Document" },
-    "document-content": { ru: "В документе", uz: "Hujjat ichida", en: "In document" },
-    conversation: { ru: "Диалог", uz: "Suhbat", en: "Conversation" },
-    comparison: { ru: "Сравнение", uz: "Taqqoslash", en: "Comparison" },
-    task: { ru: "Задача", uz: "Vazifa", en: "Task" },
-    analysis: { ru: "Анализ", uz: "Tahlil", en: "Analysis" },
-    template: { ru: "Шаблон", uz: "Shablon", en: "Template" },
-    lawyer: { ru: "Юрист", uz: "Yurist", en: "Lawyer" },
-    source: { ru: "Официальный источник", uz: "Rasmiy manba", en: "Official source" },
+    case: ["Дело", "Ish", "Matter"], document: ["Документ", "Hujjat", "Document"], "document-content": ["В документе", "Hujjat ichida", "In document"],
+    conversation: ["Диалог", "Suhbat", "Conversation"], comparison: ["Сравнение", "Taqqoslash", "Comparison"], task: ["Задача", "Vazifa", "Task"],
+    analysis: ["Анализ", "Tahlil", "Analysis"], template: ["Шаблон", "Shablon", "Template"], lawyer: ["Юрист", "Yurist", "Lawyer"], source: ["Официальный источник", "Rasmiy manba", "Official source"],
   } as const;
-  return (labels[type as keyof typeof labels] ?? { ru: "Результат", uz: "Natija", en: "Result" })[locale];
+  return labels[type][locale === "ru" ? 0 : locale === "uz" ? 1 : 2];
 }

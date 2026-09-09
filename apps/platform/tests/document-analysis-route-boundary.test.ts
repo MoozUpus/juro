@@ -186,7 +186,7 @@ test("AI and document processors revalidate provider citations before persistenc
   const provider = source("lib/document-analysis/provider.ts");
   assert.match(provider, /untrustedDocument\.documentText/);
   assert.match(processor, /originalUrl: source\.officialUrl/);
-  assert.match(processor, /publishPendingOwnerCorpusUpload\(scopedEnv, analysisId\)/);
+  assert.doesNotMatch(processor, /publishPendingOwnerCorpusUpload/);
   assert.match(
     processor,
     /setAnalysisState\(env\.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT"\)/,

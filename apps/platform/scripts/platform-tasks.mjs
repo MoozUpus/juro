@@ -150,33 +150,17 @@ const coreTestFiles = [
   "tests/account-deletion-purge.test.ts",
   "tests/email-change.test.ts",
   "tests/security-email.test.ts",
-  "tests/legal-corpus-trust.test.ts",
-  "tests/legal-corpus-versioning.test.ts",
-  "tests/legal-corpus-discovery-parser.test.ts",
-  "tests/legal-corpus-ingestion.test.ts",
-  "tests/legal-corpus-provider.test.ts",
   "tests/legal-corpus-chat-retrieval.test.ts",
-  "tests/legal-corpus-read-service.test.ts",
-  "tests/legal-corpus-citation-validation.test.ts",
-  "tests/legal-corpus-catalog-discovery.test.ts",
-  "tests/legal-corpus-admin-operations.test.ts",
-  "tests/legal-corpus-owner-materials.test.ts",
   "tests/legal-source-trust.test.ts",
   "tests/legal-corpus-worker-boundary.test.ts",
-  "tests/legal-corpus-retrieval.test.ts",
-  "tests/legal-research-loop.test.ts",
+  "tests/legal-target-evaluation.test.ts",
   "tests/legal-retrieval-understanding.test.ts",
-  "tests/legal-corpus-sparse-index.test.ts",
-  "tests/legal-corpus-embeddings.test.ts",
-  "tests/legal-corpus-qdrant.test.ts",
-  "tests/legal-corpus-qdrant-indexing.test.ts",
   "tests/legal-source-fetch.test.ts",
   "tests/legal-source-discovery.test.ts",
   "tests/lex-metadata-monitor.test.ts",
   "tests/live-lex-runtime-boundary.test.ts",
   "tests/legal-source-acquisition.test.ts",
   "tests/legal-scheduled-corpus-sync.test.ts",
-  "tests/legal-scheduled-corpus-lifecycle.test.ts",
   "tests/legal-evaluation-corpus.test.ts",
   "tests/document-evaluation-corpus.test.ts",
   "tests/legal-source-parser.test.ts",
@@ -248,12 +232,6 @@ const coreTestFiles = [
   "tests/legal-applicability-date.test.ts",
   "tests/legal-chat-openai-schema.test.ts",
   "tests/legal-chat-release-gate.test.ts",
-  "tests/legal-corpus-core-code-discovery.test.ts",
-  "tests/legal-corpus-lex-request-pacer.test.ts",
-  "tests/legal-corpus-maintenance.test.ts",
-  "tests/legal-corpus-owner-upload.test.ts",
-  "tests/legal-corpus-qdrant-snapshots.test.ts",
-  "tests/legal-corpus-release-gate.test.ts",
   "tests/legal-evaluation-human-evidence.test.ts",
   "tests/legal-evaluation-persisted-evidence.test.ts",
   "tests/legal-query-planner.test.ts",
@@ -1154,23 +1132,6 @@ async function main() {
         },
       );
       return;
-    case "dev-staging-corpus":
-      assertNoArgs("dev-staging-corpus", args);
-      await runInteractiveTask(
-        "vite",
-        "vite",
-        [],
-        {
-          JURO_AGENT_PREVIEW_COMPATIBILITY_DATE: "2026-05-22",
-          JURO_STAGING_CORPUS_READS: "true",
-          LOCAL_AUTH_BYPASS: process.env.LOCAL_AUTH_BYPASS ?? "false",
-          LOCAL_AUTH_EMAIL:
-            process.env.LOCAL_AUTH_EMAIL ?? "developer@local.juro.uz",
-          LOCAL_AUTH_FULL_NAME:
-            process.env.LOCAL_AUTH_FULL_NAME ?? "JURO Local Developer",
-        },
-      );
-      return;
     case "start":
       await runInteractiveTask("vinext", "vinext", ["start", ...args], {});
       return;
@@ -1286,7 +1247,7 @@ async function main() {
     }
     default:
       throw new Error(
-        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|dev-staging-corpus|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|smoke-case-create|type-check|lint|build|artifact|performance-budget|matrix|cf-types|cf-types-check|db-generate>",
+        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|smoke-case-create|type-check|lint|build|artifact|performance-budget|matrix|cf-types|cf-types-check|db-generate>",
       );
   }
 }

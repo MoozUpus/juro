@@ -329,8 +329,18 @@ export function PlatformShell({
           <div className="platform-brand">
             <Link href={`${base}/dashboard`} aria-label="JURO">
               <Image
+                className="platform-logo-on-dark"
                 src="/juro-logo-light.png"
-                alt="JURO"
+                alt=""
+                width={236}
+                height={120}
+                priority
+                unoptimized
+              />
+              <Image
+                className="platform-logo-on-light"
+                src="/juro-logo-primary.png"
+                alt=""
                 width={236}
                 height={120}
                 priority

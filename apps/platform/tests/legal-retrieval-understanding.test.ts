@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeLegalRetrievalUnderstanding } from "../lib/legal/legal-retrieval-understanding";
+import {
+  normalizeLegalRetrievalUnderstanding,
+} from "../lib/legal/legal-retrieval-understanding";
 
 test("provider-sized retrieval plans are bounded without discarding semantic queries", () => {
   const originalQuery = "можно ли уволить сотрудника в декрете";
@@ -9,6 +11,7 @@ test("provider-sized retrieval plans are bounded without discarding semantic que
     standaloneQuestion: "  прекращение трудового договора с работником в отпуске по уходу за ребёнком  ",
     corpusQueries: Array.from({ length: 8 }, (_, index) => `семантическая гипотеза ${index}`),
     requiredConcepts: Array.from({ length: 7 }, (_, conceptIndex) => ({
+      statement: `требование ${conceptIndex}`,
       alternatives: Array.from({ length: 8 }, (_, alternativeIndex) =>
         `понятие ${conceptIndex} вариант ${alternativeIndex}`),
     })),
@@ -29,7 +32,7 @@ test("empty optional planner values degrade to the original query, not an invali
   const plan = normalizeLegalRetrievalUnderstanding({
     standaloneQuestion: "   ",
     corpusQueries: [],
-    requiredConcepts: [{ alternatives: ["", "   "] }],
+    requiredConcepts: [{ statement: "", alternatives: ["", "   "] }],
     lexSearchQueries: [],
     webSearchQuery: "",
   }, originalQuery);

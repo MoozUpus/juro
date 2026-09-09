@@ -221,6 +221,7 @@ class OpenAiLegalProvider implements LegalAiProvider {
     const firstContentBudgetMs = interactive
       ? Math.max(1, Math.min(4_500, providerBudgetMs))
       : Math.max(1, Math.min(30_000, providerBudgetMs));
+    const providerDeadlineAt = Date.now() + providerBudgetMs;
     const emittedFindingsByAttempt = new Map<1 | 2, number>();
     const result = await callOpenAiStructured<LegalChatResponse>({
       schemaName: "juro_legal_chat_response",
@@ -230,9 +231,12 @@ class OpenAiLegalProvider implements LegalAiProvider {
       // allow a healthy structured stream enough time to finish completely.
       firstByteTimeoutMs: firstContentBudgetMs,
       totalResponseTimeoutMs: providerBudgetMs,
+      // The explicit provider window is shared by every OpenAI attempt. Using
+      // only the outer request deadline here would reset totalResponseTimeoutMs
+      // for a retry and could make two attempts consume twice the allocation.
       deadlineAt: options.budget?.hasOverallDeadline
-        ? Date.now() + options.budget.remainingMs
-        : undefined,
+        ? Math.min(providerDeadlineAt, Date.now() + options.budget.remainingMs)
+        : providerDeadlineAt,
       maxAttempts: 2,
       onAttempt: ({ attempt }) => options.beforeProviderCall?.({ provider: "openai", model, attempt }),
       requestId: input.requestId,
@@ -379,6 +383,7 @@ class ResilientLegalProvider implements LegalAiProvider {
     if (this.primary === "anthropic") {
       return runAnthropicLegalChat(input, options);
     }
+    const resilientStartedAt = Date.now();
     try {
       return await new OpenAiLegalProvider().runLegalChat(input, options);
     } catch (error) {
@@ -386,13 +391,21 @@ class ResilientLegalProvider implements LegalAiProvider {
         || !hasAnthropicConfiguration()
         || !isAnthropicFallbackEligible(error)) throw error;
       await assertAiProviderEnabled("anthropic");
+      const explicitRemainingMs = options.providerTimeoutMs === undefined
+        ? null
+        : Math.max(0, options.providerTimeoutMs - (Date.now() - resilientStartedAt));
+      const requestedFallbackMs = Math.min(
+        input.reasoningMode === "fast" ? 8_000 : 60_000,
+        explicitRemainingMs ?? Number.MAX_SAFE_INTEGER,
+      );
+      if (requestedFallbackMs < (input.reasoningMode === "fast" ? 4_000 : 12_000)) throw error;
       const fallback = options.budget
         ? allocateAiFallbackBudget(options.budget, {
-          requestedTimeoutMs: input.reasoningMode === "fast" ? 8_000 : 60_000,
+          requestedTimeoutMs: requestedFallbackMs,
           minimumAttemptMs: input.reasoningMode === "fast" ? 4_000 : 12_000,
           reserveMs: input.reasoningMode === "fast" ? 2_000 : 5_000,
         })
-        : { timeoutMs: input.reasoningMode === "fast" ? 8_000 : 60_000 };
+        : { timeoutMs: requestedFallbackMs };
       if (!fallback) throw error;
       if (error instanceof AiUnavailableError) {
         await options.onProviderFailure?.({

@@ -1,0 +1,465 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import test from "node:test";
+
+import { legalEvaluationCorpus } from "../evaluation/legal-evaluation-corpus";
+import {
+  LEGAL_RELEASE_EVALUATION_REGISTRY,
+  REQUIRED_RELEASE_EVALUATION_STRATA,
+  evaluatePersistedObservationWindow,
+  recordReleaseObservation,
+  recordSearchReleaseGovernance,
+} from "../lib/legal-corpus/target-governance";
+import { createReleaseLifecycle } from "../lib/legal-corpus/target-release";
+import {
+  importCurrentRepresentativeProvision,
+  MemoryEvidenceBucket,
+  representativeProvision,
+} from "./helpers/legal-target";
+import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
+
+const metrics = {
+  recallAt5: 0.90,
+  recallAt10: 0.95,
+  mrr: 0.85,
+  citationPrecision: 1,
+  citationRecall: 0.95,
+  articleExactness: 0.95,
+  documentExactness: 0.97,
+  abstentionCorrectness: 0.95,
+  partialAnswerCorrectness: 0.90,
+  groundedness: 0.95,
+  staleInvalidLinkCount: 0,
+  sourceUnavailabilityRate: 0.02,
+  indexedP95Ms: 5_000,
+  answerP95Ms: 30_000,
+  providerCostUsd: 30,
+};
+
+function governanceEvidence(releaseId: string, reportId: string, item: {
+  itemKey: string;
+  language: "ru";
+  documentType: string;
+  validFrom: string;
+}) {
+  return {
+    id: `governance-${releaseId}`,
+    releaseId,
+    environment: "development" as const,
+    capability: "current" as const,
+    reconciliationRunId: reportId,
+    recordedAt: "2026-08-30T03:00:00.000Z",
+    configuration: {
+      identity: "ai-search-governed-v1",
+      metadataSchema: ["language", "document_type", "valid_from", "valid_to"],
+      fifthMetadataFieldReserved: true,
+      embeddingModel: "openai/text-embedding-3-large",
+      dimensions: 1_536,
+      keywordTokenizer: "porter" as const,
+      gatewayIdentity: "juro-ai-search-development",
+      providerProjectIdentity: "juro-openai-development",
+      providerNamespaceIdentity: "juro-legal-development",
+      sourcePrefix: `search-releases/${releaseId}/current/`,
+      serviceBindingIdentity: "LEGAL_CORPUS_SERVICE",
+      gatewayPayloadLogging: false,
+      gatewayCaching: false,
+      similarityCaching: false,
+      queryRewriting: false,
+      providerReranking: false,
+      providerGeneration: false,
+      contextExpansion: false,
+    },
+    privacy: {
+      deterministicTransformAttested: true,
+      contentFreeTelemetryAttested: true,
+      productionDisclosureAccepted: false,
+      productionEmbeddingDataControlsApproved: false,
+      stagingQueriesSyntheticOrNonPersonal: true,
+    },
+    sync: { state: "complete" as const, scheduledIndexingPaused: true, partialErrors: 0 },
+    shards: [{
+      id: "00",
+      itemCount: 1,
+      inventorySha256: "8".repeat(64),
+      syncState: "complete" as const,
+      providerNamespaceIdentity: "juro-legal-development",
+      providerInstanceId: "juro-current-development-00",
+      syncJobId: "00000000-0000-4000-8000-000000000001",
+      scheduledIndexingPaused: true,
+    }],
+    providerItems: [{
+      itemKey: item.itemKey,
+      language: item.language,
+      documentType: item.documentType,
+      validFrom: item.validFrom,
+      validTo: null,
+    }],
+    cost: {
+      measuredEmbeddingTokens: 1_000_000,
+      acceptedUsdPerMillionTokens: 0.13,
+      authorizedCostUsd: 0.1625,
+      migrationBudgetKind: "current" as const,
+      monthlyProductionQueryCostUsd: 24.99,
+      unpricedRequests: 0,
+    },
+    integrity: {
+      missingItems: 0,
+      extraItems: 0,
+      hashMismatches: 0,
+      metadataMismatches: 0,
+      unknownKeys: 0,
+      wrongReleaseKeys: 0,
+      partialResponses: 0,
+      configurationErrors: 0,
+      privacyErrors: 0,
+    },
+    evaluation: {
+      registryVersion: "legal-evaluation-corpus-v3" as const,
+      scenarioCount: 314 as const,
+      providerCostUsd: 30,
+      strata: REQUIRED_RELEASE_EVALUATION_STRATA.map((stratum) => ({
+        stratum,
+        scenarioIds: [...LEGAL_RELEASE_EVALUATION_REGISTRY[stratum]],
+        scenarioCount: LEGAL_RELEASE_EVALUATION_REGISTRY[stratum].length,
+        ...metrics,
+      })),
+    },
+    operations: {
+      officialChangeValidatedAt: "2026-08-30T01:00:00.000Z",
+      currentSnapshotReadyAt: "2026-08-30T03:00:00.000Z",
+      emergencyRequestedAt: "2026-08-30T01:00:00.000Z",
+      emergencyReadyAt: "2026-08-30T03:00:00.000Z",
+      historyLastReconciledAt: "2026-08-29T03:00:00.000Z",
+      rollbackHealthy: true,
+    },
+  };
+}
+
+async function governedDraft() {
+  const { sqlite, d1 } = sqliteD1FixtureFromDirectory(new URL("../legal-drizzle/", import.meta.url));
+  const bucket = new MemoryEvidenceBucket();
+  const imported = await importCurrentRepresentativeProvision({ db: d1, bucket });
+  const lifecycle = createReleaseLifecycle({ db: d1 });
+  const snapshot = await lifecycle.freezeCorpusSnapshot({
+    id: "snapshot-governance-v1",
+    environment: "development",
+    provisionRenditionIds: [representativeProvision.provisionRenditionId],
+    createdAt: "2026-08-30T02:00:00.000Z",
+  });
+  const releaseId = "release-governance-v1";
+  const canonicalChunkId = `chunk:${representativeProvision.provisionRenditionId}:0`;
+  const itemKey = `search-releases/${releaseId}/current/00/${canonicalChunkId}.md`;
+  const item = {
+    provisionRenditionId: representativeProvision.provisionRenditionId,
+    canonicalChunkId,
+    itemKey,
+    r2Key: itemKey,
+    byteCount: imported.provisionLocator.byteCount,
+    sha256: imported.provisionLocator.sha256,
+    language: "ru" as const,
+    documentType: representativeProvision.documentType,
+    validFrom: "2026-01-01T00:00:00.000Z",
+    validTo: null,
+  };
+  await lifecycle.createSearchReleaseDraft({
+    id: releaseId,
+    environment: "development",
+    capability: "current",
+    corpusSnapshotId: snapshot.id,
+    items: [item],
+    retrievalPolicyVersion: "governed-v1",
+    configurationIdentity: "ai-search-governed-v1",
+    createdAt: "2026-08-30T02:30:00.000Z",
+  });
+  const reportId = "reconciliation-governance-v1";
+  const reportJson = JSON.stringify({
+    status: "clean",
+    environment: "development",
+    releaseId,
+    capability: "current",
+    expected: {
+      releaseItems: [{
+        chunkId: item.canonicalChunkId,
+        provisionRenditionId: item.provisionRenditionId,
+        itemKey: item.itemKey,
+        r2Key: item.r2Key,
+        byteCount: item.byteCount,
+        sha256: item.sha256,
+      }],
+    },
+  });
+  sqlite.prepare(`INSERT INTO legal_migration_reconciliation_reports
+    (run_id,environment,release_id,capability,input_sha256,report_sha256,status,report_json,created_at)
+    VALUES (?,'development',?,'current',?,?,'clean',?,'2026-08-30T02:45:00.000Z')`).run(
+    reportId, releaseId, "6".repeat(64), "7".repeat(64), reportJson,
+  );
+  return { sqlite, d1, lifecycle, snapshot, releaseId, reportId, item };
+}
+
+test("release strata are derived from authenticated scenario language, tags, and capabilities", () => {
+  const scenarioById = new Map(legalEvaluationCorpus.map((scenario) => [scenario.id, scenario]));
+  for (const [stratum, language] of [
+    ["russian", "ru"],
+    ["uzbek_latin", "uz-Latn"],
+    ["uzbek_cyrillic", "uz-Cyrl"],
+    ["english", "en"],
+  ] as const) {
+    const ids = LEGAL_RELEASE_EVALUATION_REGISTRY[stratum];
+    assert.equal(ids.length > 0, true, stratum);
+    assert.equal(ids.every((id) => scenarioById.get(id)?.queryLanguage === language), true, stratum);
+  }
+  assert.equal(LEGAL_RELEASE_EVALUATION_REGISTRY.cross_language.every((id) =>
+    scenarioById.get(id)?.releaseGateCapabilities.includes("cross_language")), true);
+  assert.equal(LEGAL_RELEASE_EVALUATION_REGISTRY.exact_citation.every((id) =>
+    scenarioById.get(id)?.releaseGateCapabilities.includes("exact_citation")), true);
+  assert.equal(LEGAL_RELEASE_EVALUATION_REGISTRY.exact_citation.length > 0, true);
+  assert.equal(new Set(Object.values(LEGAL_RELEASE_EVALUATION_REGISTRY).flat()).size,
+    legalEvaluationCorpus.length);
+});
+
+test("a complete governed manifest seals while any failed numeric or zero-tolerance gate blocks", async () => {
+  const fixture = await governedDraft();
+  try {
+    const evidence = governanceEvidence(fixture.releaseId, fixture.reportId, {
+      itemKey: fixture.item.itemKey,
+      language: fixture.item.language,
+      documentType: fixture.item.documentType,
+      validFrom: fixture.item.validFrom,
+    });
+    await assert.rejects(
+      () => fixture.lifecycle.sealSearchRelease({
+        id: fixture.releaseId,
+        environment: "development",
+        capability: "current",
+        corpusSnapshotId: fixture.snapshot.id,
+        items: [fixture.item],
+        retrievalPolicyVersion: "governed-v1",
+        configurationIdentity: "ai-search-governed-v1",
+        createdAt: "2026-08-30T03:04:00.000Z",
+      }),
+      /SEARCH_RELEASE_REJECTED/u,
+      "missing governance evidence must block sealing",
+    );
+    const verdict = await recordSearchReleaseGovernance({ db: fixture.d1 }, evidence);
+    assert.deepEqual(verdict, { passed: true, failures: [] });
+    const providerInstance = fixture.sqlite.prepare(`SELECT provider_namespace AS namespace,
+        provider_instance_id AS instanceId,sync_job_id AS syncJobId,
+        scheduled_indexing_paused AS paused
+      FROM legal_search_release_provider_instances WHERE governance_id=? AND shard_id='00'`)
+      .get(evidence.id) as { namespace: string; instanceId: string; syncJobId: string; paused: number };
+    assert.deepEqual({ ...providerInstance }, {
+      namespace: "juro-legal-development",
+      instanceId: "juro-current-development-00",
+      syncJobId: "00000000-0000-4000-8000-000000000001",
+      paused: 1,
+    });
+    const sealed = await fixture.lifecycle.sealSearchRelease({
+      id: fixture.releaseId,
+      environment: "development",
+      capability: "current",
+      corpusSnapshotId: fixture.snapshot.id,
+      items: [fixture.item],
+      retrievalPolicyVersion: "governed-v1",
+      configurationIdentity: "ai-search-governed-v1",
+      createdAt: "2026-08-30T03:05:00.000Z",
+    });
+    assert.equal(sealed.status, "sealed");
+
+    const second = await governedDraft();
+    try {
+      const failed = governanceEvidence(second.releaseId, second.reportId, {
+        itemKey: second.item.itemKey,
+        language: second.item.language,
+        documentType: second.item.documentType,
+        validFrom: second.item.validFrom,
+      });
+      failed.id = "governance-release-governance-failed-v1";
+      failed.releaseId = "release-governance-v1";
+      failed.integrity.hashMismatches = 1;
+      failed.evaluation.strata[0]!.recallAt5 = 0.899;
+      failed.evaluation.strata[0]!.scenarioIds.pop();
+      failed.evaluation.providerCostUsd = 30.01;
+      failed.operations.currentSnapshotReadyAt = "2026-08-30T00:59:00.000Z";
+      failed.operations.historyLastReconciledAt = "2026-08-31T03:00:00.000Z";
+      const failedVerdict = await recordSearchReleaseGovernance({ db: second.d1 }, failed);
+      assert.equal(failedVerdict.passed, false);
+      assert.equal(failedVerdict.failures.includes("INTEGRITY_HASH_MISMATCH"), true);
+      assert.equal(failedVerdict.failures.some((failure) => failure.includes("RECALL_AT_5")), true);
+      assert.equal(failedVerdict.failures.some((failure) =>
+        failure.startsWith("EVALUATION_SCENARIO_COUNT_MISMATCH:")), true);
+      assert.equal(failedVerdict.failures.some((failure) =>
+        failure.startsWith("EVALUATION_SCENARIO_REGISTRY_MISMATCH:")), true);
+      assert.equal(failedVerdict.failures.includes("EVALUATION_PROVIDER_COST_EXCEEDED"), true);
+      assert.equal(failedVerdict.failures.includes("CURRENT_FRESHNESS_SLO_FAILED"), true);
+      assert.equal(failedVerdict.failures.includes("HISTORY_RECONCILIATION_STALE"), true);
+      assert.equal(failedVerdict.failures.includes(
+        "OPERATION_TIMESTAMP_AFTER_RECORDING:historyLastReconciledAt"), true);
+
+      const future = governanceEvidence(second.releaseId, second.reportId, {
+        itemKey: second.item.itemKey,
+        language: second.item.language,
+        documentType: second.item.documentType,
+        validFrom: second.item.validFrom,
+      });
+      future.id = "governance-release-future-readiness-v1";
+      future.recordedAt = "2026-08-30T03:01:00.000Z";
+      future.operations.officialChangeValidatedAt = "2026-08-30T02:00:00.000Z";
+      future.operations.currentSnapshotReadyAt = "2026-08-30T04:00:00.000Z";
+      future.operations.emergencyRequestedAt = "2026-08-30T02:00:00.000Z";
+      future.operations.emergencyReadyAt = "2026-08-30T04:00:00.000Z";
+      const futureVerdict = await recordSearchReleaseGovernance({ db: second.d1 }, future);
+      assert.equal(futureVerdict.passed, false);
+      assert.equal(futureVerdict.failures.includes(
+        "OPERATION_TIMESTAMP_AFTER_RECORDING:currentSnapshotReadyAt"), true);
+      assert.equal(futureVerdict.failures.includes(
+        "OPERATION_TIMESTAMP_AFTER_RECORDING:emergencyReadyAt"), true);
+      await assert.rejects(
+        () => second.lifecycle.sealSearchRelease({
+          id: second.releaseId,
+          environment: "development",
+          capability: "current",
+          corpusSnapshotId: second.snapshot.id,
+          items: [second.item],
+          retrievalPolicyVersion: "governed-v1",
+          configurationIdentity: "ai-search-governed-v1",
+          createdAt: "2026-08-30T03:05:00.000Z",
+        }),
+        /SEARCH_RELEASE_REJECTED/u,
+      );
+    } finally {
+      second.sqlite.close();
+    }
+
+    const staleFixture = await governedDraft();
+    try {
+      const stale = governanceEvidence(staleFixture.releaseId, staleFixture.reportId, {
+        itemKey: staleFixture.item.itemKey,
+        language: staleFixture.item.language,
+        documentType: staleFixture.item.documentType,
+        validFrom: staleFixture.item.validFrom,
+      });
+      stale.recordedAt = "2026-08-28T03:00:00.000Z";
+      stale.operations.officialChangeValidatedAt = "2026-08-28T01:00:00.000Z";
+      stale.operations.currentSnapshotReadyAt = "2026-08-28T02:00:00.000Z";
+      stale.operations.emergencyRequestedAt = "2026-08-28T01:00:00.000Z";
+      stale.operations.emergencyReadyAt = "2026-08-28T02:00:00.000Z";
+      stale.operations.historyLastReconciledAt = "2026-08-28T02:00:00.000Z";
+      assert.equal((await recordSearchReleaseGovernance({ db: staleFixture.d1 }, stale)).passed, true);
+      await assert.rejects(
+        () => staleFixture.lifecycle.sealSearchRelease({
+          id: staleFixture.releaseId,
+          environment: "development",
+          capability: "current",
+          corpusSnapshotId: staleFixture.snapshot.id,
+          items: [staleFixture.item],
+          retrievalPolicyVersion: "governed-v1",
+          configurationIdentity: "ai-search-governed-v1",
+          createdAt: "2026-08-30T03:05:00.000Z",
+        }),
+        /SEARCH_RELEASE_REJECTED/u,
+        "governance evidence older than 24 hours must block sealing",
+      );
+    } finally {
+      staleFixture.sqlite.close();
+    }
+  } finally {
+    fixture.sqlite.close();
+  }
+});
+
+test("staging-scale governance accepts a compact immutable candidate qualification", async () => {
+  const fixture = await governedDraft();
+  try {
+    const evidence = governanceEvidence(fixture.releaseId, fixture.reportId, {
+      itemKey: fixture.item.itemKey,
+      language: fixture.item.language,
+      documentType: fixture.item.documentType,
+      validFrom: fixture.item.validFrom,
+    });
+    const { providerItems: explicitProviderItems, ...compactBase } = evidence;
+    void explicitProviderItems;
+    const compact = {
+      ...compactBase,
+      candidateQualificationIds: ["qualification-governance-v1"],
+    };
+    const configurationJson = JSON.stringify(compact.configuration);
+    const configurationSha256 = createHash("sha256").update(configurationJson).digest("hex");
+    const providerReconciliationJson = JSON.stringify({
+      instanceId: compact.shards[0]!.providerInstanceId,
+      providerItems: 1,
+      uniqueItems: 1,
+      chunks: 1,
+      mismatches: {},
+      verifiedInventorySha256: compact.shards[0]!.inventorySha256,
+      ok: true,
+    });
+    const providerReconciliationSha256 = createHash("sha256")
+      .update(providerReconciliationJson).digest("hex");
+    fixture.sqlite.prepare(`INSERT INTO legal_search_candidate_qualifications
+      (id,search_release_id,environment,capability,reconciliation_run_id,
+       provider_namespace,provider_instance_id,shard_id,sync_job_id,
+       configuration_json,configuration_sha256,provider_item_count,
+       provider_chunk_count,provider_inventory_sha256,provider_reconciliation_json,
+       provider_reconciliation_sha256,source_prefix,
+       scheduled_indexing_paused,status,recorded_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "qualification-governance-v1",
+      fixture.releaseId,
+      "development",
+      "current",
+      fixture.reportId,
+      compact.shards[0]!.providerNamespaceIdentity,
+      compact.shards[0]!.providerInstanceId,
+      compact.shards[0]!.id,
+      compact.shards[0]!.syncJobId,
+      configurationJson,
+      configurationSha256,
+      1,
+      1,
+      compact.shards[0]!.inventorySha256,
+      providerReconciliationJson,
+      providerReconciliationSha256,
+      compact.configuration.sourcePrefix,
+      1,
+      "qualified",
+      "2026-08-30T02:59:00.000Z",
+    );
+    assert.deepEqual(await recordSearchReleaseGovernance({ db: fixture.d1 }, compact), {
+      passed: true,
+      failures: [],
+    });
+  } finally {
+    fixture.sqlite.close();
+  }
+});
+
+test("release observations accept a bounded passing check without elapsed days or request quotas", async () => {
+  const { sqlite, d1 } = sqliteD1FixtureFromDirectory(new URL("../legal-drizzle/", import.meta.url));
+  try {
+    for (const phase of ["staging_soak", "production_canary", "retirement_stability"] as const) {
+      const scope = { releaseId: "release-observed", environment: "staging" as const, phase };
+      assert.equal((await evaluatePersistedObservationWindow({ db: d1 }, {
+        ...scope, asOf: "2026-09-06T00:00:00.000Z",
+      })).eligible, false);
+      await recordReleaseObservation({ db: d1 }, {
+        ...scope, id: `observation-${phase}`, observedAt: "2026-09-06T00:00:00.000Z",
+        requestCount: 4, green: true, gateBreachCount: 0,
+      });
+      const verdict = await evaluatePersistedObservationWindow({ db: d1 }, {
+        ...scope, asOf: "2026-09-06T00:01:00.000Z",
+      });
+      assert.equal(verdict.eligible, true);
+      assert.equal(verdict.requiredDays, 0);
+      assert.equal(verdict.requiredRequests, 0);
+      await recordReleaseObservation({ db: d1 }, {
+        ...scope, id: `breach-${phase}`, observedAt: "2026-09-06T00:02:00.000Z",
+        requestCount: 1, green: false, gateBreachCount: 1,
+      });
+      assert.equal((await evaluatePersistedObservationWindow({ db: d1 }, {
+        ...scope, asOf: "2026-09-06T00:03:00.000Z",
+      })).eligible, false);
+    }
+  } finally {
+    sqlite.close();
+  }
+});

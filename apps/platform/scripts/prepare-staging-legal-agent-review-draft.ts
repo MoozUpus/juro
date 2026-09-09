@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   LEGAL_EVALUATION_AREAS,
   LEGAL_EVALUATION_BEHAVIORS,
+  LEGAL_RELEASE_GATE_CAPABILITIES,
   type LegalEvaluationBehavior,
   type LegalEvaluationScenario,
 } from "../evaluation/legal-evaluation-corpus";
@@ -49,10 +50,12 @@ const rawRunsSchema = z.array(rawRunSchema).length(314);
 const scenariosSchema = z.array(z.object({
   id: z.string(),
   locale: z.enum(["ru", "uz"]),
+  queryLanguage: z.enum(["ru", "uz-Latn", "uz-Cyrl", "en"]),
   accountType: z.enum(["individual", "entrepreneur", "lawyer"]),
   area: z.enum(LEGAL_EVALUATION_AREAS),
   prompt: z.string(),
   tags: z.array(z.string()),
+  releaseGateCapabilities: z.array(z.enum(LEGAL_RELEASE_GATE_CAPABILITIES)),
   expectedBehaviors: z.array(z.enum(LEGAL_EVALUATION_BEHAVIORS)),
   expectedCanonicalLexUrls: z.array(z.string()),
   expectedArticleIds: z.array(z.string()),

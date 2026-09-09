@@ -361,6 +361,15 @@ function sourceMetadata(source: LegalSourceContext, span: LegalSourceSpan) {
   };
 }
 
+function groundedProvisionTitle(source: LegalSourceContext, span: LegalSourceSpan): string {
+  const article = boundedNullableMetadata(span.article ?? source.article, 160);
+  if (!article) return source.actTitle.slice(0, 240);
+  const articleNumber = article.match(/\d+(?:[.-]\d+)?/u)?.[0];
+  if (!articleNumber) return `${article} — ${source.actTitle}`.slice(0, 240);
+  const prefix = source.locale === "ru" ? `Ст. ${articleNumber}` : `${articleNumber}-modda`;
+  return `${prefix} — ${source.actTitle}`.slice(0, 240);
+}
+
 function boundedNullableMetadata(value: string | null | undefined, maxLength: number): string | null {
   const normalized = value?.replace(/\s+/gu, " ").trim();
   return normalized ? normalized.slice(0, maxLength) : null;
@@ -644,7 +653,7 @@ export function buildVerifiedSourceOnlyFallback(input: {
   const exactText = grounded.map(({ claim }) => claim.text).join(" ");
   const response: LegalChatResponse = {
     confirmedFindings: grounded.map(({ claim, source, span }) => ({
-      title: (span.article ?? source.actTitle).slice(0, 240),
+      title: groundedProvisionTitle(source, span),
       explanation: claim.text,
       sourceIds: [source.id],
     })),
@@ -741,9 +750,18 @@ export function validateLegalGatewayAnswer(input: {
       || source.retrievalSelection === "deterministic_fallback"
       || alreadyGroundedSourceIds.has(source.id)
     ) return [];
-    const matched = sourceGroundedFallback([source], validationQuestion);
+    // A semantic-reranker source has already passed hybrid retrieval,
+    // requirement-specific late ranking, graph completion and exact D1
+    // hydration. Reapplying a literal user-word overlap gate here erased
+    // complementary provisions whose statutory wording differs from the
+    // colloquial question whose wording differs from the formal legal concept.
+    // Copying its verified span adds no model-authored law.
+    const matched = sourceGroundedFallback(
+      [source],
+      source.retrievalSelection === "semantic_reranker" ? undefined : validationQuestion,
+    );
     return matched ? [matched] : [];
-  }).slice(0, input.answerMode === "detailed" ? 8 : 3);
+  }).slice(0, input.answerMode === "detailed" ? 12 : 4);
   for (const { source } of serverGroundedOfficial) alreadyGroundedSourceIds.add(source.id);
   // Public-web material is already a server-refetched exact span. Preserve up
   // to three such references even when the answer model focused only on the
@@ -797,7 +815,7 @@ export function validateLegalGatewayAnswer(input: {
     ? {
       ...filtered,
       confirmedFindings: [{
-        title: (fallback.span.article ?? fallback.source.actTitle).slice(0, 240),
+        title: groundedProvisionTitle(fallback.source, fallback.span),
         explanation: fallback.claim.text,
         sourceIds: [fallback.source.id],
       }],
@@ -807,7 +825,7 @@ export function validateLegalGatewayAnswer(input: {
       confirmedFindings: [
         ...filtered.confirmedFindings,
         ...serverGroundedOfficial.map(({ claim, source, span }) => ({
-          title: (span.article ?? source.actTitle).slice(0, 240),
+          title: groundedProvisionTitle(source, span),
           explanation: claim.text,
           sourceIds: [source.id],
         })),

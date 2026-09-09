@@ -57,7 +57,7 @@ test("profile, development authentication, and production configuration preserve
   assert.match(adminConfig, /"keep_vars": false/u);
   assert.match(
     platformConfig,
-    /"migrations_pattern": "\.\/drizzle\/\{0121,012\[4-9\],01\[3-9\]\[0-9\],0\[2-9\]\[0-9\]\[0-9\],\[1-9\]\[0-9\]\[0-9\]\[0-9\]\}_\*\.sql"/u,
+    /"migrations_pattern": "\.\/drizzle\/\{0121,012\[4-9\],013\[0-9\],014\[0-9\]\}_\*\.sql"/u,
   );
 });
 
@@ -68,9 +68,9 @@ test("production workflow pins third-party actions and exposes Cloudflare creden
   assert.equal(workflow.match(/uses: actions\/setup-node@[0-9a-f]{40}/gu)?.length, 3);
   assert.equal(workflow.match(/CLOUDFLARE_ACCOUNT_ID:/gu)?.length, 3);
   assert.equal(workflow.match(/CLOUDFLARE_API_TOKEN:/gu)?.length, 3);
-  for (const step of ["Deploy public website", "Deploy user platform", "Deploy admin Worker"]) {
-    assert.match(workflow, new RegExp(`- name: ${step}[\\s\\S]*?run: npm run deploy:production[\\s\\S]*?env:[\\s\\S]*?CLOUDFLARE_API_TOKEN:`));
-  }
+  assert.match(workflow, /- name: Deploy public website[\s\S]*?run: npm run deploy:production[\s\S]*?env:[\s\S]*?CLOUDFLARE_API_TOKEN:/u);
+  assert.match(workflow, /- name: Deploy legal retrieval services and user platform[\s\S]*?run: npm run deploy:production:stack[\s\S]*?env:[\s\S]*?CLOUDFLARE_API_TOKEN:/u);
+  assert.match(workflow, /- name: Deploy admin Worker[\s\S]*?run: npm run deploy:production[\s\S]*?env:[\s\S]*?CLOUDFLARE_API_TOKEN:/u);
 });
 
 test("multipart upload routes enforce a declared aggregate bound before form-data parsing", async () => {

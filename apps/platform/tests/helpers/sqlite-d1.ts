@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 type SqliteBinding = null | number | bigint | string;
@@ -70,7 +70,7 @@ class SqliteStatement {
 const drizzleRoot = new URL("../../drizzle/", import.meta.url);
 const journal = JSON.parse(
   readFileSync(new URL("meta/_journal.json", drizzleRoot), "utf8"),
-) as { entries: Array<{ tag: string }> };
+) as { entries: Array<{ idx: number; tag: string }> };
 
 function statements(sql: string): string[] {
   return sql.split("--> statement-breakpoint")
@@ -78,13 +78,13 @@ function statements(sql: string): string[] {
     .filter(Boolean);
 }
 
-export function sqliteD1Fixture(): {
+function createSqliteD1Fixture(lastMigrationIndex = Number.POSITIVE_INFINITY): {
   sqlite: DatabaseSync;
   d1: D1Database;
 } {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys = ON");
-  for (const entry of journal.entries) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= lastMigrationIndex)) {
     const sql = readFileSync(
       new URL(`${entry.tag}.sql`, drizzleRoot),
       "utf8",
@@ -110,6 +110,48 @@ export function sqliteD1Fixture(): {
     },
   } as unknown as D1Database;
   return { sqlite, d1 };
+}
+
+export function sqliteD1FixtureFromDirectory(root: URL): {
+  sqlite: DatabaseSync;
+  d1: D1Database;
+} {
+  const migrationFiles = readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /^\d+_.+\.sql$/u.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec("PRAGMA foreign_keys = ON");
+  for (const migrationFile of migrationFiles) {
+    const sql = readFileSync(new URL(migrationFile, root), "utf8");
+    for (const statement of statements(sql)) sqlite.exec(statement);
+  }
+  const d1 = {
+    prepare(sql: string) {
+      return new SqliteStatement(sqlite, sql);
+    },
+    async batch(batchStatements: D1PreparedStatement[]) {
+      sqlite.exec("BEGIN IMMEDIATE");
+      try {
+        const results = batchStatements.map((statement) =>
+          (statement as unknown as SqliteStatement).execute()
+        );
+        sqlite.exec("COMMIT");
+        return results;
+      } catch (error) {
+        sqlite.exec("ROLLBACK");
+        throw error;
+      }
+    },
+  } as unknown as D1Database;
+  return { sqlite, d1 };
+}
+
+export function sqliteD1Fixture(): {
+  sqlite: DatabaseSync;
+  d1: D1Database;
+} {
+  return createSqliteD1Fixture();
 }
 
 export function batchBarrier(

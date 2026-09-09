@@ -34,7 +34,6 @@ import {
 } from "../../../../lib/legal-corpus/chat-retrieval";
 import {
   fallbackLegalRetrievalUnderstanding,
-  rerankLegalCorpusCandidates,
   understandLegalRetrievalQuery,
 } from "../../../../lib/legal/legal-retrieval-understanding";
 import {
@@ -504,49 +503,27 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     let retrieval;
-    const retrievalBudget = budget;
-    const retrievalStage = retrievalBudget.beginStage("live_lex_retrieval", { timeoutMs: 12_500 });
+    const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 12_500 });
     try {
       retrieval = await retrieveCorpusAwareLegalSources({
-        env: { ...runtimeEnv(), DB: db },
-        query: effectiveQuestion,
+        query: parsed.data.question,
         locale: discoveryLocale,
-        indexQueries: retrievalUnderstanding.corpusQueries,
-        rerankingQuestion: retrievalUnderstanding.standaloneQuestion,
-        requiredConcepts: retrievalUnderstanding.requiredConcepts,
+        targetService: env.LEGAL_RETRIEVAL_SERVICE,
+        targetEnvironment: env.APP_ENV ?? "development",
+        targetQuestionId: idempotencyKey,
+        contextualQuestion: retrievalUnderstanding.standaloneQuestion,
+        applicableAt: applicableAt?.toISOString(),
         lexSearchQueries: retrievalUnderstanding.lexSearchQueries,
         signal: retrievalStage.signal,
         limit: 4,
         budgetMs: 12_000,
-        correlationId: idempotencyKey,
-        scope: { asOfDate: applicableAt ? parsed.data.legalContextDate ?? null : null },
-        rerankCandidates: async ({ question, candidates, limit }) => {
-          const rerankingStage = retrievalBudget.beginStage("corpus_reranking", { timeoutMs: 7_200 });
-          try {
-            const ranked = await rerankLegalCorpusCandidates({
-              question,
-              locale,
-              candidates,
-              limit,
-              requestId: `${idempotencyKey}:corpus-reranking`,
-              safetyIdentifier,
-              signal: rerankingStage.signal,
-              timeoutMs: 7_000,
-            });
-            rerankingStage.complete();
-            return ranked;
-          } catch (error) {
-            rerankingStage.fail();
-            throw error;
-          }
-        },
       });
       retrievalStage.complete();
     } catch (error) {
       retrievalStage.fail();
       rethrowGuestCancellation(error, budget.signal);
       retrieval = await retrieveCorpusAwareLegalSources({
-        env: { ...runtimeEnv(), DB: db }, query: "", locale: discoveryLocale, limit: 1, budgetMs: 1,
+        query: "", locale: discoveryLocale, limit: 1, budgetMs: 1,
       });
     }
     const secondaryInternet: SecondaryInternetRetrieval = !applicableAt
