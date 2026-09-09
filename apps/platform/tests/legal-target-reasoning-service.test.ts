@@ -153,6 +153,11 @@ function selectionCandidate(itemKey: string, retrievalRequirementIds: string[], 
         instanceId: "instance-one",
         shardId: "shard-one",
         formulationIds: ["formulation-one"],
+        formulationMatches: [{
+          formulationId: "formulation-one",
+          rank: 1,
+          fusionScore: score,
+        }],
         readingIds: ["reading-one", "reading-two"],
         retrievalRequirementIds,
         vectorRank: 1,
@@ -243,6 +248,54 @@ test("assessed support retrieved for the same requirement wins retrieval-score t
     assert.deepEqual(result.selections.map(({ itemKey }) => itemKey), [
       "aligned-one", "aligned-two",
     ]);
+  }
+});
+
+test("requirement-specific formulation rank beats broad cross-formulation popularity", () => {
+  const direct = selectionCandidate("direct-rule", ["requirement-one"], 0.2);
+  direct.candidate.candidate.formulationIds = ["formulation-one"];
+  direct.candidate.candidate.formulationMatches = [{
+    formulationId: "formulation-one",
+    rank: 1,
+    fusionScore: 0.2,
+  }];
+  const broad = selectionCandidate("broad-guidance", ["requirement-one", "requirement-two"], 0.99);
+  broad.candidate.candidate.formulationIds = ["formulation-one", "formulation-two"];
+  broad.candidate.candidate.formulationMatches = [{
+    formulationId: "formulation-one",
+    rank: 8,
+    fusionScore: 0.99,
+  }, {
+    formulationId: "formulation-two",
+    rank: 1,
+    fusionScore: 0.99,
+  }];
+  const second = selectionCandidate("second-rule", ["requirement-two"], 0.1);
+  second.candidate.candidate.formulationIds = ["formulation-two"];
+  second.candidate.candidate.formulationMatches = [{
+    formulationId: "formulation-two",
+    rank: 2,
+    fusionScore: 0.1,
+  }];
+
+  const result = selectTargetProvisions({
+    plan,
+    candidates: [broad, direct, second],
+    repairAttempted: false,
+  }, { mappings: [{
+    itemKey: "broad-guidance",
+    supportedRequirementIds: ["requirement-one", "requirement-two"],
+  }, {
+    itemKey: "direct-rule",
+    supportedRequirementIds: ["requirement-one"],
+  }, {
+    itemKey: "second-rule",
+    supportedRequirementIds: ["requirement-two"],
+  }], additionalRequirements: [] });
+
+  assert.equal(result.outcome, "selected");
+  if (result.outcome === "selected") {
+    assert.deepEqual(result.selections.map(({ itemKey }) => itemKey), ["direct-rule", "broad-guidance"]);
   }
 });
 
