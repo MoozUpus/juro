@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="620" viewBox="0 0 1600 620" role="img" aria-labelledby="avatar-title avatar-desc">
+  <title id="avatar-title">JURO AI Avatar — in development</title><desc id="avatar-desc">Abstract, faceless AI assistant silhouette with voice, visual conversation and legal guidance interface tracks, all marked as development work.</desc>
+  <defs>
+    <linearGradient id="avatar-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#031B30"/><stop offset=".62" stop-color="#062844"/><stop offset="1" stop-color="#0B314C"/>
+    </linearGradient>
+    <linearGradient id="avatar-gold" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#A77A31"/><stop offset=".52" stop-color="#DEC27F"/><stop offset="1" stop-color="#BE974F"/>
+    </linearGradient>
+    <radialGradient id="avatar-glow" cx="50%" cy="50%" r="50%">
+      <stop stop-color="#BE974F" stop-opacity=".18"/><stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="avatar-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#DDE8EE" stroke-opacity=".065"/>
+    </pattern>
+    <filter id="avatar-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#00101E" flood-opacity=".25"/>
+    </filter>
+    <filter id="avatar-softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#00101E" flood-opacity=".16"/>
+    </filter>
+  </defs><style>
+    .ui{font-family:Inter,Manrope,"Segoe UI",Arial,sans-serif}.serif{font-family:Georgia,"Times New Roman",serif}
+    .caps{font-weight:800;letter-spacing:2.2px}.tiny{font-size:13px}.small{font-size:16px}.body{font-size:19px}.title{font-size:28px;font-weight:800}.muted{fill:#657985}
+  </style>
+  <rect width="1600" height="620" rx="28" fill="url(#avatar-bg)"/>
+  <circle cx="1310" cy="110" r="430" fill="url(#avatar-glow)"/><path d="M1000 0c120 130 285 188 620 180M1110 620c130-130 300-180 520-166" fill="none" stroke="#BE974F" stroke-opacity=".2"/>
+  <g transform="translate(76 76)"><text class="ui caps" font-size="13" fill="#DEC27F">JURO LAB / HUMAN-CENTRED AI</text><text y="75" class="serif" font-size="58" font-weight="700" fill="#fff">AI Avatar</text><g transform="translate(0 105)"><rect width="170" height="32" rx="16" fill="#F5ECD7"/><circle cx="17" cy="16" r="4" fill="#BE974F"/><text x="29" y="21" class="ui caps" font-size="10" fill="#795B22">IN DEVELOPMENT</text></g><text y="190" class="ui" font-size="23" font-weight="800" fill="#fff">A visual AI legal assistant designed for</text><text y="224" class="ui" font-size="23" font-weight="800" fill="#fff">more natural and accessible interaction.</text><text y="275" class="ui" font-size="16" fill="#BDCED6">No face claim. No production claim. A clear development track.</text>
+  <g transform="translate(0 320)"><rect width="580" height="44" rx="11" fill="#fff" fill-opacity=".055" stroke="#fff" stroke-opacity=".08"/><circle cx="21" cy="22" r="4" fill="#BE974F"/><text x="38" y="27" class="ui caps" font-size="10" fill="#E8EFF2">VOICE INTERACTION</text><text x="556" y="27" text-anchor="end" class="ui caps" font-size="9" fill="#DEC27F">RESEARCH</text></g><g transform="translate(0 378)"><rect width="580" height="44" rx="11" fill="#fff" fill-opacity=".055" stroke="#fff" stroke-opacity=".08"/><circle cx="21" cy="22" r="4" fill="#BE974F"/><text x="38" y="27" class="ui caps" font-size="10" fill="#E8EFF2">VISUAL CONVERSATION</text><text x="556" y="27" text-anchor="end" class="ui caps" font-size="9" fill="#DEC27F">BUILDING</text></g><g transform="translate(0 436)"><rect width="580" height="44" rx="11" fill="#fff" fill-opacity=".055" stroke="#fff" stroke-opacity=".08"/><circle cx="21" cy="22" r="4" fill="#BE974F"/><text x="38" y="27" class="ui caps" font-size="10" fill="#E8EFF2">LEGAL GUIDANCE INTERFACE</text><text x="556" y="27" text-anchor="end" class="ui caps" font-size="9" fill="#DEC27F">PROTOTYPING</text></g></g>
+  <g transform="translate(790 58)"><circle cx="342" cy="252" r="203" fill="#0D3A59" stroke="#BE974F" stroke-opacity=".65"/><circle cx="342" cy="225" r="77" fill="#7893A4"/><path d="M206 432c18-114 70-159 136-159s118 45 136 159" fill="#7893A4"/><circle cx="342" cy="252" r="232" fill="none" stroke="#D7BD7A" stroke-dasharray="2 16" stroke-linecap="round" opacity=".55"/><circle cx="342" cy="252" r="263" fill="none" stroke="#fff" stroke-opacity=".06"/><path d="M88 252H43M641 252h-45M342 22v-45M342 527v-45" stroke="#BE974F" stroke-opacity=".45"/>
+  <g transform="translate(483 410)"><rect width="236" height="105" rx="17" fill="#102F47" stroke="#BE974F"/><text x="18" y="29" class="ui caps" font-size="9" fill="#DEC27F">BUILD STATUS</text><rect x="18" y="49" width="200" height="8" rx="4" fill="#fff" fill-opacity=".12"/><rect x="18" y="49" width="126" height="8" rx="4" fill="#BE974F"/><text x="18" y="82" class="ui" font-size="13" fill="#D3DEE3">Research → development</text></g></g>
+</svg>

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="1030" viewBox="0 0 760 1030" role="img" aria-labelledby="avatar-mobile-title avatar-mobile-desc">
+  <title id="avatar-mobile-title">JURO AI Avatar — in development</title><desc id="avatar-mobile-desc">Abstract, faceless AI assistant silhouette with voice, visual conversation and legal guidance interface tracks, all marked as development work.</desc>
+  <defs>
+    <linearGradient id="avatar-mobile-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#031B30"/><stop offset=".62" stop-color="#062844"/><stop offset="1" stop-color="#0B314C"/>
+    </linearGradient>
+    <linearGradient id="avatar-mobile-gold" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#A77A31"/><stop offset=".52" stop-color="#DEC27F"/><stop offset="1" stop-color="#BE974F"/>
+    </linearGradient>
+    <radialGradient id="avatar-mobile-glow" cx="50%" cy="50%" r="50%">
+      <stop stop-color="#BE974F" stop-opacity=".18"/><stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="avatar-mobile-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#DDE8EE" stroke-opacity=".065"/>
+    </pattern>
+    <filter id="avatar-mobile-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#00101E" flood-opacity=".25"/>
+    </filter>
+    <filter id="avatar-mobile-softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#00101E" flood-opacity=".16"/>
+    </filter>
+  </defs><style>
+    .ui{font-family:Inter,Manrope,"Segoe UI",Arial,sans-serif}.serif{font-family:Georgia,"Times New Roman",serif}
+    .caps{font-weight:800;letter-spacing:2.2px}.tiny{font-size:13px}.small{font-size:16px}.body{font-size:19px}.title{font-size:28px;font-weight:800}.muted{fill:#657985}
+  </style>
+  <rect width="760" height="1030" rx="28" fill="url(#avatar-mobile-bg)"/>
+  <circle cx="620" cy="120" r="300" fill="url(#avatar-mobile-glow)"/><text x="48" y="62" class="ui caps" font-size="13" fill="#DEC27F">JURO LAB / HUMAN-CENTRED AI</text><text x="48" y="118" class="serif" font-size="42" font-weight="700" fill="#fff">AI Avatar</text><g transform="translate(48 144)"><rect width="170" height="32" rx="16" fill="#F5ECD7"/><circle cx="17" cy="16" r="4" fill="#BE974F"/><text x="29" y="21" class="ui caps" font-size="10" fill="#795B22">IN DEVELOPMENT</text></g>
+  <g transform="translate(170 226)"><circle cx="210" cy="210" r="174" fill="#0D3A59" stroke="#BE974F" stroke-opacity=".65"/><circle cx="210" cy="191" r="63" fill="#7893A4"/><path d="M100 362c14-94 57-132 110-132s96 38 110 132" fill="#7893A4"/><circle cx="210" cy="210" r="197" fill="none" stroke="#D7BD7A" stroke-dasharray="2 14" stroke-linecap="round" opacity=".55"/><path d="M48 210h-30M402 210h-30M210 18V-12M210 432v-30" stroke="#BE974F" stroke-opacity=".5"/></g>
+  <g transform="translate(48 662)"><rect width="664" height="282" rx="22" fill="#0A314C" stroke="#2B536C"/><text x="28" y="43" class="ui" font-size="24" font-weight="850" fill="#fff">A more natural way to interact with JURO</text><text x="28" y="78" class="ui" font-size="16" fill="#BFD0D8">A visual AI legal assistant for accessible conversation.</text><g transform="translate(28 111)"><rect width="608" height="40" rx="10" fill="#fff" fill-opacity=".055"/><circle cx="18" cy="20" r="4" fill="#BE974F"/><text x="34" y="25" class="ui caps" font-size="10" fill="#E7EEF1">VOICE INTERACTION</text><text x="590" y="25" text-anchor="end" class="ui caps" font-size="9" fill="#DEC27F">RESEARCH</text></g><g transform="translate(28 163)"><rect width="608" height="40" rx="10" fill="#fff" fill-opacity=".055"/><circle cx="18" cy="20" r="4" fill="#BE974F"/><text x="34" y="25" class="ui caps" font-size="10" fill="#E7EEF1">VISUAL CONVERSATION</text><text x="590" y="25" text-anchor="end" class="ui caps" font-size="9" fill="#DEC27F">BUILDING</text></g><g transform="translate(28 215)"><rect width="608" height="40" rx="10" fill="#fff" fill-opacity=".055"/><circle cx="18" cy="20" r="4" fill="#BE974F"/><text x="34" y="25" class="ui caps" font-size="10" fill="#E7EEF1">LEGAL GUIDANCE UI</text><text x="590" y="25" text-anchor="end" class="ui caps" font-size="9" fill="#DEC27F">PROTOTYPING</text></g></g>
+</svg>

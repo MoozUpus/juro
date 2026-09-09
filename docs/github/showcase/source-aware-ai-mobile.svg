@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="1260" viewBox="0 0 760 1260" role="img" aria-labelledby="source-mobile-title source-mobile-desc">
+  <title id="source-mobile-title">Source-aware legal AI</title><desc id="source-mobile-desc">A question, structured answer and three source cards with source identifiers and verification status.</desc>
+  <defs>
+    <linearGradient id="source-mobile-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#031B30"/><stop offset=".62" stop-color="#062844"/><stop offset="1" stop-color="#0B314C"/>
+    </linearGradient>
+    <linearGradient id="source-mobile-gold" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#A77A31"/><stop offset=".52" stop-color="#DEC27F"/><stop offset="1" stop-color="#BE974F"/>
+    </linearGradient>
+    <radialGradient id="source-mobile-glow" cx="50%" cy="50%" r="50%">
+      <stop stop-color="#BE974F" stop-opacity=".18"/><stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="source-mobile-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#DDE8EE" stroke-opacity=".065"/>
+    </pattern>
+    <filter id="source-mobile-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#00101E" flood-opacity=".25"/>
+    </filter>
+    <filter id="source-mobile-softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#00101E" flood-opacity=".16"/>
+    </filter>
+  </defs><style>
+    .ui{font-family:Inter,Manrope,"Segoe UI",Arial,sans-serif}.serif{font-family:Georgia,"Times New Roman",serif}
+    .caps{font-weight:800;letter-spacing:2.2px}.tiny{font-size:13px}.small{font-size:16px}.body{font-size:19px}.title{font-size:28px;font-weight:800}.muted{fill:#657985}
+  </style>
+  <rect width="760" height="1260" rx="28" fill="#F8F6F2"/><text x="46" y="58" class="ui caps" font-size="13" fill="#BE974F">AI + SOURCES / EVIDENCE LAYER</text><text x="46" y="110" class="serif" font-size="42" font-weight="700" fill="#112B3E">Source-aware legal AI</text>
+  <g transform="translate(46 150)"><rect width="668" height="350" rx="22" fill="#062844"/><text x="28" y="40" class="ui caps" font-size="11" fill="#DEC27F">QUESTION · Q-2048 · 09:41</text><text x="28" y="92" class="ui" font-size="25" font-weight="800" fill="#fff">Можно ли расторгнуть</text><text x="28" y="127" class="ui" font-size="25" font-weight="800" fill="#fff">договор без уведомления?</text><path d="M28 166h612" stroke="#fff" stroke-opacity=".13"/>
+  <text x="28" y="205" class="ui caps" font-size="10" fill="#AFC2CC">REQUEST PIPELINE</text><g class="ui" font-size="13" font-weight="800" fill="#E9F0F3"><circle cx="34" cy="244" r="5" fill="#BE974F"/><text x="50" y="249">Identify legal context</text><circle cx="34" cy="282" r="5" fill="#BE974F"/><text x="50" y="287">Retrieve source candidates</text><circle cx="34" cy="320" r="5" fill="#BE974F"/><text x="50" y="325">Structure a bounded answer</text></g></g>
+  <g transform="translate(46 530)"><rect width="668" height="650" rx="22" fill="#FFFDFC" stroke="#D9E0E3"/><text x="28" y="39" class="ui caps" font-size="11" fill="#BE974F">JURO ANSWER · SOURCE-AWARE</text><g transform="translate(504 22)"><rect width="138" height="32" rx="16" fill="#E7F3EC"/><circle cx="17" cy="16" r="4" fill="#2E7658"/><text x="29" y="21" class="ui caps" font-size="10" fill="#2E7658">TRACEABLE</text></g>
+  <text x="28" y="88" class="ui" font-size="18" font-weight="800" fill="#112B3E">The answer separates the legal rule, context and next step.</text><rect x="28" y="113" width="612" height="98" rx="14" fill="#F0F3F4"/><rect x="45" y="136" width="564" height="9" rx="4.5" fill="#BFCBD1"/><rect x="45" y="163" width="478" height="9" rx="4.5" fill="#D5DDE1"/><rect x="45" y="188" width="548" height="9" rx="4.5" fill="#D5DDE1"/>
+  <text x="28" y="248" class="ui caps" font-size="10" fill="#657985">SOURCES / 03 MATCHES</text>
+  <g transform="translate(28 270)"><rect width="612" height="64" rx="12" fill="#F5ECD7" stroke="#DDC590"/><text x="16" y="24" class="ui caps" font-size="9" fill="#76551B">01 · SOURCE ID L-382</text><text x="16" y="48" class="ui" font-size="15" font-weight="800" fill="#112B3E">Civil Code</text><g transform="translate(478 16)"><rect width="120" height="32" rx="16" fill="#E7F3EC"/><circle cx="17" cy="16" r="4" fill="#2E7658"/><text x="29" y="21" class="ui caps" font-size="10" fill="#2E7658">VERIFIED</text></g></g><g transform="translate(28 348)"><rect width="612" height="64" rx="12" fill="#F3F5F5" stroke="#D9E0E3"/><text x="16" y="24" class="ui caps" font-size="9" fill="#657985">02 · SOURCE ID L-383</text><text x="16" y="48" class="ui" font-size="15" font-weight="800" fill="#112B3E">Relevant regulation</text><g transform="translate(478 16)"><rect width="120" height="32" rx="16" fill="#E7F3EC"/><circle cx="17" cy="16" r="4" fill="#2E7658"/><text x="29" y="21" class="ui caps" font-size="10" fill="#2E7658">VERIFIED</text></g></g><g transform="translate(28 426)"><rect width="612" height="64" rx="12" fill="#F3F5F5" stroke="#D9E0E3"/><text x="16" y="24" class="ui caps" font-size="9" fill="#657985">03 · SOURCE ID L-384</text><text x="16" y="48" class="ui" font-size="15" font-weight="800" fill="#112B3E">JURO legal material</text><g transform="translate(478 16)"><rect width="120" height="32" rx="16" fill="#E7F3EC"/><circle cx="17" cy="16" r="4" fill="#2E7658"/><text x="29" y="21" class="ui caps" font-size="10" fill="#2E7658">REVIEWED</text></g></g>
+  <rect x="28" y="526" width="612" height="1" fill="#D9E0E3"/><circle cx="36" cy="560" r="5" fill="#2E7658"/><text x="52" y="565" class="ui caps" font-size="9" fill="#2E7658">SOURCE STATUS VISIBLE TO THE USER</text></g>
+</svg>

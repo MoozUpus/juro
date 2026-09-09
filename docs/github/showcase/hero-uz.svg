@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820" role="img" aria-labelledby="hero-uz-title hero-uz-desc">
+  <title id="hero-uz-title">JURO product hero — uz</title><desc id="hero-uz-desc">Premium LegalTech product composition with case workspace, source verification, documents, human hand-off and an AI Avatar clearly marked in development.</desc>
+  <defs>
+    <linearGradient id="hero-uz-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#031B30"/><stop offset=".62" stop-color="#062844"/><stop offset="1" stop-color="#0B314C"/>
+    </linearGradient>
+    <linearGradient id="hero-uz-gold" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#A77A31"/><stop offset=".52" stop-color="#DEC27F"/><stop offset="1" stop-color="#BE974F"/>
+    </linearGradient>
+    <radialGradient id="hero-uz-glow" cx="50%" cy="50%" r="50%">
+      <stop stop-color="#BE974F" stop-opacity=".18"/><stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="hero-uz-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#DDE8EE" stroke-opacity=".065"/>
+    </pattern>
+    <filter id="hero-uz-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#00101E" flood-opacity=".25"/>
+    </filter>
+    <filter id="hero-uz-softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#00101E" flood-opacity=".16"/>
+    </filter>
+  </defs><style>
+    .ui{font-family:Inter,Manrope,"Segoe UI",Arial,sans-serif}.serif{font-family:Georgia,"Times New Roman",serif}
+    .caps{font-weight:800;letter-spacing:2.2px}.tiny{font-size:13px}.small{font-size:16px}.body{font-size:19px}.title{font-size:28px;font-weight:800}.muted{fill:#657985}
+  </style>
+  <rect width="1600" height="820" rx="28" fill="url(#hero-uz-bg)"/>
+  <rect width="1600" height="820" rx="28" fill="url(#hero-uz-grid)"/>
+  <circle cx="1390" cy="112" r="420" fill="url(#hero-uz-glow)"/>
+  <path d="M1040 -30C1210 110 1350 158 1640 160M1010 790C1230 640 1425 608 1650 630" fill="none" stroke="#BE974F" stroke-opacity=".2"/>
+  <path d="M925 0V820M0 664H1600" stroke="#DCE8EE" stroke-opacity=".07"/>
+  <g transform="translate(78 64)">
+    <path d="M0 14h18v10c0 14-10 22-18 26V14Z" fill="#BE974F"/><path d="M0 50c11-5 18-13 18-26" fill="none" stroke="#091E31" stroke-width="3"/>
+    <text x="38" y="39" class="ui caps" font-size="38" fill="#fff" letter-spacing="9">JURO</text>
+    <text x="0" y="126" class="ui caps" font-size="14" fill="#DEC27F">AI-POWERED LEGALTECH · UZBEKISTAN</text>
+    <text x="0" y="213" class="serif" font-size="65" font-weight="700" fill="#fff">Huquqiy aniqlik.</text>
+    <text x="0" y="284" class="serif" font-size="57" font-weight="700" fill="#fff">Amaliy keyingi qadam.</text>
+    <text x="0" y="344" class="ui" font-size="20" fill="#C5D2D9">AI yordami, himoyalangan hujjat jarayonlari,</text>
+    <text x="0" y="376" class="ui" font-size="20" fill="#C5D2D9">manbali javoblar va yurist bilan aloqa — bir ish maydonida.</text>
+    <g transform="translate(0 420)"><rect width="184" height="42" rx="21" fill="#FFFFFF" fill-opacity=".055" stroke="#FFFFFF" stroke-opacity=".17"/><circle cx="19" cy="21" r="4" fill="#BE974F"/><text x="31" y="26" class="ui caps" font-size="12" fill="#E7EEF2">AI LEGAL ASSISTANT</text></g><g transform="translate(196 420)"><rect width="184" height="42" rx="21" fill="#FFFFFF" fill-opacity=".055" stroke="#FFFFFF" stroke-opacity=".17"/><circle cx="19" cy="21" r="4" fill="#BE974F"/><text x="31" y="26" class="ui caps" font-size="12" fill="#E7EEF2">VERIFIED SOURCES</text></g><g transform="translate(392 420)"><rect width="132" height="42" rx="21" fill="#FFFFFF" fill-opacity=".055" stroke="#FFFFFF" stroke-opacity=".17"/><circle cx="19" cy="21" r="4" fill="#BE974F"/><text x="31" y="26" class="ui caps" font-size="12" fill="#E7EEF2">DOCUMENTS</text></g>
+    <g transform="translate(0 474)"><rect width="170" height="42" rx="21" fill="#FFFFFF" fill-opacity=".055" stroke="#FFFFFF" stroke-opacity=".17"/><circle cx="19" cy="21" r="4" fill="#BE974F"/><text x="31" y="26" class="ui caps" font-size="12" fill="#E7EEF2">CASE WORKSPACE</text></g><g transform="translate(182 474)"><rect width="188" height="42" rx="21" fill="#FFFFFF" fill-opacity=".055" stroke="#FFFFFF" stroke-opacity=".17"/><circle cx="19" cy="21" r="4" fill="#BE974F"/><text x="31" y="26" class="ui caps" font-size="12" fill="#E7EEF2">LAWYER · PARTIAL</text></g><g transform="translate(382 474)"><rect width="172" height="42" rx="21" fill="#FFFFFF" fill-opacity=".055" stroke="#FFFFFF" stroke-opacity=".17"/><circle cx="19" cy="21" r="4" fill="#BE974F"/><text x="31" y="26" class="ui caps" font-size="12" fill="#E7EEF2">AI AVATAR · DEV</text></g>
+    <text x="0" y="592" class="ui caps" font-size="12" fill="#E0E9EE">RU · UZ · EN</text>
+    <circle cx="145" cy="588" r="3" fill="#BE974F"/><text x="158" y="593" class="ui" font-size="15" fill="#B7C7D0">juro.uz</text>
+    <circle cx="248" cy="588" r="3" fill="#BE974F"/><text x="261" y="593" class="ui" font-size="15" fill="#B7C7D0">app.juro.uz</text>
+    <text x="0" y="676" class="ui caps" font-size="10" fill="#7892A2">PRODUCT ILLUSTRATION · NO CUSTOMER DATA</text>
+  </g>
+  <g filter="url(#hero-uz-shadow)">
+    <rect x="815" y="72" width="705" height="648" rx="22" fill="#FFFDFC"/>
+    <g transform="translate(815 72)"><rect width="705" height="58" rx="18" fill="#103955"/><rect y="40" width="705" height="18" fill="#103955"/><circle cx="24" cy="26" r="5" fill="#BE974F"/><circle cx="42" cy="26" r="5" fill="#B8C8D0"/><circle cx="60" cy="26" r="5" fill="#617C8E"/><text x="88" y="31" class="ui caps" font-size="12" fill="#EAF1F4">JURO / CASE WORKSPACE</text><text x="681" y="31" text-anchor="end" class="ui" font-size="11" fill="#B6C8D2">CASE #UZ-2048 · 09:41</text></g>
+    <g transform="translate(849 154)">
+      <text class="ui caps" font-size="11" fill="#BE974F">EMPLOYMENT · ACTIVE CASE</text>
+      <text y="36" class="ui" font-size="24" font-weight="800" fill="#112B3E">From question to a verified next step</text>
+      <g transform="translate(500 0)"><rect width="132" height="32" rx="16" fill="#E7F3EC"/><circle cx="17" cy="16" r="4" fill="#2E7658"/><text x="29" y="21" class="ui caps" font-size="10" fill="#2E7658">PROTECTED</text></g>
+      <rect y="66" width="637" height="85" rx="14" fill="#F0F3F4" stroke="#D9E0E3"/>
+      <text x="18" y="91" class="ui caps" font-size="10" fill="#657985">QUESTION · 09:41</text>
+      <text x="18" y="124" class="ui" font-size="17" font-weight="700" fill="#112B3E">Can my employer terminate my contract without notice?</text>
+      <path d="M38 186V428" stroke="#CAD5DA" stroke-width="2"/>
+      <g class="ui" font-size="12" font-weight="800">
+        <circle cx="38" cy="190" r="13" fill="#062844"/><text x="38" y="194" text-anchor="middle" fill="#fff">1</text><text x="64" y="195" fill="#112B3E">QUESTION</text>
+        <circle cx="38" cy="250" r="13" fill="#BE974F"/><text x="38" y="254" text-anchor="middle" fill="#031B30">2</text><text x="64" y="255" fill="#112B3E">SOURCES</text>
+        <circle cx="38" cy="310" r="13" fill="#D4DDE2"/><text x="38" y="314" text-anchor="middle" fill="#112B3E">3</text><text x="64" y="315" fill="#112B3E">ANALYSIS</text>
+        <circle cx="38" cy="370" r="13" fill="#D4DDE2"/><text x="38" y="374" text-anchor="middle" fill="#112B3E">4</text><text x="64" y="375" fill="#112B3E">DOCUMENT</text>
+        <circle cx="38" cy="430" r="13" fill="#D4DDE2"/><text x="38" y="434" text-anchor="middle" fill="#112B3E">5</text><text x="64" y="435" fill="#112B3E">ACTION</text>
+      </g>
+      <g transform="translate(176 178)">
+        <rect width="274" height="136" rx="15" fill="#062844"/>
+        <text x="18" y="25" class="ui caps" font-size="10" fill="#DEC27F">AI ANALYSIS · STRUCTURING</text>
+        <rect x="18" y="48" width="225" height="8" rx="4" fill="#fff" fill-opacity=".82"/><rect x="18" y="70" width="195" height="8" rx="4" fill="#fff" fill-opacity=".45"/><rect x="18" y="92" width="234" height="8" rx="4" fill="#fff" fill-opacity=".45"/>
+        <rect x="18" y="117" width="116" height="4" rx="2" fill="#BE974F"/>
+      </g>
+      <g transform="translate(464 178)">
+        <rect width="173" height="136" rx="15" fill="#F5EBD5" stroke="#DDC58D"/>
+        <text x="16" y="25" class="ui caps" font-size="9" fill="#7B5A1D">SOURCE 01</text>
+        <text x="16" y="52" class="ui" font-size="14" font-weight="800" fill="#112B3E">Labour law</text>
+        <text x="16" y="75" class="ui" font-size="11" fill="#657985">Article reference</text>
+        <g transform="translate(14 91)"><rect width="112" height="32" rx="16" fill="#E7F3EC"/><circle cx="17" cy="16" r="4" fill="#2E7658"/><text x="29" y="21" class="ui caps" font-size="10" fill="#2E7658">VERIFIED</text></g>
+      </g>
+      <g transform="translate(176 330)">
+        <rect width="318" height="117" rx="15" fill="#fff" stroke="#D9E0E3"/>
+        <text x="17" y="26" class="ui caps" font-size="9" fill="#657985">DOCUMENT · EMPLOYMENT_AGREEMENT.PDF</text>
+        <text x="17" y="57" class="ui" font-size="15" font-weight="800" fill="#112B3E">Review termination clause</text>
+        <rect x="17" y="78" width="232" height="7" rx="3.5" fill="#E2E8EA"/><rect x="17" y="78" width="168" height="7" rx="3.5" fill="url(#hero-uz-gold)"/>
+        <text x="273" y="86" class="ui" font-size="10" fill="#657985">72%</text>
+      </g>
+      <g transform="translate(508 330)">
+        <rect width="129" height="117" rx="15" fill="#ECF4F0" stroke="#C3DCCF"/>
+        <text x="15" y="26" class="ui caps" font-size="9" fill="#2E7658">NEXT STEP</text>
+        <text x="15" y="54" class="ui" font-size="14" font-weight="800" fill="#112B3E">Action plan</text>
+        <text x="15" y="76" class="ui" font-size="11" fill="#657985">Ready to review</text>
+        <circle cx="16" cy="96" r="4" fill="#2E7658"/><text x="28" y="100" class="ui caps" font-size="8" fill="#2E7658">TRACEABLE</text>
+      </g>
+    </g>
+  </g>
+  <g transform="translate(757 532)" filter="url(#hero-uz-softShadow)">
+    <rect width="210" height="151" rx="18" fill="#112F47" stroke="#BE974F"/>
+    <circle cx="38" cy="55" r="27" fill="#1E4865"/><path d="M25 63c5-17 22-22 29-7v12H25Z" fill="#7994A5"/><circle cx="40" cy="44" r="10" fill="#9BB0BD"/>
+    <text x="76" y="37" class="ui caps" font-size="9" fill="#DEC27F">JURO AI AVATAR</text><text x="76" y="62" class="ui" font-size="14" font-weight="800" fill="#fff">Visual assistant</text>
+    <g transform="translate(18 105)"><rect width="166" height="32" rx="16" fill="#F5ECD7"/><circle cx="17" cy="16" r="4" fill="#BE974F"/><text x="29" y="21" class="ui caps" font-size="10" fill="#795B22">IN DEVELOPMENT</text></g>
+  </g>
+  <g transform="translate(1388 485)" filter="url(#hero-uz-softShadow)">
+    <rect width="154" height="226" rx="25" fill="#0B2941" stroke="#BE974F" stroke-width="2"/>
+    <rect x="16" y="18" width="122" height="26" rx="8" fill="#294B63"/><text x="77" y="35" text-anchor="middle" class="ui caps" font-size="8" fill="#fff">JURO · MOBILE</text>
+    <text x="18" y="80" class="ui caps" font-size="7.5" fill="#DEC27F">LAWYER HAND-OFF · PARTIAL</text><text x="18" y="111" class="ui" font-size="16" font-weight="800" fill="#fff">Case context</text><text x="18" y="134" class="ui" font-size="16" font-weight="800" fill="#fff">is ready</text>
+    <rect x="18" y="164" width="118" height="30" rx="15" fill="#BE974F"/><text x="77" y="183" text-anchor="middle" class="ui caps" font-size="8" fill="#031B30">REQUEST REVIEW</text>
+  </g>
+</svg>
