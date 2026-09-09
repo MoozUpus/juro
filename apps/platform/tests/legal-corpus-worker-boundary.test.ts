@@ -26,7 +26,10 @@ test("retired legacy mutations remain fenced without shipping the scheduled pipe
 test("retired dense integrations are absent while custom retrieval stays bound", () => {
   const platformWorker = readFileSync(new URL("../worker/index.ts", import.meta.url), "utf8");
   const platformConfigText = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
-  const platformConfig = JSON.parse(platformConfigText) as { env: { staging: {
+  const platformConfig = JSON.parse(platformConfigText) as {
+    vars: Record<string, string>;
+    services: Array<{ binding: string; service: string; remote?: boolean }>;
+    env: { staging: {
     migrations: Array<{ deleted_classes?: string[] }>;
     durable_objects: { bindings: Array<{ class_name: string }> };
     containers: Array<{ name: string; class_name: string }>;
@@ -36,6 +39,15 @@ test("retired dense integrations are absent while custom retrieval stays bound",
   assert.doesNotMatch(platformWorker, /qdrant\.internal|LegalCorpusQdrantContainer/u);
   assert.doesNotMatch(platformConfigText, /LEGAL_CORPUS_READ_SERVICE/u);
   assert.match(platformConfigText, /"binding": "LEGAL_RETRIEVAL_SERVICE"/u);
+  assert.equal(platformConfig.vars.LEGAL_RETRIEVAL_ENVIRONMENT, "production");
+  assert.deepEqual(
+    platformConfig.services.find(({ binding }) => binding === "LEGAL_RETRIEVAL_SERVICE"),
+    {
+      binding: "LEGAL_RETRIEVAL_SERVICE",
+      service: "juro-legal-corpus",
+      remote: true,
+    },
+  );
   assert.doesNotMatch(corpusConfig, /QDRANT|LEGAL_AI_SEARCH_NAMESPACE|LEGAL_AI_SEARCH_SOURCE_BUCKET/u);
   assert.deepEqual(platformConfig.env.staging.migrations.at(-1)?.deleted_classes,
     ["LegalCorpusQdrantContainer"]);

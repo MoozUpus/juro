@@ -61,6 +61,7 @@ test("local development has no retired staging corpus mode or binding", () => {
   const taskRunner = readFileSync(new URL("../scripts/platform-tasks.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(viteConfig, /JURO_STAGING_CORPUS_READS|LEGAL_CORPUS_READ_DB/u);
   assert.doesNotMatch(taskRunner, /dev-staging-corpus|JURO_STAGING_CORPUS_READS/u);
+  assert.match(viteConfig, /remoteBindings: useRemoteBindings \? true : undefined/u);
 });
 
 const queueContract = [

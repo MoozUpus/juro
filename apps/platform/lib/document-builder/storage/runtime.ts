@@ -19,6 +19,7 @@ export interface BuilderRuntimeEnv {
   LEGAL_SOURCE_STAFF_API_ENABLED?: string;
   LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST?: string;
   LEGAL_RETRIEVAL_SERVICE?: Fetcher;
+  LEGAL_RETRIEVAL_ENVIRONMENT?: "development" | "staging" | "production";
   LAWYER_PROFILE_DIRECTORY_ENABLED?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
