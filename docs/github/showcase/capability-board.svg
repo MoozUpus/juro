@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1270" viewBox="0 0 1600 1270" role="img" aria-labelledby="cap-title cap-desc">
+  <title id="cap-title">What JURO can do</title><desc id="cap-desc">Eight product capability panels for AI legal assistance, documents, cases, sources, lawyer hand-off, monitoring and an AI Avatar marked in development.</desc>
+  <defs>
+    <linearGradient id="cap-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#031B30"/><stop offset=".62" stop-color="#062844"/><stop offset="1" stop-color="#0B314C"/>
+    </linearGradient>
+    <linearGradient id="cap-gold" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#A77A31"/><stop offset=".52" stop-color="#DEC27F"/><stop offset="1" stop-color="#BE974F"/>
+    </linearGradient>
+    <radialGradient id="cap-glow" cx="50%" cy="50%" r="50%">
+      <stop stop-color="#BE974F" stop-opacity=".18"/><stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="cap-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#DDE8EE" stroke-opacity=".065"/>
+    </pattern>
+    <filter id="cap-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#00101E" flood-opacity=".25"/>
+    </filter>
+    <filter id="cap-softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#00101E" flood-opacity=".16"/>
+    </filter>
+  </defs><style>
+    .ui{font-family:Inter,Manrope,"Segoe UI",Arial,sans-serif}.serif{font-family:Georgia,"Times New Roman",serif}
+    .caps{font-weight:800;letter-spacing:2.2px}.tiny{font-size:13px}.small{font-size:16px}.body{font-size:19px}.title{font-size:28px;font-weight:800}.muted{fill:#657985}
+  </style>
+  <rect width="1600" height="1270" rx="28" fill="#F8F6F2"/><text x="72" y="58" class="ui caps" font-size="13" fill="#BE974F">PRODUCT SYSTEM / 08 CAPABILITIES</text><text x="72" y="108" class="serif" font-size="42" font-weight="700" fill="#112B3E">What JURO can do</text>
+  <g transform="translate(72 154)"><rect width="704" height="245" rx="20" fill="#FFFDFC" stroke="#D9E0E3"/>
+    <text x="24" y="35" class="ui caps" font-size="11" fill="#BE974F">01 / CAPABILITY</text><g transform="translate(642 24)" fill="none" stroke="#062844" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 1l3.8 10.2L30 15l-10.2 3.8L16 29l-3.8-10.2L2 15l10.2-3.8L16 1Z"/></g>
+    <text x="24" y="82" class="ui" font-size="22" font-weight="850" fill="#112B3E">AI LEGAL ASSISTANT</text>
+    <circle cx="28" cy="118" r="3" fill="#062844"/><text x="42" y="124" class="ui" font-size="15" fill="#657985">Ask legal questions</text><circle cx="28" cy="146" r="3" fill="#062844"/><text x="42" y="152" class="ui" font-size="15" fill="#657985">Structured answers</text><circle cx="28" cy="174" r="3" fill="#062844"/><text x="42" y="180" class="ui" font-size="15" fill="#657985">Practical next steps</text>
+
+  </g><g transform="translate(804 154)"><rect width="704" height="245" rx="20" fill="#FFFDFC" stroke="#D9E0E3"/>
+    <text x="24" y="35" class="ui caps" font-size="11" fill="#BE974F">02 / CAPABILITY</text><g transform="translate(642 24)" fill="none" stroke="#062844" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="22" height="28" rx="4"/><path d="M10 11h12M10 17h12M10 23h8"/></g>
+    <text x="24" y="82" class="ui" font-size="22" font-weight="850" fill="#112B3E">DOCUMENT INTELLIGENCE</text>
+    <circle cx="28" cy="118" r="3" fill="#062844"/><text x="42" y="124" class="ui" font-size="15" fill="#657985">Analyse documents</text><circle cx="28" cy="146" r="3" fill="#062844"/><text x="42" y="152" class="ui" font-size="15" fill="#657985">Compare versions</text><circle cx="28" cy="174" r="3" fill="#062844"/><text x="42" y="180" class="ui" font-size="15" fill="#657985">Identify risks</text>
+    <g transform="translate(24 197)"><rect width="166" height="32" rx="16" fill="#F5ECD7"/><circle cx="17" cy="16" r="4" fill="#BE974F"/><text x="29" y="21" class="ui caps" font-size="10" fill="#795B22">PARTIAL WORKFLOW</text></g>
+  </g><g transform="translate(72 423)"><rect width="704" height="245" rx="20" fill="#FFFDFC" stroke="#D9E0E3"/>
+    <text x="24" y="35" class="ui caps" font-size="11" fill="#BE974F">03 / CAPABILITY</text><g transform="translate(642 24)" fill="none" stroke="#062844" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 27V8l8-5 8 5v19M2 29h28M11 13h4M11 19h4M21 13h4M21 19h4"/></g>
+    <text x="24" y="82" class="ui" font-size="22" font-weight="850" fill="#112B3E">DOCUMENT BUILDER</text>
+    <circle cx="28" cy="118" r="3" fill="#062844"/><text x="42" y="124" class="ui" font-size="15" fill="#657985">Guided questionnaires</text><circle cx="28" cy="146" r="3" fill="#062844"/><text x="42" y="152" class="ui" font-size="15" fill="#657985">Reusable templates</text><circle cx="28" cy="174" r="3" fill="#062844"/><text x="42" y="180" class="ui" font-size="15" fill="#657985">RU · UZ support</text>
+
+  </g><g transform="translate(804 423)"><rect width="704" height="245" rx="20" fill="#FFFDFC" stroke="#D9E0E3"/>
+    <text x="24" y="35" class="ui caps" font-size="11" fill="#BE974F">04 / CAPABILITY</text><g transform="translate(642 24)" fill="none" stroke="#062844" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="26" height="21" rx="4"/><path d="M11 7V4h10v3M3 15h26M13 18h6"/></g>
+    <text x="24" y="82" class="ui" font-size="22" font-weight="850" fill="#112B3E">CASE WORKSPACE</text>
+    <circle cx="28" cy="118" r="3" fill="#062844"/><text x="42" y="124" class="ui" font-size="15" fill="#657985">Questions and documents</text><circle cx="28" cy="146" r="3" fill="#062844"/><text x="42" y="152" class="ui" font-size="15" fill="#657985">Actions and history</text><circle cx="28" cy="174" r="3" fill="#062844"/><text x="42" y="180" class="ui" font-size="15" fill="#657985">Case progress</text>
+
+  </g><g transform="translate(72 692)"><rect width="704" height="245" rx="20" fill="#FFFDFC" stroke="#D9E0E3"/>
+    <text x="24" y="35" class="ui caps" font-size="11" fill="#BE974F">05 / CAPABILITY</text><g transform="translate(642 24)" fill="none" stroke="#062844" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="6"/><path d="M2 29c1-7 5-10 10-10s9 3 10 10M23 9h7v12h-7l-4 4v-4"/></g>
+    <text x="24" y="82" class="ui" font-size="22" font-weight="850" fill="#112B3E">LAWYER HAND-OFF</text>
+    <circle cx="28" cy="118" r="3" fill="#062844"/><text x="42" y="124" class="ui" font-size="15" fill="#657985">Keep the case context</text><circle cx="28" cy="146" r="3" fill="#062844"/><text x="42" y="152" class="ui" font-size="15" fill="#657985">Request human review</text><circle cx="28" cy="174" r="3" fill="#062844"/><text x="42" y="180" class="ui" font-size="15" fill="#657985">Continue one workflow</text>
+    <g transform="translate(24 197)"><rect width="166" height="32" rx="16" fill="#F5ECD7"/><circle cx="17" cy="16" r="4" fill="#BE974F"/><text x="29" y="21" class="ui caps" font-size="10" fill="#795B22">PARTIAL WORKFLOW</text></g>
+  </g><g transform="translate(804 692)"><rect width="704" height="245" rx="20" fill="#FFFDFC" stroke="#D9E0E3"/>
+    <text x="24" y="35" class="ui caps" font-size="11" fill="#BE974F">06 / CAPABILITY</text><g transform="translate(642 24)" fill="none" stroke="#062844" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h20v25H6zM11 10h10M11 15h10M11 20h7"/><circle cx="25" cy="25" r="6" fill="#F8F6F2"/><path d="M22 25l2 2 4-5"/></g>
+    <text x="24" y="82" class="ui" font-size="22" font-weight="850" fill="#112B3E">LEGAL SOURCES</text>
+    <circle cx="28" cy="118" r="3" fill="#062844"/><text x="42" y="124" class="ui" font-size="15" fill="#657985">Source-aware responses</text><circle cx="28" cy="146" r="3" fill="#062844"/><text x="42" y="152" class="ui" font-size="15" fill="#657985">Relevant legislation</text><circle cx="28" cy="174" r="3" fill="#062844"/><text x="42" y="180" class="ui" font-size="15" fill="#657985">Traceable citations</text>
+
+  </g><g transform="translate(72 961)"><rect width="704" height="245" rx="20" fill="#062844" stroke="#BE974F"/>
+    <text x="24" y="35" class="ui caps" font-size="11" fill="#DEC27F">07 / CAPABILITY</text><g transform="translate(642 24)" fill="none" stroke="#DEC27F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="12" r="7"/><path d="M5 30c1-8 5-11 11-11s10 3 11 11M4 12H1v8h4M28 12h3v8h-4"/></g>
+    <text x="24" y="82" class="ui" font-size="22" font-weight="850" fill="#fff">AI AVATAR</text>
+    <circle cx="28" cy="118" r="3" fill="#BE974F"/><text x="42" y="124" class="ui" font-size="15" fill="#C8D6DD">Visual conversation</text><circle cx="28" cy="146" r="3" fill="#BE974F"/><text x="42" y="152" class="ui" font-size="15" fill="#C8D6DD">Accessible interaction</text><circle cx="28" cy="174" r="3" fill="#BE974F"/><text x="42" y="180" class="ui" font-size="15" fill="#C8D6DD">Legal guidance interface</text>
+    <g transform="translate(24 197)"><rect width="164" height="32" rx="16" fill="#F5ECD7"/><circle cx="17" cy="16" r="4" fill="#BE974F"/><text x="29" y="21" class="ui caps" font-size="10" fill="#795B22">IN DEVELOPMENT</text></g>
+  </g><g transform="translate(804 961)"><rect width="704" height="245" rx="20" fill="#FFFDFC" stroke="#D9E0E3"/>
+    <text x="24" y="35" class="ui caps" font-size="11" fill="#BE974F">08 / CAPABILITY</text><g transform="translate(642 24)" fill="none" stroke="#062844" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="16" r="13"/><path d="M16 8v8l6 4M5 5l-3 3M27 5l3 3"/></g>
+    <text x="24" y="82" class="ui" font-size="22" font-weight="850" fill="#112B3E">LEGAL MONITORING</text>
+    <circle cx="28" cy="118" r="3" fill="#062844"/><text x="42" y="124" class="ui" font-size="15" fill="#657985">Track legal changes</text><circle cx="28" cy="146" r="3" fill="#062844"/><text x="42" y="152" class="ui" font-size="15" fill="#657985">Review source context</text><circle cx="28" cy="174" r="3" fill="#062844"/><text x="42" y="180" class="ui" font-size="15" fill="#657985">Understand implications</text>
+
+  </g>
+</svg>

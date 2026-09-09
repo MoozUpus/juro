@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="700" viewBox="0 0 1600 700" role="img" aria-labelledby="document-title document-desc">
+  <title id="document-title">Document intelligence</title><desc id="document-desc">A protected document analysis workflow showing a contract scan, three risks and an action-plan hand-off.</desc>
+  <defs>
+    <linearGradient id="document-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#031B30"/><stop offset=".62" stop-color="#062844"/><stop offset="1" stop-color="#0B314C"/>
+    </linearGradient>
+    <linearGradient id="document-gold" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#A77A31"/><stop offset=".52" stop-color="#DEC27F"/><stop offset="1" stop-color="#BE974F"/>
+    </linearGradient>
+    <radialGradient id="document-glow" cx="50%" cy="50%" r="50%">
+      <stop stop-color="#BE974F" stop-opacity=".18"/><stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="document-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#DDE8EE" stroke-opacity=".065"/>
+    </pattern>
+    <filter id="document-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#00101E" flood-opacity=".25"/>
+    </filter>
+    <filter id="document-softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#00101E" flood-opacity=".16"/>
+    </filter>
+  </defs><style>
+    .ui{font-family:Inter,Manrope,"Segoe UI",Arial,sans-serif}.serif{font-family:Georgia,"Times New Roman",serif}
+    .caps{font-weight:800;letter-spacing:2.2px}.tiny{font-size:13px}.small{font-size:16px}.body{font-size:19px}.title{font-size:28px;font-weight:800}.muted{fill:#657985}
+  </style>
+  <rect width="1600" height="700" rx="28" fill="#F8F6F2"/><text x="70" y="58" class="ui caps" font-size="13" fill="#BE974F">DOCUMENT INTELLIGENCE / PROTECTED WORKFLOW</text><text x="1530" y="58" text-anchor="end" class="ui caps" font-size="11" fill="#657985">PRODUCT ILLUSTRATION · PARTIAL WORKFLOW</text><text x="70" y="110" class="serif" font-size="42" font-weight="700" fill="#112B3E">From file to action plan</text>
+  <g transform="translate(70 150)"><rect width="1460" height="470" rx="24" fill="#062844"/>
+  <g transform="translate(34 32)"><rect width="430" height="402" rx="18" fill="#113A56" stroke="#31536A"/><text x="22" y="36" class="ui caps" font-size="11" fill="#DEC27F">CONTRACT.PDF · 2.4 MB</text><rect x="22" y="64" width="386" height="8" rx="4" fill="#fff" fill-opacity=".12"/><rect x="22" y="64" width="312" height="8" rx="4" fill="#BE974F"/><text x="22" y="105" class="ui" font-size="22" font-weight="800" fill="#fff">Analysing document…</text><text x="22" y="139" class="ui" font-size="14" fill="#BBD0DA">Clauses · obligations · dates · risks</text><g transform="translate(22 172)"><g transform="translate(0 0)"><rect width="132" height="32" rx="16" fill="#E7F3EC"/><circle cx="17" cy="16" r="4" fill="#2E7658"/><text x="29" y="21" class="ui caps" font-size="10" fill="#2E7658">PROTECTED</text></g><g transform="translate(146 0)"><rect width="142" height="32" rx="16" fill="#F5ECD7"/><circle cx="17" cy="16" r="4" fill="#BE974F"/><text x="29" y="21" class="ui caps" font-size="10" fill="#795B22">72% SCANNED</text></g></g><path d="M22 248h386" stroke="#fff" stroke-opacity=".13"/><text x="22" y="281" class="ui caps" font-size="10" fill="#AFC1CA">SCAN TRACE</text><rect x="22" y="301" width="318" height="7" rx="3.5" fill="#fff" fill-opacity="0.34"/><rect x="22" y="323" width="284" height="7" rx="3.5" fill="#fff" fill-opacity="0.30000000000000004"/><rect x="22" y="345" width="250" height="7" rx="3.5" fill="#fff" fill-opacity="0.26"/><rect x="22" y="367" width="216" height="7" rx="3.5" fill="#fff" fill-opacity="0.22000000000000003"/></g>
+  <g transform="translate(492 32)"><rect width="558" height="402" rx="18" fill="#FFFDFC"/><text x="24" y="37" class="ui caps" font-size="11" fill="#BE974F">ANALYSIS RESULT · 3 RISKS FOUND</text>
+  <g transform="translate(24 70)"><rect width="510" height="70" rx="12" fill="#F5ECD7"/><text x="16" y="27" class="ui caps" font-size="9" fill="#775719">01 / RISK</text><text x="16" y="52" class="ui" font-size="16" font-weight="800" fill="#112B3E">Termination clause</text><text x="494" y="43" text-anchor="end" class="ui caps" font-size="9" fill="#9A6722">High priority</text></g><g transform="translate(24 156)"><rect width="510" height="70" rx="12" fill="#F0F3F4"/><text x="16" y="27" class="ui caps" font-size="9" fill="#657985">02 / RISK</text><text x="16" y="52" class="ui" font-size="16" font-weight="800" fill="#112B3E">Liability</text><text x="494" y="43" text-anchor="end" class="ui caps" font-size="9" fill="#657985">Needs review</text></g><g transform="translate(24 242)"><rect width="510" height="70" rx="12" fill="#F0F3F4"/><text x="16" y="27" class="ui caps" font-size="9" fill="#657985">03 / RISK</text><text x="16" y="52" class="ui" font-size="16" font-weight="800" fill="#112B3E">Payment conditions</text><text x="494" y="43" text-anchor="end" class="ui caps" font-size="9" fill="#657985">Clarify dates</text></g></g>
+  <g transform="translate(1080 32)"><rect width="346" height="402" rx="18" fill="#F3E8CE" stroke="#D8BC7A"/><text x="22" y="38" class="ui caps" font-size="10" fill="#745317">NEXT STEP / ACTION ENGINE</text><text x="22" y="83" class="ui" font-size="23" font-weight="850" fill="#112B3E">Generate action plan</text><text x="22" y="119" class="ui" font-size="14" fill="#657985">Turn findings into review tasks.</text><g transform="translate(22 156)"><rect width="302" height="48" rx="12" fill="#062844"/><text x="151" y="30" text-anchor="middle" class="ui caps" font-size="10" fill="#fff">CREATE ACTION PLAN</text></g><path d="M22 244h302" stroke="#C8AD70"/><text x="22" y="279" class="ui caps" font-size="9" fill="#85652A">OUTPUTS</text><text x="22" y="313" class="ui" font-size="14" fill="#112B3E">• Prioritised issues</text><text x="22" y="342" class="ui" font-size="14" fill="#112B3E">• Suggested revisions</text><text x="22" y="371" class="ui" font-size="14" fill="#112B3E">• Lawyer-ready context</text></g>
+  </g>
+</svg>

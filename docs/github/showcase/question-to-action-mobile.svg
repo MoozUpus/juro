@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="1330" viewBox="0 0 760 1330" role="img" aria-labelledby="flow-mobile-title flow-mobile-desc">
+  <title id="flow-mobile-title">From question to action</title><desc id="flow-mobile-desc">Connected six-step legal workflow from asking and understanding through sources, document work, action and optional human review.</desc>
+  <defs>
+    <linearGradient id="flow-mobile-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#031B30"/><stop offset=".62" stop-color="#062844"/><stop offset="1" stop-color="#0B314C"/>
+    </linearGradient>
+    <linearGradient id="flow-mobile-gold" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#A77A31"/><stop offset=".52" stop-color="#DEC27F"/><stop offset="1" stop-color="#BE974F"/>
+    </linearGradient>
+    <radialGradient id="flow-mobile-glow" cx="50%" cy="50%" r="50%">
+      <stop stop-color="#BE974F" stop-opacity=".18"/><stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="flow-mobile-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#DDE8EE" stroke-opacity=".065"/>
+    </pattern>
+    <filter id="flow-mobile-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#00101E" flood-opacity=".25"/>
+    </filter>
+    <filter id="flow-mobile-softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#00101E" flood-opacity=".16"/>
+    </filter>
+  </defs><style>
+    .ui{font-family:Inter,Manrope,"Segoe UI",Arial,sans-serif}.serif{font-family:Georgia,"Times New Roman",serif}
+    .caps{font-weight:800;letter-spacing:2.2px}.tiny{font-size:13px}.small{font-size:16px}.body{font-size:19px}.title{font-size:28px;font-weight:800}.muted{fill:#657985}
+  </style>
+  <rect width="760" height="1330" rx="28" fill="#F8F6F2"/><text x="48" y="58" class="ui caps" font-size="13" fill="#BE974F">HOW IT WORKS / ONE CONNECTED WORKFLOW</text><text x="48" y="113" class="serif" font-size="42" font-weight="700" fill="#112B3E">From question to action</text><g transform="translate(72 162)"><rect width="616" height="132" rx="18" fill="#FFFDFC" stroke="#D9E0E3"/><text x="25" y="35" class="ui caps" font-size="11" fill="#BE974F">01 / ASK</text><text x="25" y="78" class="ui" font-size="26" font-weight="820" fill="#112B3E">Legal question</text><path d="M308 132v52" stroke="#BE974F" stroke-width="2"/><path d="m301 174 7 10 7-10" fill="none" stroke="#BE974F" stroke-width="2"/></g><g transform="translate(72 346)"><rect width="616" height="132" rx="18" fill="#FFFDFC" stroke="#D9E0E3"/><text x="25" y="35" class="ui caps" font-size="11" fill="#BE974F">02 / UNDERSTAND</text><text x="25" y="78" class="ui" font-size="26" font-weight="820" fill="#112B3E">AI analysis</text><path d="M308 132v52" stroke="#BE974F" stroke-width="2"/><path d="m301 174 7 10 7-10" fill="none" stroke="#BE974F" stroke-width="2"/></g><g transform="translate(72 530)"><rect width="616" height="132" rx="18" fill="#FFFDFC" stroke="#D9E0E3"/><text x="25" y="35" class="ui caps" font-size="11" fill="#BE974F">03 / VERIFY</text><text x="25" y="78" class="ui" font-size="26" font-weight="820" fill="#112B3E">Sources</text><path d="M308 132v52" stroke="#BE974F" stroke-width="2"/><path d="m301 174 7 10 7-10" fill="none" stroke="#BE974F" stroke-width="2"/></g><g transform="translate(72 714)"><rect width="616" height="132" rx="18" fill="#FFFDFC" stroke="#D9E0E3"/><text x="25" y="35" class="ui caps" font-size="11" fill="#BE974F">04 / WORK</text><text x="25" y="78" class="ui" font-size="26" font-weight="820" fill="#112B3E">Document / case</text><path d="M308 132v52" stroke="#BE974F" stroke-width="2"/><path d="m301 174 7 10 7-10" fill="none" stroke="#BE974F" stroke-width="2"/></g><g transform="translate(72 898)"><rect width="616" height="132" rx="18" fill="#FFFDFC" stroke="#D9E0E3"/><text x="25" y="35" class="ui caps" font-size="11" fill="#BE974F">05 / ACT</text><text x="25" y="78" class="ui" font-size="26" font-weight="820" fill="#112B3E">Next action</text><path d="M308 132v52" stroke="#BE974F" stroke-width="2"/><path d="m301 174 7 10 7-10" fill="none" stroke="#BE974F" stroke-width="2"/></g><g transform="translate(72 1082)"><rect width="616" height="132" rx="18" fill="#062844" stroke="#BE974F"/><text x="25" y="35" class="ui caps" font-size="11" fill="#BE974F">06 / HUMAN</text><text x="25" y="78" class="ui" font-size="26" font-weight="820" fill="#fff">Lawyer if needed</text></g>
+</svg>

@@ -1,14 +1,16 @@
+<picture>
+  <source media="(max-width: 900px)" srcset="docs/github/showcase/hero-uz-mobile.svg">
+  <img src="docs/github/showcase/hero-uz.svg" width="100%" alt="JURO — O‘zbekiston uchun savollar, manbalar, hujjatlar, ishlar va yuristga yo‘naltirishni birlashtiruvchi AI-powered LegalTech">
+</picture>
+
 <div align="center">
-  <img src="docs/github/hero.svg" width="100%" alt="JURO — O‘zbekiston uchun AI yordamidagi LegalTech platformasi">
+  <a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <strong>O‘zbekcha</strong>
 </div>
 
 <div align="center">
-  <a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.uz.md">O‘zbekcha</a>
-</div>
-
-<div align="center">
-  <a href="https://juro.uz">Jonli sayt</a> ·
-  <a href="https://app.juro.uz">Platformani ochish</a> ·
+  <a href="https://juro.uz"><strong>juro.uz</strong></a> ·
+  <a href="https://app.juro.uz"><strong>Platformani ochish</strong></a> ·
+  <a href="#product-demo">Mahsulot demo</a> ·
   <a href="#qanday-ishlaydi">Qanday ishlaydi</a> ·
   <a href="#mahsulot-tajribasi">Mahsulot tajribasi</a> ·
   <a href="#arxitektura">Arxitektura</a> ·
@@ -18,119 +20,151 @@
 <br>
 
 <div align="center">
-  <img src="docs/github/stack-badges.svg" width="100%" alt="TypeScript, React, Next.js, Cloudflare Workers, Cloudflare D1, Cloudflare R2, OpenAI, Node.js 22 va CI">
+  <strong>Aniq keyingi qadamlar uchun huquqiy intellekt.</strong><br>
+  <sub>AI huquqiy yordam · manbali javoblar · himoyalangan hujjat jarayonlari · ishlar · yuristga yo‘naltirish</sub>
 </div>
 
-<div align="center">
+JURO — O‘zbekiston uchun yaratilgan, xalqaro mahsulot va muhandislik standartlariga yo‘naltirilgan ko‘p tilli LegalTech ish maydoni. U huquqiy savollar, manbalar, hujjatlar, ishlar va amaliy keyingi qadamlarni bitta himoyalangan muhitda bog‘laydi — bu alohida AI-chat emas.
 
-**Yuridik ma’lumot — aniq keyingi qadamlar uchun.**
+> **Mahsulot chegarasi:** quyidagi kompozitsiyalar mijoz ma’lumotlarisiz yaratilgan original JURO mahsulot illyustratsiyalaridir. Ular amalga oshirilgan va rivojlantirilayotgan workflow’larni tushuntiradi, ammo live screenshot yoki individual yuridik maslahat o‘rnida ko‘rsatilmaydi. AI Avatar aniq **IN DEVELOPMENT** deb belgilangan.
 
-Manbaga bog‘langan huquqiy ma’lumot · himoyalangan hujjat jarayonlari · ishlar va harakat rejalari · workflow imkon bersa, yuristga yo‘naltirish
+<a name="product-demo"></a>
 
-</div>
+## Mahsulot demo
 
-JURO — O‘zbekiston uchun LegalTech ish maydoni. U inson yoki jamoaga yuridik savol va hujjatdan tushunarli, tekshirib borish mumkin bo‘lgan keyingi qadamga o‘tishga yordam beradi; AI javobini individual yuridik maslahat o‘rniga qo‘ymaydi.
+<picture>
+  <source media="(prefers-reduced-motion: reduce) and (max-width: 900px)" srcset="docs/github/showcase/product-demo-mobile-poster.svg">
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/github/showcase/product-demo-poster.svg">
+  <source media="(max-width: 900px)" srcset="docs/github/showcase/product-demo-mobile.gif">
+  <img src="docs/github/showcase/product-demo.gif" width="100%" alt="Animated JURO product illustration: a legal question moves through AI analysis, a verified source, legal analysis, a next step, a document upload and optional lawyer hand-off">
+</picture>
 
-Jonli ommaviy kirish nuqtasi [juro.uz](https://juro.uz) manzilida, himoyalangan mahsulot platformasi esa [app.juro.uz](https://app.juro.uz) manzilida. Ushbu repozitoriy ommaviy sayt, platforma, ma’muriy sirt, Cloudflare konfiguratsiyasi hamda release tekshiruvlari uchun mahsulot dosyesi va muhandislik qaydidir.
+12,6 soniyalik sikl bog‘langan yo‘lni ko‘rsatadi: **savol → tahlil → manba → huquqiy kontekst → keyingi qadam → hujjat → yurist**. Barcha assetlar repozitoriy ichida; reduced motion tanlanganida statik poster ko‘rsatiladi.
 
-## Mahsulotga bir qarash
+## JURO nimalarni qila oladi
 
-| Mahsulot yo‘nalishi | Repozitoriyda mavjud narsa | Holat chegarasi |
-|---|---|---|
-| Huquqiy ma’lumot | Aniq so‘rov doirasidagi ommaviy huquqiy sahifalar uchun source-aware javob yo‘li va citation yuzalari. | WORKING — bu rasmiy manba provayderi API’si yoki to‘liq korpus da’vosi emas. |
-| Hujjatlar va ish | Draftlar, generated-file yo‘llari, ishlar, vazifalar va harakat-reja workflows. | WORKING — foydalanish himoyalangan account va deploy holatiga bog‘liq bo‘lishi mumkin. |
-| Huquqiy ko‘rib chiqish | Citationga yo‘naltirilgan document review va comparison interfeyslari. | PARTIAL — yangi authenticated end-to-end tekshiruv zarur. |
-| Inson yordami | Yurist profillari, katalog va hand-off lifecycle yuzalari. | PARTIAL — bu vakillik yoki yakunlangan konsultatsiya kafolati emas. |
-| Yetkazib berish platformasi | Bitta monorepozitoriydagi ommaviy sayt, himoyalangan platforma va alohida admin ilova. | LIVE / WORKING / PARTIAL — quyidagi status matritsasida batafsil. |
+<picture>
+  <source media="(max-width: 900px)" srcset="docs/github/showcase/capability-board-mobile.svg">
+  <img src="docs/github/showcase/capability-board.svg" width="100%" alt="JUROning sakkiz imkoniyati: AI huquqiy yordamchi, hujjat tahlili, hujjat konstruktori, ish maydoni, yuristga yo‘naltirish, huquqiy manbalar, ishlab chiqilayotgan AI Avatar va monitoring">
+</picture>
 
-> **Nima uchun bu taqdimot dalillarga tayanadi:** JURO repozitoriyda qayta tekshiriladigan manba bo‘lmasa, auditoriya, aniqlik, daromad, korpus hajmi yoki yuridik natijalar haqida metrikalarni e’lon qilmaydi. Yashil texnik tekshiruv ham yuridik sifat yoki production-release kafolati sifatida ko‘rsatilmaydi.
+JURO bir nechta huquqiy ish sirtlarini bitta tizimga birlashtiradi. Mavjudlik account permission va deployment holatiga bog‘liq; quyidagi evidence-led matritsa LIVE, WORKING, PARTIAL va IN DEVELOPMENT holatlari uchun asosiy manba bo‘lib qoladi.
+
+<a name="qanday-ishlaydi"></a>
 
 ## Qanday ishlaydi
 
-<img src="docs/github/ai-answer-flow.svg" width="100%" alt="JUROning savol yoki hujjatdan manbalar va ixtiyoriy yuristga yo‘naltirishgacha bo‘lgan source-aware oqimi">
+<picture>
+  <source media="(max-width: 900px)" srcset="docs/github/showcase/question-to-action-mobile.svg">
+  <img src="docs/github/showcase/question-to-action.svg" width="100%" alt="JURO savol, tushunish va manbani tekshirishdan hujjat yoki ish, harakat va zarur bo‘lsa yuristgacha olib boradi">
+</picture>
 
-Amalga oshirilgan huquqiy-ma’lumot yo‘li savol yoki hujjatdan boshlanadi, so‘rov turini aniqlaydi, tegishli ommaviy manba sahifalarini oladi, cheklangan kontekstni yig‘adi va dalil bo‘lganda manba kartalari bilan tartibli javobni ko‘rsatadi. Ommaviy manba qatlami Lex.uz hamda Advice.uz sahifalarini query-scoped olishdan iborat; JURO uchinchi tomon rasmiy API integratsiyasini da’vo qilmaydi.
+Mahsulot chat soniga emas, natijaga tomon harakatga qurilgan: to‘g‘ri kontekstni yig‘ish, manbani ko‘rsatish, ishni himoyalangan muhitda saqlash va javobni amaliy harakatga aylantirish. Inson yordami joriy workflow va mavjudlik ruxsat bergan joyda alohida qadam bo‘lib qoladi.
 
-Javobning chegarasi aniq bo‘lsagina u foydali bo‘ladi:
+## Manbalarini ko‘rsatadigan AI
 
-| JURO ko‘rinadigan qilmoqchi bo‘lgan narsa | Repozitoriy dalili | Mahsulot ataylab nimani va’da qilmaydi |
-|---|---|---|
-| Javob bilan bog‘langan manba | [`direct-citation-store.ts`](apps/platform/lib/legal/direct-citation-store.ts) bevosita citationsni AI run bilan saqlaydi. | Bir manba sahifasi javobni individual yuridik maslahatga aylantirmaydi. |
-| Nazorat qilinadigan ommaviy manba olish yo‘li | [`direct-retrieval.ts`](apps/platform/lib/legal/direct-retrieval.ts) retrieval va citation eligibility mantiqini o‘z ichiga oladi. | Rasmiy provayderga kirish, to‘liq qamrov yoki xatosiz retrieval. |
-| Hujjat review’ida citation chegaralari | [`document-analysis/schema.ts`](apps/platform/lib/document-analysis/schema.ts) ayrim legal findings, risks va missing clausesni citationssiz rad etadi. | Tugallangan end-to-end review da’vosi; bu sirt PARTIAL bo‘lib qoladi. |
-| Inson tekshiruviga yo‘l | Yurist profili va hand-off kodi [`apps/platform`](apps/platform) ichida. | Avtomatik konsultatsiya, vakillik yoki natija. |
+<picture>
+  <source media="(max-width: 900px)" srcset="docs/github/showcase/source-aware-ai-mobile.svg">
+  <img src="docs/github/showcase/source-aware-ai.svg" width="100%" alt="Source-aware JURO AI: savol, tuzilgan javob, manba identifikatorlari va ko‘rinadigan tekshiruv holati">
+</picture>
 
-Muhandislik asoslari va kod xaritasini [Product foundations](docs/github/PRODUCT_FOUNDATIONS.md) hujjatida o‘qing.
+JURO huquqiy axborot yo‘li dalil chegarasini ko‘rinadigan saqlaydi. Query-scoped retrieval, citation eligibility va direct citation saqlash [direct-retrieval.ts](apps/platform/lib/legal/direct-retrieval.ts) hamda [direct-citation-store.ts](apps/platform/lib/legal/direct-citation-store.ts) da amalga oshirilgan. Public-source path tegishli Lex.uz va Advice.uz sahifalarini oladi; JURO rasmiy provider API, qonunchilikning to‘liq qamrovi yoki source page mavjudligi AI javobini individual yuridik maslahatga aylantirishini da’vo qilmaydi.
+
+## Hujjat intellekti
+
+<picture>
+  <source media="(max-width: 900px)" srcset="docs/github/showcase/document-intelligence-mobile.svg">
+  <img src="docs/github/showcase/document-intelligence.svg" width="100%" alt="JURO hujjat intellekti: himoyalangan shartnoma skani, uchta risk sohasi va action planga o‘tish">
+</picture>
+
+Himoyalangan platformada review, comparison, versioning va action-plan sirtlari mavjud. Illyustratsiya workflow’ni tushuntiradi, ammo har bir tahlil yo‘li yangi authenticated end-to-end tekshiruvdan o‘tganini da’vo qilmaydi; matritsada ko‘rsatilgan joylarda holat **PARTIAL** bo‘lib qoladi.
+
+## AI Avatar — In Development
+
+<picture>
+  <source media="(max-width: 900px)" srcset="docs/github/showcase/ai-avatar-mobile.svg">
+  <img src="docs/github/showcase/ai-avatar.svg" width="100%" alt="Aniq yuzsiz abstrakt JURO AI Avatar: voice interaction, visual conversation va legal guidance interface yo‘nalishlari in development holatida">
+</picture>
+
+JURO tabiiyroq va hammabop muloqot uchun vizual AI huquqiy yordamchini ishlab chiqmoqda. Repozitoriy production avatar, tasdiqlangan rigged character, live lip-sync yoki tugallangan voice path mavjudligini **da’vo qilmaydi**. Research, interface prototyping va asset approval ishlab chiqish bosqichida.
+
+## Yuristga yo‘naltirish
+
+<picture>
+  <source media="(max-width: 900px)" srcset="docs/github/showcase/lawyer-handoff-mobile.svg">
+  <img src="docs/github/showcase/lawyer-handoff.svg" width="100%" alt="JUROda AI yordamidan himoyalangan ish konteksti orqali so‘ralgan yurist ko‘rigiga o‘tish">
+</picture>
+
+Hand-off modeli savol, manbalar, hujjatlar va harakat tarixini saqlaydi, shunda foydalanuvchi ishni boshidan tushuntirmasdan inson yordamini so‘rashi mumkin. Bu boshqariladigan mahsulot workflow’i; vakillik, yurist mavjudligi yoki natija kafolati emas.
+
+## Production uchun qurilgan
+
+<picture>
+  <source media="(max-width: 900px)" srcset="docs/github/showcase/technology-architecture-mobile.svg">
+  <img src="docs/github/showcase/technology-architecture.svg" width="100%" alt="JURO texnologik arxitekturasi: React, Next.js, TypeScript, Cloudflare Workers, Node.js, D1, private R2, OpenAI va CI/CD">
+</picture>
+
+Monorepozitoriy public, protected va administrative sirtlarni ajratadi; credentials va data access server chegarasida qoladi. Frontend React, Next.js va TypeScript’da; runtime hamda data layer Cloudflare Workers, Node.js, D1 va private R2’da; OpenAI faqat server-side sozlanadi; CI/CD va artifact checks release intizomini qo‘llab-quvvatlaydi.
+
+<a name="mahsulot-tajribasi"></a>
 
 ## Mahsulot tajribasi
 
-| Ommaviy kirish nuqtasi | Himoyalangan ish maydoni |
+Quyida mijoz ma’lumotlarisiz, repozitoriyda saqlanadigan haqiqiy product surface capture’lari keltirilgan. Ular yuqoridagi tushuntiruvchi kompozitsiyalarni to‘ldiradi.
+
+| Ommaviy mahsulot | Himoyalangan ish maydoni |
 |---|---|
 | <img src="docs/github/screenshots/public-website.webp" alt="JURO ommaviy sayti" width="100%"> | <img src="docs/github/screenshots/platform-dashboard.webp" alt="Account ma’lumotlarisiz JURO himoyalangan ish maydoni" width="100%"> |
-| Yuridik vaziyat, hujjat yoki keyingi harakatdan boshlang. | Huquqiy ish, hujjatlar va keyingi qadamlarni bitta himoyalangan maydonda bog‘lang. |
+| **Ommaviy sayt** · ko‘p tilli kirish nuqtasi | **Workspace** · ishlar, hujjatlar, harakatlar va account-scoped navigation |
 
-| Manbaga bog‘langan savol oqimi | Hujjat konstruktori |
+| AI huquqiy axborot | Hujjat konstruktori |
 |---|---|
 | <img src="docs/github/screenshots/ai-chat.webp" alt="Suhbat tarixisiz JURO AI huquqiy ma’lumot oqimi" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="JURO hujjatlar kutubxonasi va konstruktori kirish nuqtasi" width="100%"> |
-| Interfeys kontekstni so‘raydi va manba mavjudligini aniq bildiradi. | Hujjat workflow’i orqali tartibli draftni boshlang. |
+| **AI + manbalar** · tuzilgan javob va evidence surfaces | **Hujjatlar** · kutubxona, guided builder va generated-file paths |
 
-| Review va taqqoslash sirti | Ommaviy mahsulotning tor ko‘rinishi |
+| Hujjat review | Mobil mahsulot kirishi |
 |---|---|
 | <img src="docs/github/screenshots/document-analysis.webp" alt="JURO hujjat review va comparison kirish nuqtasi" width="100%"> | <img src="docs/github/screenshots/mobile-experience.webp" alt="JURO ommaviy mahsulotining tor preview’i" width="100%"> |
-| Interfeys mavjud; uning end-to-end yuridik tahlil holati PARTIAL. | Jonli ommaviy mahsulotning tor presentation capture’i, mobile-QA dalili emas. |
+| **Review** · analysis va comparison (**PARTIAL**) | **Responsive experience** · narrow public-product preview |
 
-## Huquqiy kontekstdan amaliy ishga
+<a name="arxitektura"></a>
 
-<img src="docs/github/operating-model.svg" width="100%" alt="JURO operatsion modeli: huquqiy kontekst va manbalardan himoyalangan ish va qisman yuristga yo‘naltirishgacha">
-
-JURO alohida chat oynasi emas, bog‘langan workflow sifatida shakllantirilgan. Foydalanuvchi kontekstdan boshlashi, manbalardagi mavjud dalillarni ko‘rishi, himoyalangan maydonda davom etishi va — joriy ssenariy bunga ruxsat bersa — inson yordamiga murojaat qilishi mumkin.
-
-| O‘tish | Joriy holat | Ochiq ko‘rsatiladigan chegara |
-|---|---|---|
-| Ommaviy legal-intelligence kirish → himoyalangan platforma | LIVE | Ommaviy sayt va platforma alohida domenga deploy qilingan. |
-| Savol → tartibli source-aware javob | WORKING | Javob asosini ko‘rsatishi yoki cheklovni aytishi lozim. |
-| Javob → hujjat, ish yoki harakat rejasi | WORKING | Workflows himoyalangan platformada amalga oshirilgan; ayrim route ma’lum account uchun yoqilmagan bo‘lishi mumkin. |
-| Murakkab masala → yuristga yo‘naltirish | PARTIAL | Workflow kodda bor, lekin kafolatli vakillik sifatida ko‘rsatilmaydi. |
-
-## Mahsulot ekotizimi
-
-<img src="docs/github/product-overview.svg" width="100%" alt="JUROning working, partial va planned komponentlardan iborat mahsulot ekotizimi">
-
-Sxema joriy yadroni qisman hamda rejalashtirilgan yuzalardan ajratadi. Uzluksiz chiziqlar repozitoriydagi implemented yoki working yo‘llarni, punktir chiziqlar esa PARTIAL yoki PLANNED ishni bildiradi.
-
-## Arxitektura
+## Arxitektura va mahsulot chegaralari
 
 <img src="docs/github/platform-architecture.svg" width="100%" alt="JURO monorepozitoriyi va Cloudflare arxitekturasi">
 
-JURO mustaqil deploy qilinadigan ommaviy va himoyalangan ilovalarga ega monorepozitoriydir:
+JURO mustaqil deploy qilinadigan sirtlarga ega monorepozitoriydir:
 
-- `apps/website` React, Next.js, Vite/Vinext va Cloudflare Worker tooling orqali ommaviy saytni ishga tushiradi.
-- `apps/platform` himoyalangan route handlerlar, document workflows, authorization chegaralari va generated-file flowsni ta’minlaydi.
-- `apps/admin` alohida Worker-based ma’muriy sirt bo‘lib, PARTIAL holatida qoladi.
-- Cloudflare D1 va private R2 saqlanadigan platforma ma’lumotlari hamda fayllarini qo‘llab-quvvatlaydi; OpenAI konfiguratsiyasi serverda qoladi.
-- Platforma DOCX, PDF va ZIP generatsiyasini qo‘llaydi. Yoqilganda email/OTP server-side provider settings orqali sozlanadi.
+- apps/website React, Next.js, Vite/Vinext va Cloudflare Worker tooling orqali ommaviy saytni ta’minlaydi.
+- apps/platform himoyalangan route handler’lar, AI evidence, hujjatlar, ishlar, authorization boundary va generated-file flow’larni beradi.
+- apps/admin — **PARTIAL** holatidagi alohida Worker-based administrative surface.
+- Cloudflare D1 va private R2 platforma ma’lumotlari hamda fayllarini saqlaydi; AI va email configuration server-side bo‘lib qoladi.
+- Platformada DOCX, PDF va ZIP generation path’lari mavjud; email/OTP delivery yoqilganda server-side provider configuration ishlatiladi.
+
+<img src="docs/github/product-overview.svg" width="100%" alt="JUROning working, partial va planned komponentlardan iborat mahsulot ekotizimi">
+
+Solid connection’lar implemented/working yo‘llarni, dashed connection’lar PARTIAL yoki PLANNED chegaralarni bildiradi. Muhandislik asoslari va kod xaritasini [Product foundations](docs/github/PRODUCT_FOUNDATIONS.md) hujjatida o‘qing.
 
 ## Ishonch, maxfiylik va yuridik xavfsizlik
 
 <img src="docs/github/trust-layer.svg" width="100%" alt="JURO ishonch, maxfiylik va yuridik xavfsizlik chegaralari">
 
-Repozitoriyda bir nechta asosiy chegara tekshirilishi mumkin: server-side credentials, backend orqali D1/R2 kirishi, himoyalangan ownership yoki workspace checks, manbalarni ko‘rsatish va AI natijasidagi aniq cheklovlar. Bu yerda GDPR, ISO, SOC 2, data residency yoki boshqa sertifikatlar da’vo qilinmaydi.
+Repozitoriy server-side credentials, backend-mediated D1/R2 access, ownership/workspace checks, manba ko‘rsatish va AI output cheklovlarini tekshiriladigan qiladi. Bu yerda GDPR, ISO, SOC 2, data residency yoki yuridik natija da’vosi berilmaydi.
 
-<img src="docs/github/engineering-commitments.svg" width="100%" alt="JUROning manbalar, himoyalangan ish va inson hand-off’i bo‘yicha muhandislik majburiyatlari">
-
-Zaifliklar haqida [SECURITY.md](SECURITY.md) bo‘yicha yopiq tarzda xabar bering. Issue yoki pull requestga secrets, shaxsiy ma’lumotlar, foydalanuvchi hujjatlari yoki production logsni qo‘shmang.
+Zaiflik haqida [SECURITY.md](SECURITY.md) orqali maxfiy xabar bering. Issue yoki pull request ichiga secret, shaxsiy ma’lumot, foydalanuvchi hujjati yoki production log joylamang.
 
 ## Joriy holat
 
 | Soha | Holat | Izoh |
 |---|---|---|
-| Ommaviy veb-sayt | LIVE | [juro.uz](https://juro.uz) hujjatlashtirish auditi vaqtida ochildi. |
-| Himoyalangan platformaga kirish | LIVE | [app.juro.uz](https://app.juro.uz) ochiladi va himoyalangan mahsulot route’larini xizmat qiladi. |
+| Ommaviy veb-sayt | LIVE | [juro.uz](https://juro.uz) 2026-09-10 kuni HTTP 200 qaytardi. |
+| Himoyalangan platformaga kirish | LIVE | [app.juro.uz](https://app.juro.uz) 2026-09-10 kuni HTTP 200 qaytardi va mahalliylashtirilgan himoyalangan kirish sahifasiga yo‘naltirdi. |
 | AI huquqiy ma’lumot oqimi | WORKING | Source-aware javob va citation surfaces amalga oshirilgan; kengroq legal evaluation alohida release gate hisoblanadi. |
 | Hujjat konstruktori | WORKING | Persisted document workflows, private storage va generated-file paths amalga oshirilgan. |
 | Hujjat tahlili va taqqoslash | PARTIAL | Review va comparison yuzalari bor, ammo yangi authenticated end-to-end evidence yakunlanmagan. |
 | Ishlar va harakat rejalari | WORKING | Case, task va action-plan workflows amalga oshirilgan. |
 | Yuristlar katalogi va konsultatsiyalar | PARTIAL | Controlled profiles, katalog va hand-off lifecycle hali to‘liq emas. |
+| AI Avatar | IN DEVELOPMENT | Vizual yordamchi ishlab chiqish yo‘nalishida; production avatar, tasdiqlangan rigged character yoki yakunlangan live voice path da’vo qilinmaydi. |
 | Ma’muriyat | PARTIAL | Alohida admin Worker va himoyalangan administrative flows mavjud. |
 | Production to‘lovlar | PLANNED | Repozitoriyda live payment provider da’vo qilinmaydi. |
 
