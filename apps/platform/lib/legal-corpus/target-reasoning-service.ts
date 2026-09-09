@@ -63,6 +63,7 @@ const supportAssessmentProviderSchema = z.object({
   }).strict()).max(3),
 }).strict();
 const supportAssessmentJsonSchema = z.toJSONSchema(supportAssessmentProviderSchema, { io: "output" });
+const SUPPORT_ASSESSMENT_BATCH_SIZE = 8;
 
 const formulationProviderSchema = z.object({
   ...questionInterpretationPlanSchema.shape.formulations.element.shape,
@@ -240,57 +241,88 @@ export type TargetRequirementSupport = z.infer<typeof supportAssessmentProviderS
 export async function assessTargetRequirementSupport(input: z.input<typeof selectionRequestSchema>): Promise<TargetRequirementSupport> {
   const value = selectionRequestSchema.parse(input);
   if (value.candidates.length === 0) return { mappings: [], additionalRequirements: [] };
-  const result = await callOpenAiStructured({
-    schemaName: "juro_target_requirement_support",
-    schema: supportAssessmentJsonSchema,
-    parse: (output) => supportAssessmentProviderSchema.parse(output),
-    instructions: [
-      "Assess whether each verified official provision directly supports each stated legal coverage requirement.",
-      "A search match, shared topic, title, actor, or procedural deadline is not support by itself.",
-      "Mark support only when the supplied provision text entails or directly establishes the material legal proposition.",
-      "Do not answer the user's question, invent rules, infer missing article text, or use outside knowledge.",
-      "A provision may support requirements from any retrieval formulation, and may support none.",
-      "When a supporting provision explicitly cites another provision that is necessary to understand a supported requirement and no existing requirement covers it, add one concise additional requirement grounded only in that citation.",
-      "Do not add broad background, merely related provisions, or an additional requirement without an explicit reference in the supplied text.",
-      "Return only item keys and requirement identifiers supplied in the input.",
-    ].join(" "),
-    input: {
-      requirements: value.plan.readings.flatMap((reading) => reading.requirements.map((requirement) => ({
-        id: requirement.id,
-        statement: requirement.statement,
-        priority: requirement.priority ?? "core",
-        reading: reading.statement,
-      }))),
-      candidates: value.candidates.map((candidate) => ({
-        itemKey: candidate.candidate.candidate.itemKey,
-        citationLabel: candidate.citationLabel,
-        provisionText: candidate.provisionText,
-      })),
-    },
-    maxAttempts: 1,
-    // Production support assessment includes a bounded set of verified
-    // provision texts. Allow the structured provider enough time to begin a
-    // response under normal edge-to-provider latency while staying within the
-    // target retrieval deadline.
-    firstByteTimeoutMs: 8_000,
-    totalResponseTimeoutMs: 10_000,
-    maxOutputTokens: 1_200,
-    reasoningEffort: "low",
-    textVerbosity: "low",
+  const requirements = value.plan.readings.flatMap((reading) => reading.requirements.map((requirement) => ({
+    id: requirement.id,
+    statement: requirement.statement,
+    priority: requirement.priority ?? "core",
+    reading: reading.statement,
+  })));
+  const candidateBatches: SelectionCandidate[][] = [];
+  for (let offset = 0; offset < value.candidates.length; offset += SUPPORT_ASSESSMENT_BATCH_SIZE) {
+    candidateBatches.push(value.candidates.slice(offset, offset + SUPPORT_ASSESSMENT_BATCH_SIZE));
+  }
+  const results = await Promise.all(candidateBatches.map((candidates) => callOpenAiStructured({
+      schemaName: "juro_target_requirement_support",
+      schema: supportAssessmentJsonSchema,
+      parse: (output) => supportAssessmentProviderSchema.parse(output),
+      instructions: [
+        "Assess whether each verified official provision directly supports each stated legal coverage requirement.",
+        "A search match, shared topic, title, actor, or procedural deadline is not support by itself.",
+        "Mark support only when the supplied provision text entails or directly establishes the material legal proposition.",
+        "Do not answer the user's question, invent rules, infer missing article text, or use outside knowledge.",
+        "A provision may support requirements from any retrieval formulation, and may support none.",
+        "When a supporting provision explicitly cites another provision that is necessary to understand a supported requirement and no existing requirement covers it, add one concise additional requirement grounded only in that citation.",
+        "Do not add broad background, merely related provisions, or an additional requirement without an explicit reference in the supplied text.",
+        "Return only item keys and requirement identifiers supplied in the input.",
+      ].join(" "),
+      input: {
+        requirements,
+        candidates: candidates.map((candidate) => ({
+          itemKey: candidate.candidate.candidate.itemKey,
+          citationLabel: candidate.citationLabel,
+          provisionText: candidate.provisionText,
+        })),
+      },
+      maxAttempts: 1,
+      // Each request contains at most eight verified provisions. The calls run
+      // in parallel, so coverage is retained without making first-byte latency
+      // grow with the complete selection pool.
+      firstByteTimeoutMs: 10_000,
+      totalResponseTimeoutMs: 12_000,
+      maxOutputTokens: 800,
+      reasoningEffort: "low",
+      textVerbosity: "low",
+    })));
+  const candidateKeys = new Set(value.candidates.map((candidate) =>
+    candidate.candidate.candidate.itemKey));
+  const requirementIds = new Set(requirements.map((requirement) => requirement.id));
+  const mappings = new Map<string, Set<string>>();
+  for (const mapping of results.flatMap((result) => result.data.mappings)) {
+    if (!candidateKeys.has(mapping.itemKey)) continue;
+    const supported = mappings.get(mapping.itemKey) ?? new Set<string>();
+    for (const requirementId of mapping.supportedRequirementIds) {
+      if (requirementIds.has(requirementId)) supported.add(requirementId);
+    }
+    if (supported.size > 0) mappings.set(mapping.itemKey, supported);
+  }
+  const additionalRequirements = new Map<string,
+    z.infer<typeof supportAssessmentProviderSchema>["additionalRequirements"][number]>();
+  for (const addition of results.flatMap((result) => result.data.additionalRequirements)) {
+    const identity = [addition.sourceItemKey, addition.readingId, addition.priority,
+      addition.statement.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase()].join("\n");
+    if (!additionalRequirements.has(identity)) additionalRequirements.set(identity, addition);
+  }
+  const support = supportAssessmentProviderSchema.parse({
+    mappings: [...mappings].map(([itemKey, supportedRequirementIds]) => ({
+      itemKey,
+      supportedRequirementIds: [...supportedRequirementIds],
+    })),
+    additionalRequirements: [...additionalRequirements.values()].slice(0, 3),
   });
   console.log(JSON.stringify({
     event: "legal_requirement_support_assessed",
     planId: value.plan.id,
     candidateCount: value.candidates.length,
+    batchCount: candidateBatches.length,
     requirementCount: value.plan.readings.reduce((count, reading) => count + reading.requirements.length, 0),
-    mappings: result.data.mappings.map((mapping) => ({
+    mappings: support.mappings.map((mapping) => ({
       itemKey: mapping.itemKey,
       supportedRequirementIds: mapping.supportedRequirementIds,
     })),
-    additionalRequirementCount: result.data.additionalRequirements.length,
+    additionalRequirementCount: support.additionalRequirements.length,
     repairAttempted: value.repairAttempted,
   }));
-  return result.data;
+  return support;
 }
 
 /** Converts explicitly assessed Requirement Support into a bounded Provision

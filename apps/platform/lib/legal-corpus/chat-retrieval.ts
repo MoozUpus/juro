@@ -14,10 +14,11 @@ import {
   type TargetLegalAnswerResult,
 } from "./target-retrieval";
 
-/** The indexed target's accepted complete-answer contract is 30 seconds. */
-export const LEGAL_RETRIEVAL_BUDGET_MS = 30_000;
+/** The indexed target's accepted complete-answer contract includes the shared
+ * semantic planning wait plus bounded search and support assessment. */
+export const LEGAL_RETRIEVAL_BUDGET_MS = 36_000;
 /** Leave the caller a small margin to observe and record the target deadline. */
-export const LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = 30_500;
+export const LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = 36_500;
 
 export function legalRetrievalEnvironment(bindings: {
   APP_ENV?: "development" | "staging" | "production";

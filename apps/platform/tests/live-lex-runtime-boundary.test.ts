@@ -50,6 +50,6 @@ test("user AI uses R2-native retrieval before direct Lex while other paths stay 
 
 test("the caller allows the indexed target its complete-answer contract", async () => {
   const retrieval = await source("lib/legal-corpus/chat-retrieval.ts");
-  assert.match(retrieval, /LEGAL_RETRIEVAL_BUDGET_MS = 30_000/);
-  assert.match(retrieval, /LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = 30_500/);
+  assert.match(retrieval, /LEGAL_RETRIEVAL_BUDGET_MS = 36_000/);
+  assert.match(retrieval, /LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = 36_500/);
 });
