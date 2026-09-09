@@ -1124,7 +1124,7 @@ async function main() {
         args,
         {
           JURO_AGENT_PREVIEW_COMPATIBILITY_DATE: "2026-05-22",
-          LOCAL_AUTH_BYPASS: process.env.LOCAL_AUTH_BYPASS ?? "false",
+          LOCAL_AUTH_BYPASS: process.env.LOCAL_AUTH_BYPASS ?? "true",
           LOCAL_AUTH_EMAIL:
             process.env.LOCAL_AUTH_EMAIL ?? "developer@local.juro.uz",
           LOCAL_AUTH_FULL_NAME:

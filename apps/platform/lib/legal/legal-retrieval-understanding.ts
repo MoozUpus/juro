@@ -66,55 +66,6 @@ function normalize(value: string, maxLength: number): string {
   return value.normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, maxLength);
 }
 
-function stabilizeLaborConcepts(
-  query: string,
-  concepts: readonly string[],
-  locale: AiOutputLocale,
-): string[] {
-  if (locale === "en") return [...concepts];
-  const normalizedQuery = query.toLocaleLowerCase("und");
-  const russian = locale === "ru";
-  const mentionsDecree = /dekret|декрет/iu.test(normalizedQuery);
-  const mentionsMaternity = mentionsDecree || /homilador|tug['‘’ʼ`]?ish/iu.test(normalizedQuery);
-  const hasMaternity = mentionsMaternity || /беремен|родам/iu.test(normalizedQuery);
-  const mentionsChildcare = mentionsDecree
-    || /bola(?:ni|ga)?\s+parvarish|parvarish(?:lash)?\s+ta['‘’ʼ`]?til|уходу\s+за\s+ребен/iu.test(normalizedQuery);
-  const mentionsDismissal = /bo['‘’ʼ`]?shat|ishdan\s+bo|shartnoma(?:ni)?\s+bekor|увол|прекращ|расторж/iu.test(normalizedQuery);
-  if ((!hasMaternity && !mentionsChildcare) || !mentionsDismissal) return [...concepts];
-
-  const stabilized = [...concepts];
-  if (hasMaternity) {
-    stabilized[0] = russian
-      ? "отпуск по беременности и родам"
-      : "homiladorlik va tug‘ish ta’tili / отпуск по беременности и родам";
-  }
-  if (mentionsChildcare) {
-    stabilized[hasMaternity ? 1 : 0] = russian
-      ? "отпуск по уходу за ребенком до трех лет"
-      : "bola parvarishlash ta’tili / отпуск по уходу за ребенком";
-  }
-  stabilized[3] = russian
-    ? "сохранение места работы на период социального отпуска"
-    : "ta’til davrida ish joyini saqlash / сохранение места работы на период социального отпуска";
-  if (hasMaternity && mentionsChildcare) {
-    stabilized[2] = russian
-      ? "гарантии прекращения трудового договора с беременной женщиной"
-      : "homilador xodimani bo‘shatish kafolatlari / гарантии прекращения трудового договора с беременной женщиной";
-    stabilized[4] = russian
-      ? "гарантии увольнения работника в отпуске по уходу за ребенком"
-      : "bola parvarishlash ta’tilidagi xodimani bo‘shatish / гарантии увольнения работника в отпуске по уходу за ребенком";
-  } else {
-    stabilized[4] = hasMaternity
-      ? russian
-        ? "гарантии прекращения трудового договора с беременной женщиной"
-        : "homilador xodimani bo‘shatish kafolatlari / гарантии прекращения трудового договора с беременной женщиной"
-      : russian
-        ? "гарантии увольнения работника в отпуске по уходу за ребенком"
-        : "bola parvarishlash ta’tilidagi xodimani bo‘shatish / гарантии увольнения работника в отпуске по уходу за ребенком";
-  }
-  return stabilized;
-}
-
 /**
  * Safe degradation for provider outages. It deliberately preserves the
  * question instead of guessing synonyms, legal domains, acts, or articles.
@@ -197,7 +148,7 @@ export async function understandLegalRetrievalQuery(input: {
     instructions: [
       "Create a compact retrieval plan for an Uzbekistan legal question in the user's language.",
       "Resolve conversation references in standaloneQuestion while preserving actors, action, status, circumstances, date, and outcome.",
-      "Fill the five named concept slots with concise, independently testable phrases in formal statutory vocabulary suitable for hybrid retrieval. primaryStatus and alternativeStatus separate plausible meanings hidden by everyday wording; entitlementOrDefinition covers another governing status or entitlement; preservationOrOngoingRights names continuation of the employment relationship, position, entitlement, payment, or other ongoing right that the question puts at issue; requestedActionGroundsExceptions uses the formal legal name of the requested action and includes its relevant actor statuses, grounds, exceptions, or transition after the status ends. Carry the primary and alternative statuses into the last two slots when they change the applicable rule. Never collapse pregnancy, maternity leave, and childcare leave.",
+      "Fill the five named concept slots with concise, independently testable phrases in formal statutory vocabulary suitable for hybrid retrieval. primaryStatus and alternativeStatus separate plausible meanings hidden by everyday wording; entitlementOrDefinition covers another governing status or entitlement; preservationOrOngoingRights names continuation of any relationship, status, position, entitlement, payment, or other ongoing right that the question puts at issue; requestedActionGroundsExceptions uses the formal legal name of the requested action and includes relevant actor statuses, grounds, exceptions, or transitions. Carry the primary and alternative statuses into the last two slots when they change the applicable rule.",
       "Cover ambiguity conditionally without choosing an unsupported interpretation.",
       "For Uzbek questions, write each concept slot as a concise Uzbek phrase followed by its Russian statutory equivalent after ' / '; the indexed official act may currently exist only in Russian. Keep standaloneQuestion in the user's language.",
       "Do not invent an act, article, fact, quotation, or legal outcome.",
@@ -233,13 +184,13 @@ export async function understandLegalRetrievalQuery(input: {
     outputTokens: result.usage.outputTokens,
   });
 
-  const plannerConcepts = stabilizeLaborConcepts(query, [
+  const plannerConcepts = [
     result.data.primaryStatus,
     result.data.alternativeStatus,
     result.data.entitlementOrDefinition,
     result.data.preservationOrOngoingRights,
     result.data.requestedActionGroundsExceptions,
-  ], input.locale);
+  ];
   const normalizedConcepts = plannerConcepts.map((concept) => ({
     statement: concept,
     alternatives: [concept],

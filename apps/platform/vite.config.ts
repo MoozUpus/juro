@@ -47,7 +47,10 @@ export default defineConfig(async ({ command }) => {
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
-        remoteBindings: useRemoteBindings,
+        // `false` disables even bindings marked `remote` in wrangler.jsonc.
+        // Leave the option unset by default so the legal corpus service alone
+        // can use its explicit remote production binding.
+        remoteBindings: useRemoteBindings ? true : undefined,
         configPath: "./wrangler.jsonc",
         config(userConfig) {
           if (agentPreviewCompatibilityDate) {

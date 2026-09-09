@@ -13,6 +13,18 @@ import {
   type TargetLegalAnswerResult,
 } from "./target-retrieval";
 
+/** The indexed target's accepted complete-answer contract is 30 seconds. */
+export const LEGAL_RETRIEVAL_BUDGET_MS = 30_000;
+/** Leave the caller a small margin to observe and record the target deadline. */
+export const LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = 30_500;
+
+export function legalRetrievalEnvironment(bindings: {
+  APP_ENV?: "development" | "staging" | "production";
+  LEGAL_RETRIEVAL_ENVIRONMENT?: "development" | "staging" | "production";
+}): "development" | "staging" | "production" {
+  return bindings.LEGAL_RETRIEVAL_ENVIRONMENT ?? bindings.APP_ENV ?? "development";
+}
+
 export type LegalChatSourceEvidence = {
   sourceId: string;
   sourceKind: "lex";

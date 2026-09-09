@@ -10,6 +10,7 @@
   },
   "vars": {
     "APP_ENV": "development",
+    "LEGAL_RETRIEVAL_ENVIRONMENT": "production",
     "ASYNC_RUNTIME_ENABLED": "false",
     "CRON_ENABLED": "false",
     "ACCOUNT_DELETION_PURGE_ENABLED": "false",
@@ -65,7 +66,8 @@
   "services": [
     {
       "binding": "LEGAL_RETRIEVAL_SERVICE",
-      "service": "juro-legal-corpus-development"
+      "service": "juro-legal-corpus",
+      "remote": true
     }
   ],
   "queues": {
@@ -168,6 +170,7 @@
       },
       "vars": {
         "APP_ENV": "staging",
+        "LEGAL_RETRIEVAL_ENVIRONMENT": "staging",
         "ASYNC_RUNTIME_ENABLED": "true",
         "CRON_ENABLED": "true",
         "ACCOUNT_DELETION_PURGE_ENABLED": "true",
@@ -513,6 +516,7 @@
       },
       "vars": {
         "APP_ENV": "production",
+        "LEGAL_RETRIEVAL_ENVIRONMENT": "production",
         "TURNSTILE_SITE_KEY": "0x4AAAAAAEJG7au8PVCt7Euq",
         "ASYNC_RUNTIME_ENABLED": "true",
         "CRON_ENABLED": "true",

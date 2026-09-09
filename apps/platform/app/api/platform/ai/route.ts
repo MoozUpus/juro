@@ -27,6 +27,9 @@ import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
 import {
+  LEGAL_RETRIEVAL_BUDGET_MS,
+  LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS,
+  legalRetrievalEnvironment,
   retrieveCorpusAwareLegalSources,
   shouldRetrieveSecondaryInternet,
   type LegalChatSourceRetrieval,
@@ -642,22 +645,21 @@ async function executePostWithinBudget(
   await emitProgress({ stage: "document_search_started" });
   const retrievalStartedAtMs = budget.elapsedMs;
   const retrievalStage = budget.beginStage("live_lex_retrieval", {
-    timeoutMs: 13_000,
+    timeoutMs: LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS,
   });
   const retrievalResult: LegalChatSourceRetrieval | Response = await (async () => {
     try {
       const result = await waitForStage(retrieveCorpusAwareLegalSources({
-        query: question,
+        query: rewrite.query,
         locale: discoveryLocale,
         targetService: bindings.LEGAL_RETRIEVAL_SERVICE,
-        targetEnvironment: bindings.APP_ENV ?? "development",
+        targetEnvironment: legalRetrievalEnvironment(bindings),
         targetQuestionId: idempotencyKey,
-        contextualQuestion: retrievalUnderstandingPromise.then((understanding) => understanding.standaloneQuestion),
         applicableAt: applicableAt?.toISOString(),
         lexSearchQueries: retrievalUnderstandingPromise.then((understanding) => understanding.lexSearchQueries),
         signal: retrievalStage.signal,
         limit: 12,
-        budgetMs: 12_500,
+        budgetMs: LEGAL_RETRIEVAL_BUDGET_MS,
         onLiveSearchStarted: () => emitProgress({ stage: "lex_search_started" }),
         discoverOfficialUrls: async (query, discoveryLocale, discoverySignal) => {
           const usage = await usageSummary(db, workspace.id, user.id, answerCycleLimit);

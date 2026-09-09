@@ -7,6 +7,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "dev": "npm run dev:platform",
     "install:all": "npm --prefix apps/website ci && npm --prefix apps/platform run install:ci",
     "dev:website": "npm --prefix apps/website run dev",
     "dev:platform": "npm --prefix apps/platform run dev",

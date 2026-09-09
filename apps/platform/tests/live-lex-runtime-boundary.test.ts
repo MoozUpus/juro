@@ -16,8 +16,11 @@ test("user AI uses R2-native retrieval before direct Lex while other paths stay 
   ]);
   assert.match(platformAi, /retrieveCorpusAwareLegalSources/);
   assert.match(platformAi, /targetService: bindings\.LEGAL_RETRIEVAL_SERVICE/);
-  assert.match(platformAi, /retrieveCorpusAwareLegalSources\(\{\s*query: question,/);
-  assert.match(platformAi, /contextualQuestion: retrievalUnderstandingPromise\.then/);
+  assert.match(platformAi, /targetEnvironment: legalRetrievalEnvironment\(bindings\)/);
+  assert.match(platformAi, /timeoutMs: LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS/);
+  assert.match(platformAi, /budgetMs: LEGAL_RETRIEVAL_BUDGET_MS/);
+  assert.match(platformAi, /retrieveCorpusAwareLegalSources\(\{\s*query: rewrite\.query,/);
+  assert.doesNotMatch(platformAi, /contextualQuestion: retrievalUnderstanding/);
   assert.match(platformAi, /const retrievalUnderstandingPromise = \(async/);
   assert.match(platformAi, /const retrievalQuestion = retrievalUnderstanding\.standaloneQuestion;/);
   assert.match(platformAi, /lexSearchQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.lexSearchQueries\)/);
@@ -25,8 +28,11 @@ test("user AI uses R2-native retrieval before direct Lex while other paths stay 
   assert.doesNotMatch(platformAi, /const retrievalQuestion = researchPlan\.primaryQuery;/);
   assert.match(guestAi, /retrieveCorpusAwareLegalSources/);
   assert.match(guestAi, /targetService: env\.LEGAL_RETRIEVAL_SERVICE/);
-  assert.match(guestAi, /retrieveCorpusAwareLegalSources\(\{\s*query: parsed\.data\.question,/);
-  assert.match(guestAi, /contextualQuestion: retrievalUnderstanding\.standaloneQuestion/);
+  assert.match(guestAi, /targetEnvironment: legalRetrievalEnvironment\(env\)/);
+  assert.match(guestAi, /timeoutMs: LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS/);
+  assert.match(guestAi, /budgetMs: LEGAL_RETRIEVAL_BUDGET_MS/);
+  assert.match(guestAi, /retrieveCorpusAwareLegalSources\(\{\s*query: effectiveQuestion,/);
+  assert.doesNotMatch(guestAi, /contextualQuestion: retrievalUnderstanding/);
   assert.match(corpusAware, /retrieveLiveLexSources/);
   assert.match(corpusAware, /if \(input\.applicableAt\)[\s\S]*unavailableHistoricalCoverage/);
   assert.doesNotMatch(corpusAware, /LEGAL_CORPUS_ENABLED/);
@@ -40,4 +46,10 @@ test("user AI uses R2-native retrieval before direct Lex while other paths stay 
     assert.doesNotMatch(value, /pending_review/);
   }
   assert.doesNotMatch(processor, /semanticSearch/);
+});
+
+test("the caller allows the indexed target its complete-answer contract", async () => {
+  const retrieval = await source("lib/legal-corpus/chat-retrieval.ts");
+  assert.match(retrieval, /LEGAL_RETRIEVAL_BUDGET_MS = 30_000/);
+  assert.match(retrieval, /LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = 30_500/);
 });

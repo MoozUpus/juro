@@ -165,6 +165,16 @@ Clone and install the website and platform:
 
 Run locally:
 
+    npm run dev
+
+The default command starts the platform with a loopback-only developer login
+and its legal retrieval service bound read-only to the current production
+corpus. Run `wrangler login` once before the first start. Legal questions leave
+the local machine for retrieval; do not use private client facts in local
+testing. The remote corpus can incur Cloudflare and AI-provider usage charges.
+
+Other applications can be started explicitly:
+
     npm run dev:website
     npm run dev:platform
     npm run dev:admin
@@ -181,7 +191,7 @@ Copy `.env.example` to a local ignored environment file. Never commit `.env` fil
 | `RESEND_API_KEY` | For email OTP | Server | Email-provider authentication |
 | `EMAIL_FROM` | For email OTP | Server | Verified sender address |
 | `JURO_SMOKE_BASE_URL` | No | Test process | Document-builder smoke-test base URL |
-| `CLOUDFLARE_REMOTE_BINDINGS` | No | Local development | Opt in to remote bindings; requires Wrangler login |
+| `CLOUDFLARE_REMOTE_BINDINGS` | No | Local development | Opt additional supported bindings into remote mode; the read-only production legal corpus service is remote by default and requires Wrangler login |
 | `DB` | Persisted features | Worker binding | Cloudflare D1 |
 | `BUCKET` | File workflows | Worker binding | Private Cloudflare R2 |
 | `ASSETS` / `IMAGES` | Hosting managed | Worker binding | Static assets and image optimization |

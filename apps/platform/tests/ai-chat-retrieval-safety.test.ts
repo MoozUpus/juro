@@ -51,6 +51,8 @@ test("chat uses bounded model-understood queries across the authority ladder wit
   assert.match(route, /const retrievalUnderstandingPromise = \(async/u);
   assert.match(route, /queryUnderstandingFallback = true/u);
   assert.match(route, /fallbackLegalRetrievalUnderstanding\(rewrite\.query\)/u);
+  assert.match(route, /query: rewrite\.query/u);
+  assert.doesNotMatch(route, /contextualQuestion: retrievalUnderstanding/u);
   assert.match(route, /lexSearchQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.lexSearchQueries\)/u);
   assert.doesNotMatch(route, /indexQueries:/u);
   assert.match(route, /const retrievalQuestion = retrievalUnderstanding\.standaloneQuestion/u);
@@ -58,8 +60,12 @@ test("chat uses bounded model-understood queries across the authority ladder wit
   assert.match(route, /retrievalQuery: retrievalQuestion/u);
   assert.match(route, /chargeable: result\.responseKind === "answer"/u);
   assert.match(direct, /Model-understood, request-scoped Lex searches/u);
-  assert.doesNotMatch(`${direct}\n${gateway}`, /декрет|беременн|parental|maternity/iu);
-  assert.doesNotMatch(`${direct}\n${gateway}`, /legal-query-concepts/u);
+  const retrievalImplementation = `${understanding}\n${direct}\n${gateway}`;
+  assert.doesNotMatch(
+    retrievalImplementation,
+    /stabilizeLaborConcepts|декрет|беременн|parental|maternity/iu,
+  );
+  assert.doesNotMatch(retrievalImplementation, /legal-query-concepts/u);
 });
 
 test("secondary research accepts only provider-observed public HTTPS citations and remains non-legislative", async () => {

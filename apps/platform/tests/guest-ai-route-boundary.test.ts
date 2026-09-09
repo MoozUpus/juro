@@ -14,7 +14,7 @@ test("guest AI route is server-only, same-origin protected, provider-backed, and
   assert.match(route, /validateTurnstile/);
   assert.match(route, /guestAiTurnstileAction/);
   assert.match(route, /retrieveCorpusAwareLegalSources/);
-  assert.match(route, /retrieveCorpusAwareLegalSources\(\{\s*query: parsed\.data\.question,/);
+  assert.match(route, /retrieveCorpusAwareLegalSources\(\{\s*query: effectiveQuestion,/);
   assert.match(route, /understandLegalRetrievalQuery/);
   assert.doesNotMatch(route, /rerankLegalCorpusCandidates/);
   assert.match(route, /shouldRetrieveSecondaryInternet\(retrieval\)/);

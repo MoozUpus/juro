@@ -29,6 +29,9 @@ import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
 import {
+  LEGAL_RETRIEVAL_BUDGET_MS,
+  LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS,
+  legalRetrievalEnvironment,
   retrieveCorpusAwareLegalSources,
   shouldRetrieveSecondaryInternet,
 } from "../../../../lib/legal-corpus/chat-retrieval";
@@ -503,20 +506,21 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     let retrieval;
-    const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 12_500 });
+    const retrievalStage = budget.beginStage("live_lex_retrieval", {
+      timeoutMs: LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS,
+    });
     try {
       retrieval = await retrieveCorpusAwareLegalSources({
-        query: parsed.data.question,
+        query: effectiveQuestion,
         locale: discoveryLocale,
         targetService: env.LEGAL_RETRIEVAL_SERVICE,
-        targetEnvironment: env.APP_ENV ?? "development",
+        targetEnvironment: legalRetrievalEnvironment(env),
         targetQuestionId: idempotencyKey,
-        contextualQuestion: retrievalUnderstanding.standaloneQuestion,
         applicableAt: applicableAt?.toISOString(),
         lexSearchQueries: retrievalUnderstanding.lexSearchQueries,
         signal: retrievalStage.signal,
         limit: 4,
-        budgetMs: 12_000,
+        budgetMs: LEGAL_RETRIEVAL_BUDGET_MS,
       });
       retrievalStage.complete();
     } catch (error) {

@@ -454,12 +454,13 @@ test("production identity prefers OTP sessions and gates trusted edge headers", 
 });
 
 test("local development login is explicit, loopback-only, and creates a real session", async () => {
-  const [route, developmentAuth, authPage, authForm, launcher] = await Promise.all([
+  const [route, developmentAuth, authPage, authForm, launcher, rootPackageText] = await Promise.all([
     readFile(new URL("../app/api/auth/dev-login/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/auth/development-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_auth/AuthPage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_auth/AuthForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../scripts/platform-tasks.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../../../package.json", import.meta.url), "utf8"),
   ]);
   assert.match(developmentAuth, /NODE_ENV !== "production"/);
   assert.match(developmentAuth, /APP_ENV === "development"/);
@@ -470,7 +471,8 @@ test("local development login is explicit, loopback-only, and creates a real ses
   assert.match(route, /sessionCookie\(session\.token\)/);
   assert.match(authPage, /developmentAuthEnabled/);
   assert.match(authForm, /\/api\/auth\/dev-login\?returnTo=/);
-  assert.match(launcher, /LOCAL_AUTH_BYPASS: process\.env\.LOCAL_AUTH_BYPASS \?\? "false"/);
+  assert.match(launcher, /LOCAL_AUTH_BYPASS: process\.env\.LOCAL_AUTH_BYPASS \?\? "true"/);
+  assert.equal(JSON.parse(rootPackageText).scripts.dev, "npm run dev:platform");
   assert.match(
     await readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
     /host: "127\.0\.0\.1"/,
