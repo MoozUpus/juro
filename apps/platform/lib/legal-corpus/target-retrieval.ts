@@ -7,7 +7,7 @@ import {
   type PinnedCandidateRelease,
   type TemporalEndpoint,
 } from "./legal-candidate-index";
-import type { ControllingEvidenceResolution } from "./target-evidence";
+import { LegalEvidenceError, type ControllingEvidenceResolution } from "./target-evidence";
 import {
   acceptsPrivateServiceRequest,
   declaredRequestBodyWithinLimit,
@@ -27,15 +27,28 @@ import {
 export const TARGET_LEGAL_ANSWER_PATH = "/internal/legal-corpus/target/retrieval/answer";
 
 const SERVICE_BINDING_MARKER = "target-legal-answer-v1";
+export const targetQuestionPlanningHintsSchema = z.object({
+  answerLanguage: z.enum(["ru", "uz", "en"]),
+  standaloneQuestion: z.string().trim().min(1).max(900),
+  requirements: z.array(z.object({
+    statement: z.string().trim().min(1).max(240),
+    priority: z.enum(["core", "supporting"]),
+  }).strict()).min(1).max(6),
+  formulations: z.array(z.string().trim().min(1).max(500)).min(1).max(6),
+}).strict();
+export type TargetQuestionPlanningHints = z.infer<typeof targetQuestionPlanningHintsSchema>;
 const questionSchema = z.object({
   id: legalIdentifierSchema,
   question: z.string().trim().min(1).max(4_000),
   contextualQuestion: z.string().trim().min(1).max(900).optional(),
+  priorUserQuestions: z.array(z.string().trim().min(1).max(900)).max(6).optional(),
+  planningHints: targetQuestionPlanningHintsSchema.optional(),
   applicableAt: utcInstantSchema.optional(),
 }).strict();
 const requirementSchema = z.object({
   id: legalIdentifierSchema,
   statement: z.string().trim().min(1).max(1_000),
+  priority: z.enum(["core", "supporting"]).optional(),
 }).strict();
 const readingSchema = z.object({
   id: legalIdentifierSchema,
@@ -83,6 +96,38 @@ export type QuestionInterpretationPlan = z.infer<typeof questionInterpretationPl
 export function parseQuestionInterpretationPlan(value: unknown): QuestionInterpretationPlan {
   return questionInterpretationPlanSchema.parse(value);
 }
+
+export function planFromQuestionPlanningHints(
+  id: string,
+  untrustedHints: TargetQuestionPlanningHints,
+): QuestionInterpretationPlan {
+  const hints = targetQuestionPlanningHintsSchema.parse(untrustedHints);
+  const requirements = hints.requirements.map((requirement, index) => ({
+    id: `requirement-${index + 1}`,
+    ...requirement,
+  }));
+  const requirementIds = requirements.map((requirement) => requirement.id);
+  return questionInterpretationPlanSchema.parse({
+    id: `plan-${id}`.slice(0, 200),
+    originalLanguage: hints.answerLanguage,
+    answerLanguage: hints.answerLanguage,
+    readings: [{
+      id: "reading-1",
+      statement: hints.standaloneQuestion,
+      requirements,
+    }],
+    formulations: hints.formulations.map((text, index) => ({
+      id: `formulation-${index + 1}`,
+      text,
+      legalTitleSpans: [],
+      privateNameSpans: [],
+      readingIds: ["reading-1"],
+      requirementIds,
+      kind: "legal_register" as const,
+    })),
+    missingCaseFacts: [],
+  });
+}
 export const revalidatedCandidateSchema = z.object({
   candidate: candidateSchema,
   canonicalChunkId: canonicalChunkIdSchema,
@@ -97,9 +142,20 @@ export function parseRevalidatedCandidates(value: unknown): RevalidatedCandidate
   return z.array(revalidatedCandidateSchema).parse(value);
 }
 
+export const selectionCandidateSchema = z.object({
+  candidate: revalidatedCandidateSchema,
+  citationLabel: z.string().trim().min(1).max(2_300),
+  provisionText: z.string().trim().min(1).max(4_000),
+}).strict();
+export type SelectionCandidate = z.infer<typeof selectionCandidateSchema>;
+
 const repairDecisionSchema = z.object({
   outcome: z.literal("repair"),
   repairFormulation: formulationSchema,
+  additionalRequirements: z.array(z.object({
+    readingId: legalIdentifierSchema,
+    requirement: requirementSchema,
+  }).strict()).max(3).optional(),
 }).strict();
 const rejectedDecisionSchema = z.object({ outcome: z.literal("rejected") }).strict();
 const selectedDecisionSchema = z.object({
@@ -115,10 +171,15 @@ const selectedDecisionSchema = z.object({
   }).strict()).min(1).max(300),
   whatToDoNext: z.array(z.string().trim().min(1).max(2_000)).max(20),
 }).strict();
+const partialDecisionSchema = selectedDecisionSchema.extend({
+  outcome: z.literal("partial"),
+  uncoveredSupportingRequirementIds: z.array(legalIdentifierSchema).min(1),
+}).strict();
 export const selectionDecisionSchema = z.discriminatedUnion("outcome", [
   repairDecisionSchema,
   rejectedDecisionSchema,
   selectedDecisionSchema,
+  partialDecisionSchema,
 ]);
 export type SelectionDecision = z.infer<typeof selectionDecisionSchema>;
 export function parseSelectionDecision(value: unknown): SelectionDecision {
@@ -152,6 +213,11 @@ const answerSchema = z.object({
   formulationsUsed: z.number().int().min(1).max(6),
   repairQueriesUsed: z.number().int().min(0).max(1),
   temporalEndpoint: temporalEndpointSchema,
+}).strict();
+const partialAnswerSchema = answerSchema.extend({
+  kind: z.literal("partial_legal_answer"),
+  nextTier: z.literal("live_official_search"),
+  uncoveredSupportingRequirementIds: z.array(legalIdentifierSchema).min(1),
 }).strict();
 const clarificationSchema = z.object({
   kind: z.literal("clarification_required"),
@@ -203,6 +269,7 @@ const comparisonAnswerSchema = z.object({
 }).strict();
 const retrievalResultSchema = z.discriminatedUnion("kind", [
   answerSchema,
+  partialAnswerSchema,
   comparisonAnswerSchema,
   clarificationSchema,
   sourceUnavailableSchema,
@@ -218,7 +285,10 @@ type Dependencies = {
   environment: z.infer<typeof legalEnvironmentSchema>;
   now?: () => number;
   interpreter: {
-    interpret(question: string): Promise<QuestionInterpretationPlan>;
+    interpret(input: {
+      question: string;
+      priorUserQuestions: string[];
+    }): Promise<QuestionInterpretationPlan>;
   };
   releaseResolver: {
     resolve(endpoint: TemporalEndpoint): Promise<PinnedCandidateRelease | null>;
@@ -246,7 +316,7 @@ type Dependencies = {
   provisionSelector: {
     select(input: {
       plan: QuestionInterpretationPlan;
-      candidates: RevalidatedCandidate[];
+      candidates: SelectionCandidate[];
       repairAttempted: boolean;
     }): Promise<SelectionDecision>;
   };
@@ -358,16 +428,74 @@ function mergeCandidateCoverage(
     ...preferred,
     candidate: {
       ...preferred.candidate,
+      formulationIds: [...new Set([
+        ...preferred.candidate.formulationIds,
+        ...other.candidate.formulationIds,
+      ])].sort(),
       readingIds: [...new Set([
         ...preferred.candidate.readingIds,
         ...other.candidate.readingIds,
       ])].sort(),
-      requirementIds: [...new Set([
-        ...preferred.candidate.requirementIds,
-        ...other.candidate.requirementIds,
+      retrievalRequirementIds: [...new Set([
+        ...preferred.candidate.retrievalRequirementIds,
+        ...other.candidate.retrievalRequirementIds,
       ])].sort(),
     },
   };
+}
+
+const MAX_SELECTION_CANDIDATES = 16;
+const MAX_SELECTION_CANDIDATES_PER_FORMULATION = 3;
+
+function candidateScore(entry: RevalidatedCandidate): number {
+  return entry.candidate.fusionScore
+    + entry.candidate.vectorScore / 1_000
+    + entry.candidate.keywordScore / 1_000_000;
+}
+
+/** Bounds pre-selection evidence while retaining candidates from every
+ * formulation. The associations here are retrieval provenance only. */
+export function boundedSelectionPool(candidates: readonly RevalidatedCandidate[]): RevalidatedCandidate[] {
+  const ranked = [...candidates].sort((left, right) =>
+    candidateScore(right) - candidateScore(left)
+    || left.candidate.itemKey.localeCompare(right.candidate.itemKey));
+  const selected = new Map<string, RevalidatedCandidate>();
+  const formulationCounts = new Map<string, number>();
+  for (const candidate of ranked) {
+    if (selected.has(candidate.provisionRenditionId)) continue;
+    const eligible = candidate.candidate.formulationIds.some((id) =>
+      (formulationCounts.get(id) ?? 0) < MAX_SELECTION_CANDIDATES_PER_FORMULATION);
+    if (!eligible) continue;
+    selected.set(candidate.provisionRenditionId, candidate);
+    for (const id of candidate.candidate.formulationIds) {
+      formulationCounts.set(id, (formulationCounts.get(id) ?? 0) + 1);
+    }
+    if (selected.size >= MAX_SELECTION_CANDIDATES) break;
+  }
+  for (const candidate of ranked) {
+    if (selected.size >= MAX_SELECTION_CANDIDATES) break;
+    if (!selected.has(candidate.provisionRenditionId)) {
+      selected.set(candidate.provisionRenditionId, candidate);
+    }
+  }
+  return [...selected.values()];
+}
+
+function boundedProvisionText(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length <= 1_800) return normalized;
+  const omission = "\n[... verified provision text omitted for selection ...]\n";
+  const side = Math.floor((1_800 - omission.length) / 2);
+  return `${normalized.slice(0, side)}${omission}${normalized.slice(-side)}`;
+}
+
+function emitTargetStageFailure(stage: string, code: string, error?: unknown): void {
+  console.warn(JSON.stringify({
+    event: "legal_target_stage_failed",
+    stage,
+    safeErrorCode: code,
+    errorName: error instanceof Error ? error.name : "unknown",
+  }));
 }
 
 function mergeRevalidatedCandidates(
@@ -405,9 +533,12 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       const request = questionSchema.parse(untrustedInput);
       let plan: QuestionInterpretationPlan;
       try {
-        plan = questionInterpretationPlanSchema.parse(await dependencies.interpreter.interpret(
-          request.contextualQuestion ?? request.question,
-        ));
+        plan = request.planningHints
+          ? planFromQuestionPlanningHints(request.id, request.planningHints)
+          : questionInterpretationPlanSchema.parse(await dependencies.interpreter.interpret({
+              question: request.contextualQuestion ?? request.question,
+              priorUserQuestions: request.priorUserQuestions ?? [],
+            }));
         if (request.applicableAt) {
           plan = questionInterpretationPlanSchema.parse({
             ...plan,
@@ -524,6 +655,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
           { currentAt },
         );
       } catch {
+        emitTargetStageFailure("candidate_retrieval", "INDEXED_CANDIDATE_UNAVAILABLE");
         return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
       }
       if (initialPacket.availability !== "available") {
@@ -537,6 +669,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
           currentAt,
         ));
       } catch {
+        emitTargetStageFailure("candidate_revalidation", "INDEXED_REVALIDATION_FAILED");
         return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
       }
       let candidates = mergeRevalidatedCandidates(validatedPackets);
@@ -545,18 +678,87 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       }
       if (candidates.length === 0) return insufficient(plan);
 
+      const evidenceByRendition = new Map<string, ControllingEvidenceResolution>();
+      const hydrateSelectionCandidates = async (): Promise<SelectionCandidate[]> => {
+        const pool = boundedSelectionPool(candidates!);
+        const failureCodes = new Map<string, number>();
+        const hydrated = await Promise.all(pool.map(async (candidate) => {
+          try {
+            let evidence = evidenceByRendition.get(candidate.provisionRenditionId);
+            if (!evidence) {
+              evidence = await dependencies.evidenceResolver.resolveControlling(
+                candidate.provisionRenditionId,
+                endpoint,
+                { release, currentAt },
+              );
+              evidenceByRendition.set(candidate.provisionRenditionId, evidence);
+            }
+            return selectionCandidateSchema.parse({
+              candidate,
+              citationLabel: evidence.materialCitation.label,
+              provisionText: boundedProvisionText(evidence.controlling.provisionText),
+            });
+          } catch (error) {
+            if (!(error instanceof LegalEvidenceError) || error.code !== "SOURCE_UNAVAILABILITY") {
+              throw error;
+            }
+            const code = error && typeof error === "object" && "code" in error
+              && typeof error.code === "string" ? error.code : "unknown";
+            failureCodes.set(code, (failureCodes.get(code) ?? 0) + 1);
+            return null;
+          }
+        }));
+        const verified = hydrated.filter((candidate): candidate is SelectionCandidate => candidate !== null);
+        if (verified.length !== pool.length) {
+          console.warn(JSON.stringify({
+            event: "legal_target_evidence_candidates_dropped",
+            candidateCount: pool.length,
+            droppedCount: pool.length - verified.length,
+            failureCodes: [...failureCodes].map(([code, count]) => ({ code, count })),
+          }));
+        }
+        if (verified.length === 0) throw new TypeError("NO_VERIFIED_SELECTION_CANDIDATES");
+        return verified;
+      };
+
       let decision: SelectionDecision;
       try {
         decision = selectionDecisionSchema.parse(await dependencies.provisionSelector.select({
           plan,
-          candidates,
+          candidates: await hydrateSelectionCandidates(),
           repairAttempted: false,
         }));
-      } catch {
+      } catch (error) {
+        emitTargetStageFailure("requirement_support", "INDEXED_REVALIDATION_FAILED", error);
         return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
       }
       let repairQueriesUsed = 0;
       if (decision.outcome === "repair") {
+        if (decision.additionalRequirements?.length) {
+          const existingRequirementIds = new Set(plan.readings.flatMap((reading) =>
+            reading.requirements.map((requirement) => requirement.id)));
+          const additionsByReading = new Map<string, typeof decision.additionalRequirements>();
+          for (const addition of decision.additionalRequirements) {
+            if (existingRequirementIds.has(addition.requirement.id)
+              || !plan.readings.some((reading) => reading.id === addition.readingId)) {
+              return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
+            }
+            existingRequirementIds.add(addition.requirement.id);
+            const additions = additionsByReading.get(addition.readingId) ?? [];
+            additions.push(addition);
+            additionsByReading.set(addition.readingId, additions);
+          }
+          plan = questionInterpretationPlanSchema.parse({
+            ...plan,
+            readings: plan.readings.map((reading) => ({
+              ...reading,
+              requirements: [
+                ...reading.requirements,
+                ...(additionsByReading.get(reading.id) ?? []).map(({ requirement }) => requirement),
+              ],
+            })),
+          });
+        }
         if (
           plan.formulations.length >= 6
           || decision.repairFormulation.kind !== "repair"
@@ -590,14 +792,14 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         try {
           decision = selectionDecisionSchema.parse(await dependencies.provisionSelector.select({
             plan,
-            candidates,
+            candidates: await hydrateSelectionCandidates(),
             repairAttempted: true,
           }));
         } catch {
           return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
         }
       }
-      if (decision.outcome !== "selected") return insufficient(plan);
+      if (decision.outcome !== "selected" && decision.outcome !== "partial") return insufficient(plan);
 
       const candidateByKey = new Map(candidates.map((entry) => [entry.candidate.itemKey, entry]));
       const selected = decision.selections.flatMap((selection) => {
@@ -608,8 +810,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         reading.requirements.map((requirement) => requirement.id)));
       if (selected.length !== decision.selections.length
         || selected.some((entry) => entry.requirementIds.some((requirementId) =>
-          !planRequirementIds.has(requirementId)
-          || !entry.candidate.candidate.requirementIds.includes(requirementId)))) {
+          !planRequirementIds.has(requirementId)))) {
         return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
       }
       const uniqueRenditions = [...new Map(selected.map((entry) => [
@@ -627,14 +828,29 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       const requirementIds = planRequirementIds;
       const covered = new Set(selected.flatMap((entry) => entry.requirementIds)
         .filter((id) => requirementIds.has(id)));
-      if ([...requirementIds].some((id) => !covered.has(id))) return insufficient(plan, covered);
+      const uncovered = [...requirementIds].filter((id) => !covered.has(id));
+      const requirementsById = new Map(plan.readings.flatMap((reading) =>
+        reading.requirements.map((requirement) => [requirement.id, requirement] as const)));
+      const uncoveredCore = uncovered.filter((id) => requirementsById.get(id)?.priority !== "supporting");
+      const uncoveredSupporting = uncovered.filter((id) => requirementsById.get(id)?.priority === "supporting");
+      if (uncoveredCore.length > 0) return insufficient(plan, covered);
+      if (decision.outcome === "selected" && uncovered.length > 0) {
+        return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
+      }
+      if (decision.outcome === "partial"
+        && (uncoveredSupporting.length === 0
+          || uncoveredSupporting.some((id) => !decision.uncoveredSupportingRequirementIds.includes(id)))) {
+        return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
+      }
 
-      let evidenceByRendition: Map<string, ControllingEvidenceResolution>;
       try {
-        evidenceByRendition = new Map(await Promise.all(uniqueRenditions.map(async (id) => [
-          id,
-          await dependencies.evidenceResolver.resolveControlling(id, endpoint, { release, currentAt }),
-        ] as const)));
+        await Promise.all(uniqueRenditions.map(async (id) => {
+          if (!evidenceByRendition.has(id)) {
+            evidenceByRendition.set(id, await dependencies.evidenceResolver.resolveControlling(
+              id, endpoint, { release, currentAt },
+            ));
+          }
+        }));
       } catch {
         return sourceUnavailable("INDEXED_EVIDENCE_UNAVAILABLE");
       }
@@ -642,7 +858,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         proposition.requirementId,
         proposition.statement,
       ]));
-      if ([...requirementIds].some((id) => !propositions.has(id))) return insufficient(plan, covered);
+      if ([...covered].some((id) => !propositions.has(id))) return insufficient(plan, covered);
       const whatTheLawSays = selected.flatMap((entry) => {
         const evidence = evidenceByRendition.get(entry.candidate.provisionRenditionId);
         if (!evidence) return [];
@@ -669,8 +885,10 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       const materialQuestions = plan.missingCaseFacts
         .filter((fact) => fact.material)
         .map((fact) => fact.question);
-      return answerSchema.parse({
-        kind: materialQuestions.length > 0 ? "conditional_answer" : "legal_answer",
+      const partial = uncoveredSupporting.length > 0;
+      const answer = {
+        kind: partial ? "partial_legal_answer" as const
+          : materialQuestions.length > 0 ? "conditional_answer" as const : "legal_answer" as const,
         sourceLadder: "indexed_official_corpus",
         mainPoint: decision.mainPoint,
         whatTheLawSays,
@@ -679,7 +897,12 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         formulationsUsed: plan.formulations.length + repairQueriesUsed,
         repairQueriesUsed,
         temporalEndpoint: endpoint,
-      });
+        ...(partial ? {
+          nextTier: "live_official_search" as const,
+          uncoveredSupportingRequirementIds: uncoveredSupporting,
+        } : {}),
+      };
+      return partial ? partialAnswerSchema.parse(answer) : answerSchema.parse(answer);
     },
   };
 }
@@ -703,7 +926,7 @@ export async function handleTargetLegalAnswerRequest(
     })
   ) return privateServiceJson({ code: "TARGET_LEGAL_ANSWER_PRIVATE_ROUTE_REJECTED" }, 404);
   try {
-    if (!declaredRequestBodyWithinLimit(request, 8_192)) {
+    if (!declaredRequestBodyWithinLimit(request, 16_384)) {
       throw new TypeError("TARGET_LEGAL_ANSWER_REQUEST_TOO_LARGE");
     }
     return privateServiceJson({

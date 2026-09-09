@@ -41,6 +41,7 @@ import {
 import { discoverOfficialLexUrls } from "../../../../lib/legal/openai-lex-discovery";
 import {
   fallbackLegalRetrievalUnderstanding,
+  targetQuestionPlanningHints,
   understandLegalRetrievalQuery,
 } from "../../../../lib/legal/legal-retrieval-understanding";
 import {
@@ -495,7 +496,7 @@ async function executePostWithinBudget(
   const rewrite = gateway.rewriteFollowUp({ question, locale, conversationHistory });
   const bindings = runtimeEnv();
   const understandingStage = budget.beginStage("query_understanding", {
-    timeoutMs: 6_500,
+    timeoutMs: 9_400,
   });
   let queryUnderstandingFallback = false;
   const retrievalUnderstandingPromise = (async () => {
@@ -507,15 +508,15 @@ async function executePostWithinBudget(
       const understood = await understandLegalRetrievalQuery({
         query: rewrite.query,
         locale,
-        conversationHistory,
+        priorUserQuestions: conversationHistory.map((turn) => turn.user),
         requestId: `${idempotencyKey}:understanding`,
         safetyIdentifier,
         signal: understandingStage.signal,
-        timeoutMs: Math.min(6_200, budget.remainingMs),
+        timeoutMs: Math.min(9_000, budget.remainingMs),
         // Retry one fast provider/network failure inside the existing stage
         // deadline. The planner remains fail-closed if neither attempt can
         // produce the bounded semantic plan.
-        maxAttempts: 2,
+        maxAttempts: 1,
         onTelemetry: async (event) => {
           try {
             const completedAt = isoNow();
@@ -655,6 +656,9 @@ async function executePostWithinBudget(
         targetService: bindings.LEGAL_RETRIEVAL_SERVICE,
         targetEnvironment: legalRetrievalEnvironment(bindings),
         targetQuestionId: idempotencyKey,
+        priorUserQuestions: conversationHistory.map((turn) => turn.user),
+        targetPlanningHints: retrievalUnderstandingPromise.then((understanding) =>
+          targetQuestionPlanningHints(understanding, locale)),
         applicableAt: applicableAt?.toISOString(),
         lexSearchQueries: retrievalUnderstandingPromise.then((understanding) => understanding.lexSearchQueries),
         signal: retrievalStage.signal,
@@ -1360,6 +1364,11 @@ async function executePostWithinBudget(
       rerankedCandidateCount: retrieval.retrievalTelemetry?.rerankedCandidateCount ?? 0,
       rerankingOutcome: retrieval.retrievalTelemetry?.rerankingOutcome ?? "not_configured",
       rerankingFailureCode: retrieval.retrievalTelemetry?.rerankingFailureCode ?? null,
+      requirementSupport: (retrieval.retrievalTelemetry?.coverageRequirements ?? []).map((requirement) => ({
+        requirementId: requirement.requirementId,
+        status: requirement.status,
+        provisionIds: requirement.provisionIds,
+      })),
       exactWindowSuccesses: retrieval.retrievalTelemetry?.exactWindowSuccesses ?? 0,
       denseSearchUnavailable: retrieval.retrievalTelemetry?.denseUnavailable ?? false,
       targetOutcome: retrieval.retrievalTelemetry?.targetOutcome ?? null,

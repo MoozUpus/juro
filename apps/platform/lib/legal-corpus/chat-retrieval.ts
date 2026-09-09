@@ -10,6 +10,7 @@ import {
 } from "../legal/verified-retrieval";
 import {
   createTargetLegalAnswerClient,
+  type TargetQuestionPlanningHints,
   type TargetLegalAnswerResult,
 } from "./target-retrieval";
 
@@ -208,13 +209,17 @@ function citationArticle(label: string): string | null {
 }
 
 function targetAnswerDetails(result: TargetLegalAnswerResult) {
-  if (result.kind === "legal_answer" || result.kind === "conditional_answer") {
+  if (result.kind === "legal_answer" || result.kind === "conditional_answer"
+    || result.kind === "partial_legal_answer") {
     return {
       statements: result.whatTheLawSays.map((statement) => ({
         statement,
         temporalEndpoint: result.temporalEndpoint,
       })),
       formulationsUsed: result.formulationsUsed,
+      partial: result.kind === "partial_legal_answer",
+      uncoveredRequirementIds: result.kind === "partial_legal_answer"
+        ? result.uncoveredSupportingRequirementIds : [],
     };
   }
   if (result.kind === "comparison_answer") {
@@ -230,6 +235,8 @@ function targetAnswerDetails(result: TargetLegalAnswerResult) {
         })),
       ],
       formulationsUsed: result.endpointFormulationSearches,
+      partial: false,
+      uncoveredRequirementIds: [],
     };
   }
   return null;
@@ -337,6 +344,12 @@ async function withTargetCoverage(
   }));
   if (sources.length === 0) return null;
   const freshness = legalDatabaseFreshnessFromAsOf(checkedAt, now);
+  const provisionsByRequirement = new Map<string, Set<string>>();
+  for (const { statement } of answer.statements) {
+    const provisions = provisionsByRequirement.get(statement.requirementId) ?? new Set<string>();
+    provisions.add(statement.provisionRenditionId);
+    provisionsByRequirement.set(statement.requirementId, provisions);
+  }
   return {
     sources,
     freshness,
@@ -354,19 +367,33 @@ async function withTargetCoverage(
       validatedAt: checkedAt,
       validationStatus: "validated",
     })),
-    coverageStatus: "good_coverage",
+    coverageStatus: answer.partial ? "partial_coverage" : "good_coverage",
     retrievalTelemetry: {
       indexedHitCount: sources.length,
       liveHitCount: 0,
       queriesRun: answer.formulationsUsed,
       retrievedCandidateCount: sources.length,
-      rerankCandidateCount: 0,
-      rerankedCandidateCount: 0,
-      rerankingOutcome: "not_configured",
+      rerankCandidateCount: sources.length,
+      rerankedCandidateCount: sources.length,
+      rerankingOutcome: "selected",
       rerankingFailureCode: null,
       exactWindowSuccesses: sources.length,
       denseUnavailable: false,
       indexedAvailability: "available",
+      coverageRequirements: [
+        ...[...provisionsByRequirement].map(([requirementId, provisionIds]) => ({
+          requirementId,
+          statement: "",
+          status: "covered" as const,
+          provisionIds: [...provisionIds],
+        })),
+        ...answer.uncoveredRequirementIds.map((requirementId) => ({
+          requirementId,
+          statement: "",
+          status: "uncovered" as const,
+          provisionIds: [],
+        })),
+      ],
       indexVersion: "r2-native-accepted",
       rerankerVersion: "target-provision-selector",
       fusionOutcome: "indexed",
@@ -386,6 +413,8 @@ export async function retrieveCorpusAwareLegalSources(input: {
   targetService?: Fetcher;
   targetEnvironment?: "development" | "staging" | "production";
   targetQuestionId?: string;
+  priorUserQuestions?: readonly string[];
+  targetPlanningHints?: TargetQuestionPlanningHints | Promise<TargetQuestionPlanningHints>;
   contextualQuestion?: string | Promise<string>;
   applicableAt?: string;
   lexSearchQueries?: readonly string[] | Promise<readonly string[]>;
@@ -401,12 +430,16 @@ export async function retrieveCorpusAwareLegalSources(input: {
   input.signal?.throwIfAborted();
   const retrievalStartedAt = performance.now();
   let targetTelemetry: TargetAttemptTelemetry | undefined;
+  let partialIndexed: LegalChatSourceRetrieval | null = null;
   if (input.targetService && input.targetEnvironment && input.targetQuestionId) {
     const contextualPlanningStartedAt = performance.now();
-    const contextualPromise = Promise.resolve(input.contextualQuestion).catch(() => undefined);
-    const contextualQuestion = input.signal
-      ? await withinSignal(contextualPromise, input.signal)
-      : await contextualPromise;
+    const planningPromise = Promise.all([
+      Promise.resolve(input.contextualQuestion).catch(() => undefined),
+      Promise.resolve(input.targetPlanningHints).catch(() => undefined),
+    ]);
+    const [contextualQuestion, planningHints] = input.signal
+      ? await withinSignal(planningPromise, input.signal)
+      : await planningPromise;
     input.signal?.throwIfAborted();
     const contextualPlanningLatencyMs = Math.max(0, performance.now() - contextualPlanningStartedAt);
     const remainingBudgetMs = Math.max(
@@ -433,6 +466,8 @@ export async function retrieveCorpusAwareLegalSources(input: {
           id: input.targetQuestionId,
           question: input.query,
           contextualQuestion,
+          priorUserQuestions: input.priorUserQuestions?.slice(-6),
+          planningHints,
           applicableAt: input.applicableAt,
         }), targetController.signal);
       const indexed = await withTargetCoverage(target, input.locale, input.now ?? new Date());
@@ -445,9 +480,21 @@ export async function retrieveCorpusAwareLegalSources(input: {
           contextualPlanningLatencyMs,
           targetBudgetMs: targetTimeoutMs,
         };
-        return indexed;
+        if (indexed.coverageStatus === "good_coverage") return indexed;
+        if (indexed.coverageStatus === "partial_coverage") {
+          partialIndexed = indexed;
+          targetTelemetry = {
+            targetOutcome: "selected",
+            targetFailureCode: null,
+            targetLatencyMs: Math.max(0, performance.now() - targetStartedAt),
+            contextualPlanningLatencyMs,
+            targetBudgetMs: targetTimeoutMs,
+          };
+        } else {
+          return indexed;
+        }
       }
-      targetTelemetry = {
+      if (!indexed) targetTelemetry = {
         targetOutcome: "unavailable",
         targetFailureCode: "TARGET_SOURCE_UNAVAILABLE",
         targetLatencyMs: Math.max(0, performance.now() - targetStartedAt),
@@ -490,5 +537,30 @@ export async function retrieveCorpusAwareLegalSources(input: {
     searchQueries: Promise.resolve(input.lexSearchQueries ?? []).catch(() => []),
     discoverOfficialUrls: input.discoverOfficialUrls,
   });
-  return withLiveCoverage(result, input.query, targetTelemetry);
+  const live = withLiveCoverage(result, input.query, targetTelemetry);
+  if (!partialIndexed) return live;
+  const sources = [...partialIndexed.sources];
+  const known = new Set(sources.map((source) => source.officialUrl));
+  for (const source of live.sources) {
+    if (!known.has(source.officialUrl)) sources.push(source);
+  }
+  const evidence = [...partialIndexed.evidence];
+  const evidenceKeys = new Set(evidence.map((entry) => `${entry.canonicalUrl}:${entry.contentSha256}`));
+  for (const entry of live.evidence) {
+    const key = `${entry.canonicalUrl}:${entry.contentSha256}`;
+    if (!evidenceKeys.has(key)) evidence.push(entry);
+  }
+  return {
+    ...partialIndexed,
+    sources,
+    evidence,
+    errors: [...partialIndexed.errors, ...live.errors],
+    coverageStatus: "partial_coverage",
+    retrievalTelemetry: {
+      ...partialIndexed.retrievalTelemetry!,
+      ...targetTelemetry,
+      liveHitCount: live.sources.length,
+      fusionOutcome: live.sources.length > 0 ? "mixed" : "indexed",
+    },
+  };
 }
