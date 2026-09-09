@@ -24,28 +24,28 @@ const retrievalUnderstandingSchema = z.object({
 // the same standalone question and statutory query hypotheses.
 const retrievalPlannerSchema = z.object({
   standaloneQuestion: z.string().trim().min(1).max(900),
-  generalPermissionAndProhibition: z.string().trim().min(1).max(180)
-    .describe("One formal statutory query that explicitly names both permission for and prohibition of the requested action; never the action alone."),
+  generalProhibition: z.string().trim().min(1).max(180)
+    .describe("One formal statutory noun phrase for prohibition of the requested action; start with the user's language equivalent of 'prohibition'."),
   primaryStatusRule: z.string().trim().min(1).max(180)
     .describe("One special governing rule for the primary plausible formal legal status."),
   alternativeStatusRule: z.string().trim().min(1).max(180)
-    .describe("One special governing rule for a materially different plausible formal legal status."),
-  requestedActionGroundsExceptions: z.string().trim().min(1).max(180)
-    .describe("One formal statutory phrase for the action's general grounds, exceptions, or transitions and responsible actor."),
+    .describe("One special governing rule for a materially different plausible formal legal status, not a second everyday label for the primary status."),
+  generalActionGrounds: z.string().trim().min(1).max(180)
+    .describe("One formal statutory noun phrase starting with the user's language equivalent of 'grounds for', followed by the requested action and responsible actor."),
   preservationOrOngoingRights: z.string().trim().min(1).max(180)
     .describe("One formal statutory phrase for a relationship, position, entitlement, payment, or other right preserved despite the situation."),
-  publicLiabilityOrRemedies: z.string().trim().min(1).max(180)
-    .describe("One concise public-law liability or sanction query when protected-status discrimination is possible; otherwise one remedies query."),
+  criminalAndAdministrativeLiability: z.string().trim().min(1).max(180)
+    .describe("One concise query explicitly naming both criminal and administrative liability, the action, and the protected status."),
 }).strict();
 
 const retrievalPlannerProviderSchema = z.object({
   standaloneQuestion: z.string(),
-  generalPermissionAndProhibition: z.string(),
+  generalProhibition: z.string(),
   primaryStatusRule: z.string(),
   alternativeStatusRule: z.string(),
-  requestedActionGroundsExceptions: z.string(),
+  generalActionGrounds: z.string(),
   preservationOrOngoingRights: z.string(),
-  publicLiabilityOrRemedies: z.string(),
+  criminalAndAdministrativeLiability: z.string(),
 }).strict();
 
 const retrievalUnderstandingJsonSchema = z.toJSONSchema(retrievalPlannerSchema, {
@@ -182,7 +182,7 @@ export async function understandLegalRetrievalQuery(input: {
     instructions: [
       "Create a compact retrieval plan for an Uzbekistan legal question in the user's language.",
       "Resolve conversation references in standaloneQuestion while preserving actors, action, status, circumstances, date, and outcome.",
-      "Fill the six named concept slots with concise, independently testable phrases in formal statutory vocabulary likely to occur in an official provision or heading. Every phrase must connect the legally material status to the action and legal issue the user asks about instead of merely defining the status. Keep the slots complementary and put only the named concern in each slot. generalPermissionAndProhibition must explicitly name both opposing search hypotheses using direct nominal terms equivalent to 'permission for [formal action]' and 'prohibition of [formal action]'; it must never name the action alone. Use the most likely formal statutory action term and include a second plausible formal synonym succinctly when terminology is ambiguous. Do not put status-specific wording, grounds, or exceptions in this slot. primaryStatusRule names the formal protected legal status—not merely the everyday label for a leave or benefit—and the one special rule to check for that status. alternativeStatusRule does the same for the materially different alternative status hidden by everyday wording. requestedActionGroundsExceptions uses the formal legal name of the action together with the responsible actor named or implied by the question and names only its general grounds, exceptions, or transitions. preservationOrOngoingRights names continuation of any relationship, status, position, entitlement, payment, or other ongoing right that the requested action puts at issue. publicLiabilityOrRemedies is one short public-law sanction or administrative or criminal liability query whenever the action may discriminate based on a protected status; only otherwise does it name the challenge procedure and private remedies, and it never combines the two. If a slot is not independently relevant, restate the closest material requirement without inventing a rule.",
+      "Fill the six named concept slots with concise, independently testable phrases in formal statutory vocabulary likely to occur in an official provision or heading. Every phrase must connect the legally material status to the action and legal issue the user asks about instead of merely defining the status. Keep the slots complementary and put only the named concern in each slot. generalProhibition is a retrieval hypothesis, not a legal conclusion: it must start with the direct nominal term equivalent to 'prohibition' and then name the most likely formal statutory action and responsible actor; do not put status-specific wording or grounds in this slot. primaryStatusRule names the formal protected legal status—not merely the everyday label for a leave or benefit—and the one special rule to check for that status. alternativeStatusRule must identify a materially different person or formal status hidden by ambiguous everyday wording, not merely repeat a second leave or benefit label, and name the one special rule to check for that status. generalActionGrounds must start with the direct nominal term equivalent to 'grounds for', followed by the same formal action and responsible actor; do not add procedure, special statuses, or remedies. preservationOrOngoingRights names continuation of any relationship, status, position, entitlement, payment, or other ongoing right that the requested action puts at issue. criminalAndAdministrativeLiability must explicitly name both criminal and administrative liability, followed by the same action and each material protected status; it is a retrieval hypothesis and does not assert that liability applies. When no protected status is material, restate the closest consequence requirement without inventing liability. If a slot is not independently relevant, restate the closest material requirement without inventing a rule.",
       "Cover ambiguity conditionally without choosing an unsupported interpretation.",
       "For Uzbek questions, write each concept slot as a concise Uzbek phrase followed by its Russian statutory equivalent after ' / '; the indexed official act may currently exist only in Russian. Keep standaloneQuestion in the user's language.",
       "Never add a bilingual ' / ' pair for Russian or English questions; use only the user's language.",
@@ -218,12 +218,12 @@ export async function understandLegalRetrievalQuery(input: {
   });
 
   const plannerConcepts = [
-    result.data.generalPermissionAndProhibition,
+    result.data.generalProhibition,
     result.data.primaryStatusRule,
     result.data.alternativeStatusRule,
-    result.data.requestedActionGroundsExceptions,
+    result.data.generalActionGrounds,
     result.data.preservationOrOngoingRights,
-    result.data.publicLiabilityOrRemedies,
+    result.data.criminalAndAdministrativeLiability,
   ].map((concept) => input.locale === "uz" ? concept : concept.split(" / ", 1)[0] ?? concept);
   const normalizedConcepts = plannerConcepts.map((concept) => ({
     statement: concept,

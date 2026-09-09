@@ -46,7 +46,7 @@ const interpretationRequestSchema = z.object({
 }).strict();
 const selectionRequestSchema = z.object({
   plan: questionInterpretationPlanSchema,
-  candidates: z.array(selectionCandidateSchema).max(24),
+  candidates: z.array(selectionCandidateSchema).max(30),
   repairAttempted: z.boolean(),
 }).strict();
 
@@ -55,7 +55,7 @@ const supportMappingSchema = z.object({
   supportedRequirementIds: z.array(z.string().min(1).max(200)).max(40),
 }).strict();
 const supportAssessmentProviderSchema = z.object({
-  mappings: z.array(supportMappingSchema).max(24),
+  mappings: z.array(supportMappingSchema).max(30),
   additionalRequirements: z.array(z.object({
     sourceItemKey: z.string().min(1).max(700),
     readingId: z.string().min(1).max(200),
