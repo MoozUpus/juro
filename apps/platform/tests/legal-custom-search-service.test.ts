@@ -94,6 +94,7 @@ test(physicalAlias
   const observed = { denseOptions: null as VectorizeQueryOptions | null };
   let activeEmbeddingRequests = 0;
   let maximumEmbeddingConcurrency = 0;
+  const embeddingBatchSizes: number[] = [];
   const dense = {
     async query(_vector: number[], options: VectorizeQueryOptions) {
       observed.denseOptions = options;
@@ -114,16 +115,18 @@ test(physicalAlias
     CUSTOM_RUNTIME_DESCRIPTOR_SHA256: runtime.descriptorReference.sha256,
     ARTIFACTS: bucket as unknown as R2Bucket,
     CATALOG_DB: database,
-    AI: { gateway() { return { async run() {
+    AI: { gateway() { return { async run(request: { query: { input: string[] } }) {
+      const inputs = request.query.input;
+      embeddingBatchSizes.push(inputs.length);
       activeEmbeddingRequests++;
       maximumEmbeddingConcurrency = Math.max(maximumEmbeddingConcurrency, activeEmbeddingRequests);
       await new Promise((resolve) => setTimeout(resolve, 5));
       activeEmbeddingRequests--;
       assert.deepEqual(calls.slice(0, 3), ["component", "reserve", "ledger"]);
       return Response.json({ model: "text-embedding-3-large", object: "list",
-        data: [{ object: "embedding", index: 0,
-          embedding: Array.from({ length: 1_536 }, (_, index) => index === 0 ? 1 : 0) }],
-        usage: { prompt_tokens: 1, total_tokens: 1 } });
+        data: inputs.map((_, inputIndex) => ({ object: "embedding", index: inputIndex,
+          embedding: Array.from({ length: 1_536 }, (_, index) => index === inputIndex ? 1 : 0) })),
+        usage: { prompt_tokens: inputs.length, total_tokens: inputs.length } });
     } }; } } as unknown as Ai,
     DENSE: dense,
   } satisfies CustomSearchEnv;
@@ -149,6 +152,25 @@ test(physicalAlias
     valid_to_epoch: { $gt: 1_788_566_400 },
   });
   if (!oversizedPosting) {
+    const batchBody = JSON.stringify({ releaseId: RELEASE_ID, instanceIds: [INSTANCE_ID],
+      queries: ["work", "contract"], currentAt: "2026-09-05T00:00:00.000Z",
+      endpoint: { kind: "current" }, maxResults: 50, vectorThreshold: 0 });
+    const batchResponse = await handleCustomSearchRequest(new Request(
+      "http://legal-corpus.internal/internal/legal-corpus/custom-search", {
+        method: "POST", headers: { "content-type": "application/json",
+          "content-length": String(new TextEncoder().encode(batchBody).byteLength),
+          "x-juro-service-binding": "custom-search-runtime-v1",
+          "x-juro-legal-environment": "staging" }, body: batchBody,
+      }), env);
+    assert.equal(batchResponse.status, 200);
+    const batchResult = await batchResponse.json() as {
+      results: Array<{ queryIndex: number; hits: Array<{ itemKey: string }> }>;
+      tokenUsage: number;
+    };
+    assert.deepEqual(batchResult.results.map((entry) => entry.queryIndex), [0, 1]);
+    assert.deepEqual(batchResult.results.map((entry) => entry.hits[0]?.itemKey), [fullKey, fullKey]);
+    assert.equal(batchResult.tokenUsage, 2);
+    assert.equal(embeddingBatchSizes.at(-1), 2);
     activeEmbeddingRequests = 0;
     maximumEmbeddingConcurrency = 0;
     const concurrent = await Promise.all([1, 2].map(() => handleCustomSearchRequest(new Request(

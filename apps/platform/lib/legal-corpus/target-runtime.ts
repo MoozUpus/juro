@@ -5,11 +5,14 @@ import {
   parsePinnedCandidateRelease,
   toPinnedCandidateConfiguration,
   type LegalCandidateProvider,
+  type LegalCandidateBatchSearchInput,
+  type LegalCandidateSearchInput,
   type CandidatePacket,
   type PinnedCandidateRelease,
   type TemporalEndpoint,
 } from "./legal-candidate-index";
-import { CUSTOM_SEARCH_PATH, CUSTOM_SEARCH_SERVICE_MARKER, customSearchResponseSchema }
+import { CUSTOM_SEARCH_PATH, CUSTOM_SEARCH_SERVICE_MARKER, customSearchBatchResponseSchema,
+  customSearchResponseSchema }
   from "./custom-search-service";
 import { customReleaseGovernanceSchema } from "./custom-release-governance";
 import { resolveCustomBm25RuntimeMembershipEntries, type CustomRuntimeLegalIdentity }
@@ -356,7 +359,7 @@ function customPinnedConfiguration(identityValue: string, gatewayIdentity: strin
 }
 
 function assertCustomSearchRequest(capability: CustomSearchCapability, environment: string,
-  input: Parameters<LegalCandidateProvider["search"]>[0]) {
+  input: Pick<LegalCandidateSearchInput, "endpoint" | "instanceIds">) {
   if ((capability === "current" && input.endpoint.kind !== "current")
     || (capability === "history" && input.endpoint.kind !== "timestamp")
     || input.instanceIds.length !== 1
@@ -366,7 +369,7 @@ function assertCustomSearchRequest(capability: CustomSearchCapability, environme
 }
 
 async function requestCustomSearch(service: Fetcher, environment: string,
-  input: Parameters<LegalCandidateProvider["search"]>[0]) {
+  input: LegalCandidateSearchInput) {
   const response = await service.fetch(`http://legal-corpus.internal${CUSTOM_SEARCH_PATH}`, {
     method: "POST",
     headers: { "content-type": "application/json",
@@ -376,6 +379,19 @@ async function requestCustomSearch(service: Fetcher, environment: string,
   });
   if (!response.ok) throw new TypeError("CUSTOM_SEARCH_SERVICE_UNAVAILABLE");
   return customSearchResponseSchema.parse(await response.json());
+}
+
+async function requestCustomSearchBatch(service: Fetcher, environment: string,
+  input: LegalCandidateBatchSearchInput) {
+  const response = await service.fetch(`http://legal-corpus.internal${CUSTOM_SEARCH_PATH}`, {
+    method: "POST",
+    headers: { "content-type": "application/json",
+      "x-juro-service-binding": CUSTOM_SEARCH_SERVICE_MARKER,
+      "x-juro-legal-environment": environment },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new TypeError("CUSTOM_SEARCH_SERVICE_UNAVAILABLE");
+  return customSearchBatchResponseSchema.parse(await response.json());
 }
 
 export function createRuntimeCustomSearchProvider(input: {
@@ -415,6 +431,12 @@ export function createRuntimeCustomSearchProvider(input: {
       return requestCustomSearch(input.service, input.environment,
         { ...searchInput, releaseId: release.id });
     },
+    async searchMany(searchInput) {
+      assertCustomSearchRequest(input.capability, input.environment, searchInput);
+      const release = await pinned(searchInput.releaseId);
+      return requestCustomSearchBatch(input.service, input.environment,
+        { ...searchInput, releaseId: release.id });
+    },
   };
 }
 
@@ -445,6 +467,11 @@ function createRuntimeEvaluationCustomSearchProvider(input: {
       assertCustomSearchRequest(input.capability, "staging", searchInput);
       assertEvaluationRelease(searchInput.releaseId);
       return requestCustomSearch(input.service, "staging", searchInput);
+    },
+    async searchMany(searchInput) {
+      assertCustomSearchRequest(input.capability, "staging", searchInput);
+      assertEvaluationRelease(searchInput.releaseId);
+      return requestCustomSearchBatch(input.service, "staging", searchInput);
     },
   };
 }
@@ -597,6 +624,13 @@ export function createRuntimeTargetLegalAnswerRetriever(
         ? custom.search(input)
         : Promise.reject(new TypeError("TARGET_CANDIDATE_PROVIDER_UNAVAILABLE"));
     },
+    searchMany(input) {
+      const custom = input.instanceIds.length === 1
+        ? customProviderForInstance(input.instanceIds[0]!) : undefined;
+      return custom?.searchMany
+        ? custom.searchMany(input)
+        : Promise.reject(new TypeError("TARGET_CANDIDATE_PROVIDER_UNAVAILABLE"));
+    },
   };
   const candidateIndex = createRuntimeCandidateIndex(provider);
   const resolvePinnedRelease = async (searchRelease: { id: string; capability: string }) => {
@@ -744,6 +778,14 @@ export async function createRuntimeTargetActivationSetEvaluation(input: {
         ? providerForInstance(searchInput.instanceIds[0]!) : undefined;
       return capability
         ? providers.get(capability)!.search(searchInput)
+        : Promise.reject(new TypeError("TARGET_CANDIDATE_PROVIDER_UNAVAILABLE"));
+    },
+    searchMany(searchInput) {
+      const capability = searchInput.instanceIds.length === 1
+        ? providerForInstance(searchInput.instanceIds[0]!) : undefined;
+      const selected = capability ? providers.get(capability) : undefined;
+      return selected?.searchMany
+        ? selected.searchMany(searchInput)
         : Promise.reject(new TypeError("TARGET_CANDIDATE_PROVIDER_UNAVAILABLE"));
     },
   };

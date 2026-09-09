@@ -256,22 +256,31 @@ type ProviderCandidateHit = Omit<NormalizedCandidateInput, "instanceId" | "shard
   shardId: string;
   candidateText?: string;
 };
+export type LegalCandidateSearchInput = {
+  releaseId?: string;
+  currentAt?: string;
+  instanceIds: string[];
+  query: string;
+  endpoint: TemporalEndpoint;
+  maxResults: 50;
+  vectorThreshold: 0;
+};
+export type LegalCandidateSearchResponse = {
+  hits: ProviderCandidateHit[];
+  errors: Array<{ code: string; instanceId?: string }>;
+  searchedInstanceIds: string[];
+  tokenUsage?: number;
+};
+export type LegalCandidateBatchSearchInput = Omit<LegalCandidateSearchInput, "query"> & {
+  queries: string[];
+};
+export type LegalCandidateBatchSearchResponse = Omit<LegalCandidateSearchResponse, "hits"> & {
+  results: Array<{ queryIndex: number; hits: ProviderCandidateHit[] }>;
+};
 export type LegalCandidateProvider = {
   attest(instanceId: string, releaseId?: string): Promise<CandidateConfiguration>;
-  search(input: {
-    releaseId?: string;
-    currentAt?: string;
-    instanceIds: string[];
-    query: string;
-    endpoint: TemporalEndpoint;
-    maxResults: 50;
-    vectorThreshold: 0;
-  }): Promise<{
-    hits: ProviderCandidateHit[];
-    errors: Array<{ code: string; instanceId?: string }>;
-    searchedInstanceIds: string[];
-    tokenUsage?: number;
-  }>;
+  search(input: LegalCandidateSearchInput): Promise<LegalCandidateSearchResponse>;
+  searchMany?(input: LegalCandidateBatchSearchInput): Promise<LegalCandidateBatchSearchResponse>;
 };
 
 const providerStatusSchema = z.enum(["ok", "unavailable", "rejected"]);
@@ -390,15 +399,20 @@ export function createProviderCandidateIndex(
         }
 
         const waves = chunks(requiredInstanceIds, 10);
-        const searches = await Promise.all(interpretation.formulations.flatMap((formulation) =>
-          waves.map(async (instanceIds) => ({
-            formulation,
+        const currentAt = context?.currentAt ?? new Date(startedAt).toISOString();
+        const searches: Array<{
+          formulation: QuestionInterpretation["formulations"][number];
+          instanceIds: string[];
+          response: LegalCandidateSearchResponse;
+        }> = [];
+        if (provider.searchMany) {
+          const batches = await Promise.all(waves.map(async (instanceIds) => ({
             instanceIds,
-            response: await provider.search({
+            response: await provider.searchMany!({
               releaseId: release.id,
-              currentAt: context?.currentAt ?? new Date(startedAt).toISOString(),
+              currentAt,
               instanceIds,
-              query: formulation.text,
+              queries: interpretation.formulations.map((formulation) => formulation.text),
               endpoint,
               maxResults: 50,
               vectorThreshold: 0,
@@ -406,7 +420,57 @@ export function createProviderCandidateIndex(
               observedTokenUsage += response.tokenUsage ?? 0;
               return response;
             }),
-          }))));
+          })));
+          for (const batch of batches) {
+            if (batch.response.errors.length > 0) {
+              emitOutcome("unavailable", "provider_unavailable");
+              return unavailable(release, endpoint, batch.response.errors.map((error) => {
+                const instanceId = candidateInstanceIdSchema.safeParse(error.instanceId);
+                return {
+                  code: "CANDIDATE_PARTIAL_RESPONSE" as const,
+                  ...(instanceId.success ? { instanceId: instanceId.data } : {}),
+                };
+              }));
+            }
+            const indices = batch.response.results.map((result) => result.queryIndex);
+            if (indices.length !== interpretation.formulations.length
+              || new Set(indices).size !== indices.length
+              || indices.some((index) => !Number.isInteger(index)
+                || index < 0 || index >= interpretation.formulations.length)) {
+              emitOutcome("unavailable", "integrity_failure");
+              return unavailable(release, endpoint, [{ code: "CANDIDATE_PARTIAL_RESPONSE" }]);
+            }
+            for (const result of batch.response.results) {
+              searches.push({
+                formulation: interpretation.formulations[result.queryIndex]!,
+                instanceIds: batch.instanceIds,
+                response: {
+                  hits: result.hits,
+                  errors: [],
+                  searchedInstanceIds: batch.response.searchedInstanceIds,
+                },
+              });
+            }
+          }
+        } else {
+          searches.push(...await Promise.all(interpretation.formulations.flatMap((formulation) =>
+            waves.map(async (instanceIds) => ({
+              formulation,
+              instanceIds,
+              response: await provider.search({
+                releaseId: release.id,
+                currentAt,
+                instanceIds,
+                query: formulation.text,
+                endpoint,
+                maxResults: 50,
+                vectorThreshold: 0,
+              }).then((response) => {
+                observedTokenUsage += response.tokenUsage ?? 0;
+                return response;
+              }),
+            })))));
+        }
         const normalized: Array<NormalizedCandidateInput & {
           formulation: QuestionInterpretation["formulations"][number];
         }> = [];
