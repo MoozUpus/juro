@@ -761,7 +761,7 @@ export function validateLegalGatewayAnswer(input: {
       source.retrievalSelection === "semantic_reranker" ? undefined : validationQuestion,
     );
     return matched ? [matched] : [];
-  }).slice(0, input.answerMode === "detailed" ? 12 : 4);
+  }).slice(0, 12);
   for (const { source } of serverGroundedOfficial) alreadyGroundedSourceIds.add(source.id);
   // Public-web material is already a server-refetched exact span. Preserve up
   // to three such references even when the answer model focused only on the

@@ -241,6 +241,21 @@ function retrievalSupportsRequirement(candidate: SelectionCandidate, requirement
   return candidate.candidate.candidate.retrievalRequirementIds.includes(requirementId);
 }
 
+function comparableLegalText(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase().replace(/ё/gu, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/gu, " ").trim();
+}
+
+function literalFormulationSupports(candidate: SelectionCandidate, formulation: {
+  text: string;
+  requirementIds: readonly string[];
+}): boolean {
+  const formulationText = comparableLegalText(formulation.text);
+  if (formulationText.length < 18 || formulationText.split(" ").length < 3) return false;
+  const evidenceText = comparableLegalText(`${candidate.citationLabel} ${candidate.provisionText}`);
+  return evidenceText.includes(formulationText);
+}
+
 function candidatesForRequirement(
   ranked: readonly SelectionCandidate[],
   supportedByKey: ReadonlyMap<string, ReadonlySet<string>>,
@@ -410,6 +425,21 @@ export function selectTargetProvisions(
       ...(supportedByKey.get(mapping.itemKey) ?? []),
       ...ids,
     ]));
+  }
+  // Exact legal-register wording in the verified provision is stronger than
+  // a probabilistic omission by the support classifier. Only supplement a
+  // requirement when the candidate was retrieved for that same requirement
+  // and contains the complete bounded formulation literally.
+  for (const candidate of value.candidates) {
+    const itemKey = candidate.candidate.candidate.itemKey;
+    const supported = supportedByKey.get(itemKey) ?? new Set<string>();
+    for (const requirementId of candidate.candidate.candidate.retrievalRequirementIds) {
+      if (!requirementIds.has(requirementId)) continue;
+      if (value.plan.formulations.some((formulation) =>
+        formulation.requirementIds.includes(requirementId)
+        && literalFormulationSupports(candidate, formulation))) supported.add(requirementId);
+    }
+    if (supported.size > 0) supportedByKey.set(itemKey, supported);
   }
   const ranked = [...value.candidates].sort((left, right) =>
     candidateScore(right) - candidateScore(left)
