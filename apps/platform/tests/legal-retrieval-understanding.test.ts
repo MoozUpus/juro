@@ -4,8 +4,16 @@ import test from "node:test";
 import {
   normalizeLegalRetrievalUnderstanding,
   projectLegalRetrievalConcepts,
+  RETRIEVAL_PLANNER_RESPONSE_LIMITS,
   targetQuestionPlanningHints,
 } from "../lib/legal/legal-retrieval-understanding";
+
+test("retrieval planner starts structured output directly with a bounded response budget", () => {
+  assert.deepEqual(RETRIEVAL_PLANNER_RESPONSE_LIMITS, {
+    maxOutputTokens: 640,
+    reasoningEffort: "none",
+  });
+});
 
 test("semantic atoms project to six complementary statutory retrieval concepts", () => {
   const concepts = projectLegalRetrievalConcepts({
@@ -24,10 +32,26 @@ test("semantic atoms project to six complementary statutory retrieval concepts",
     "Prohibition of formal action by responsible actor",
     "Prohibition of alternative legal action by responsible actor",
     "Guarantees for primary protected person",
-    "Guarantees for alternative protected person",
+    "Guarantees for alternative protected person; relationship-level legal action by responsible actor",
     "relationship-level legal action by responsible actor",
-    "Criminal and administrative liability; action; primary status; alternative status",
+    "Criminal and administrative liability; action; primary protected person; alternative protected person; primary status; alternative status",
   ]);
+});
+
+test("alternative status retrieval keeps the second concrete person category action-scoped", () => {
+  const concepts = projectLegalRetrievalConcepts({
+    formalRequestedActionVariants: ["direct action", "relationship termination"],
+    independentActionKeyword: "action",
+    relationshipOrInstrumentActionKeyword: "termination at the initiative of an actor",
+    primaryPersonStatus: "people in the first concrete status",
+    alternativePersonStatus: "people in the second concrete status with a material qualifier",
+    protectedStatusKeywords: ["first condition", "second qualified condition"],
+  }, "en");
+
+  assert.equal(
+    concepts[3],
+    "Guarantees for people in the second concrete status with a material qualifier; termination at the initiative of an actor",
+  );
 });
 
 test("provider-sized retrieval plans are bounded without discarding semantic queries", () => {

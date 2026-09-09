@@ -324,6 +324,7 @@ async function withTargetCoverage(
         effectiveDate: historicalInstant,
         applicabilityStatus: historicalInstant ? "historical" : "current",
         sourceClass: "OFFICIAL_LEGISLATION",
+        retrievalSelection: "semantic_reranker",
         spans: [{
           id,
           article: citationArticle(citation.label),

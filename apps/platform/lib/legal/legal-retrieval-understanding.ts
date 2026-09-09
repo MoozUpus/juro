@@ -33,7 +33,7 @@ const retrievalPlannerSchema = z.object({
   primaryPersonStatus: z.string().trim().min(1).max(140)
     .describe("The primary plausible formal status inherent to the affected person, inflected to grammatically complete 'guarantees for [PERSON]' in the user's language; never identify the person merely by a leave, benefit, procedure, or document."),
   alternativePersonStatus: z.string().trim().min(1).max(140)
-    .describe("A materially different formal status inherent to the affected person, inflected to grammatically complete 'guarantees for [PERSON]' in the user's language; never repeat the first status or identify the person merely by a leave, benefit, procedure, or document."),
+    .describe("The closest materially different concrete formal status inherent to the affected person, inflected to grammatically complete 'guarantees for [PERSON]' in the user's language; when a lay term spans multiple concrete statuses, return the second concrete status rather than an umbrella class; never repeat the first status or identify the person merely by a leave, benefit, procedure, or document."),
   protectedStatusKeywords: z.array(z.string().trim().min(1).max(100)).length(2)
     .describe("Two concise, uninflected statutory condition, capacity, or status keywords corresponding to the two person statuses, suitable as independent search terms."),
 }).strict();
@@ -52,6 +52,11 @@ const retrievalUnderstandingJsonSchema = z.toJSONSchema(retrievalPlannerSchema, 
   target: "draft-7",
   unrepresentable: "throw",
 }) as Record<string, unknown>;
+
+export const RETRIEVAL_PLANNER_RESPONSE_LIMITS = {
+  maxOutputTokens: 640,
+  reasoningEffort: "none",
+} as const;
 
 export type LegalRetrievalUnderstanding = z.infer<typeof retrievalUnderstandingSchema>;
 type LegalRetrievalUnderstandingProviderOutput = {
@@ -161,13 +166,16 @@ export function projectLegalRetrievalConcepts(
       ? `${russian.prohibition} ${secondaryAction!.russian}` : undefined, locale),
     bilingual(`${vocabulary.guarantees} ${primary.local}`, primary.russian
       ? `${russian.guarantees} ${primary.russian}` : undefined, locale),
-    bilingual(`${vocabulary.guarantees} ${alternative.local}`, alternative.russian
-      ? `${russian.guarantees} ${alternative.russian}` : undefined, locale),
+    bilingual(`${vocabulary.guarantees} ${alternative.local}; ${relationshipAction.local}`,
+      alternative.russian && relationshipAction.russian
+        ? `${russian.guarantees} ${alternative.russian}; ${relationshipAction.russian}`
+        : undefined, locale),
     bilingual(relationshipAction.local, relationshipAction.russian, locale),
     bilingual(
-      `${vocabulary.liability}; ${independentAction.local}; ${statusKeywords.map((entry) => entry.local).join("; ")}`,
-      independentAction.russian && statusKeywords.every((entry) => entry.russian)
-        ? `${russian.liability}; ${independentAction.russian}; ${statusKeywords.map((entry) => entry.russian).join("; ")}`
+      `${vocabulary.liability}; ${independentAction.local}; ${primary.local}; ${alternative.local}; ${statusKeywords.map((entry) => entry.local).join("; ")}`,
+      independentAction.russian && primary.russian && alternative.russian
+        && statusKeywords.every((entry) => entry.russian)
+        ? `${russian.liability}; ${independentAction.russian}; ${primary.russian}; ${alternative.russian}; ${statusKeywords.map((entry) => entry.russian).join("; ")}`
         : undefined,
       locale,
     ),
@@ -256,7 +264,7 @@ export async function understandLegalRetrievalQuery(input: {
     instructions: [
       "Create a compact retrieval plan for an Uzbekistan legal question in the user's language.",
       "Resolve conversation references in standaloneQuestion while preserving actors, action, status, circumstances, date, and outcome.",
-      "Return only the semantic atoms named by the schema; the application will compose the search phrases. formalRequestedActionVariants contains exactly two concise standardized expressions for the same action. The first is the direct requested action. The second must instead express that action as its formal legal effect on the underlying legal relationship or instrument—its formation, change, suspension, termination, invalidation, or other lifecycle effect as applicable. When an initiating actor is material, identify the actor with the user's language formal equivalent of 'at the initiative of [ACTOR]', not merely an instrumental actor form. Do not merely give another surface synonym in the second position. Each variant contains the action and responsible actor only—never the affected person's status, leave, benefit, facts, or circumstances. Inflect each variant so it grammatically follows the user's language equivalent of 'prohibition of' or 'grounds for'; in Russian this means the genitive case. independentActionKeyword is the single most likely uninflected statutory noun for the direct action. relationshipOrInstrumentActionKeyword restates the second variant as a standalone, uninflected code-heading phrase and uses the same formal initiative construction. Inflect primaryPersonStatus and alternativePersonStatus so each grammatically follows the user's language equivalent of 'guarantees for'; in Russian this means the dative case, using the generic plural category when that is the normal statutory heading style. The two statuses must be distinct and inherent to the affected person. protectedStatusKeywords gives the corresponding uninflected statutory condition or capacity terms, not leave names. A leave, benefit, procedure, document, or circumstance is not a person-status: infer the underlying formal role, capacity, family status, or health condition instead. Do not put an act, article, legal rule, permission, prohibition, grounds, remedy, liability, or outcome into these atoms.",
+      "Return only the semantic atoms named by the schema; the application will compose the search phrases. formalRequestedActionVariants contains exactly two concise standardized expressions for the same action. The first is the direct requested action. The second must instead express that action as its formal legal effect on the underlying legal relationship or instrument—its formation, change, suspension, termination, invalidation, or other lifecycle effect as applicable. When an initiating actor is material, identify the actor with the user's language formal equivalent of 'at the initiative of [ACTOR]', not merely an instrumental actor form. Do not merely give another surface synonym in the second position. Each variant contains the action and responsible actor only—never the affected person's status, leave, benefit, facts, or circumstances. Inflect each variant so it grammatically follows the user's language equivalent of 'prohibition of' or 'grounds for'; in Russian this means the genitive case. independentActionKeyword is the single most likely uninflected codified noun for the direct action. relationshipOrInstrumentActionKeyword restates the second variant as a standalone, uninflected code-heading phrase and uses the same formal initiative construction. Inflect primaryPersonStatus and alternativePersonStatus so each grammatically follows the user's language equivalent of 'guarantees for'; in Russian this means the dative case, using the concrete plural category when that is the normal statutory heading style. The two statuses must be distinct and inherent to the affected person. When an everyday status can denote two sequential or alternative concrete legal statuses, use those two concrete statuses; do not replace the second with a broader umbrella class that drops a material qualifier. protectedStatusKeywords gives the corresponding uninflected statutory condition or capacity terms, not leave names. A leave, benefit, procedure, document, or circumstance is not a person-status: infer the underlying formal role, capacity, family status, or health condition instead. Do not put an act, article, legal rule, permission, prohibition, grounds, remedy, liability, or outcome into these atoms.",
       "Cover ambiguity conditionally without choosing an unsupported interpretation.",
       "For Uzbek questions, write each concept slot as a concise Uzbek phrase followed by its Russian statutory equivalent after ' / '; the indexed official act may currently exist only in Russian. Keep standaloneQuestion in the user's language.",
       "Never add a bilingual ' / ' pair for Russian or English questions; use only the user's language.",
@@ -278,7 +286,7 @@ export async function understandLegalRetrievalQuery(input: {
     totalResponseTimeoutMs: timeoutMs,
     requestId: input.requestId,
     safetyIdentifier: input.safetyIdentifier,
-    maxOutputTokens: 480,
+    ...RETRIEVAL_PLANNER_RESPONSE_LIMITS,
     signal: input.signal,
   });
 

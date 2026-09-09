@@ -1076,6 +1076,60 @@ test("gateway preserves every retrieved maternity provision omitted by synthesis
   assert.match(validated.run.data.answer, /ребенка до трех лет/iu);
 });
 
+test("gateway keeps every official citation when one provider finding names mixed-validity sources", () => {
+  const provision = (article: string, text: string): LegalSourceContext => ({
+    ...source,
+    id: `indexed:labour:mixed:${article}`,
+    actTitle: "Трудовой кодекс Республики Узбекистан",
+    officialUrl: "https://lex.uz/ru/docs/6257291",
+    verificationState: "verified",
+    retrievalSelection: "semantic_reranker",
+    article,
+    excerpt: text,
+    contentSha256: article.padStart(64, "0"),
+    spans: [{
+      id: `span:labour:mixed:${article}`,
+      article: `Статья ${article}`,
+      paragraph: null,
+      text,
+      textSha256: article.padEnd(64, "0"),
+      quality: "high",
+    }],
+  });
+  const article408 = provision(
+    "408",
+    "Прекращение трудового договора с беременной женщиной по инициативе работодателя не допускается, кроме ликвидации организации.",
+  );
+  const article163 = provision(
+    "163",
+    "Запрещается прекращение трудового договора по инициативе работодателя в период нахождения работника в отпуске.",
+  );
+  const mixedFinding: LegalChatResponse = {
+    ...result,
+    confirmedFindings: [{
+      title: "Беременную работницу нельзя уволить по инициативе работодателя",
+      explanation: article408.spans![0]!.text,
+      sourceIds: [article408.id, article163.id],
+    }],
+    sources: [],
+  };
+
+  const validated = validateLegalGatewayAnswer({
+    result: mixedFinding,
+    run: { ...run, data: mixedFinding },
+    sources: [article408, article163],
+    question: "Можно ли уволить работника в декрете?",
+    locale: "ru",
+    answerMode: "detailed",
+    reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt,
+  });
+
+  assert.deepEqual(validated.run.data.sources.map((item) => item.article), ["Статья 408", "Статья 163"]);
+  assert.equal(validated.run.data.confirmedFindings.length, 1);
+  assert.deepEqual(validated.run.data.confirmedFindings[0]?.sourceIds, [article408.id, article163.id]);
+});
+
 test("gateway does not auto-publish an omitted deterministic fallback candidate", () => {
   const deterministic: LegalSourceContext = {
     ...source,

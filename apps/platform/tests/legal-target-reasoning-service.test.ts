@@ -173,7 +173,7 @@ function selectionCandidate(itemKey: string, retrievalRequirementIds: string[], 
   };
 }
 
-test("provision selection uses assessed support rather than retrieval provenance", () => {
+test("provision selection uses the minimum assessed Provision Set rather than redundant hits", () => {
   const selectionInput = {
     plan,
     candidates: [
@@ -198,9 +198,7 @@ test("provision selection uses assessed support rather than retrieval provenance
     assert.deepEqual(selected.propositions.map(({ requirementId }) => requirementId), [
       "requirement-one", "requirement-two",
     ]);
-    assert.deepEqual(selected.selections.map(({ itemKey }) => itemKey), [
-      "item-one", "item-two", "item-one-complement",
-    ]);
+    assert.deepEqual(selected.selections.map(({ itemKey }) => itemKey), ["item-one", "item-two"]);
   }
 
   const repair = selectTargetProvisions({
