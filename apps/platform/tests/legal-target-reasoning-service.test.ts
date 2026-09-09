@@ -248,6 +248,23 @@ test("assessed support retrieved for the same requirement wins retrieval-score t
   }
 });
 
+test("literal verified provision wording fills a support-classifier omission", () => {
+  const literal = selectionCandidate("literal", ["requirement-one"], 0.7);
+  literal.provisionText = "Article heading. First governing rule. Exact controlling text.";
+  const result = selectTargetProvisions({
+    plan,
+    candidates: [literal, selectionCandidate("item-two", ["requirement-two"], 0.6)],
+    repairAttempted: false,
+  }, { mappings: [{
+    itemKey: "item-two", supportedRequirementIds: ["requirement-two"],
+  }], additionalRequirements: [] });
+
+  assert.equal(result.outcome, "selected");
+  if (result.outcome === "selected") {
+    assert.deepEqual(result.selections.map(({ itemKey }) => itemKey), ["literal", "item-two"]);
+  }
+});
+
 test("selection preserves supported core requirements when only supporting coverage remains open", () => {
   const partialPlan = {
     ...plan,

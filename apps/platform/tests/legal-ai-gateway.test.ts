@@ -1034,6 +1034,11 @@ test("gateway preserves every retrieved maternity provision omitted by synthesis
       "Гарантии работнику с ребенком до трех лет",
       "Прекращение трудового договора работодателем с работником, имеющим ребенка до трех лет, допускается только по основаниям, предусмотренным законом.",
     ),
+    maternitySource(
+      "163",
+      "Запрет прекращения трудового договора по инициативе работодателя",
+      "Прекращение трудового договора по инициативе работодателя в период отпуска не допускается.",
+    ),
   ];
   const providerUsedOnlyFirst: LegalChatResponse = {
     ...result,
@@ -1063,8 +1068,9 @@ test("gateway preserves every retrieved maternity provision omitted by synthesis
     "237",
     "408",
     "409",
+    "163",
   ]);
-  assert.equal(validated.run.data.confirmedFindings.length, 4);
+  assert.equal(validated.run.data.confirmedFindings.length, 5);
   assert.match(validated.run.data.answer, /социальные отпуска/iu);
   assert.match(validated.run.data.answer, /беременной женщиной/iu);
   assert.match(validated.run.data.answer, /ребенка до трех лет/iu);
