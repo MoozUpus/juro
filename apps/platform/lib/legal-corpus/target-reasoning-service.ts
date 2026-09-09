@@ -268,8 +268,12 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       })),
     },
     maxAttempts: 1,
-    firstByteTimeoutMs: 5_000,
-    totalResponseTimeoutMs: 7_000,
+    // Production support assessment includes a bounded set of verified
+    // provision texts. Allow the structured provider enough time to begin a
+    // response under normal edge-to-provider latency while staying within the
+    // target retrieval deadline.
+    firstByteTimeoutMs: 8_000,
+    totalResponseTimeoutMs: 10_000,
     maxOutputTokens: 1_200,
     reasoningEffort: "low",
     textVerbosity: "low",
