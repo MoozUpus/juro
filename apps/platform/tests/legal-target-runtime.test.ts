@@ -51,7 +51,30 @@ test("named instruments remain searchable with custom-only release mappings", as
     async attest() { return release.configuration; },
     async search(input) {
       searched.push(input.query);
-      return { hits: [], errors: [], searchedInstanceIds: input.instanceIds };
+      const suffix = input.query.startsWith("Labor Code") ? "labor" : "maternity";
+      return {
+        hits: [{
+          itemKey: `search-releases/${release.id}/retrieval-chunk-v1:shared`,
+          instanceId: "custom-current-development-v1",
+          shardId: "base",
+          vectorRank: 1,
+          vectorScore: suffix === "labor" ? 0.95 : 0.8,
+          keywordRank: 1,
+          keywordScore: suffix === "labor" ? 0.95 : 0.8,
+          fusionScore: suffix === "labor" ? 0.95 : 0.8,
+        }, {
+          itemKey: `search-releases/${release.id}/retrieval-chunk-v1:${suffix}`,
+          instanceId: "custom-current-development-v1",
+          shardId: "base",
+          vectorRank: 2,
+          vectorScore: 0.9,
+          keywordRank: 2,
+          keywordScore: 0.9,
+          fusionScore: 0.9,
+        }],
+        errors: [],
+        searchedInstanceIds: input.instanceIds,
+      };
     },
   }, {
     async attestPrivateNames(input) { return { classifierVersion: "juro-local-pii-v1",
@@ -67,7 +90,27 @@ test("named instruments remain searchable with custom-only release mappings", as
       privateNameSpans: [], readingIds: ["reading"], requirementIds: ["protection"],
     }] }, { kind: "current" }, release);
     assert.equal(packet.availability, "available");
-    assert.deepEqual(searched, ["Labor Code termination rules | protection during maternity leave"]);
+    assert.deepEqual(searched, [
+      "Labor Code termination rules",
+      "protection during maternity leave",
+    ]);
+    assert.deepEqual(packet.candidates.map((candidate) => ({
+      itemKey: candidate.itemKey,
+      formulationIds: candidate.formulationIds,
+      retrievalRequirementIds: candidate.retrievalRequirementIds,
+    })), [{
+      itemKey: `search-releases/${release.id}/retrieval-chunk-v1:shared`,
+      formulationIds: ["formulation", "maternity"],
+      retrievalRequirementIds: ["protection", "requirement"],
+    }, {
+      itemKey: `search-releases/${release.id}/retrieval-chunk-v1:labor`,
+      formulationIds: ["formulation"],
+      retrievalRequirementIds: ["requirement"],
+    }, {
+      itemKey: `search-releases/${release.id}/retrieval-chunk-v1:maternity`,
+      formulationIds: ["maternity"],
+      retrievalRequirementIds: ["protection"],
+    }]);
     assert.deepEqual(await resolveRuntimeTrustedLegalTitles(db, release.id), ["Labor Code"]);
     sqlite.prepare("INSERT INTO legal_instruments VALUES (?,?)").run("other", "Other Code");
     assert.deepEqual(await resolveRuntimeTrustedLegalTitles(db, "legacy-release"), ["Other Code"]);

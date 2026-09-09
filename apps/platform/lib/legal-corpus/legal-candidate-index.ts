@@ -197,19 +197,12 @@ function normalizeCandidates(input: Array<NormalizedCandidateInput & {
       ...(raw.providerMetadata ? { providerMetadata: raw.providerMetadata } : {}),
     });
     const existing = byKey.get(candidate.itemKey);
-    if (!existing || candidate.fusionScore > existing.fusionScore) {
-      byKey.set(candidate.itemKey, existing ? {
-        ...candidate,
-        formulationIds: [...new Set([...existing.formulationIds, ...candidate.formulationIds])].sort(),
-        readingIds: [...new Set([...existing.readingIds, ...candidate.readingIds])].sort(),
-        retrievalRequirementIds: [...new Set([
-          ...existing.retrievalRequirementIds,
-          ...candidate.retrievalRequirementIds,
-        ])].sort(),
-      } : candidate);
-    } else if (candidate.fusionScore === existing.fusionScore) {
+    if (!existing) {
+      byKey.set(candidate.itemKey, candidate);
+    } else {
+      const preferred = candidate.fusionScore > existing.fusionScore ? candidate : existing;
       byKey.set(candidate.itemKey, {
-        ...existing,
+        ...preferred,
         formulationIds: [...new Set([...existing.formulationIds, ...candidate.formulationIds])].sort(),
         readingIds: [...new Set([...existing.readingIds, ...candidate.readingIds])].sort(),
         retrievalRequirementIds: [...new Set([
@@ -339,20 +332,6 @@ function chunks<T>(values: readonly T[], size: number): T[][] {
   return result;
 }
 
-/** One hybrid search can represent every bounded formulation. This avoids
- * repeatedly loading the same immutable search runtime while preserving each
- * formulation as candidate provenance for later diagnostics. */
-export function combinedFormulationQuery(
-  formulations: readonly QuestionInterpretation["formulations"][number][],
-): string {
-  const separator = " | ";
-  const available = 900 - separator.length * Math.max(0, formulations.length - 1);
-  const perFormulation = Math.max(1, Math.floor(available / formulations.length));
-  return formulations.map((formulation) => formulation.text
-    .normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, perFormulation))
-    .join(separator).slice(0, 900);
-}
-
 export function createProviderCandidateIndex(
   provider: LegalCandidateProvider,
   options: CandidateIndexOptions,
@@ -411,14 +390,15 @@ export function createProviderCandidateIndex(
         }
 
         const waves = chunks(requiredInstanceIds, 10);
-        const searches = await Promise.all(waves.map(async (instanceIds) => ({
-            formulations: interpretation.formulations,
+        const searches = await Promise.all(interpretation.formulations.flatMap((formulation) =>
+          waves.map(async (instanceIds) => ({
+            formulation,
             instanceIds,
             response: await provider.search({
               releaseId: release.id,
               currentAt: context?.currentAt ?? new Date(startedAt).toISOString(),
               instanceIds,
-              query: combinedFormulationQuery(interpretation.formulations),
+              query: formulation.text,
               endpoint,
               maxResults: 50,
               vectorThreshold: 0,
@@ -426,7 +406,7 @@ export function createProviderCandidateIndex(
               observedTokenUsage += response.tokenUsage ?? 0;
               return response;
             }),
-          })));
+          }))));
         const normalized: Array<NormalizedCandidateInput & {
           formulation: QuestionInterpretation["formulations"][number];
         }> = [];
@@ -485,22 +465,20 @@ export function createProviderCandidateIndex(
                 instanceId: hitInstanceId.data,
               }]);
             }
-            for (const formulation of search.formulations) {
-              normalized.push({
-                itemKey: hit.itemKey,
-                instanceId: hitInstanceId.data,
-                shardId,
-                vectorRank: hit.vectorRank,
-                vectorScore: hit.vectorScore,
-                keywordRank: hit.keywordRank,
-                keywordScore: hit.keywordScore,
-                fusionScore: waves.length > 1
-                  ? 1 / (60 + hit.vectorRank) + 1 / (60 + hit.keywordRank)
-                  : hit.fusionScore,
-                ...(hit.providerMetadata ? { providerMetadata: hit.providerMetadata } : {}),
-                formulation,
-              });
-            }
+            normalized.push({
+              itemKey: hit.itemKey,
+              instanceId: hitInstanceId.data,
+              shardId,
+              vectorRank: hit.vectorRank,
+              vectorScore: hit.vectorScore,
+              keywordRank: hit.keywordRank,
+              keywordScore: hit.keywordScore,
+              fusionScore: waves.length > 1
+                ? 1 / (60 + hit.vectorRank) + 1 / (60 + hit.keywordRank)
+                : hit.fusionScore,
+              ...(hit.providerMetadata ? { providerMetadata: hit.providerMetadata } : {}),
+              formulation: search.formulation,
+            });
           }
         }
         const packet = packetSchema.parse({
