@@ -29,15 +29,21 @@ const endpointSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("current") }).strict(),
   z.object({ kind: z.literal("timestamp"), instant: utcInstantSchema }).strict(),
 ]);
-const requestSchema = z.object({
+const requestBaseSchema = z.object({
   releaseId: searchReleaseIdSchema,
   instanceIds: z.array(z.string().min(1).max(64)).length(1),
-  query: z.string().trim().min(1).max(900),
   endpoint: endpointSchema,
   currentAt: utcInstantSchema,
   maxResults: z.literal(50),
   vectorThreshold: z.literal(0),
 }).strict();
+const singleRequestSchema = requestBaseSchema.extend({
+  query: z.string().trim().min(1).max(900),
+}).strict();
+const batchRequestSchema = requestBaseSchema.extend({
+  queries: z.array(z.string().trim().min(1).max(900)).min(1).max(6),
+}).strict();
+const requestSchema = z.union([singleRequestSchema, batchRequestSchema]);
 const hitSchema = z.object({
   itemKey: z.string().min(1).max(700),
   instanceId: z.string().min(1).max(64),
@@ -50,6 +56,15 @@ const hitSchema = z.object({
 }).strict();
 export const customSearchResponseSchema = z.object({
   hits: z.array(hitSchema).max(50),
+  errors: z.array(z.object({ code: z.string(), instanceId: z.string().optional() }).strict()),
+  searchedInstanceIds: z.array(z.string()).length(1),
+  tokenUsage: z.number().int().nonnegative(),
+}).strict();
+export const customSearchBatchResponseSchema = z.object({
+  results: z.array(z.object({
+    queryIndex: z.number().int().nonnegative().max(5),
+    hits: z.array(hitSchema).max(50),
+  }).strict()).min(1).max(6),
   errors: z.array(z.object({ code: z.string(), instanceId: z.string().optional() }).strict()),
   searchedInstanceIds: z.array(z.string()).length(1),
   tokenUsage: z.number().int().nonnegative(),
@@ -71,38 +86,43 @@ export type CustomSearchEnv = {
   CUSTOM_RUNTIME_DESCRIPTOR_SHA256: string;
 };
 
-async function reserveQueryBudget(env: CustomSearchEnv, releaseId: string): Promise<string> {
+async function reserveQueryBudget(
+  env: CustomSearchEnv,
+  releaseId: string,
+  queryCount: number,
+): Promise<string> {
   const environment = legalEnvironmentSchema.parse(env.APP_ENV);
   const period = environment === "staging" ? "evaluation"
     : new Date().toISOString().slice(0, 7);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  const reservation = QUERY_RESERVATION_USD_MICROS * queryCount;
   const reserved = await env.CATALOG_DB.prepare(`UPDATE legal_custom_query_budget_periods
-    SET reserved_usd_micros=reserved_usd_micros+?,reserved_requests=reserved_requests+1
+    SET reserved_usd_micros=reserved_usd_micros+?,reserved_requests=reserved_requests+?
     WHERE environment=? AND period=?
       AND reserved_usd_micros+?<=authorized_usd_micros
     RETURNING reserved_usd_micros AS reservedUsdMicros`).bind(
-    QUERY_RESERVATION_USD_MICROS, environment, period, QUERY_RESERVATION_USD_MICROS,
+    reservation, queryCount, environment, period, reservation,
   ).first<{ reservedUsdMicros: number }>();
   if (!reserved) throw new TypeError("CUSTOM_QUERY_BUDGET_EXHAUSTED");
   await env.CATALOG_DB.prepare(`INSERT INTO legal_custom_query_reservations
     (id,environment,period,release_id,reserved_usd_micros,created_at)
     VALUES (?,?,?,?,?,?)`).bind(
-    id, environment, period, releaseId, QUERY_RESERVATION_USD_MICROS, now,
+    id, environment, period, releaseId, reservation, now,
   ).run();
   return id;
 }
 
 const embeddingResponseSchema = z.object({
   model: z.literal(CUSTOM_EMBEDDING_MODEL),
-  data: z.array(z.object({ index: z.literal(0),
-    embedding: z.array(z.number().finite()).length(CUSTOM_EMBEDDING_DIMENSIONS) }).passthrough()).length(1),
+  data: z.array(z.object({ index: z.number().int().nonnegative(),
+    embedding: z.array(z.number().finite()).length(CUSTOM_EMBEDDING_DIMENSIONS) }).passthrough()).min(1).max(6),
   usage: z.object({ prompt_tokens: z.number().int().positive(),
     total_tokens: z.number().int().positive() }).passthrough(),
 }).passthrough();
 
-async function queryEmbedding(env: CustomSearchEnv, query: string): Promise<{
-  vector: number[]; tokenUsage: number;
+async function queryEmbeddings(env: CustomSearchEnv, queries: string[]): Promise<{
+  vectors: number[][]; tokenUsage: number;
 }> {
   const response = await env.AI.gateway(env.AI_GATEWAY_ID).run({
     provider: "openai",
@@ -110,14 +130,19 @@ async function queryEmbedding(env: CustomSearchEnv, query: string): Promise<{
     headers: { "Content-Type": "application/json", "cf-aig-skip-cache": true,
       "cf-aig-collect-log": false, "cf-aig-max-attempts": 1 },
     query: { model: CUSTOM_EMBEDDING_MODEL, dimensions: CUSTOM_EMBEDDING_DIMENSIONS,
-      encoding_format: "float", input: [query] },
+      encoding_format: "float", input: queries },
   }, { signal: AbortSignal.timeout(60_000), gateway: { id: env.AI_GATEWAY_ID,
     skipCache: true, collectLog: false, requestTimeoutMs: 55_000, retries: { maxAttempts: 1 } } });
   if (!response.ok) throw new TypeError("CUSTOM_QUERY_EMBEDDING_UNAVAILABLE");
   const contentLength = Number(response.headers.get("content-length") ?? 0);
-  if (contentLength > 128 * 1024) throw new TypeError("CUSTOM_QUERY_EMBEDDING_RESPONSE_TOO_LARGE");
+  if (contentLength > 768 * 1024) throw new TypeError("CUSTOM_QUERY_EMBEDDING_RESPONSE_TOO_LARGE");
   const result = embeddingResponseSchema.parse(await response.json());
-  return { vector: normalizeCustomEmbedding(result.data[0]!.embedding),
+  const byIndex = new Map(result.data.map((entry) => [entry.index, entry.embedding]));
+  if (byIndex.size !== queries.length
+    || queries.some((_, index) => !byIndex.has(index))) {
+    throw new TypeError("CUSTOM_QUERY_EMBEDDING_RESPONSE_INCOMPLETE");
+  }
+  return { vectors: queries.map((_, index) => normalizeCustomEmbedding(byIndex.get(index)!)),
     tokenUsage: result.usage.prompt_tokens };
 }
 
@@ -185,49 +210,63 @@ export async function executeCustomSearch(env: CustomSearchEnv, raw: unknown) {
   }
   const descriptor = await loadDescriptor(env, input.releaseId);
   const denseMetadataReleaseId = descriptor.denseMetadataReleaseId ?? descriptor.releaseId;
-  await reserveQueryBudget(env, input.releaseId);
+  const queries = "query" in input ? [input.query] : input.queries;
+  await reserveQueryBudget(env, input.releaseId, queries.length);
   const atEpoch = Math.floor(new Date(input.endpoint.kind === "timestamp"
     ? input.endpoint.instant : input.currentAt).getTime() / 1_000);
-  const embedding = await queryEmbedding(env, input.query);
-  const [sparse, dense] = await Promise.all([
-    queryCustomBm25Runtime(env.ARTIFACTS, descriptor,
-      { text: input.query, atEpoch, topK: input.maxResults }),
-    queryCustomDenseLane(env.DENSE, {
-      releaseId: denseMetadataReleaseId,
-      vector: embedding.vector,
-      filter: buildCustomVectorizeFilter({ releaseId: denseMetadataReleaseId, atEpoch }),
-      topK: input.maxResults,
-    }),
-  ]);
-  const sparseOrdinals = sparse.map((entry) => entry.ordinal);
-  const runtimeKeys = await resolveCustomBm25RuntimeItemKeys(env.ARTIFACTS, descriptor,
-    sparseOrdinals);
-  const sparseKeys = runtimeKeys
-    ? runtimeKeys.map((key) => `search-releases/${input.releaseId}/${key}`)
-    : await itemKeysForOrdinals(env, input.releaseId, sparseOrdinals);
-  const denseKeys = dense.map((entry) =>
-    `search-releases/${input.releaseId}/${entry.itemKey}`);
-  const fused = fuseCustomRankedLanes([sparseKeys, denseKeys], { k: 60, topK: input.maxResults });
-  const sparseByKey = new Map(sparseKeys.map((key, index) => [key, {
-    rank: index + 1, score: sparse[index]!.score,
-  }]));
-  const denseByKey = new Map(denseKeys.map((key, index) => [key, {
-    rank: index + 1, score: dense[index]!.score,
-  }]));
-  return customSearchResponseSchema.parse({
-    hits: fused.map((entry) => ({
-      itemKey: entry.itemKey,
-      instanceId: env.CUSTOM_SEARCH_INSTANCE_ID,
-      shardId: env.CUSTOM_SEARCH_SHARD_ID,
-      vectorRank: denseByKey.get(entry.itemKey)?.rank ?? dense.length + 1,
-      vectorScore: denseByKey.get(entry.itemKey)?.score ?? 0,
-      keywordRank: sparseByKey.get(entry.itemKey)?.rank ?? sparse.length + 1,
-      keywordScore: sparseByKey.get(entry.itemKey)?.score ?? 0,
-      fusionScore: entry.score,
-    })),
+  const embedding = await queryEmbeddings(env, queries);
+  const results = await Promise.all(queries.map(async (query, queryIndex) => {
+    const [sparse, dense] = await Promise.all([
+      queryCustomBm25Runtime(env.ARTIFACTS, descriptor,
+        { text: query, atEpoch, topK: input.maxResults }),
+      queryCustomDenseLane(env.DENSE, {
+        releaseId: denseMetadataReleaseId,
+        vector: embedding.vectors[queryIndex]!,
+        filter: buildCustomVectorizeFilter({ releaseId: denseMetadataReleaseId, atEpoch }),
+        topK: input.maxResults,
+      }),
+    ]);
+    const sparseOrdinals = sparse.map((entry) => entry.ordinal);
+    const runtimeKeys = await resolveCustomBm25RuntimeItemKeys(env.ARTIFACTS, descriptor,
+      sparseOrdinals);
+    const sparseKeys = runtimeKeys
+      ? runtimeKeys.map((key) => `search-releases/${input.releaseId}/${key}`)
+      : await itemKeysForOrdinals(env, input.releaseId, sparseOrdinals);
+    const denseKeys = dense.map((entry) =>
+      `search-releases/${input.releaseId}/${entry.itemKey}`);
+    const fused = fuseCustomRankedLanes([sparseKeys, denseKeys], { k: 60, topK: input.maxResults });
+    const sparseByKey = new Map(sparseKeys.map((key, index) => [key, {
+      rank: index + 1, score: sparse[index]!.score,
+    }]));
+    const denseByKey = new Map(denseKeys.map((key, index) => [key, {
+      rank: index + 1, score: dense[index]!.score,
+    }]));
+    return {
+      queryIndex,
+      hits: fused.map((entry) => ({
+        itemKey: entry.itemKey,
+        instanceId: env.CUSTOM_SEARCH_INSTANCE_ID,
+        shardId: env.CUSTOM_SEARCH_SHARD_ID,
+        vectorRank: denseByKey.get(entry.itemKey)?.rank ?? dense.length + 1,
+        vectorScore: denseByKey.get(entry.itemKey)?.score ?? 0,
+        keywordRank: sparseByKey.get(entry.itemKey)?.rank ?? sparse.length + 1,
+        keywordScore: sparseByKey.get(entry.itemKey)?.score ?? 0,
+        fusionScore: entry.score,
+      })),
+    };
+  }));
+  const batch = customSearchBatchResponseSchema.parse({
+    results,
     errors: [],
     searchedInstanceIds: input.instanceIds,
     tokenUsage: embedding.tokenUsage,
+  });
+  if (!("query" in input)) return batch;
+  return customSearchResponseSchema.parse({
+    hits: batch.results[0]!.hits,
+    errors: batch.errors,
+    searchedInstanceIds: batch.searchedInstanceIds,
+    tokenUsage: batch.tokenUsage,
   });
 }
 
@@ -241,7 +280,7 @@ export async function handleCustomSearchRequest(request: Request, env: CustomSea
     requireJson: true,
   })) return privateServiceJson({ code: "CUSTOM_SEARCH_PRIVATE_ROUTE_REJECTED" }, 404);
   try {
-    if (!declaredRequestBodyWithinLimit(request, 4_096)) {
+    if (!declaredRequestBodyWithinLimit(request, 8_192)) {
       throw new TypeError("CUSTOM_SEARCH_REQUEST_TOO_LARGE");
     }
     const body = await request.json();

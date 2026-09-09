@@ -49,29 +49,32 @@ test("named instruments remain searchable with custom-only release mappings", as
   const searched: string[] = [];
   const index = createProviderCandidateIndex({
     async attest() { return release.configuration; },
-    async search(input) {
-      searched.push(input.query);
-      const suffix = input.query.startsWith("Labor Code") ? "labor" : "maternity";
+    async search() { throw new Error("expected batched formulation search"); },
+    async searchMany(input) {
+      searched.push(...input.queries);
       return {
-        hits: [{
-          itemKey: `search-releases/${release.id}/retrieval-chunk-v1:shared`,
-          instanceId: "custom-current-development-v1",
-          shardId: "base",
-          vectorRank: 1,
-          vectorScore: suffix === "labor" ? 0.95 : 0.8,
-          keywordRank: 1,
-          keywordScore: suffix === "labor" ? 0.95 : 0.8,
-          fusionScore: suffix === "labor" ? 0.95 : 0.8,
-        }, {
-          itemKey: `search-releases/${release.id}/retrieval-chunk-v1:${suffix}`,
-          instanceId: "custom-current-development-v1",
-          shardId: "base",
-          vectorRank: 2,
-          vectorScore: 0.9,
-          keywordRank: 2,
-          keywordScore: 0.9,
-          fusionScore: 0.9,
-        }],
+        results: input.queries.map((query, queryIndex) => {
+          const suffix = query.startsWith("Labor Code") ? "labor" : "maternity";
+          return { queryIndex, hits: [{
+            itemKey: `search-releases/${release.id}/retrieval-chunk-v1:shared`,
+            instanceId: "custom-current-development-v1",
+            shardId: "base",
+            vectorRank: 1,
+            vectorScore: suffix === "labor" ? 0.95 : 0.8,
+            keywordRank: 1,
+            keywordScore: suffix === "labor" ? 0.95 : 0.8,
+            fusionScore: suffix === "labor" ? 0.95 : 0.8,
+          }, {
+            itemKey: `search-releases/${release.id}/retrieval-chunk-v1:${suffix}`,
+            instanceId: "custom-current-development-v1",
+            shardId: "base",
+            vectorRank: 2,
+            vectorScore: 0.9,
+            keywordRank: 2,
+            keywordScore: 0.9,
+            fusionScore: 0.9,
+          }] };
+        }),
         errors: [],
         searchedInstanceIds: input.instanceIds,
       };
@@ -135,7 +138,11 @@ test("runtime custom provider keeps its pinned release after activation changes,
     service: { async fetch(input, init) {
       const request = new Request(input, init);
       requests.push(request);
-      return Response.json({ hits: [], errors: [],
+      const body = await request.clone().json() as { queries?: string[] };
+      return Response.json(body.queries ? {
+        results: body.queries.map((_, queryIndex) => ({ queryIndex, hits: [] })),
+        errors: [], searchedInstanceIds: ["custom-current-staging-v1"], tokenUsage: 2,
+      } : { hits: [], errors: [],
         searchedInstanceIds: ["custom-current-staging-v1"], tokenUsage: 2 });
     } } as Fetcher,
   });
@@ -151,6 +158,15 @@ test("runtime custom provider keeps its pinned release after activation changes,
     releaseId: "release:staging:current:custom-v2:2026-09-05",
     currentAt,
     instanceIds: ["custom-current-staging-v1"], query: "Article 1",
+    endpoint: { kind: "current" }, maxResults: 50, vectorThreshold: 0,
+  });
+  assert.equal((await provider.searchMany!({ releaseId, currentAt,
+    instanceIds: ["custom-current-staging-v1"], queries: ["Article 1", "Article 2"],
+    endpoint: { kind: "current" }, maxResults: 50, vectorThreshold: 0 })).results.length, 2);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(await requests[1]?.json(), {
+    releaseId: "release:staging:current:custom-v2:2026-09-05",
+    currentAt, instanceIds: ["custom-current-staging-v1"], queries: ["Article 1", "Article 2"],
     endpoint: { kind: "current" }, maxResults: 50, vectorThreshold: 0,
   });
   await assert.rejects(() => provider.search({ instanceIds: ["custom-current-staging-v1"],
