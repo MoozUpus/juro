@@ -7,13 +7,13 @@ import {
   handleTargetReasoningServiceRequest,
   parseTargetInterpretationProviderOutput,
   selectTargetProvisions,
+  targetSupportAssessmentJsonSchema,
   targetInterpretationJsonSchema,
   TARGET_PRIVATE_NAME_CLASSIFICATION_PATH,
   TARGET_PROVISION_SELECTION_PATH,
 } from "../lib/legal-corpus/target-reasoning-service";
 
-test("question interpretation uses the strict provider schema subset and normalizes nullable optionals", () => {
-  const providerSchema = openAiCompatibleJsonSchema(targetInterpretationJsonSchema);
+test("reasoning calls use strict provider schemas and interpretation normalizes nullable optionals", () => {
   const visit = (value: unknown): void => {
     if (Array.isArray(value)) return value.forEach(visit);
     if (!value || typeof value !== "object") return;
@@ -26,7 +26,9 @@ test("question interpretation uses the strict provider schema subset and normali
     }
     Object.values(object).forEach(visit);
   };
-  visit(providerSchema);
+  visit(openAiCompatibleJsonSchema(targetInterpretationJsonSchema));
+  visit(openAiCompatibleJsonSchema(targetSupportAssessmentJsonSchema));
+  assert.match(JSON.stringify(targetSupportAssessmentJsonSchema), /governingRequirementIds/u);
   const parsed = parseTargetInterpretationProviderOutput({
     id: "plan-provider",
     originalLanguage: "ru",
@@ -296,6 +298,45 @@ test("requirement-specific formulation rank beats broad cross-formulation popula
   assert.equal(result.outcome, "selected");
   if (result.outcome === "selected") {
     assert.deepEqual(result.selections.map(({ itemKey }) => itemKey), ["direct-rule", "broad-guidance"]);
+  }
+});
+
+test("an operative governing provision beats a higher-ranked cross-reference", () => {
+  const direct = selectionCandidate("operative-direct-rule", ["requirement-one"], 0.2);
+  direct.candidate.candidate.formulationMatches = [{
+    formulationId: "formulation-one",
+    rank: 8,
+    fusionScore: 0.2,
+  }];
+  const broad = selectionCandidate("higher-ranked-broad-rule", ["requirement-one"], 0.99);
+  broad.candidate.candidate.formulationMatches = [{
+    formulationId: "formulation-one",
+    rank: 1,
+    fusionScore: 0.99,
+  }];
+  const second = selectionCandidate("second-rule", ["requirement-two"], 0.1);
+
+  const result = selectTargetProvisions({
+    plan,
+    candidates: [broad, direct, second],
+    repairAttempted: false,
+  }, { mappings: [{
+    itemKey: "higher-ranked-broad-rule",
+    supportedRequirementIds: ["requirement-one"],
+  }, {
+    itemKey: "operative-direct-rule",
+    supportedRequirementIds: ["requirement-one"],
+    governingRequirementIds: ["requirement-one"],
+  }, {
+    itemKey: "second-rule",
+    supportedRequirementIds: ["requirement-two"],
+  }], additionalRequirements: [] });
+
+  assert.equal(result.outcome, "selected");
+  if (result.outcome === "selected") {
+    assert.deepEqual(result.selections.map(({ itemKey }) => itemKey), [
+      "operative-direct-rule", "second-rule",
+    ]);
   }
 });
 
