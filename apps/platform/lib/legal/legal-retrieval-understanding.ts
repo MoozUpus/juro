@@ -24,28 +24,28 @@ const retrievalUnderstandingSchema = z.object({
 // the same standalone question and statutory query hypotheses.
 const retrievalPlannerSchema = z.object({
   standaloneQuestion: z.string().trim().min(1).max(900),
-  generalProhibition: z.string().trim().min(1).max(180)
-    .describe("One formal statutory noun phrase for prohibition of the requested action; start with the user's language equivalent of 'prohibition'."),
-  primaryStatusRule: z.string().trim().min(1).max(180)
-    .describe("One special governing rule for the primary plausible formal legal status."),
-  alternativeStatusRule: z.string().trim().min(1).max(180)
-    .describe("One special governing rule for a materially different plausible formal legal status, not a second everyday label for the primary status."),
-  generalActionGrounds: z.string().trim().min(1).max(180)
-    .describe("One formal statutory noun phrase starting with the user's language equivalent of 'grounds for', followed by the requested action and responsible actor."),
-  preservationOrOngoingRights: z.string().trim().min(1).max(180)
-    .describe("One formal statutory phrase for a relationship, position, entitlement, payment, or other right preserved despite the situation."),
-  criminalAndAdministrativeLiability: z.string().trim().min(1).max(180)
-    .describe("One concise query explicitly naming both criminal and administrative liability, the action, and the protected status."),
+  formalRequestedActionVariants: z.array(z.string().trim().min(1).max(180)).length(2)
+    .describe("Two concise action-only codified noun phrases: first the direct requested action, then the same action expressed as its legal effect on the underlying relationship or instrument; each must grammatically complete 'prohibition of [ACTION]' or 'grounds for [ACTION]' and include the responsible actor when material."),
+  independentActionKeyword: z.string().trim().min(1).max(100)
+    .describe("The likeliest uninflected codified noun for the requested action, suitable as an independent statutory search keyword."),
+  relationshipOrInstrumentActionKeyword: z.string().trim().min(1).max(180)
+    .describe("The same action as an uninflected codified heading phrase describing its legal effect on the underlying relationship or instrument, using the formal equivalent of 'at the initiative of [ACTOR]' when an initiator is material."),
+  primaryPersonStatus: z.string().trim().min(1).max(140)
+    .describe("The primary plausible formal status inherent to the affected person, inflected to grammatically complete 'guarantees for [PERSON]' in the user's language; never identify the person merely by a leave, benefit, procedure, or document."),
+  alternativePersonStatus: z.string().trim().min(1).max(140)
+    .describe("A materially different formal status inherent to the affected person, inflected to grammatically complete 'guarantees for [PERSON]' in the user's language; never repeat the first status or identify the person merely by a leave, benefit, procedure, or document."),
+  protectedStatusKeywords: z.array(z.string().trim().min(1).max(100)).length(2)
+    .describe("Two concise, uninflected statutory condition, capacity, or status keywords corresponding to the two person statuses, suitable as independent search terms."),
 }).strict();
 
 const retrievalPlannerProviderSchema = z.object({
   standaloneQuestion: z.string(),
-  generalProhibition: z.string(),
-  primaryStatusRule: z.string(),
-  alternativeStatusRule: z.string(),
-  generalActionGrounds: z.string(),
-  preservationOrOngoingRights: z.string(),
-  criminalAndAdministrativeLiability: z.string(),
+  formalRequestedActionVariants: z.array(z.string()).length(2),
+  independentActionKeyword: z.string(),
+  relationshipOrInstrumentActionKeyword: z.string(),
+  primaryPersonStatus: z.string(),
+  alternativePersonStatus: z.string(),
+  protectedStatusKeywords: z.array(z.string()).length(2),
 }).strict();
 
 const retrievalUnderstandingJsonSchema = z.toJSONSchema(retrievalPlannerSchema, {
@@ -98,6 +98,80 @@ export function targetQuestionPlanningHints(
 
 function normalize(value: string, maxLength: number): string {
   return value.normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, maxLength);
+}
+
+type LegalRetrievalTerms = {
+  formalRequestedActionVariants: string[];
+  independentActionKeyword: string;
+  relationshipOrInstrumentActionKeyword: string;
+  primaryPersonStatus: string;
+  alternativePersonStatus: string;
+  protectedStatusKeywords: string[];
+};
+
+const retrievalVocabulary = {
+  ru: {
+    prohibition: "Запрет",
+    guarantees: "Гарантии",
+    liability: "Уголовная и административная ответственность",
+  },
+  uz: {
+    prohibition: "Taqiqlash",
+    guarantees: "Kafolatlar",
+    liability: "Jinoiy va ma'muriy javobgarlik",
+  },
+  en: {
+    prohibition: "Prohibition of",
+    guarantees: "Guarantees for",
+    liability: "Criminal and administrative liability",
+  },
+} as const;
+
+function languageParts(value: string, locale: AiOutputLocale): { local: string; russian?: string } {
+  const normalized = normalize(value, 180);
+  if (locale !== "uz") return { local: normalized };
+  const [local, russian] = normalized.split(" / ", 2);
+  return { local: local?.trim() || normalized, ...(russian?.trim() ? { russian: russian.trim() } : {}) };
+}
+
+function bilingual(local: string, russian: string | undefined, locale: AiOutputLocale): string {
+  return normalize(locale === "uz" && russian ? `${local} / ${russian}` : local, 240);
+}
+
+/** Converts semantic atoms into a stable, topic-neutral statutory search
+ * inventory. The projection supplies only retrieval vocabulary; it never
+ * names an act, article, legal outcome, or domain-specific rule. */
+export function projectLegalRetrievalConcepts(
+  value: LegalRetrievalTerms,
+  locale: AiOutputLocale,
+): string[] {
+  const vocabulary = retrievalVocabulary[locale];
+  const russian = retrievalVocabulary.ru;
+  const actions = value.formalRequestedActionVariants.map((entry) => languageParts(entry, locale));
+  const [primaryAction, secondaryAction] = actions;
+  const independentAction = languageParts(value.independentActionKeyword, locale);
+  const relationshipAction = languageParts(value.relationshipOrInstrumentActionKeyword, locale);
+  const primary = languageParts(value.primaryPersonStatus, locale);
+  const alternative = languageParts(value.alternativePersonStatus, locale);
+  const statusKeywords = value.protectedStatusKeywords.map((entry) => languageParts(entry, locale));
+  return [
+    bilingual(`${vocabulary.prohibition} ${primaryAction!.local}`, primaryAction!.russian
+      ? `${russian.prohibition} ${primaryAction!.russian}` : undefined, locale),
+    bilingual(`${vocabulary.prohibition} ${secondaryAction!.local}`, secondaryAction!.russian
+      ? `${russian.prohibition} ${secondaryAction!.russian}` : undefined, locale),
+    bilingual(`${vocabulary.guarantees} ${primary.local}`, primary.russian
+      ? `${russian.guarantees} ${primary.russian}` : undefined, locale),
+    bilingual(`${vocabulary.guarantees} ${alternative.local}`, alternative.russian
+      ? `${russian.guarantees} ${alternative.russian}` : undefined, locale),
+    bilingual(relationshipAction.local, relationshipAction.russian, locale),
+    bilingual(
+      `${vocabulary.liability}; ${independentAction.local}; ${statusKeywords.map((entry) => entry.local).join("; ")}`,
+      independentAction.russian && statusKeywords.every((entry) => entry.russian)
+        ? `${russian.liability}; ${independentAction.russian}; ${statusKeywords.map((entry) => entry.russian).join("; ")}`
+        : undefined,
+      locale,
+    ),
+  ];
 }
 
 /**
@@ -182,7 +256,7 @@ export async function understandLegalRetrievalQuery(input: {
     instructions: [
       "Create a compact retrieval plan for an Uzbekistan legal question in the user's language.",
       "Resolve conversation references in standaloneQuestion while preserving actors, action, status, circumstances, date, and outcome.",
-      "Fill the six named concept slots with concise, independently testable phrases in formal statutory vocabulary likely to occur in an official provision or heading. Every phrase must connect the legally material status to the action and legal issue the user asks about instead of merely defining the status. Keep the slots complementary and put only the named concern in each slot. generalProhibition is a retrieval hypothesis, not a legal conclusion: it must start with the direct nominal term equivalent to 'prohibition' and then name the most likely formal statutory action and responsible actor; do not put status-specific wording or grounds in this slot. primaryStatusRule names the formal protected legal status—not merely the everyday label for a leave or benefit—and the one special rule to check for that status. alternativeStatusRule must identify a materially different person or formal status hidden by ambiguous everyday wording, not merely repeat a second leave or benefit label, and name the one special rule to check for that status. generalActionGrounds must start with the direct nominal term equivalent to 'grounds for', followed by the same formal action and responsible actor; do not add procedure, special statuses, or remedies. preservationOrOngoingRights names continuation of any relationship, status, position, entitlement, payment, or other ongoing right that the requested action puts at issue. criminalAndAdministrativeLiability must explicitly name both criminal and administrative liability, followed by the same action and each material protected status; it is a retrieval hypothesis and does not assert that liability applies. When no protected status is material, restate the closest consequence requirement without inventing liability. If a slot is not independently relevant, restate the closest material requirement without inventing a rule.",
+      "Return only the semantic atoms named by the schema; the application will compose the search phrases. formalRequestedActionVariants contains exactly two concise standardized expressions for the same action. The first is the direct requested action. The second must instead express that action as its formal legal effect on the underlying legal relationship or instrument—its formation, change, suspension, termination, invalidation, or other lifecycle effect as applicable. When an initiating actor is material, identify the actor with the user's language formal equivalent of 'at the initiative of [ACTOR]', not merely an instrumental actor form. Do not merely give another surface synonym in the second position. Each variant contains the action and responsible actor only—never the affected person's status, leave, benefit, facts, or circumstances. Inflect each variant so it grammatically follows the user's language equivalent of 'prohibition of' or 'grounds for'; in Russian this means the genitive case. independentActionKeyword is the single most likely uninflected statutory noun for the direct action. relationshipOrInstrumentActionKeyword restates the second variant as a standalone, uninflected code-heading phrase and uses the same formal initiative construction. Inflect primaryPersonStatus and alternativePersonStatus so each grammatically follows the user's language equivalent of 'guarantees for'; in Russian this means the dative case, using the generic plural category when that is the normal statutory heading style. The two statuses must be distinct and inherent to the affected person. protectedStatusKeywords gives the corresponding uninflected statutory condition or capacity terms, not leave names. A leave, benefit, procedure, document, or circumstance is not a person-status: infer the underlying formal role, capacity, family status, or health condition instead. Do not put an act, article, legal rule, permission, prohibition, grounds, remedy, liability, or outcome into these atoms.",
       "Cover ambiguity conditionally without choosing an unsupported interpretation.",
       "For Uzbek questions, write each concept slot as a concise Uzbek phrase followed by its Russian statutory equivalent after ' / '; the indexed official act may currently exist only in Russian. Keep standaloneQuestion in the user's language.",
       "Never add a bilingual ' / ' pair for Russian or English questions; use only the user's language.",
@@ -217,14 +291,7 @@ export async function understandLegalRetrievalQuery(input: {
     outputTokens: result.usage.outputTokens,
   });
 
-  const plannerConcepts = [
-    result.data.generalProhibition,
-    result.data.primaryStatusRule,
-    result.data.alternativeStatusRule,
-    result.data.generalActionGrounds,
-    result.data.preservationOrOngoingRights,
-    result.data.criminalAndAdministrativeLiability,
-  ].map((concept) => input.locale === "uz" ? concept : concept.split(" / ", 1)[0] ?? concept);
+  const plannerConcepts = projectLegalRetrievalConcepts(result.data, input.locale);
   const normalizedConcepts = plannerConcepts.map((concept) => ({
     statement: concept,
     alternatives: [concept],

@@ -3,8 +3,32 @@ import test from "node:test";
 
 import {
   normalizeLegalRetrievalUnderstanding,
+  projectLegalRetrievalConcepts,
   targetQuestionPlanningHints,
 } from "../lib/legal/legal-retrieval-understanding";
+
+test("semantic atoms project to six complementary statutory retrieval concepts", () => {
+  const concepts = projectLegalRetrievalConcepts({
+    formalRequestedActionVariants: [
+      "formal action by responsible actor",
+      "alternative legal action by responsible actor",
+    ],
+    independentActionKeyword: "action",
+    relationshipOrInstrumentActionKeyword: "relationship-level legal action by responsible actor",
+    primaryPersonStatus: "primary protected person",
+    alternativePersonStatus: "alternative protected person",
+    protectedStatusKeywords: ["primary status", "alternative status"],
+  }, "en");
+
+  assert.deepEqual(concepts, [
+    "Prohibition of formal action by responsible actor",
+    "Prohibition of alternative legal action by responsible actor",
+    "Guarantees for primary protected person",
+    "Guarantees for alternative protected person",
+    "relationship-level legal action by responsible actor",
+    "Criminal and administrative liability; action; primary status; alternative status",
+  ]);
+});
 
 test("provider-sized retrieval plans are bounded without discarding semantic queries", () => {
   const originalQuery = "можно ли уволить сотрудника в декрете";
