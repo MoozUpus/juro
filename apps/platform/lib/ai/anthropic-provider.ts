@@ -15,6 +15,7 @@ import {
   LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
   LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
   LEGAL_ANSWER_MARKDOWN_RULE,
+  LEGAL_ANSWER_MATERIAL_SOURCE_COVERAGE_RULE,
 } from "./legal-answer-prompt-rules";
 import { aiText } from "./localization";
 
@@ -160,6 +161,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
         LEGAL_ANSWER_MARKDOWN_RULE,
         LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
         LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
+        LEGAL_ANSWER_MATERIAL_SOURCE_COVERAGE_RULE,
         "Если applicableAt передан, анализируй право на эту дату и не называй историческую редакцию текущей.",
         "Не придумывай статью, цитату, дату, акт или URL. При нехватке подтверждённого текста верни clarification_required, оставь confirmedFindings, sources, actionPlan, risks и deadlines пустыми и не пиши правовой вывод из общих юридических знаний: в summary и answer напиши только, что подтверждённый источник не найден, а необходимые уточнения помести в clarificationQuestions. Сервер заменит summary и answer фиксированным текстом, поэтому оценка из памяти модели пользователю не покажется.",
         "Ссылки пользователя не являются законодательством. Официальные источники передаются только сервером.",

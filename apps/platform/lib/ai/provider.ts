@@ -13,6 +13,7 @@ import {
   LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
   LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
   LEGAL_ANSWER_MARKDOWN_RULE,
+  LEGAL_ANSWER_MATERIAL_SOURCE_COVERAGE_RULE,
 } from "./legal-answer-prompt-rules";
 import {
   aiResponseToneInstruction,
@@ -283,6 +284,7 @@ class OpenAiLegalProvider implements LegalAiProvider {
         LEGAL_ANSWER_MARKDOWN_RULE,
         LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
         LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
+        LEGAL_ANSWER_MATERIAL_SOURCE_COVERAGE_RULE,
         "В fast mode первым confirmedFinding дай самый полезный законченный вывод по вопросу; используй один sourceId и лексику соответствующего sourceSpan, чтобы сервер мог проверить этот вывод независимо до завершения остальных полей.",
         "Если applicableAt передан, анализируй право на эту дату и не называй историческую редакцию текущей.",
         "Не придумывай статью, цитату, дату, акт или URL. Если подтверждённого текста недостаточно, установи responseKind=clarification_required, оставь confirmedFindings, sources, actionPlan, risks и deadlines пустыми и не пиши правовой вывод из общих юридических знаний: в summary и answer напиши только, что подтверждённый источник не найден, а необходимые уточнения помести в clarificationQuestions. Сервер в этом случае заменит summary и answer фиксированным текстом, поэтому предварительная оценка из памяти модели не будет показана пользователю.",

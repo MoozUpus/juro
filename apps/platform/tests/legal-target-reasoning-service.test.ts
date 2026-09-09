@@ -276,6 +276,38 @@ test("selection preserves supported core requirements when only supporting cover
   }
 });
 
+test("a dedicated formulation does not repeat an uncovered supporting search", () => {
+  const dedicatedPlan = {
+    ...plan,
+    readings: [{
+      id: "reading-one",
+      statement: "Requested legal outcome",
+      requirements: [{ id: "requirement-one", statement: "Governing rule", priority: "core" as const }, {
+        id: "requirement-remedy", statement: "Available remedy", priority: "supporting" as const,
+      }],
+    }],
+    formulations: [{
+      ...plan.formulations[0]!,
+      readingIds: ["reading-one"],
+      requirementIds: ["requirement-one"],
+    }, {
+      ...plan.formulations[1]!,
+      readingIds: ["reading-one"],
+      requirementIds: ["requirement-remedy"],
+    }],
+  };
+  const result = selectTargetProvisions({
+    plan: dedicatedPlan,
+    candidates: [selectionCandidate("item-one", ["requirement-one"], 0.9)],
+    repairAttempted: false,
+  }, { mappings: [{ itemKey: "item-one", supportedRequirementIds: ["requirement-one"] }], additionalRequirements: [] });
+
+  assert.equal(result.outcome, "partial");
+  if (result.outcome === "partial") {
+    assert.deepEqual(result.uncoveredSupportingRequirementIds, ["requirement-remedy"]);
+  }
+});
+
 test("an explicit provision reference can trigger one bounded generic repair", () => {
   const candidate = selectionCandidate("item-one", ["requirement-one"], 0.9);
   const result = selectTargetProvisions({
