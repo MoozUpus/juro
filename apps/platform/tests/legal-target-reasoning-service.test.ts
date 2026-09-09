@@ -224,6 +224,30 @@ test("provision selection uses assessed support rather than retrieval provenance
   }
 });
 
+test("assessed support retrieved for the same requirement wins retrieval-score ties", () => {
+  const result = selectTargetProvisions({
+    plan,
+    candidates: [
+      selectionCandidate("cross-topic-high", ["requirement-two"], 0.99),
+      selectionCandidate("aligned-one", ["requirement-one"], 0.7),
+      selectionCandidate("aligned-two", ["requirement-two"], 0.6),
+    ],
+    repairAttempted: false,
+  }, { mappings: [{
+    itemKey: "cross-topic-high", supportedRequirementIds: ["requirement-one"],
+  }, {
+    itemKey: "aligned-one", supportedRequirementIds: ["requirement-one"],
+  }, {
+    itemKey: "aligned-two", supportedRequirementIds: ["requirement-two"],
+  }], additionalRequirements: [] });
+  assert.equal(result.outcome, "selected");
+  if (result.outcome === "selected") {
+    assert.deepEqual(result.selections.map(({ itemKey }) => itemKey), [
+      "aligned-one", "aligned-two",
+    ]);
+  }
+});
+
 test("selection preserves supported core requirements when only supporting coverage remains open", () => {
   const partialPlan = {
     ...plan,

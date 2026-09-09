@@ -115,6 +115,11 @@ export const candidateSchema = z.object({
   // One bounded repair formulation may be merged with the six initial
   // retrieval provenance identifiers for the same provision.
   formulationIds: z.array(legalIdentifierSchema).min(1).max(7),
+  formulationMatches: z.array(z.object({
+    formulationId: legalIdentifierSchema,
+    rank: z.number().int().positive().max(50),
+    fusionScore: z.number().finite(),
+  }).strict()).min(1).max(7).optional(),
   readingIds: z.array(legalIdentifierSchema).min(1),
   retrievalRequirementIds: z.array(legalIdentifierSchema).min(1),
   vectorRank: z.number().int().positive(),
@@ -160,7 +165,7 @@ export interface LegalCandidateIndex {
 }
 
 type NormalizedCandidateInput = Omit<z.input<typeof candidateSchema>,
-  "formulationIds" | "readingIds" | "retrievalRequirementIds">;
+  "formulationIds" | "formulationMatches" | "readingIds" | "retrievalRequirementIds">;
 
 function unavailable(
   release: PinnedCandidateRelease,
@@ -179,6 +184,7 @@ function unavailable(
 
 function normalizeCandidates(input: Array<NormalizedCandidateInput & {
   formulation: QuestionInterpretation["formulations"][number];
+  formulationRank: number;
 }>): CandidatePacket["candidates"] {
   const byKey = new Map<string, z.infer<typeof candidateSchema>>();
   for (const raw of input) {
@@ -187,28 +193,54 @@ function normalizeCandidates(input: Array<NormalizedCandidateInput & {
       instanceId: raw.instanceId,
       shardId: raw.shardId,
       formulationIds: [raw.formulation.id],
+      formulationMatches: [{
+        formulationId: raw.formulation.id,
+        rank: raw.formulationRank,
+        fusionScore: raw.fusionScore,
+      }],
       readingIds: [...new Set(raw.formulation.readingIds)].sort(),
       retrievalRequirementIds: [...new Set(raw.formulation.requirementIds)].sort(),
       vectorRank: raw.vectorRank,
       vectorScore: raw.vectorScore,
       keywordRank: raw.keywordRank,
       keywordScore: raw.keywordScore,
-      fusionScore: raw.fusionScore,
+      // Outer reciprocal-rank fusion treats each independently searched
+      // formulation as one retrieval list. Provider fusion remains available
+      // on the per-formulation match for deterministic tie-breaking.
+      fusionScore: 1 / (60 + raw.formulationRank),
       ...(raw.providerMetadata ? { providerMetadata: raw.providerMetadata } : {}),
     });
     const existing = byKey.get(candidate.itemKey);
     if (!existing) {
       byKey.set(candidate.itemKey, candidate);
     } else {
-      const preferred = candidate.fusionScore > existing.fusionScore ? candidate : existing;
+      const existingProviderScore = existing.formulationMatches
+        ? Math.max(...existing.formulationMatches.map((match) => match.fusionScore))
+        : existing.fusionScore;
+      const preferred = raw.fusionScore > existingProviderScore ? candidate : existing;
+      const matches = new Map((existing.formulationMatches ?? []).map((match) => [
+        match.formulationId,
+        match,
+      ]));
+      for (const match of candidate.formulationMatches ?? []) {
+        const previous = matches.get(match.formulationId);
+        if (!previous || match.rank < previous.rank
+          || (match.rank === previous.rank && match.fusionScore > previous.fusionScore)) {
+          matches.set(match.formulationId, match);
+        }
+      }
+      const formulationMatches = [...matches.values()].sort((left, right) =>
+        left.formulationId.localeCompare(right.formulationId));
       byKey.set(candidate.itemKey, {
         ...preferred,
         formulationIds: [...new Set([...existing.formulationIds, ...candidate.formulationIds])].sort(),
+        formulationMatches,
         readingIds: [...new Set([...existing.readingIds, ...candidate.readingIds])].sort(),
         retrievalRequirementIds: [...new Set([
           ...existing.retrievalRequirementIds,
           ...candidate.retrievalRequirementIds,
         ])].sort(),
+        fusionScore: formulationMatches.reduce((score, match) => score + 1 / (60 + match.rank), 0),
       });
     }
   }
@@ -230,9 +262,10 @@ export function createCallbackCandidateIndex(
       const release = pinnedReleaseSchema.parse(rawRelease);
       try {
         const results = await Promise.all(interpretation.formulations.map(async (formulation) =>
-          (await retrieve(formulation, endpoint, release)).map((candidate) => ({
+          (await retrieve(formulation, endpoint, release)).map((candidate, index) => ({
             ...candidate,
             formulation,
+            formulationRank: index + 1,
           }))));
         return packetSchema.parse({
           availability: "available",
@@ -473,6 +506,7 @@ export function createProviderCandidateIndex(
         }
         const normalized: Array<NormalizedCandidateInput & {
           formulation: QuestionInterpretation["formulations"][number];
+          formulationRank: number;
         }> = [];
         for (const search of searches) {
           if (search.response.errors.length > 0) {
@@ -509,7 +543,7 @@ export function createProviderCandidateIndex(
               instanceId: missing,
             }]);
           }
-          for (const hit of search.response.hits.slice(0, 50)) {
+          for (const [hitIndex, hit] of search.response.hits.slice(0, 50).entries()) {
             const hitInstanceId = candidateInstanceIdSchema.safeParse(hit.instanceId);
             const shardId = hitInstanceId.success ? shardByInstance.get(hitInstanceId.data) : undefined;
             if (!hitInstanceId.success || !shardId || !requested.has(hit.instanceId)) {
@@ -542,6 +576,7 @@ export function createProviderCandidateIndex(
                 : hit.fusionScore,
               ...(hit.providerMetadata ? { providerMetadata: hit.providerMetadata } : {}),
               formulation: search.formulation,
+              formulationRank: hitIndex + 1,
             });
           }
         }

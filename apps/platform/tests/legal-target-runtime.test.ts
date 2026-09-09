@@ -100,18 +100,23 @@ test("named instruments remain searchable with custom-only release mappings", as
     assert.deepEqual(packet.candidates.map((candidate) => ({
       itemKey: candidate.itemKey,
       formulationIds: candidate.formulationIds,
+      formulationMatches: candidate.formulationMatches,
       retrievalRequirementIds: candidate.retrievalRequirementIds,
     })), [{
       itemKey: `search-releases/${release.id}/retrieval-chunk-v1:shared`,
       formulationIds: ["formulation", "maternity"],
+      formulationMatches: [{ formulationId: "formulation", rank: 1, fusionScore: 0.95 },
+        { formulationId: "maternity", rank: 1, fusionScore: 0.8 }],
       retrievalRequirementIds: ["protection", "requirement"],
     }, {
       itemKey: `search-releases/${release.id}/retrieval-chunk-v1:labor`,
       formulationIds: ["formulation"],
+      formulationMatches: [{ formulationId: "formulation", rank: 2, fusionScore: 0.9 }],
       retrievalRequirementIds: ["requirement"],
     }, {
       itemKey: `search-releases/${release.id}/retrieval-chunk-v1:maternity`,
       formulationIds: ["maternity"],
+      formulationMatches: [{ formulationId: "maternity", rank: 2, fusionScore: 0.9 }],
       retrievalRequirementIds: ["protection"],
     }]);
     assert.deepEqual(await resolveRuntimeTrustedLegalTitles(db, release.id), ["Labor Code"]);

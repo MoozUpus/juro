@@ -7,7 +7,10 @@ import { recordProvisionTemporalEvidence } from "../lib/legal-corpus/target-temp
 import {
   createTargetLegalAnswerClient,
   createTargetLegalAnswerRetriever,
+  boundedSelectionPool,
   handleTargetLegalAnswerRequest,
+  parseRevalidatedCandidates,
+  planFromQuestionPlanningHints,
   type QuestionInterpretationPlan,
 } from "../lib/legal-corpus/target-retrieval";
 import {
@@ -104,6 +107,55 @@ function candidate(key: string, formulationId: string, readingIds: string[], req
     fusionScore: 0.9,
   };
 }
+
+test("planning hints preserve one-to-one formulation requirement provenance", () => {
+  const planned = planFromQuestionPlanningHints("request", {
+    answerLanguage: "ru",
+    standaloneQuestion: "Вопрос",
+    requirements: [{ statement: "Запрет", priority: "core" },
+      { statement: "Исключения", priority: "core" }],
+    formulations: ["правовой запрет", "исключения из запрета"],
+  });
+  assert.deepEqual(planned.formulations.map((formulation) => formulation.requirementIds), [
+    ["requirement-1"], ["requirement-2"],
+  ]);
+});
+
+test("selection pool reserves independently ranked candidates for every formulation", () => {
+  const make = (key: string, formulationIds: string[], matches: Array<{
+    formulationId: string; rank: number; fusionScore: number;
+  }>, score: number) => ({
+    candidate: {
+      ...candidate(key, formulationIds[0]!, ["reading"], ["requirement"]),
+      formulationIds,
+      formulationMatches: matches,
+      fusionScore: score,
+    },
+    ...stableIdentity(`rendition-${key}`),
+  });
+  const shared = Array.from({ length: 4 }, (_, index) => make(
+    `shared-${index + 1}`,
+    ["formulation-1", "formulation-2"],
+    ["formulation-1", "formulation-2"].map((formulationId) => ({
+      formulationId, rank: index + 1, fusionScore: 1 - index / 100,
+    })),
+    2 - index / 100,
+  ));
+  const noise = Array.from({ length: 30 }, (_, index) => make(
+    `noise-${index + 1}`,
+    ["formulation-3"],
+    [{ formulationId: "formulation-3", rank: index + 1, fusionScore: 1 - index / 100 }],
+    3 - index / 100,
+  ));
+  const specific = [make("specific-1", ["formulation-1"],
+    [{ formulationId: "formulation-1", rank: 5, fusionScore: 0.5 }], 0.5),
+  make("specific-2", ["formulation-2"],
+    [{ formulationId: "formulation-2", rank: 5, fusionScore: 0.5 }], 0.5)];
+  const selected = boundedSelectionPool(parseRevalidatedCandidates([...noise, ...shared, ...specific]));
+  assert.equal(selected.length, 24);
+  assert.equal(selected.some((entry) => entry.candidate.itemKey === "specific-1"), true);
+  assert.equal(selected.some((entry) => entry.candidate.itemKey === "specific-2"), true);
+});
 
 test("domain-general questions return hash-verified Legal Answers through the private retrieval seam", async () => {
   const { sqlite, d1 } = sqliteD1FixtureFromDirectory(new URL("../legal-drizzle/", import.meta.url));
