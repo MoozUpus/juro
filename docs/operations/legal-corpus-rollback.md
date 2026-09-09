@@ -1,32 +1,14 @@
 # Legal corpus rollback
 
-The first rollback action is server-side flag disablement:
+Rollback the Indexed Official Corpus by atomically selecting the immediately prior capability-compatible Activation Set. Verify its immutable R2 BM25 manifest, dense index contract, exact membership reconciliation and body-free D1 release roots before resuming indexed traffic.
 
-- `LEGAL_CORPUS_ENABLED=false`
-- `LEGAL_CORPUS_AUTO_INGEST_ENABLED=false`
-- `LEGAL_CORPUS_LIVE_LEXUZ_ENABLED=false`
+Never roll back by:
 
-This immediately returns chat to the existing validated direct Lex path and
-stops new discovery/ingestion claims. Immutable sources and historical
-versions remain intact for audit.
+- editing release membership or legal text;
+- overwriting a sparse segment or reusable embedding;
+- pairing current/history or sparse/dense components from different releases;
+- restoring retired D1 body/posting schemas;
+- reattaching Qdrant or Cloudflare AI Search; or
+- changing DNS or deleting migrations.
 
-Apply the same disabled values to the dedicated `juro-legal-corpus-*` Worker,
-then verify its internal `/health` response reports `enabled: false`. The
-ordinary platform Worker contains no corpus discovery or ingestion handler,
-so an application rollback is neither required nor an acceptable substitute
-for disabling the isolated corpus runtime. If the dedicated Worker itself is
-faulty, roll it back to its last verified Cloudflare version or remove its
-cron triggers only after the flags are confirmed false; preserve the D1 run,
-failure and admin-event ledgers.
-
-If data restoration is necessary, restore only a backup that passed the
-isolated rehearsal. A version rollback changes the audited
-`current_version_id` pointer; it never edits or deletes a version, provision
-or citation span. Verify direct retrieval, current-version retrieval and
-private-scope isolation before any gradual re-enable.
-
-Do not roll back by deleting migrations from a production ledger, removing
-historical legal text, changing DNS, or publishing an unverified snapshot.
-
-The production Wrangler migration glob intentionally excludes staging-only
-`0122–0123`; do not widen it to `./drizzle/*.sql` during a corpus release.
+If no complete prior Candidate Packet is available, mark indexed retrieval unavailable and continue the strict Source Ladder through Live Official Search. Preserve the failed and prior releases, activation event and bounded verification evidence. The route-free legal-corpus Worker has no acquisition cron or legacy write path to restart.

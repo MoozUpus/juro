@@ -17,12 +17,13 @@ as JURO-native TypeScript in `apps/platform/lib/legal-corpus/{embeddings,qdrant,
 no upstream Python/Qdrant client or deployment file was copied. Target paths and each decision are listed in
 `docs/integrations/huquq-ai/ADOPTION_MATRIX.md`.
 
-The owner-material workflow in
-`apps/platform/lib/legal-corpus/{owner-materials,sparse-index}.ts`, migration
-`0128_owner_corpus_publications.sql`, and the isolated admin form/API was also
-written from scratch for JURO. It reuses JURO's existing private R2,
-malware-safe analysis, OCR integrity, staff-role and MFA controls; no Huquq AI
-upload, authentication, legal text or storage implementation was copied.
+The historical owner-material workflow and migration
+`0128_owner_corpus_publications.sql` were also written from scratch for JURO;
+no Huquq AI upload, authentication, legal text or storage implementation was
+copied. That global owner-to-official-corpus workflow is now retired. The
+migration remains immutable compatibility history, while private document
+upload, malware-safe analysis and tenant isolation remain separate product
+capabilities.
 
 The Huquq AI local corpus, raw HTML, Markdown, screenshots, logos, product name, legal
 texts, datasets, providers and dependency lockfiles were not copied. MIT covers source

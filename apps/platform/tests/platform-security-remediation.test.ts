@@ -136,6 +136,30 @@ test("document metadata visibility matches owner, collaborator, attachment, and 
   }
 });
 
+test("global search keeps document ACLs for recent, exact, and fuzzy queries", () => {
+  const route = source("app/api/platform/search/route.ts");
+  const query = route.match(/`(SELECT d\.id,d\.title,d\.category[\s\S]*?)`/);
+  assert.ok(query);
+  assert.match(route, /bind\(\.\.\.documentVisibility\.bindings, searchFlag, like, fuzzyLike\)/);
+  const { sqlite } = sqliteD1Fixture();
+  try {
+    seedDocumentVisibility(sqlite);
+    for (const userId of ["viewer", "collaborator"]) {
+      const visibility = documentVisibilityScope(userId, "workspace", now);
+      const statement = sqlite.prepare(query[1]!
+        .replace("${documentVisibility.sql}", visibility.sql)
+        .replaceAll("\\\\", "\\"));
+      for (const bindings of [[0, "%", "%"], [1, "%Shared%", "%missing%"], [1, "%missing%", "%Shar%"]] as const) {
+        const rows = statement.all(...visibility.bindings, ...bindings) as Array<{ id: string }>;
+        assert.deepEqual(rows.map((row) => row.id), userId === "collaborator" ? ["shared"] : []);
+      }
+      assert.deepEqual(statement.all(...visibility.bindings, 1, "%Private%", "%Priv%"), []);
+    }
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("metadata routes enforce ACLs before counts, ordering, limits, and case-event output", () => {
   const dashboard = source("app/api/platform/dashboard/route.ts");
   const search = source("app/api/platform/search/route.ts");

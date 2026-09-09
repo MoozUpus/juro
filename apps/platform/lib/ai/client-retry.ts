@@ -49,6 +49,6 @@ export function shouldUseFreshAiRetry(error: unknown) {
 
 export function isRestartableAiTerminal(status: number, code: unknown) {
   return typeof code === "string"
-    && ["AI_RUN_FAILED", "INVALID_AI_OUTPUT", "PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE"].includes(code)
+    && ["AI_RUN_FAILED", "INVALID_AI_OUTPUT", "PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE", "LEGAL_SOURCE_UNAVAILABLE"].includes(code)
     && [409, 422, 503, 504].includes(status);
 }

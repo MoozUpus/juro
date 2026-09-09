@@ -1034,57 +1034,78 @@
     {
       "idx": 147,
       "version": "7",
+      "when": 1788134400000,
+      "tag": "0146_versioned_legal_search_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
       "when": 1788196800000,
       "tag": "0147_signed_share_verification_hardening",
       "breakpoints": true
     },
     {
-      "idx": 148,
+      "idx": 149,
       "version": "7",
       "when": 1788283200000,
       "tag": "0148_document_analysis_resource_guardrails",
       "breakpoints": true
     },
     {
-      "idx": 149,
+      "idx": 150,
       "version": "7",
       "when": 1788286800000,
       "tag": "0149_ai_question_intakes",
       "breakpoints": true
     },
     {
-      "idx": 150,
+      "idx": 151,
       "version": "7",
       "when": 1788507000000,
       "tag": "0150_password_authentication",
       "breakpoints": true
     },
     {
-      "idx": 151,
+      "idx": 152,
       "version": "7",
       "when": 1788510600000,
       "tag": "0151_english_policy_evidence",
       "breakpoints": true
     },
     {
-      "idx": 152,
+      "idx": 153,
       "version": "7",
       "when": 1788514200000,
       "tag": "0152_password_changed_email_retry",
       "breakpoints": true
     },
     {
-      "idx": 153,
+      "idx": 154,
       "version": "7",
       "when": 1788517800000,
       "tag": "0153_pending_registration_retention",
       "breakpoints": true
     },
     {
-      "idx": 154,
+      "idx": 155,
       "version": "7",
       "when": 1788521400000,
       "tag": "0154_english_locale_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1788912000000,
+      "tag": "0150_retire_legacy_official_corpus_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 157,
+      "version": "7",
+      "when": 1788915600000,
+      "tag": "0151_remove_legacy_official_corpus_schemas",
       "breakpoints": true
     }
   ]

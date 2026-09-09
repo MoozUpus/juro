@@ -92,7 +92,13 @@ For retained backups outside the Time Travel window, the target automation is th
 
 An R2 backup manifest must identify only approved object metadata and checksums. It must not expose object keys, user filenames, signed URLs, encryption keys, or document content in logs/alerts. Restore validation samples isolated objects through server-side authorization and checksum verification.
 
-Quarantine, private documents, and backups must be separate buckets in each environment. The remote inventory found production primary `juro-private-documents`, the three older development buckets `juro-private-documents-development`, `juro-private-backups-development`, and `juro-quarantine-development`, plus six new empty private development/staging target buckets. Empty targets are not backup or restore evidence; no object or binding was copied or cut over. No production backup/quarantine bucket exists. Cross-environment restore requires an explicit reviewed procedure and must never reuse production credentials in development.
+Quarantine, private documents, and backups must be separate buckets in each environment. The approved development namespaces are `juro-development-files`, `juro-development-backups`, and `juro-development-quarantine`; the three empty legacy `juro-private-*-development` namespaces were retired on 2026-09-09 after binding and object checks. Production uses `juro-private-documents`, `juro-production-backups`, and `juro-production-quarantine`. Empty buckets are not backup or restore evidence. Cross-environment restore requires an explicit reviewed procedure and must never reuse production credentials in development.
+
+The 2026-09-09 account cleanup also retired the one-off legal pipeline proof
+bucket, failed blue/green staging evidence candidates, and empty unbound
+`site-creator-r2`. The active `green2` evidence bucket remains bound, and its
+verified external recovery bundle is the legal staging recovery source. The
+deleted bucket names are not valid restore destinations or rollback evidence.
 
 ## Queue and cleanup recovery
 

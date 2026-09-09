@@ -23,11 +23,7 @@ import {
   isStagingLegalEvaluationQueue,
 } from "./staging-legal-evaluation-queue";
 import { handleInternalAdminRequest } from "../lib/auth/admin-internal-api";
-import {
-  handleLegalCorpusEmbeddingServiceRequest,
-  handleLegalCorpusQdrantServiceRequest,
-  LegalCorpusQdrantContainer,
-} from "./legal-corpus-private-services";
+import { handleTargetReasoningServiceRequest } from "../lib/legal-corpus/target-reasoning-service";
 import { lawyerHostTarget } from "./lawyer-host-router";
 import {
   INTERNAL_REQUEST_PATH_HEADER,
@@ -40,13 +36,14 @@ import {
   requestWithBoundedBody,
 } from "../lib/request-body";
 
-export { MalwareScannerContainer, LegalCorpusQdrantContainer };
+export { MalwareScannerContainer };
 
 type FrameworkEnv = PlatformJobEnv & {
   AI?: Ai;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_CHAT_MODEL?: string;
+  OPENAI_RETRIEVAL_MODEL?: string;
   OPENAI_DEEP_MODEL?: string;
   OPENAI_FALLBACK_MODEL?: string;
   ANTHROPIC_API_KEY?: string;
@@ -73,9 +70,6 @@ type FrameworkEnv = PlatformJobEnv & {
   ADMIN_INTERNAL_TOKEN?: string;
   ADMIN_CONSOLE_TOKEN?: string;
   ADMIN_CONSOLE?: Fetcher;
-  QDRANT_CONTAINER?: DurableObjectNamespace<LegalCorpusQdrantContainer>;
-  QDRANT_API_KEY?: string;
-  QDRANT_COLLECTION?: string;
 };
 
 type SupportedImageOutputFormat =
@@ -125,14 +119,11 @@ function withSecurityHeaders(
 const worker = {
   async fetch(request: Request, env: FrameworkEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.hostname === "legal-corpus.internal") {
+      return handleTargetReasoningServiceRequest(request, env);
+    }
     if (url.hostname === "malware-scanner.internal") {
       return handleMalwareScannerServiceRequest(request, env);
-    }
-    if (url.hostname === "qdrant.internal") {
-      return handleLegalCorpusQdrantServiceRequest(request, env);
-    }
-    if (url.hostname === "embeddings.internal") {
-      return handleLegalCorpusEmbeddingServiceRequest(request, env);
     }
     // Keep the existing custom domain on the production platform Worker while
     // moving the admin UI and its host-only session cookie into the isolated

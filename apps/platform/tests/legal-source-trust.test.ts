@@ -383,7 +383,7 @@ test("stale and unavailable legal databases cannot retain confirmed conclusions"
     maxAgeDays: 7,
   }, { locale: "ru", answerMode: "detailed", reasoningMode: "fast" });
   assert.equal(stale.confirmedFindings.length, 0);
-  assert.equal(stale.deadlines[0]?.confidence, "preliminary");
+  assert.deepEqual(stale.deadlines, []);
   assert.equal(stale.successOutlook, null);
   assert.equal(stale.suggestLawyer, true);
   assert.match(stale.answer, /более 7 дней/);
@@ -409,6 +409,87 @@ test("stale and unavailable legal databases cannot retain confirmed conclusions"
   assert.equal(unavailable.responseKind, "clarification_required");
   assert.deepEqual(unavailable.confirmedFindings, []);
   assert.deepEqual(unavailable.sources, []);
+});
+
+test("stale mixed evidence preserves private facts and secondary notes but removes official conclusions", () => {
+  const mixed = legalResult();
+  mixed.summary = "STALE_OFFICIAL_SUMMARY";
+  mixed.answer = "STALE_OFFICIAL_ANSWER";
+  mixed.sources.push({
+    ...mixed.sources[0]!,
+    sourceId: "private_1",
+    actTitle: "Договор аренды.md",
+    actIdentifier: null,
+    article: null,
+    originalUrl: `juro-private://document/ud_${"f".repeat(61)}`,
+    sourceClass: "USER_TRUSTED_PRIVATE",
+    documentType: "uploaded_document",
+  }, {
+    ...mixed.sources[0]!,
+    sourceId: "secondary_1",
+    actTitle: "Справочный материал",
+    actIdentifier: null,
+    article: null,
+    originalUrl: "https://example.org/legal-context",
+    status: "unconfirmed",
+    sourceClass: "SECONDARY_REFERENCE",
+    sourceOrigin: "web",
+  }, {
+    ...mixed.sources[0]!,
+    sourceId: "owner_1",
+    actTitle: "Глобальный материал владельца",
+    originalUrl: "https://example.org/owner-material",
+    sourceClass: "OWNER_TRUSTED_GLOBAL",
+  });
+  mixed.confirmedFindings.push({
+    title: "Срок в документе",
+    explanation: "Оплата указана до 10 числа.",
+    sourceIds: ["private_1"],
+  }, {
+    title: "OWNER_GLOBAL_FINDING",
+    explanation: "Не выдавать за факт из документа пользователя.",
+    sourceIds: ["owner_1"],
+  });
+  mixed.conditionalBranches = [{
+    condition: "Если акт применим",
+    outcome: "STALE_OFFICIAL_BRANCH",
+    sourceIds: ["source_1"],
+  }, {
+    condition: "Если договор подписан",
+    outcome: "В документе указана дата.",
+    sourceIds: ["private_1"],
+  }];
+  mixed.referenceNotes = [{
+    title: "Справочный контекст",
+    note: "Практическое описание, не норма.",
+    sourceIds: ["secondary_1"],
+  }];
+  mixed.actionPlan = [{
+    title: "STALE_OFFICIAL_ACTION",
+    description: "Не показывать.",
+    sourceIds: ["source_1"],
+  }];
+  mixed.urgency = "critical";
+
+  const stale = enforceLegalDatabaseFreshness(mixed, {
+    status: "stale",
+    asOf: "2026-07-20T09:00:00.000Z",
+    ageDays: 11,
+    maxAgeDays: 7,
+  }, { locale: "ru", answerMode: "detailed", reasoningMode: "fast" });
+
+  assert.equal(stale.responseKind, "answer");
+  assert.deepEqual(stale.confirmedFindings.map(finding => finding.sourceIds), [["private_1"]]);
+  assert.deepEqual(stale.conditionalBranches?.map(branch => branch.sourceIds), [["private_1"]]);
+  assert.deepEqual(stale.referenceNotes?.map(note => note.sourceIds), [["secondary_1"]]);
+  assert.deepEqual(stale.sources.map(source => source.sourceId), ["private_1", "secondary_1"]);
+  assert.deepEqual(stale.actionPlan, []);
+  assert.deepEqual(stale.deadlines, []);
+  assert.equal(stale.urgency, "normal");
+  assert.equal(stale.evidenceMode, "mixed");
+  assert.match(stale.answer, /Срок в документе: Оплата указана до 10 числа/u);
+  assert.doesNotMatch(`${stale.summary}\n${stale.answer}`, /STALE_OFFICIAL/u);
+  assert.doesNotMatch(`${stale.summary}\n${stale.answer}`, /OWNER_GLOBAL/u);
 });
 
 test("unavailable law does not erase exact facts from a trusted private document", () => {
@@ -441,6 +522,24 @@ test("unavailable law does not erase exact facts from a trusted private document
   assert.equal(preserved.deadlines.length, 0);
   assert.equal(preserved.suggestLawyer, true);
   assert.match(preserved.assumptions[0]?.impact ?? "", /не является официальным источником/iu);
+
+  for (const source of [{
+    sourceClass: "TENANT_TRUSTED_PRIVATE" as const,
+    originalUrl: `juro-private://document/tenant_${"e".repeat(58)}`,
+  }, {
+    sourceClass: undefined,
+    originalUrl: `juro-private://document/legacy_${"d".repeat(58)}`,
+  }]) {
+    const variant = structuredClone(privateFacts);
+    variant.sources[0] = { ...variant.sources[0]!, ...source };
+    const result = enforceLegalDatabaseFreshness(variant, {
+      status: "unavailable",
+      asOf: "unavailable",
+      ageDays: null,
+      maxAgeDays: 7,
+    }, { locale: "ru", answerMode: "detailed", reasoningMode: "fast" });
+    assert.equal(result.confirmedFindings.length, 1);
+  }
 });
 
 test("document analysis removes legal-compliance claims when corpus freshness is unavailable", () => {

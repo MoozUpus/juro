@@ -146,8 +146,8 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Deploy user platform
-        run: npm run deploy:production
+      - name: Deploy legal retrieval services and user platform
+        run: npm run deploy:production:stack
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

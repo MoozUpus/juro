@@ -22,11 +22,17 @@ export function openAiCompatibleJsonSchema(schema: Record<string, unknown>): Rec
   const visit = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(visit);
     if (!value || typeof value !== "object") return value;
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([key]) => !unsupportedAnnotations.has(key))
-        .map(([key, nested]) => [key, visit(nested)]),
-    );
+    const entries: Array<[string, unknown]> = [];
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      if (unsupportedAnnotations.has(key)) continue;
+      const providerKey = key === "oneOf" ? "anyOf" : key;
+      const visited = visit(nested);
+      if (providerKey === "allOf" && Array.isArray(visited)
+        && visited.every((entry) => entry && typeof entry === "object"
+          && Object.keys(entry as Record<string, unknown>).length === 0)) continue;
+      entries.push([providerKey, visited]);
+    }
+    return Object.fromEntries(entries);
   };
   return visit(schema) as Record<string, unknown>;
 }

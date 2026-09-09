@@ -58,7 +58,8 @@ test("AI chat keeps the answer in focus and exposes responsive history and evide
   assert.match(client, /className="ai-mobile-context-bar"/u);
   assert.match(client, /role=\{mobileContextOpen \? "dialog" : undefined\}/u);
   assert.match(client, /hidden=\{mobileContextOpen && mobileContextTab !== "facts"\}/u);
-  assert.match(client, /hidden=\{mobileContextOpen && mobileContextTab !== "sources"\}/u);
+  assert.match(client, /\{hasCaseFacts && <button[^>]+onClick=\{\(\) => openMobileContext\("facts"\)\}/u);
+  assert.match(client, /hidden=\{mobileContextOpen && hasCaseFacts && mobileContextTab !== "sources"\}/u);
   assert.match(client, /latestAnswerRef\.current\?\.scrollIntoView/u);
   assert.doesNotMatch(client, /transcript\.scrollTo\(\{ top: transcript\.scrollHeight, behavior: preliminary/u);
 

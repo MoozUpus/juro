@@ -17,14 +17,18 @@ async function source(relativePath: string): Promise<string> {
 test("chat completes the official authority ladder before conditionally using lower-authority web research", async () => {
   const route = await source("../app/api/platform/ai/route.ts");
   const privateContext = route.indexOf("const privateDocumentRetrieval = (async");
-  const lex = route.indexOf("const retrieval: LegalChatSourceRetrieval = await");
+  const lex = route.indexOf("const retrievalResult: LegalChatSourceRetrieval | Response = await");
+  const unavailableGuard = route.indexOf("if (retrievalResult instanceof Response) return retrievalResult", lex);
+  const acceptedOfficialResult = route.indexOf("const retrieval = retrievalResult", lex);
   const secondaryGate = route.indexOf("shouldRetrieveSecondaryInternet(retrieval)");
   const web = route.indexOf("await retrieveSecondaryInternetSources", secondaryGate);
   const orderedSources = route.indexOf("const sources = [...retrieval.sources, ...privateDocuments.sources, ...secondaryInternet.sources]");
 
   assert.ok(privateContext >= 0);
   assert.ok(lex > privateContext);
-  assert.ok(secondaryGate > lex);
+  assert.ok(unavailableGuard > lex);
+  assert.ok(acceptedOfficialResult > unavailableGuard);
+  assert.ok(secondaryGate > acceptedOfficialResult);
   assert.ok(web > secondaryGate);
   assert.ok(orderedSources > web);
   assert.match(route, /legal corpus -> live Lex\.uz/u);
@@ -47,8 +51,8 @@ test("chat uses bounded model-understood queries across the authority ladder wit
   assert.match(route, /const retrievalUnderstandingPromise = \(async/u);
   assert.match(route, /queryUnderstandingFallback = true/u);
   assert.match(route, /fallbackLegalRetrievalUnderstanding\(rewrite\.query\)/u);
-  assert.match(route, /indexQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.corpusQueries\)/u);
   assert.match(route, /lexSearchQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.lexSearchQueries\)/u);
+  assert.doesNotMatch(route, /indexQueries:/u);
   assert.match(route, /const retrievalQuestion = retrievalUnderstanding\.standaloneQuestion/u);
   assert.match(route, /query: retrievalUnderstanding\.webSearchQuery/u);
   assert.match(route, /retrievalQuery: retrievalQuestion/u);

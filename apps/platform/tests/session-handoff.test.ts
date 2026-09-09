@@ -449,7 +449,7 @@ test("migration 0150 installs the constrained handoff schema and journal entry",
     )) as { entries: Array<{ idx: number; tag: string }> };
     assert.deepEqual(
       journal.entries.find(({ tag }) => tag === "0150_password_authentication"),
-      { idx: 150, version: "7", when: 1788507000000, tag: "0150_password_authentication", breakpoints: true },
+      { idx: 151, version: "7", when: 1788507000000, tag: "0150_password_authentication", breakpoints: true },
     );
   } finally {
     sqlite.close();

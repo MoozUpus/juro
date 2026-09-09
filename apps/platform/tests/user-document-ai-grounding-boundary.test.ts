@@ -11,7 +11,9 @@ test("AI chat retrieves private document evidence only behind the explicit auto-
   assert.match(route, /retrieveTrustedUserDocumentSources/);
   assert.match(route, /const privateDocumentRetrieval = \(async \(\): Promise<TrustedUserDocumentRetrieval>/u);
   assert.match(route, /const privateDocuments = await privateDocumentRetrieval/u);
-  assert.match(route, /const retrieval: LegalChatSourceRetrieval = await/u);
+  assert.match(route, /const retrievalResult: LegalChatSourceRetrieval \| Response = await/u);
+  assert.match(route, /if \(retrievalResult instanceof Response\) return retrievalResult/u);
+  assert.match(route, /const retrieval = retrievalResult/u);
   assert.match(route, /const sources = \[\.\.\.retrieval\.sources, \.\.\.privateDocuments\.sources, \.\.\.secondaryInternet\.sources\]/u);
   assert.match(route, /private_document_retrieval_unavailable/);
   assert.match(route, /trustedPrivateSourceCount/);

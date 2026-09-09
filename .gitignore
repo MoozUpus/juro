@@ -40,3 +40,6 @@ work/
 
 # Local AI-agent analytics exports (may contain user/session metadata)
 docs/codemie/
+
+# Local agent issue tracker and operational evidence
+/.scratch/

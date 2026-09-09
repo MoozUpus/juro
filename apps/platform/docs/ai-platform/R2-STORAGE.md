@@ -14,8 +14,11 @@ staging EICAR probe proved the infected terminal path and then removed all
 synthetic R2/D1 state; no clean user-file promotion or production promotion is
 claimed.
 
-Updated: 2026-07-29
-Status: remote inventory verified. Six approved private EEUR Standard development/staging target buckets exist. `juro-staging-backups` contains 26 verified staging D1 backup/restore artifacts, including the pre/post `0030`–`0034` checkpoints; all other target buckets remain without verified application content. Production storage was unchanged.
+Updated: 2026-09-09
+Status: the account-wide remote inventory and deployed Worker bindings were
+reconciled. Fifteen R2 buckets remain, each with a current application binding,
+an active legal-search release role, verified backup/user content, or an enabled
+public-media endpoint.
 
 Current checkpoint — 2026-08-04: private prefix
 `d1/juro-staging/20260804-080310-0068/` contains full/schema/data exports whose
@@ -28,14 +31,20 @@ for migration `0068`; it does not prove malware clearance or user-file backup.
 | Role | Bucket | State |
 |---|---|---|
 | Production primary | `juro-private-documents` | exists; private; preserve |
-| Development primary legacy | `juro-private-documents-development` | exists; private |
-| Development backup legacy | `juro-private-backups-development` | exists; private |
-| Development quarantine legacy | `juro-quarantine-development` | exists; private |
+| Development legacy namespaces | `juro-private-documents-development`, `juro-private-backups-development`, `juro-quarantine-development` | retired empty on 2026-09-09 after binding and object checks |
 | Development targets | `juro-development-files`, `juro-development-backups`, `juro-development-quarantine` | exist; no verified application objects; private; EEUR Standard |
-| Staging targets | `juro-staging-files`, `juro-staging-backups`, `juro-staging-quarantine` | exist; private; EEUR Standard; backups contains 26 verified D1 SQL/restore artifacts, while files/quarantine have no verified application objects |
-| Production backup/quarantine | — | absent |
+| Staging targets | `juro-staging-files`, `juro-staging-backups`, `juro-staging-quarantine` | all three exist and are deployed bindings; backups contains verified D1 SQL/restore artifacts |
+| Production backup/quarantine | `juro-production-backups`, `juro-production-quarantine` | exist; private |
+| Active legal corpus | `juro-legal-current-custom-20260903`, `juro-legal-current-custom-production-20260908`, `juro-legal-custom-prototype-20260903`, `juro-legal-evidence-production-20260908`, `juro-legal-evidence-staging-green2-20260831` | retained active staging/production current, historical, reusable-artifact, and evidence bindings |
+| Public media | `juro-public-media` | retained with three objects and its managed public endpoint enabled |
 
-`site-creator-r2` is a Sites-managed/non-JURO-primary resource and is not repurposed for document, backup, or quarantine storage.
+On 2026-09-09 the account cleanup retired seven unused buckets after exact
+object and binding checks: the three empty legacy development namespaces,
+the one-off custom-pipeline proof bucket, the failed blue and green legal
+evidence candidates, and empty unbound `site-creator-r2`. The verified
+`green2` legal evidence release and its recovery bundle supersede the failed
+blue/green candidates. Bucket deletion is irreversible; none of these names
+may be treated as recovery targets after this checkpoint.
 
 ## Approved target names
 
@@ -45,7 +54,7 @@ for migration `0068`; it does not prove malware clearance or user-file backup.
 | Staging | `juro-staging-files` | `juro-staging-backups` | `juro-staging-quarantine` |
 | Production | `juro-private-documents` | `juro-production-backups` | `juro-production-quarantine` |
 
-Every bucket in the verified remote inventory is private and has no public development URL or custom domain. `juro-production-backups` and `juro-production-quarantine` are approved target names only and do not currently exist. The 26 staging SQL/restore objects prove only the recorded D1 backup/restore checks; bucket existence alone is not proof of user-file backup, quarantine, or malware scanning. Application access uses an authorized backend proxy or narrowly scoped short-lived signed URL after session, tenant, object, method, disposition, and audit checks.
+The approved private document, backup, and quarantine buckets have no public development URL or custom domain. The 26 staging SQL/restore objects prove only the recorded D1 backup/restore checks; bucket existence alone is not proof of user-file backup, quarantine, or malware scanning. Application access uses an authorized backend proxy or narrowly scoped short-lived signed URL after session, tenant, object, method, disposition, and audit checks.
 
 ## Object model
 

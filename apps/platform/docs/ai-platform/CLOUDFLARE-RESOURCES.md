@@ -1,5 +1,16 @@
 # JURO Cloudflare resources
 
+> **Authoritative R2 checkpoint — 2026-09-09.** Account-wide R2 listing,
+> deployed Worker/Page bindings, repository configuration, object counts, and
+> public endpoints were reconciled. Fifteen buckets remain. Seven unused
+> buckets were retired: three empty legacy development namespaces,
+> `juro-legal-custom-pipeline-proof-20260903`, the failed blue/green evidence
+> candidates `juro-legal-evidence-staging` and
+> `juro-legal-evidence-staging-green-20260831`, and empty unbound
+> `site-creator-r2`. Active `green2`, production legal evidence/artifacts,
+> environment file/backup/quarantine bindings, private documents, and public
+> media were preserved.
+
 > **Authoritative remote state — 2026-08-06.** Cloudflare's deployments API
 > reports protected Worker `juro-platform-staging` deployment
 > `ea1ded08-03a8-46a9-83c8-279c468b4541` with version
@@ -93,25 +104,35 @@ The current branch has migrations `0000`–`0034`. Staging has the exact 35-entr
 Existing private JURO buckets:
 
 - `juro-private-documents` — production primary; preserve;
-- `juro-private-documents-development` — existing development primary;
-- `juro-private-backups-development` — existing development backup namespace;
-- `juro-quarantine-development` — existing development quarantine namespace;
-- `juro-development-files`, `juro-development-backups`, and `juro-development-quarantine` — newly created empty EEUR Standard targets; private and not bound;
-- `juro-staging-files` and `juro-staging-quarantine` — private EEUR Standard targets bound only to `juro-platform-staging`; no public bucket access or active processing consumer is configured;
+- `juro-development-files`, `juro-development-backups`, and `juro-development-quarantine` — current private development bindings;
+- `juro-staging-files` and `juro-staging-quarantine` are private staging bindings;
 - `juro-staging-backups` — private EEUR Standard target containing 26 verified D1 migration/restore artifacts documented in `BACKUP-RESTORE.md` and `STAGING-0034-EVIDENCE.md`; bound only to protected staging and not publicly exposed.
 
-The account also contains `site-creator-r2`, a Sites-managed/non-JURO-primary resource. It must not be repurposed as a JURO file, backup, or quarantine bucket.
+The active legal-retrieval buckets are
+`juro-legal-current-custom-20260903`,
+`juro-legal-current-custom-production-20260908`,
+`juro-legal-custom-prototype-20260903`,
+`juro-legal-evidence-production-20260908`, and
+`juro-legal-evidence-staging-green2-20260831`. Live Worker bindings preserve
+all five. The two earlier failed staging evidence candidates and the one-off
+pipeline proof bucket were emptied and deleted on 2026-09-09 after the active
+bindings and `green2` recovery evidence were confirmed.
 
-No production backup or quarantine bucket exists. The JURO buckets above have no public development URL or custom domain. Only the three staging D1 checkpoint exports were written to the staging backup bucket; no user file, legacy object, or cross-environment object was copied, and no binding was cut over.
+`juro-public-media` is retained because its managed public endpoint is enabled
+and it contains three objects. Empty `site-creator-r2` was deleted after the
+deployed binding audit found no consumer and the website hosting manifest
+confirmed that it requests no R2 binding.
+
+Production backup and quarantine buckets exist as private bindings. The JURO buckets above have no public development URL or custom domain. Only the three staging D1 checkpoint exports were written to the staging backup bucket; no user file, legacy object, or cross-environment object was copied during the earlier target provisioning.
 
 The owner-approved target names differ from the older source/runtime names:
 
 | Purpose | Approved target | Existing legacy name | Phase 1 rule |
 |---|---|---|---|
-| Dev primary files | `juro-development-files` | `juro-private-documents-development` | empty target exists; do not abandon or duplicate data; inventory objects, choose an additive copy/cutover plan, then update binding |
+| Dev primary files | `juro-development-files` | retired after an empty-object and binding check on 2026-09-09 | preserve the current binding |
 | Staging primary files | `juro-staging-files` | absent | isolated target is bound only to the protected staging Worker; upload/scanning remains feature-gated |
 | Production primary files | `juro-private-documents` | same | preserve; no replacement |
-| Backups | `juro-{environment}-backups` | dev uses `juro-private-backups-development` | staging contains 26 checksum-verified D1 checkpoint artifacts including the `0034` pre/post sets; development remains empty and production remains absent |
+| Backups | `juro-{environment}-backups` | legacy development namespace retired empty on 2026-09-09 | staging contains 26 checksum-verified D1 checkpoint artifacts including the `0034` pre/post sets; an empty bucket alone is not recovery evidence |
 | Quarantine | `juro-{environment}-quarantine` | private dedicated dev/staging/prod bindings exist; new document-analysis uploads use the staging binding with `quarantine-v2/` keys | a bucket is not a scanner; files remain quarantined until a real fail-closed scanner marks them safe |
 
 ### Queues

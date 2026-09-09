@@ -28,16 +28,34 @@ export const LEGAL_EVALUATION_BEHAVIORS = [
 
 export type LegalEvaluationArea = (typeof LEGAL_EVALUATION_AREAS)[number];
 export type LegalEvaluationLocale = "ru" | "uz";
+export type LegalEvaluationQueryLanguage = "ru" | "uz-Latn" | "uz-Cyrl" | "en";
+export const LEGAL_RELEASE_GATE_CAPABILITIES = [
+  "current",
+  "as_of",
+  "comparison",
+  "exact_citation",
+  "cross_language",
+  "coverage_completeness",
+  "long_adjacent_referenced",
+  "typo_transliteration",
+  "adversarial_source",
+  "dependency_failure",
+  "cold_warm",
+  "fast_deep",
+] as const;
+export type LegalReleaseGateCapability = (typeof LEGAL_RELEASE_GATE_CAPABILITIES)[number];
 export type LegalEvaluationAccountType = (typeof LEGAL_EVALUATION_ACCOUNT_TYPES)[number];
 export type LegalEvaluationBehavior = (typeof LEGAL_EVALUATION_BEHAVIORS)[number];
 
 export type LegalEvaluationScenario = {
   id: string;
   locale: LegalEvaluationLocale;
+  queryLanguage: LegalEvaluationQueryLanguage;
   accountType: LegalEvaluationAccountType;
   area: LegalEvaluationArea;
   prompt: string;
   tags: readonly string[];
+  releaseGateCapabilities: readonly LegalReleaseGateCapability[];
   expectedBehaviors: readonly LegalEvaluationBehavior[];
   expectedCanonicalLexUrls: readonly string[];
   expectedArticleIds: readonly string[];
@@ -101,6 +119,27 @@ type ScenarioVariant = {
   expectedBehaviors: readonly LegalEvaluationBehavior[];
 };
 
+function releaseGateCapabilities(
+  tags: readonly string[],
+  expectedBehaviors: readonly LegalEvaluationBehavior[],
+): LegalReleaseGateCapability[] {
+  return [...new Set<LegalReleaseGateCapability>([
+    tags.includes("historical") ? "as_of" : "current",
+    ...(expectedBehaviors.includes("distinguish_historical_current") ? ["comparison" as const] : []),
+    ...(tags.includes("exact_citation") ? ["exact_citation" as const] : []),
+    ...(tags.includes("cross_language") ? ["cross_language" as const] : []),
+    "coverage_completeness",
+    ...(tags.includes("long_history") ? ["long_adjacent_referenced" as const] : []),
+    ...(tags.includes("typo_transliteration") ? ["typo_transliteration" as const] : []),
+    ...(tags.some((tag) => ["adversarial", "prompt_injection", "unofficial_source"].includes(tag))
+      ? ["adversarial_source" as const] : []),
+    ...(tags.some((tag) => ["provider_failure", "lex_unavailable", "timeout"].includes(tag))
+      ? ["dependency_failure" as const] : []),
+    "cold_warm",
+    "fast_deep",
+  ])];
+}
+
 const variants: readonly ScenarioVariant[] = [
   { tags: ["historical"], expectedBehaviors: ["ask_event_date", "distinguish_historical_current"] },
   { tags: ["deadline", "critical_deadline", "urgent"], expectedBehaviors: ["identify_urgency", "explain_deadline_inputs", "recommend_lawyer_review"] },
@@ -152,15 +191,38 @@ function scenarioPrompt(locale: LegalEvaluationLocale, area: LegalEvaluationArea
 function buildBase(locale: LegalEvaluationLocale): LegalEvaluationScenario[] {
   return LEGAL_EVALUATION_AREAS.flatMap((area, areaIndex) => variants.map((variant, index) => {
     const expected = expectedLexMetadata(area, locale);
+    const isUzbekCyrillic = locale === "uz" && area === "civil" && index === 7;
+    const isEnglish = locale === "uz" && area === "data_it" && index === 7;
+    const isTypoTransliteration = locale === "uz" && area === "tax" && index === 7;
+    const isExactCitation = area === "contracts" && index === 7;
+    const tags = [
+      ...variant.tags,
+      ...(isEnglish ? ["cross_language"] : []),
+      ...(isTypoTransliteration ? ["typo_transliteration"] : []),
+      ...(isExactCitation ? ["exact_citation"] : []),
+    ];
+    const prompt = isUzbekCyrillic
+      ? "Фуқаролик низоси бўйича кейинги қонуний қадамни фақат Lex.uz манбалари билан тушунтиринг."
+      : isEnglish
+        ? "What is the next lawful step for a personal-data dispute in Uzbekistan? Use only controlling Lex.uz evidence."
+        : isTypoTransliteration
+          ? "Soliq majburyati bo‘yicha keyingi qadamni toping; xato yozilgan atamani qonuniy reyestrga moslang."
+          : isExactCitation
+            ? (locale === "ru"
+                ? "Назовите точную статью Lex.uz, регулирующую договорное обязательство, и приведите проверяемую ссылку на документ."
+                : "Shartnoma majburiyatini tartibga soluvchi Lex.uz hujjatining aniq moddasini va tekshiriladigan havolasini ko‘rsating.")
+          : area === "entrepreneurship" && index === 7
+            ? (locale === "ru" ? "Как открыть ООО в Узбекистане? Дайте практические шаги и основания только из Lex.uz." : "O‘zbekistonda MChJni qanday ochaman? Amaliy qadamlar va faqat Lex.uz asoslarini bering.")
+            : scenarioPrompt(locale, area, index);
     return ({
     id: `legal-${locale}-${area}-${String(index + 1).padStart(2, "0")}`,
     locale,
+    queryLanguage: isUzbekCyrillic ? "uz-Cyrl" : isEnglish ? "en" : locale === "ru" ? "ru" : "uz-Latn",
     accountType: LEGAL_EVALUATION_ACCOUNT_TYPES[(areaIndex + index) % LEGAL_EVALUATION_ACCOUNT_TYPES.length]!,
     area,
-    prompt: area === "entrepreneurship" && index === 7
-      ? (locale === "ru" ? "Как открыть ООО в Узбекистане? Дайте практические шаги и основания только из Lex.uz." : "O‘zbekistonda MChJni qanday ochaman? Amaliy qadamlar va faqat Lex.uz asoslarini bering.")
-      : scenarioPrompt(locale, area, index),
-    tags: variant.tags,
+    prompt,
+    tags,
+    releaseGateCapabilities: releaseGateCapabilities(tags, variant.expectedBehaviors),
     expectedBehaviors: variant.expectedBehaviors,
     expectedCanonicalLexUrls: variant.tags.includes("no_source") ? [] : expected.urls,
     expectedArticleIds: variant.tags.includes("no_source") ? [] : expected.articleIds,
@@ -185,18 +247,22 @@ function buildAmbiguous(locale: LegalEvaluationLocale): LegalEvaluationScenario[
         ? `Неофициальная ссылка содержит спорное утверждение №${index + 1} по ${ruArea[area]}, но дата события, применимая редакция и первичный документ не указаны. Определите, что можно подтвердить.`
         : `Norasmiy havolada ${uzArea[area]} bo‘yicha ${index + 1}-bahsli fikr bor, ammo voqea sanasi, qo‘llanadigan tahrir va birlamchi hujjat ko‘rsatilmagan. Nimani tasdiqlash mumkinligini aniqlang.`;
     const expected = expectedLexMetadata(area, locale);
+    const tags = index === 0
+      ? ["ambiguous", "follow_up", "long_history"]
+      : ["ambiguous", "unofficial_source", "historical", "incomplete_facts", ...(index === 1 ? ["long_history"] : [])];
+    const expectedBehaviors: LegalEvaluationBehavior[] = index === 0
+      ? ["rewrite_follow_up", "separate_assumptions"]
+      : ["ask_event_date", "distinguish_historical_current", "reject_unofficial_source_as_law", "separate_assumptions"];
     return {
       id: `legal-${locale}-ambiguous-${String(index + 1).padStart(2, "0")}`,
       locale,
+      queryLanguage: locale === "ru" ? "ru" : "uz-Latn",
       accountType,
       area,
       prompt,
-      tags: index === 0
-        ? ["ambiguous", "follow_up", "long_history"]
-        : ["ambiguous", "unofficial_source", "historical", "incomplete_facts", ...(index === 1 ? ["long_history"] : [])],
-      expectedBehaviors: index === 0
-        ? ["rewrite_follow_up", "separate_assumptions"]
-        : ["ask_event_date", "distinguish_historical_current", "reject_unofficial_source_as_law", "separate_assumptions"],
+      tags,
+      releaseGateCapabilities: releaseGateCapabilities(tags, expectedBehaviors),
+      expectedBehaviors,
       expectedCanonicalLexUrls: expected.urls,
       expectedArticleIds: expected.articleIds,
       expectedSourceAvailability: true,

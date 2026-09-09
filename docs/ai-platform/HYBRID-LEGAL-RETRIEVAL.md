@@ -1,5 +1,12 @@
 # Hybrid legal retrieval
 
+> This document describes the implemented staff-published/legacy platform path.
+> It is not the accepted Indexed Official Corpus target. The latter is defined by
+> [ADR 0006](../adr/0006-own-hybrid-official-corpus-retrieval.md) and the
+> [custom hybrid target architecture](../legal-corpus/target-search-architecture.md),
+> where R2 BM25 and Vectorize are both required for a General Legal Question and
+> current/as-of/comparison capabilities activate through Search Releases.
+
 ## Purpose
 
 `AI-юрист JURO` and the asynchronous document-analysis worker now combine exact lexical matching with semantic candidate matching. This is a retrieval enhancement only: it does not let Vectorize decide legal truth or bypass legal-source review.

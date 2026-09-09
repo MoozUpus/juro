@@ -1,5 +1,9 @@
 # huquq-ai adoption audit
 
+Status: historical audit. The D1/Qdrant indexed path described below is retired;
+the current runtime is the R2-native architecture in
+`docs/legal-corpus/target-search-architecture.md`.
+
 Audit date: 2026-08-13
 Upstream: `toxirerkinov70-commits/huquq-ai`
 Pinned commit: `1bce500c69b8213373d8ce0b40d56be7d83f6aec`

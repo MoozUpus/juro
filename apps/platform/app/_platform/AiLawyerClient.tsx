@@ -134,7 +134,7 @@ type AiRunRecoveryStatus =
   | { kind: "completed"; runId: string; conversationId: string; responseMessageId: string; branchId: string | null }
   | { kind: "failed"; runId: string; errorCode: string };
 
-const feedbackOptions: AiFeedbackType[] = ["not_helpful", "wrong_norm", "broken_link", "outdated", "incomplete", "language", "unsafe", "ignored_facts"];
+const feedbackOptions: AiFeedbackType[] = ["wrong_norm", "incomplete", "language", "not_helpful"];
 
 export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const text = useCallback(
@@ -195,7 +195,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [creatingSuggestedDocument, setCreatingSuggestedDocument] = useState(false);
   const documentHandoffKeyRef = useRef("");
   const [feedback, setFeedback] = useState<AiFeedback[]>([]);
-  const [feedbackType, setFeedbackType] = useState<AiFeedbackType>("not_helpful");
+  const [feedbackType, setFeedbackType] = useState<AiFeedbackType>("wrong_norm");
   const [feedbackComment, setFeedbackComment] = useState("");
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState("");
@@ -754,16 +754,19 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }
 
   function feedbackLabel(type: AiFeedbackType) {
-    const ruLabels: Record<AiFeedbackType, string> = { helpful: "Полезно", not_helpful: "Не помогло", wrong_norm: "Неверная норма", broken_link: "Нерабочая ссылка", outdated: "Устарело", incomplete: "Неполно", language: "Проблема языка", unsafe: "Небезопасно", ignored_facts: "Не учтены факты" };
-    const uzLabels: Record<AiFeedbackType, string> = { helpful: "Foydali", not_helpful: "Yordam bermadi", wrong_norm: "Noto‘g‘ri norma", broken_link: "Ishlamaydigan havola", outdated: "Eskirgan", incomplete: "To‘liq emas", language: "Til muammosi", unsafe: "Xavfsiz emas", ignored_facts: "Faktlar hisobga olinmadi" };
-    const enLabels: Record<AiFeedbackType, string> = { helpful: "Helpful", not_helpful: "Not helpful", wrong_norm: "Incorrect legal rule", broken_link: "Broken link", outdated: "Out of date", incomplete: "Incomplete", language: "Language issue", unsafe: "Unsafe", ignored_facts: "Facts were overlooked" };
-    return (locale === "en" ? enLabels : locale === "uz" ? uzLabels : ruLabels)[type];
+    const ruLabels: Record<AiFeedbackType, string> = { helpful: "Полезно", not_helpful: "Другое", wrong_norm: "Неверный правовой вывод", broken_link: "Нерабочая ссылка", outdated: "Устаревший источник", incomplete: "Не хватает или устарел источник", language: "Ответ непонятен", unsafe: "Небезопасно", ignored_facts: "Не учтены факты" };
+    const uzLabels: Record<AiFeedbackType, string> = { helpful: "Foydali", not_helpful: "Boshqa", wrong_norm: "Noto‘g‘ri huquqiy xulosa", broken_link: "Ishlamaydigan havola", outdated: "Eskirgan manba", incomplete: "Manba yetishmaydi yoki eskirgan", language: "Javob tushunarsiz", unsafe: "Xavfsiz emas", ignored_facts: "Faktlar hisobga olinmadi" };
+    const enLabels: Record<AiFeedbackType, string> = { helpful: "Helpful", not_helpful: "Other", wrong_norm: "Incorrect legal conclusion", broken_link: "Broken link", outdated: "Outdated source", incomplete: "Missing or outdated source", language: "Unclear answer", unsafe: "Unsafe", ignored_facts: "Facts were overlooked" };
+    return (locale === "ru" ? ruLabels : locale === "uz" ? uzLabels : enLabels)[type];
   }
 
   const visibleSources = answer?.result.sources.filter((source) =>
     safeOfficialUrl(source.originalUrl) || isTrustedPrivateSource(source) || isSafeSecondarySource(source)) ?? [];
   const hasPrivateSources = visibleSources.some(isTrustedPrivateSource);
   const hasSecondarySources = visibleSources.some(isSafeSecondarySource);
+  const hasCaseFacts = Boolean(answer?.facts.length);
+  const hasAnswerContext = hasCaseFacts || visibleSources.length > 0;
+  const sourceWasUnavailable = answer?.result.sourceValidationStatus === "unavailable" && visibleSources.length === 0;
 
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
   return (
@@ -822,7 +825,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             <div className="ai-answer-actions">
               {answer.result.responseKind === "answer" && answer.result.suggestedDocument && <button type="button" disabled={!answer.messageId || sending || openingSuggestedDocument} onClick={() => void openSuggestedDocument()}><FilePlus2 />{openingSuggestedDocument ? text("Проверяем шаблон…", "Shablon tekshirilmoqda…", "Verifying template…") : text("Открыть шаблон JURO", "JURO shablonini ochish", "Open JURO template")}</button>}
               <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setVoiceRecordingId(""); setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{text("Редактировать вопрос", "Savolni tahrirlash", "Edit question")}</button>
-              <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{text("Повторить ответ", "Javobni qayta yaratish", "Regenerate answer")}</button>
+              <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{sourceWasUnavailable ? text("Повторить поиск источников", "Manbalarni qayta qidirish", "Retry source search") : text("Повторить ответ", "Javobni qayta yaratish", "Regenerate answer")}</button>
               {answer.messageId && answer.result.responseKind === "answer" && <AssistantSpeechControls locale={locale} assistantMessageId={answer.messageId} disabled={sending} onPhaseChange={setVoiceSpeechPhase} />}
             </div>
             {documentPrefill && documentPrefillMessageId === answer.messageId && <section className="ai-document-prefill" aria-labelledby="ai-document-prefill-title" aria-busy={creatingSuggestedDocument}>
@@ -844,9 +847,9 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
               <div className="ai-feedback-actions">
                 <button type="button" className={feedback.some((item) => item.feedbackType === "helpful") ? "selected" : undefined} disabled={savingFeedback} onClick={() => void saveFeedback("helpful")}><ThumbsUp />{feedback.some((item) => item.feedbackType === "helpful") ? text("Полезно — сохранено", "Foydali — saqlandi", "Helpful — saved") : feedbackLabel("helpful")}</button>
                 <details>
-                  <summary>{text("Сообщить о проблеме", "Muammo haqida xabar berish", "Report an issue")}</summary>
+                  <summary><CircleAlert aria-hidden="true" /><span>{text("Сообщить о проблеме", "Muammo haqida xabar berish", "Report an issue")}</span></summary>
                   <div className="ai-feedback-form">
-                    <div className="ai-select-field"><span id="ai-feedback-type-label">{text("Что не так", "Nima noto‘g‘ri", "What went wrong")}</span><AiSelect value={feedbackType} onChange={setFeedbackType} ariaLabelledBy="ai-feedback-type-label" options={feedbackOptions.map((item) => ({ value: item, label: feedbackLabel(item) }))} /></div>
+                    <div className="ai-feedback-categories" role="group" aria-labelledby="ai-feedback-type-label"><span id="ai-feedback-type-label">{text("Что не так", "Nima noto‘g‘ri", "What went wrong")}</span><div>{feedbackOptions.map((item) => <button type="button" className={feedbackType === item ? "selected" : undefined} aria-pressed={feedbackType === item} key={item} onClick={() => setFeedbackType(item)}>{feedbackLabel(item)}</button>)}</div></div>
                     <label>{text("Комментарий — необязательно", "Izoh — ixtiyoriy", "Comment — optional")}<textarea value={feedbackComment} maxLength={2_000} onChange={(event) => setFeedbackComment(event.target.value)} placeholder={text("Не указывайте лишние персональные данные.", "Ortiqcha shaxsiy ma’lumotlarni kiritmang.", "Avoid unnecessary personal data.")} /></label>
                     <button type="button" disabled={savingFeedback} onClick={() => void saveFeedback(feedbackType, feedbackComment)}>{savingFeedback ? text("Сохраняем…", "Saqlanmoqda…", "Saving…") : text("Сохранить отзыв", "Fikrni saqlash", "Save feedback")}</button>
                   </div>
@@ -891,12 +894,18 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           <small className="ai-composer-hint">{text("Enter — отправить · Shift + Enter — новая строка · не указывайте лишние персональные данные", "Enter — yuborish · Shift + Enter — yangi satr · ortiqcha shaxsiy ma’lumotlarni kiritmang", "Enter — send · Shift + Enter — new line · avoid unnecessary personal data")}</small>
         </form>
       </section>
-      <nav className="ai-mobile-context-bar" aria-label={text("Факты и источники ответа", "Javob faktlari va manbalari", "Answer facts and sources")}><button type="button" onClick={() => openMobileContext("facts")}><Check aria-hidden="true" />{text(`Факты ${answer?.facts.length ?? 0}`, `Faktlar ${answer?.facts.length ?? 0}`, `Facts ${answer?.facts.length ?? 0}`)}</button><button type="button" onClick={() => openMobileContext("sources")}><BookOpenCheck aria-hidden="true" />{text(`Источники ${visibleSources.length}`, `Manbalar ${visibleSources.length}`, `Sources ${visibleSources.length}`)}</button></nav>
+      <nav className="ai-mobile-context-bar" aria-label={text("Факты и источники ответа", "Javob faktlari va manbalari", "Answer facts and sources")}>
+        {hasCaseFacts && <button type="button" onClick={() => openMobileContext("facts")}><Check aria-hidden="true" />{text(`Факты ${answer?.facts.length ?? 0}`, `Faktlar ${answer?.facts.length ?? 0}`, `Facts ${answer?.facts.length ?? 0}`)}</button>}
+        <button type="button" onClick={() => openMobileContext("sources")}><BookOpenCheck aria-hidden="true" />{hasAnswerContext ? text(`Источники ${visibleSources.length}`, `Manbalar ${visibleSources.length}`, `Sources ${visibleSources.length}`) : text("Статус источников", "Manbalar holati", "Source status")}</button>
+      </nav>
       <aside ref={mobileContextRef} className={`ai-context ${mobileContextOpen ? "is-mobile-open" : ""}`} id="ai-context-panel" role={mobileContextOpen ? "dialog" : undefined} aria-modal={mobileContextOpen || undefined} aria-label={text("Факты и источники", "Faktlar va manbalar", "Facts and sources")}>
         <header><BookOpenCheck aria-hidden="true" /><strong>{text("Контекст ответа", "Javob konteksti", "Answer context")}</strong><button className="ai-context-close" type="button" aria-label={text("Закрыть факты и источники", "Faktlar va manbalarni yopish", "Close facts and sources")} onClick={closeMobileContext}><X /></button></header>
-        <div className="ai-context-tabs" role="tablist" aria-label={text("Раздел контекста", "Kontekst bo‘limi", "Context section")}><button ref={mobileFactsTabRef} id="ai-context-facts-tab" type="button" role="tab" aria-selected={mobileContextTab === "facts"} aria-controls="ai-context-facts-panel" tabIndex={mobileContextTab === "facts" ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("facts")}>{text("Факты", "Faktlar", "Facts")}</button><button ref={mobileSourcesTabRef} id="ai-context-sources-tab" type="button" role="tab" aria-selected={mobileContextTab === "sources"} aria-controls="ai-context-sources-panel" tabIndex={mobileContextTab === "sources" ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("sources")}>{text("Источники", "Manbalar", "Sources")}</button></div>
-        <section id="ai-context-facts-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-facts-tab" : undefined} hidden={mobileContextOpen && mobileContextTab !== "facts"}><h2>{text("Факты для подтверждения", "Tasdiqlash uchun faktlar", "Facts to confirm")}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={text("Подтвердить факт", "Faktni tasdiqlash", "Confirm fact")}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={text("Отклонить факт", "Faktni rad etish", "Reject fact")}><X /></button></span> : <small>{fact.status === "confirmed" ? text("Подтверждено", "Tasdiqlandi", "Confirmed") : text("Отклонено", "Rad etildi", "Rejected")}</small>}</div>) : <p>{text("Предположения появятся после разбора.", "Taxminlar tahlildan keyin paydo bo‘ladi.", "Proposed facts will appear after analysis.")}</p>}</section>
-        <section id="ai-context-sources-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-sources-tab" : undefined} className="ai-evidence" hidden={mobileContextOpen && mobileContextTab !== "sources"}><h2>{hasPrivateSources || hasSecondarySources ? text("Источники", "Manbalar", "Sources") : text("Основания в Lex.uz", "Lex.uz asoslari", "Legal basis in Lex.uz")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, locale)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{text("Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются.", "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi.", "No verified legal basis was found in Lex.uz; JURO will not invent an article or link.")}</p>}</section>
+        {hasAnswerContext ? <><div className="ai-context-tabs" role="tablist" aria-label={text("Раздел контекста", "Kontekst bo‘limi", "Context section")}>
+          {hasCaseFacts && <button ref={mobileFactsTabRef} id="ai-context-facts-tab" type="button" role="tab" aria-selected={mobileContextTab === "facts"} aria-controls="ai-context-facts-panel" tabIndex={mobileContextTab === "facts" ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("facts")}>{text("Факты", "Faktlar", "Facts")}</button>}
+          <button ref={mobileSourcesTabRef} id="ai-context-sources-tab" type="button" role="tab" aria-selected={mobileContextTab === "sources" || !hasCaseFacts} aria-controls="ai-context-sources-panel" tabIndex={mobileContextTab === "sources" || !hasCaseFacts ? 0 : -1} onKeyDown={handleMobileContextTabKeyDown} onClick={() => setMobileContextTab("sources")}>{text("Источники", "Manbalar", "Sources")}</button>
+        </div>
+        {answer?.facts.length ? <section id="ai-context-facts-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-facts-tab" : undefined} hidden={mobileContextOpen && mobileContextTab !== "facts"}><h2>{text("Факты для подтверждения", "Tasdiqlash uchun faktlar", "Facts to verify")}</h2>{answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={text("Подтвердить факт", "Faktni tasdiqlash", "Verify fact")}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={text("Отклонить факт", "Faktni rad etish", "Reject fact")}><X /></button></span> : <small>{fact.status === "confirmed" ? text("Подтверждено", "Tasdiqlandi", "Verified") : text("Отклонено", "Rad etildi", "Rejected")}</small>}</div>)}</section> : null}
+        {visibleSources.length ? <section id="ai-context-sources-panel" role={mobileContextOpen ? "tabpanel" : undefined} aria-labelledby={mobileContextOpen ? "ai-context-sources-tab" : undefined} className="ai-evidence" hidden={mobileContextOpen && hasCaseFacts && mobileContextTab !== "sources"}><h2>{hasPrivateSources || hasSecondarySources ? text("Источники", "Manbalar", "Sources") : text("Основания в Lex.uz", "Lex.uz asoslari", "Lex.uz legal bases")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, locale)}</p>}{visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />)}</section> : null}</> : <section className="ai-context-empty"><span><BookOpenCheck aria-hidden="true" /></span><h2>{text("Нет подтверждённых источников", "Tasdiqlangan manbalar yo‘q", "No verified sources")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, locale)}</p>}<p>{sourceWasUnavailable ? text("При сохранении этого ответа официальный источник был недоступен. Повторите поиск из ответа.", "Bu javob saqlanganda rasmiy manba mavjud emas edi. Javobdan qidiruvni takrorlang.", "The official source was unavailable when this answer was saved. Retry the source search from the answer.") : text("JURO не показывает статью или ссылку без подтверждённого основания.", "JURO tasdiqlangan asossiz modda yoki havolani ko‘rsatmaydi.", "JURO does not show an article or link without a verified legal basis.")}</p></section>}
       </aside>
     </section>
   );
@@ -1293,11 +1302,12 @@ function VoiceModeStage(props: {
 }
 
 type AiStreamStatus = {
-  stage?: "accepted" | "document_search_started" | "lex_search_started" | "internet_search_started" | "source_verified" | "provider_started" | "provider_delta" | "preliminary" | "fallback";
+  stage?: "accepted" | "document_search_started" | "lex_search_started" | "internet_search_started" | "source_verified" | "retrieval_trace" | "provider_started" | "provider_delta" | "preliminary" | "fallback";
   provider?: string;
   model?: string;
   receivedCharacters?: number;
   preliminary?: AiPreliminary;
+  trace?: Record<string, unknown>;
 };
 
 async function readAiEventStream(

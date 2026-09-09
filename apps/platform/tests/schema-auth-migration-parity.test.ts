@@ -97,7 +97,11 @@ function statements(sql: string): string[] {
 }
 
 function applyMigrationsThrough0154(db: DatabaseSync): void {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 154)) {
+  const cutoff = journal.entries.find(
+    ({ tag }) => tag === "0154_english_locale_foundation",
+  );
+  assert.ok(cutoff, "missing 0154_english_locale_foundation journal entry");
+  for (const entry of journal.entries.filter(({ idx }) => idx <= cutoff.idx)) {
     const migration = readFileSync(
       new URL(`${entry.tag}.sql`, drizzleRoot),
       "utf8",

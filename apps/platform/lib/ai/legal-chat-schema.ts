@@ -2,9 +2,9 @@ import { z } from "zod";
 import type { LegalDatabaseFreshness } from "../legal/verified-retrieval";
 import { aiText, type AiOutputLocale } from "./localization";
 import {
-  nonRepeatingLegalDetail,
   sanitizeClarificationQuestions,
 } from "./legal-output-safety";
+import { legalEvidenceSourceClass } from "./legal-evidence-mode";
 export { deriveLegalEvidenceMode } from "./legal-evidence-mode";
 
 const sourceIdList = z.array(z.string().min(1).max(160)).max(12);
@@ -245,10 +245,9 @@ export function enforceLegalDatabaseFreshness(
 ): LegalChatResponse {
   if (freshness.status === "unavailable") {
     const nonLegislativeFactsOnly = result.sources.length > 0
-      && result.sources.every((source) =>
-        source.sourceClass === "USER_TRUSTED_PRIVATE"
-        || source.sourceClass === "SECONDARY_REFERENCE"
-      );
+      && result.sources.every((source) => ["private", "secondary"].includes(
+        legalEvidenceSourceClass(source),
+      ));
     if (nonLegislativeFactsOnly) {
       const warning = aiText(options.locale, "Факты ниже опираются только на ваши документы и/или справочные интернет-материалы. Достаточная норма Lex.uz не найдена; каждый такой материал не является официальным источником законодательства.", "Quyidagi faktlar faqat hujjatlaringiz va/yoki internetdagi ma’lumotnoma materiallariga tayangan. Yetarli Lex.uz normasi topilmadi; bu materiallar qonunchilik tasdig‘i emas.", "The facts below rely only on your documents and/or public reference materials. No sufficient legal provision was found in Lex.uz; these materials are not official sources of law.");
       return {
@@ -278,40 +277,65 @@ export function enforceLegalDatabaseFreshness(
     statement: aiText(options.locale, "Актуальность правовой базы требует подтверждения", "Huquqiy bazaning dolzarbligi tasdiqlanishi kerak", "The currency of the legal database must be verified"),
     impact: warning.slice(0, 2_000),
   };
-  const formerFindings = result.confirmedFindings.map((finding) => {
-    const uniqueDetail = nonRepeatingLegalDetail(finding.title, finding.explanation);
-    const prefix = aiText(options.locale, "Ранее подтверждённый вывод переведён в предварительный до обновления базы", "Oldin tasdiqlangan xulosa baza yangilanguncha dastlabki deb ko‘rsatiladi", "A previously verified finding is marked preliminary until the database is updated");
-    return {
-      statement: finding.title.slice(0, 1_000),
-      impact: (uniqueDetail ? `${prefix}: ${uniqueDetail}` : `${prefix}.`).slice(0, 2_000),
-    };
-  });
-  const assumptions = [
-    staleAssumption,
-    ...result.assumptions,
-    ...formerFindings,
-  ].filter((assumption, index, all) => {
-    const key = `${assumption.statement.trim()}\n${assumption.impact.trim()}`;
-    return all.findIndex((candidate) =>
-      `${candidate.statement.trim()}\n${candidate.impact.trim()}` === key
-    ) === index;
-  }).slice(0, 16);
-  const answer = result.answer.includes(warning)
-    ? result.answer
-    : `${warning}\n\n${result.answer}`.slice(0, 20_000);
+  const sourceClasses = new Map(result.sources.map((source) => [
+    source.sourceId,
+    legalEvidenceSourceClass(source),
+  ]));
+  const usesOnly = (sourceIds: readonly string[], expected: "private" | "secondary") =>
+    sourceIds.length > 0 && sourceIds.every(sourceId => sourceClasses.get(sourceId) === expected);
+  const confirmedFindings = result.confirmedFindings.filter(finding =>
+    usesOnly(finding.sourceIds, "private")
+  );
+  const conditionalBranches = (result.conditionalBranches ?? []).filter(branch =>
+    usesOnly(branch.sourceIds, "private")
+  );
+  const referenceNotes = (result.referenceNotes ?? []).filter(note =>
+    usesOnly(note.sourceIds, "secondary")
+  );
+  const retainedSourceIds = new Set([
+    ...confirmedFindings.flatMap(finding => finding.sourceIds),
+    ...conditionalBranches.flatMap(branch => branch.sourceIds),
+    ...referenceNotes.flatMap(note => note.sourceIds),
+  ]);
+  const sources = result.sources.filter(source => retainedSourceIds.has(source.sourceId));
+  const privateFactText = [
+    ...confirmedFindings.map(finding => `${finding.title}: ${finding.explanation}`),
+    ...conditionalBranches.map(branch => `${branch.condition}: ${branch.outcome}`),
+  ].join("\n\n").slice(0, 20_000);
+  const hasPrivateFacts = privateFactText.length > 0;
+  const hasSecondaryReferences = referenceNotes.length > 0;
+  const clarificationQuestions = sanitizeClarificationQuestions(
+    result.clarificationQuestions,
+    options.locale,
+  );
   return {
     ...result,
-    answer,
-    confirmedFindings: [],
-    conditionalBranches: [],
-    assumptions,
-    deadlines: result.deadlines.map((deadline) => ({
-      ...deadline,
-      confidence: "preliminary" as const,
-    })),
+    responseKind: hasPrivateFacts ? "answer" : "clarification_required",
+    summary: hasPrivateFacts
+      ? aiText(options.locale, "Подтверждены только факты из ваших документов.", "Faqat hujjatlaringizdagi faktlar tasdiqlandi.", "Only facts from your documents were verified.")
+      : aiText(options.locale, "Актуальный официальный правовой вывод недоступен.", "Amaldagi rasmiy huquqiy xulosa mavjud emas.", "A current official legal conclusion is unavailable."),
+    answer: hasPrivateFacts
+      ? `${warning}\n\n${privateFactText}`.slice(0, 20_000)
+      : warning,
+    clarificationQuestions,
+    confirmedFindings,
+    conditionalBranches,
+    referenceNotes,
+    assumptions: [staleAssumption],
+    risks: [],
+    sources,
+    requiredDocuments: [],
+    actionPlan: [],
+    deadlines: [],
     successOutlook: null,
+    urgency: "normal",
+    suggestedDocument: null,
     suggestLawyer: true,
     legalDatabaseAsOf: freshness.asOf,
+    evidenceMode: hasPrivateFacts
+      ? hasSecondaryReferences ? "mixed" : "private_only"
+      : hasSecondaryReferences ? "secondary_only" : "none",
+    coverageStatus: "no_coverage",
   };
 }
 

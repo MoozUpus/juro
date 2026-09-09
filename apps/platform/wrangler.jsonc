@@ -23,20 +23,12 @@
     "PAYMENT_PRODUCTION_APPROVED": "false",
     "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
     "LEGAL_LEX_INGESTION_ENABLED": "false",
-    "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
+    "LEGAL_LEX_METADATA_MONITOR_ENABLED": "false",
     "LEGAL_ADVICE_INGESTION_ENABLED": "false",
     "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
-    "LEGAL_CORPUS_ENABLED": "false",
-    "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "false",
-    "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
-    "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "false",
-    "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
     "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
-    "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
-    "LEGAL_CORPUS_DENSE_ENABLED": "false",
-    "LEGAL_CORPUS_SHADOW_MODE": "false",
     "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
-    "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
+    "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
     "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
     "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
     "IDENTITY_PROTECTION_MODE": "legacy",
@@ -68,6 +60,12 @@
     {
       "binding": "QUARANTINE_BUCKET",
       "bucket_name": "juro-development-quarantine"
+    }
+  ],
+  "services": [
+    {
+      "binding": "LEGAL_RETRIEVAL_SERVICE",
+      "service": "juro-legal-corpus-development"
     }
   ],
   "queues": {
@@ -186,21 +184,13 @@
         "PAYMENT_SANDBOX_ENABLED": "true",
         "PAYMENT_PRODUCTION_APPROVED": "false",
         "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
-        "LEGAL_LEX_INGESTION_ENABLED": "true",
-        "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
+        "LEGAL_LEX_INGESTION_ENABLED": "false",
+        "LEGAL_LEX_METADATA_MONITOR_ENABLED": "false",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
-        "LEGAL_CORPUS_ENABLED": "true",
-        "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "true",
-        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "true",
-        "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "true",
-        "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "true",
-        "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "true",
-        "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
-        "LEGAL_CORPUS_DENSE_ENABLED": "false",
-        "LEGAL_CORPUS_SHADOW_MODE": "false",
+        "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
-        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
+        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
         "IDENTITY_PROTECTION_MODE": "dual_write",
@@ -211,12 +201,12 @@
         "STATUS_HOSTNAME": "status.staging.juro.uz",
         "ADMIN_CONSOLE_ORIGIN": "https://admin.staging.juro.uz",
         "OPENAI_CHAT_MODEL": "gpt-5.6-terra",
+        "OPENAI_RETRIEVAL_MODEL": "gpt-5.6-terra",
         "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
         "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
         "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
         "ANTHROPIC_DOCUMENT_MODEL": "claude-sonnet-4-6",
-        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6",
-        "QDRANT_COLLECTION": "juro_legal_staging"
+        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6"
       },
       "d1_databases": [
         {
@@ -234,6 +224,10 @@
         {
           "tag": "v2-staging-legal-corpus-qdrant",
           "new_sqlite_classes": ["LegalCorpusQdrantContainer"]
+        },
+        {
+          "tag": "v3-retire-staging-legal-corpus-qdrant",
+          "deleted_classes": ["LegalCorpusQdrantContainer"]
         }
       ],
       "durable_objects": {
@@ -241,10 +235,6 @@
           {
             "name": "MALWARE_SCANNER_CONTAINER",
             "class_name": "MalwareScannerContainer"
-          },
-          {
-            "name": "QDRANT_CONTAINER",
-            "class_name": "LegalCorpusQdrantContainer"
           }
         ]
       },
@@ -255,16 +245,13 @@
           "image": "docker.io/clamav/clamav@sha256:4de20bd9ab45a4b763c5412b769217ef5082572ebc8a63aff1a77943419e5dd8",
           "instance_type": "standard-1",
           "max_instances": 1
-        },
-        {
-          "name": "juro-staging-legal-corpus-qdrant",
-          "class_name": "LegalCorpusQdrantContainer",
-          "image": "docker.io/qdrant/qdrant@sha256:da65a06bc75e42702f80c992b99c5144b0fbd675ae7a96d2991de0bf957b7071",
-          "instance_type": "standard-1",
-          "max_instances": 1
         }
       ],
       "services": [
+        {
+          "binding": "LEGAL_RETRIEVAL_SERVICE",
+          "service": "juro-legal-corpus-staging"
+        },
         {
           "binding": "MALWARE_SCANNER",
           "service": "juro-platform-staging"
@@ -544,21 +531,13 @@
         "PAYMENT_SANDBOX_ENABLED": "false",
         "PAYMENT_PRODUCTION_APPROVED": "false",
         "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
-        "LEGAL_LEX_INGESTION_ENABLED": "true",
-        "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
+        "LEGAL_LEX_INGESTION_ENABLED": "false",
+        "LEGAL_LEX_METADATA_MONITOR_ENABLED": "false",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
-        "LEGAL_CORPUS_ENABLED": "false",
-        "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "false",
-        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
-        "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "false",
-        "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
         "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
-        "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
-        "LEGAL_CORPUS_DENSE_ENABLED": "false",
-        "LEGAL_CORPUS_SHADOW_MODE": "false",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
-        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
+        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
         "IDENTITY_PROTECTION_MODE": "dual_write",
@@ -581,7 +560,7 @@
           "database_name": "juro-production",
           "database_id": "4cce509b-0e02-4ca9-a3ba-a5ce1327aeda",
           "migrations_dir": "./drizzle",
-          "migrations_pattern": "./drizzle/{0121,012[4-9],01[3-9][0-9],0[2-9][0-9][0-9],[1-9][0-9][0-9][0-9]}_*.sql"
+          "migrations_pattern": "./drizzle/{0121,012[4-9],013[0-9],014[0-9]}_*.sql"
         }
       ],
       "migrations": [
@@ -608,6 +587,10 @@
         }
       ],
       "services": [
+        {
+          "binding": "LEGAL_RETRIEVAL_SERVICE",
+          "service": "juro-legal-corpus"
+        },
         {
           "binding": "MALWARE_SCANNER",
           "service": "juro"

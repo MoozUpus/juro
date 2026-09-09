@@ -14,12 +14,13 @@ test("guest AI route is server-only, same-origin protected, provider-backed, and
   assert.match(route, /validateTurnstile/);
   assert.match(route, /guestAiTurnstileAction/);
   assert.match(route, /retrieveCorpusAwareLegalSources/);
+  assert.match(route, /retrieveCorpusAwareLegalSources\(\{\s*query: parsed\.data\.question,/);
   assert.match(route, /understandLegalRetrievalQuery/);
-  assert.match(route, /rerankLegalCorpusCandidates/);
+  assert.doesNotMatch(route, /rerankLegalCorpusCandidates/);
   assert.match(route, /shouldRetrieveSecondaryInternet\(retrieval\)/);
   assert.match(route, /retrieveSecondaryInternetSources/);
-  assert.match(route, /indexQueries: retrievalUnderstanding\.corpusQueries/);
   assert.match(route, /lexSearchQueries: retrievalUnderstanding\.lexSearchQueries/);
+  assert.doesNotMatch(route, /indexQueries:/);
   const official = route.indexOf("retrieval = await retrieveCorpusAwareLegalSources");
   const secondaryGate = route.indexOf("shouldRetrieveSecondaryInternet(retrieval)");
   const secondary = route.indexOf("await retrieveSecondaryInternetSources", secondaryGate);

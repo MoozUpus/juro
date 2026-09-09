@@ -1,44 +1,17 @@
-import type { LegalSourceContext, LegalSourceSpan } from "../ai/provider";
+import type { LegalSourceContext } from "../ai/provider";
 import {
   retrieveLiveLexSources,
   type LiveLexRetrievalResult,
 } from "../legal/live-lex-retrieval";
+import { detectArticleNumbers } from "../legal/legal-language";
 import {
   legalDatabaseFreshnessFromAsOf,
   type LegalDatabaseFreshness,
 } from "../legal/verified-retrieval";
-import { enqueueOfficialLexCorpusDocument } from "./ingestion";
 import {
-  assessLegalCorpusCoverage,
-  type LegalCorpusSearchScope,
-} from "./retrieval";
-import {
-  runJuroLegalResearchLoop,
-  type JuroLegalCandidateReranker,
-  type JuroLegalRequiredConcept,
-  type JuroLegalResearchHit,
-  type JuroLegalResearchResult,
-} from "./legal-research-loop";
-import { createJuroLegalCorpusReadServiceTools } from "./legal-read-service";
-import { createReadOnlyLegalCorpusDatabase } from "./read-only-d1";
-import {
-  featureEnabled,
-  type LegalCorpusFeatureFlag,
-} from "./trust";
-import { createQdrantDenseSearch } from "./qdrant-indexing";
-
-type CorpusRuntimeEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
-  & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>
-  & {
-    OPENAI_API_KEY?: string;
-    EMBEDDING_MODEL?: string;
-    QDRANT_URL?: string;
-    QDRANT_API_KEY?: string;
-    QDRANT_COLLECTION?: string;
-    LEGAL_CORPUS_READ_DB?: D1Database;
-    LEGAL_CORPUS_READ_SERVICE?: Fetcher;
-    LEGAL_CORPUS_REMOTE_READ_ENABLED?: string;
-  };
+  createTargetLegalAnswerClient,
+  type TargetLegalAnswerResult,
+} from "./target-retrieval";
 
 export type LegalChatSourceEvidence = {
   sourceId: string;
@@ -67,20 +40,45 @@ export type LegalChatSourceRetrieval = {
     retrievedCandidateCount: number;
     rerankCandidateCount: number;
     rerankedCandidateCount: number;
-    rerankingOutcome: JuroLegalResearchResult["rerankingOutcome"];
+    rerankingOutcome: "not_configured" | "not_needed" | "selected" | "rejected" | "deterministic_fallback" | "failed_closed";
     rerankingFailureCode: string | null;
     exactWindowSuccesses: number;
     denseUnavailable: boolean;
+    repairQueriesRun?: number;
+    indexedAvailability?: "available" | "degraded" | "unavailable";
+    coverageRequirements?: Array<{
+      requirementId: string;
+      statement: string;
+      status: "covered" | "uncovered";
+      provisionIds: string[];
+    }>;
+    selectedProvisions?: Array<{
+      provisionId: string;
+      chunkId: string;
+      sparseRank: number | null;
+      denseRank: number | null;
+      semanticScore: number | null;
+      fusionScore: number | null;
+      selectionMethod: "semantic_reranker" | "deterministic_fallback";
+      matchedQueryCount: number;
+      requirementIds: string[];
+    }>;
+    indexVersion?: string | null;
+    rerankerVersion?: string | null;
+    targetOutcome?: "selected" | "unavailable" | "timed_out" | "failed";
+    targetFailureCode?: "TARGET_SOURCE_UNAVAILABLE" | "TARGET_RETRIEVAL_TIMEOUT" | "TARGET_RETRIEVAL_FAILED" | null;
+    targetLatencyMs?: number;
+    contextualPlanningLatencyMs?: number;
+    targetBudgetMs?: number;
     fusionOutcome: "indexed" | "live" | "mixed" | "none";
   };
 };
 
-/**
- * Lower-authority public material is a terminal fallback, never a concurrent
- * evidence branch. Partial official coverage is still sufficient to answer
- * conservatively; only weak or empty combined corpus/Lex coverage may consult
- * secondary internet material.
- */
+type TargetAttemptTelemetry = Pick<
+  NonNullable<LegalChatSourceRetrieval["retrievalTelemetry"]>,
+  "targetOutcome" | "targetFailureCode" | "targetLatencyMs" | "contextualPlanningLatencyMs" | "targetBudgetMs"
+>;
+
 export function shouldRetrieveSecondaryInternet(
   retrieval: Pick<LegalChatSourceRetrieval, "coverageStatus">,
 ): boolean {
@@ -90,203 +88,31 @@ export function shouldRetrieveSecondaryInternet(
 
 type LiveSearchInput = Parameters<typeof retrieveLiveLexSources>[0];
 
-function sourceLocale(language: JuroLegalResearchHit["passage"]["language"]): string {
-  if (language === "uz-Cyrl") return "uzc";
-  if (language === "uz-Latn") return "uz";
-  return language;
-}
-
-function officialLexUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:"
-      && !url.username
-      && !url.password
-      && !url.port
-      && (url.hostname === "lex.uz" || url.hostname === "www.lex.uz")
-      && /^(?:\/(?:ru|uz|uzc|en))?\/docs\/-?\d+/u.test(url.pathname);
-  } catch {
-    return false;
-  }
-}
-
-function indexedArticleNumber(span: LegalSourceSpan, fallback: string | null): string | null {
-  const match = span.article?.match(/^(?:статья|ст\.?|модда|modda|article)?\s*(\d+(?:[.-]\d+)?)/iu);
-  return match?.[1] ?? fallback;
-}
-
-function indexedContext(hit: JuroLegalResearchHit, span: LegalSourceSpan): LegalSourceContext | null {
-  const source = hit.passage;
-  if (
-    !officialLexUrl(hit.act.sourceUrl)
-    || !hit.act.title.trim()
-    || !span.text.trim()
-    || !/^[a-f0-9]{64}$/u.test(span.textSha256)
-  ) {
-    return null;
-  }
-  const historical = source.status === "historical" || source.status === "repealed";
-  const anchor = span.id === source.chunkId;
-  return {
-    id: span.id,
-    actTitle: hit.act.title,
-    actIdentifier: source.documentId,
-    officialUrl: hit.act.sourceUrl,
-    revisionDate: source.versionDate,
-    lastCheckedAt: source.fetchedAt,
-    locale: sourceLocale(source.language),
-    publishedAt: hit.act.publicationDate,
-    sourceType: "lex",
-    documentType: source.documentType,
-    documentNumber: source.documentNumber,
-    adoptingAuthority: source.adoptingAuthority,
-    sourceClass: source.sourceClass,
-    status: "verified",
-    verificationState: "verified",
-    verifiedAt: source.fetchedAt,
-    contentSha256: span.textSha256,
-    article: indexedArticleNumber(span, source.articleNumber),
-    excerpt: span.text.slice(0, 1_200),
-    effectiveDate: source.validFrom,
-    applicabilityStatus: historical ? "historical" : "current",
-    spans: [span],
-    sourceQuality: {
-      passed: true,
-      title: hit.act.title.trim().length > 0,
-      sufficientText: span.text.trim().length > 0,
-      clean: true,
-      locale: true,
-      canonicalUrl: true,
-      structured: hit.exactWindowHydrated,
-    },
-    retrievalSelection: anchor ? hit.selectionMethod : "responsive_neighbour",
-  };
-}
-
-function indexedRetrieval(
-  hits: readonly JuroLegalResearchHit[],
-  now: Date,
-  coverageStatus: LegalChatSourceRetrieval["coverageStatus"],
-  metrics: {
-    queriesRun: number;
-    retrievedCandidateCount: number;
-    rerankCandidateCount: number;
-    rerankedCandidateCount: number;
-    rerankingOutcome: JuroLegalResearchResult["rerankingOutcome"];
-    rerankingFailureCode: string | null;
-    exactWindowSuccesses: number;
-    denseUnavailable: boolean;
-  } = {
-    queriesRun: 0,
-    retrievedCandidateCount: 0,
-    rerankCandidateCount: 0,
-    rerankedCandidateCount: 0,
-    rerankingOutcome: "not_configured",
-    rerankingFailureCode: null,
-    exactWindowSuccesses: 0,
-    denseUnavailable: false,
-  },
-): LegalChatSourceRetrieval {
-  // A selected anchor can have a second independently responsive provision
-  // immediately beside it (for example a rule followed by its protected-status
-  // exception). Publish those exact provisions as separate source identities;
-  // otherwise one anchor ID collapses several article cards back into one.
-  const expandedContexts = hits.flatMap((hit) => hit.responsiveSpans
-    .map((span) => indexedContext(hit, span))
-    .filter((source): source is LegalSourceContext => Boolean(source)));
-  const contexts = [...new Map(expandedContexts.map((source) => [source.id, source])).values()]
-    .slice(0, 12);
-  const retrievedAt = contexts.map((source) => source.lastCheckedAt)
-    .filter((value) => Number.isFinite(Date.parse(value)))
-    .sort()
-    .at(-1) ?? null;
-  const freshness = retrievedAt
-    ? legalDatabaseFreshnessFromAsOf(retrievedAt, now)
-    : legalDatabaseFreshnessFromAsOf("unavailable", now);
-  return {
-    sources: contexts,
-    freshness,
-    legalDatabaseAsOf: freshness.asOf,
-    sourceAccessMode: "approved_package",
-    sourcesRetrievedAt: retrievedAt,
-    sourceValidationStatus: contexts.length > 0 ? "validated" : "unavailable",
-    errors: contexts.length > 0 ? [] : [{ code: "LEGAL_CORPUS_INDEXED_SOURCE_REJECTED" }],
-    evidence: contexts.map((source) => ({
-      sourceId: source.id,
-      sourceKind: "lex",
-      canonicalUrl: source.officialUrl,
-      contentSha256: source.contentSha256,
-      retrievedAt: source.lastCheckedAt,
-      validatedAt: source.verifiedAt,
-      validationStatus: "validated",
-    })),
-    coverageStatus,
-    retrievalTelemetry: {
-      indexedHitCount: contexts.length,
-      liveHitCount: 0,
-      queriesRun: metrics.queriesRun,
-      retrievedCandidateCount: metrics.retrievedCandidateCount,
-      rerankCandidateCount: metrics.rerankCandidateCount,
-      rerankedCandidateCount: metrics.rerankedCandidateCount,
-      rerankingOutcome: metrics.rerankingOutcome,
-      rerankingFailureCode: metrics.rerankingFailureCode,
-      exactWindowSuccesses: metrics.exactWindowSuccesses,
-      denseUnavailable: metrics.denseUnavailable,
-      fusionOutcome: contexts.length > 0 ? "indexed" : "none",
-    },
-  };
-}
-
 function liveCoverage(
   query: string,
   sources: readonly LegalSourceContext[],
-  locale: "ru" | "uz",
 ): LegalChatSourceRetrieval["coverageStatus"] {
-  return assessLegalCorpusCoverage({
-    query,
-    preferredLanguage: locale === "ru" ? "ru" : undefined,
-    sources: sources.flatMap((source, index) => {
-      const exactQuote = source.spans?.[0]?.text ?? source.excerpt ?? "";
-      if (!exactQuote.trim()) return [];
-      return [{
-        chunkId: source.id,
-        documentId: source.actIdentifier ?? source.id,
-        documentTitle: source.actTitle,
-        documentType: "legal_act",
-        documentNumber: source.actIdentifier ?? null,
-        adoptingAuthority: null,
-        sourceClass: "OFFICIAL_LEGISLATION" as const,
-        articleNumber: source.article ?? null,
-        articleTitle: null,
-        exactQuote,
-        sourceUrl: source.officialUrl,
-        language: source.locale === "uzc" ? "uz-Cyrl" as const
-          : source.locale === "uz" ? "uz-Latn" as const
-            : source.locale === "en" ? "en" as const : "ru" as const,
-        status: source.applicabilityStatus === "historical" ? "historical" as const : "active" as const,
-        validFrom: source.effectiveDate ?? null,
-        validTo: null,
-        versionDate: source.revisionDate,
-        fetchedAt: source.lastCheckedAt,
-        contentHash: source.contentSha256,
-        provider: "lex_uz",
-        denseRank: index + 1,
-        semanticScore: source.sourceQuality?.passed ? 1 : 0,
-        fusionScore: 2 / (61 + index),
-        windowHydrated: Boolean(source.spans?.length),
-      }];
-    }),
-  });
+  if (sources.length === 0) return "no_coverage";
+  const requestedArticles = detectArticleNumbers(query);
+  const foundArticles = new Set(sources.map((source) => source.article).filter(Boolean));
+  if (requestedArticles.some((article) => !foundArticles.has(article))) {
+    return foundArticles.size > 0 ? "partial_coverage" : "weak_coverage";
+  }
+  return sources.some((source) =>
+    source.verificationState === "direct_validated"
+    && source.sourceQuality?.passed
+    && Boolean(source.spans?.[0]?.text.trim() || source.excerpt?.trim())
+  ) ? "good_coverage" : "partial_coverage";
 }
 
 function withLiveCoverage(
   result: LiveLexRetrievalResult,
   query: string,
-  locale: "ru" | "uz",
+  targetTelemetry?: TargetAttemptTelemetry,
 ): LegalChatSourceRetrieval {
   return {
     ...result,
-    coverageStatus: liveCoverage(query, result.sources, locale),
+    coverageStatus: liveCoverage(query, result.sources),
     retrievalTelemetry: {
       indexedHitCount: 0,
       liveHitCount: result.sources.length,
@@ -298,240 +124,359 @@ function withLiveCoverage(
       rerankingFailureCode: null,
       exactWindowSuccesses: 0,
       denseUnavailable: false,
+      ...targetTelemetry,
       fusionOutcome: result.sources.length > 0 ? "live" : "none",
     },
   };
 }
 
-function sourceDeduplicationKey(source: LegalSourceContext): string {
-  const spanHash = source.spans?.[0]?.textSha256 ?? source.contentSha256;
-  return [source.actIdentifier ?? source.officialUrl, source.revisionDate ?? "current", source.article ?? "", spanHash]
-    .join("\u001f");
-}
-
-function mergeIndexedAndLive(
-  indexed: LegalChatSourceRetrieval,
-  live: LegalChatSourceRetrieval,
-  query: string,
-  locale: "ru" | "uz",
+function unavailableHistoricalCoverage(
+  applicableAt: string,
+  now: Date,
 ): LegalChatSourceRetrieval {
-  const sourcesByKey = new Map<string, LegalSourceContext>();
-  for (const source of [...indexed.sources, ...live.sources]) {
-    const key = sourceDeduplicationKey(source);
-    const current = sourcesByKey.get(key);
-    if (!current || source.verificationState === "direct_validated") sourcesByKey.set(key, source);
-  }
-  const sources = [...sourcesByKey.values()];
-  const sourceIds = new Set(sources.map((source) => source.id));
-  const evidence = [...indexed.evidence, ...live.evidence].filter((item, index, all) =>
-    sourceIds.has(item.sourceId) && all.findIndex((candidate) => candidate.sourceId === item.sourceId) === index,
-  );
-  const newestRetrievedAt = [indexed.sourcesRetrievedAt, live.sourcesRetrievedAt]
-    .filter((value): value is string => Boolean(value && Number.isFinite(Date.parse(value))))
-    .sort()
-    .at(-1) ?? null;
+  const checkedAt = now.toISOString();
   return {
-    sources,
-    evidence,
-    freshness: live.sources.length > 0 ? live.freshness : indexed.freshness,
-    legalDatabaseAsOf: live.sources.length > 0 ? live.legalDatabaseAsOf : indexed.legalDatabaseAsOf,
-    sourceAccessMode: indexed.sources.length > 0 && live.sources.length > 0
-      ? "mixed"
-      : live.sources.length > 0 ? "direct" : "approved_package",
-    sourcesRetrievedAt: newestRetrievedAt,
-    sourceValidationStatus: sources.length > 0 ? "validated" : "unavailable",
-    errors: [...indexed.errors, ...live.errors],
-    coverageStatus: liveCoverage(query, sources, locale),
+    sources: [],
+    freshness: legalDatabaseFreshnessFromAsOf(checkedAt, now),
+    legalDatabaseAsOf: applicableAt,
+    sourceAccessMode: "approved_package",
+    sourcesRetrievedAt: null,
+    sourceValidationStatus: "unavailable",
+    errors: [{ code: "HISTORICAL_INDEXED_COVERAGE_UNAVAILABLE" }],
+    evidence: [],
+    coverageStatus: "no_coverage",
     retrievalTelemetry: {
-      indexedHitCount: indexed.sources.length,
-      liveHitCount: live.sources.length,
-      queriesRun: indexed.retrievalTelemetry?.queriesRun ?? 0,
-      retrievedCandidateCount: indexed.retrievalTelemetry?.retrievedCandidateCount ?? 0,
-      rerankCandidateCount: indexed.retrievalTelemetry?.rerankCandidateCount ?? 0,
-      rerankedCandidateCount: indexed.retrievalTelemetry?.rerankedCandidateCount ?? 0,
-      rerankingOutcome: indexed.retrievalTelemetry?.rerankingOutcome ?? "not_configured",
-      rerankingFailureCode: indexed.retrievalTelemetry?.rerankingFailureCode ?? null,
-      exactWindowSuccesses: indexed.retrievalTelemetry?.exactWindowSuccesses ?? 0,
-      denseUnavailable: indexed.retrievalTelemetry?.denseUnavailable ?? false,
-      fusionOutcome: indexed.sources.length > 0 && live.sources.length > 0
-        ? "mixed"
-        : live.sources.length > 0 ? "live" : indexed.sources.length > 0 ? "indexed" : "none",
+      indexedHitCount: 0,
+      liveHitCount: 0,
+      queriesRun: 0,
+      retrievedCandidateCount: 0,
+      rerankCandidateCount: 0,
+      rerankedCandidateCount: 0,
+      rerankingOutcome: "failed_closed",
+      rerankingFailureCode: "HISTORICAL_INDEXED_COVERAGE_UNAVAILABLE",
+      exactWindowSuccesses: 0,
+      denseUnavailable: false,
+      indexedAvailability: "unavailable",
+      fusionOutcome: "none",
     },
   };
 }
 
-async function queueValidatedLiveSources(
-  env: CorpusRuntimeEnv,
-  result: LiveLexRetrievalResult,
-  correlationId?: string,
-): Promise<void> {
-  if (
-    result.sourceValidationStatus !== "validated"
-    || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")
-  ) return;
-  await Promise.all(result.sources.map(async (source) => {
-    if (source.verificationState !== "direct_validated" || !source.sourceQuality?.passed) return;
-    try {
-      await enqueueOfficialLexCorpusDocument(env, {
-        sourceUrl: source.officialUrl,
-        correlationId,
-      });
-    } catch {
-      // Interactive legal answers must not fail because the background corpus
-      // queue is temporarily unavailable. No question or source text is logged.
+function unavailableTargetCeilingCoverage(now: Date): LegalChatSourceRetrieval {
+  const checkedAt = now.toISOString();
+  return {
+    sources: [],
+    freshness: legalDatabaseFreshnessFromAsOf(checkedAt, now),
+    legalDatabaseAsOf: checkedAt,
+    sourceAccessMode: "approved_package",
+    sourcesRetrievedAt: null,
+    sourceValidationStatus: "unavailable",
+    errors: [{ code: "TARGET_EVIDENCE_CEILING_EXCEEDED" }],
+    evidence: [],
+    coverageStatus: "no_coverage",
+    retrievalTelemetry: {
+      indexedHitCount: 0,
+      liveHitCount: 0,
+      queriesRun: 0,
+      retrievedCandidateCount: 0,
+      rerankCandidateCount: 0,
+      rerankedCandidateCount: 0,
+      rerankingOutcome: "failed_closed",
+      rerankingFailureCode: "TARGET_EVIDENCE_CEILING_EXCEEDED",
+      exactWindowSuccesses: 0,
+      denseUnavailable: false,
+      indexedAvailability: "available",
+      fusionOutcome: "none",
+    },
+  };
+}
+
+function citationArticle(label: string): string | null {
+  return label.match(/(?:article|статья|ст\.?|modda|модда)\s*(\d+(?:[.-]\d+)?)/iu)?.[1] ?? null;
+}
+
+function targetAnswerDetails(result: TargetLegalAnswerResult) {
+  if (result.kind === "legal_answer" || result.kind === "conditional_answer") {
+    return {
+      statements: result.whatTheLawSays.map((statement) => ({
+        statement,
+        temporalEndpoint: result.temporalEndpoint,
+      })),
+      formulationsUsed: result.formulationsUsed,
+    };
+  }
+  if (result.kind === "comparison_answer") {
+    return {
+      statements: [
+        ...result.left.whatTheLawSays.map((statement) => ({
+          statement,
+          temporalEndpoint: result.left.temporalEndpoint,
+        })),
+        ...result.right.whatTheLawSays.map((statement) => ({
+          statement,
+          temporalEndpoint: result.right.temporalEndpoint,
+        })),
+      ],
+      formulationsUsed: result.endpointFormulationSearches,
+    };
+  }
+  return null;
+}
+
+function uniqueTargetStatements(
+  answer: NonNullable<ReturnType<typeof targetAnswerDetails>>,
+) {
+  const unique = new Map<string, (typeof answer.statements)[number]>();
+  for (const entry of answer.statements) {
+    const endpointKey = entry.temporalEndpoint.kind === "timestamp"
+      ? entry.temporalEndpoint.instant
+      : "current";
+    const key = `${entry.statement.provisionRenditionId}:${endpointKey}`;
+    if (!unique.has(key)) {
+      unique.set(key, entry);
     }
+  }
+  return [...unique.values()];
+}
+
+async function sha256Text(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function withinSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    const aborted = () => {
+      signal.removeEventListener("abort", aborted);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", aborted, { once: true });
+    promise.then((value) => {
+      signal.removeEventListener("abort", aborted);
+      resolve(value);
+    }, (error) => {
+      signal.removeEventListener("abort", aborted);
+      reject(error);
+    });
+  });
+}
+
+async function withTargetCoverage(
+  result: TargetLegalAnswerResult,
+  locale: "ru" | "uz",
+  now: Date,
+): Promise<LegalChatSourceRetrieval | null> {
+  const answer = targetAnswerDetails(result);
+  if (!answer) return null;
+  const checkedAt = now.toISOString();
+  const statements = uniqueTargetStatements(answer);
+  if (statements.length > 12) return unavailableTargetCeilingCoverage(now);
+  const sources = await Promise.all(statements.map(async (
+    { statement, temporalEndpoint },
+  ): Promise<LegalSourceContext> => {
+    const historicalInstant = temporalEndpoint.kind === "timestamp"
+      ? temporalEndpoint.instant
+      : null;
+    const citation = statement.officialCitations[0]!;
+    const endpointKey = historicalInstant ?? "current";
+    const idHash = await sha256Text(`${statement.provisionRenditionId}:${endpointKey}`);
+    const id = `target:${idHash.slice(0, 48)}`;
+    const textSha256 = await sha256Text(statement.controllingQuotation);
+    return {
+        id,
+        actTitle: citation.label.split(" — ")[0]?.trim() || citation.label,
+        actIdentifier: statement.provisionConceptId,
+        officialUrl: citation.url,
+        revisionDate: historicalInstant,
+        lastCheckedAt: checkedAt,
+        locale,
+        publishedAt: null,
+        sourceType: "lex",
+        status: "verified",
+        verificationState: "verified",
+        verifiedAt: checkedAt,
+        contentSha256: statement.evidenceSha256,
+        article: citationArticle(citation.label),
+        excerpt: statement.controllingQuotation.slice(0, 1_200),
+        effectiveDate: historicalInstant,
+        applicabilityStatus: historicalInstant ? "historical" : "current",
+        sourceClass: "OFFICIAL_LEGISLATION",
+        spans: [{
+          id,
+          article: citationArticle(citation.label),
+          paragraph: null,
+          text: statement.controllingQuotation,
+          textSha256,
+          quality: "high",
+        }],
+        sourceQuality: {
+          passed: true,
+          title: true,
+          sufficientText: true,
+          clean: true,
+          locale: true,
+          canonicalUrl: true,
+          structured: true,
+        },
+    };
   }));
+  if (sources.length === 0) return null;
+  const freshness = legalDatabaseFreshnessFromAsOf(checkedAt, now);
+  return {
+    sources,
+    freshness,
+    legalDatabaseAsOf: freshness.asOf,
+    sourceAccessMode: "approved_package",
+    sourcesRetrievedAt: checkedAt,
+    sourceValidationStatus: "validated",
+    errors: [],
+    evidence: sources.map((source) => ({
+      sourceId: source.id,
+      sourceKind: "lex",
+      canonicalUrl: source.officialUrl,
+      contentSha256: source.contentSha256,
+      retrievedAt: checkedAt,
+      validatedAt: checkedAt,
+      validationStatus: "validated",
+    })),
+    coverageStatus: "good_coverage",
+    retrievalTelemetry: {
+      indexedHitCount: sources.length,
+      liveHitCount: 0,
+      queriesRun: answer.formulationsUsed,
+      retrievedCandidateCount: sources.length,
+      rerankCandidateCount: 0,
+      rerankedCandidateCount: 0,
+      rerankingOutcome: "not_configured",
+      rerankingFailureCode: null,
+      exactWindowSuccesses: sources.length,
+      denseUnavailable: false,
+      indexedAvailability: "available",
+      indexVersion: "r2-native-accepted",
+      rerankerVersion: "target-provision-selector",
+      fusionOutcome: "indexed",
+    },
+  };
 }
 
 /**
- * Keeps the current direct Lex flow as the exact feature-off fallback. When
- * enabled, only good immutable indexed coverage stops the ladder. Partial,
- * weak, or empty coverage continues to the existing live validator and queues
- * only those validated URLs.
+ * Retrieves hash-verified evidence through the R2-native sparse+dense target
+ * service. Current requests continue to direct Lex when indexed evidence is
+ * unavailable or insufficient; historical requests fail closed because live
+ * retrieval is not applicability-aware. The retired D1/Qdrant protocol is absent.
  */
 export async function retrieveCorpusAwareLegalSources(input: {
-  env: CorpusRuntimeEnv;
   query: string;
   locale: "ru" | "uz";
-  indexQueries?: readonly string[] | Promise<readonly string[]>;
-  rerankingQuestion?: string | Promise<string>;
-  requiredConcepts?: readonly JuroLegalRequiredConcept[] | Promise<readonly JuroLegalRequiredConcept[]>;
+  targetService?: Fetcher;
+  targetEnvironment?: "development" | "staging" | "production";
+  targetQuestionId?: string;
+  contextualQuestion?: string | Promise<string>;
+  applicableAt?: string;
   lexSearchQueries?: readonly string[] | Promise<readonly string[]>;
   limit?: number;
   signal?: AbortSignal;
   budgetMs?: number;
-  scope?: LegalCorpusSearchScope;
-  correlationId?: string;
-  now?: Date;
+  targetBudgetMs?: number;
   discoverOfficialUrls?: LiveSearchInput["discoverOfficialUrls"];
   liveSearch?: typeof retrieveLiveLexSources;
   onLiveSearchStarted?: () => void | Promise<void>;
-  rerankCandidates?: JuroLegalCandidateReranker;
+  now?: Date;
 }): Promise<LegalChatSourceRetrieval> {
+  input.signal?.throwIfAborted();
+  const retrievalStartedAt = performance.now();
+  let targetTelemetry: TargetAttemptTelemetry | undefined;
+  if (input.targetService && input.targetEnvironment && input.targetQuestionId) {
+    const contextualPlanningStartedAt = performance.now();
+    const contextualPromise = Promise.resolve(input.contextualQuestion).catch(() => undefined);
+    const contextualQuestion = input.signal
+      ? await withinSignal(contextualPromise, input.signal)
+      : await contextualPromise;
+    input.signal?.throwIfAborted();
+    const contextualPlanningLatencyMs = Math.max(0, performance.now() - contextualPlanningStartedAt);
+    const remainingBudgetMs = Math.max(
+      1,
+      Math.floor((input.budgetMs ?? 12_000) - (performance.now() - retrievalStartedAt)),
+    );
+    const targetTimeoutMs = Math.max(1, Math.min(
+      input.targetBudgetMs ?? remainingBudgetMs,
+      remainingBudgetMs,
+    ));
+    const targetController = new AbortController();
+    const abortFromCaller = () => targetController.abort(input.signal?.reason);
+    input.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    const targetTimer = setTimeout(() => targetController.abort(
+      new DOMException("Target retrieval deadline exceeded", "TimeoutError"),
+    ), targetTimeoutMs);
+    const targetStartedAt = performance.now();
+    try {
+      const target = await withinSignal(createTargetLegalAnswerClient({
+          service: input.targetService,
+          environment: input.targetEnvironment,
+          signal: targetController.signal,
+        }).answer({
+          id: input.targetQuestionId,
+          question: input.query,
+          contextualQuestion,
+          applicableAt: input.applicableAt,
+        }), targetController.signal);
+      const indexed = await withTargetCoverage(target, input.locale, input.now ?? new Date());
+      if (indexed) {
+        indexed.retrievalTelemetry = {
+          ...indexed.retrievalTelemetry!,
+          targetOutcome: "selected",
+          targetFailureCode: null,
+          targetLatencyMs: Math.max(0, performance.now() - targetStartedAt),
+          contextualPlanningLatencyMs,
+          targetBudgetMs: targetTimeoutMs,
+        };
+        return indexed;
+      }
+      targetTelemetry = {
+        targetOutcome: "unavailable",
+        targetFailureCode: "TARGET_SOURCE_UNAVAILABLE",
+        targetLatencyMs: Math.max(0, performance.now() - targetStartedAt),
+        contextualPlanningLatencyMs,
+        targetBudgetMs: targetTimeoutMs,
+      };
+    } catch (error) {
+      if (input.signal?.aborted) throw error;
+      const timedOut = targetController.signal.aborted;
+      targetTelemetry = {
+        targetOutcome: timedOut ? "timed_out" : "failed",
+        targetFailureCode: timedOut ? "TARGET_RETRIEVAL_TIMEOUT" : "TARGET_RETRIEVAL_FAILED",
+        targetLatencyMs: Math.max(0, performance.now() - targetStartedAt),
+        contextualPlanningLatencyMs,
+        targetBudgetMs: targetTimeoutMs,
+      };
+    } finally {
+      clearTimeout(targetTimer);
+      input.signal?.removeEventListener("abort", abortFromCaller);
+    }
+  }
+  if (input.applicableAt) {
+    const historical = unavailableHistoricalCoverage(input.applicableAt, input.now ?? new Date());
+    historical.retrievalTelemetry = {
+      ...historical.retrievalTelemetry!,
+      ...targetTelemetry,
+    };
+    return historical;
+  }
+  await input.onLiveSearchStarted?.();
   const liveSearch = input.liveSearch ?? retrieveLiveLexSources;
-  const resolvedLiveInput = (): LiveSearchInput => ({
+  const result = await liveSearch({
     query: input.query,
     locale: input.locale,
     limit: input.limit,
     signal: input.signal,
-    budgetMs: input.budgetMs,
+    budgetMs: input.budgetMs === undefined
+      ? undefined
+      : Math.max(1, Math.floor(input.budgetMs - (performance.now() - retrievalStartedAt))),
     searchQueries: Promise.resolve(input.lexSearchQueries ?? []).catch(() => []),
     discoverOfficialUrls: input.discoverOfficialUrls,
   });
-  if (!featureEnabled(input.env, "LEGAL_CORPUS_ENABLED")) {
-    await input.onLiveSearchStarted?.();
-    return withLiveCoverage(await liveSearch(resolvedLiveInput()), input.query, input.locale);
-  }
-
-  let indexed: JuroLegalResearchHit[] = [];
-  let indexedMetrics = {
-    queriesRun: 0,
-    retrievedCandidateCount: 0,
-    rerankCandidateCount: 0,
-    rerankedCandidateCount: 0,
-    rerankingOutcome: "not_configured" as JuroLegalResearchResult["rerankingOutcome"],
-    rerankingFailureCode: null as string | null,
-    exactWindowSuccesses: 0,
-    denseUnavailable: false,
-  };
-  try {
-    const remoteReadRequested = input.env.LEGAL_CORPUS_REMOTE_READ_ENABLED === "true";
-    if (remoteReadRequested && (
-      input.env.APP_ENV !== "development"
-      || (!input.env.LEGAL_CORPUS_READ_DB && !input.env.LEGAL_CORPUS_READ_SERVICE)
-    )) {
-      throw new TypeError("LEGAL_CORPUS_REMOTE_READ_UNAVAILABLE");
-    }
-    const remoteReadDatabase = remoteReadRequested && input.env.LEGAL_CORPUS_READ_DB
-      ? createReadOnlyLegalCorpusDatabase(input.env.LEGAL_CORPUS_READ_DB)
-      : undefined;
-    const readTools = remoteReadRequested
-      && !remoteReadDatabase
-      && input.env.LEGAL_CORPUS_READ_SERVICE
-      ? createJuroLegalCorpusReadServiceTools({
-        service: input.env.LEGAL_CORPUS_READ_SERVICE,
-        signal: input.signal,
-      })
-      : undefined;
-    const denseSearch = !remoteReadRequested && input.env.APP_ENV
-      ? createQdrantDenseSearch({
-        ...input.env,
-        APP_ENV: input.env.APP_ENV,
-        DB: input.env.DB,
-      })
-      : undefined;
-    const research = await runJuroLegalResearchLoop({
-      db: remoteReadDatabase ?? input.env.DB,
-      originalQuery: input.query,
-      generatedQueries: input.indexQueries,
-      rerankingQuestion: input.rerankingQuestion,
-      requiredConcepts: input.requiredConcepts,
-      locale: input.locale,
-      scope: input.scope,
-      limit: Math.max(input.limit ?? 3, 8),
-      denseSearch,
-      readTools,
-      rerankCandidates: input.rerankCandidates,
-      signal: input.signal,
-    });
-    indexed = research.hits;
-    indexedMetrics = {
-      queriesRun: research.queriesRun,
-      retrievedCandidateCount: research.retrievedCandidateCount,
-      rerankCandidateCount: research.rerankCandidateCount,
-      rerankedCandidateCount: research.rerankedCandidateCount,
-      rerankingOutcome: research.rerankingOutcome,
-      rerankingFailureCode: research.rerankingFailureCode,
-      exactWindowSuccesses: research.exactWindowSuccesses,
-      denseUnavailable: research.denseUnavailable,
-    };
-  } catch (error) {
-    if (input.signal?.aborted) input.signal.throwIfAborted();
-    if (error instanceof Error && error.name === "AbortError") throw error;
-    indexed = [];
-  }
-  const coverage = assessLegalCorpusCoverage({
-    query: input.query,
-    preferredLanguage: input.locale === "ru" ? "ru" : undefined,
-    sources: indexed.map((hit) => hit.passage),
-  });
-  const indexedPacket = indexedRetrieval(indexed, input.now ?? new Date(), coverage, indexedMetrics);
-  const hasGoodIndexedCoverage = indexedPacket.sources.length > 0
-    && coverage === "good_coverage";
-  const liveEnabled = featureEnabled(input.env, "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED");
-  const useIndexed = hasGoodIndexedCoverage
-    && (indexedPacket.freshness.status === "fresh" || !liveEnabled);
-
-  // The existing direct Lex fallback resolves the current page. It must not
-  // be presented as point-in-time evidence when an explicit historical date
-  // was requested. Until a matching ONDATE packet is indexed, fail closed.
-  if (input.scope?.asOfDate) {
-    return indexedPacket;
-  }
-
-  if (featureEnabled(input.env, "LEGAL_CORPUS_SHADOW_MODE")) {
-    await input.onLiveSearchStarted?.();
-    const live = await liveSearch(resolvedLiveInput());
-    await queueValidatedLiveSources(input.env, live, input.correlationId);
-    return withLiveCoverage(live, input.query, input.locale);
-  }
-  if (useIndexed) return indexedPacket;
-  if (!liveEnabled) {
-    return indexedPacket;
-  }
-  await input.onLiveSearchStarted?.();
-  try {
-    const live = await liveSearch(resolvedLiveInput());
-    await queueValidatedLiveSources(input.env, live, input.correlationId);
-    return mergeIndexedAndLive(
-      indexedPacket,
-      withLiveCoverage(live, input.query, input.locale),
-      input.query,
-      input.locale,
-    );
-  } catch (error) {
-    if (input.signal?.aborted) input.signal.throwIfAborted();
-    if (error instanceof Error && error.name === "AbortError") throw error;
-    return indexedPacket;
-  }
+  return withLiveCoverage(result, input.query, targetTelemetry);
 }

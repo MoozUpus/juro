@@ -163,7 +163,7 @@ function citationText(source: LegalAnswerViewSource, locale: PlatformLocale): st
   const act = source.actTitle
     .replace(/Республики Узбекистан/giu, { ru: "РУз", uz: "O‘zR", en: "Uzbekistan" }[locale])
     .replace(/O‘zbekiston Respublikasi/giu, { ru: "РУз", uz: "O‘zR", en: "Uzbekistan" }[locale]);
-  if (article) return locale === "ru" ? `ст. ${article} · ${act}` : locale === "uz" ? `${article}-modda · ${act}` : `Art. ${article} · ${act}`;
+  if (article) return locale === "ru" ? `Ст. ${article} — ${act}` : locale === "uz" ? `${article}-modda — ${act}` : `Art. ${article} — ${act}`;
   if (source.documentNumber) return `${act} · № ${source.documentNumber}`;
   return act;
 }
@@ -189,9 +189,8 @@ function CitationList({
     {sources.map((source) => {
       const label = citationText(source, locale);
       const href = publicSourceUrl(source);
-      if (onCitationSelect) return <button type="button" key={source.sourceId} onClick={() => onCitationSelect(source.sourceId)}>{label}</button>;
       return href
-        ? <a href={href} target="_blank" rel="noopener noreferrer" key={source.sourceId} title={copy.openSource}>{label}<ExternalLink aria-hidden="true" /></a>
+        ? <a href={href} target="_blank" rel="noopener noreferrer" key={source.sourceId} title={copy.openSource} onClick={() => onCitationSelect?.(source.sourceId)}>{label}<ExternalLink aria-hidden="true" /></a>
         : <span key={source.sourceId}>{label}</span>;
     })}
   </span>;
