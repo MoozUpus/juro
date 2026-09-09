@@ -4,6 +4,7 @@ import { callOpenAiStructured } from "../document-builder/ai/openai";
 import { runtimeEnv } from "../document-builder/storage/runtime";
 import { resolveAiRuntimeSettings } from "../ai/runtime-settings";
 import type { AiOutputLocale } from "../ai/localization";
+import type { TargetQuestionPlanningHints } from "../legal-corpus/target-retrieval";
 
 const retrievalConceptSchema = z.object({
   statement: z.string().trim().min(1).max(240),
@@ -13,7 +14,7 @@ const retrievalConceptSchema = z.object({
 const retrievalUnderstandingSchema = z.object({
   standaloneQuestion: z.string().trim().min(1).max(900),
   corpusQueries: z.array(z.string().trim().min(1).max(500)).min(1).max(3),
-  requiredConcepts: z.array(retrievalConceptSchema).max(5),
+  requiredConcepts: z.array(retrievalConceptSchema).max(6),
   lexSearchQueries: z.array(z.string().trim().min(1).max(240)).min(1).max(4),
   webSearchQuery: z.string().trim().min(1).max(500),
 }).strict();
@@ -28,6 +29,7 @@ const retrievalPlannerSchema = z.object({
   entitlementOrDefinition: z.string().trim().min(1).max(180),
   preservationOrOngoingRights: z.string().trim().min(1).max(180),
   requestedActionGroundsExceptions: z.string().trim().min(1).max(180),
+  procedureRemediesConsequences: z.string().trim().min(1).max(180),
 }).strict();
 
 const retrievalPlannerProviderSchema = z.object({
@@ -37,6 +39,7 @@ const retrievalPlannerProviderSchema = z.object({
   entitlementOrDefinition: z.string(),
   preservationOrOngoingRights: z.string(),
   requestedActionGroundsExceptions: z.string(),
+  procedureRemediesConsequences: z.string(),
 }).strict();
 
 const retrievalUnderstandingJsonSchema = z.toJSONSchema(retrievalPlannerSchema, {
@@ -61,6 +64,31 @@ export type LegalRetrievalUnderstandingTelemetry = {
   inputTokens: number;
   outputTokens: number;
 };
+
+/** Projects the already-paid semantic planning call into the private corpus
+ * contract. Fixed slot semantics provide priorities; no legal rule, act, or
+ * article is inferred here. */
+export function targetQuestionPlanningHints(
+  understanding: LegalRetrievalUnderstanding,
+  locale: AiOutputLocale,
+): TargetQuestionPlanningHints {
+  const concepts = understanding.requiredConcepts;
+  const requirements = concepts.map((concept, index) => ({
+    statement: concept.statement,
+    priority: ([0, 1, 4].includes(index) ? "core" : "supporting") as "core" | "supporting",
+  }));
+  const fallbackStatement = understanding.standaloneQuestion.slice(0, 240);
+  return {
+    answerLanguage: locale,
+    standaloneQuestion: understanding.standaloneQuestion,
+    requirements: requirements.length > 0
+      ? requirements
+      : [{ statement: fallbackStatement, priority: "core" }],
+    formulations: concepts.length > 0
+      ? concepts.map((concept) => concept.alternatives[0] ?? concept.statement)
+      : understanding.corpusQueries,
+  };
+}
 
 function normalize(value: string, maxLength: number): string {
   return value.normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, maxLength);
@@ -97,7 +125,7 @@ export function normalizeLegalRetrievalUnderstanding(
   const corpusQueries = generatedCorpusQueries.length > 0
     ? generatedCorpusQueries
     : query ? [query] : [];
-  const requiredConcepts = value.requiredConcepts.slice(0, 5).flatMap((concept) => {
+  const requiredConcepts = value.requiredConcepts.slice(0, 6).flatMap((concept) => {
     const alternatives = [...new Set(concept.alternatives
       .map((candidate) => normalize(candidate, 160))
       .filter(Boolean))].slice(0, 5);
@@ -129,7 +157,7 @@ export async function understandLegalRetrievalQuery(input: {
   locale: AiOutputLocale;
   requestId: string;
   safetyIdentifier: string;
-  conversationHistory?: readonly { user: string; assistant: string }[];
+  priorUserQuestions?: readonly string[];
   signal?: AbortSignal;
   timeoutMs?: number;
   maxAttempts?: 1 | 2;
@@ -148,7 +176,7 @@ export async function understandLegalRetrievalQuery(input: {
     instructions: [
       "Create a compact retrieval plan for an Uzbekistan legal question in the user's language.",
       "Resolve conversation references in standaloneQuestion while preserving actors, action, status, circumstances, date, and outcome.",
-      "Fill the five named concept slots with concise, independently testable phrases in formal statutory vocabulary suitable for hybrid retrieval. primaryStatus and alternativeStatus separate plausible meanings hidden by everyday wording; entitlementOrDefinition covers another governing status or entitlement; preservationOrOngoingRights names continuation of any relationship, status, position, entitlement, payment, or other ongoing right that the question puts at issue; requestedActionGroundsExceptions uses the formal legal name of the requested action and includes relevant actor statuses, grounds, exceptions, or transitions. Carry the primary and alternative statuses into the last two slots when they change the applicable rule.",
+      "Fill the six named concept slots with concise, independently testable phrases in formal statutory vocabulary suitable for hybrid retrieval. primaryStatus and alternativeStatus separate plausible meanings hidden by everyday wording; entitlementOrDefinition covers another governing status or entitlement; preservationOrOngoingRights names continuation of any relationship, status, position, entitlement, payment, or other ongoing right that the question puts at issue; requestedActionGroundsExceptions uses the formal legal name of the requested action and includes relevant actor statuses, grounds, exceptions, or transitions; procedureRemediesConsequences covers any relevant procedure, challenge, remedy, sanction, liability, or other legal consequence. Carry the primary and alternative statuses into the last three slots when they change the applicable rule. If a slot is not independently relevant, restate the closest material requirement without inventing a rule.",
       "Cover ambiguity conditionally without choosing an unsupported interpretation.",
       "For Uzbek questions, write each concept slot as a concise Uzbek phrase followed by its Russian statutory equivalent after ' / '; the indexed official act may currently exist only in Russian. Keep standaloneQuestion in the user's language.",
       "Do not invent an act, article, fact, quotation, or legal outcome.",
@@ -160,10 +188,8 @@ export async function understandLegalRetrievalQuery(input: {
       query,
       locale: input.locale,
       jurisdiction: "UZ",
-      conversationHistory: (input.conversationHistory ?? []).slice(-6).map((turn) => ({
-        user: normalize(turn.user, 700),
-        assistant: normalize(turn.assistant, 900),
-      })),
+      priorUserQuestions: (input.priorUserQuestions ?? []).slice(-6)
+        .map((question) => normalize(question, 700)),
     },
     model: env.OPENAI_RETRIEVAL_MODEL?.trim() || settings.openaiChatModel,
     maxAttempts: input.maxAttempts ?? 1,
@@ -171,7 +197,7 @@ export async function understandLegalRetrievalQuery(input: {
     totalResponseTimeoutMs: timeoutMs,
     requestId: input.requestId,
     safetyIdentifier: input.safetyIdentifier,
-    maxOutputTokens: 420,
+    maxOutputTokens: 480,
     signal: input.signal,
   });
 
@@ -190,6 +216,7 @@ export async function understandLegalRetrievalQuery(input: {
     result.data.entitlementOrDefinition,
     result.data.preservationOrOngoingRights,
     result.data.requestedActionGroundsExceptions,
+    result.data.procedureRemediesConsequences,
   ];
   const normalizedConcepts = plannerConcepts.map((concept) => ({
     statement: concept,

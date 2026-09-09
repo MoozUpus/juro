@@ -112,9 +112,9 @@ export const candidateSchema = z.object({
   itemKey: z.string().min(1).max(700),
   instanceId: candidateInstanceIdSchema,
   shardId: candidateShardIdSchema,
-  formulationId: legalIdentifierSchema,
+  formulationIds: z.array(legalIdentifierSchema).min(1).max(6),
   readingIds: z.array(legalIdentifierSchema).min(1),
-  requirementIds: z.array(legalIdentifierSchema).min(1),
+  retrievalRequirementIds: z.array(legalIdentifierSchema).min(1),
   vectorRank: z.number().int().positive(),
   vectorScore: z.number().finite(),
   keywordRank: z.number().int().positive(),
@@ -158,7 +158,7 @@ export interface LegalCandidateIndex {
 }
 
 type NormalizedCandidateInput = Omit<z.input<typeof candidateSchema>,
-  "formulationId" | "readingIds" | "requirementIds">;
+  "formulationIds" | "readingIds" | "retrievalRequirementIds">;
 
 function unavailable(
   release: PinnedCandidateRelease,
@@ -184,9 +184,9 @@ function normalizeCandidates(input: Array<NormalizedCandidateInput & {
       itemKey: raw.itemKey,
       instanceId: raw.instanceId,
       shardId: raw.shardId,
-      formulationId: raw.formulation.id,
+      formulationIds: [raw.formulation.id],
       readingIds: [...new Set(raw.formulation.readingIds)].sort(),
-      requirementIds: [...new Set(raw.formulation.requirementIds)].sort(),
+      retrievalRequirementIds: [...new Set(raw.formulation.requirementIds)].sort(),
       vectorRank: raw.vectorRank,
       vectorScore: raw.vectorScore,
       keywordRank: raw.keywordRank,
@@ -198,19 +198,21 @@ function normalizeCandidates(input: Array<NormalizedCandidateInput & {
     if (!existing || candidate.fusionScore > existing.fusionScore) {
       byKey.set(candidate.itemKey, existing ? {
         ...candidate,
+        formulationIds: [...new Set([...existing.formulationIds, ...candidate.formulationIds])].sort(),
         readingIds: [...new Set([...existing.readingIds, ...candidate.readingIds])].sort(),
-        requirementIds: [...new Set([
-          ...existing.requirementIds,
-          ...candidate.requirementIds,
+        retrievalRequirementIds: [...new Set([
+          ...existing.retrievalRequirementIds,
+          ...candidate.retrievalRequirementIds,
         ])].sort(),
       } : candidate);
     } else if (candidate.fusionScore === existing.fusionScore) {
       byKey.set(candidate.itemKey, {
         ...existing,
+        formulationIds: [...new Set([...existing.formulationIds, ...candidate.formulationIds])].sort(),
         readingIds: [...new Set([...existing.readingIds, ...candidate.readingIds])].sort(),
-        requirementIds: [...new Set([
-          ...existing.requirementIds,
-          ...candidate.requirementIds,
+        retrievalRequirementIds: [...new Set([
+          ...existing.retrievalRequirementIds,
+          ...candidate.retrievalRequirementIds,
         ])].sort(),
       });
     }
@@ -335,6 +337,20 @@ function chunks<T>(values: readonly T[], size: number): T[][] {
   return result;
 }
 
+/** One hybrid search can represent every bounded formulation. This avoids
+ * repeatedly loading the same immutable search runtime while preserving each
+ * formulation as candidate provenance for later diagnostics. */
+export function combinedFormulationQuery(
+  formulations: readonly QuestionInterpretation["formulations"][number][],
+): string {
+  const separator = " | ";
+  const available = 900 - separator.length * Math.max(0, formulations.length - 1);
+  const perFormulation = Math.max(1, Math.floor(available / formulations.length));
+  return formulations.map((formulation) => formulation.text
+    .normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, perFormulation))
+    .join(separator).slice(0, 900);
+}
+
 export function createProviderCandidateIndex(
   provider: LegalCandidateProvider,
   options: CandidateIndexOptions,
@@ -393,15 +409,14 @@ export function createProviderCandidateIndex(
         }
 
         const waves = chunks(requiredInstanceIds, 10);
-        const searches = await Promise.all(interpretation.formulations.flatMap((formulation) =>
-          waves.map(async (instanceIds) => ({
-            formulation,
+        const searches = await Promise.all(waves.map(async (instanceIds) => ({
+            formulations: interpretation.formulations,
             instanceIds,
             response: await provider.search({
               releaseId: release.id,
               currentAt: context?.currentAt ?? new Date(startedAt).toISOString(),
               instanceIds,
-              query: formulation.text,
+              query: combinedFormulationQuery(interpretation.formulations),
               endpoint,
               maxResults: 50,
               vectorThreshold: 0,
@@ -409,7 +424,7 @@ export function createProviderCandidateIndex(
               observedTokenUsage += response.tokenUsage ?? 0;
               return response;
             }),
-          }))));
+          })));
         const normalized: Array<NormalizedCandidateInput & {
           formulation: QuestionInterpretation["formulations"][number];
         }> = [];
@@ -468,20 +483,22 @@ export function createProviderCandidateIndex(
                 instanceId: hitInstanceId.data,
               }]);
             }
-            normalized.push({
-              itemKey: hit.itemKey,
-              instanceId: hitInstanceId.data,
-              shardId,
-              vectorRank: hit.vectorRank,
-              vectorScore: hit.vectorScore,
-              keywordRank: hit.keywordRank,
-              keywordScore: hit.keywordScore,
-              fusionScore: waves.length > 1
-                ? 1 / (60 + hit.vectorRank) + 1 / (60 + hit.keywordRank)
-                : hit.fusionScore,
-              ...(hit.providerMetadata ? { providerMetadata: hit.providerMetadata } : {}),
-              formulation: search.formulation,
-            });
+            for (const formulation of search.formulations) {
+              normalized.push({
+                itemKey: hit.itemKey,
+                instanceId: hitInstanceId.data,
+                shardId,
+                vectorRank: hit.vectorRank,
+                vectorScore: hit.vectorScore,
+                keywordRank: hit.keywordRank,
+                keywordScore: hit.keywordScore,
+                fusionScore: waves.length > 1
+                  ? 1 / (60 + hit.vectorRank) + 1 / (60 + hit.keywordRank)
+                  : hit.fusionScore,
+                ...(hit.providerMetadata ? { providerMetadata: hit.providerMetadata } : {}),
+                formulation,
+              });
+            }
           }
         }
         const packet = packetSchema.parse({

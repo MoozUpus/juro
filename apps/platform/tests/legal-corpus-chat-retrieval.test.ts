@@ -79,6 +79,7 @@ test("chat retrieval uses the R2-native target service before live Lex", async (
         id: "question-1",
         question: "статья 9",
         contextualQuestion: "Какой срок предусмотрен статьёй 9?",
+        priorUserQuestions: ["Как оформляется трудовой договор?"],
       });
       return Response.json({
         result: {
@@ -124,6 +125,7 @@ test("chat retrieval uses the R2-native target service before live Lex", async (
     targetEnvironment: "staging",
     targetQuestionId: "question-1",
     contextualQuestion: "Какой срок предусмотрен статьёй 9?",
+    priorUserQuestions: ["Как оформляется трудовой договор?"],
     liveSearch: async () => {
       calls += 1;
       return liveResult();

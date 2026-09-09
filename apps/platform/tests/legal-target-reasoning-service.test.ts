@@ -32,7 +32,7 @@ test("question interpretation uses the strict provider schema subset and normali
     originalLanguage: "ru",
     answerLanguage: "ru",
     readings: [{ id: "reading", statement: "Трудовой договор",
-      requirements: [{ id: "requirement", statement: "Порядок заключения" }] }],
+      requirements: [{ id: "requirement", statement: "Порядок заключения", priority: "core" }] }],
     formulations: [{ id: "formulation", text: "порядок заключения трудового договора",
       legalTitleSpans: [], privateNameSpans: [], readingIds: ["reading"],
       requirementIds: ["requirement"], kind: "legal_register" }],
@@ -48,7 +48,7 @@ test("question interpretation canonicalizes provider UTC instants that omit the 
     originalLanguage: "en",
     answerLanguage: "en",
     readings: [{ id: "reading", statement: "Employment contract rules",
-      requirements: [{ id: "requirement", statement: "Governing rules" }] }],
+      requirements: [{ id: "requirement", statement: "Governing rules", priority: "core" }] }],
     formulations: [{ id: "formulation", text: "employment contract rules",
       legalTitleSpans: [], privateNameSpans: [], readingIds: ["reading"],
       requirementIds: ["requirement"], kind: "legal_register" }],
@@ -145,39 +145,51 @@ const plan = {
   missingCaseFacts: [],
 };
 
-function revalidatedCandidate(itemKey: string, requirementIds: string[], score: number) {
+function selectionCandidate(itemKey: string, retrievalRequirementIds: string[], score: number) {
   return {
     candidate: {
-      itemKey,
-      instanceId: "instance-one",
-      shardId: "shard-one",
-      formulationId: "formulation-one",
-      readingIds: ["reading-one", "reading-two"],
-      requirementIds,
-      vectorRank: 1,
-      vectorScore: score,
-      keywordRank: 1,
-      keywordScore: score,
-      fusionScore: score,
+      candidate: {
+        itemKey,
+        instanceId: "instance-one",
+        shardId: "shard-one",
+        formulationIds: ["formulation-one"],
+        readingIds: ["reading-one", "reading-two"],
+        retrievalRequirementIds,
+        vectorRank: 1,
+        vectorScore: score,
+        keywordRank: 1,
+        keywordScore: score,
+        fusionScore: score,
+      },
+      canonicalChunkId: `chunk-${itemKey}`,
+      provisionRenditionId: `rendition-${itemKey}`,
+      textRevisionId: `revision-${itemKey}`,
+      provisionConceptId: `concept-${itemKey}`,
+      languageFamily: "en" as const,
+      textualAuthority: "controlling" as const,
     },
-    canonicalChunkId: `chunk-${itemKey}`,
-    provisionRenditionId: `rendition-${itemKey}`,
-    textRevisionId: `revision-${itemKey}`,
-    provisionConceptId: `concept-${itemKey}`,
-    languageFamily: "en" as const,
-    textualAuthority: "controlling" as const,
+    citationLabel: `Act — Article ${itemKey}`,
+    provisionText: `Verified provision text for ${itemKey}`,
   };
 }
 
-test("provision selection covers every requirement with revalidated candidates or requests one repair", () => {
-  const selected = selectTargetProvisions({
+test("provision selection uses assessed support rather than retrieval provenance", () => {
+  const selectionInput = {
     plan,
     candidates: [
-      revalidatedCandidate("item-one", ["requirement-one"], 0.9),
-      revalidatedCandidate("item-two", ["requirement-two"], 0.8),
+      selectionCandidate("irrelevant-high", ["requirement-one", "requirement-two"], 0.99),
+      selectionCandidate("item-one", ["requirement-one"], 0.9),
+      selectionCandidate("item-two", ["requirement-two"], 0.8),
     ],
     repairAttempted: false,
-  });
+  };
+  const selected = selectTargetProvisions(selectionInput, { mappings: [{
+    itemKey: "irrelevant-high", supportedRequirementIds: [],
+  }, {
+    itemKey: "item-one", supportedRequirementIds: ["requirement-one"],
+  }, {
+    itemKey: "item-two", supportedRequirementIds: ["requirement-two"],
+  }], additionalRequirements: [] });
   assert.equal(selected.outcome, "selected");
   if (selected.outcome === "selected") {
     assert.deepEqual(selected.propositions.map(({ requirementId }) => requirementId), [
@@ -188,12 +200,76 @@ test("provision selection covers every requirement with revalidated candidates o
 
   const repair = selectTargetProvisions({
     plan,
-    candidates: [revalidatedCandidate("item-one", ["requirement-one"], 0.9)],
+    candidates: [selectionCandidate("item-one", ["requirement-one"], 0.9)],
     repairAttempted: false,
-  });
+  }, { mappings: [{ itemKey: "item-one", supportedRequirementIds: ["requirement-one"] }], additionalRequirements: [] });
   assert.equal(repair.outcome, "repair");
   if (repair.outcome === "repair") {
     assert.deepEqual(repair.repairFormulation.requirementIds, ["requirement-two"]);
+  }
+
+  const unrelated = selectTargetProvisions({
+    plan,
+    candidates: [selectionCandidate("irrelevant-high", ["requirement-one", "requirement-two"], 0.99)],
+    repairAttempted: false,
+  }, { mappings: [{ itemKey: "irrelevant-high", supportedRequirementIds: [] }], additionalRequirements: [] });
+  assert.equal(unrelated.outcome, "repair");
+  if (unrelated.outcome === "repair") {
+    assert.deepEqual(unrelated.repairFormulation.requirementIds, ["requirement-one"]);
+  }
+});
+
+test("selection preserves supported core requirements when only supporting coverage remains open", () => {
+  const partialPlan = {
+    ...plan,
+    readings: [{
+      id: "reading-one",
+      statement: "Requested legal outcome",
+      requirements: [{ id: "requirement-one", statement: "Governing rule", priority: "core" as const }, {
+        id: "requirement-remedy", statement: "Available remedy", priority: "supporting" as const,
+      }],
+    }],
+    formulations: [{
+      ...plan.formulations[0]!,
+      readingIds: ["reading-one"],
+      requirementIds: ["requirement-one", "requirement-remedy"],
+    }],
+  };
+  const result = selectTargetProvisions({
+    plan: partialPlan,
+    candidates: [selectionCandidate("item-one", ["requirement-one", "requirement-remedy"], 0.9)],
+    repairAttempted: true,
+  }, { mappings: [{ itemKey: "item-one", supportedRequirementIds: ["requirement-one"] }], additionalRequirements: [] });
+  assert.equal(result.outcome, "partial");
+  if (result.outcome === "partial") {
+    assert.deepEqual(result.uncoveredSupportingRequirementIds, ["requirement-remedy"]);
+    assert.deepEqual(result.selections[0]?.requirementIds, ["requirement-one"]);
+  }
+});
+
+test("an explicit provision reference can trigger one bounded generic repair", () => {
+  const candidate = selectionCandidate("item-one", ["requirement-one"], 0.9);
+  const result = selectTargetProvisions({
+    plan: {
+      ...plan,
+      readings: [plan.readings[0]!],
+      formulations: [plan.formulations[0]!],
+    },
+    candidates: [candidate],
+    repairAttempted: false,
+  }, {
+    mappings: [{ itemKey: "item-one", supportedRequirementIds: ["requirement-one"] }],
+    additionalRequirements: [{
+      sourceItemKey: "item-one",
+      readingId: "reading-one",
+      statement: "The expressly referenced exception must also be checked.",
+      priority: "supporting",
+    }],
+  });
+  assert.equal(result.outcome, "repair");
+  if (result.outcome === "repair") {
+    assert.equal(result.additionalRequirements?.length, 1);
+    assert.deepEqual(result.repairFormulation.requirementIds, ["related-reading-one-1"]);
   }
 });
 
@@ -201,8 +277,8 @@ test("reasoning routes require the exact private service boundary", async () => 
   const body = {
     plan,
     candidates: [
-      revalidatedCandidate("item-one", ["requirement-one"], 0.9),
-      revalidatedCandidate("item-two", ["requirement-two"], 0.8),
+      selectionCandidate("item-one", ["requirement-one"], 0.9),
+      selectionCandidate("item-two", ["requirement-two"], 0.8),
     ],
     repairAttempted: false,
   };
@@ -217,7 +293,13 @@ test("reasoning routes require the exact private service boundary", async () => 
       },
       body: JSON.stringify(body),
     },
-  ), { APP_ENV: "staging" });
+  ), { APP_ENV: "staging" }, {
+    assessSupport: async () => ({ mappings: [{
+      itemKey: "item-one", supportedRequirementIds: ["requirement-one"],
+    }, {
+      itemKey: "item-two", supportedRequirementIds: ["requirement-two"],
+    }], additionalRequirements: [] }),
+  });
   assert.equal(accepted.status, 200);
 
   const publicRequest = await handleTargetReasoningServiceRequest(new Request(

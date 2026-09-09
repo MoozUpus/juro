@@ -97,6 +97,13 @@ async function serviceJson(
   path: string,
   body: unknown,
 ): Promise<unknown> {
+  const serializedBody = JSON.stringify(body);
+  if (path === "/internal/legal-corpus/reasoning/select") {
+    console.log(JSON.stringify({
+      event: "legal_target_reasoning_requested",
+      requestBytes: new TextEncoder().encode(serializedBody).byteLength,
+    }));
+  }
   const response = await service.fetch(`http://legal-corpus.internal${path}`, {
     method: "POST",
     headers: {
@@ -104,9 +111,13 @@ async function serviceJson(
       "x-juro-service-binding": "target-retrieval-runtime-v1",
       "x-juro-legal-environment": environment,
     },
-    body: JSON.stringify(body),
+    body: serializedBody,
   });
-  if (!response.ok) throw new TypeError("TARGET_RETRIEVAL_DEPENDENCY_UNAVAILABLE");
+  if (!response.ok) {
+    const error = new TypeError("TARGET_RETRIEVAL_DEPENDENCY_UNAVAILABLE");
+    error.name = `TargetRetrievalDependency${response.status}`;
+    throw error;
+  }
   return response.json();
 }
 
@@ -470,12 +481,12 @@ function createRuntimeRetriever(
   return createTargetLegalAnswerRetriever({
     environment,
     interpreter: {
-      async interpret(question): Promise<QuestionInterpretationPlan> {
+      async interpret(input): Promise<QuestionInterpretationPlan> {
         const body = await serviceJson(
           reasoningService,
           environment,
           "/internal/legal-corpus/reasoning/interpret",
-          { question },
+          input,
         );
         const response = z.object({ result: z.unknown() }).strict().parse(body);
         return parseQuestionInterpretationPlan(response.result);

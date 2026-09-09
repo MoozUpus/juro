@@ -94,9 +94,9 @@ function candidate(key: string, formulationId: string, readingIds: string[], req
     itemKey: key,
     instanceId: "current-00",
     shardId: "current-00",
-    formulationId,
+    formulationIds: [formulationId],
     readingIds,
-    requirementIds,
+    retrievalRequirementIds: requirementIds,
     vectorRank: 1,
     vectorScore: 0.91,
     keywordRank: 1,
@@ -179,13 +179,19 @@ test("domain-general questions return hash-verified Legal Answers through the pr
         }] : [],
       };
       const key = itemKey(renditionId);
-      const index = createInMemoryCandidateIndex(async (formulation) => [{
-        ...candidate(key, formulation.id, formulation.readingIds, formulation.requirementIds),
-      }]);
+      const unavailableRenditionId = `rendition-${fixture.id}-unavailable`;
+      const unavailableKey = itemKey(unavailableRenditionId);
+      const index = createInMemoryCandidateIndex(async (formulation) => [
+        ...(fixture.id === "employment" ? [{
+          ...candidate(unavailableKey, formulation.id, formulation.readingIds, formulation.requirementIds),
+        }] : []),
+        { ...candidate(key, formulation.id, formulation.readingIds, formulation.requirementIds) },
+      ]);
       const retriever = createTargetLegalAnswerRetriever({
         environment: "development",
-        interpreter: { interpret: async (question) => {
-          assert.equal(question, `Resolved context: ${fixture.question}`);
+        interpreter: { interpret: async (input) => {
+          assert.equal(input.question, `Resolved context: ${fixture.question}`);
+          assert.deepEqual(input.priorUserQuestions, []);
           return plan;
         } },
         releaseResolver: { resolve: async () => release },
@@ -193,26 +199,30 @@ test("domain-general questions return hash-verified Legal Answers through the pr
         candidateCatalog: {
           revalidate: async (packet) => packet.candidates.map((entry) => ({
             candidate: entry,
-            ...stableIdentity(renditionId),
+            ...stableIdentity(entry.itemKey === unavailableKey ? unavailableRenditionId : renditionId),
           })),
         },
         evidenceResolver: {
           resolveControlling: (id) => resolveControllingEvidence({ db: d1, bucket }, id),
         },
         provisionSelector: {
-          select: async ({ plan: interpreted, candidates }) => ({
-            outcome: "selected",
-            mainPoint: `Main Point for ${fixture.id}`,
-            propositions: interpreted.readings.flatMap((reading) => reading.requirements.map((requirement) => ({
-              requirementId: requirement.id,
-              statement: requirement.statement,
-            }))),
-            selections: [{
-              itemKey: candidates[0]!.candidate.itemKey,
-              requirementIds: [`requirement-${fixture.id}`],
-            }],
-            whatToDoNext: ["Check the material facts against the controlling provision."],
-          }),
+          select: async ({ plan: interpreted, candidates }) => {
+            assert.equal(candidates.length, 1);
+            assert.equal(candidates[0]!.candidate.provisionRenditionId, renditionId);
+            return {
+              outcome: "selected",
+              mainPoint: `Main Point for ${fixture.id}`,
+              propositions: interpreted.readings.flatMap((reading) => reading.requirements.map((requirement) => ({
+                requirementId: requirement.id,
+                statement: requirement.statement,
+              }))),
+              selections: [{
+                itemKey: candidates[0]!.candidate.candidate.itemKey,
+                requirementIds: [`requirement-${fixture.id}`],
+              }],
+              whatToDoNext: ["Check the material facts against the controlling provision."],
+            };
+          },
         },
       });
       const service = {
@@ -363,8 +373,8 @@ test("every Plausible Reading gets a formulation before repair and the six-formu
             requirementId: "requirement-b", statement: "Second rule",
           }],
           selections: candidates.map((entry) => ({
-            itemKey: entry.candidate.itemKey,
-            requirementIds: entry.candidate.itemKey === repairKey ? ["requirement-b"] : ["requirement-a"],
+            itemKey: entry.candidate.candidate.itemKey,
+            requirementIds: entry.candidate.candidate.itemKey === repairKey ? ["requirement-b"] : ["requirement-a"],
           })),
           whatToDoNext: [],
         } as const;
@@ -581,7 +591,7 @@ test("an as-of interpretation pins the history release and endpoint through cand
         mainPoint: "This is the rule at the requested instant.",
         propositions: [{ requirementId: "requirement-history", statement: "Historical rule" }],
         selections: [{
-          itemKey: candidates[0]!.candidate.itemKey,
+          itemKey: candidates[0]!.candidate.candidate.itemKey,
           requirementIds: ["requirement-history"],
         }],
         whatToDoNext: [],

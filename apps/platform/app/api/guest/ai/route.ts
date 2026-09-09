@@ -37,6 +37,7 @@ import {
 } from "../../../../lib/legal-corpus/chat-retrieval";
 import {
   fallbackLegalRetrievalUnderstanding,
+  targetQuestionPlanningHints,
   understandLegalRetrievalQuery,
 } from "../../../../lib/legal/legal-retrieval-understanding";
 import {
@@ -488,7 +489,7 @@ export async function POST(request: Request): Promise<Response> {
       fallbackFromProvider: null,
     };
     let retrievalUnderstanding = fallbackLegalRetrievalUnderstanding(effectiveQuestion);
-    const understandingStage = budget.beginStage("query_understanding", { timeoutMs: 6_200 });
+    const understandingStage = budget.beginStage("query_understanding", { timeoutMs: 9_400 });
     try {
       retrievalUnderstanding = await understandLegalRetrievalQuery({
         query: effectiveQuestion,
@@ -496,7 +497,7 @@ export async function POST(request: Request): Promise<Response> {
         requestId: `${idempotencyKey}:understanding`,
         safetyIdentifier,
         signal: understandingStage.signal,
-        timeoutMs: 6_000,
+        timeoutMs: 9_000,
         maxAttempts: 1,
       });
       understandingStage.complete();
@@ -516,6 +517,7 @@ export async function POST(request: Request): Promise<Response> {
         targetService: env.LEGAL_RETRIEVAL_SERVICE,
         targetEnvironment: legalRetrievalEnvironment(env),
         targetQuestionId: idempotencyKey,
+        targetPlanningHints: targetQuestionPlanningHints(retrievalUnderstanding, locale),
         applicableAt: applicableAt?.toISOString(),
         lexSearchQueries: retrievalUnderstanding.lexSearchQueries,
         signal: retrievalStage.signal,

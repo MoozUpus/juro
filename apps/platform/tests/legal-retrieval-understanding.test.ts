@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   normalizeLegalRetrievalUnderstanding,
+  targetQuestionPlanningHints,
 } from "../lib/legal/legal-retrieval-understanding";
 
 test("provider-sized retrieval plans are bounded without discarding semantic queries", () => {
@@ -21,7 +22,7 @@ test("provider-sized retrieval plans are bounded without discarding semantic que
 
   assert.equal(plan.corpusQueries[0], "семантическая гипотеза 0");
   assert.equal(plan.corpusQueries.length, 3);
-  assert.equal(plan.requiredConcepts.length, 5);
+  assert.equal(plan.requiredConcepts.length, 6);
   assert.ok(plan.requiredConcepts.every((concept) => concept.alternatives.length === 5));
   assert.equal(plan.lexSearchQueries.length, 4);
   assert.match(plan.standaloneQuestion, /прекращение трудового договора/u);
@@ -42,4 +43,28 @@ test("empty optional planner values degrade to the original query, not an invali
   assert.deepEqual(plan.requiredConcepts, []);
   assert.deepEqual(plan.lexSearchQueries, [originalQuery]);
   assert.equal(plan.webSearchQuery, originalQuery);
+});
+
+test("one semantic plan supplies bounded core and supporting hints to indexed retrieval", () => {
+  const understanding = normalizeLegalRetrievalUnderstanding({
+    standaloneQuestion: "Можно ли прекратить трудовой договор во время отпуска?",
+    corpusQueries: ["прекращение трудового договора"],
+    requiredConcepts: [
+      { statement: "статус отпуска", alternatives: ["статус отпуска"] },
+      { statement: "статус беременности", alternatives: ["статус беременности"] },
+      { statement: "гарантии работника", alternatives: ["гарантии работника"] },
+      { statement: "сохранение права", alternatives: ["сохранение права"] },
+      { statement: "основания и исключения прекращения", alternatives: ["основания и исключения прекращения"] },
+      { statement: "ответственность за незаконное прекращение", alternatives: ["ответственность за незаконное прекращение"] },
+    ],
+    lexSearchQueries: ["прекращение трудового договора"],
+    webSearchQuery: "увольнение в отпуске",
+  }, "Можно ли уволить работника в декрете?");
+
+  const hints = targetQuestionPlanningHints(understanding, "ru");
+  assert.deepEqual(hints.requirements.map(({ priority }) => priority), [
+    "core", "core", "supporting", "supporting", "core", "supporting",
+  ]);
+  assert.equal(hints.formulations.length, 6);
+  assert.equal(hints.standaloneQuestion, understanding.standaloneQuestion);
 });

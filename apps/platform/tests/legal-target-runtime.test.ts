@@ -62,9 +62,12 @@ test("named instruments remain searchable with custom-only release mappings", as
     const packet = await index.retrieve({ id: "interpretation", formulations: [{
       id: "formulation", text: "Labor Code termination rules", legalTitleSpans: ["Labor Code"],
       privateNameSpans: [], readingIds: ["reading"], requirementIds: ["requirement"],
+    }, {
+      id: "maternity", text: "protection during maternity leave", legalTitleSpans: [],
+      privateNameSpans: [], readingIds: ["reading"], requirementIds: ["protection"],
     }] }, { kind: "current" }, release);
     assert.equal(packet.availability, "available");
-    assert.deepEqual(searched, ["Labor Code termination rules"]);
+    assert.deepEqual(searched, ["Labor Code termination rules | protection during maternity leave"]);
     assert.deepEqual(await resolveRuntimeTrustedLegalTitles(db, release.id), ["Labor Code"]);
     sqlite.prepare("INSERT INTO legal_instruments VALUES (?,?)").run("other", "Other Code");
     assert.deepEqual(await resolveRuntimeTrustedLegalTitles(db, "legacy-release"), ["Other Code"]);
@@ -170,7 +173,7 @@ test("custom catalog rejects future and expired records even when candidate lane
   const packet = parseCandidatePacket({ availability: "available", releaseId: release.id,
     endpoint: { kind: "current" }, requiredInstanceIds: ["custom-current-staging-v1"], partialErrors: [],
     candidates: [{ itemKey: key, instanceId: "custom-current-staging-v1", shardId: "current-base-v1",
-      formulationId: "formulation", readingIds: ["reading"], requirementIds: ["requirement"],
+      formulationIds: ["formulation"], readingIds: ["reading"], retrievalRequirementIds: ["requirement"],
       vectorRank: 1, vectorScore: 1, keywordRank: 1, keywordScore: 1, fusionScore: 1 }] });
   const db = { prepare(sql: string) { return { bind(...values: string[]) {
     return { async all() { return { results: sqlite.prepare(sql).all(...values) }; } };
@@ -265,8 +268,8 @@ test("custom catalog revalidates a logical release through hash-anchored physica
   const packet = parseCandidatePacket({ availability: "available", releaseId: release.id,
     endpoint: { kind: "timestamp", instant: "2020-01-01T00:00:00.000Z" },
     requiredInstanceIds: ["custom-history-staging-v1"], partialErrors: [], candidates: [{ itemKey,
-      instanceId: "custom-history-staging-v1", shardId: "history-base-v1", formulationId: "formulation",
-      readingIds: ["reading"], requirementIds: ["requirement"], vectorRank: 1, vectorScore: 1,
+      instanceId: "custom-history-staging-v1", shardId: "history-base-v1", formulationIds: ["formulation"],
+      readingIds: ["reading"], retrievalRequirementIds: ["requirement"], vectorRank: 1, vectorScore: 1,
       keywordRank: 1, keywordScore: 1, fusionScore: 1 }] });
   const result = await createRuntimeCandidateCatalog(db, bucket as never).revalidate(packet,
     { kind: "timestamp", instant: "2020-01-01T00:00:00.000Z" }, release,

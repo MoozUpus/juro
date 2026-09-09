@@ -166,6 +166,10 @@ _Avoid_: assumption, query variant, Coverage Requirement
 A distinct legal proposition required by a Plausible Reading that must be supported or explicitly left unresolved before JURO can claim good Official Coverage.
 _Avoid_: interpretation, facet, keyword, query concept
 
+**Requirement Support**:
+The validated relationship showing that one eligible official provision supports one Coverage Requirement. Candidate retrieval for a related formulation does not establish this relationship.
+_Avoid_: query match, candidate membership, inherited requirement
+
 **Provision Set**:
 The complementary official provisions selected to satisfy the Coverage Requirements for one Legal Answer.
 _Avoid_: top results, hit list, citation count
