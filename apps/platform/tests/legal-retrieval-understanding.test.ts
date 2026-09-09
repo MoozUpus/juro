@@ -63,7 +63,7 @@ test("one semantic plan supplies bounded core and supporting hints to indexed re
 
   const hints = targetQuestionPlanningHints(understanding, "ru");
   assert.deepEqual(hints.requirements.map(({ priority }) => priority), [
-    "core", "core", "supporting", "supporting", "core", "supporting",
+    "core", "core", "core", "core", "supporting", "supporting",
   ]);
   assert.equal(hints.formulations.length, 6);
   assert.equal(hints.standaloneQuestion, understanding.standaloneQuestion);

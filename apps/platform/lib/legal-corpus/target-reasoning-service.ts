@@ -415,8 +415,12 @@ export function selectTargetProvisions(
   const missing = requirements.find((requirement) => !ranked.some((candidate) =>
     supportedByKey.get(candidate.candidate.candidate.itemKey)?.has(requirement.id)));
   if (missing) {
+    const hasDedicatedFormulation = value.plan.formulations.some((formulation) =>
+      formulation.requirementIds.length === 1
+      && formulation.requirementIds[0] === missing.id);
     if (value.repairAttempted
-      || value.plan.formulations.length >= TARGET_TOTAL_FORMULATION_LIMIT) {
+      || value.plan.formulations.length >= TARGET_TOTAL_FORMULATION_LIMIT
+      || (missing.priority === "supporting" && hasDedicatedFormulation)) {
       const missingCore = requirements.filter((requirement) => requirement.priority !== "supporting"
         && !ranked.some((candidate) => supportedByKey.get(
           candidate.candidate.candidate.itemKey)?.has(requirement.id)));
