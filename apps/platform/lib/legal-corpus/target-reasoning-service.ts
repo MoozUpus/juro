@@ -280,7 +280,10 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       firstByteTimeoutMs: 10_000,
       totalResponseTimeoutMs: 12_000,
       maxOutputTokens: 800,
-      reasoningEffort: "low",
+      // This is bounded textual entailment classification, not open-ended
+      // legal reasoning. Starting output directly avoids spending the target
+      // deadline on hidden reasoning before the first structured token.
+      reasoningEffort: "none",
       textVerbosity: "low",
     })));
   const candidateKeys = new Set(value.candidates.map((candidate) =>
