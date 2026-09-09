@@ -133,7 +133,7 @@ test("selection pool reserves independently ranked candidates for every formulat
     },
     ...stableIdentity(`rendition-${key}`),
   });
-  const shared = Array.from({ length: 4 }, (_, index) => make(
+  const shared = Array.from({ length: 7 }, (_, index) => make(
     `shared-${index + 1}`,
     ["formulation-1", "formulation-2"],
     ["formulation-1", "formulation-2"].map((formulationId) => ({
@@ -141,18 +141,18 @@ test("selection pool reserves independently ranked candidates for every formulat
     })),
     2 - index / 100,
   ));
-  const noise = Array.from({ length: 30 }, (_, index) => make(
+  const noise = Array.from({ length: 48 }, (_, index) => make(
     `noise-${index + 1}`,
     ["formulation-3"],
     [{ formulationId: "formulation-3", rank: index + 1, fusionScore: 1 - index / 100 }],
     3 - index / 100,
   ));
   const specific = [make("specific-1", ["formulation-1"],
-    [{ formulationId: "formulation-1", rank: 5, fusionScore: 0.5 }], 0.5),
+    [{ formulationId: "formulation-1", rank: 8, fusionScore: 0.5 }], 0.5),
   make("specific-2", ["formulation-2"],
-    [{ formulationId: "formulation-2", rank: 5, fusionScore: 0.5 }], 0.5)];
+    [{ formulationId: "formulation-2", rank: 8, fusionScore: 0.5 }], 0.5)];
   const selected = boundedSelectionPool(parseRevalidatedCandidates([...noise, ...shared, ...specific]));
-  assert.equal(selected.length, 30);
+  assert.equal(selected.length, 48);
   assert.equal(selected.some((entry) => entry.candidate.itemKey === "specific-1"), true);
   assert.equal(selected.some((entry) => entry.candidate.itemKey === "specific-2"), true);
 });
