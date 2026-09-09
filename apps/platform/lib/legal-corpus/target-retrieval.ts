@@ -109,6 +109,7 @@ export function planFromQuestionPlanningHints(
     ...requirement,
   }));
   const requirementIds = requirements.map((requirement) => requirement.id);
+  const hasOneFormulationPerRequirement = hints.formulations.length === requirements.length;
   return questionInterpretationPlanSchema.parse({
     id: `plan-${id}`.slice(0, 200),
     originalLanguage: hints.answerLanguage,
@@ -124,7 +125,9 @@ export function planFromQuestionPlanningHints(
       legalTitleSpans: [],
       privateNameSpans: [],
       readingIds: ["reading-1"],
-      requirementIds,
+      requirementIds: hasOneFormulationPerRequirement
+        ? [requirements[index]!.id]
+        : requirementIds,
       kind: "legal_register" as const,
     })),
     missingCaseFacts: [],
@@ -435,6 +438,13 @@ function mergeCandidateCoverage(
         ...preferred.candidate.formulationIds,
         ...other.candidate.formulationIds,
       ])].sort(),
+      ...((preferred.candidate.formulationMatches || other.candidate.formulationMatches) ? {
+        formulationMatches: [...new Map([
+          ...(preferred.candidate.formulationMatches ?? []),
+          ...(other.candidate.formulationMatches ?? []),
+        ].map((match) => [match.formulationId, match])).values()].sort((left, right) =>
+          left.formulationId.localeCompare(right.formulationId)),
+      } : {}),
       readingIds: [...new Set([
         ...preferred.candidate.readingIds,
         ...other.candidate.readingIds,
@@ -447,8 +457,8 @@ function mergeCandidateCoverage(
   };
 }
 
-const MAX_SELECTION_CANDIDATES = 16;
-const MAX_SELECTION_CANDIDATES_PER_FORMULATION = 3;
+const MAX_SELECTION_CANDIDATES = 24;
+const MAX_SELECTION_CANDIDATES_PER_FORMULATION = 4;
 
 function candidateScore(entry: RevalidatedCandidate): number {
   return entry.candidate.fusionScore
@@ -463,17 +473,39 @@ export function boundedSelectionPool(candidates: readonly RevalidatedCandidate[]
     candidateScore(right) - candidateScore(left)
     || left.candidate.itemKey.localeCompare(right.candidate.itemKey));
   const selected = new Map<string, RevalidatedCandidate>();
-  const formulationCounts = new Map<string, number>();
-  for (const candidate of ranked) {
-    if (selected.has(candidate.provisionRenditionId)) continue;
-    const eligible = candidate.candidate.formulationIds.some((id) =>
-      (formulationCounts.get(id) ?? 0) < MAX_SELECTION_CANDIDATES_PER_FORMULATION);
-    if (!eligible) continue;
-    selected.set(candidate.provisionRenditionId, candidate);
-    for (const id of candidate.candidate.formulationIds) {
-      formulationCounts.set(id, (formulationCounts.get(id) ?? 0) + 1);
+  const formulationIds = [...new Set(candidates.flatMap((candidate) =>
+    candidate.candidate.formulationIds))].sort();
+  const nextPosition = new Map(formulationIds.map((id) => [id, 0]));
+  const rankedByFormulation = new Map(formulationIds.map((formulationId) => [
+    formulationId,
+    candidates.filter((candidate) =>
+      candidate.candidate.formulationIds.includes(formulationId)).sort((left, right) => {
+      const leftMatch = left.candidate.formulationMatches?.find((match) =>
+        match.formulationId === formulationId);
+      const rightMatch = right.candidate.formulationMatches?.find((match) =>
+        match.formulationId === formulationId);
+      return (leftMatch?.rank ?? left.candidate.vectorRank)
+        - (rightMatch?.rank ?? right.candidate.vectorRank)
+        || (rightMatch?.fusionScore ?? candidateScore(right))
+          - (leftMatch?.fusionScore ?? candidateScore(left))
+        || left.candidate.itemKey.localeCompare(right.candidate.itemKey);
+    }),
+  ]));
+  for (let contribution = 0;
+    contribution < MAX_SELECTION_CANDIDATES_PER_FORMULATION;
+    contribution += 1) {
+    for (const formulationId of formulationIds) {
+      if (selected.size >= MAX_SELECTION_CANDIDATES) break;
+      const formulationRanked = rankedByFormulation.get(formulationId) ?? [];
+      let position = nextPosition.get(formulationId) ?? 0;
+      while (position < formulationRanked.length
+        && selected.has(formulationRanked[position]!.provisionRenditionId)) position += 1;
+      nextPosition.set(formulationId, position + 1);
+      const candidate = formulationRanked[position];
+      if (candidate) {
+        selected.set(candidate.provisionRenditionId, candidate);
+      }
     }
-    if (selected.size >= MAX_SELECTION_CANDIDATES) break;
   }
   for (const candidate of ranked) {
     if (selected.size >= MAX_SELECTION_CANDIDATES) break;

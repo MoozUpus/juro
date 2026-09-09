@@ -237,8 +237,27 @@ function candidateScore(candidate: SelectionCandidate): number {
     + candidate.candidate.candidate.keywordScore / 1_000_000;
 }
 
-/** Retains every directly supporting provision up to the evidence ceiling
- * after the minimum one-per-requirement set has been established. */
+function retrievalSupportsRequirement(candidate: SelectionCandidate, requirementId: string): boolean {
+  return candidate.candidate.candidate.retrievalRequirementIds.includes(requirementId);
+}
+
+function candidatesForRequirement(
+  ranked: readonly SelectionCandidate[],
+  supportedByKey: ReadonlyMap<string, ReadonlySet<string>>,
+  requirementId: string,
+): SelectionCandidate[] {
+  return ranked.filter((candidate) => supportedByKey.get(
+    candidate.candidate.candidate.itemKey)?.has(requirementId)).sort((left, right) =>
+    Number(retrievalSupportsRequirement(right, requirementId))
+      - Number(retrievalSupportsRequirement(left, requirementId))
+    || candidateScore(right) - candidateScore(left)
+    || left.candidate.candidate.itemKey.localeCompare(right.candidate.candidate.itemKey));
+}
+
+/** Retains corroborated support up to the evidence ceiling after the minimum
+ * one-per-requirement set has been established. Model-assessed entailment is
+ * required; formulation provenance only prevents adjacent-topic matches from
+ * displacing provisions retrieved for the requirement they actually support. */
 function addComplementarySupport(
   selected: Map<string, Set<string>>,
   ranked: readonly SelectionCandidate[],
@@ -250,7 +269,10 @@ function addComplementarySupport(
     const supported = supportedByKey.get(itemKey);
     if (!supported || supported.size === 0) continue;
     const requirementIds = selected.get(itemKey) ?? new Set<string>();
-    for (const requirementId of supported) requirementIds.add(requirementId);
+    for (const requirementId of supported) {
+      if (retrievalSupportsRequirement(candidate, requirementId)) requirementIds.add(requirementId);
+    }
+    if (requirementIds.size === 0) continue;
     selected.set(itemKey, requirementIds);
   }
 }
@@ -401,8 +423,8 @@ export function selectTargetProvisions(
       if (missingCore.length === 0) {
         const selected = new Map<string, Set<string>>();
         for (const requirement of requirements) {
-          const candidate = ranked.find((entry) => supportedByKey.get(
-            entry.candidate.candidate.itemKey)?.has(requirement.id));
+          const candidate = candidatesForRequirement(
+            ranked, supportedByKey, requirement.id)[0];
           if (!candidate) continue;
           const itemKey = candidate.candidate.candidate.itemKey;
           const covered = selected.get(itemKey) ?? new Set<string>();
@@ -479,8 +501,7 @@ export function selectTargetProvisions(
   const selected = new Map<string, Set<string>>();
   const renditions = new Set<string>();
   for (const requirement of requirements) {
-    const candidate = ranked.find((entry) =>
-      supportedByKey.get(entry.candidate.candidate.itemKey)?.has(requirement.id));
+    const candidate = candidatesForRequirement(ranked, supportedByKey, requirement.id)[0];
     if (!candidate) return selectionDecisionSchema.parse({ outcome: "rejected" });
     renditions.add(candidate.candidate.provisionRenditionId);
     const itemKey = candidate.candidate.candidate.itemKey;
