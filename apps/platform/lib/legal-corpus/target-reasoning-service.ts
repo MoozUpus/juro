@@ -53,6 +53,7 @@ const selectionRequestSchema = z.object({
 const supportMappingSchema = z.object({
   itemKey: z.string().min(1).max(700),
   supportedRequirementIds: z.array(z.string().min(1).max(200)).max(40),
+  governingRequirementIds: z.array(z.string().min(1).max(200)).max(40).default([]),
 }).strict();
 const supportAssessmentProviderSchema = z.object({
   mappings: z.array(supportMappingSchema).max(48),
@@ -63,7 +64,10 @@ const supportAssessmentProviderSchema = z.object({
     priority: z.enum(["core", "supporting"]),
   }).strict()).max(3),
 }).strict();
-const supportAssessmentJsonSchema = z.toJSONSchema(supportAssessmentProviderSchema, { io: "output" });
+export const targetSupportAssessmentJsonSchema = z.toJSONSchema(
+  supportAssessmentProviderSchema,
+  { io: "output" },
+);
 const SUPPORT_ASSESSMENT_BATCH_SIZE = 8;
 
 const formulationProviderSchema = z.object({
@@ -259,6 +263,7 @@ function literalFormulationSupports(candidate: SelectionCandidate, formulation: 
 function candidatesForRequirement(
   ranked: readonly SelectionCandidate[],
   supportedByKey: ReadonlyMap<string, ReadonlySet<string>>,
+  governingByKey: ReadonlyMap<string, ReadonlySet<string>>,
   requirementId: string,
   formulationIdsByRequirement: ReadonlyMap<string, ReadonlySet<string>>,
 ): SelectionCandidate[] {
@@ -271,12 +276,14 @@ function candidatesForRequirement(
     candidate.candidate.candidate.itemKey)?.has(requirementId)).sort((left, right) =>
     Number(retrievalSupportsRequirement(right, requirementId))
       - Number(retrievalSupportsRequirement(left, requirementId))
+    || Number(governingByKey.get(right.candidate.candidate.itemKey)?.has(requirementId) ?? false)
+      - Number(governingByKey.get(left.candidate.candidate.itemKey)?.has(requirementId) ?? false)
     || requirementRetrievalScore(right) - requirementRetrievalScore(left)
     || candidateScore(right) - candidateScore(left)
     || left.candidate.candidate.itemKey.localeCompare(right.candidate.candidate.itemKey));
 }
 
-export type TargetRequirementSupport = z.infer<typeof supportAssessmentProviderSchema>;
+export type TargetRequirementSupport = z.input<typeof supportAssessmentProviderSchema>;
 
 export async function assessTargetRequirementSupport(input: z.input<typeof selectionRequestSchema>): Promise<TargetRequirementSupport> {
   const value = selectionRequestSchema.parse(input);
@@ -298,11 +305,12 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
     ]));
     const result = await callOpenAiStructured({
       schemaName: "juro_target_requirement_support",
-      schema: supportAssessmentJsonSchema,
+      schema: targetSupportAssessmentJsonSchema,
       parse: (output) => supportAssessmentProviderSchema.parse(output),
       instructions: [
         "Assess whether each verified official provision directly supports each stated legal coverage requirement.",
         "Assess every candidate independently and return every direct support mapping, not merely the best or shortest set.",
+        "For each mapping, governingRequirementIds must be a subset of supportedRequirementIds. Include a requirement there only when this provision itself states the operative governing rule, prohibition, entitlement, exception, ground, or liability needed for that requirement. Exclude provisions that merely cross-reference another article, mention the topic, apply another provision procedurally, or provide interpretive guidance when the operative rule is elsewhere.",
         "A search match, shared topic, title, actor, or procedural deadline is not support by itself.",
         "Mark support only when the supplied provision text entails or directly establishes the material legal proposition.",
         "When both a directly governing codified provision and interpretive, procedural, or cross-referencing guidance support a requirement, retain both mappings; downstream selection decides priority.",
@@ -348,6 +356,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
     candidate.candidate.candidate.itemKey));
   const requirementIds = new Set(requirements.map((requirement) => requirement.id));
   const mappings = new Map<string, Set<string>>();
+  const governingMappings = new Map<string, Set<string>>();
   for (const mapping of results.flatMap((result) => result.mappings)) {
     if (!candidateKeys.has(mapping.itemKey)) continue;
     const supported = mappings.get(mapping.itemKey) ?? new Set<string>();
@@ -355,6 +364,13 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       if (requirementIds.has(requirementId)) supported.add(requirementId);
     }
     if (supported.size > 0) mappings.set(mapping.itemKey, supported);
+    const governing = governingMappings.get(mapping.itemKey) ?? new Set<string>();
+    for (const requirementId of mapping.governingRequirementIds) {
+      if (requirementIds.has(requirementId) && supported.has(requirementId)) {
+        governing.add(requirementId);
+      }
+    }
+    if (governing.size > 0) governingMappings.set(mapping.itemKey, governing);
   }
   const additionalRequirements = new Map<string,
     z.infer<typeof supportAssessmentProviderSchema>["additionalRequirements"][number]>();
@@ -367,6 +383,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
     mappings: [...mappings].map(([itemKey, supportedRequirementIds]) => ({
       itemKey,
       supportedRequirementIds: [...supportedRequirementIds],
+      governingRequirementIds: [...(governingMappings.get(itemKey) ?? [])],
     })),
     additionalRequirements: [...additionalRequirements.values()].slice(0, 3),
   });
@@ -379,6 +396,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
     mappings: support.mappings.map((mapping) => ({
       itemKey: mapping.itemKey,
       supportedRequirementIds: mapping.supportedRequirementIds,
+      governingRequirementIds: mapping.governingRequirementIds,
     })),
     additionalRequirementCount: support.additionalRequirements.length,
     repairAttempted: value.repairAttempted,
@@ -410,12 +428,19 @@ export function selectTargetProvisions(
     candidate,
   ]));
   const supportedByKey = new Map<string, Set<string>>();
+  const governingByKey = new Map<string, Set<string>>();
   for (const mapping of support.mappings) {
     if (!candidateByKey.has(mapping.itemKey)) continue;
     const ids = new Set(mapping.supportedRequirementIds.filter((id) => requirementIds.has(id)));
     if (ids.size > 0) supportedByKey.set(mapping.itemKey, new Set([
       ...(supportedByKey.get(mapping.itemKey) ?? []),
       ...ids,
+    ]));
+    const governingIds = new Set(mapping.governingRequirementIds
+      .filter((id) => ids.has(id)));
+    if (governingIds.size > 0) governingByKey.set(mapping.itemKey, new Set([
+      ...(governingByKey.get(mapping.itemKey) ?? []),
+      ...governingIds,
     ]));
   }
   // Exact legal-register wording in the verified provision is stronger than
@@ -452,7 +477,8 @@ export function selectTargetProvisions(
         const selected = new Map<string, Set<string>>();
         for (const requirement of requirements) {
           const candidate = candidatesForRequirement(
-            ranked, supportedByKey, requirement.id, formulationIdsByRequirement)[0];
+            ranked, supportedByKey, governingByKey, requirement.id,
+            formulationIdsByRequirement)[0];
           if (!candidate) continue;
           const itemKey = candidate.candidate.candidate.itemKey;
           const covered = selected.get(itemKey) ?? new Set<string>();
@@ -529,7 +555,8 @@ export function selectTargetProvisions(
   const renditions = new Set<string>();
   for (const requirement of requirements) {
     const candidate = candidatesForRequirement(
-      ranked, supportedByKey, requirement.id, formulationIdsByRequirement)[0];
+      ranked, supportedByKey, governingByKey, requirement.id,
+      formulationIdsByRequirement)[0];
     if (!candidate) return selectionDecisionSchema.parse({ outcome: "rejected" });
     renditions.add(candidate.candidate.provisionRenditionId);
     const itemKey = candidate.candidate.candidate.itemKey;
