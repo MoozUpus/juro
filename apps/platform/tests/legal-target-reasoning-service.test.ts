@@ -179,6 +179,7 @@ test("provision selection uses assessed support rather than retrieval provenance
     candidates: [
       selectionCandidate("irrelevant-high", ["requirement-one", "requirement-two"], 0.99),
       selectionCandidate("item-one", ["requirement-one"], 0.9),
+      selectionCandidate("item-one-complement", ["requirement-one"], 0.85),
       selectionCandidate("item-two", ["requirement-two"], 0.8),
     ],
     repairAttempted: false,
@@ -188,6 +189,8 @@ test("provision selection uses assessed support rather than retrieval provenance
   }, {
     itemKey: "item-one", supportedRequirementIds: ["requirement-one"],
   }, {
+    itemKey: "item-one-complement", supportedRequirementIds: ["requirement-one"],
+  }, {
     itemKey: "item-two", supportedRequirementIds: ["requirement-two"],
   }], additionalRequirements: [] });
   assert.equal(selected.outcome, "selected");
@@ -195,7 +198,9 @@ test("provision selection uses assessed support rather than retrieval provenance
     assert.deepEqual(selected.propositions.map(({ requirementId }) => requirementId), [
       "requirement-one", "requirement-two",
     ]);
-    assert.deepEqual(selected.selections.map(({ itemKey }) => itemKey), ["item-one", "item-two"]);
+    assert.deepEqual(selected.selections.map(({ itemKey }) => itemKey), [
+      "item-one", "item-two", "item-one-complement",
+    ]);
   }
 
   const repair = selectTargetProvisions({
@@ -253,7 +258,10 @@ test("an explicit provision reference can trigger one bounded generic repair", (
     plan: {
       ...plan,
       readings: [plan.readings[0]!],
-      formulations: [plan.formulations[0]!],
+      formulations: Array.from({ length: 6 }, (_, index) => ({
+        ...plan.formulations[0]!,
+        id: `formulation-${index + 1}`,
+      })),
     },
     candidates: [candidate],
     repairAttempted: false,

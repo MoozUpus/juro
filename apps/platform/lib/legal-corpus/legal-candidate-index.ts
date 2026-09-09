@@ -112,7 +112,9 @@ export const candidateSchema = z.object({
   itemKey: z.string().min(1).max(700),
   instanceId: candidateInstanceIdSchema,
   shardId: candidateShardIdSchema,
-  formulationIds: z.array(legalIdentifierSchema).min(1).max(6),
+  // One bounded repair formulation may be merged with the six initial
+  // retrieval provenance identifiers for the same provision.
+  formulationIds: z.array(legalIdentifierSchema).min(1).max(7),
   readingIds: z.array(legalIdentifierSchema).min(1),
   retrievalRequirementIds: z.array(legalIdentifierSchema).min(1),
   vectorRank: z.number().int().positive(),
