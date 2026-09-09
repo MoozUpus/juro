@@ -64,7 +64,7 @@ const supportAssessmentProviderSchema = z.object({
   }).strict()).max(3),
 }).strict();
 const supportAssessmentJsonSchema = z.toJSONSchema(supportAssessmentProviderSchema, { io: "output" });
-const SUPPORT_ASSESSMENT_BATCH_SIZE = 6;
+const SUPPORT_ASSESSMENT_BATCH_SIZE = 8;
 
 const formulationProviderSchema = z.object({
   ...questionInterpretationPlanSchema.shape.formulations.element.shape,
@@ -327,11 +327,11 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       // grow with the complete selection pool.
       firstByteTimeoutMs: 10_000,
       totalResponseTimeoutMs: 12_000,
-      maxOutputTokens: 2_400,
+      maxOutputTokens: 1_200,
       // This is bounded textual entailment classification, not open-ended
       // legal reasoning. Starting output directly avoids spending the target
       // deadline on hidden reasoning before the first structured token.
-      reasoningEffort: "low",
+      reasoningEffort: "none",
       textVerbosity: "low",
     });
     return supportAssessmentProviderSchema.parse({
