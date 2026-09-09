@@ -260,11 +260,18 @@ function candidatesForRequirement(
   ranked: readonly SelectionCandidate[],
   supportedByKey: ReadonlyMap<string, ReadonlySet<string>>,
   requirementId: string,
+  formulationIdsByRequirement: ReadonlyMap<string, ReadonlySet<string>>,
 ): SelectionCandidate[] {
+  const relevantFormulationIds = formulationIdsByRequirement.get(requirementId) ?? new Set<string>();
+  const requirementRetrievalScore = (candidate: SelectionCandidate): number =>
+    (candidate.candidate.candidate.formulationMatches ?? [])
+      .filter((match) => relevantFormulationIds.has(match.formulationId))
+      .reduce((score, match) => score + 1 / (60 + match.rank), 0);
   return ranked.filter((candidate) => supportedByKey.get(
     candidate.candidate.candidate.itemKey)?.has(requirementId)).sort((left, right) =>
     Number(retrievalSupportsRequirement(right, requirementId))
       - Number(retrievalSupportsRequirement(left, requirementId))
+    || requirementRetrievalScore(right) - requirementRetrievalScore(left)
     || candidateScore(right) - candidateScore(left)
     || left.candidate.candidate.itemKey.localeCompare(right.candidate.candidate.itemKey));
 }
@@ -390,6 +397,14 @@ export function selectTargetProvisions(
   const requirements = value.plan.readings.flatMap((reading) =>
     reading.requirements.map((requirement) => ({ ...requirement, readingId: reading.id })));
   const requirementIds = new Set(requirements.map((requirement) => requirement.id));
+  const formulationIdsByRequirement = new Map<string, Set<string>>();
+  for (const formulation of value.plan.formulations) {
+    for (const requirementId of formulation.requirementIds) {
+      const formulationIds = formulationIdsByRequirement.get(requirementId) ?? new Set<string>();
+      formulationIds.add(formulation.id);
+      formulationIdsByRequirement.set(requirementId, formulationIds);
+    }
+  }
   const candidateByKey = new Map(value.candidates.map((candidate) => [
     candidate.candidate.candidate.itemKey,
     candidate,
@@ -437,7 +452,7 @@ export function selectTargetProvisions(
         const selected = new Map<string, Set<string>>();
         for (const requirement of requirements) {
           const candidate = candidatesForRequirement(
-            ranked, supportedByKey, requirement.id)[0];
+            ranked, supportedByKey, requirement.id, formulationIdsByRequirement)[0];
           if (!candidate) continue;
           const itemKey = candidate.candidate.candidate.itemKey;
           const covered = selected.get(itemKey) ?? new Set<string>();
@@ -513,7 +528,8 @@ export function selectTargetProvisions(
   const selected = new Map<string, Set<string>>();
   const renditions = new Set<string>();
   for (const requirement of requirements) {
-    const candidate = candidatesForRequirement(ranked, supportedByKey, requirement.id)[0];
+    const candidate = candidatesForRequirement(
+      ranked, supportedByKey, requirement.id, formulationIdsByRequirement)[0];
     if (!candidate) return selectionDecisionSchema.parse({ outcome: "rejected" });
     renditions.add(candidate.candidate.provisionRenditionId);
     const itemKey = candidate.candidate.candidate.itemKey;
