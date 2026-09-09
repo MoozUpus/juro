@@ -152,7 +152,7 @@ test("selection pool reserves independently ranked candidates for every formulat
   make("specific-2", ["formulation-2"],
     [{ formulationId: "formulation-2", rank: 5, fusionScore: 0.5 }], 0.5)];
   const selected = boundedSelectionPool(parseRevalidatedCandidates([...noise, ...shared, ...specific]));
-  assert.equal(selected.length, 24);
+  assert.equal(selected.length, 30);
   assert.equal(selected.some((entry) => entry.candidate.itemKey === "specific-1"), true);
   assert.equal(selected.some((entry) => entry.candidate.itemKey === "specific-2"), true);
 });

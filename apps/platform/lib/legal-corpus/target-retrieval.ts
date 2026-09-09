@@ -457,8 +457,8 @@ function mergeCandidateCoverage(
   };
 }
 
-const MAX_SELECTION_CANDIDATES = 24;
-const MAX_SELECTION_CANDIDATES_PER_FORMULATION = 4;
+const MAX_SELECTION_CANDIDATES = 30;
+const MAX_SELECTION_CANDIDATES_PER_FORMULATION = 5;
 
 function candidateScore(entry: RevalidatedCandidate): number {
   return entry.candidate.fusionScore
