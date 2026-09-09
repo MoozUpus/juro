@@ -748,7 +748,8 @@ export function validateLegalGatewayAnswer(input: {
     if (
       sourceTier(source) !== "authoritative"
       || source.retrievalSelection === "deterministic_fallback"
-      || alreadyGroundedSourceIds.has(source.id)
+      || (alreadyGroundedSourceIds.has(source.id)
+        && source.retrievalSelection !== "semantic_reranker")
     ) return [];
     // A semantic-reranker source has already passed hybrid retrieval,
     // requirement-specific late ranking, graph completion and exact D1
@@ -811,24 +812,33 @@ export function validateLegalGatewayAnswer(input: {
     validSourceIds,
     new Set(input.availableDocumentTemplateCodes ?? []),
   );
+  const visibleProviderSourceIds = new Set([
+    ...filtered.confirmedFindings.flatMap((finding) => finding.sourceIds),
+    ...(filtered.conditionalBranches ?? []).flatMap((branch) => branch.sourceIds),
+    ...filtered.actionPlan.flatMap((step) => step.sourceIds),
+    ...filtered.risks.flatMap((risk) => risk.sourceIds),
+    ...filtered.deadlines.flatMap((deadline) => deadline.sourceIds),
+  ]);
+  const visibleServerGroundedOfficial = serverGroundedOfficial.filter(({ source }) =>
+    !visibleProviderSourceIds.has(source.id));
+  const serverFinding = ({ claim, source, span }:
+    typeof serverGroundedOfficial[number]) => ({
+      title: groundedProvisionTitle(source, span),
+      explanation: claim.text,
+      sourceIds: [source.id],
+    });
   const grounded = fallback
     ? {
       ...filtered,
-      confirmedFindings: [{
-        title: groundedProvisionTitle(fallback.source, fallback.span),
-        explanation: fallback.claim.text,
-        sourceIds: [fallback.source.id],
-      }],
+      confirmedFindings: [serverFinding(fallback), ...visibleServerGroundedOfficial
+        .filter(({ source }) => source.id !== fallback.source.id)
+        .map(serverFinding)],
     }
     : {
       ...filtered,
       confirmedFindings: [
         ...filtered.confirmedFindings,
-        ...serverGroundedOfficial.map(({ claim, source, span }) => ({
-          title: groundedProvisionTitle(source, span),
-          explanation: claim.text,
-          sourceIds: [source.id],
-        })),
+        ...visibleServerGroundedOfficial.map(serverFinding),
       ],
     };
   const canonicalSources = [...validSourceIds].flatMap((sourceId) => {

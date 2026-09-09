@@ -139,6 +139,7 @@ test("chat retrieval uses the R2-native target service before live Lex", async (
   assert.equal(liveStarted, 0);
   assert.equal(result.sourceAccessMode, "approved_package");
   assert.equal(result.sources[0]?.verificationState, "verified");
+  assert.equal(result.sources[0]?.retrievalSelection, "semantic_reranker");
   assert.equal(result.coverageStatus, "good_coverage");
   assert.equal(result.retrievalTelemetry?.indexedHitCount, 1);
   assert.equal(result.retrievalTelemetry?.queriesRun, 2);

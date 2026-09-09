@@ -269,29 +269,6 @@ function candidatesForRequirement(
     || left.candidate.candidate.itemKey.localeCompare(right.candidate.candidate.itemKey));
 }
 
-/** Retains corroborated support up to the evidence ceiling after the minimum
- * one-per-requirement set has been established. Model-assessed entailment is
- * required; formulation provenance only prevents adjacent-topic matches from
- * displacing provisions retrieved for the requirement they actually support. */
-function addComplementarySupport(
-  selected: Map<string, Set<string>>,
-  ranked: readonly SelectionCandidate[],
-  supportedByKey: ReadonlyMap<string, ReadonlySet<string>>,
-): void {
-  for (const candidate of ranked) {
-    if (selected.size >= 12) return;
-    const itemKey = candidate.candidate.candidate.itemKey;
-    const supported = supportedByKey.get(itemKey);
-    if (!supported || supported.size === 0) continue;
-    const requirementIds = selected.get(itemKey) ?? new Set<string>();
-    for (const requirementId of supported) {
-      if (retrievalSupportsRequirement(candidate, requirementId)) requirementIds.add(requirementId);
-    }
-    if (requirementIds.size === 0) continue;
-    selected.set(itemKey, requirementIds);
-  }
-}
-
 export type TargetRequirementSupport = z.infer<typeof supportAssessmentProviderSchema>;
 
 export async function assessTargetRequirementSupport(input: z.input<typeof selectionRequestSchema>): Promise<TargetRequirementSupport> {
@@ -467,7 +444,6 @@ export function selectTargetProvisions(
           covered.add(requirement.id);
           selected.set(itemKey, covered);
         }
-        addComplementarySupport(selected, ranked, supportedByKey);
         const missingSupporting = requirements.filter((requirement) => requirement.priority === "supporting"
           && !ranked.some((candidate) => supportedByKey.get(
             candidate.candidate.candidate.itemKey)?.has(requirement.id))).map(({ id }) => id);
@@ -545,7 +521,6 @@ export function selectTargetProvisions(
     covered.add(requirement.id);
     selected.set(itemKey, covered);
   }
-  addComplementarySupport(selected, ranked, supportedByKey);
   if (renditions.size > 12) return selectionDecisionSchema.parse({ outcome: "rejected" });
   const isRussian = value.plan.answerLanguage.toLowerCase().startsWith("ru");
   const isUzbek = value.plan.answerLanguage.toLowerCase().startsWith("uz");
