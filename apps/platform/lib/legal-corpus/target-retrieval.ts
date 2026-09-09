@@ -27,6 +27,8 @@ import {
 export const TARGET_LEGAL_ANSWER_PATH = "/internal/legal-corpus/target/retrieval/answer";
 
 const SERVICE_BINDING_MARKER = "target-legal-answer-v1";
+export const TARGET_INITIAL_FORMULATION_LIMIT = 6;
+export const TARGET_TOTAL_FORMULATION_LIMIT = 7;
 export const targetQuestionPlanningHintsSchema = z.object({
   answerLanguage: z.enum(["ru", "uz", "en"]),
   standaloneQuestion: z.string().trim().min(1).max(900),
@@ -210,7 +212,7 @@ const answerSchema = z.object({
   whatTheLawSays: z.array(lawStatementSchema).min(1).max(120),
   whatToDoNext: z.array(z.string().min(1).max(2_000)).max(20),
   focusedQuestions: z.array(z.string().min(1).max(1_000)).max(20),
-  formulationsUsed: z.number().int().min(1).max(6),
+  formulationsUsed: z.number().int().min(1).max(TARGET_TOTAL_FORMULATION_LIMIT),
   repairQueriesUsed: z.number().int().min(0).max(1),
   temporalEndpoint: temporalEndpointSchema,
 }).strict();
@@ -265,7 +267,8 @@ const comparisonAnswerSchema = z.object({
   right: answerSchema,
   transitions: z.array(lineageSchema).min(1).max(144),
   mainPoint: z.string().min(1).max(8_000),
-  endpointFormulationSearches: z.number().int().min(2).max(12),
+  endpointFormulationSearches: z.number().int().min(2)
+    .max(TARGET_TOTAL_FORMULATION_LIMIT * 2),
 }).strict();
 const retrievalResultSchema = z.discriminatedUnion("kind", [
   answerSchema,
@@ -550,7 +553,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
       }
       if (
-        plan.formulations.length > 6
+        plan.formulations.length > TARGET_INITIAL_FORMULATION_LIMIT
         || !formulationsRespectPlan(plan, plan.formulations)
       ) {
         return clarificationSchema.parse({
@@ -760,7 +763,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
           });
         }
         if (
-          plan.formulations.length >= 6
+          plan.formulations.length >= TARGET_TOTAL_FORMULATION_LIMIT
           || decision.repairFormulation.kind !== "repair"
           || !formulationsRespectPlan(plan, [...plan.formulations, decision.repairFormulation])
         ) return insufficient(plan);

@@ -5,6 +5,7 @@ import {
   questionInterpretationPlanSchema,
   selectionCandidateSchema,
   selectionDecisionSchema,
+  TARGET_TOTAL_FORMULATION_LIMIT,
   type QuestionInterpretationPlan,
   type SelectionCandidate,
   type SelectionDecision,
@@ -236,6 +237,24 @@ function candidateScore(candidate: SelectionCandidate): number {
     + candidate.candidate.candidate.keywordScore / 1_000_000;
 }
 
+/** Retains every directly supporting provision up to the evidence ceiling
+ * after the minimum one-per-requirement set has been established. */
+function addComplementarySupport(
+  selected: Map<string, Set<string>>,
+  ranked: readonly SelectionCandidate[],
+  supportedByKey: ReadonlyMap<string, ReadonlySet<string>>,
+): void {
+  for (const candidate of ranked) {
+    if (selected.size >= 12) return;
+    const itemKey = candidate.candidate.candidate.itemKey;
+    const supported = supportedByKey.get(itemKey);
+    if (!supported || supported.size === 0) continue;
+    const requirementIds = selected.get(itemKey) ?? new Set<string>();
+    for (const requirementId of supported) requirementIds.add(requirementId);
+    selected.set(itemKey, requirementIds);
+  }
+}
+
 export type TargetRequirementSupport = z.infer<typeof supportAssessmentProviderSchema>;
 
 export async function assessTargetRequirementSupport(input: z.input<typeof selectionRequestSchema>): Promise<TargetRequirementSupport> {
@@ -251,7 +270,12 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
   for (let offset = 0; offset < value.candidates.length; offset += SUPPORT_ASSESSMENT_BATCH_SIZE) {
     candidateBatches.push(value.candidates.slice(offset, offset + SUPPORT_ASSESSMENT_BATCH_SIZE));
   }
-  const results = await Promise.all(candidateBatches.map((candidates) => callOpenAiStructured({
+  const results = await Promise.all(candidateBatches.map(async (candidates) => {
+    const itemKeyByAlias = new Map(candidates.map((candidate, index) => [
+      `candidate-${index + 1}`,
+      candidate.candidate.candidate.itemKey,
+    ]));
+    const result = await callOpenAiStructured({
       schemaName: "juro_target_requirement_support",
       schema: supportAssessmentJsonSchema,
       parse: (output) => supportAssessmentProviderSchema.parse(output),
@@ -267,8 +291,8 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       ].join(" "),
       input: {
         requirements,
-        candidates: candidates.map((candidate) => ({
-          itemKey: candidate.candidate.candidate.itemKey,
+        candidates: candidates.map((candidate, index) => ({
+          itemKey: `candidate-${index + 1}`,
           citationLabel: candidate.citationLabel,
           provisionText: candidate.provisionText,
         })),
@@ -279,18 +303,29 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       // grow with the complete selection pool.
       firstByteTimeoutMs: 10_000,
       totalResponseTimeoutMs: 12_000,
-      maxOutputTokens: 800,
+      maxOutputTokens: 1_200,
       // This is bounded textual entailment classification, not open-ended
       // legal reasoning. Starting output directly avoids spending the target
       // deadline on hidden reasoning before the first structured token.
       reasoningEffort: "none",
       textVerbosity: "low",
-    })));
+    });
+    return supportAssessmentProviderSchema.parse({
+      mappings: result.data.mappings.flatMap((mapping) => {
+        const itemKey = itemKeyByAlias.get(mapping.itemKey);
+        return itemKey ? [{ ...mapping, itemKey }] : [];
+      }),
+      additionalRequirements: result.data.additionalRequirements.flatMap((addition) => {
+        const sourceItemKey = itemKeyByAlias.get(addition.sourceItemKey);
+        return sourceItemKey ? [{ ...addition, sourceItemKey }] : [];
+      }),
+    });
+  }));
   const candidateKeys = new Set(value.candidates.map((candidate) =>
     candidate.candidate.candidate.itemKey));
   const requirementIds = new Set(requirements.map((requirement) => requirement.id));
   const mappings = new Map<string, Set<string>>();
-  for (const mapping of results.flatMap((result) => result.data.mappings)) {
+  for (const mapping of results.flatMap((result) => result.mappings)) {
     if (!candidateKeys.has(mapping.itemKey)) continue;
     const supported = mappings.get(mapping.itemKey) ?? new Set<string>();
     for (const requirementId of mapping.supportedRequirementIds) {
@@ -300,7 +335,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
   }
   const additionalRequirements = new Map<string,
     z.infer<typeof supportAssessmentProviderSchema>["additionalRequirements"][number]>();
-  for (const addition of results.flatMap((result) => result.data.additionalRequirements)) {
+  for (const addition of results.flatMap((result) => result.additionalRequirements)) {
     const identity = [addition.sourceItemKey, addition.readingId, addition.priority,
       addition.statement.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase()].join("\n");
     if (!additionalRequirements.has(identity)) additionalRequirements.set(identity, addition);
@@ -358,7 +393,8 @@ export function selectTargetProvisions(
   const missing = requirements.find((requirement) => !ranked.some((candidate) =>
     supportedByKey.get(candidate.candidate.candidate.itemKey)?.has(requirement.id)));
   if (missing) {
-    if (value.repairAttempted || value.plan.formulations.length >= 6) {
+    if (value.repairAttempted
+      || value.plan.formulations.length >= TARGET_TOTAL_FORMULATION_LIMIT) {
       const missingCore = requirements.filter((requirement) => requirement.priority !== "supporting"
         && !ranked.some((candidate) => supportedByKey.get(
           candidate.candidate.candidate.itemKey)?.has(requirement.id)));
@@ -373,6 +409,7 @@ export function selectTargetProvisions(
           covered.add(requirement.id);
           selected.set(itemKey, covered);
         }
+        addComplementarySupport(selected, ranked, supportedByKey);
         const missingSupporting = requirements.filter((requirement) => requirement.priority === "supporting"
           && !ranked.some((candidate) => supportedByKey.get(
             candidate.candidate.candidate.itemKey)?.has(requirement.id))).map(({ id }) => id);
@@ -405,7 +442,8 @@ export function selectTargetProvisions(
       additionalRequirements: [],
     });
   }
-  if (!value.repairAttempted && value.plan.formulations.length < 6) {
+  if (!value.repairAttempted
+    && value.plan.formulations.length < TARGET_TOTAL_FORMULATION_LIMIT) {
     const readingIds = new Set(value.plan.readings.map((reading) => reading.id));
     const candidateKeys = new Set(value.candidates.map((candidate) => candidate.candidate.candidate.itemKey));
     const existingStatements = new Set(requirements.map((requirement) => requirement.statement
@@ -450,6 +488,7 @@ export function selectTargetProvisions(
     covered.add(requirement.id);
     selected.set(itemKey, covered);
   }
+  addComplementarySupport(selected, ranked, supportedByKey);
   if (renditions.size > 12) return selectionDecisionSchema.parse({ outcome: "rejected" });
   const isRussian = value.plan.answerLanguage.toLowerCase().startsWith("ru");
   const isUzbek = value.plan.answerLanguage.toLowerCase().startsWith("uz");
