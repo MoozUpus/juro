@@ -16,6 +16,15 @@ import { legalEnvironmentSchema, searchReleaseIdSchema, sha256Schema, utcInstant
 
 export const CUSTOM_SEARCH_PATH = "/internal/legal-corpus/custom-search";
 export const CUSTOM_SEARCH_SERVICE_MARKER = "custom-search-runtime-v1";
+
+export function fuseCustomProvisionMatches(sparseKeys: string[], denseKeys: string[], explicitArticleKeys: ReadonlySet<string>, topK: number) {
+  // Preserve explicit provision lookup through fusion and the later bounded
+  // evidence pool. This is retrieval priority, never authority or entailment.
+  return fuseCustomRankedLanes([sparseKeys, denseKeys], {k: 60, topK: Math.max(topK, sparseKeys.length + denseKeys.length)})
+    .map(hit => ({...hit, score: hit.score + (explicitArticleKeys.has(hit.itemKey) ? 1 : 0)}))
+    .sort((left, right) => right.score - left.score || left.itemKey.localeCompare(right.itemKey))
+    .slice(0, topK);
+}
 const QUERY_RESERVATION_USD_MICROS = 1_065;
 let customSearchTail: Promise<void> = Promise.resolve();
 
@@ -234,7 +243,8 @@ export async function executeCustomSearch(env: CustomSearchEnv, raw: unknown) {
       : await itemKeysForOrdinals(env, input.releaseId, sparseOrdinals);
     const denseKeys = dense.map((entry) =>
       `search-releases/${input.releaseId}/${entry.itemKey}`);
-    const fused = fuseCustomRankedLanes([sparseKeys, denseKeys], { k: 60, topK: input.maxResults });
+    const explicitArticleKeys = new Set(sparseKeys.filter((_, index) => sparse[index]!.explicitArticleMatch));
+    const fused = fuseCustomProvisionMatches(sparseKeys, denseKeys, explicitArticleKeys, input.maxResults);
     const sparseByKey = new Map(sparseKeys.map((key, index) => [key, {
       rank: index + 1, score: sparse[index]!.score,
     }]));
