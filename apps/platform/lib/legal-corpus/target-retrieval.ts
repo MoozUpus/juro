@@ -579,6 +579,12 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
     async answer(untrustedInput) {
       const currentAt = new Date((dependencies.now ?? Date.now)()).toISOString();
       const request = questionSchema.parse(untrustedInput);
+      const timed = async <T>(stage: string, operation: () => Promise<T>): Promise<T> => {
+        const started = Date.now();
+        try { return await operation(); }
+        finally { console.info(JSON.stringify({event: "legal_target_stage_completed", stage,
+          elapsedMs: Date.now() - started})); }
+      };
       let plan: QuestionInterpretationPlan;
       try {
         plan = request.planningHints
@@ -696,12 +702,12 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       const validatedPackets: RevalidatedCandidate[][] = [];
       let initialPacket: CandidatePacket;
       try {
-        initialPacket = await dependencies.candidateIndex.retrieve(
+        initialPacket = await timed("initial_search", () => dependencies.candidateIndex.retrieve(
           candidateInterpretation(plan, plan.formulations),
           endpoint,
           release,
           { currentAt },
-        );
+        ));
       } catch {
         emitTargetStageFailure("candidate_retrieval", "INDEXED_CANDIDATE_UNAVAILABLE");
         return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
@@ -710,12 +716,12 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
       }
       try {
-        validatedPackets.push(await dependencies.candidateCatalog.revalidate(
+        validatedPackets.push(await timed("initial_revalidation", () => dependencies.candidateCatalog.revalidate(
           initialPacket,
           endpoint,
           release,
           currentAt,
-        ));
+        )));
       } catch {
         emitTargetStageFailure("candidate_revalidation", "INDEXED_REVALIDATION_FAILED");
         return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
@@ -775,11 +781,12 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
 
       let decision: SelectionDecision;
       try {
-        decision = selectionDecisionSchema.parse(await dependencies.provisionSelector.select({
+        const hydrated = await timed("initial_evidence", hydrateSelectionCandidates);
+        decision = selectionDecisionSchema.parse(await timed("initial_support", () => dependencies.provisionSelector.select({
           plan,
-          candidates: await hydrateSelectionCandidates(),
+          candidates: hydrated,
           repairAttempted: false,
-        }));
+        })));
       } catch (error) {
         emitTargetStageFailure("requirement_support", "INDEXED_REVALIDATION_FAILED", error);
         return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
@@ -829,21 +836,21 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         repairQueriesUsed = repairFormulations.length;
         let repairPacket: CandidatePacket;
         try {
-          repairPacket = await dependencies.candidateIndex.retrieve(
+          repairPacket = await timed("repair_search", () => dependencies.candidateIndex.retrieve(
             candidateInterpretation(plan, repairFormulations),
             endpoint,
             release,
             { currentAt },
-          );
+          ));
           if (repairPacket.availability !== "available") {
             return unavailableWithDiscovery("INDEXED_CANDIDATE_UNAVAILABLE");
           }
-          validatedPackets.push(await dependencies.candidateCatalog.revalidate(
+          validatedPackets.push(await timed("repair_revalidation", () => dependencies.candidateCatalog.revalidate(
             repairPacket,
             endpoint,
             release,
             currentAt,
-          ));
+          )));
         } catch {
           return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
         }
@@ -852,11 +859,12 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
           return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
         }
         try {
-          decision = selectionDecisionSchema.parse(await dependencies.provisionSelector.select({
+          const hydrated = await timed("repair_evidence", hydrateSelectionCandidates);
+          decision = selectionDecisionSchema.parse(await timed("repair_support", () => dependencies.provisionSelector.select({
             plan: { ...plan, formulations: [...plan.formulations, ...repairFormulations] },
-            candidates: await hydrateSelectionCandidates(),
+            candidates: hydrated,
             repairAttempted: true,
-          }));
+          })));
         } catch {
           return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
         }
