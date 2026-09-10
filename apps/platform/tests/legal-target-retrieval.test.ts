@@ -186,7 +186,10 @@ test("reference evidence is assessed before repair without displacing the initia
   oversizedEvidence = true;
   const oversized = await retriever.answer({id: "oversized-evidence", question: "Rule and its grounds"});
   assert.equal(oversized.kind, "clarification_required", "complete authenticated text must fit even when selection accepts its bounded excerpt");
-  if (oversized.kind === "clarification_required") assert.equal(oversized.safeErrorCode, "EVIDENCE_CEILING_EXCEEDED");
+  if (oversized.kind === "clarification_required") {
+    assert.equal(oversized.safeErrorCode, "EVIDENCE_CEILING_EXCEEDED");
+    assert.deepEqual(oversized.coverageRequirements?.map(requirement => requirement.id), ["requirement-1", "requirement-2"]);
+  }
 });
 
 test("repair retains supported evidence even when new candidates push it below the pool ceiling", () => {

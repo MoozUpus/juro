@@ -246,6 +246,7 @@ const clarificationSchema = z.object({
   sourceLadder: z.literal("indexed_official_corpus"),
   focusedQuestions: z.array(z.string().min(1).max(1_000)).min(1),
   safeErrorCode: z.enum(["FORMULATION_BUDGET_EXCEEDED", "EVIDENCE_CEILING_EXCEEDED"]),
+  coverageRequirements: z.array(requirementSchema).max(240).optional(),
 }).strict();
 const sourceUnavailableSchema = z.object({
   kind: z.literal("source_unavailability"),
@@ -956,6 +957,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
           sourceLadder: "indexed_official_corpus",
           focusedQuestions: ["Please narrow the question so its complete evidence can fit within the answer context."],
           safeErrorCode: "EVIDENCE_CEILING_EXCEEDED",
+          coverageRequirements: plan.readings.flatMap(reading => reading.requirements),
         });
       }
       const requirementIds = planRequirementIds;
@@ -997,6 +999,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         sourceLadder: "indexed_official_corpus",
         focusedQuestions: ["Please narrow the question so its complete evidence can fit within the answer context."],
         safeErrorCode: "EVIDENCE_CEILING_EXCEEDED",
+        coverageRequirements: plan.readings.flatMap(reading => reading.requirements),
       });
       const propositions = new Map(decision.propositions.map((proposition) => [
         proposition.requirementId,
