@@ -128,6 +128,60 @@ test("planning hints preserve one-to-one formulation requirement provenance", ()
   }
 });
 
+test("reference evidence is assessed before repair without displacing the initial pool", async () => {
+  const plan = planFromQuestionPlanningHints("references", {answerLanguage: "en", standaloneQuestion: "Rule and its grounds",
+    requirements: [{statement: "Ordinary rule", priority: "core"}, {statement: "Operative grounds", priority: "core"}],
+    formulations: ["Rule and its grounds"], formulationRequirementIndexes: [[0, 1]]});
+  const initial = parseRevalidatedCandidates(Array.from({length: 48}, (_, index) => ({...stableIdentity(`rendition-${index}`),
+    candidate: candidate(`item-${index}`, "formulation-1", ["reading-1"], ["requirement-1", "requirement-2"])})));
+  const references = parseRevalidatedCandidates(Array.from({length: 12}, (_, index) => ({...stableIdentity(`reference-${index}`),
+    candidate: {...candidate(`reference-${index}`, "formulation-1", ["reading-1"], ["requirement-2"]),
+      referenceOrigin: {itemKey: "item-0", article: String(700 + index)}, fusionScore: 0}})));
+  let searches = 0;
+  let wrongArticle = false;
+  const retriever = createTargetLegalAnswerRetriever({environment: "development", interpreter: {interpret: async () => plan},
+    releaseResolver: {resolve: async () => release},
+    candidateIndex: {retrieve: async () => {
+      searches++;
+      return parseCandidatePacket({availability: "available", releaseId: release.id, endpoint: {kind: "current"},
+        requiredInstanceIds: ["current-00"], partialErrors: [], candidates: initial.map(item => item.candidate)});
+    }},
+    candidateCatalog: {revalidate: async packet => packet.candidates.map(candidate => {
+      const known = [...initial, ...references].find(item => item.candidate.itemKey === candidate.itemKey)!;
+      return {...known, candidate};
+    })},
+    referenceDiscovery: async candidates => {
+      assert.equal(candidates.length, 48);
+      assert.deepEqual(new Set(candidates.map(item => item.candidate.candidate.itemKey)), new Set(initial.map(item => item.candidate.itemKey)));
+      return references;
+    },
+    evidenceResolver: {resolveControlling: async id => {
+      const article = id.startsWith("reference-") ? String(700 + Number(id.slice("reference-".length))) : "1";
+      const citation = {label: `Example Act — Article ${wrongArticle ? "999" : article}`, url: "https://lex.uz/docs/900"};
+      return parseControllingEvidenceResolution({controlling: {legalInstrumentId: "instrument", officialExpressionId: "expression",
+        textRevisionId: "revision", provisionConceptId: `concept-${id}`, provisionRenditionId: id,
+        languageTag: "uz-Latn", script: "Latn", textualAuthority: "controlling", provisionText: `Complete verified rule for ${id}.`,
+        officialCitation: citation, evidence: {provisionRenditionId: id, r2Key: `evidence/${id}`, byteCount: 100,
+          sha256: "a".repeat(64), sourceNormalizedSha256: "b".repeat(64), schemaVersion: 1}}, materialCitation: citation});
+    }},
+    provisionSelector: {select: async ({candidates, repairAttempted}) => {
+      assert.equal(repairAttempted, false);
+      assert.equal(candidates.length, wrongArticle ? 48 : 60);
+      if (wrongArticle) return {outcome: "rejected"};
+      return {outcome: "selected", mainPoint: "Both independently verified rules.",
+        propositions: [{requirementId: "requirement-1", statement: "Rule"}, {requirementId: "requirement-2", statement: "Grounds"}],
+        selections: [{itemKey: "item-0", requirementIds: ["requirement-1"]}, {itemKey: "reference-0", requirementIds: ["requirement-2"]}],
+        whatToDoNext: []};
+    }},
+  });
+  const answer = await retriever.answer({id: "reference-flow", question: "Rule and its grounds"});
+  assert.equal(answer.kind, "legal_answer");
+  assert.equal(searches, 1, "explicit reference discovery avoids a second semantic search");
+  wrongArticle = true;
+  const mismatched = await retriever.answer({id: "reference-mismatch", question: "Rule and its grounds"});
+  assert.equal(mismatched.kind, "insufficient_indexed_coverage", "metadata alone cannot substitute a different article's authenticated text");
+});
+
 test("repair retains supported evidence even when new candidates push it below the pool ceiling", () => {
   const entries = parseRevalidatedCandidates(Array.from({length: 60}, (_, index) => ({
     ...stableIdentity(`rendition-${index}`),

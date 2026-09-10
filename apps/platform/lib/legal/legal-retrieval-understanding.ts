@@ -8,8 +8,8 @@ import type { AiOutputLocale } from "../ai/localization";
 import type { TargetQuestionPlanningHints } from "../legal-corpus/target-retrieval";
 
 const retrievalConceptSchema = z.object({
-  statement: z.string().trim().min(1).max(240),
-  alternatives: z.array(z.string().trim().min(1).max(240)).min(1).max(5),
+  statement: z.string().trim().min(1).max(500),
+  alternatives: z.array(z.string().trim().min(1).max(500)).min(1).max(5),
   priority: z.enum(["core", "supporting"]).optional(),
   scopeKind: legalCoverageScopeSchema.optional(),
 }).strict();
@@ -142,9 +142,9 @@ export function normalizeLegalRetrievalUnderstanding(
     : query ? [query] : [];
   const requiredConcepts = value.requiredConcepts.flatMap((concept) => {
     const alternatives = [...new Set(concept.alternatives
-      .map((candidate) => normalize(candidate, 240))
+      .map((candidate) => normalize(candidate, 500))
       .filter(Boolean))].slice(0, 5);
-    const statement = normalize(concept.statement, 240) || alternatives[0] || "";
+    const statement = normalize(concept.statement, 500) || alternatives[0] || "";
     return alternatives.length > 0 && statement ? [{ statement, alternatives,
       ...(concept.scopeKind ? {scopeKind: concept.scopeKind} : {}),
       ...(concept.priority ? { priority: concept.priority } : {}) }] : [];
@@ -241,27 +241,39 @@ export async function understandLegalRetrievalQuery(input: {
     outputTokens: result.usage.outputTokens,
   });
 
-  const normalizedConcepts: LegalRetrievalUnderstandingProviderOutput["requiredConcepts"] = [{statement: result.data.generalQuery, alternatives: [result.data.generalQuery], priority: "core", scopeKind: "general"},
-    ...result.data.personalStatuses.map(({query: statement}) => ({statement, alternatives: [statement], priority: "core" as const, scopeKind: "personal_status" as const})),
-    ...result.data.forums.map(({query: statement}) => ({statement, alternatives: [statement], priority: "core" as const, scopeKind: "forum" as const})),
-    ...result.data.concepts.map((concept) => ({
+  return projectLegalRetrievalPlan(result.data, query);
+}
+
+/** Preserve the planner's independent scopes when projecting its compact response. */
+export function projectLegalRetrievalPlan(value: unknown, query: string): LegalRetrievalUnderstanding {
+  const plan = retrievalPlannerProviderSchema.parse(value);
+  const normalizedConcepts: LegalRetrievalUnderstandingProviderOutput["requiredConcepts"] = [{statement: plan.generalQuery, alternatives: [plan.generalQuery], priority: "core", scopeKind: "general"},
+    ...plan.personalStatuses.map(({status, query}) => {
+      const statement = `${status}: ${query}`;
+      return {statement, alternatives: [statement], priority: "core" as const, scopeKind: "personal_status" as const};
+    }),
+    ...plan.forums.map(({forum, query}) => {
+      const statement = `${forum}: ${query}`;
+      return {statement, alternatives: [statement], priority: "core" as const, scopeKind: "forum" as const};
+    }),
+    ...plan.concepts.map((concept) => ({
     statement: concept.statement,
     alternatives: [concept.statement],
     priority: concept.priority,
     scopeKind: concept.scopeKind,
   }))];
-  if (result.data.consequences) normalizedConcepts.push({
-    statement: result.data.consequences,
-    alternatives: [result.data.consequences],
+  if (plan.consequences) normalizedConcepts.push({
+    statement: plan.consequences,
+    alternatives: [plan.consequences],
     priority: "supporting",
     scopeKind: "consequence",
   });
-  const derivedQueries = [result.data.generalQuery, ...result.data.concepts.map((concept) => concept.statement)].slice(0, 3);
+  const derivedQueries = [plan.generalQuery, ...plan.concepts.map((concept) => concept.statement)].slice(0, 3);
   return normalizeLegalRetrievalUnderstanding({
-    standaloneQuestion: result.data.standaloneQuestion,
+    standaloneQuestion: plan.standaloneQuestion,
     requiredConcepts: normalizedConcepts,
     corpusQueries: derivedQueries,
     lexSearchQueries: derivedQueries,
-    webSearchQuery: result.data.standaloneQuestion,
+    webSearchQuery: plan.standaloneQuestion,
   }, query);
 }

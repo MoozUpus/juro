@@ -110,6 +110,10 @@ export function toPinnedCandidateConfiguration(value: unknown): PinnedCandidateC
 
 export const candidateSchema = z.object({
   itemKey: z.string().min(1).max(700),
+  /** Reference discovery inherits the originating search's provenance; its
+   * numeric ranks do not represent a separate vector or keyword match. */
+  referenceOrigin: z.object({itemKey: z.string().min(1).max(700),
+    article: z.string().regex(/^\d+(?:[.-]\d+)?$/u).max(40)}).strict().optional(),
   instanceId: candidateInstanceIdSchema,
   shardId: candidateShardIdSchema,
   // One bounded repair formulation may be merged with the six initial

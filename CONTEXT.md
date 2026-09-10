@@ -136,6 +136,10 @@ _Avoid_: live index, corpus source of truth, deployment
 An immutable, hash-verified physical projection of a Search Release's accepted membership inventory that locates candidate identities in small pages without changing their legal content, eligibility or ranking.
 _Avoid_: answer cache, alternate corpus, new evidence
 
+**Reference Lookup**:
+A mapping from an explicitly cited provision within one Text Revision and language to candidate identities in the same Search Release. It discovers related provisions but does not establish their relevance or Requirement Support.
+_Avoid_: answer template, citation validation, inferred law
+
 **Activation Set**:
 The named selection of mutually compatible Search Releases that defines which Indexed Official Corpus capabilities are available together.
 _Avoid_: environment variable, mutable manifest, all-or-nothing migration

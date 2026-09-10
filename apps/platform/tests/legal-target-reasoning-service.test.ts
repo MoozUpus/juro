@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { selectionReferenceContext } from "../lib/legal-corpus/selection-reference-context";
+import { selectionAssessmentBatches, selectionReferenceContext } from "../lib/legal-corpus/selection-reference-context";
 
 import { openAiCompatibleJsonSchema } from "../lib/ai/openai-schema";
 import {
@@ -544,6 +544,43 @@ test("assessment batches see already verified references without mixing revision
   assert.deepEqual(selectionReferenceContext([source], [source, reference]), []);
   source.provisionText = "No explicit reference is supplied.";
   assert.deepEqual(selectionReferenceContext([source], [source, reference]), []);
+});
+
+test("assessment groups an explicit rule and its grounds without dropping intervening candidates", () => {
+  const source = selectionCandidate("referring-rule", ["requirement-one"], 0.9);
+  source.citationLabel = "Example Act — Article 700";
+  source.provisionText = "Only the grounds in Article 732 of this Act apply.";
+  const noise = Array.from({length: 9}, (_, index) => selectionCandidate(`other-${index}`, ["requirement-one"], 0.8));
+  const grounds = selectionCandidate("referenced-grounds", ["requirement-one"], 0.7);
+  grounds.candidate.textRevisionId = source.candidate.textRevisionId;
+  grounds.citationLabel = "Example Act — Article 732";
+  const input = [source, ...noise, grounds];
+  const batches = selectionAssessmentBatches(input, 8);
+  assert.equal(batches[0]?.includes(grounds), true, "explicitly referenced grounds must be in the referring rule's batch");
+  assert.ok(batches.every(batch => batch.length <= 8));
+  assert.equal(batches.flat().length, input.length);
+  assert.deepEqual(new Set(batches.flat()), new Set(input));
+  const foreign = structuredClone(grounds);
+  foreign.candidate.textRevisionId = "foreign-revision";
+  assert.ok(!selectionAssessmentBatches([source, ...noise, foreign], 8)[0]?.includes(foreign));
+  assert.throws(() => selectionAssessmentBatches(input, 0));
+});
+
+test("referenced grounds see the referring status rule during their own assessment", () => {
+  const referring = selectionCandidate("protected-status", ["requirement-one"], 0.9);
+  referring.citationLabel = "Example Act — Article 700";
+  referring.provisionText = "For a licensed representative, only the grounds in Article 732 of this Act apply.";
+  const grounds = selectionCandidate("grounds", ["requirement-one"], 0.8);
+  grounds.citationLabel = "Example Act — Article 732";
+  grounds.provisionText = "Article 732. The grounds are dissolution and serious misconduct.";
+  grounds.candidate.textRevisionId = referring.candidate.textRevisionId;
+  assert.deepEqual(selectionReferenceContext([grounds], [grounds, referring]),
+    [{citationLabel: referring.citationLabel, provisionText: referring.provisionText}]);
+  const foreign = structuredClone(referring);
+  foreign.candidate.textRevisionId = "another-revision";
+  assert.deepEqual(selectionReferenceContext([grounds], [grounds, foreign]), []);
+  referring.provisionText = "See Article 732 of another Act.";
+  assert.deepEqual(selectionReferenceContext([grounds], [grounds, referring]), []);
 });
 
 test("repair retains material cross-references while another requirement is uncovered", () => {

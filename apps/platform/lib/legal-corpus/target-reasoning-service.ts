@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { selectionReferenceContext } from "./selection-reference-context";
+import { selectionAssessmentBatches, selectionReferenceContext } from "./selection-reference-context";
 
 import { callOpenAiStructured } from "../document-builder/ai/openai";
 import {
@@ -7,6 +7,7 @@ import {
   selectionCandidateSchema,
   selectionDecisionSchema,
   TARGET_TOTAL_FORMULATION_LIMIT,
+  TARGET_SUPPORT_CANDIDATE_LIMIT,
   type QuestionInterpretationPlan,
   type SelectionCandidate,
   type SelectionDecision,
@@ -47,7 +48,7 @@ const interpretationRequestSchema = z.object({
 }).strict();
 const selectionRequestSchema = z.object({
   plan: questionInterpretationPlanSchema,
-  candidates: z.array(selectionCandidateSchema).max(48),
+  candidates: z.array(selectionCandidateSchema).max(TARGET_SUPPORT_CANDIDATE_LIMIT),
   repairAttempted: z.boolean(),
 }).strict();
 
@@ -57,7 +58,7 @@ const supportMappingSchema = z.object({
   governingRequirementIds: z.array(z.string().min(1).max(200)).max(40).default([]),
 }).strict();
 const supportAssessmentProviderSchema = z.object({
-  mappings: z.array(supportMappingSchema).max(48),
+  mappings: z.array(supportMappingSchema).max(TARGET_SUPPORT_CANDIDATE_LIMIT),
   additionalRequirements: z.array(z.object({
     sourceItemKey: z.string().min(1).max(700),
     readingId: z.string().min(1).max(200),
@@ -316,10 +317,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
   const value = selectionRequestSchema.parse(input);
   if (value.candidates.length === 0) return { mappings: [], additionalRequirements: [] };
   const requirements = targetRequirementSupportContext(value.plan);
-  const candidateBatches: SelectionCandidate[][] = [];
-  for (let offset = 0; offset < value.candidates.length; offset += SUPPORT_ASSESSMENT_BATCH_SIZE) {
-    candidateBatches.push(value.candidates.slice(offset, offset + SUPPORT_ASSESSMENT_BATCH_SIZE));
-  }
+  const candidateBatches = selectionAssessmentBatches(value.candidates, SUPPORT_ASSESSMENT_BATCH_SIZE);
   const results = await Promise.all(candidateBatches.map(async (candidates) => {
     const itemKeyByAlias = new Map(candidates.map((candidate, index) => [
       `candidate-${index + 1}`,
@@ -340,7 +338,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
         "For a time-limit requirement, match the actor and the timed action: a body's time to process or decide a submitted application does not support the applicant's time to file it. A reference to a filing period established elsewhere does not supply that period. Keep this requirement unsupported unless its operative filing rule is present.",
         "When both a directly governing codified provision and interpretive, procedural, or cross-referencing guidance support a requirement, retain both mappings; downstream selection decides priority.",
         "Do not answer the user's question, invent rules, infer missing article text, or use outside knowledge.",
-        "referenceContext contains other already-verified provisions from the same revision that this batch cites. Use it to distinguish an actually missing operative reference from text already supplied elsewhere in the selection pool. Do not request another search for grounds whose substantive text is present there. Return mappings only for candidates, never for referenceContext.",
+        "referenceContext contains other already-verified provisions from the same revision linked to this batch by an explicit reference, in either direction. A referring status rule can expressly incorporate a candidate's generally worded grounds: assess those grounds as a complementary operative component of that status requirement, only within the referring rule's stated scope. This does not extend the grounds to other statuses or override the referring rule's limits. Use both ends to distinguish an actually missing operative reference from text already supplied elsewhere in the selection pool. Do not request another search for grounds whose substantive text is present there. Return mappings only for candidates, never for referenceContext.",
         "A provision may support requirements from any retrieval formulation, and may support none.",
         "Use the supplied readingId for additionalRequirements; never infer an identifier from a reading's text.",
         value.repairAttempted

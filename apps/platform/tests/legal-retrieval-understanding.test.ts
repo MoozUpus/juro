@@ -4,11 +4,42 @@ import { planFromQuestionPlanningHints } from "../lib/legal-corpus/target-retrie
 import { targetRequirementSupportContext } from "../lib/legal-corpus/target-reasoning-service";
 
 import {
+  projectLegalRetrievalPlan,
   normalizeLegalRetrievalUnderstanding,
   RETRIEVAL_PLANNER_RESPONSE_LIMITS,
   targetQuestionPlanningHints,
   fallbackLegalRetrievalUnderstanding,
 } from "../lib/legal/legal-retrieval-understanding";
+
+test("named status and forum survive a planner query that omits their names", () => {
+  const status = "Licensed temporary representative";
+  const forum = "Independent review board";
+  const query = "Conditions and exceptions during the current procedure";
+  const understanding = projectLegalRetrievalPlan({
+    standaloneQuestion: "Which restrictions and filing periods apply?",
+    generalQuery: "Ordinary restrictions during the procedure",
+    personalStatuses: [{status, query}], forums: [{forum, query: "Applicant filing period"}],
+    concepts: [], consequences: null,
+  }, "Which restrictions and filing periods apply?");
+  const hints = targetQuestionPlanningHints(understanding, "en")!;
+  const context = targetRequirementSupportContext(planFromQuestionPlanningHints("named-scopes", hints));
+  assert.equal(context[1]?.statement, `${status}: ${query}`);
+  assert.equal(context[2]?.statement, `${forum}: Applicant filing period`);
+  assert.ok(hints.formulations.includes(`${status}: ${query}`));
+  assert.ok(hints.formulations.includes(`${forum}: Applicant filing period`));
+});
+
+test("the full bounded named scope and query reach assessment without truncation", () => {
+  const status = "s".repeat(100);
+  const query = "q".repeat(240);
+  const understanding = projectLegalRetrievalPlan({standaloneQuestion: "Original question",
+    generalQuery: "Ordinary governing rule", personalStatuses: [{status, query}],
+    forums: [], concepts: [], consequences: null}, "Original question");
+  const hints = targetQuestionPlanningHints(understanding, "en")!;
+  const context = targetRequirementSupportContext(planFromQuestionPlanningHints("bounded-scope", hints));
+  assert.equal(context[1]?.statement, `${status}: ${query}`);
+  assert.ok(hints.formulations.includes(`${status}: ${query}`));
+});
 
 test("retrieval planner starts structured output directly with a bounded response budget", () => {
   assert.deepEqual(RETRIEVAL_PLANNER_RESPONSE_LIMITS, {
