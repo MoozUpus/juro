@@ -74,7 +74,7 @@ export function parseTargetRequirementSupport(output: unknown): TargetRequiremen
   // Provider-compatible JSON Schema omits maxItems. Optional suggestions must
   // not invalidate otherwise valid evidence mappings when that bound is missed.
   const parsed = supportAssessmentProviderSchema.extend({
-    additionalRequirements: supportAssessmentProviderSchema.shape.additionalRequirements.max(48),
+    additionalRequirements: z.array(supportAssessmentProviderSchema.shape.additionalRequirements.element).max(48),
   }).parse(output);
   return supportAssessmentProviderSchema.parse({
     ...parsed, additionalRequirements: parsed.additionalRequirements.slice(0, 3),
