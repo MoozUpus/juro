@@ -50,7 +50,7 @@ function seedCredential(sqlite: DatabaseSync, userId: string): void {
     INSERT INTO user_password_credentials (
       user_id,algorithm,iterations,salt_base64url,hash_base64url,
       password_changed_at,created_at,updated_at
-    ) VALUES (?,'PBKDF2-SHA256',600000,?,?,?,?,?)
+    ) VALUES (?,'PBKDF2-SHA256',100000,?,?,?,?,?)
   `).run(
     userId,
     "s".repeat(22),

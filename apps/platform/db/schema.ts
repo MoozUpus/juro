@@ -98,7 +98,7 @@ export const userPasswordCredentials = sqliteTable(
       onDelete: "cascade",
     }),
     algorithm: text("algorithm").notNull().default("PBKDF2-SHA256"),
-    iterations: integer("iterations").notNull().default(600_000),
+    iterations: integer("iterations").notNull().default(100_000),
     saltBase64url: text("salt_base64url").notNull(),
     hashBase64url: text("hash_base64url").notNull(),
     passwordChangedAt: text("password_changed_at").notNull(),
@@ -111,7 +111,7 @@ export const userPasswordCredentials = sqliteTable(
     ),
     check(
       "user_password_iterations_check",
-      sql`${table.iterations} BETWEEN 310000 AND 1000000`,
+      sql`${table.iterations} = 100000`,
     ),
     check(
       "user_password_salt_check",

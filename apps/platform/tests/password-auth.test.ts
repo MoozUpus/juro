@@ -19,6 +19,7 @@ import {
   failPasswordLoginAttempt,
   hashPassword,
   mfaVerificationRateLimit,
+  PASSWORD_PBKDF2_ITERATIONS,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   passwordCredentialForUser,
@@ -76,7 +77,7 @@ test("password credentials use a salted slow hash and never store plaintext", as
   const first = await hashPassword(password);
   const second = await hashPassword(password);
   assert.equal(first.algorithm, "PBKDF2-SHA256");
-  assert.equal(first.iterations, 600_000);
+  assert.equal(first.iterations, PASSWORD_PBKDF2_ITERATIONS);
   assert.notEqual(first.saltBase64url, second.saltBase64url);
   assert.notEqual(first.hashBase64url, second.hashBase64url);
   assert.equal(first.hashBase64url.includes(password), false);
@@ -85,18 +86,14 @@ test("password credentials use a salted slow hash and never store plaintext", as
   assert.equal(await verifyPassword(password, null), false);
 });
 
-test("password KDF avoids the Workers Web Crypto PBKDF2 iteration cap", () => {
+test("password KDF stays within the Workers Web Crypto PBKDF2 iteration cap", () => {
   const passwordModule = readFileSync(
     new URL("../lib/auth/password.ts", import.meta.url),
     "utf8",
   );
-  const derivePasswordHash = passwordModule.slice(
-    passwordModule.indexOf("async function derivePasswordHash"),
-    passwordModule.indexOf("async function constantTimeEqual"),
-  );
-  assert.match(passwordModule, /import \{ pbkdf2 \} from "node:crypto";/u);
-  assert.match(derivePasswordHash, /pbkdf2\(password, salt, iterations, 32, "sha256"/u);
-  assert.doesNotMatch(derivePasswordHash, /crypto\.subtle\.deriveBits/u);
+  assert.equal(PASSWORD_PBKDF2_ITERATIONS, 100_000);
+  assert.match(passwordModule, /crypto\.subtle\.deriveBits/u);
+  assert.doesNotMatch(passwordModule, /from "node:crypto"/u);
 });
 
 test("password policy supports passphrases without silent truncation", () => {

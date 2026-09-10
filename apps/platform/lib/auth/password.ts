@@ -1,10 +1,10 @@
-import { pbkdf2 } from "node:crypto";
 import { randomToken, sha256 } from "./crypto";
 import type { SecurityEventGuard } from "./security-events";
 
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 256;
-export const PASSWORD_PBKDF2_ITERATIONS = 600_000;
+// Cloudflare Workers caps Web Crypto PBKDF2 at 100,000 iterations.
+export const PASSWORD_PBKDF2_ITERATIONS = 100_000;
 
 export type PasswordCredential = {
   userId: string;
@@ -23,6 +23,8 @@ export type PreparedPasswordCredential = Omit<
 export type PasswordValidation =
   | { ok: true }
   | { ok: false; code: "PASSWORD_TOO_SHORT" | "PASSWORD_TOO_LONG" };
+
+const encoder = new TextEncoder();
 
 function toArrayBuffer(value: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(value.byteLength);
@@ -65,18 +67,24 @@ async function derivePasswordHash(
   salt: Uint8Array,
   iterations: number,
 ): Promise<Uint8Array> {
-  // Workers Web Crypto rejects PBKDF2 iteration counts above 100,000. Use
-  // the fully supported node:crypto API so the stored 600,000-iteration
-  // credentials remain both deployable and verifiable in the Worker runtime.
-  return new Promise<Uint8Array>((resolve, reject) => {
-    pbkdf2(password, salt, iterations, 32, "sha256", (error, derivedKey) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(new Uint8Array(derivedKey));
-    });
-  });
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: toArrayBuffer(salt),
+      iterations,
+    },
+    key,
+    256,
+  );
+  return new Uint8Array(bits);
 }
 
 async function constantTimeEqual(
@@ -219,8 +227,7 @@ export async function verifyPassword(
   if (
     selected.algorithm !== "PBKDF2-SHA256"
     || !Number.isSafeInteger(selected.iterations)
-    || selected.iterations < 310_000
-    || selected.iterations > 1_000_000
+    || selected.iterations !== PASSWORD_PBKDF2_ITERATIONS
     || salt?.byteLength !== 16
     || expected?.byteLength !== 32
   ) {

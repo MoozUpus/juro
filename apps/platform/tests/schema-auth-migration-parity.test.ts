@@ -112,6 +112,16 @@ function applyMigrationsThrough0154(db: DatabaseSync): void {
   }
 }
 
+function applyPasswordKdfWorkersLimitMigration(db: DatabaseSync): void {
+  const migration = readFileSync(
+    new URL("0155_password_kdf_workers_limit.sql", drizzleRoot),
+    "utf8",
+  );
+  for (const statement of statements(migration)) {
+    db.exec(statement);
+  }
+}
+
 function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
@@ -236,11 +246,12 @@ function assertColumnParity(
   assert.deepEqual(declared, migrated);
 }
 
-test("db/schema.ts stays in parity with locale and authentication migrations 0150-0154", () => {
+test("db/schema.ts stays in parity with locale and authentication migrations 0150-0155", () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
     applyMigrationsThrough0154(db);
+    applyPasswordKdfWorkersLimitMigration(db);
 
     for (const table of migratedTables) {
       const tableName = getTableName(table);
