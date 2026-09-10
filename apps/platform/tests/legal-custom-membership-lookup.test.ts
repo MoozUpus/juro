@@ -3,7 +3,7 @@ import test from "node:test";
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {DatabaseSync} from "node:sqlite";
-import {buildCustomMembershipLookup, resolveCustomMembershipLookup} from "../lib/legal-corpus/custom-membership-lookup";
+import {buildCustomMembershipLookup, createCustomMembershipLookupReader, resolveCustomMembershipLookup} from "../lib/legal-corpus/custom-membership-lookup";
 
 test("registered lookup roots are append-only and require bounded hashes and sizes", () => {
   const db = new DatabaseSync(":memory:");
@@ -62,6 +62,12 @@ test("fine membership layout preserves every accepted identity and reads only re
   assert.equal(reads.includes(pageKey), false);
   const leafKey = reads.find(key => key.includes("/leaf-"))!;
   assert.ok(objects.get(leafKey)!.length < originalPage.length / 10);
+  const requestReader = createCustomMembershipLookupReader(bucket);
+  await requestReader({releaseId, sourceInventorySha256, reference: layout.reference, itemKeys: [members[17]!.itemKey]});
+  reads.length = 0;
+  await requestReader({releaseId, sourceInventorySha256, reference: layout.reference, itemKeys: [members[18]!.itemKey]});
+  assert.equal(reads.length, 1, "repair authenticates its new leaf while reusing verified directory metadata");
+  assert.ok(reads[0]!.includes("/leaf-"));
   await assert.rejects(resolveCustomMembershipLookup({bucket, releaseId, reference: layout.reference,
     sourceInventorySha256: "f".repeat(64), itemKeys: [members[17]!.itemKey]}));
   const corrupt = objects.get(leafKey)!.slice();

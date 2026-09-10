@@ -127,15 +127,37 @@ export async function buildCustomMembershipLookup(input: {
 
 /** The accepted D1 lookup root binds this layout to the original inventory.
  * All directory and leaf bytes still require their parent's exact hash. */
-export async function resolveCustomMembershipLookup(input: {
+type LookupInput = {
   bucket: Bucket; releaseId: string; sourceInventorySha256: string; reference: Reference;
   itemKeys: readonly string[];
-}): Promise<Map<string, {ordinal: number; legalIdentitySha256: string | null;
+};
+
+export function createCustomMembershipLookupReader(bucket: Bucket) {
+  const directoryCache = new Map<string, unknown>();
+  let cachedBytes = 0;
+  const readDirectory: typeof readVerified = async (binding, reference, limit) => {
+    const identity = `${reference.key}:${reference.sha256}:${reference.sizeBytes}`;
+    if (directoryCache.has(identity)) return directoryCache.get(identity);
+    const value = await readVerified(binding, reference, limit);
+    if (cachedBytes + reference.sizeBytes <= 2 * 1_024 * 1_024) {
+      directoryCache.set(identity, value);
+      cachedBytes += reference.sizeBytes;
+    }
+    return value;
+  };
+  return (input: Omit<LookupInput, "bucket">) => resolveMembershipLookup({...input, bucket}, readDirectory);
+}
+
+export function resolveCustomMembershipLookup(input: LookupInput) {
+  return resolveMembershipLookup(input, readVerified);
+}
+
+async function resolveMembershipLookup(input: LookupInput, readDirectory: typeof readVerified): Promise<Map<string, {ordinal: number; legalIdentitySha256: string | null;
   legalIdentity?: z.infer<typeof customRuntimeLegalIdentitySchema>}>> {
   const root = z.object({schemaVersion: z.literal(2), releaseId: z.literal(input.releaseId),
     sourceInventorySha256: z.literal(input.sourceInventorySha256), memberCount: z.number().int().positive(),
     partitions: z.array(partitionReferenceSchema).max(64)}).strict()
-    .parse(await readVerified(input.bucket, input.reference, ROOT_LIMIT));
+    .parse(await readDirectory(input.bucket, input.reference, ROOT_LIMIT));
   const roots = references(root.partitions, /^[0-3][a-f0-9]$/u);
   if (root.partitions.reduce((sum, page) => sum + page.count, 0) !== root.memberCount) {
     throw new TypeError("CUSTOM_MEMBERSHIP_LOOKUP_COUNT_INVALID");
@@ -154,7 +176,7 @@ export async function resolveCustomMembershipLookup(input: {
       if (!reference) return;
       const directory = z.object({schemaVersion: z.literal(2), releaseId: z.literal(input.releaseId),
         partition: z.literal(partition), pages: z.array(partitionReferenceSchema).max(64)}).strict()
-        .parse(await readVerified(input.bucket, reference, ROOT_LIMIT));
+        .parse(await readDirectory(input.bucket, reference, ROOT_LIMIT));
       const pages = references(directory.pages, /^[a-f0-9]{3}$/u);
       if (directory.pages.some(page => parentPartition(page.partition) !== partition)
         || directory.pages.reduce((sum, page) => sum + page.count, 0) !== reference.count) {

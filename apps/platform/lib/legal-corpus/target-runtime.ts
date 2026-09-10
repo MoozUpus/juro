@@ -18,7 +18,7 @@ import { customReleaseGovernanceSchema } from "./custom-release-governance";
 import { resolveCustomBm25RuntimeMembershipEntries, type CustomRuntimeLegalIdentity }
   from "./custom-bm25-runtime";
 import { resolveCustomTrustedLegalTitles } from "./custom-search-trusted-titles";
-import { resolveCustomMembershipLookup } from "./custom-membership-lookup";
+import { createCustomMembershipLookupReader } from "./custom-membership-lookup";
 import { assertCompleteCorpusCurrentInterval, resolveCompleteCorpusEvidence, resolveControllingEvidence,
   resolveR2NativeCustomEvidence,
   type LegalEvidenceBucket } from "./target-evidence";
@@ -179,6 +179,7 @@ export function createRuntimeCandidateCatalog(
   // candidate provenance are still checked for every packet and endpoint.
   type Membership = NonNullable<Awaited<ReturnType<typeof resolveCustomBm25RuntimeMembershipEntries>>>;
   const membershipByInventory = new Map<string, Membership>();
+  const readMembershipLookup = bucket ? createCustomMembershipLookupReader(bucket as R2Bucket) : null;
   return {
     async revalidate(
       packet: CandidatePacket,
@@ -237,7 +238,7 @@ export function createRuntimeCandidateCatalog(
         const physicalReleaseId = physicalRuntimeReleaseId(component.descriptorKey, release.id);
         compactMembership = missingKeys.length === 0 ? new Map()
           : component.lookupKey && component.lookupSha256 && component.lookupSizeBytes
-            ? await resolveCustomMembershipLookup({bucket: bucket as R2Bucket, releaseId: physicalReleaseId,
+            ? await readMembershipLookup!({releaseId: physicalReleaseId,
               sourceInventorySha256: component.mappingInventorySha256,
               reference: {key: component.lookupKey, sha256: component.lookupSha256, sizeBytes: component.lookupSizeBytes},
               itemKeys: missingKeys})
