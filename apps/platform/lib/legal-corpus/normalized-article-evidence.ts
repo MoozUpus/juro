@@ -11,7 +11,7 @@ export function createNormalizedArticleEvidenceReader(bucket: Pick<LegalEvidence
     r2Key: string; byteCount: number; sha256: string;
   } | null>>();
   return async (original: ResolvedOfficialEvidence, article: string,
-    sourceRevisionId = original.textRevisionId): Promise<ResolvedOfficialEvidence | null> => {
+    sourceRevisionId: string = original.textRevisionId): Promise<ResolvedOfficialEvidence | null> => {
     if (!/:\s*$/u.test(original.provisionText)) return null;
     const r2Key = `corpus/normalized/${sourceRevisionId}.json`;
     const sha256 = original.evidence.sourceNormalizedSha256;
