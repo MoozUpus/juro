@@ -1,4 +1,4 @@
-import type { LegalSourceContext } from "../ai/provider";
+import type { LegalChatRequest, LegalSourceContext } from "../ai/provider";
 import { verifyCurrentLexDocument } from "../legal/lex-document-status";
 import {
   retrieveLiveLexSources,
@@ -44,6 +44,7 @@ export type LegalChatSourceEvidence = {
 
 export type LegalChatSourceRetrieval = {
   sources: LegalSourceContext[];
+  coverageRequirements?: LegalChatRequest["coverageRequirements"];
   freshness: LegalDatabaseFreshness;
   legalDatabaseAsOf: string;
   sourceAccessMode: "direct" | "approved_package" | "mixed";
@@ -220,7 +221,10 @@ export function targetCitationArticle(label: string, quotation: string): string 
   return itemNumber && itemNumber === article ? null : article;
 }
 
-function targetAnswerDetails(result: TargetLegalAnswerResult) {
+function targetAnswerDetails(result: TargetLegalAnswerResult, locale: "ru" | "uz") {
+  const endpointLabel = (endpoint: { kind: "current" } | { kind: "timestamp"; instant: string }) =>
+    endpoint.kind === "timestamp" ? endpoint.instant.slice(0, 10)
+      : locale === "ru" ? "Действующая редакция" : "Amaldagi tahrir";
   if (result.kind === "legal_answer" || result.kind === "conditional_answer"
     || result.kind === "partial_legal_answer") {
     return {
@@ -232,23 +236,34 @@ function targetAnswerDetails(result: TargetLegalAnswerResult) {
       partial: result.kind === "partial_legal_answer",
       uncoveredRequirementIds: result.kind === "partial_legal_answer"
         ? result.uncoveredSupportingRequirementIds : [],
+      coverageRequirements: result.coverageRequirements ?? [],
     };
   }
   if (result.kind === "comparison_answer") {
     return {
       statements: [
         ...result.left.whatTheLawSays.map((statement) => ({
-          statement,
+          statement: { ...statement, requirementId: `left:${statement.requirementId}` },
           temporalEndpoint: result.left.temporalEndpoint,
         })),
         ...result.right.whatTheLawSays.map((statement) => ({
-          statement,
+          statement: { ...statement, requirementId: `right:${statement.requirementId}` },
           temporalEndpoint: result.right.temporalEndpoint,
         })),
       ],
       formulationsUsed: result.endpointFormulationSearches,
       partial: false,
       uncoveredRequirementIds: [],
+      coverageRequirements: [
+        ...(result.left.coverageRequirements ?? []).map(requirement => ({
+          ...requirement, id: `left:${requirement.id}`,
+          statement: `${endpointLabel(result.left.temporalEndpoint)}: ${requirement.statement}`,
+        })),
+        ...(result.right.coverageRequirements ?? []).map(requirement => ({
+          ...requirement, id: `right:${requirement.id}`,
+          statement: `${endpointLabel(result.right.temporalEndpoint)}: ${requirement.statement}`,
+        })),
+      ],
     };
   }
   return null;
@@ -301,7 +316,7 @@ async function withTargetCoverage(
   now: Date,
   verifyCurrentSource: (url: string) => Promise<boolean>,
 ): Promise<LegalChatSourceRetrieval | null> {
-  const answer = targetAnswerDetails(result);
+  const answer = targetAnswerDetails(result, locale);
   if (!answer) return null;
   const checkedAt = now.toISOString();
   const candidates = uniqueTargetStatements(answer);
@@ -385,6 +400,14 @@ async function withTargetCoverage(
     freshness,
     legalDatabaseAsOf: freshness.asOf,
     sourceAccessMode: "approved_package",
+    coverageRequirements: answer.coverageRequirements.map(requirement => ({
+      id: requirement.id, statement: requirement.statement, priority: requirement.priority ?? "core",
+      ...(requirement.scopeKind ? {scopeKind: requirement.scopeKind} : {}),
+      sourceIds: statements.flatMap((entry, index) => answer.statements.some(candidate =>
+        candidate.statement.requirementId === requirement.id
+        && candidate.statement.provisionRenditionId === entry.statement.provisionRenditionId)
+        ? [sources[index]!.id] : []),
+    })),
     sourcesRetrievedAt: checkedAt,
     sourceValidationStatus: "validated",
     errors: droppedCurrent ? [{ code: [...statuses.values()].includes(null)
@@ -519,6 +542,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
   let targetTelemetry: TargetAttemptTelemetry | undefined;
   let partialIndexed: LegalChatSourceRetrieval | null = null;
   let discoveredOfficialUrls: string[] = [];
+  let coverageRequirements: LegalChatRequest["coverageRequirements"] = [];
   if (input.targetService && input.targetEnvironment && input.targetQuestionId) {
     const contextualPlanningStartedAt = performance.now();
     const planningPromise = Promise.all([
@@ -529,6 +553,9 @@ export async function retrieveCorpusAwareLegalSources(input: {
       ? await withinSignal(planningPromise, input.signal)
       : await planningPromise;
     input.signal?.throwIfAborted();
+    coverageRequirements = planningHints?.requirements.map((requirement, index) => ({
+      id: `requirement-${index + 1}`, ...requirement, sourceIds: [],
+    })) ?? [];
     const contextualPlanningLatencyMs = Math.max(0, performance.now() - contextualPlanningStartedAt);
     const remainingBudgetMs = Math.max(
       1,
@@ -560,6 +587,10 @@ export async function retrieveCorpusAwareLegalSources(input: {
         }), targetController.signal);
       if (target.kind === "insufficient_indexed_coverage" || target.kind === "source_unavailability") {
         discoveredOfficialUrls = target.discoveredOfficialUrls ?? [];
+        if (target.coverageRequirements?.length) coverageRequirements = target.coverageRequirements.map(requirement => ({
+          id: requirement.id, statement: requirement.statement, priority: requirement.priority ?? "core", sourceIds: [],
+          ...(requirement.scopeKind ? {scopeKind: requirement.scopeKind} : {}),
+        }));
       }
       const indexed = await withTargetCoverage(target, input.locale, input.now ?? new Date(),
         input.verifyCurrentSource ?? ((url) => verifyCurrentLexDocument(url, targetController.signal)));
@@ -642,15 +673,23 @@ export async function retrieveCorpusAwareLegalSources(input: {
     discoverOfficialUrls: input.discoverOfficialUrls,
   });
   const live = withLiveCoverage(result, input.query, targetTelemetry);
+  live.coverageRequirements = coverageRequirements;
   const complete = (retrieval: LegalChatSourceRetrieval) => completeArticleContexts(retrieval, {
     locale: input.locale, signal: input.signal, reader: input.articleContextReader,
     budgetMs: (input.budgetMs ?? 12_000) - (performance.now() - retrievalStartedAt),
   });
   if (!partialIndexed) return complete(live);
   const sources = [...partialIndexed.sources];
-  const known = new Set(sources.map((source) => source.officialUrl));
+  // Different articles in the same instrument are independent evidence.
+  const sourceIdentity = (source: LegalChatSourceRetrieval["sources"][number]) =>
+    JSON.stringify([source.officialUrl, source.article, source.spans?.map(span => span.text), source.excerpt]);
+  const known = new Set(sources.map(sourceIdentity));
   for (const source of live.sources) {
-    if (!known.has(source.officialUrl)) sources.push(source);
+    const identity = sourceIdentity(source);
+    if (!known.has(identity)) {
+      sources.push(source);
+      known.add(identity);
+    }
   }
   const evidence = [...partialIndexed.evidence];
   const evidenceKeys = new Set(evidence.map((entry) => `${entry.canonicalUrl}:${entry.contentSha256}`));

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { planFromQuestionPlanningHints } from "../lib/legal-corpus/target-retrieval";
+import { targetRequirementSupportContext } from "../lib/legal-corpus/target-reasoning-service";
 
 import {
   normalizeLegalRetrievalUnderstanding,
@@ -14,6 +15,20 @@ test("retrieval planner starts structured output directly with a bounded respons
     maxOutputTokens: 1_024,
     reasoningEffort: "none",
   });
+});
+
+test("scope types survive normalization, formulation planning and support assessment", () => {
+  const scopes = ["general", "personal_status", "action_stage", "forum", "claim_kind", "consequence"] as const;
+  const understanding = normalizeLegalRetrievalUnderstanding({standaloneQuestion: "Independent scopes",
+    corpusQueries: ["Independent scopes"], lexSearchQueries: ["Independent scopes"], webSearchQuery: "Independent scopes",
+    requiredConcepts: scopes.map(scopeKind => ({statement: `Rule for ${scopeKind}`, alternatives: [`Query for ${scopeKind}`],
+      priority: "core", scopeKind})),
+  }, "Independent scopes");
+  const hints = targetQuestionPlanningHints(understanding, "en")!;
+  const context = targetRequirementSupportContext(planFromQuestionPlanningHints("scope-preservation", hints));
+  assert.deepEqual(context.map(requirement => requirement.scopeKind), scopes);
+  assert.equal(hints.formulations.length, scopes.length);
+  assert.deepEqual(hints.formulationRequirementIndexes, scopes.map((_, index) => [index]));
 });
 
 test("provider-sized retrieval plans are bounded without discarding semantic queries", () => {

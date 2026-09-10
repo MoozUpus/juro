@@ -104,6 +104,120 @@ const run: LegalAiRunResult = {
   fallbackFromProvider: null,
 };
 
+test("Main Point fallback leads with the validated governing finding before conditional exceptions", () => {
+  const evidence = {...source, spans: [{...source.spans![0]!, text:
+    "Общество подлежит государственной регистрации. При реорганизации общества регистрация проводится после передачи документов."}]};
+  const answer = {...result, summary: "Обзор процедур и альтернатив требует отдельного рассмотрения.",
+    conditionalBranches: [{condition: "При реорганизации общества",
+      outcome: "Регистрация проводится после передачи документов.", sourceIds: [source.id]}]};
+  const validated = validateLegalGatewayAnswer({result: answer, run: {...run, data: answer},
+    sources: [evidence], locale: "ru", answerMode: "short", reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt});
+  assert.match(validated.run.data.summary, /Общество подлежит государственной регистрации/u);
+  assert.doesNotMatch(validated.run.data.summary, /реорганизации/u);
+  assert.equal(validated.run.data.conditionalBranches?.length, 1);
+});
+
+test("Main Point selects the grounded ordinary rule and cites only its evidence", () => {
+  const exception = {...source, id: "exception", spans: [{...source.spans![0]!, text:
+    "При реорганизации общества регистрация проводится после передачи документов."}]};
+  const answer: LegalChatResponse = {...result, summary: "Обзор процедур и альтернатив.", confirmedFindings: [
+    {title: "При реорганизации общества", explanation: "Регистрация проводится после передачи документов.",
+      answerRole: "qualification", sourceIds: [exception.id]},
+    {...result.confirmedFindings[0]!, answerRole: "governing_rule"},
+  ]};
+  const validated = validateLegalGatewayAnswer({result: answer, run: {...run, data: answer},
+    sources: [source, exception], locale: "ru", answerMode: "short", reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt});
+  assert.match(validated.run.data.summary, /Общество подлежит государственной регистрации/u);
+  assert.doesNotMatch(validated.run.data.summary, /реорганизации/u);
+  assert.deepEqual(validated.run.data.summarySourceIds, [source.id]);
+});
+
+test("a multi-scope Main Point must cite the validated evidence for both scopes", () => {
+  const secondText = "Заявитель направляет письменное уведомление в комиссию в течение семи дней.";
+  const second = {...source, id: "second-rule", spans: [{...source.spans![0]!, text: secondText}]};
+  const summary = `${result.confirmedFindings[0]!.explanation} ${secondText}`;
+  const answer: LegalChatResponse = {...result, summary, summarySourceIds: [source.id, second.id],
+    confirmedFindings: [{...result.confirmedFindings[0]!, answerRole: "governing_rule"},
+      {title: "Уведомление комиссии", explanation: secondText, answerRole: "governing_rule", sourceIds: [second.id]}]};
+  const validate = (value: LegalChatResponse) => validateLegalGatewayAnswer({result: value, run: {...run, data: value},
+    sources: [source, second], locale: "ru", answerMode: "detailed", reasoningMode: "fast", legalDatabaseAsOf: source.verifiedAt});
+  const accepted = validate(answer).run.data;
+  assert.equal(accepted.summary, summary);
+  assert.deepEqual(accepted.summarySourceIds, [source.id, second.id]);
+  const rejected = validate({...answer, summarySourceIds: [source.id]}).run.data;
+  assert.doesNotMatch(rejected.summary, /семи дней/u);
+  assert.deepEqual(rejected.summarySourceIds, [source.id]);
+});
+
+test("grounding checks operative clauses beyond the opening terms of a verified span", () => {
+  const introduction = Array.from({length: 70}, (_, index) => `введение${index}`).join(" ");
+  const evidence = {...source, spans: [{...source.spans![0]!, text:
+    `${introduction}. Общество подлежит государственной регистрации в установленном порядке.`}]};
+  const validated = validateLegalGatewayAnswer({result, run,
+    sources: [evidence], locale: "ru", answerMode: "short", reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt});
+  assert.equal(validated.run.sourceFallback, undefined);
+  assert.deepEqual(validated.run.data.confirmedFindings[0]?.sourceIds, [source.id]);
+  assert.equal(validated.run.data.responseKind, "answer");
+  const invented = {...result, confirmedFindings: [{...result.confirmedFindings[0]!,
+    explanation: "Общество подлежит государственной регистрации за 999 дней."}]};
+  const rejected = validateLegalGatewayAnswer({result: invented, run: {...run, data: invented},
+    sources: [evidence], locale: "ru", answerMode: "short", reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt});
+  assert.doesNotMatch(JSON.stringify(rejected.run.data.confirmedFindings), /999/u);
+});
+
+test("independent requirements remain visibly unresolved when findings disappear at grounding", () => {
+  const requirements = [
+    {id: "registration", statement: "Государственная регистрация общества", priority: "core" as const, sourceIds: [source.id]},
+    {id: "filing", statement: "Срок подачи документов", priority: "core" as const, sourceIds: [source.id]},
+  ];
+  const answer = {...result, confirmedFindings: [
+    {...result.confirmedFindings[0]!, requirementIds: ["registration"]},
+    {title: "Срок подачи документов", explanation: "Документы подаются за 999 дней.", sourceIds: [source.id], requirementIds: ["filing"]},
+  ]};
+  const validated = validateLegalGatewayAnswer({result: answer, run: {...run, data: answer},
+    sources: [source], coverageRequirements: requirements, locale: "ru", answerMode: "detailed",
+    reasoningMode: "fast", legalDatabaseAsOf: source.verifiedAt});
+  assert.equal(validated.run.data.responseKind, "clarification_required");
+  assert.deepEqual(validated.run.data.coverageGaps, ["Срок подачи документов"]);
+  assert.equal(validated.run.data.confirmedFindings.length, 1);
+});
+
+test("a supported heading cannot authorize an unsupported explanation", () => {
+  const answer = {...result, confirmedFindings: [{
+    title: "Общество подлежит государственной регистрации в установленном порядке",
+    explanation: "Предусмотрены штраф, конфискация имущества и лишение свободы.", sourceIds: [source.id],
+  }]};
+  const validated = validateLegalGatewayAnswer({result: answer, run: {...run, data: answer},
+    sources: [source], locale: "ru", answerMode: "detailed", reasoningMode: "fast", legalDatabaseAsOf: source.verifiedAt});
+  assert.doesNotMatch(JSON.stringify(validated.run.data.confirmedFindings), /конфискация|лишение свободы/u);
+});
+
+test("complementary citations can separately support a finding's rule and qualification", () => {
+  const title = "Общество подлежит государственной регистрации в установленном порядке";
+  const explanation = "Заявитель предоставляет подписанное заявление и документ, удостоверяющий личность, в течение семи дней.";
+  const qualification = {...source, id: "qualification", spans: [{...source.spans![0]!, id: "qualification-span", text: explanation}]};
+  const rule = {...source, spans: [{...source.spans![0]!, text: title}]};
+  const answer = {...result, confirmedFindings: [{title, explanation,
+    sourceIds: [rule.id, qualification.id], requirementIds: ["rule", "qualification"]}]};
+  const validated = validateLegalGatewayAnswer({result: answer, run: {...run, data: answer},
+    sources: [rule, qualification], locale: "ru", answerMode: "detailed", reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt, coverageRequirements: [
+      {id: "rule", statement: title, priority: "core", sourceIds: [rule.id]},
+      {id: "qualification", statement: explanation, priority: "core", sourceIds: [qualification.id]},
+    ]});
+  assert.deepEqual(new Set(validated.run.data.confirmedFindings[0]?.sourceIds), new Set([rule.id, qualification.id]));
+  assert.deepEqual(validated.run.data.coverageGaps, []);
+  const invented = {...answer, confirmedFindings: [{...answer.confirmedFindings[0]!, explanation: `${explanation} Штраф составляет 999.`}]};
+  const rejected = validateLegalGatewayAnswer({result: invented, run: {...run, data: invented},
+    sources: [rule, qualification], locale: "ru", answerMode: "detailed", reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt});
+  assert.doesNotMatch(JSON.stringify(rejected.run.data.confirmedFindings), /999/u);
+});
+
 test("numeric grounding accepts written quantities but not digits inside article numbers", () => {
   const deadlineSource = { ...source, spans: [{ ...source.spans![0]!,
     text: "Статья 560. Срок обращения в суд — три месяца. Для другого требования срок составляет один год. Для комиссии установлен шестимесячный срок.",

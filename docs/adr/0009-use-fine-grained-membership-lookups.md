@@ -1,6 +1,6 @@
 # Use fine-grained membership lookups
 
-Status: proposed
+Status: accepted — 2026-09-11
 
 The R2-native search runtime keeps accepted membership inventories immutable. Their coarse partitions contain complete legal identities and evidence locators, making individual candidate validation read much more data than it needs.
 

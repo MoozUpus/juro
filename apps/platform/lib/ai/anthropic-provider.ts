@@ -17,6 +17,8 @@ import {
   LEGAL_ANSWER_MARKDOWN_RULE,
   LEGAL_ANSWER_MATERIAL_SOURCE_COVERAGE_RULE,
   LEGAL_ANSWER_COMPLETENESS_RULE,
+  LEGAL_ANSWER_REQUIREMENT_COVERAGE_RULE,
+  LEGAL_ANSWER_OPERATIVE_CITATION_RULE,
 } from "./legal-answer-prompt-rules";
 import { aiText } from "./localization";
 
@@ -50,8 +52,6 @@ export function normalizeAnthropicLegalChatResponse(
   const record = value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
-  const text = (key: string, fallback: string) =>
-    typeof record[key] === "string" && record[key].trim() ? record[key] as string : fallback;
   const list = (key: string) => Array.isArray(record[key]) ? record[key] : [];
   const defaultQuestion = aiText(input.locale, "Какие обстоятельства, документы и даты можно уточнить?", "Qaysi holatlar, hujjatlar va sanalarni aniqlashtirish mumkin?", "Which circumstances, documents and dates can you clarify?");
   const responseKind = record.responseKind === "answer" || record.responseKind === "clarification_required"
@@ -59,8 +59,7 @@ export function normalizeAnthropicLegalChatResponse(
     : "clarification_required";
   return parseLegalChatResponse({
     responseKind,
-    summary: text("summary", aiText(input.locale, "Для ответа нужны уточнения.", "Javob uchun aniqlik kiritish kerak.", "The answer requires clarification.")),
-    answer: text("answer", aiText(input.locale, "Уточните обстоятельства, чтобы JURO мог проверить применимые нормы.", "JURO tegishli normalarni tekshirishi uchun holatlarni aniqlashtiring.", "Clarify the circumstances so JURO can verify the applicable law.")),
+    ...(typeof record.summary === "string" ? { summary: record.summary } : {}),
     language: input.locale,
     jurisdiction: "UZ",
     answerMode: input.answerMode,
@@ -70,7 +69,7 @@ export function normalizeAnthropicLegalChatResponse(
     conditionalBranches: list("conditionalBranches"),
     assumptions: list("assumptions"),
     risks: list("risks"),
-    sources: list("sources"),
+    sources: [],
     requiredDocuments: list("requiredDocuments"),
     actionPlan: list("actionPlan"),
     deadlines: list("deadlines"),
@@ -79,7 +78,7 @@ export function normalizeAnthropicLegalChatResponse(
     suggestedDocument: record.suggestedDocument && typeof record.suggestedDocument === "object" ? record.suggestedDocument : null,
     suggestLawyer: typeof record.suggestLawyer === "boolean" ? record.suggestLawyer : false,
     legalDatabaseAsOf: input.legalDatabaseAsOf,
-  });
+  }, input);
 }
 
 export async function runAnthropicLegalChat(input: LegalChatRequest, options: LegalAiRunOptions = {}): Promise<LegalAiRunResult> {
@@ -163,6 +162,8 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
         LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
         LEGAL_ANSWER_MATERIAL_SOURCE_COVERAGE_RULE,
         LEGAL_ANSWER_COMPLETENESS_RULE,
+        LEGAL_ANSWER_REQUIREMENT_COVERAGE_RULE,
+        LEGAL_ANSWER_OPERATIVE_CITATION_RULE,
         "Если applicableAt передан, анализируй право на эту дату и не называй историческую редакцию текущей.",
         "Не придумывай статью, цитату, дату, акт или URL и не пиши правовой вывод из общих юридических знаний. Если релевантных источников нет, верни clarification_required с пустыми confirmedFindings, actionPlan, risks и deadlines.",
         "Ссылки пользователя не являются законодательством. Официальные источники передаются только сервером.",
@@ -184,12 +185,15 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
         reasoningMode: input.reasoningMode,
         intent: input.intent ?? "legal_question",
         researchPlan: input.researchPlan ?? null,
+        coverageRequirements: (input.coverageRequirements ?? []).map(requirement => ({...requirement,
+          sourceIds: input.sources.flatMap((source, index) => requirement.sourceIds.includes(source.id) ? [`s${index + 1}`] : []),
+        })),
         availableDocumentTemplates: input.availableDocumentTemplates ?? [],
         legalDatabaseAsOf: input.legalDatabaseAsOf,
         applicableAt: input.applicableAt ?? null,
         conversationHistory: input.conversationHistory ?? [],
-        verifiedSources: input.sources.map((source) => ({
-          sourceId: source.id,
+        verifiedSources: input.sources.map((source, index) => ({
+          sourceId: `s${index + 1}`,
           sourceType: source.sourceType,
           sourceClass: source.sourceClass ?? "OFFICIAL_LEGISLATION",
           actTitle: source.actTitle,
@@ -200,8 +204,8 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
           status: source.applicabilityStatus ?? "current",
           effectiveDate: source.effectiveDate ?? null,
           verifiedAt: source.verifiedAt,
-          sourceSpans: (source.spans ?? []).map((span) => ({
-            sourceSpanId: span.id,
+          sourceSpans: (source.spans ?? []).map((span, spanIndex) => ({
+            sourceSpanId: `s${index + 1}-${spanIndex + 1}`,
             article: span.article,
             paragraph: span.paragraph,
             text: span.text,

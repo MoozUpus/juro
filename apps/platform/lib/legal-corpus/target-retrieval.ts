@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { legalCoverageScopeSchema } from "../legal/legal-coverage";
 
 import {
   candidateSchema,
@@ -38,6 +39,7 @@ export const targetQuestionPlanningHintsSchema = z.object({
   requirements: z.array(z.object({
     statement: z.string().trim().min(1).max(240),
     priority: z.enum(["core", "supporting"]),
+    scopeKind: legalCoverageScopeSchema.optional(),
   }).strict()).min(1).max(6),
   formulations: z.array(z.string().trim().min(1).max(500)).min(1).max(6),
   formulationRequirementIndexes: z.array(z.array(z.number().int().min(0).max(5)).min(1).max(6)).min(1).max(6).optional(),
@@ -60,6 +62,7 @@ const requirementSchema = z.object({
   id: legalIdentifierSchema,
   statement: z.string().trim().min(1).max(1_000),
   priority: z.enum(["core", "supporting"]).optional(),
+  scopeKind: legalCoverageScopeSchema.optional(),
 }).strict();
 const readingSchema = z.object({
   id: legalIdentifierSchema,
@@ -167,6 +170,7 @@ export type SelectionCandidate = z.infer<typeof selectionCandidateSchema>;
 
 const repairDecisionSchema = z.object({
   outcome: z.literal("repair"),
+  retainedItemKeys: z.array(z.string().min(1).max(700)).max(12).optional(),
   repairFormulation: formulationSchema,
   additionalRequirements: z.array(z.object({
     readingId: legalIdentifierSchema,
@@ -229,6 +233,7 @@ const answerSchema = z.object({
   formulationsUsed: z.number().int().min(1).max(TARGET_TOTAL_FORMULATION_LIMIT),
   repairQueriesUsed: z.number().int().min(0).max(TARGET_REPAIR_FORMULATION_LIMIT),
   temporalEndpoint: temporalEndpointSchema,
+  coverageRequirements: z.array(requirementSchema).max(240).optional(),
 }).strict();
 const partialAnswerSchema = answerSchema.extend({
   kind: z.literal("partial_legal_answer"),
@@ -246,6 +251,7 @@ const sourceUnavailableSchema = z.object({
   sourceLadder: z.literal("indexed_official_corpus"),
   nextTier: z.literal("live_official_search"),
   discoveredOfficialUrls: z.array(z.string().url()).max(12).optional(),
+  coverageRequirements: z.array(requirementSchema).max(240).optional(),
   safeErrorCode: z.enum([
     "INDEXED_CANDIDATE_UNAVAILABLE",
     "INDEXED_REVALIDATION_FAILED",
@@ -258,6 +264,7 @@ const insufficientSchema = z.object({
   nextTier: z.literal("live_official_search"),
   uncoveredRequirementIds: z.array(legalIdentifierSchema),
   discoveredOfficialUrls: z.array(z.string().url()).max(12).optional(),
+  coverageRequirements: z.array(requirementSchema).max(240).optional(),
 }).strict();
 const lineageSchema = z.object({
   id: legalIdentifierSchema,
@@ -410,6 +417,7 @@ function insufficient(plan: QuestionInterpretationPlan, covered = new Set<string
     kind: "insufficient_indexed_coverage",
     sourceLadder: "indexed_official_corpus",
     nextTier: "live_official_search",
+    coverageRequirements: plan.readings.flatMap(reading => reading.requirements),
     uncoveredRequirementIds: plan.readings
       .flatMap((reading) => reading.requirements)
       .map((requirement) => requirement.id)
@@ -481,11 +489,16 @@ function candidateScore(entry: RevalidatedCandidate): number {
 
 /** Bounds pre-selection evidence while retaining candidates from every
  * formulation. The associations here are retrieval provenance only. */
-export function boundedSelectionPool(candidates: readonly RevalidatedCandidate[]): RevalidatedCandidate[] {
+export function boundedSelectionPool(candidates: readonly RevalidatedCandidate[], retainedItemKeys: readonly string[] = []): RevalidatedCandidate[] {
+  if (retainedItemKeys.length > 12) throw new RangeError("RETAINED_EVIDENCE_CEILING_EXCEEDED");
   const ranked = [...candidates].sort((left, right) =>
     candidateScore(right) - candidateScore(left)
     || left.candidate.itemKey.localeCompare(right.candidate.itemKey));
   const selected = new Map<string, RevalidatedCandidate>();
+  const retained = new Set(retainedItemKeys);
+  for (const candidate of ranked) {
+    if (retained.has(candidate.candidate.itemKey)) selected.set(candidate.provisionRenditionId, candidate);
+  }
   const formulationIds = [...new Set(candidates.flatMap((candidate) =>
     candidate.candidate.formulationIds))].sort();
   const nextPosition = new Map(formulationIds.map((id) => [id, 0]));
@@ -531,9 +544,10 @@ export function boundedSelectionPool(candidates: readonly RevalidatedCandidate[]
 
 function boundedProvisionText(value: string): string {
   const normalized = value.trim();
-  if (normalized.length <= 1_800) return normalized;
+  const limit = selectionCandidateSchema.shape.provisionText.maxLength!;
+  if (normalized.length <= limit) return normalized;
   const omission = "\n[... verified provision text omitted for selection ...]\n";
-  const side = Math.floor((1_800 - omission.length) / 2);
+  const side = Math.floor((limit - omission.length) / 2);
   return `${normalized.slice(0, side)}${omission}${normalized.slice(-side)}`;
 }
 
@@ -733,12 +747,14 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       if (candidates.length === 0) return insufficient(plan);
 
       const evidenceByRendition = new Map<string, ControllingEvidenceResolution>();
+      let retainedItemKeys: string[] = [];
       const discoveredLocations = () => [...new Set([...evidenceByRendition.values()]
         .map(evidence => evidence.controlling.officialCitation.url))].slice(0, 12);
       const unavailableWithDiscovery = (code: z.infer<typeof sourceUnavailableSchema>["safeErrorCode"]) =>
-        sourceUnavailableSchema.parse({ ...sourceUnavailable(code), discoveredOfficialUrls: discoveredLocations() });
+        sourceUnavailableSchema.parse({ ...sourceUnavailable(code), discoveredOfficialUrls: discoveredLocations(),
+          coverageRequirements: plan.readings.flatMap(reading => reading.requirements) });
       const hydrateSelectionCandidates = async (): Promise<SelectionCandidate[]> => {
-        const pool = boundedSelectionPool(candidates!);
+        const pool = boundedSelectionPool(candidates!, retainedItemKeys);
         const failureCodes = new Map<string, number>();
         const hydrated = await Promise.all(pool.map(async (candidate) => {
           try {
@@ -793,6 +809,10 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       }
       let repairQueriesUsed = 0;
       if (decision.outcome === "repair") {
+        retainedItemKeys = decision.retainedItemKeys ?? [];
+        if (retainedItemKeys.some(key => !candidates!.some(candidate => candidate.candidate.itemKey === key))) {
+          return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
+        }
         if (decision.additionalRequirements?.length) {
           const existingRequirementIds = new Set(plan.readings.flatMap((reading) =>
             reading.requirements.map((requirement) => requirement.id)));
@@ -972,6 +992,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         formulationsUsed: plan.formulations.length + repairQueriesUsed,
         repairQueriesUsed,
         temporalEndpoint: endpoint,
+        coverageRequirements: plan.readings.flatMap(reading => reading.requirements),
         ...(partial ? {
           nextTier: "live_official_search" as const,
           uncoveredSupportingRequirementIds: uncoveredSupporting,

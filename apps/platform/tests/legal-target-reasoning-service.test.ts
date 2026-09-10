@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { selectionReferenceContext } from "../lib/legal-corpus/selection-reference-context";
 
 import { openAiCompatibleJsonSchema } from "../lib/ai/openai-schema";
 import {
@@ -516,6 +517,35 @@ test("an explicit provision reference can trigger one bounded generic repair", (
   }
 });
 
+test("an irrelevant search hit cannot spend the repair budget on a new scope", () => {
+  const result = selectTargetProvisions({plan,
+    candidates: [selectionCandidate("supported", ["requirement-one", "requirement-two"], 0.8),
+      selectionCandidate("unrelated", ["requirement-one"], 0.9)], repairAttempted: false,
+  }, {mappings: [{itemKey: "supported", supportedRequirementIds: ["requirement-one", "requirement-two"]}],
+    additionalRequirements: [{sourceItemKey: "unrelated", readingId: "reading-one",
+      statement: "A different actor's procedure", priority: "core"}],
+  });
+  assert.equal(result.outcome, "selected");
+});
+
+test("assessment batches see already verified references without mixing revisions", () => {
+  const source = selectionCandidate("source", ["requirement-one"], 0.9);
+  source.provisionText = "The exception is defined in Article 732 of this Act.";
+  const reference = selectionCandidate("reference", ["requirement-one"], 0.8);
+  reference.citationLabel = "Example Act — Article 732";
+  reference.candidate.textRevisionId = source.candidate.textRevisionId;
+  reference.provisionText = "Article 732. The exception requires written notice.";
+  const otherRevision = selectionCandidate("other", ["requirement-one"], 0.7);
+  otherRevision.citationLabel = reference.citationLabel;
+  assert.deepEqual(selectionReferenceContext([source], [source, otherRevision, reference]),
+    [{citationLabel: reference.citationLabel, provisionText: reference.provisionText}]);
+  assert.deepEqual(selectionReferenceContext([source, reference], [source, reference]), []);
+  source.provisionText = "See Article 732 of a different Act.";
+  assert.deepEqual(selectionReferenceContext([source], [source, reference]), []);
+  source.provisionText = "No explicit reference is supplied.";
+  assert.deepEqual(selectionReferenceContext([source], [source, reference]), []);
+});
+
 test("repair retains material cross-references while another requirement is uncovered", () => {
   const result = selectTargetProvisions({ plan,
     candidates: [selectionCandidate("item-one", ["requirement-one"], 0.9)], repairAttempted: false,
@@ -528,6 +558,7 @@ test("repair retains material cross-references while another requirement is unco
     assert.equal(result.additionalRequirements?.length, 1);
     assert.ok(result.repairFormulation.requirementIds.includes("requirement-two"));
     assert.ok(result.repairFormulation.requirementIds.includes("related-reading-one-1"));
+    assert.deepEqual(result.retainedItemKeys, ["item-one"]);
   }
 });
 

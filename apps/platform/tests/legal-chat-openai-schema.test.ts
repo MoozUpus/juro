@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { openAiCompatibleJsonSchema } from "../lib/ai/openai-schema";
-import { legalChatJsonSchema } from "../lib/ai/legal-chat-schema";
+import { legalChatJsonSchema, restoreLegalSourceIds } from "../lib/ai/legal-chat-schema";
 
 function assertStructuredOutputObjectRules(value: unknown, path = "$"): void {
   if (Array.isArray(value)) {
@@ -29,6 +29,16 @@ test("legal-chat schema is valid for OpenAI Structured Outputs and excludes serv
   assert.equal("sourceAccessMode" in properties, false);
   assert.equal("sourcesRetrievedAt" in properties, false);
   assert.equal("sourceValidationStatus" in properties, false);
+  for (const field of ["sources", "answer", "assumptions", "requiredDocuments", "successOutlook", "language", "jurisdiction", "answerMode", "reasoningMode", "legalDatabaseAsOf"]) {
+    assert.equal(field in properties, false, `${field} is derived from validated request context`);
+  }
   assert.equal(Object.keys(properties)[0], "confirmedFindings");
+  assert.ok("summary" in properties && "summarySourceIds" in properties);
   assertStructuredOutputObjectRules(schema);
+});
+
+test("compact source aliases resolve only within their own request and preserve unknown ids for rejection", () => {
+  assert.deepEqual(restoreLegalSourceIds(["s1", "s2", "s99"], [{id: "evidence-a"}, {id: "evidence-b"}]),
+    ["evidence-a", "evidence-b", "s99"]);
+  assert.deepEqual(restoreLegalSourceIds(["s1"], [{id: "different-evidence"}]), ["different-evidence"]);
 });

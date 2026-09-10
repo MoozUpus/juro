@@ -13,6 +13,8 @@ export const legalFindingSchema = z.object({
   title: z.string().min(1).max(240),
   explanation: z.string().min(1).max(4_000),
   sourceIds: sourceIdList,
+  requirementIds: z.array(z.string().min(1).max(240)).max(40).optional(),
+  answerRole: z.enum(["governing_rule", "qualification", "procedure", "consequence"]).optional(),
 }).strict();
 
 /**
@@ -114,6 +116,7 @@ export const legalChatResponseSchema = z.object({
   confirmedFindings: z.array(legalFindingSchema).max(16),
   responseKind: z.enum(["answer", "clarification_required"]),
   summary: z.string().min(1).max(1_500),
+  summarySourceIds: sourceIdList.optional(),
   answer: z.string().min(1).max(20_000),
   conditionalBranches: legalConditionalBranchListSchema.optional(),
   language: z.enum(["ru", "uz", "en"]),
@@ -142,6 +145,7 @@ export const legalChatResponseSchema = z.object({
   sourceValidationStatus: z.enum(["validated", "unavailable"]).optional(),
   coverageStatus: z.enum(["good_coverage", "partial_coverage", "weak_coverage", "no_coverage"]).optional(),
   referenceNotes: z.array(legalReferenceNoteSchema).max(8).optional(),
+  coverageGaps: z.array(z.string().min(1).max(1_000)).max(240).optional(),
 }).strict();
 
 export type LegalChatResponse = z.infer<typeof legalChatResponseSchema>;
@@ -162,11 +166,28 @@ export const legalChatModelResponseSchema = legalChatResponseSchema
     sourceValidationStatus: true,
     coverageStatus: true,
     referenceNotes: true,
+    coverageGaps: true,
     conditionalBranches: true,
+    sources: true,
+    answer: true,
+    language: true,
+    jurisdiction: true,
+    answerMode: true,
+    reasoningMode: true,
+    legalDatabaseAsOf: true,
+    assumptions: true,
+    requiredDocuments: true,
+    successOutlook: true,
+    summarySourceIds: true,
   })
   .extend({
+    summary: z.string().min(1).max(650),
+    summarySourceIds: sourceIdList,
+    confirmedFindings: z.array(legalFindingSchema.extend({
+      requirementIds: z.array(z.string().min(1).max(240)).max(40),
+      answerRole: legalFindingSchema.shape.answerRole.unwrap(),
+    })).max(16),
     conditionalBranches: legalConditionalBranchListSchema,
-    sources: z.array(legalSourceRefModelSchema).max(12),
   });
 
 export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, {
@@ -174,8 +195,44 @@ export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, 
   unrepresentable: "throw",
 }) as Record<string, unknown>;
 
-export function parseLegalChatResponse(value: unknown): LegalChatResponse {
-  return legalChatResponseSchema.parse(value);
+export function restoreLegalSourceIds(ids: readonly string[], sources: readonly { id: string }[]): string[] {
+  const sourceByAlias = new Map(sources.map((source, index) => [`s${index + 1}`, source.id]));
+  return ids.map(id => sourceByAlias.get(id) ?? id);
+}
+
+export function parseLegalChatResponse(value: unknown, context?: {
+  locale: AiOutputLocale;
+  answerMode: "short" | "detailed";
+  reasoningMode: "fast" | "deep";
+  legalDatabaseAsOf: string;
+  sources?: readonly { id: string }[];
+}): LegalChatResponse {
+  if (!context || !value || typeof value !== "object" || Array.isArray(value)) {
+    return legalChatResponseSchema.parse(value);
+  }
+  const record = value as Record<string, unknown>;
+  const claims = Object.fromEntries(["confirmedFindings", "conditionalBranches", "risks", "actionPlan", "deadlines"]
+    .filter(key => Array.isArray(record[key])).map(key => [key, (record[key] as unknown[]).map(item => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+      const claim = item as Record<string, unknown>;
+      return {...claim, sourceIds: Array.isArray(claim.sourceIds)
+        ? claim.sourceIds.map(id => typeof id === "string" ? restoreLegalSourceIds([id], context.sources ?? [])[0] : id) : claim.sourceIds};
+    })]));
+  // Source cards and the legacy answer copy are rebuilt after validation.
+  // The concise summary can cover several independently grounded findings.
+  const findings = Array.isArray(record.confirmedFindings) ? record.confirmedFindings : [];
+  const main = findings.find(finding => finding?.answerRole === "governing_rule") ?? findings[0];
+  const summary = typeof record.summary === "string" ? record.summary
+    : main && typeof main.explanation === "string"
+      ? main.explanation.slice(0, 1_500) : " ";
+  return legalChatResponseSchema.parse({ ...record, ...claims,
+    ...(Array.isArray(record.summarySourceIds) ? {summarySourceIds: record.summarySourceIds.map(id =>
+      typeof id === "string" ? restoreLegalSourceIds([id], context.sources ?? [])[0] : id)} : {}),
+    summary, answer: summary, sources: [], language: context.locale, jurisdiction: "UZ",
+    answerMode: context.answerMode, reasoningMode: context.reasoningMode,
+    legalDatabaseAsOf: context.legalDatabaseAsOf,
+    assumptions: [], requiredDocuments: [], successOutlook: null,
+  });
 }
 
 export function forceClarificationWithoutVerifiedSources(

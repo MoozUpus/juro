@@ -1,0 +1,33 @@
+import { detectArticleNumbers } from "../legal/legal-language";
+import { sameInstrumentArticleReferences } from "../legal/referenced-article-context";
+type ReferenceCandidate = {
+  citationLabel: string;
+  provisionText: string;
+  candidate: {textRevisionId: string; languageFamily: string; candidate: {itemKey: string}};
+};
+
+/** Supply already-verified same-revision references to each small assessment
+ * batch. A reference outside the batch is not missing evidence. Context does
+ * not create a support mapping: every candidate is still assessed in its own
+ * batch, and each resulting claim still requires evidence validation. */
+export function selectionReferenceContext(
+  batch: readonly ReferenceCandidate[],
+  candidates: readonly ReferenceCandidate[],
+): Array<{citationLabel: string; provisionText: string}> {
+  const batchKeys = new Set(batch.map(item => item.candidate.candidate.itemKey));
+  const context = new Map<string, ReferenceCandidate>();
+  for (const source of batch) {
+    const references = new Set(sameInstrumentArticleReferences(source.provisionText));
+    for (const candidate of candidates) {
+      const key = candidate.candidate.candidate.itemKey;
+      if (batchKeys.has(key) || context.has(key)
+        || candidate.candidate.textRevisionId !== source.candidate.textRevisionId
+        || candidate.candidate.languageFamily !== source.candidate.languageFamily) continue;
+      const article = detectArticleNumbers(candidate.citationLabel)[0];
+      if (article && references.has(article)) context.set(key, candidate);
+      if (context.size >= 4) break;
+    }
+    if (context.size >= 4) break;
+  }
+  return [...context.values()].map(({citationLabel, provisionText}) => ({citationLabel, provisionText}));
+}

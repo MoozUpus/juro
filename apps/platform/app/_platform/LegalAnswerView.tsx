@@ -24,6 +24,7 @@ export type LegalAnswerViewSource = {
 export type LegalAnswerViewResult = {
   responseKind: "answer" | "clarification_required";
   summary: string;
+  summarySourceIds?: string[];
   answer: string;
   clarificationQuestions: string[];
   confirmedFindings: Array<{ title: string; explanation: string; sourceIds?: string[] }>;
@@ -39,6 +40,7 @@ export type LegalAnswerViewResult = {
   evidenceMode?: "official" | "mixed" | "secondary_only" | "private_only" | "none";
   referenceNotes?: Array<{ title: string; note: string; sourceIds: string[] }>;
   conditionalBranches?: Array<{ condition: string; outcome: string; sourceIds: string[] }>;
+  coverageGaps?: string[];
 };
 
 type AnswerCopy = {
@@ -233,6 +235,10 @@ export function LegalAnswerView({
     {locale === "ru" ? "Ответ использует интернет-источники" : locale === "uz"
       ? "Javobda internet manbalaridan foydalanilgan" : "This answer uses internet sources"}
   </p>;
+  const coverageGaps = (result.coverageGaps ?? []).length > 0 && <Section id={`${id}-gaps`}
+    title={locale === "ru" ? "Что ещё не подтверждено" : locale === "uz" ? "Hali tasdiqlanmagan jihatlar" : "What remains unverified"}>
+    <ul>{result.coverageGaps!.map((gap, index) => <li key={index}>{gap}</li>)}</ul>
+  </Section>;
 
   if (result.responseKind === "clarification_required") {
     return <article className={`${rootClass} legal-answer--insufficient`} data-answer-kind="insufficient-evidence">
@@ -255,6 +261,7 @@ export function LegalAnswerView({
           <CitationList sourceIds={finding.sourceIds} result={result} locale={locale} onCitationSelect={onCitationSelect} />
         </div>)}
       </Section>}
+      {coverageGaps}
       {(result.referenceNotes ?? []).length > 0 && <Section id={`${id}-additional`} title={copy.additional} className="legal-answer__section--additional">
         <p className="legal-answer__secondary-note">{copy.secondaryNote}</p>
         {(result.referenceNotes ?? []).map((note) => <article key={`${note.title}:${note.sourceIds.join(":")}`}>
@@ -273,7 +280,7 @@ export function LegalAnswerView({
 
   const important = result.assumptions.length > 0 || result.risks.length > 0 || result.urgency !== "normal";
   const prepare = result.requiredDocuments.length > 0 || Boolean(result.suggestedDocument);
-  const mainSourceIds = [...new Set([
+  const mainSourceIds = result.summarySourceIds ?? [...new Set([
     ...result.confirmedFindings.map((finding) => finding.sourceIds),
     ...(result.conditionalBranches ?? []).map((branch) => branch.sourceIds),
     ...result.actionPlan.map((step) => step.sourceIds),
@@ -337,6 +344,7 @@ export function LegalAnswerView({
         <CitationList sourceIds={note.sourceIds} result={result} locale={locale} onCitationSelect={onCitationSelect} />
       </article>)}
     </Section>}
+    {coverageGaps}
     {result.clarificationQuestions.length > 0 && <section className="legal-answer__questions" aria-labelledby={`${id}-clarify`}>
       <h2 id={`${id}-clarify`}>{copy.clarify}</h2>
       <div>{result.clarificationQuestions.map((question) => onQuestionSelect

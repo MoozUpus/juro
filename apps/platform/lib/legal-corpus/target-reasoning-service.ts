@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { selectionReferenceContext } from "./selection-reference-context";
 
 import { callOpenAiStructured } from "../document-builder/ai/openai";
 import {
@@ -305,6 +306,7 @@ export function targetRequirementSupportContext(plan: QuestionInterpretationPlan
     id: requirement.id,
     statement: requirement.statement,
     priority: requirement.priority ?? "core",
+    ...(requirement.scopeKind ? {scopeKind: requirement.scopeKind} : {}),
     readingId: reading.id,
     reading: reading.statement,
   })));
@@ -329,20 +331,22 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       parse: parseTargetRequirementSupport,
       instructions: [
         "Assess whether each verified official provision directly supports each stated legal coverage requirement.",
+        "scopeKind preserves the independent dimension being researched. A personal_status rule about WHO someone is cannot establish an action_stage rule about everyone during an event, and a stage rule cannot replace an independent status guarantee. A general requirement needs the ordinary rule for the stated population and action, not only a protected subgroup's special rule. Match the text's actual scope even when the same person might satisfy several scopes.",
         "Assess every candidate independently and return every direct support mapping, not merely the best or shortest set.",
         "For each mapping, governingRequirementIds must be a subset of supportedRequirementIds. Include a requirement there only when this provision itself states the operative governing rule, prohibition, entitlement, exception, ground, or liability needed for that requirement. Exclude provisions that merely cross-reference another article, mention the topic, apply another provision procedurally, or provide interpretive guidance when the operative rule is elsewhere.",
-        "A search match, shared topic, title, actor, or procedural deadline is not support by itself.",
+        "Distinguish the instrument containing the supplied text from the rule it quotes. A court practice explanation or interpretive resolution remains interpretive guidance even when it restates a statute verbatim: it may have supportedRequirementIds, but not governingRequirementIds. Determine this from the citation label and text together. A search match, shared topic, title, actor, or procedural deadline is not support by itself.",
         "Mark support only when the supplied provision text entails or directly establishes the material legal proposition.",
         "Support must match the requirement's actor, action, legal status, stage and forum. Within that SAME scope, complementary provisions may each supply an independently operative rule, condition or exception; do not require one article to contain every ground and exception. A provision for a different status, stage or forum does not support the requirement, and a provision for one alternative cannot establish another alternative. Mere topical overlap is never support.",
         "For a time-limit requirement, match the actor and the timed action: a body's time to process or decide a submitted application does not support the applicant's time to file it. A reference to a filing period established elsewhere does not supply that period. Keep this requirement unsupported unless its operative filing rule is present.",
         "When both a directly governing codified provision and interpretive, procedural, or cross-referencing guidance support a requirement, retain both mappings; downstream selection decides priority.",
         "Do not answer the user's question, invent rules, infer missing article text, or use outside knowledge.",
+        "referenceContext contains other already-verified provisions from the same revision that this batch cites. Use it to distinguish an actually missing operative reference from text already supplied elsewhere in the selection pool. Do not request another search for grounds whose substantive text is present there. Return mappings only for candidates, never for referenceContext.",
         "A provision may support requirements from any retrieval formulation, and may support none.",
         "Use the supplied readingId for additionalRequirements; never infer an identifier from a reading's text.",
         value.repairAttempted
           ? "The bounded expansion has already run. Return additionalRequirements as an empty array; assess only the supplied requirements."
           : "Return at most three additionalRequirements, prioritizing unresolved operative references over optional details.",
-        "When a provision explicitly cites operative grounds or exceptions necessary to answer the ORIGINAL actor/action/status, propose a concise core additional requirement unless already covered. A bare cross-reference is not the referenced rule. Do not expand references in inapplicable alternative grounds, or every procedural condition mentioned in a broad article. A reference is core only if its absence prevents answering the original question; ancillary procedure and consequences remain supporting.",
+        "When a provision explicitly cites operative grounds or exceptions necessary to answer the ORIGINAL actor/action/status, propose a concise core additional requirement unless already covered. A bare cross-reference is not the referenced rule. Do not expand references in inapplicable alternative grounds, or every procedural condition mentioned in a broad article. In particular, a qualification noting that OTHER actors or initiators may use a different route does not require researching that route unless the original question asks about it. Keep the supplied qualification in the answer without inventing a new core scope. A reference is core only if its absence prevents answering the original question; ancillary procedure and consequences remain supporting.",
         "Prioritize unresolved operative cross-references, then distinct relevant provisions not supporting any existing requirement. Numbered grounds are unresolved unless their substantive text is supplied; a broadly worded requirement does not resolve them. Do not spend additionalRequirements on subclauses or details already present in a provision mapped to an existing requirement: the answer can use that supplied text without another search.",
         "Also propose a supporting additional requirement when supplied provision text directly establishes a distinct, materially relevant consequence, remedy, sanction or qualification missing from the current plan, even without an explicit cross-reference. It must concern the same actor, action and circumstances, not merely the same legal field. A shared topic or duplicate formulation is not a distinct contribution. Keep each statement under 200 characters. These proposals trigger evidence checking, not automatic inclusion in the answer.",
         "Do not add broad background, speculative liability, outside knowledge, or a requirement without grounding in the supplied provision text. Preserve every factual trigger and scope limitation; never assume a violation occurred.",
@@ -350,6 +354,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       ].join(" "),
       input: {
         requirements,
+        referenceContext: selectionReferenceContext(candidates, value.candidates),
         candidates: candidates.map((candidate, index) => ({
           itemKey: `candidate-${index + 1}`,
           citationLabel: candidate.citationLabel,
@@ -481,6 +486,9 @@ export function selectTargetProvisions(
     ? support.additionalRequirements : []).filter((addition) =>
     readingIds.has(addition.readingId)
     && candidateByKey.has(addition.sourceItemKey)
+    // Unrelated search hits must not expand the question or consume its repair.
+    // The source proposing an expansion must first establish relevant support.
+    && (supportedByKey.get(addition.sourceItemKey)?.size ?? 0) > 0
     && !existingStatements.has(addition.statement.normalize("NFKC")
       .replace(/\s+/gu, " ").trim().toLocaleLowerCase())).slice(0, 3)
     .map((addition, index) => ({
@@ -493,6 +501,10 @@ export function selectTargetProvisions(
     }));
   const missing = requirements.find((requirement) => !ranked.some((candidate) =>
     supportedByKey.get(candidate.candidate.candidate.itemKey)?.has(requirement.id)));
+  const retainedItemKeys = [...new Set(requirements.flatMap(requirement => candidatesForRequirement(
+    ranked, supportedByKey, governingByKey, requirement.id, formulationIdsByRequirement,
+  ).map(candidate => candidate.candidate.candidate.itemKey)))];
+  if (retainedItemKeys.length > 12) return selectionDecisionSchema.parse({outcome: "rejected"});
   if (missing) {
     const hasDedicatedFormulation = value.plan.formulations.some((formulation) =>
       formulation.requirementIds.length === 1
@@ -537,6 +549,7 @@ export function selectTargetProvisions(
     }
     return selectionDecisionSchema.parse({
       outcome: "repair",
+      retainedItemKeys,
       repairFormulation: {
         id: `repair-${missing.id}`.slice(0, 200),
         text: [missing.statement, ...additions.map(({ requirement }) => requirement.statement)].join(" ").slice(0, 900),
@@ -551,6 +564,7 @@ export function selectTargetProvisions(
   if (additions.length > 0) {
     return selectionDecisionSchema.parse({
       outcome: "repair",
+      retainedItemKeys,
       repairFormulation: {
         id: `repair-${additions[0]!.requirement.id}`.slice(0, 200),
         text: additions.map(({ requirement }) => requirement.statement).join(" ").slice(0, 900),
