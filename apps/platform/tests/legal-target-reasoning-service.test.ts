@@ -8,6 +8,7 @@ import {
   parseTargetInterpretationProviderOutput,
   selectTargetProvisions,
   targetSupportAssessmentJsonSchema,
+  targetRequirementSupportContext,
   targetInterpretationJsonSchema,
   TARGET_PRIVATE_NAME_CLASSIFICATION_PATH,
   TARGET_PROVISION_SELECTION_PATH,
@@ -444,6 +445,26 @@ test("a dedicated formulation does not repeat an uncovered supporting search", (
   }
 });
 
+test("support context supplies reading identifiers required by related-provision discovery", () => {
+  const context = targetRequirementSupportContext(plan);
+  assert.deepEqual(context.map(item => item.readingId), ["reading-one", "reading-two"]);
+});
+
+test("a coverage requirement retains distinct operative provisions, not only its highest-ranked hit", () => {
+  const direct = selectionCandidate("civil-remedy", ["requirement-one"], 0.9);
+  const complementary = selectionCandidate("liability", ["requirement-one"], 0.8);
+  const translated = selectionCandidate("civil-remedy-translation", ["requirement-one"], 0.7);
+  translated.candidate.provisionConceptId = direct.candidate.provisionConceptId;
+  const result = selectTargetProvisions({
+    plan: {...plan, readings: [plan.readings[0]!], formulations: [plan.formulations[0]!]},
+    candidates: [direct, complementary, translated], repairAttempted: true,
+  }, {mappings: [direct, complementary, translated].map(candidate => ({
+    itemKey: candidate.candidate.candidate.itemKey, supportedRequirementIds: ["requirement-one"], governingRequirementIds: ["requirement-one"],
+  })), additionalRequirements: []});
+  assert.equal(result.outcome, "selected");
+  if (result.outcome === "selected") assert.deepEqual(result.selections.map(item => item.itemKey), ["civil-remedy", "liability"]);
+});
+
 test("an explicit provision reference can trigger one bounded generic repair", () => {
   const candidate = selectionCandidate("item-one", ["requirement-one"], 0.9);
   const result = selectTargetProvisions({
@@ -470,6 +491,21 @@ test("an explicit provision reference can trigger one bounded generic repair", (
   if (result.outcome === "repair") {
     assert.equal(result.additionalRequirements?.length, 1);
     assert.deepEqual(result.repairFormulation.requirementIds, ["related-reading-one-1"]);
+  }
+});
+
+test("repair retains material cross-references while another requirement is uncovered", () => {
+  const result = selectTargetProvisions({ plan,
+    candidates: [selectionCandidate("item-one", ["requirement-one"], 0.9)], repairAttempted: false,
+  }, { mappings: [{itemKey: "item-one", supportedRequirementIds: ["requirement-one"]}],
+    additionalRequirements: [{sourceItemKey: "item-one", readingId: "reading-one",
+      statement: "The expressly referenced grounds defining the exception", priority: "core"}],
+  });
+  assert.equal(result.outcome, "repair");
+  if (result.outcome === "repair") {
+    assert.equal(result.additionalRequirements?.length, 1);
+    assert.ok(result.repairFormulation.requirementIds.includes("requirement-two"));
+    assert.ok(result.repairFormulation.requirementIds.includes("related-reading-one-1"));
   }
 });
 
