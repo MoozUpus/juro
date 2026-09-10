@@ -119,6 +119,13 @@ test("planning hints preserve one-to-one formulation requirement provenance", ()
   assert.deepEqual(planned.formulations.map((formulation) => formulation.requirementIds), [
     ["requirement-1"], ["requirement-2"],
   ]);
+  for (const formulationRequirementIndexes of [[[0]], [[0], [2]]]) {
+    assert.throws(() => planFromQuestionPlanningHints("invalid-scope", {
+      answerLanguage: "en", standaloneQuestion: "Question",
+      requirements: [{ statement: "Rule", priority: "core" }, { statement: "Exception", priority: "core" }],
+      formulations: ["rule", "exception"], formulationRequirementIndexes,
+    }));
+  }
 });
 
 test("selection pool reserves independently ranked candidates for every formulation", () => {

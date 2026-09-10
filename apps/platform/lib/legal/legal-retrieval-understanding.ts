@@ -77,6 +77,8 @@ export function targetQuestionPlanningHints(understanding: LegalRetrievalUnderst
     concept.alternatives[0] ?? concept.statement))];
   const broadFormulations = [...new Set([understanding.standaloneQuestion.slice(0, 500),
     ...understanding.corpusQueries.slice(1, 2)])].filter((query) => !scopedFormulations.includes(query));
+  const formulations = [...broadFormulations.slice(0, Math.max(0, 6 - scopedFormulations.length)), ...scopedFormulations];
+  const allRequirementIndexes = understanding.requiredConcepts.map((_, index) => index);
   return {
     answerLanguage: locale,
     standaloneQuestion: understanding.standaloneQuestion,
@@ -84,8 +86,11 @@ export function targetQuestionPlanningHints(understanding: LegalRetrievalUnderst
       statement: concept.statement, priority: concept.priority ?? "core",
     })),
     // Broad searches must not displace the last material scope at the ceiling.
-    formulations: [...broadFormulations.slice(0, Math.max(0, 6 - scopedFormulations.length)),
-      ...scopedFormulations],
+    formulations,
+    formulationRequirementIndexes: formulations.map(query => scopedFormulations.includes(query)
+      ? allRequirementIndexes.filter(index => (understanding.requiredConcepts[index]!.alternatives[0]
+        ?? understanding.requiredConcepts[index]!.statement) === query)
+      : allRequirementIndexes),
   };
 }
 

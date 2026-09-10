@@ -40,7 +40,13 @@ export const targetQuestionPlanningHintsSchema = z.object({
     priority: z.enum(["core", "supporting"]),
   }).strict()).min(1).max(6),
   formulations: z.array(z.string().trim().min(1).max(500)).min(1).max(6),
-}).strict();
+  formulationRequirementIndexes: z.array(z.array(z.number().int().min(0).max(5)).min(1).max(6)).min(1).max(6).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.formulationRequirementIndexes && (value.formulationRequirementIndexes.length !== value.formulations.length
+    || value.formulationRequirementIndexes.some(indexes => indexes.some(index => index >= value.requirements.length)))) {
+    context.addIssue({ code: "custom", message: "Formulation requirements must reference the supplied requirement inventory" });
+  }
+});
 export type TargetQuestionPlanningHints = z.infer<typeof targetQuestionPlanningHintsSchema>;
 const questionSchema = z.object({
   id: legalIdentifierSchema,
@@ -128,7 +134,9 @@ export function planFromQuestionPlanningHints(
       legalTitleSpans: [],
       privateNameSpans: [],
       readingIds: ["reading-1"],
-      requirementIds: hasOneFormulationPerRequirement
+      requirementIds: hints.formulationRequirementIndexes
+        ? hints.formulationRequirementIndexes[index]!.map(requirementIndex => requirements[requirementIndex]!.id)
+        : hasOneFormulationPerRequirement
         ? [requirements[index]!.id]
         : requirementIds,
       kind: "legal_register" as const,
