@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { planFromQuestionPlanningHints } from "../lib/legal-corpus/target-retrieval";
 
 import {
   normalizeLegalRetrievalUnderstanding,
@@ -87,6 +88,11 @@ test("the target receives the general rule query alongside separate status-speci
   const hints = targetQuestionPlanningHints(plan, "ru")!;
   assert.deepEqual(hints.formulations, [question, generalQuery, ...concepts]);
   assert.deepEqual(hints.requirements.map(item => item.statement), concepts);
+  const target = planFromQuestionPlanningHints("mixed-scopes", hints);
+  assert.deepEqual(target.formulations.map(item => item.requirementIds), [
+    ["requirement-1", "requirement-2"], ["requirement-1", "requirement-2"],
+    ["requirement-1"], ["requirement-2"],
+  ], "broad formulations must not erase the independent scope of dedicated searches");
 });
 
 test("bounded planning retains a search for every core scope before broad formulations", () => {
