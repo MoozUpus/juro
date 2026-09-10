@@ -186,6 +186,34 @@ test("gateway binds a legal claim to an exact validated Lex span and strips exce
   assert.equal(validated.run.data.sources[0]?.excerpt, null);
 });
 
+test("gateway preserves every independently validated citation of the same finding", () => {
+  const complementary: LegalSourceContext = { ...source, id: "direct:lex:ru:43:def",
+    officialUrl: "https://lex.uz/ru/docs/43", article: "Статья 4",
+    spans: [{ ...source.spans![0]!, id: "span:complementary", article: "Статья 4",
+      text: "Статья 4. Государственной регистрации подлежит общество, в установленном законом порядке." }] };
+  const combined = { ...result, confirmedFindings: [{ ...result.confirmedFindings[0]!,
+    sourceIds: [source.id, complementary.id] }] };
+  const validated = validateLegalGatewayAnswer({ result: combined, run: {...run, data: combined},
+    sources: [source, complementary], locale: "ru", answerMode: "short", reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt });
+  assert.deepEqual(validated.run.data.confirmedFindings[0]?.sourceIds, [source.id, complementary.id]);
+  assert.deepEqual(new Set(validated.answer.claims.map(claim => claim.sourceId)), new Set([source.id, complementary.id]));
+});
+
+test("a citation validated for another finding cannot authorize an unsupported citation pair", () => {
+  const other: LegalSourceContext = { ...source, id: "direct:lex:ru:44:other",
+    spans: [{ ...source.spans![0]!, id: "span:other", text: "Арендатор возвращает имущество арендодателю после прекращения договора аренды." }] };
+  const combined = { ...result, confirmedFindings: [
+    { ...result.confirmedFindings[0]!, sourceIds: [source.id, other.id] },
+    { title: "Возврат имущества", explanation: other.spans![0]!.text, sourceIds: [other.id] },
+  ] };
+  const validated = validateLegalGatewayAnswer({ result: combined, run: {...run, data: combined},
+    sources: [source, other], locale: "ru", answerMode: "short", reasoningMode: "fast",
+    legalDatabaseAsOf: source.verifiedAt });
+  assert.equal(validated.run.data.confirmedFindings.some(finding => finding.sourceIds.length > 1), false);
+  assert.ok(validated.run.data.confirmedFindings.some(finding => finding.title === "Возврат имущества"));
+});
+
 test("gateway retains only conditional branches supported by their cited exact span", () => {
   const branchResult: LegalChatResponse = {
     ...result,

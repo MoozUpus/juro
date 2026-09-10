@@ -386,13 +386,15 @@ function filteredLegacyResult(
   validSourceIds: ReadonlySet<string>,
   availableDocumentTemplateCodes: ReadonlySet<string>,
 ): LegalChatResponse {
-  const supportedText = new Set(validClaims.map((claim) => claim.text));
-  const supported = (title: string, explanation: string) =>
-    supportedText.has(nonRepeatingLegalText(title, explanation));
+  const supported = (title: string, explanation: string, sourceIds: readonly string[]) => {
+    const text = nonRepeatingLegalText(title, explanation);
+    return sourceIds.length > 0 && sourceIds.every(sourceId =>
+      validClaims.some(claim => claim.text === text && claim.sourceId === sourceId));
+  };
   return {
     ...result,
     confirmedFindings: result.confirmedFindings.filter((finding) =>
-      supported(finding.title, finding.explanation)
+      supported(finding.title, finding.explanation, finding.sourceIds)
         && finding.sourceIds.every((sourceId) => validSourceIds.has(sourceId)),
     ).map((finding) => ({
       ...finding,
@@ -400,7 +402,7 @@ function filteredLegacyResult(
       explanation: plainGroundedText(finding.explanation),
     })),
     conditionalBranches: (result.conditionalBranches ?? []).filter((branch) =>
-      supported(branch.condition, branch.outcome)
+      supported(branch.condition, branch.outcome, branch.sourceIds)
         && branch.sourceIds.every((sourceId) => validSourceIds.has(sourceId)),
     ).map((branch) => ({
       ...branch,
@@ -408,11 +410,11 @@ function filteredLegacyResult(
       outcome: plainGroundedText(branch.outcome),
     })),
     risks: result.risks.filter((risk) =>
-      risk.sourceIds.length > 0 && (supported(risk.title, risk.explanation)
+      risk.sourceIds.length > 0 && (supported(risk.title, risk.explanation, risk.sourceIds)
         && risk.sourceIds.every((sourceId) => validSourceIds.has(sourceId))),
     ).map((risk) => ({ ...risk, title: plainGroundedText(risk.title), explanation: plainGroundedText(risk.explanation) })),
     actionPlan: result.actionPlan.filter((step) =>
-      step.sourceIds.length > 0 && (supported(step.title, step.description)
+      step.sourceIds.length > 0 && (supported(step.title, step.description, step.sourceIds)
         && step.sourceIds.every((sourceId) => validSourceIds.has(sourceId))),
     ).map((step) => ({ ...step, title: plainGroundedText(step.title), description: plainGroundedText(step.description) })),
     deadlines: result.deadlines.filter((deadline) =>
@@ -744,15 +746,24 @@ export function validateLegalGatewayAnswer(input: {
   const sourceById = new Map(input.sources.map((source) => [source.id, source]));
   const candidates = candidateClaims(input.result);
   const providerValidated = candidates.flatMap((claim): LegalGatewayClaim[] => {
-    const match = bestValidatedSpan(claim, sourceById);
-    if (!match) return [];
-    return [{
-      text: claim.text,
-      type: claimTypeForSource(claim, match.source),
-      sourceId: match.source.id,
-      sourceSpanId: match.span.id,
-      confidence: Math.min(1, Math.max(0.5, match.coverage)),
-    }];
+    const matches = [...new Set(claim.sourceIds)].flatMap(sourceId => {
+      const match = bestValidatedSpan({ ...claim, sourceIds: [sourceId] }, sourceById);
+      return match ? [match] : [];
+    }).sort((left, right) => right.coverage - left.coverage);
+    const terms = legalTerms(plainGroundedText(claim.text));
+    const covered = new Set<string>();
+    // Keep equally supporting citations and complementary evidence. A weaker
+    // overlap that adds no claim support must not acquire a citation merely
+    // because another provision supports the complete statement.
+    return matches.flatMap(match => {
+      const spanTerms = legalTerms(match.span.text);
+      const supported = terms.filter(term => spanTerms.some(other => term === other || sharesStem(term, other)));
+      if (match.coverage < matches[0]!.coverage && supported.every(term => covered.has(term))) return [];
+      supported.forEach(term => covered.add(term));
+      return [{ text: claim.text, type: claimTypeForSource(claim, match.source),
+        sourceId: match.source.id, sourceSpanId: match.span.id,
+        confidence: Math.min(1, Math.max(0.5, match.coverage)) }];
+    });
   });
   const validationQuestion = [input.question, input.retrievalQuery]
     .filter((value): value is string => Boolean(value?.trim()))
