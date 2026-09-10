@@ -123,11 +123,11 @@ test("reference discovery preserves all matching members and isolates revisions 
   assert.deepEqual(await discover([referring, operative], {kind: "current"}, release, "2026-09-11T00:00:00.000Z"), []);
   assert.equal(validations, 1, "already supplied operative text needs no lookup or revalidation");
   const otherReferring = (suffix: string, article: string) => {
-    const candidate = structuredClone(referring);
-    candidate.candidate.provisionRenditionId = `rendition:origin-${suffix}`;
-    candidate.candidate.provisionConceptId = `concept:origin-${suffix}`;
-    candidate.candidate.candidate.itemKey = `search-releases/${releaseId}/origin-${suffix}`;
-    candidate.provisionText = `The grounds are defined by Article ${article} of this Code.`;
+    const candidate = selectionCandidateSchema.parse({...referring,
+      provisionText: `The grounds are defined by Article ${article} of this Code.`,
+      candidate: {...referring.candidate, provisionRenditionId: `rendition:origin-${suffix}`,
+        provisionConceptId: `concept:origin-${suffix}`, candidate: {...referring.candidate.candidate,
+          itemKey: `search-releases/${releaseId}/origin-${suffix}`}}});
     identities.set(candidate.candidate.provisionRenditionId, {...identities.get("rendition:origin")!,
       provisionRenditionId: candidate.candidate.provisionRenditionId,
       provisionConceptId: candidate.candidate.provisionConceptId});
