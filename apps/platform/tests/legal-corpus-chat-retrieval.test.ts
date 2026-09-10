@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  retrieveCorpusAwareLegalSources,
+  retrieveCorpusAwareLegalSources as retrieveWithOfficialStatus,
   shouldRetrieveSecondaryInternet,
 } from "../lib/legal-corpus/chat-retrieval";
 import type { LiveLexRetrievalResult } from "../lib/legal/live-lex-retrieval";
@@ -11,6 +11,10 @@ import { legalDatabaseFreshnessFromAsOf } from "../lib/legal/verified-retrieval"
 const now = new Date("2026-08-15T00:00:00.000Z");
 const checkedAt = "2026-08-14T23:00:00.000Z";
 const contentHash = "a".repeat(64);
+
+function retrieveCorpusAwareLegalSources(input: Parameters<typeof retrieveWithOfficialStatus>[0]) {
+  return retrieveWithOfficialStatus({ verifyCurrentSource: async () => true, ...input });
+}
 
 function liveResult(): LiveLexRetrievalResult {
   return {
@@ -144,6 +148,24 @@ test("chat retrieval uses the R2-native target service before live Lex", async (
   assert.equal(result.retrievalTelemetry?.indexedHitCount, 1);
   assert.equal(result.retrievalTelemetry?.queriesRun, 2);
   assert.equal(result.retrievalTelemetry?.fusionOutcome, "indexed");
+});
+
+test("revoked indexed documents are excluded before live research and cannot certify coverage", async () => {
+  let liveCalls = 0;
+  const targetService = { async fetch() {
+    return Response.json({ result: { kind: "legal_answer", sourceLadder: "indexed_official_corpus",
+      mainPoint: "A selected rule", whatTheLawSays: [{ requirementId: "rule", provisionConceptId: "concept",
+        provisionRenditionId: "rendition", proposition: "A selected rule", controllingQuotation: "A selected rule in an obsolete document.",
+        officialCitations: [{ label: "Law — Article 9", url: "https://lex.uz/ru/docs/777" }], evidenceSha256: contentHash }],
+      whatToDoNext: [], focusedQuestions: [], formulationsUsed: 1, repairQueriesUsed: 0,
+      temporalEndpoint: { kind: "current" } } });
+  }, connect() { throw new Error("Unexpected socket connection"); } } satisfies Fetcher;
+  const result = await retrieveCorpusAwareLegalSources({ query: "статья 9", locale: "ru", targetService,
+    targetEnvironment: "staging", targetQuestionId: "revoked-doc", verifyCurrentSource: async () => false,
+    liveSearch: async () => { liveCalls += 1; return liveResult(); } });
+  assert.equal(liveCalls, 1);
+  assert.equal(result.sourceAccessMode, "direct");
+  assert.equal(result.sources.some((source) => source.id.startsWith("target:")), false);
 });
 
 test("contextual planning does not consume the Indexed Official Corpus deadline", async () => {
@@ -359,7 +381,7 @@ test("target source unavailability continues to direct validated Lex", async () 
   assert.equal(result.sourceAccessMode, "direct");
   assert.equal(result.retrievalTelemetry?.fusionOutcome, "live");
   assert.equal(result.retrievalTelemetry?.targetOutcome, "unavailable");
-  assert.equal(result.retrievalTelemetry?.targetFailureCode, "TARGET_SOURCE_UNAVAILABLE");
+  assert.equal(result.retrievalTelemetry?.targetFailureCode, "INDEXED_CANDIDATE_UNAVAILABLE");
 });
 
 test("a timed-out current target preserves budget for direct validated Lex", async () => {
@@ -426,12 +448,14 @@ test("an article mismatch keeps direct official coverage below the answer thresh
   assert.equal(result.coverageStatus, "partial_coverage");
 });
 
-test("secondary internet remains eligible only for weak or empty official coverage", () => {
+test("live research includes the wider internet while sufficient indexed answers stay local", () => {
   const packet = (coverageStatus: "good_coverage" | "partial_coverage" | "weak_coverage" | "no_coverage") => ({
     coverageStatus,
   });
   assert.equal(shouldRetrieveSecondaryInternet(packet("good_coverage")), false);
-  assert.equal(shouldRetrieveSecondaryInternet(packet("partial_coverage")), false);
+  assert.equal(shouldRetrieveSecondaryInternet(packet("partial_coverage")), true);
+  assert.equal(shouldRetrieveSecondaryInternet({ ...packet("good_coverage"), sourceAccessMode: "direct" }), true);
+  assert.equal(shouldRetrieveSecondaryInternet({ ...packet("good_coverage"), sourceAccessMode: "approved_package" }), false);
   assert.equal(shouldRetrieveSecondaryInternet(packet("weak_coverage")), true);
   assert.equal(shouldRetrieveSecondaryInternet(packet("no_coverage")), true);
 });

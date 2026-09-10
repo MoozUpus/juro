@@ -1,6 +1,8 @@
 # Escalate legal research through a strict source ladder
 
-JURO legal research searches the Indexed Official Corpus first, performs Live Official Search when indexed Official Coverage is insufficient or indexed semantic selection is unavailable, and begins Secondary Web Research only when official coverage remains insufficient. This deliberately accepts additional latency in exchange for source-priority integrity, avoids unnecessary third-party requests, and keeps secondary material from influencing an answer when official law is sufficient.
+JURO legal research searches the Indexed Official Corpus first. When indexed Official Coverage is insufficient or indexed semantic selection is unavailable, live research includes both Live Official Search and Secondary Web Research across the public internet. Official discovery runs first and keeps priority in legal analysis; the wider search also runs when live official discovery succeeds. Answers using live or secondary internet sources display a distinct notice above the answer, with source-specific citations. Non-official publications remain contextual evidence rather than validated legislation.
+
+Amended by owner direction on 2026-09-10 to include the wider internet whenever live research is needed. Sufficient indexed answers do not require an additional internet search.
 
 ## Consequences
 

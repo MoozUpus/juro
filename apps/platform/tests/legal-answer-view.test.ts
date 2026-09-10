@@ -112,7 +112,7 @@ test("Conditional Answer renders supported branches with their own citations", (
   assert.match(html, /Ст\. 163 — Трудовой кодекс РУз/u);
 });
 
-test("Main Point cites only its leading supported proposition", () => {
+test("Main Point exposes sources from all supported findings in the synthesized conclusion", () => {
   const secondSource = {
     ...result().sources[0]!,
     sourceId: "civil-code-10",
@@ -133,7 +133,7 @@ test("Main Point cites only its leading supported proposition", () => {
   const law = html.indexOf(">Что говорит закон<");
   const mainMarkup = html.slice(main, law);
   assert.match(mainMarkup, /Ст\. 163 — Трудовой кодекс РУз/u);
-  assert.doesNotMatch(mainMarkup, /Ст\. 10 — Гражданский кодекс РУз/u);
+  assert.match(mainMarkup, /Ст\. 10 — Гражданский кодекс РУз/u);
 });
 
 test("branch-only Conditional Answer cites the branch that grounds its Main Point", () => {
@@ -181,13 +181,34 @@ test("unsupported conclusions render an Insufficient-Evidence Result instead of 
   assert.doesNotMatch(html, />Что делать дальше</u);
 });
 
+test("incomplete evidence displays found provisions and focused questions without a verified-answer badge", () => {
+  const html = renderToStaticMarkup(createElement(LegalAnswerView, {
+    result: result({ responseKind: "clarification_required", clarificationQuestions: ["Какой отпуск оформлен?"] }),
+    locale: "ru",
+  }));
+  assert.match(html, /data-answer-kind="insufficient-evidence"/u);
+  assert.match(html, /Ст\. 163 — Трудовой кодекс РУз/u);
+  assert.match(html, /Какой отпуск оформлен/u);
+  assert.doesNotMatch(html, />Подтверждено официальными источниками</u);
+});
+
+test("internet provenance is visibly marked above answers using live or secondary sources", () => {
+  for (const sourceOrigin of ["live", "web"] as const) {
+    const html = renderToStaticMarkup(createElement(LegalAnswerView, {
+      result: result({ sources: result().sources.map((source) => ({ ...source, sourceOrigin })) }), locale: "ru",
+    }));
+    assert.ok(html.indexOf("Ответ использует интернет-источники") < html.indexOf(">Главное<"));
+    assert.match(html, /data-source-notice="internet"/u);
+  }
+});
+
 test("authenticated and guest chat use the same Legal Answer presentation contract", async () => {
   const [authenticated, guest] = await Promise.all([
     readFile(new URL("../app/_platform/AiLawyerClient.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_guest/GuestAiClient.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(authenticated, /<LegalAnswerView[\s\S]*?result=\{result\}[\s\S]*?locale=\{ru \? "ru" : "uz"\}/u);
+  assert.match(authenticated, /<LegalAnswerView[\s\S]*?result=\{result\}[\s\S]*?locale=\{locale\}/u);
   assert.match(guest, /<LegalAnswerView result=\{result\} locale=\{locale\}/u);
   assert.doesNotMatch(authenticated, /function uniqueAnswerDetail/u);
   assert.doesNotMatch(guest, /function paragraphs/u);

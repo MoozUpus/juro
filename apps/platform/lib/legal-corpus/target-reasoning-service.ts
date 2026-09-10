@@ -650,6 +650,10 @@ export async function handleTargetReasoningServiceRequest(
       providerStatus: typeof failure.providerStatus === "number" ? failure.providerStatus : null,
       providerErrorType: typeof failure.providerErrorType === "string"
         ? failure.providerErrorType : null,
+      // Log only schema coordinates, never source text, prompts or rejected values.
+      validationIssues: error instanceof z.ZodError
+        ? error.issues.slice(0, 8).map((issue) => ({ code: issue.code, path: issue.path.join(".") }))
+        : [],
     }));
     return privateServiceJson({ code: "TARGET_REASONING_UNAVAILABLE" }, 503);
   }

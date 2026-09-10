@@ -1,6 +1,7 @@
 import type { LegalSourceContext, LegalSourceSpan } from "../ai/provider";
 import { detectArticleNumbers } from "./legal-language";
 import { legalDatabaseFreshnessFromAsOf, type LegalDatabaseFreshness } from "./verified-retrieval";
+import { lexDocumentIsRepealed } from "./lex-document-status";
 import {
   classifyLegalSourceUrl,
   fetchLegalSource,
@@ -766,8 +767,10 @@ class OfficialDirectProvider implements LegalSourceProvider {
       crawlDelayMode: "proceed",
       wait: (delayMs) => waitWithAbort(this.wait, delayMs, this.signal),
     });
+    const html = new TextDecoder("utf-8", { fatal: true }).decode(fetched.bytes);
+    if (lexDocumentIsRepealed(html)) throw new Error("LEGAL_SOURCE_DOCUMENT_REPEALED");
     const snapshot = normalizeLegalSourceHtml({
-      html: new TextDecoder("utf-8", { fatal: true }).decode(fetched.bytes),
+      html,
       reference: fetched,
       rawContentSha256: fetched.contentSha256,
     });

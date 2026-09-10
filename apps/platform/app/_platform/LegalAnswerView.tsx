@@ -227,9 +227,16 @@ export function LegalAnswerView({
   const copy = COPY[locale];
   const mode = deriveLegalEvidenceMode(result);
   const rootClass = `legal-answer ${className}`.trim();
+  const usesInternet = result.sources.some((source) => source.sourceOrigin === "web"
+    || source.sourceOrigin === "live" || source.sourceClass === "SECONDARY_REFERENCE");
+  const internetNotice = usesInternet && <p className="legal-answer__authority legal-answer__authority--secondary_only" data-source-notice="internet">
+    {locale === "ru" ? "Ответ использует интернет-источники" : locale === "uz"
+      ? "Javobda internet manbalaridan foydalanilgan" : "This answer uses internet sources"}
+  </p>;
 
   if (result.responseKind === "clarification_required") {
     return <article className={`${rootClass} legal-answer--insufficient`} data-answer-kind="insufficient-evidence">
+      {internetNotice}
       <p className="legal-answer__authority">{copy.authority.none}</p>
       <header className="legal-answer__insufficient-heading">
         <span>{copy.checked}</span>
@@ -241,6 +248,20 @@ export function LegalAnswerView({
         <p>{copy.checkedBody}</p>
         <p>{copy.missing}</p>
       </section>
+      {result.confirmedFindings.length > 0 && <Section id={`${id}-found`} title={copy.law}>
+        {result.confirmedFindings.map((finding, index) => <div className="legal-answer__finding" key={index}>
+          <h3>{finding.title}</h3>
+          <Markdown result={result} locale={locale}>{finding.explanation}</Markdown>
+          <CitationList sourceIds={finding.sourceIds} result={result} locale={locale} onCitationSelect={onCitationSelect} />
+        </div>)}
+      </Section>}
+      {(result.referenceNotes ?? []).length > 0 && <Section id={`${id}-additional`} title={copy.additional} className="legal-answer__section--additional">
+        <p className="legal-answer__secondary-note">{copy.secondaryNote}</p>
+        {(result.referenceNotes ?? []).map((note) => <article key={`${note.title}:${note.sourceIds.join(":")}`}>
+          <h3>{note.title}</h3><Markdown result={result} locale={locale}>{note.note}</Markdown>
+          <CitationList sourceIds={note.sourceIds} result={result} locale={locale} onCitationSelect={onCitationSelect} />
+        </article>)}
+      </Section>}
       {result.clarificationQuestions.length > 0 && <section className="legal-answer__questions" aria-labelledby={`${id}-clarify`}>
         <h3 id={`${id}-clarify`}>{copy.clarify}</h3>
         <div>{result.clarificationQuestions.map((question) => onQuestionSelect
@@ -252,14 +273,15 @@ export function LegalAnswerView({
 
   const important = result.assumptions.length > 0 || result.risks.length > 0 || result.urgency !== "normal";
   const prepare = result.requiredDocuments.length > 0 || Boolean(result.suggestedDocument);
-  const mainSourceIds = [
+  const mainSourceIds = [...new Set([
     ...result.confirmedFindings.map((finding) => finding.sourceIds),
     ...(result.conditionalBranches ?? []).map((branch) => branch.sourceIds),
     ...result.actionPlan.map((step) => step.sourceIds),
     ...result.risks.map((risk) => risk.sourceIds),
     ...result.deadlines.map((deadline) => deadline.sourceIds),
-  ].find((sourceIds) => (sourceIds?.length ?? 0) > 0) ?? [];
+  ].flatMap((sourceIds) => sourceIds ?? []))];
   return <article className={rootClass} data-answer-kind="legal-answer">
+    {internetNotice}
     <p className={`legal-answer__authority legal-answer__authority--${mode}`}>{copy.authority[mode]}</p>
     <Section id={`${id}-main`} title={copy.main} className="legal-answer__section--main">
       <Markdown result={result} locale={locale}>{result.summary}</Markdown>

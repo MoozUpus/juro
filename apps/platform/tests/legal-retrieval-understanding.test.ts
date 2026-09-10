@@ -3,55 +3,16 @@ import test from "node:test";
 
 import {
   normalizeLegalRetrievalUnderstanding,
-  projectLegalRetrievalConcepts,
   RETRIEVAL_PLANNER_RESPONSE_LIMITS,
   targetQuestionPlanningHints,
+  fallbackLegalRetrievalUnderstanding,
 } from "../lib/legal/legal-retrieval-understanding";
 
 test("retrieval planner starts structured output directly with a bounded response budget", () => {
   assert.deepEqual(RETRIEVAL_PLANNER_RESPONSE_LIMITS, {
-    maxOutputTokens: 640,
+    maxOutputTokens: 1_024,
     reasoningEffort: "none",
   });
-});
-
-test("semantic atoms project to six complementary statutory retrieval concepts", () => {
-  const concepts = projectLegalRetrievalConcepts({
-    formalRequestedActionVariants: [
-      "formal action by responsible actor",
-      "alternative legal action by responsible actor",
-    ],
-    independentActionKeyword: "action",
-    relationshipOrInstrumentActionKeyword: "relationship-level legal action by responsible actor",
-    primaryPersonStatus: "primary protected person",
-    alternativePersonStatus: "alternative protected person",
-    protectedStatusKeywords: ["primary status", "alternative status"],
-  }, "en");
-
-  assert.deepEqual(concepts, [
-    "Prohibition of formal action by responsible actor",
-    "Prohibition of alternative legal action by responsible actor",
-    "Guarantees for primary protected person",
-    "Guarantees for alternative protected person; relationship-level legal action by responsible actor",
-    "relationship-level legal action by responsible actor",
-    "Criminal and administrative liability; action; primary protected person; alternative protected person; primary status; alternative status",
-  ]);
-});
-
-test("alternative status retrieval keeps the second concrete person category action-scoped", () => {
-  const concepts = projectLegalRetrievalConcepts({
-    formalRequestedActionVariants: ["direct action", "relationship termination"],
-    independentActionKeyword: "action",
-    relationshipOrInstrumentActionKeyword: "termination at the initiative of an actor",
-    primaryPersonStatus: "people in the first concrete status",
-    alternativePersonStatus: "people in the second concrete status with a material qualifier",
-    protectedStatusKeywords: ["first condition", "second qualified condition"],
-  }, "en");
-
-  assert.equal(
-    concepts[3],
-    "Guarantees for people in the second concrete status with a material qualifier; termination at the initiative of an actor",
-  );
 });
 
 test("provider-sized retrieval plans are bounded without discarding semantic queries", () => {
@@ -68,7 +29,7 @@ test("provider-sized retrieval plans are bounded without discarding semantic que
     webSearchQuery: "  увольнение во время отпуска по уходу за ребенком Узбекистан  ",
   }, originalQuery);
 
-  assert.equal(plan.corpusQueries[0], "семантическая гипотеза 0");
+  assert.equal(plan.corpusQueries[0], plan.standaloneQuestion);
   assert.equal(plan.corpusQueries.length, 3);
   assert.equal(plan.requiredConcepts.length, 6);
   assert.ok(plan.requiredConcepts.every((concept) => concept.alternatives.length === 5));
@@ -93,26 +54,22 @@ test("empty optional planner values degrade to the original query, not an invali
   assert.equal(plan.webSearchQuery, originalQuery);
 });
 
-test("one semantic plan supplies bounded core and supporting hints to indexed retrieval", () => {
+test("deadline queries retain the question and only their supplied legal concepts", () => {
+  const question = "Срок исковой давности по трудовым спорам";
+  const concepts = ["срок обращения в комиссию по трудовым спорам", "срок обращения в суд по трудовым спорам"];
   const understanding = normalizeLegalRetrievalUnderstanding({
-    standaloneQuestion: "Можно ли прекратить трудовой договор во время отпуска?",
-    corpusQueries: ["прекращение трудового договора"],
-    requiredConcepts: [
-      { statement: "статус отпуска", alternatives: ["статус отпуска"] },
-      { statement: "статус беременности", alternatives: ["статус беременности"] },
-      { statement: "гарантии работника", alternatives: ["гарантии работника"] },
-      { statement: "сохранение права", alternatives: ["сохранение права"] },
-      { statement: "основания и исключения прекращения", alternatives: ["основания и исключения прекращения"] },
-      { statement: "ответственность за незаконное прекращение", alternatives: ["ответственность за незаконное прекращение"] },
-    ],
-    lexSearchQueries: ["прекращение трудового договора"],
-    webSearchQuery: "увольнение в отпуске",
-  }, "Можно ли уволить работника в декрете?");
-
-  const hints = targetQuestionPlanningHints(understanding, "ru");
-  assert.deepEqual(hints.requirements.map(({ priority }) => priority), [
-    "core", "core", "core", "core", "supporting", "supporting",
-  ]);
-  assert.equal(hints.formulations.length, 6);
-  assert.equal(hints.standaloneQuestion, understanding.standaloneQuestion);
+    standaloneQuestion: question,
+    corpusQueries: concepts,
+    requiredConcepts: concepts.map(statement => ({ statement, alternatives: [statement] })),
+    lexSearchQueries: concepts,
+    webSearchQuery: question,
+  }, question);
+  assert.deepEqual(understanding.corpusQueries, [question, ...concepts]);
+  assert.deepEqual(understanding.lexSearchQueries, [question, ...concepts]);
+  assert.deepEqual(understanding.requiredConcepts.map(item => item.statement), concepts);
+  assert.doesNotMatch(JSON.stringify(understanding), /запрет|гарантии|уголовная/iu);
+  const hints = targetQuestionPlanningHints(understanding, "ru")!;
+  assert.equal(hints.formulations[0], question);
+  assert.deepEqual(hints.requirements.map((item) => item.statement), concepts);
+  assert.equal(targetQuestionPlanningHints(fallbackLegalRetrievalUnderstanding(question), "ru"), undefined);
 });

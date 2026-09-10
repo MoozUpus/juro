@@ -104,7 +104,7 @@ const run: LegalAiRunResult = {
   fallbackFromProvider: null,
 };
 
-test("verified exact spans survive synthesis-provider timeout as a source-only answer", async () => {
+test("provider timeout retains found articles as an explicitly incomplete result", async () => {
   const provider: LegalAiProvider = {
     name: "openai",
     async runLegalChat() {
@@ -132,10 +132,11 @@ test("verified exact spans survive synthesis-provider timeout as a source-only a
 
   assert.equal(fallback.run.sourceFallback, true);
   assert.equal(fallback.run.sourceFallbackReason, "PROVIDER_TIMEOUT");
-  assert.equal(fallback.run.data.responseKind, "answer");
+  assert.equal(fallback.run.data.responseKind, "clarification_required");
   assert.equal(fallback.run.data.evidenceMode, "official");
   assert.equal(fallback.run.data.sources[0]?.originalUrl, source.officialUrl);
-  assert.match(fallback.run.data.answer, /государственной регистрации/iu);
+  assert.match(fallback.run.data.confirmedFindings[0]!.explanation, /государственной регистрации/iu);
+  assert.match(fallback.run.data.answer, /повторить запрос/iu);
   assert.deepEqual(fallback.run.data.actionPlan, []);
   assert.deepEqual(fallback.run.data.deadlines, []);
 });
@@ -236,7 +237,7 @@ test("gateway emits a repeated title and explanation only once", () => {
     legalDatabaseAsOf: capitalSource.verifiedAt,
   });
 
-  assert.equal(validated.run.data.summary, `Краткий вывод: ${provision}`);
+  assert.equal(validated.run.data.summary, provision);
   assert.equal(validated.run.data.answer, provision);
   assert.equal(validated.answer.claims[0]?.text, provision);
 });
@@ -572,7 +573,7 @@ test("gateway removes an invented number and does not attach an unused source", 
   assert.equal(validated.answer.claims.length, 1);
   assert.equal(validated.answer.claims[0]?.text.includes("99"), false);
   assert.equal(validated.answer.sources.length, 1);
-  assert.equal(validated.run.data.responseKind, "answer");
+  assert.equal(validated.run.data.responseKind, "clarification_required");
   assert.equal(validated.run.data.confirmedFindings.length, 1);
 });
 
@@ -597,7 +598,7 @@ test("gateway replaces provider-authored legal prose with a request-scoped sourc
     reasoningMode: "fast",
     legalDatabaseAsOf: source.verifiedAt,
   });
-  assert.equal(validated.run.data.responseKind, "answer");
+  assert.equal(validated.run.data.responseKind, "clarification_required");
   assert.equal(validated.run.data.answer.includes("3 дня"), false);
   assert.deepEqual(validated.run.data.assumptions, []);
   assert.deepEqual(validated.run.data.requiredDocuments, []);
@@ -771,7 +772,7 @@ test("gateway rejects provider links outside the request source allowlist", () =
     reasoningMode: "fast",
     legalDatabaseAsOf: source.verifiedAt,
   });
-  assert.equal(validated.run.data.responseKind, "answer");
+  assert.equal(validated.run.data.responseKind, "clarification_required");
   assert.doesNotMatch(validated.run.data.answer, /evil\.example|\]\(/iu);
   assert.equal(validated.answer.claims[0]?.sourceSpanId, source.spans?.[0]?.id);
 });
@@ -838,9 +839,9 @@ test("gateway publishes cited web material only as a reference note, never as co
     /\[Открыть справочный источник\]\(https:\/\/example\.org\/guidance\)/u,
   );
   assert.deepEqual(validated.run.data.referenceNotes?.[0]?.sourceIds, [secondary.id]);
-  assert.equal(validated.run.data.responseKind, "answer");
+  assert.equal(validated.run.data.responseKind, "clarification_required");
   assert.equal(validated.run.data.evidenceMode, "secondary_only");
-  assert.match(validated.run.data.answer, /не устанавливает законодательство/iu);
+  assert.match(validated.run.data.answer, /недостаточно для подтверждённого правового вывода/iu);
   assert.deepEqual(validated.run.data.actionPlan, []);
   assert.deepEqual(validated.run.data.deadlines, []);
   assert.equal(validated.run.data.successOutlook, null);
@@ -985,15 +986,15 @@ test("gateway answers a colloquial maternity-dismissal question from the exact L
     legalDatabaseAsOf: maternitySource.verifiedAt,
   });
 
-  assert.equal(validated.run.data.responseKind, "answer");
+  assert.equal(validated.run.data.responseKind, "clarification_required");
   assert.equal(validated.run.data.evidenceMode, "official");
-  assert.match(validated.run.data.answer, /прекращение трудового договора/iu);
-  assert.match(validated.run.data.answer, /ребенка в возрасте до трех лет/iu);
+  assert.match(validated.run.data.confirmedFindings[0]!.explanation, /прекращение трудового договора/iu);
+  assert.match(validated.run.data.confirmedFindings[0]!.explanation, /ребенка в возрасте до трех лет/iu);
   assert.deepEqual(validated.run.data.clarificationQuestions, ["Какой именно отпуск оформлен?"]);
   assert.equal(validated.run.data.sources[0]?.article?.startsWith("Статья 409"), true);
 });
 
-test("gateway preserves every retrieved maternity provision omitted by synthesis", () => {
+test("gateway does not append omitted provisions to a successfully synthesized answer", () => {
   const maternitySource = (article: string, title: string, text: string): LegalSourceContext => ({
     ...source,
     id: `indexed:labour:${article}`,
@@ -1063,20 +1064,12 @@ test("gateway preserves every retrieved maternity provision omitted by synthesis
     legalDatabaseAsOf: source.verifiedAt,
   });
 
-  assert.deepEqual(validated.run.data.sources.map((item) => item.article?.match(/\d+/u)?.[0]), [
-    "215",
-    "237",
-    "408",
-    "409",
-    "163",
-  ]);
-  assert.equal(validated.run.data.confirmedFindings.length, 5);
-  assert.match(validated.run.data.answer, /социальные отпуска/iu);
-  assert.match(validated.run.data.answer, /беременной женщиной/iu);
-  assert.match(validated.run.data.answer, /ребенка до трех лет/iu);
+  assert.deepEqual(validated.run.data.sources.map((item) => item.article?.match(/\d+/u)?.[0]), ["215"]);
+  assert.equal(validated.run.data.confirmedFindings.length, 1);
+  assert.doesNotMatch(validated.run.data.answer, /социальные отпуска/iu);
 });
 
-test("gateway keeps every official citation when one provider finding names mixed-validity sources", () => {
+test("gateway drops a finding with an unsupported additional citation", () => {
   const provision = (article: string, text: string): LegalSourceContext => ({
     ...source,
     id: `indexed:labour:mixed:${article}`,
@@ -1125,9 +1118,8 @@ test("gateway keeps every official citation when one provider finding names mixe
     legalDatabaseAsOf: source.verifiedAt,
   });
 
-  assert.deepEqual(validated.run.data.sources.map((item) => item.article), ["Статья 408", "Статья 163"]);
-  assert.equal(validated.run.data.confirmedFindings.length, 1);
-  assert.deepEqual(validated.run.data.confirmedFindings[0]?.sourceIds, [article408.id, article163.id]);
+  assert.deepEqual(validated.run.data.sources.map((item) => item.article), ["Статья 408"]);
+  assert.equal(validated.run.data.confirmedFindings.length, 0);
 });
 
 test("gateway does not auto-publish an omitted deterministic fallback candidate", () => {

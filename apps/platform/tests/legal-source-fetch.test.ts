@@ -253,6 +253,20 @@ test("bounded Lex fetch verifies robots, preserves evidence, and hashes bytes", 
   }
 });
 
+test("an absent robots file, including the publisher's same-origin 404 redirect, permits document access", async () => {
+  for (const redirect of [false, true]) {
+    const synthetic = sequenceFetch([
+      ...(redirect ? [new Response(null, { status: 302, headers: { location: "/Pages/404.aspx" } })] : []),
+      new Response("not found", { status: 404, headers: { "content-type": "text/html" } }), html(),
+    ]);
+    const result = await fetchLegalSource("https://lex.uz/ru/docs/-42", {
+      adviceEnabled: false, fetchImpl: synthetic.fetchImpl,
+    });
+    assert.equal(result.canonicalId, "-42");
+    assert.equal(synthetic.calls.at(-1)?.url, "https://lex.uz/ru/docs/-42");
+  }
+});
+
 test("robots disallow and excessive crawl-delay policies fail closed", async () => {
   for (const [body, code] of [
     ["User-agent: *\nDisallow: /ru/docs/\n", "LEGAL_SOURCE_ROBOTS_DISALLOWED"],

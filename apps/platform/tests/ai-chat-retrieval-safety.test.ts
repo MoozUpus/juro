@@ -32,7 +32,7 @@ test("chat completes the official authority ladder before conditionally using lo
   assert.ok(web > secondaryGate);
   assert.ok(orderedSources > web);
   assert.match(route, /legal corpus -> live Lex\.uz/u);
-  assert.match(route, /only after the combined official\s+result is weak or empty/u);
+  assert.match(route, /search the wider internet after official discovery/u);
   assert.match(route, /assertProviderCallAllowed\(\{ db, environment: providerEnvironment, provider: "openai" \}\)/u);
   assert.match(route, /provider_usage_secondary_/u);
 });
@@ -56,6 +56,7 @@ test("chat uses bounded model-understood queries across the authority ladder wit
   assert.match(route, /priorUserQuestions: conversationHistory\.map\(\(turn\) => turn\.user\)/u);
   assert.doesNotMatch(route, /priorUserQuestions: conversationHistory\.map\(\(turn\) => turn\.assistant\)/u);
   assert.match(route, /targetPlanningHints: retrievalUnderstandingPromise\.then/u);
+  assert.match(route, /targetQuestionId: idempotencyKey/u);
   assert.match(understanding, /priorUserQuestions:/u);
   assert.doesNotMatch(understanding, /assistant: normalize\(turn\.assistant/u);
   assert.match(route, /lexSearchQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.lexSearchQueries\)/u);
@@ -150,9 +151,9 @@ test("provider and UI contracts answer first, keep questions last, and conceal i
   assert.match(sharedPromptRules, /узком последующем вопросе не повторяй нерелевантные части/u);
   assert.match(sharedPromptRules, /conditionalBranches/u);
   const summary = legalAnswer.indexOf('id={`${id}-main`}');
-  const findings = legalAnswer.indexOf("result.confirmedFindings.length");
+  const findings = legalAnswer.indexOf("result.confirmedFindings.length", summary);
   const actionPlan = legalAnswer.indexOf("result.actionPlan.length");
-  const reference = legalAnswer.indexOf("(result.referenceNotes ?? []).length");
+  const reference = legalAnswer.indexOf("(result.referenceNotes ?? []).length", summary);
   const questions = legalAnswer.lastIndexOf("result.clarificationQuestions.length");
   assert.match(legalAnswer, /data-answer-kind="insufficient-evidence"/u);
   assert.match(legalAnswer, /не получил достаточного подтверждения для правового вывода/u);

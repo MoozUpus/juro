@@ -85,7 +85,7 @@ function publicPageText(html: string): string {
   const root = parse(html) as unknown as HtmlNode;
   const values: string[] = [];
   const visit = (node: HtmlNode) => {
-    if (["script", "style", "noscript", "svg", "canvas"].includes(node.tagName ?? "")) return;
+    if (["head", "script", "style", "noscript", "svg", "canvas", "nav", "footer"].includes(node.tagName ?? "")) return;
     if (node.nodeName === "#text" && node.value) values.push(node.value);
     for (const child of node.childNodes ?? []) visit(child);
   };
@@ -286,11 +286,11 @@ export async function retrieveSecondaryInternetSources(input: {
     input: { query: input.query.slice(0, 800), locale: input.locale, jurisdiction: "UZ" },
     model: settings.openaiChatModel,
     maxAttempts: 1,
-    firstByteTimeoutMs: Math.max(1, Math.min(input.timeoutMs ?? 4_000, 6_000)),
-    totalResponseTimeoutMs: Math.max(1, Math.min(input.timeoutMs ?? 4_000, 6_000)),
+    firstByteTimeoutMs: Math.max(1, Math.min(input.timeoutMs ?? 20_000, 20_000)),
+    totalResponseTimeoutMs: Math.max(1, Math.min(input.timeoutMs ?? 20_000, 20_000)),
     requestId: input.requestId,
     safetyIdentifier: input.safetyIdentifier,
-    reasoningEffort: "low",
+    reasoningEffort: "none",
     textVerbosity: "low",
     maxOutputTokens: 1_000,
     webSearch: { purpose: "secondary_research" },
@@ -332,17 +332,9 @@ export async function retrieveSecondaryInternetSources(input: {
       proposedExcerpt: material.excerpt,
     }];
   });
-  // Provider-observed search results remain useful even when structured output
-  // omitted or slightly rewrote their URL. They are still re-fetched and the
-  // excerpt is selected exclusively from the returned page text.
-  const eligible = [
-    ...rankedMaterials,
-    ...[...observedSources.entries()].flatMap(([canonicalUrl, title]) => {
-      if (seen.has(canonicalUrl)) return [];
-      seen.add(canonicalUrl);
-      return [{ canonicalUrl, title: title ?? "", proposedExcerpt: "" }];
-    }),
-  ].slice(0, 5);
+  // Search observation proves provenance, not relevance. Only re-fetch pages
+  // explicitly selected for this question; omitted hits must not become evidence.
+  const eligible = rankedMaterials.slice(0, 3);
   const fetchedPages = await Promise.allSettled(eligible.map((candidate) =>
     fetchJuroSecondaryPage({
       url: candidate.canonicalUrl,

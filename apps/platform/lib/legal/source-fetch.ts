@@ -302,6 +302,7 @@ async function fetchFollowingRedirects(
     timeoutMs: number;
     maxRedirects: number;
     accept: string;
+    allowNotFound?: boolean;
     validateUrl: (url: URL) => boolean;
     unavailableCode:
       | "LEGAL_SOURCE_ROBOTS_UNAVAILABLE"
@@ -317,6 +318,7 @@ async function fetchFollowingRedirects(
       options.accept,
     );
     if (!REDIRECT_STATUSES.has(response.status)) {
+      if (options.allowNotFound && response.status === 404) return { response, finalUrl: currentUrl };
       if (!response.ok) {
         await cancelBody(response);
         const retryable = response.status === 408
@@ -570,6 +572,7 @@ export async function fetchLegalSource(
     timeoutMs,
     maxRedirects,
     accept: "*/*",
+    allowNotFound: true,
     unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
     validateUrl(candidate) {
       return candidate.protocol === "https:"
@@ -577,20 +580,23 @@ export async function fetchLegalSource(
         && candidate.username === ""
         && candidate.password === ""
         && sourceHostKind(candidate.hostname) === reference.sourceKind
-        && candidate.pathname === "/robots.txt"
+        && (candidate.pathname === "/robots.txt"
+          || (candidate.origin === robotsInitialUrl.origin && candidate.pathname === "/Pages/404.aspx"))
         && candidate.search === ""
         && candidate.hash === "";
     },
   });
   const robotsType = responseContentType(robotsResult.response);
+  const robotsMissing = robotsResult.response.status === 404;
   if (
-    robotsType.mediaType !== "text/plain"
-    || (robotsType.charset && !["utf-8", "utf8"].includes(robotsType.charset))
+    !robotsMissing && (robotsType.mediaType !== "text/plain"
+    || (robotsType.charset && !["utf-8", "utf8"].includes(robotsType.charset)))
   ) {
     await cancelBody(robotsResult.response);
     throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_UNAVAILABLE", false);
   }
-  const robotsBytes = await readBoundedBytes(
+  if (robotsMissing) await cancelBody(robotsResult.response);
+  const robotsBytes = robotsMissing ? new Uint8Array() : await readBoundedBytes(
     robotsResult.response,
     ROBOTS_MAX_BYTES,
     timeoutMs,
