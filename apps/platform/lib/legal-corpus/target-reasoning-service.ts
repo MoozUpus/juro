@@ -70,6 +70,17 @@ export const targetSupportAssessmentJsonSchema = z.toJSONSchema(
 );
 const SUPPORT_ASSESSMENT_BATCH_SIZE = 8;
 
+export function parseTargetRequirementSupport(output: unknown): TargetRequirementSupport {
+  // Provider-compatible JSON Schema omits maxItems. Optional suggestions must
+  // not invalidate otherwise valid evidence mappings when that bound is missed.
+  const parsed = supportAssessmentProviderSchema.extend({
+    additionalRequirements: supportAssessmentProviderSchema.shape.additionalRequirements.max(48),
+  }).parse(output);
+  return supportAssessmentProviderSchema.parse({
+    ...parsed, additionalRequirements: parsed.additionalRequirements.slice(0, 3),
+  });
+}
+
 const formulationProviderSchema = z.object({
   ...questionInterpretationPlanSchema.shape.formulations.element.shape,
   legalTitleSpans: questionInterpretationPlanSchema.shape.formulations.element.shape
@@ -305,7 +316,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
     const result = await callOpenAiStructured({
       schemaName: "juro_target_requirement_support",
       schema: targetSupportAssessmentJsonSchema,
-      parse: (output) => supportAssessmentProviderSchema.parse(output),
+      parse: parseTargetRequirementSupport,
       instructions: [
         "Assess whether each verified official provision directly supports each stated legal coverage requirement.",
         "Assess every candidate independently and return every direct support mapping, not merely the best or shortest set.",
@@ -318,6 +329,9 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
         "Do not answer the user's question, invent rules, infer missing article text, or use outside knowledge.",
         "A provision may support requirements from any retrieval formulation, and may support none.",
         "Use the supplied readingId for additionalRequirements; never infer an identifier from a reading's text.",
+        value.repairAttempted
+          ? "The bounded expansion has already run. Return additionalRequirements as an empty array; assess only the supplied requirements."
+          : "Return at most three additionalRequirements, prioritizing unresolved operative references over optional details.",
         "When a provision explicitly cites operative grounds, exceptions or conditions needed to understand the answer, propose a separate concise additional requirement for that reference unless already covered. A bare cross-reference is not the content of the referenced rule.",
         "Prioritize unresolved operative cross-references, then distinct relevant provisions not supporting any existing requirement. Numbered grounds are unresolved unless their substantive text is supplied; a broadly worded requirement does not resolve them. Do not spend additionalRequirements on subclauses or details already present in a provision mapped to an existing requirement: the answer can use that supplied text without another search.",
         "Also propose a supporting additional requirement when supplied provision text directly establishes a distinct, materially relevant consequence, remedy, sanction or qualification missing from the current plan, even without an explicit cross-reference. It must concern the same actor, action and circumstances, not merely the same legal field. A shared topic or duplicate formulation is not a distinct contribution. Keep each statement under 200 characters. These proposals trigger evidence checking, not automatic inclusion in the answer.",

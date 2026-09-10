@@ -16,10 +16,11 @@ import {
 } from "./target-retrieval";
 
 /** The indexed target's accepted complete-answer contract includes the shared
- * semantic planning wait plus bounded search and support assessment. */
-export const LEGAL_RETRIEVAL_BUDGET_MS = 48_000;
+ * semantic planning, two bounded search/support passes and the publisher's
+ * current-status check. A repair must not consume the status-check budget. */
+export const LEGAL_RETRIEVAL_BUDGET_MS = 64_000;
 /** Leave the caller a small margin to observe and record the target deadline. */
-export const LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = 48_500;
+export const LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = LEGAL_RETRIEVAL_BUDGET_MS + 500;
 
 export function legalRetrievalEnvironment(bindings: {
   APP_ENV?: "development" | "staging" | "production";

@@ -6,6 +6,7 @@ import {
   classifyTargetPrivateNames,
   handleTargetReasoningServiceRequest,
   parseTargetInterpretationProviderOutput,
+  parseTargetRequirementSupport,
   selectTargetProvisions,
   targetSupportAssessmentJsonSchema,
   targetRequirementSupportContext,
@@ -13,6 +14,15 @@ import {
   TARGET_PRIVATE_NAME_CLASSIFICATION_PATH,
   TARGET_PROVISION_SELECTION_PATH,
 } from "../lib/legal-corpus/target-reasoning-service";
+
+test("optional expansion overflow does not discard validated support mappings", () => {
+  const mappings = [{itemKey: "source", supportedRequirementIds: ["requirement"], governingRequirementIds: ["requirement"]}];
+  const additionalRequirements = Array.from({length: 4}, (_, index) => ({sourceItemKey: "source", readingId: "reading", statement: `Referenced operative condition ${index}`, priority: "core"}));
+  const parsed = parseTargetRequirementSupport({mappings, additionalRequirements});
+  assert.deepEqual(parsed.mappings, mappings);
+  assert.equal(parsed.additionalRequirements.length, 3);
+  assert.throws(() => parseTargetRequirementSupport({mappings: [{itemKey: "source"}], additionalRequirements}));
+});
 
 test("reasoning calls use strict provider schemas and interpretation normalizes nullable optionals", () => {
   const visit = (value: unknown): void => {
