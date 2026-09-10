@@ -1,5 +1,6 @@
 import type { LegalSourceContext, LegalSourceSpan } from "../ai/provider";
 import { detectArticleNumbers } from "./legal-language";
+import { completeArticleText } from "./article-context";
 import { legalDatabaseFreshnessFromAsOf, type LegalDatabaseFreshness } from "./verified-retrieval";
 import { lexDocumentIsRepealed } from "./lex-document-status";
 import {
@@ -603,18 +604,9 @@ async function requestScopedSourceSpans(input: {
   completeRequestedArticle?: boolean;
 }): Promise<LegalSourceSpan[]> {
   if (input.completeRequestedArticle && input.articleNumberRequested) {
-    let active = false;
-    let heading: string | null = null;
-    const parts: string[] = [];
-    for (const block of input.snapshot.blocks) {
-      if (block.semanticRole === "article" || ARTICLE_HEADING_START.test(block.text)) {
-        active = articleNumberFromText(block.text) === input.articleNumberRequested;
-        if (active) heading = block.text.slice(0, 240);
-      } else if (block.semanticRole === "chapter" || block.semanticRole === "section") active = false;
-      if (active) parts.push(block.text);
-    }
-    if (!heading || parts.length < 2) throw new Error("LEGAL_SOURCE_PROVISION_INCOMPLETE");
-    const fullText = parts.join(" ").replace(/\s+/gu, " ").trim();
+    const article = completeArticleText(input.snapshot.blocks, input.articleNumberRequested);
+    if (!article) throw new Error("LEGAL_SOURCE_PROVISION_INCOMPLETE");
+    const {heading, text: fullText} = article;
     const chunks = splitLegalText(fullText);
     if (chunks.length > MAX_SOURCE_SPANS || chunks.join(" ").replace(/\s+/gu, " ").trim() !== fullText) {
       throw new Error("LEGAL_SOURCE_PROVISION_CONTEXT_LIMIT");

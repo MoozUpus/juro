@@ -403,7 +403,7 @@ for (const compoundRepair of [false, true]) test(`every Plausible Reading gets a
       resolveControlling: async (id, _endpoint, context) => {
         assert.equal(context.release.id, release.id);
         observedInstants.push(context.currentAt);
-        return parseControllingEvidenceResolution({
+        const resolved = parseControllingEvidenceResolution({
         controlling: {
           legalInstrumentId: "instrument",
           officialExpressionId: "expression",
@@ -425,11 +425,17 @@ for (const compoundRepair of [false, true]) test(`every Plausible Reading gets a
           },
         },
         materialCitation: { label: `Act — Article ${id}`, url: "https://lex.uz/docs/900" },
-      }); },
+      });
+        return {...resolved, articleContext: {...resolved.controlling,
+          provisionText: `complete verified ${id}`,
+          evidence: {...resolved.controlling.evidence, r2Key: "corpus/normalized/revision.json", sha256: "b".repeat(64)},
+        }};
+      },
     },
     provisionSelector: {
       select: async ({ candidates }) => {
         selectionCalls += 1;
+        assert.ok(candidates.every(candidate => candidate.provisionText.startsWith("complete verified")));
         if (selectionCalls === 1) return {
           outcome: "repair",
           repairFormulation: {
@@ -465,7 +471,11 @@ for (const compoundRepair of [false, true]) test(`every Plausible Reading gets a
   assert.equal(selectionCalls, 2);
   assert.equal(observedInstants.length, 6);
   assert.deepEqual([...new Set(observedInstants)], [requestInstant]);
-  if (result.kind === "legal_answer") assert.equal(result.whatTheLawSays.length, 2);
+  if (result.kind === "legal_answer") {
+    assert.equal(result.whatTheLawSays.length, 2);
+    assert.ok(result.whatTheLawSays.every(statement => statement.controllingQuotation.startsWith("complete verified")
+      && statement.evidenceSha256 === "b".repeat(64)));
+  }
 
   const overBudget = createTargetLegalAnswerRetriever({
     environment: "development",

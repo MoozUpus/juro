@@ -225,6 +225,7 @@ const provisionObjectSchema = z.object({
 // provision object, so legacy object identifiers do not become runtime joins.
 const r2NativeProvisionEvidenceSchema = z.object({
   provisionRenditionId: provisionRenditionIdSchema,
+  textRevisionId: textRevisionIdSchema.optional(),
   languageTag: importObjectSchema.shape.languageTag,
   script: legalScriptSchema,
   actTitle: importObjectSchema.shape.actTitle,
@@ -1332,6 +1333,7 @@ export async function resolveProvisionRendition(
 
 const controllingResolutionSchema = z.object({
   controlling: resolvedEvidenceSchema,
+  articleContext: resolvedEvidenceSchema.optional(),
   translation: resolvedEvidenceSchema.optional(),
   translationLabel: z.literal("Official Translation").optional(),
   materialCitation: resolvedEvidenceSchema.shape.officialCitation,
@@ -1546,7 +1548,9 @@ export async function resolveCompleteCorpusEvidence(
 
 /** Resolves immutable evidence through the body-free R2-native runtime mapping. */
 export async function resolveR2NativeCustomEvidence(
-  dependencies: { bucket: Pick<LegalEvidenceBucket, "get">; currentAt: string },
+  dependencies: { bucket: Pick<LegalEvidenceBucket, "get">; currentAt: string;
+    readArticleContext?: (original: ResolvedOfficialEvidence, article: string,
+      sourceRevisionId: string) => Promise<ResolvedOfficialEvidence | null> },
   identity: CustomRuntimeLegalIdentity,
   untrustedEndpoint: TemporalEndpoint,
 ): Promise<ControllingEvidenceResolution> {
@@ -1560,6 +1564,8 @@ export async function resolveR2NativeCustomEvidence(
   }, "sealed-production-evidence");
   let provisionText: string;
   let officialCitation = identity.citation;
+  let articleNumber: string | undefined;
+  let sourceRevisionId: string | undefined;
   if (identity.evidence.mediaType === "text/plain;charset=utf-8") {
     try { provisionText = new TextDecoder("utf-8", { fatal: true }).decode(evidenceBytes); }
     catch { throw new LegalEvidenceError("SOURCE_UNAVAILABILITY"); }
@@ -1579,6 +1585,8 @@ export async function resolveR2NativeCustomEvidence(
       throw new LegalEvidenceError("SOURCE_UNAVAILABILITY");
     }
     provisionText = provision.provisionText;
+    articleNumber = provision.articleNumber;
+    sourceRevisionId = provision.textRevisionId;
     officialCitation = {
       label: `${provision.actTitle} — Article ${provision.articleNumber}`,
       url: provision.sourceUrl,
@@ -1604,7 +1612,12 @@ export async function resolveR2NativeCustomEvidence(
       schemaVersion: 1,
     },
   });
+  // Runtime identities may be remapped across releases. The parent locator
+  // belongs to the original revision authenticated inside the sealed bytes.
+  const articleContext = articleNumber && sourceRevisionId && dependencies.readArticleContext
+    ? await dependencies.readArticleContext(evidence, articleNumber, sourceRevisionId) : null;
   return controllingResolutionSchema.parse({ controlling: evidence,
+    ...(articleContext ? { articleContext } : {}),
     materialCitation: evidence.officialCitation });
 }
 

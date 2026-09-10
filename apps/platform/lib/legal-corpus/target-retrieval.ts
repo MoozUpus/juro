@@ -748,7 +748,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
             return selectionCandidateSchema.parse({
               candidate,
               citationLabel: evidence.materialCitation.label,
-              provisionText: boundedProvisionText(evidence.controlling.provisionText),
+              provisionText: boundedProvisionText((evidence.articleContext ?? evidence.controlling).provisionText),
             });
           } catch (error) {
             if (!(error instanceof LegalEvidenceError) || error.code !== "SOURCE_UNAVAILABILITY") {
@@ -937,9 +937,9 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
             provisionConceptId: evidence.controlling.provisionConceptId,
             provisionRenditionId: evidence.controlling.provisionRenditionId,
             proposition,
-            controllingQuotation: evidence.controlling.provisionText,
+            controllingQuotation: (evidence.articleContext ?? evidence.controlling).provisionText,
             officialCitations: [evidence.materialCitation],
-            evidenceSha256: evidence.controlling.evidence.sha256,
+            evidenceSha256: (evidence.articleContext ?? evidence.controlling).evidence.sha256,
             ...(evidence.translation ? {
               officialTranslation: {
                 label: "Official Translation" as const,

@@ -86,6 +86,9 @@ test("article context follows only unresolved same-instrument references and nev
     text: "Статья 17. Исключения установлены статьей 27 настоящего Кодекса. Также применяются статья 33 другого Закона и статья 44 Налогового кодекса.",
   }] };
   assert.deepEqual(referencedArticleContextRequests([referring]), [{ url: source.officialUrl, article: "27" }]);
+  assert.deepEqual(referencedArticleContextRequests([referring], true), []);
+  const truncated = {...referring, spans: [{...referring.spans[0]!, text: "Статья 17. Допускаются следующие основания:"}]};
+  assert.deepEqual(referencedArticleContextRequests([truncated], true), [{url: source.officialUrl, article: "17"}]);
   assert.deepEqual(referencedArticleContextRequests([referring, { ...source, article: "27" }]), []);
   assert.deepEqual(referencedArticleContextRequests([{ ...referring, applicabilityStatus: "historical" }]), []);
   assert.equal(selectReferencedArticleContext(source, "27"), null);

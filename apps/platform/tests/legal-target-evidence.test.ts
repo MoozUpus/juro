@@ -10,12 +10,65 @@ import {
   resolveCompleteCorpusEvidence,
   resolveCompleteCorpusCurrentEvidence,
   resolveR2NativeCustomEvidence,
+  parseResolvedOfficialEvidence,
 } from "../lib/legal-corpus/target-evidence";
+import { createNormalizedArticleEvidenceReader } from "../lib/legal-corpus/normalized-article-evidence";
+import { completeArticleText } from "../lib/legal/article-context";
 import { recordProvisionTemporalEvidence } from "../lib/legal-corpus/target-temporal";
 import { sqliteD1FixtureFromDirectory } from "./helpers/sqlite-d1";
 import { MemoryEvidenceBucket, representativeProvision } from "./helpers/legal-target";
 
 const migrationCutoff = "2026-08-31T06:26:27.225Z";
+
+test("accepted parent recovery authenticates full article context without replacing the original rendition", async () => {
+  const blocks = [
+    "Article 7. Filing requirements", "An application must contain the following information:",
+    "1) the applicant's registered name and correspondence address;",
+    "2) the requested action and the documents supporting that request.",
+    "Article 8. Decision", "The authority communicates its decision in writing.",
+  ].map((text, index) => ({index, kind: "paragraph" as const, text}));
+  const source = {sourceKind: "lex", locale: "ru", canonicalId: "777",
+    canonicalUrl: representativeProvision.sourceUrl, rawContentSha256: "a".repeat(64)};
+  const snapshot = {schemaVersion: 1, parser: {name: "parse5", version: "8.0.1", profile: "juro-legal-blocks-v1"},
+    source, primarySelector: "lex-document", documentTitle: "Filing rules", blocks,
+    plainText: blocks.map(block => block.text).join(" ")};
+  const bytes = new TextEncoder().encode(JSON.stringify(snapshot));
+  const original = parseResolvedOfficialEvidence({
+    legalInstrumentId: representativeProvision.legalInstrumentId,
+    officialExpressionId: representativeProvision.officialExpressionId,
+    textRevisionId: representativeProvision.textRevisionId,
+    provisionConceptId: representativeProvision.provisionConceptId,
+    provisionRenditionId: representativeProvision.provisionRenditionId,
+    languageTag: "ru", script: "Cyrl", textualAuthority: "controlling",
+    provisionText: blocks.slice(0, 2).map(block => block.text).join(" "),
+    officialCitation: {label: "Filing rules — Article 7", url: representativeProvision.sourceUrl},
+    evidence: {provisionRenditionId: representativeProvision.provisionRenditionId, r2Key: "original",
+      byteCount: 100, sha256: "b".repeat(64), sourceNormalizedSha256: sha256(bytes), schemaVersion: 1},
+  });
+  const bucket = new MemoryEvidenceBucket();
+  const sourceRevisionId = "revision:original-parent";
+  const key = `corpus/normalized/${sourceRevisionId}.json`;
+  bucket.objects.set(key, {bytes, customMetadata: {}});
+  let reads = 0;
+  const reader = createNormalizedArticleEvidenceReader({get: async key => {reads++; return bucket.get(key);}});
+  const read = (evidence: typeof original, article: string) => reader(evidence, article, sourceRevisionId);
+  const [context, second] = await Promise.all([read(original, "7"), read(original, "7")]);
+  assert.equal(reads, 1);
+  assert.deepEqual(context, second);
+  assert.match(context!.provisionText, /2\) the requested action/u);
+  assert.doesNotMatch(context!.provisionText, /Article 8/u);
+  assert.equal(context!.evidence.sha256, sha256(bytes));
+  assert.equal(context!.evidence.r2Key, key);
+  assert.equal(original.evidence.r2Key, "original");
+  assert.match(original.provisionText, /information:$/u);
+  assert.equal(await read({...original, officialCitation: {...original.officialCitation, url: "https://lex.uz/ru/docs/999"}}, "7"), null);
+  assert.equal(await read({...original, provisionText: "Different statutory introduction:"}, "7"), null);
+  assert.equal(completeArticleText([...blocks, ...blocks], "7"), null);
+  const corrupt = bytes.slice();
+  corrupt[corrupt.length - 1] = 0;
+  bucket.objects.set(key, {bytes: corrupt, customMetadata: {}});
+  assert.equal(await createNormalizedArticleEvidenceReader(bucket)(original, "7", sourceRevisionId), null);
+});
 
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
@@ -67,11 +120,17 @@ test("R2-native runtime identity hydrates accepted immutable legal evidence form
     const resolve = () => resolveR2NativeCustomEvidence({
       bucket,
       currentAt: "2026-06-01T00:00:00.000Z",
+      readArticleContext: async (original, article, sourceRevisionId) => {
+        assert.equal(sourceRevisionId, representativeProvision.textRevisionId);
+        assert.equal(original.textRevisionId, "revision:remapped-runtime");
+        assert.equal(article, representativeProvision.articleNumber);
+        return null;
+      },
     }, {
       legalIdentitySha256: "a".repeat(64),
       legalInstrumentId: representativeProvision.legalInstrumentId,
       officialExpressionId: representativeProvision.officialExpressionId,
-      textRevisionId: representativeProvision.textRevisionId,
+      textRevisionId: "revision:remapped-runtime",
       provisionConceptId: representativeProvision.provisionConceptId,
       provisionRenditionId: representativeProvision.provisionRenditionId,
       evidenceProvisionRenditionId: representativeProvision.provisionRenditionId,
