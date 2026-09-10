@@ -245,6 +245,7 @@ const sourceUnavailableSchema = z.object({
   kind: z.literal("source_unavailability"),
   sourceLadder: z.literal("indexed_official_corpus"),
   nextTier: z.literal("live_official_search"),
+  discoveredOfficialUrls: z.array(z.string().url()).max(12).optional(),
   safeErrorCode: z.enum([
     "INDEXED_CANDIDATE_UNAVAILABLE",
     "INDEXED_REVALIDATION_FAILED",
@@ -726,6 +727,10 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       if (candidates.length === 0) return insufficient(plan);
 
       const evidenceByRendition = new Map<string, ControllingEvidenceResolution>();
+      const discoveredLocations = () => [...new Set([...evidenceByRendition.values()]
+        .map(evidence => evidence.controlling.officialCitation.url))].slice(0, 12);
+      const unavailableWithDiscovery = (code: z.infer<typeof sourceUnavailableSchema>["safeErrorCode"]) =>
+        sourceUnavailableSchema.parse({ ...sourceUnavailable(code), discoveredOfficialUrls: discoveredLocations() });
       const hydrateSelectionCandidates = async (): Promise<SelectionCandidate[]> => {
         const pool = boundedSelectionPool(candidates!);
         const failureCodes = new Map<string, number>();
@@ -777,7 +782,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         }));
       } catch (error) {
         emitTargetStageFailure("requirement_support", "INDEXED_REVALIDATION_FAILED", error);
-        return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
+        return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
       }
       let repairQueriesUsed = 0;
       if (decision.outcome === "repair") {
@@ -831,7 +836,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
             { currentAt },
           );
           if (repairPacket.availability !== "available") {
-            return sourceUnavailable("INDEXED_CANDIDATE_UNAVAILABLE");
+            return unavailableWithDiscovery("INDEXED_CANDIDATE_UNAVAILABLE");
           }
           validatedPackets.push(await dependencies.candidateCatalog.revalidate(
             repairPacket,
@@ -840,11 +845,11 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
             currentAt,
           ));
         } catch {
-          return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
+          return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
         }
         candidates = mergeRevalidatedCandidates(validatedPackets);
         if (!candidates) {
-          return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
+          return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
         }
         try {
           decision = selectionDecisionSchema.parse(await dependencies.provisionSelector.select({
@@ -853,15 +858,14 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
             repairAttempted: true,
           }));
         } catch {
-          return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
+          return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
         }
       }
       if (decision.outcome !== "selected" && decision.outcome !== "partial") return insufficientSchema.parse({
         ...insufficient(plan),
         // Hash-verified candidate locations are discovery leads, not evidence
         // of coverage. The live tier must fetch and validate them afresh.
-        discoveredOfficialUrls: [...new Set([...evidenceByRendition.values()]
-          .map(evidence => evidence.controlling.officialCitation.url))].slice(0, 12),
+        discoveredOfficialUrls: discoveredLocations(),
       });
 
       const candidateByKey = new Map(candidates.map((entry) => [entry.candidate.itemKey, entry]));

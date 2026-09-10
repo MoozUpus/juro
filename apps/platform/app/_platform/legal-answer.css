@@ -1,6 +1,9 @@
 .legal-answer {
   --legal-rule: color-mix(in srgb, var(--border-subtle) 82%, var(--brand-gold) 18%);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  overflow-wrap: anywhere;
   gap: 0;
   color: var(--text-primary);
 }
