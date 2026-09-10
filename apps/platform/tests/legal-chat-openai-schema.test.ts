@@ -50,6 +50,7 @@ test("coverage schema requires an explicit entry for every independent requireme
   ])) as Record<string, unknown>;
   assertStructuredOutputObjectRules(schema);
   const properties = schema.properties as Record<string, Record<string, unknown>>;
+  assert.equal(Object.keys(properties)[0], "coverage", "plan every scope before streaming findings");
   assert.deepEqual(properties.coverage!.required, ["r1", "r2"]);
   const finding = properties.confirmedFindings!.items as Record<string, unknown>;
   assert.equal("requirementIds" in (finding.properties as object), false);

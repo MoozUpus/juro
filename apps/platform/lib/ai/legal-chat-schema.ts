@@ -204,12 +204,15 @@ function answerCoverageSchema(requirements: readonly {id: string}[]) {
 /** Every planned scope gets an explicit slot; an empty slot remains a visible gap. */
 export function legalChatJsonSchemaForCoverage(requirements: readonly {id: string}[] = []) {
   if (!requirements.length) return legalChatJsonSchema;
-  return z.toJSONSchema(legalChatModelResponseSchema.extend({
+  return z.toJSONSchema(z.object({
+    // Commit to the complete scope inventory before emitting findings. A
+    // trailing coverage map cannot repair an already streamed omission.
+    coverage: answerCoverageSchema(requirements),
+    ...legalChatModelResponseSchema.shape,
     confirmedFindings: z.array(legalFindingSchema.omit({requirementIds: true}).extend({
       answerRole: legalFindingSchema.shape.answerRole.unwrap(),
     })).max(16),
-    coverage: answerCoverageSchema(requirements),
-  }), {target: "draft-7", unrepresentable: "throw"}) as Record<string, unknown>;
+  }).strict(), {target: "draft-7", unrepresentable: "throw"}) as Record<string, unknown>;
 }
 
 export function restoreLegalSourceIds(ids: readonly string[], sources: readonly { id: string }[]): string[] {
