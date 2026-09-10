@@ -1,6 +1,6 @@
 # Resolve operative references before support assessment
 
-Status: proposed
+Status: accepted
 
 An explicit reference within an already identified official instrument should not require rediscovering that instrument through embedding and keyword searches. That extra round adds latency and can displace evidence for an independent requirement.
 

@@ -23,10 +23,10 @@ test("fusion retains an explicitly requested provision ahead of shared cross-ref
 class MemoryR2 {
   readonly objects = new Map<string, Uint8Array>();
   readonly reads = new Map<string, number>();
-  onRead?: (key: string) => void;
+  onRead?: (key: string) => void | Promise<void>;
   async get(key: string, options?: { range?: { offset: number; length: number } }) {
     this.reads.set(key, (this.reads.get(key) ?? 0) + 1);
-    this.onRead?.(key);
+    await this.onRead?.(key);
     const source = this.objects.get(key);
     if (!source) return null;
     const bytes = options?.range
@@ -77,7 +77,18 @@ test(physicalAlias
   const bucket = new MemoryR2();
   let sparseStarted!: () => void;
   const sparseReady = new Promise<void>(resolve => { sparseStarted = resolve; });
-  bucket.onRead = key => { if (key === runtime.documentsReference.key) sparseStarted(); };
+  let measureSparseReads = false;
+  let activeSparseReads = 0;
+  let maximumSparseConcurrency = 0;
+  bucket.onRead = async key => {
+    if (key !== runtime.documentsReference.key) return;
+    sparseStarted();
+    if (!measureSparseReads) return;
+    activeSparseReads++;
+    maximumSparseConcurrency = Math.max(maximumSparseConcurrency, activeSparseReads);
+    try { await new Promise(resolve => setTimeout(resolve, 20)); }
+    finally { activeSparseReads--; }
+  };
   bucket.objects.set(runtime.descriptorReference.key, runtime.descriptorBytes);
   bucket.objects.set(runtime.documentsReference.key, runtime.documentsBytes);
   for (const page of runtime.ordinalMappingPages) bucket.objects.set(page.reference.key, page.bytes);
@@ -109,6 +120,11 @@ test(physicalAlias
   const observed = { denseOptions: null as VectorizeQueryOptions | null };
   let activeEmbeddingRequests = 0;
   let maximumEmbeddingConcurrency = 0;
+  let delayNextEmbedding = false;
+  let embeddingStarted!: () => void;
+  let releaseEmbedding!: () => void;
+  const delayedEmbeddingStarted = new Promise<void>(resolve => { embeddingStarted = resolve; });
+  const delayedEmbeddingRelease = new Promise<void>(resolve => { releaseEmbedding = resolve; });
   const embeddingBatchSizes: number[] = [];
   const dense = {
     async query(_vector: number[], options: VectorizeQueryOptions) {
@@ -135,6 +151,11 @@ test(physicalAlias
       embeddingBatchSizes.push(inputs.length);
       activeEmbeddingRequests++;
       maximumEmbeddingConcurrency = Math.max(maximumEmbeddingConcurrency, activeEmbeddingRequests);
+      if (delayNextEmbedding) {
+        delayNextEmbedding = false;
+        embeddingStarted();
+        await delayedEmbeddingRelease;
+      }
       if (!oversizedPosting) {
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
@@ -198,15 +219,34 @@ test(physicalAlias
       "the service must share sparse evidence-table reads across formulations");
     activeEmbeddingRequests = 0;
     maximumEmbeddingConcurrency = 0;
-    const concurrent = await Promise.all([1, 2].map(() => handleCustomSearchRequest(new Request(
+    const send = () => handleCustomSearchRequest(new Request(
       "http://legal-corpus.internal/internal/legal-corpus/custom-search", {
         method: "POST", headers: { "content-type": "application/json",
           "content-length": String(new TextEncoder().encode(body).byteLength),
           "x-juro-service-binding": "custom-search-runtime-v1",
           "x-juro-legal-environment": "staging" }, body,
-      }), env)));
+      }), env);
+    delayNextEmbedding = true;
+    measureSparseReads = true;
+    const delayed = send();
+    await delayedEmbeddingStarted;
+    const independent = send();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let completedIndependently = false;
+    try {
+      completedIndependently = await Promise.race([independent.then(() => true), new Promise<false>(resolve => {
+        timer = setTimeout(() => resolve(false), 1_000);
+      })]);
+    } finally {
+      clearTimeout(timer);
+      releaseEmbedding();
+    }
+    const concurrent = await Promise.all([delayed, independent]);
     assert.deepEqual(concurrent.map((entry) => entry.status), [200, 200]);
-    assert.equal(maximumEmbeddingConcurrency, 1);
+    assert.equal(completedIndependently, true, "a slow embedding request must not block another complete search");
+    assert.equal(maximumEmbeddingConcurrency, 2);
+    assert.equal(maximumSparseConcurrency, 1, "memory-intensive artifact traversal remains serialized");
+    measureSparseReads = false;
   }
   const driftedCapabilityResponse = await handleCustomSearchRequest(new Request(
     "http://legal-corpus.internal/internal/legal-corpus/custom-search", {

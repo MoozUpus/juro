@@ -26,11 +26,13 @@ export function fuseCustomProvisionMatches(sparseKeys: string[], denseKeys: stri
     .slice(0, topK);
 }
 const QUERY_RESERVATION_USD_MICROS = 1_065;
-let customSearchTail: Promise<void> = Promise.resolve();
+let customSparseTail: Promise<void> = Promise.resolve();
 
-function serializeCustomSearch<T>(operation: () => Promise<T>): Promise<T> {
-  const result = customSearchTail.then(operation);
-  customSearchTail = result.then(() => undefined, () => undefined);
+// Bound the memory-intensive artifact traversal, not the entire request. A
+// slow embedding or dense query must not hold unrelated searches behind it.
+function serializeCustomSparseSearch<T>(operation: () => Promise<T>): Promise<T> {
+  const result = customSparseTail.then(operation);
+  customSparseTail = result.then(() => undefined, () => undefined);
   return result;
 }
 
@@ -231,8 +233,8 @@ export async function executeCustomSearch(env: CustomSearchEnv, raw: unknown) {
   const atEpoch = Math.floor(new Date(input.endpoint.kind === "timestamp"
     ? input.endpoint.instant : input.currentAt).getTime() / 1_000);
   const lanes = await Promise.allSettled([
-    timed("sparseMs", () => queryCustomBm25RuntimeBatch(env.ARTIFACTS, descriptor,
-      queries.map(text => ({ text, atEpoch, topK: input.maxResults })))),
+    timed("sparseMs", () => serializeCustomSparseSearch(() => queryCustomBm25RuntimeBatch(env.ARTIFACTS, descriptor,
+      queries.map(text => ({ text, atEpoch, topK: input.maxResults }))))),
     timed("embeddingMs", () => queryEmbeddings(env, queries)).then(async embedding => ({
       tokenUsage: embedding.tokenUsage,
       results: await timed("denseMs", () => Promise.all(embedding.vectors.map(vector => queryCustomDenseLane(env.DENSE, {
@@ -313,7 +315,7 @@ export async function handleCustomSearchRequest(request: Request, env: CustomSea
       throw new TypeError("CUSTOM_SEARCH_REQUEST_TOO_LARGE");
     }
     const body = await request.json();
-    return privateServiceJson(await serializeCustomSearch(() => executeCustomSearch(env, body)));
+    return privateServiceJson(await executeCustomSearch(env, body));
   } catch {
     return privateServiceJson({ code: "CUSTOM_SEARCH_UNAVAILABLE" }, 503);
   }
