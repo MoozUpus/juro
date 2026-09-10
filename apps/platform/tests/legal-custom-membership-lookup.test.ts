@@ -22,6 +22,8 @@ test("registered lookup roots are append-only and require bounded hashes and siz
 test("fine membership layout preserves every accepted identity and reads only requested leaves", async () => {
   const objects = new Map<string, Uint8Array>();
   const reads: string[] = [];
+  let activeBodies = 0;
+  let maximumBodies = 0;
   const releaseId = "release:lookup-test";
   const bytes = (value: unknown) => new TextEncoder().encode(`${JSON.stringify(value)}\n`);
   const hash = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -39,7 +41,12 @@ test("fine membership layout preserves every accepted identity and reads only re
   const bucket = {async get(key: string) {
     reads.push(key);
     const value = objects.get(key);
-    return value ? {size: value.length, async arrayBuffer() {return value.slice().buffer;}} : null;
+    return value ? {size: value.length, async arrayBuffer() {
+      activeBodies += 1;
+      maximumBodies = Math.max(maximumBodies, activeBodies);
+      try { await new Promise(resolve => setTimeout(resolve, 1)); return value.slice().buffer; }
+      finally { activeBodies -= 1; }
+    }} : null;
   }} as unknown as R2Bucket;
   const layout = await buildCustomMembershipLookup({bucket, releaseId, sourceInventorySha256,
     write: async (reference, value) => {objects.set(reference.key, value);}});
@@ -47,6 +54,7 @@ test("fine membership layout preserves every accepted identity and reads only re
   const lookup = (itemKeys: string[]) => resolveCustomMembershipLookup({bucket, releaseId,
     sourceInventorySha256, reference: layout.reference, itemKeys});
   const all = await lookup(members.map(member => member.itemKey));
+  assert.ok(maximumBodies > 6 && maximumBodies <= 16, "small bodies overlap within the fixed memory bound");
   assert.deepEqual([...all].sort(), members.map(({itemKey, ...member}) => [itemKey, member]).sort());
   reads.length = 0;
   assert.equal((await lookup([members[17]!.itemKey])).get(members[17]!.itemKey)?.ordinal, 17);
@@ -60,6 +68,8 @@ test("fine membership layout preserves every accepted identity and reads only re
   corrupt[corrupt.length - 1] ^= 1;
   objects.set(leafKey, corrupt);
   await assert.rejects(lookup([members[17]!.itemKey]), /CORRUPT/u);
+  await assert.rejects(lookup(members.map(member => member.itemKey)), /CORRUPT/u);
+  assert.equal(activeBodies, 0, "failed validation drains in-flight readers before returning");
   objects.set(pageKey, new Uint8Array(originalPage.length));
   await assert.rejects(buildCustomMembershipLookup({bucket, releaseId, sourceInventorySha256,
     write: async () => assert.fail("corrupt source must not produce lookup artifacts")}), /CORRUPT/u);

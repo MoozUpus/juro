@@ -14,6 +14,23 @@ type PartitionReference = z.infer<typeof partitionReferenceSchema>;
 type Bucket = Pick<R2Bucket, "get">;
 const ROOT_LIMIT = 256 * 1_024;
 const LEAF_LIMIT = 512 * 1_024;
+const LOOKUP_READERS = 16;
+
+async function forEachLookupPage<T>(items: readonly T[], visit: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  let failed = false;
+  // Workers queue excess requests awaiting headers. After headers arrive,
+  // small bounded bodies can overlap; a fixed six-item batch unnecessarily
+  // holds the whole queue behind its slowest body. At most 8 MiB of leaf
+  // response bytes are in flight here, independent of candidate count.
+  const workers = await Promise.allSettled(Array.from({length: Math.min(LOOKUP_READERS, items.length)}, async () => {
+    try {
+      while (!failed && next < items.length) await visit(items[next++]!);
+    } catch (error) { failed = true; throw error; }
+  }));
+  const failure = workers.find((worker): worker is PromiseRejectedResult => worker.status === "rejected");
+  if (failure) throw failure.reason;
+}
 
 async function readVerified(bucket: Bucket, reference: Reference, limit: number): Promise<unknown> {
   if (reference.sizeBytes > limit) throw new TypeError("CUSTOM_MEMBERSHIP_LOOKUP_SIZE_INVALID");
@@ -132,8 +149,7 @@ export async function resolveCustomMembershipLookup(input: {
   }
   const parentIds = [...new Set([...requested.keys()].map(parentPartition))];
   const leaves = new Map<string, PartitionReference>();
-  for (let offset = 0; offset < parentIds.length; offset += 6) {
-    await Promise.all(parentIds.slice(offset, offset + 6).map(async partition => {
+  await forEachLookupPage(parentIds, async partition => {
       const reference = roots.get(partition);
       if (!reference) return;
       const directory = z.object({schemaVersion: z.literal(2), releaseId: z.literal(input.releaseId),
@@ -145,13 +161,11 @@ export async function resolveCustomMembershipLookup(input: {
         throw new TypeError("CUSTOM_MEMBERSHIP_LOOKUP_COUNT_INVALID");
       }
       for (const [prefix, page] of pages) if (requested.has(prefix)) leaves.set(prefix, page);
-    }));
-  }
+  });
   const result = new Map<string, {ordinal: number; legalIdentitySha256: string | null;
     legalIdentity?: z.infer<typeof customRuntimeLegalIdentitySchema>}>();
   const groups = [...requested];
-  for (let offset = 0; offset < groups.length; offset += 6) {
-    await Promise.all(groups.slice(offset, offset + 6).map(async ([partition, keys]) => {
+  await forEachLookupPage(groups, async ([partition, keys]) => {
       const reference = leaves.get(partition);
       if (!reference) return;
       const page = z.object({schemaVersion: z.literal(2), releaseId: z.literal(input.releaseId),
@@ -165,8 +179,7 @@ export async function resolveCustomMembershipLookup(input: {
           legalIdentitySha256: member.legalIdentitySha256 ?? member.legalIdentity?.legalIdentitySha256 ?? null,
           ...(member.legalIdentity ? {legalIdentity: member.legalIdentity} : {})});
       }
-    }));
-  }
+  });
   console.info(JSON.stringify({event: "legal_membership_lookup_resolved", requestedItems: input.itemKeys.length,
     directories: parentIds.length, leaves: leaves.size,
     leafBytes: [...leaves.values()].reduce((sum, page) => sum + page.sizeBytes, 0)}));
