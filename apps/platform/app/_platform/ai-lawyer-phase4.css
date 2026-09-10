@@ -898,6 +898,8 @@
 .ai-transcript,
 .ai-conversation-turn {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: .875rem;
 }
 

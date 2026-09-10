@@ -557,7 +557,9 @@ export async function retrieveCorpusAwareLegalSources(input: {
           planningHints,
           applicableAt: input.applicableAt,
         }), targetController.signal);
-      if (target.kind === "insufficient_indexed_coverage") discoveredOfficialUrls = target.discoveredOfficialUrls ?? [];
+      if (target.kind === "insufficient_indexed_coverage" || target.kind === "source_unavailability") {
+        discoveredOfficialUrls = target.discoveredOfficialUrls ?? [];
+      }
       const indexed = await withTargetCoverage(target, input.locale, input.now ?? new Date(),
         input.verifyCurrentSource ?? ((url) => verifyCurrentLexDocument(url, targetController.signal)));
       if (indexed) {

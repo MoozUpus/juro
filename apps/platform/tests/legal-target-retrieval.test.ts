@@ -246,6 +246,7 @@ test("domain-general questions return hash-verified Legal Answers through the pr
         }] : []),
         { ...candidate(key, formulation.id, formulation.readingIds, formulation.requirementIds) },
       ]);
+      let supportUnavailable = false;
       const retriever = createTargetLegalAnswerRetriever({
         environment: "development",
         interpreter: { interpret: async (input) => {
@@ -266,6 +267,7 @@ test("domain-general questions return hash-verified Legal Answers through the pr
         },
         provisionSelector: {
           select: async ({ plan: interpreted, candidates }) => {
+            if (supportUnavailable) throw new Error("SUPPORT_TIMEOUT");
             assert.equal(candidates.length, 1);
             assert.equal(candidates[0]!.candidate.provisionRenditionId, renditionId);
             return {
@@ -314,6 +316,13 @@ test("domain-general questions return hash-verified Legal Answers through the pr
       assert.equal(JSON.stringify(result).includes("provider excerpt"), false);
       assert.deepEqual(result.focusedQuestions,
         "conditionalQuestion" in fixture ? [fixture.conditionalQuestion] : []);
+      supportUnavailable = true;
+      const unavailable = await retriever.answer({ id: `retry-${fixture.id}`,
+        question: `Resolved context: ${fixture.question}` });
+      assert.equal(unavailable.kind, "source_unavailability");
+      assert.deepEqual(Reflect.get(unavailable, "discoveredOfficialUrls"),
+        [result.whatTheLawSays[0]!.officialCitations[0]!.url],
+        "verified locations survive support failure as discovery leads, not accepted evidence");
     }
   } finally {
     sqlite.close();

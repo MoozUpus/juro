@@ -219,11 +219,12 @@ test("an indexed list introduction is completed from separately validated offici
   assert.equal(result.retrievalTelemetry?.fusionOutcome, "mixed");
 });
 
-test("insufficient indexed coverage carries only discovery locations into fresh live verification", async () => {
+for (const kind of ["insufficient_indexed_coverage", "source_unavailability"] as const) test(`${kind} carries only discovery locations into fresh live verification`, async () => {
   const urls = ["https://lex.uz/ru/docs/777"];
   const targetService = { async fetch() { return Response.json({ result: {
-    kind: "insufficient_indexed_coverage", sourceLadder: "indexed_official_corpus", nextTier: "live_official_search",
-    uncoveredRequirementIds: ["missing-rule"], discoveredOfficialUrls: urls,
+    kind, sourceLadder: "indexed_official_corpus", nextTier: "live_official_search",
+    ...(kind === "insufficient_indexed_coverage" ? { uncoveredRequirementIds: ["missing-rule"] }
+      : { safeErrorCode: "INDEXED_REVALIDATION_FAILED" }), discoveredOfficialUrls: urls,
   } }); }, connect() { throw new Error("Unexpected socket connection"); } } satisfies Fetcher;
   const result = await retrieveCorpusAwareLegalSources({ query: "Applicable rule", locale: "ru", targetService,
     targetEnvironment: "staging", targetQuestionId: "discovery-continuity",
