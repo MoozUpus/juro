@@ -71,15 +71,19 @@ export function targetQuestionPlanningHints(understanding: LegalRetrievalUnderst
   locale: AiOutputLocale): TargetQuestionPlanningHints | undefined {
   if (!understanding.requiredConcepts.length
     || understanding.requiredConcepts.every((concept) => concept.priority === "supporting")) return undefined;
+  const scopedFormulations = [...new Set(understanding.requiredConcepts.map((concept) =>
+    concept.alternatives[0] ?? concept.statement))];
+  const broadFormulations = [...new Set([understanding.standaloneQuestion.slice(0, 500),
+    ...understanding.corpusQueries.slice(1, 2)])].filter((query) => !scopedFormulations.includes(query));
   return {
     answerLanguage: locale,
     standaloneQuestion: understanding.standaloneQuestion,
     requirements: understanding.requiredConcepts.map((concept) => ({
       statement: concept.statement, priority: concept.priority ?? "core",
     })),
-    formulations: [...new Set([understanding.standaloneQuestion.slice(0, 500),
-      ...understanding.corpusQueries.slice(1, 2),
-      ...understanding.requiredConcepts.map((concept) => concept.alternatives[0] ?? concept.statement)])].slice(0, 6),
+    // Broad searches must not displace the last material scope at the ceiling.
+    formulations: [...broadFormulations.slice(0, Math.max(0, 6 - scopedFormulations.length)),
+      ...scopedFormulations],
   };
 }
 
@@ -178,6 +182,7 @@ export async function understandLegalRetrievalQuery(input: {
       "When an everyday term can describe distinct legal statuses or stages, give each materially different interpretation its own core requirement and search phrase. Do not replace the original ambiguous term with a narrower status in standaloneQuestion. Procedure for one interpretation must not displace coverage of another interpretation.",
       "Each requirement must cover ONE materially distinct legal status, stage, forum or kind of claim. It may include the rule, starting point, conditions and exceptions for that SAME scope. Never combine DIFFERENT statuses or forums into one requirement: a provision about one alternative cannot cover another. Cover distinct scopes before supporting procedure.",
       "For procedural deadlines, identify the available judicial and extrajudicial forums and materially different claim types before drafting concepts. Do not assume court is the only forum when the user has not specified one. Duration, commencement and restoration for the same scope belong together, not in duplicate concepts that displace another forum or claim type.",
+      "Preserve the timed action and actor in every deadline requirement and query. A person's deadline to file a claim is distinct from an authority's time to process or decide it. For a limitation/filing question, search filing periods in each relevant forum, not processing durations or general procedure in their place.",
       "For whether an action is permitted, cover its general controlling rule at the user's stated stage, then the nonredundant special rules for distinct statuses. Do not replace a rule during a stage with a rule after that stage. Keep a status-specific rule and its exceptions together rather than duplicating the same search as separate concepts.",
       "generalQuery is a separate concise statutory search for the general controlling rule. Retain the requested action and stage, but OMIT special-status modifiers already addressed by concepts, so the general rule is not hidden by narrower matches. This must be a meaningful legal search phrase, not a broad domain name.",
       "For Uzbek questions include Russian statutory equivalents where useful, but keep standaloneQuestion in the user's language.",

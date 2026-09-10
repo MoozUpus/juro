@@ -340,7 +340,7 @@ test("an operative governing provision beats a higher-ranked cross-reference", (
   }
 });
 
-test("literal verified provision wording fills a support-classifier omission", () => {
+test("literal search wording cannot replace assessed Requirement Support", () => {
   const literal = selectionCandidate("literal", ["requirement-one"], 0.7);
   literal.provisionText = "Article heading. First governing rule. Exact controlling text.";
   const result = selectTargetProvisions({
@@ -351,10 +351,37 @@ test("literal verified provision wording fills a support-classifier omission", (
     itemKey: "item-two", supportedRequirementIds: ["requirement-two"],
   }], additionalRequirements: [] });
 
-  assert.equal(result.outcome, "selected");
-  if (result.outcome === "selected") {
-    assert.deepEqual(result.selections.map(({ itemKey }) => itemKey), ["literal", "item-two"]);
+  assert.equal(result.outcome, "repair");
+  if (result.outcome === "repair") {
+    assert.deepEqual(result.repairFormulation.requirementIds, ["requirement-one"]);
   }
+});
+
+test("filing coverage is not inferred from a literal forum match in a processing provision", () => {
+  const filingPlan = {
+    ...plan,
+    readings: [{ id: "reading-one", statement: "Time to file a complaint",
+      requirements: [{ id: "filing", statement: "Deadline for the applicant to file with the review commission", priority: "core" as const }] }],
+    formulations: [{ ...plan.formulations[0]!, text: "review commission procedure", requirementIds: ["filing"] }],
+  };
+  const processing = selectionCandidate("processing", ["filing"], 0.99);
+  processing.provisionText = "Review commission procedure. The commission examines a submitted complaint within ten days.";
+  const result = selectTargetProvisions({ plan: filingPlan, candidates: [processing], repairAttempted: false },
+    { mappings: [], additionalRequirements: [] });
+  assert.equal(result.outcome, "repair");
+});
+
+test("operative support outranks incidental support regardless of retrieval formulation", () => {
+  const direct = selectionCandidate("filing-rule", ["requirement-two"], 0.5);
+  const incidental = selectionCandidate("processing-rule", ["requirement-one"], 0.99);
+  const result = selectTargetProvisions({ plan, candidates: [direct, incidental], repairAttempted: false }, {
+    mappings: [
+      { itemKey: "filing-rule", supportedRequirementIds: ["requirement-one", "requirement-two"], governingRequirementIds: ["requirement-one", "requirement-two"] },
+      { itemKey: "processing-rule", supportedRequirementIds: ["requirement-one"], governingRequirementIds: [] },
+    ], additionalRequirements: [],
+  });
+  assert.equal(result.outcome, "selected");
+  if (result.outcome === "selected") assert.deepEqual(result.selections.map(({ itemKey }) => itemKey), ["filing-rule"]);
 });
 
 test("selection preserves supported core requirements when only supporting coverage remains open", () => {

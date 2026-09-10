@@ -245,21 +245,6 @@ function retrievalSupportsRequirement(candidate: SelectionCandidate, requirement
   return candidate.candidate.candidate.retrievalRequirementIds.includes(requirementId);
 }
 
-function comparableLegalText(value: string): string {
-  return value.normalize("NFKC").toLocaleLowerCase().replace(/ё/gu, "е")
-    .replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/gu, " ").trim();
-}
-
-function literalFormulationSupports(candidate: SelectionCandidate, formulation: {
-  text: string;
-  requirementIds: readonly string[];
-}): boolean {
-  const formulationText = comparableLegalText(formulation.text);
-  if (formulationText.length < 18 || formulationText.split(" ").length < 3) return false;
-  const evidenceText = comparableLegalText(`${candidate.citationLabel} ${candidate.provisionText}`);
-  return evidenceText.includes(formulationText);
-}
-
 function candidatesForRequirement(
   ranked: readonly SelectionCandidate[],
   supportedByKey: ReadonlyMap<string, ReadonlySet<string>>,
@@ -274,10 +259,10 @@ function candidatesForRequirement(
       .reduce((score, match) => score + 1 / (60 + match.rank), 0);
   return ranked.filter((candidate) => supportedByKey.get(
     candidate.candidate.candidate.itemKey)?.has(requirementId)).sort((left, right) =>
-    Number(retrievalSupportsRequirement(right, requirementId))
-      - Number(retrievalSupportsRequirement(left, requirementId))
-    || Number(governingByKey.get(right.candidate.candidate.itemKey)?.has(requirementId) ?? false)
+    Number(governingByKey.get(right.candidate.candidate.itemKey)?.has(requirementId) ?? false)
       - Number(governingByKey.get(left.candidate.candidate.itemKey)?.has(requirementId) ?? false)
+    || Number(retrievalSupportsRequirement(right, requirementId))
+      - Number(retrievalSupportsRequirement(left, requirementId))
     || requirementRetrievalScore(right) - requirementRetrievalScore(left)
     || candidateScore(right) - candidateScore(left)
     || left.candidate.candidate.itemKey.localeCompare(right.candidate.candidate.itemKey));
@@ -314,6 +299,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
         "A search match, shared topic, title, actor, or procedural deadline is not support by itself.",
         "Mark support only when the supplied provision text entails or directly establishes the material legal proposition.",
         "Support means the WHOLE requirement, including every material status or alternative it names. A provision limited to one status does not support a requirement that also asks about another status. Mere overlap with part of a compound requirement is not coverage.",
+        "For a time-limit requirement, match the actor and the timed action: a body's time to process or decide a submitted application does not support the applicant's time to file it. A reference to a filing period established elsewhere does not supply that period. Keep this requirement unsupported unless its operative filing rule is present.",
         "When both a directly governing codified provision and interpretive, procedural, or cross-referencing guidance support a requirement, retain both mappings; downstream selection decides priority.",
         "Do not answer the user's question, invent rules, infer missing article text, or use outside knowledge.",
         "A provision may support requirements from any retrieval formulation, and may support none.",
@@ -443,21 +429,6 @@ export function selectTargetProvisions(
       ...(governingByKey.get(mapping.itemKey) ?? []),
       ...governingIds,
     ]));
-  }
-  // Exact legal-register wording in the verified provision is stronger than
-  // a probabilistic omission by the support classifier. Only supplement a
-  // requirement when the candidate was retrieved for that same requirement
-  // and contains the complete bounded formulation literally.
-  for (const candidate of value.candidates) {
-    const itemKey = candidate.candidate.candidate.itemKey;
-    const supported = supportedByKey.get(itemKey) ?? new Set<string>();
-    for (const requirementId of candidate.candidate.candidate.retrievalRequirementIds) {
-      if (!requirementIds.has(requirementId)) continue;
-      if (value.plan.formulations.some((formulation) =>
-        formulation.requirementIds.includes(requirementId)
-        && literalFormulationSupports(candidate, formulation))) supported.add(requirementId);
-    }
-    if (supported.size > 0) supportedByKey.set(itemKey, supported);
   }
   const ranked = [...value.candidates].sort((left, right) =>
     candidateScore(right) - candidateScore(left)
