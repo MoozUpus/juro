@@ -81,6 +81,16 @@ export function parseTargetRequirementSupport(output: unknown): TargetRequiremen
   });
 }
 
+export function prioritizeTargetRequirements(additions: TargetRequirementSupport["additionalRequirements"]) {
+  const unique = new Map<string, typeof additions[number]>();
+  for (const addition of additions) {
+    const key = [addition.readingId, addition.statement.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase()].join("\n");
+    const previous = unique.get(key);
+    if (!previous || addition.priority === "core") unique.set(key, addition);
+  }
+  return [...unique.values()].sort((left, right) => Number(right.priority === "core") - Number(left.priority === "core")).slice(0, 3);
+}
+
 const formulationProviderSchema = z.object({
   ...questionInterpretationPlanSchema.shape.formulations.element.shape,
   legalTitleSpans: questionInterpretationPlanSchema.shape.formulations.element.shape
@@ -332,7 +342,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
         value.repairAttempted
           ? "The bounded expansion has already run. Return additionalRequirements as an empty array; assess only the supplied requirements."
           : "Return at most three additionalRequirements, prioritizing unresolved operative references over optional details.",
-        "When a provision explicitly cites operative grounds, exceptions or conditions needed to understand the answer, propose a separate concise additional requirement for that reference unless already covered. A bare cross-reference is not the content of the referenced rule.",
+        "When a provision explicitly cites operative grounds, exceptions or conditions needed to understand the answer, propose a separate concise CORE additional requirement for that reference unless already covered. A bare cross-reference is not the content of the referenced rule. Optional background and consequences remain supporting.",
         "Prioritize unresolved operative cross-references, then distinct relevant provisions not supporting any existing requirement. Numbered grounds are unresolved unless their substantive text is supplied; a broadly worded requirement does not resolve them. Do not spend additionalRequirements on subclauses or details already present in a provision mapped to an existing requirement: the answer can use that supplied text without another search.",
         "Also propose a supporting additional requirement when supplied provision text directly establishes a distinct, materially relevant consequence, remedy, sanction or qualification missing from the current plan, even without an explicit cross-reference. It must concern the same actor, action and circumstances, not merely the same legal field. A shared topic or duplicate formulation is not a distinct contribution. Keep each statement under 200 characters. These proposals trigger evidence checking, not automatic inclusion in the answer.",
         "Do not add broad background, speculative liability, outside knowledge, or a requirement without grounding in the supplied provision text. Preserve every factual trigger and scope limitation; never assume a violation occurred.",
@@ -403,7 +413,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
       supportedRequirementIds: [...supportedRequirementIds],
       governingRequirementIds: [...(governingMappings.get(itemKey) ?? [])],
     })),
-    additionalRequirements: [...additionalRequirements.values()].slice(0, 3),
+    additionalRequirements: prioritizeTargetRequirements([...additionalRequirements.values()]),
   });
   console.log(JSON.stringify({
     event: "legal_requirement_support_assessed",
