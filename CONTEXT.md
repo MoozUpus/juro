@@ -132,6 +132,10 @@ _Avoid_: database backup, index build, current corpus pointer
 A named immutable set of retrieval candidates derived from one Corpus Snapshot for a single retrieval capability.
 _Avoid_: live index, corpus source of truth, deployment
 
+**Membership Lookup**:
+An immutable, hash-verified physical projection of a Search Release's accepted membership inventory that locates candidate identities in small pages without changing their legal content, eligibility or ranking.
+_Avoid_: answer cache, alternate corpus, new evidence
+
 **Activation Set**:
 The named selection of mutually compatible Search Releases that defines which Indexed Official Corpus capabilities are available together.
 _Avoid_: environment variable, mutable manifest, all-or-nothing migration

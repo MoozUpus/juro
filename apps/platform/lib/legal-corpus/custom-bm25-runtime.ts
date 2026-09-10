@@ -360,6 +360,7 @@ export async function resolveCustomBm25RuntimeMembershipEntries(
   const resolved = new Map<string, { ordinal: number; legalIdentitySha256: string | null;
     legalIdentity?: CustomRuntimeLegalIdentity }>();
   const groups = [...requested.entries()];
+  const membershipStarted = Date.now();
   for (let offset = 0; offset < groups.length; offset += 6) {
     await Promise.all(groups.slice(offset, offset + 6).map(async ([partition, keys]) => {
       const reference = partitions.get(partition);
@@ -382,6 +383,9 @@ export async function resolveCustomBm25RuntimeMembershipEntries(
       }
     }));
   }
+  console.info(JSON.stringify({event: "legal_membership_resolved", requestedItems: itemKeys.length,
+    partitions: groups.length, bytes: groups.reduce((sum, [partition]) => sum + (partitions.get(partition)?.sizeBytes ?? 0), 0),
+    elapsedMs: Date.now() - membershipStarted}));
   return resolved;
 }
 

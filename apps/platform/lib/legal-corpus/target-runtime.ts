@@ -18,6 +18,7 @@ import { customReleaseGovernanceSchema } from "./custom-release-governance";
 import { resolveCustomBm25RuntimeMembershipEntries, type CustomRuntimeLegalIdentity }
   from "./custom-bm25-runtime";
 import { resolveCustomTrustedLegalTitles } from "./custom-search-trusted-titles";
+import { createCustomMembershipLookupReader } from "./custom-membership-lookup";
 import { assertCompleteCorpusCurrentInterval, resolveCompleteCorpusEvidence, resolveControllingEvidence,
   resolveR2NativeCustomEvidence,
   type LegalEvidenceBucket } from "./target-evidence";
@@ -173,6 +174,12 @@ export function createRuntimeCandidateCatalog(
   bucket?: Pick<LegalEvidenceBucket, "get">,
   r2IdentityByRendition = new Map<string, CustomRuntimeLegalIdentity>(),
 ) {
+  // The catalog belongs to one answer request. Reuse only membership facts
+  // authenticated against the same pinned inventory; temporal eligibility and
+  // candidate provenance are still checked for every packet and endpoint.
+  type Membership = NonNullable<Awaited<ReturnType<typeof resolveCustomBm25RuntimeMembershipEntries>>>;
+  const membershipByInventory = new Map<string, Membership>();
+  const readMembershipLookup = bucket ? createCustomMembershipLookupReader(bucket as R2Bucket) : null;
   return {
     async revalidate(
       packet: CandidatePacket,
@@ -206,24 +213,52 @@ export function createRuntimeCandidateCatalog(
       let compactMembership: Map<string, { ordinal: number;
         legalIdentitySha256: string | null; legalIdentity?: CustomRuntimeLegalIdentity }> | null = null;
       if (custom && bucket) {
-        const component = await db.prepare(`SELECT mapping_inventory_sha256 AS mappingInventorySha256,
-            runtime_descriptor_r2_key AS descriptorKey
-          FROM legal_custom_search_r2_runtime_roots WHERE search_release_id=?
-          UNION ALL SELECT mapping_inventory_sha256,runtime_descriptor_r2_key
+        const component = await db.prepare(`SELECT root.mapping_inventory_sha256 AS mappingInventorySha256,
+            root.runtime_descriptor_r2_key AS descriptorKey, lookup.lookup_r2_key AS lookupKey,
+            lookup.lookup_sha256 AS lookupSha256, lookup.lookup_size_bytes AS lookupSizeBytes
+          FROM legal_custom_search_r2_runtime_roots root
+          LEFT JOIN legal_custom_search_membership_lookups lookup
+            ON lookup.search_release_id=root.search_release_id
+            AND lookup.source_inventory_sha256=root.mapping_inventory_sha256
+            AND lookup.member_count=root.mapping_count
+          WHERE root.search_release_id=?
+          UNION ALL SELECT mapping_inventory_sha256,runtime_descriptor_r2_key,NULL,NULL,NULL
           FROM legal_custom_search_runtime_components
           WHERE search_release_id=? AND NOT EXISTS (
             SELECT 1 FROM legal_custom_search_r2_runtime_roots WHERE search_release_id=?)
           LIMIT 1`).bind(release.id, release.id, release.id)
-          .first<{ mappingInventorySha256: string; descriptorKey: string }>();
+          .first<{ mappingInventorySha256: string; descriptorKey: string;
+            lookupKey?: string | null; lookupSha256?: string | null; lookupSizeBytes?: number | null }>();
         if (!component) throw new TypeError("TARGET_CUSTOM_RUNTIME_COMPONENT_MISSING");
         const prefix = `search-releases/${release.id}/`;
-        compactMembership = await resolveCustomBm25RuntimeMembershipEntries(bucket as R2Bucket, release.id,
-          component.mappingInventorySha256, uniqueKeys.map((key) => key.slice(prefix.length)));
+        const inventoryKey = `${release.id}:${component.mappingInventorySha256}`;
+        const known = membershipByInventory.get(inventoryKey) ?? new Map();
+        const canonicalKeys = uniqueKeys.map(key => key.slice(prefix.length));
+        const missingKeys = canonicalKeys.filter(key => !known.has(key));
         const physicalReleaseId = physicalRuntimeReleaseId(component.descriptorKey, release.id);
+        compactMembership = missingKeys.length === 0 ? new Map()
+          : component.lookupKey && component.lookupSha256 && component.lookupSizeBytes
+            ? await readMembershipLookup!({releaseId: physicalReleaseId,
+              sourceInventorySha256: component.mappingInventorySha256,
+              reference: {key: component.lookupKey, sha256: component.lookupSha256, sizeBytes: component.lookupSizeBytes},
+              itemKeys: missingKeys})
+            : await resolveCustomBm25RuntimeMembershipEntries(bucket as R2Bucket, release.id,
+            component.mappingInventorySha256, missingKeys);
         if (!compactMembership && physicalReleaseId !== release.id) {
           compactMembership = await resolveCustomBm25RuntimeMembershipEntries(bucket as R2Bucket,
             physicalReleaseId, component.mappingInventorySha256,
-            uniqueKeys.map((key) => key.slice(prefix.length)));
+            missingKeys);
+        }
+        if (compactMembership) {
+          for (const [key, value] of compactMembership) known.set(key, value);
+          // Current/history endpoints and one repair are bounded by the caller.
+          if (membershipByInventory.size < 4 || membershipByInventory.has(inventoryKey)) {
+            membershipByInventory.set(inventoryKey, known);
+          }
+          compactMembership = new Map(canonicalKeys.flatMap(key => {
+            const value = known.get(key);
+            return value ? [[key, value] as const] : [];
+          }));
         }
         if (compactMembership && compactMembership.size !== uniqueKeys.length) {
           throw new TypeError("TARGET_CANDIDATE_NOT_IN_PINNED_RELEASE");

@@ -10,6 +10,7 @@ import { createRuntimeCustomSearchProvider, createRuntimeCandidateCatalog,
   resolveRuntimeTrustedLegalTitles }
   from "../lib/legal-corpus/target-runtime";
 import { buildCustomTrustedTitleInventory } from "../lib/legal-corpus/custom-search-trusted-titles";
+import { buildCustomMembershipLookup } from "../lib/legal-corpus/custom-membership-lookup";
 
 test("named instruments remain searchable with custom-only release mappings", async () => {
   const sqlite = new DatabaseSync(":memory:");
@@ -280,7 +281,7 @@ test("custom catalog rejects future and expired records even when candidate lane
   } finally { sqlite.close(); }
 });
 
-test("custom catalog revalidates a logical release through hash-anchored physical membership", async () => {
+for (const useLookup of [false, true]) test(`custom catalog revalidates physical membership (fine lookup: ${useLookup})`, async () => {
   const release = parsePinnedCandidateRelease({ id: "release-custom-history-r2", environment: "staging",
     capability: "history", instances: [{ id: "custom-history-staging-v1", shardId: "history-base-v1" }],
     configuration: { identity: "custom-v1", embeddingModel: "openai/text-embedding-3-large",
@@ -305,7 +306,9 @@ test("custom catalog revalidates a logical release through hash-anchored physica
     [`search-releases/${physicalReleaseId}/runtime/mappings-${mappingInventorySha256}.json`,
       { bytes: membershipBytes, customMetadata: {} }],
   ]);
+  const reads: string[] = [];
   const bucket = { async get(key: string, options?: { range?: { offset: number; length: number } }) {
+    reads.push(key);
     const stored = objects.get(key);
     if (!stored) return null;
     const value = options?.range ? stored.bytes.slice(options.range.offset,
@@ -314,11 +317,16 @@ test("custom catalog revalidates a logical release through hash-anchored physica
       async bytes() { return value.slice(); },
       async arrayBuffer() { return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength); } };
   } };
+  const lookup = useLookup ? await buildCustomMembershipLookup({bucket: bucket as unknown as R2Bucket,
+    releaseId: physicalReleaseId, sourceInventorySha256: mappingInventorySha256,
+    write: async (reference, bytes) => { objects.set(reference.key, {bytes: new Uint8Array(bytes), customMetadata: {}}); }}) : null;
   const db = { prepare(sql: string) {
     return { bind(...values: string[]) {
       if (sql.includes("mapping_inventory_sha256")) {
         assert.deepEqual(values, [release.id, release.id, release.id]);
         return { async first() { return { mappingInventorySha256,
+          ...(lookup ? {lookupKey: lookup.reference.key, lookupSha256: lookup.reference.sha256,
+            lookupSizeBytes: lookup.reference.sizeBytes} : {}),
           descriptorKey: `search-releases/${physicalReleaseId}/runtime/descriptor-${"c".repeat(64)}.json` }; } };
       }
       assert.doesNotMatch(sql, /legal_custom_search_runtime_items/u);
@@ -335,8 +343,16 @@ test("custom catalog revalidates a logical release through hash-anchored physica
       instanceId: "custom-history-staging-v1", shardId: "history-base-v1", formulationIds: ["formulation"],
       readingIds: ["reading"], retrievalRequirementIds: ["requirement"], vectorRank: 1, vectorScore: 1,
       keywordRank: 1, keywordScore: 1, fusionScore: 1 }] });
-  const result = await createRuntimeCandidateCatalog(db, bucket as never).revalidate(packet,
+  const catalog = createRuntimeCandidateCatalog(db, bucket as never);
+  const result = await catalog.revalidate(packet,
     { kind: "timestamp", instant: "2020-01-01T00:00:00.000Z" }, release,
     "2026-09-06T00:00:00.000Z");
   assert.equal(result[0]?.canonicalChunkId, canonicalChunkId);
+  const firstReads = reads.length;
+  await catalog.revalidate(packet, packet.endpoint, release, "2026-09-06T00:00:00.000Z");
+  assert.equal(reads.length, firstReads, "repair reuses authenticated membership within this request");
+  const corruptKey = useLookup ? [...objects.keys()].find(key => key.includes("/leaf-"))! : pageKey;
+  objects.set(corruptKey, {bytes: new TextEncoder().encode("corrupt"), customMetadata: {}});
+  await assert.rejects(createRuntimeCandidateCatalog(db, bucket as never).revalidate(packet,
+    packet.endpoint, release, "2026-09-06T00:00:00.000Z"), /CORRUPT|MISMATCH|MISSING/u);
 });
