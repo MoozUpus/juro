@@ -546,6 +546,23 @@ test("assessment batches see already verified references without mixing revision
   assert.deepEqual(selectionReferenceContext([source], [source, reference]), []);
 });
 
+test("referenced grounds see the referring status rule during their own assessment", () => {
+  const referring = selectionCandidate("protected-status", ["requirement-one"], 0.9);
+  referring.citationLabel = "Example Act — Article 700";
+  referring.provisionText = "For a licensed representative, only the grounds in Article 732 of this Act apply.";
+  const grounds = selectionCandidate("grounds", ["requirement-one"], 0.8);
+  grounds.citationLabel = "Example Act — Article 732";
+  grounds.provisionText = "Article 732. The grounds are dissolution and serious misconduct.";
+  grounds.candidate.textRevisionId = referring.candidate.textRevisionId;
+  assert.deepEqual(selectionReferenceContext([grounds], [grounds, referring]),
+    [{citationLabel: referring.citationLabel, provisionText: referring.provisionText}]);
+  const foreign = structuredClone(referring);
+  foreign.candidate.textRevisionId = "another-revision";
+  assert.deepEqual(selectionReferenceContext([grounds], [grounds, foreign]), []);
+  referring.provisionText = "See Article 732 of another Act.";
+  assert.deepEqual(selectionReferenceContext([grounds], [grounds, referring]), []);
+});
+
 test("repair retains material cross-references while another requirement is uncovered", () => {
   const result = selectTargetProvisions({ plan,
     candidates: [selectionCandidate("item-one", ["requirement-one"], 0.9)], repairAttempted: false,

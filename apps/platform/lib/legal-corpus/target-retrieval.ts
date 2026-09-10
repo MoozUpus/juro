@@ -37,7 +37,7 @@ export const targetQuestionPlanningHintsSchema = z.object({
   answerLanguage: z.enum(["ru", "uz", "en"]),
   standaloneQuestion: z.string().trim().min(1).max(900),
   requirements: z.array(z.object({
-    statement: z.string().trim().min(1).max(240),
+    statement: z.string().trim().min(1).max(500),
     priority: z.enum(["core", "supporting"]),
     scopeKind: legalCoverageScopeSchema.optional(),
   }).strict()).min(1).max(6),

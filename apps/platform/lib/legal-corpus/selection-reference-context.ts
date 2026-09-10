@@ -6,8 +6,9 @@ type ReferenceCandidate = {
   candidate: {textRevisionId: string; languageFamily: string; candidate: {itemKey: string}};
 };
 
-/** Supply already-verified same-revision references to each small assessment
- * batch. A reference outside the batch is not missing evidence. Context does
+/** Supply both ends of already-verified same-revision references to each small
+ * assessment batch. The referring rule establishes the scope in which generic
+ * referenced grounds apply. A reference outside the batch is not missing evidence. Context does
  * not create a support mapping: every candidate is still assessed in its own
  * batch, and each resulting claim still requires evidence validation. */
 export function selectionReferenceContext(
@@ -28,6 +29,22 @@ export function selectionReferenceContext(
       if (context.size >= 4) break;
     }
     if (context.size >= 4) break;
+  }
+  // Outgoing operative text has priority. With the remaining bounded context,
+  // let a grounds provision see which supplied rule expressly incorporates it.
+  // This supplies scope for assessment, never an automatic support mapping.
+  for (const target of batch) {
+    if (context.size >= 4) break;
+    const article = detectArticleNumbers(target.citationLabel)[0];
+    if (!article) continue;
+    for (const referring of candidates) {
+      const key = referring.candidate.candidate.itemKey;
+      if (batchKeys.has(key) || context.has(key)
+        || referring.candidate.textRevisionId !== target.candidate.textRevisionId
+        || referring.candidate.languageFamily !== target.candidate.languageFamily) continue;
+      if (sameInstrumentArticleReferences(referring.provisionText).includes(article)) context.set(key, referring);
+      if (context.size >= 4) break;
+    }
   }
   return [...context.values()].map(({citationLabel, provisionText}) => ({citationLabel, provisionText}));
 }
