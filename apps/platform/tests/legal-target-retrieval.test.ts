@@ -313,7 +313,7 @@ test("domain-general questions return hash-verified Legal Answers through the pr
   }
 });
 
-test("every Plausible Reading gets a formulation before repair and the six-formulation budget is enforced", async () => {
+for (const compoundRepair of [false, true]) test(`every Plausible Reading gets a formulation before focused repair (compound: ${compoundRepair})`, async () => {
   const formulationOrder: string[] = [];
   const requestInstant = "2026-09-06T00:00:00.000Z";
   let clock = Date.parse(requestInstant);
@@ -353,7 +353,14 @@ test("every Plausible Reading gets a formulation before repair and the six-formu
   const repairKey = itemKey("rendition-b");
   const index = createInMemoryCandidateIndex(async (formulation) => {
     formulationOrder.push(formulation.id);
-    const key = formulation.id === "repair-b" ? repairKey : firstKey;
+    const key = formulation.id.startsWith("repair-b")
+      && formulation.requirementIds.length === 1
+      && formulation.requirementIds[0] === "requirement-b" ? repairKey : firstKey;
+    if (compoundRepair && formulation.id.startsWith("repair-b")) {
+      assert.equal(formulation.requirementIds.length, 1, "each repair query must target one legal proposition");
+      assert.equal(formulation.text, formulation.requirementIds[0] === "requirement-b"
+        ? "Second governing rule" : "First governing rule");
+    }
     return [candidate(key, formulation.id, formulation.readingIds, formulation.requirementIds)];
   });
   const retriever = createTargetLegalAnswerRetriever({
@@ -413,8 +420,8 @@ test("every Plausible Reading gets a formulation before repair and the six-formu
             id: "repair-b",
             text: "second governing rule repair",
             privateNameSpans: [],
-            readingIds: ["reading-status-b"],
-            requirementIds: ["requirement-b"],
+            readingIds: compoundRepair ? ["reading-status-b", "reading-status-a"] : ["reading-status-b"],
+            requirementIds: compoundRepair ? ["requirement-b", "requirement-a"] : ["requirement-b"],
             kind: "repair",
           },
         } as const;
@@ -436,7 +443,9 @@ test("every Plausible Reading gets a formulation before repair and the six-formu
 
   const result = await retriever.answer({ id: "question-two-readings", question: "ambiguous status" });
   assert.equal(result.kind, "legal_answer");
-  assert.deepEqual(formulationOrder, ["formulation-a", "formulation-b", "repair-b"]);
+  assert.deepEqual(formulationOrder, compoundRepair
+    ? ["formulation-a", "formulation-b", "repair-b-1", "repair-b-2"]
+    : ["formulation-a", "formulation-b", "repair-b"]);
   assert.equal(selectionCalls, 2);
   assert.equal(observedInstants.length, 6);
   assert.deepEqual([...new Set(observedInstants)], [requestInstant]);

@@ -28,7 +28,10 @@ export const TARGET_LEGAL_ANSWER_PATH = "/internal/legal-corpus/target/retrieval
 
 const SERVICE_BINDING_MARKER = "target-legal-answer-v1";
 export const TARGET_INITIAL_FORMULATION_LIMIT = 6;
-export const TARGET_TOTAL_FORMULATION_LIMIT = 7;
+// One bounded repair pass: one missing requirement plus up to three grounded
+// additions. Keep them independent so unrelated propositions cannot dilute a query.
+const TARGET_REPAIR_FORMULATION_LIMIT = 4;
+export const TARGET_TOTAL_FORMULATION_LIMIT = TARGET_INITIAL_FORMULATION_LIMIT + TARGET_REPAIR_FORMULATION_LIMIT;
 export const targetQuestionPlanningHintsSchema = z.object({
   answerLanguage: z.enum(["ru", "uz", "en"]),
   standaloneQuestion: z.string().trim().min(1).max(900),
@@ -216,7 +219,7 @@ const answerSchema = z.object({
   whatToDoNext: z.array(z.string().min(1).max(2_000)).max(20),
   focusedQuestions: z.array(z.string().min(1).max(1_000)).max(20),
   formulationsUsed: z.number().int().min(1).max(TARGET_TOTAL_FORMULATION_LIMIT),
-  repairQueriesUsed: z.number().int().min(0).max(1),
+  repairQueriesUsed: z.number().int().min(0).max(TARGET_REPAIR_FORMULATION_LIMIT),
   temporalEndpoint: temporalEndpointSchema,
 }).strict();
 const partialAnswerSchema = answerSchema.extend({
@@ -794,16 +797,26 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
             })),
           });
         }
-        if (
-          plan.formulations.length >= TARGET_TOTAL_FORMULATION_LIMIT
-          || decision.repairFormulation.kind !== "repair"
-          || !formulationsRespectPlan(plan, [...plan.formulations, decision.repairFormulation])
-        ) return insufficient(plan);
-        repairQueriesUsed = 1;
+        if (decision.repairFormulation.kind !== "repair"
+          || !formulationsRespectPlan(plan, [...plan.formulations, decision.repairFormulation])) return insufficient(plan);
+        const repair = decision.repairFormulation;
+        const repairRequirementIds = [...new Set(repair.requirementIds)];
+        if (repairRequirementIds.length > TARGET_REPAIR_FORMULATION_LIMIT) return insufficient(plan);
+        const repairFormulations = repairRequirementIds.length === 1 ? [repair]
+          : repairRequirementIds.map((requirementId, index) => {
+            const reading = plan.readings.find((item) => item.requirements.some((requirement) => requirement.id === requirementId))!;
+            const text = reading.requirements.find((requirement) => requirement.id === requirementId)!.statement.slice(0, 900);
+            return { ...repair, id: `${repair.id.slice(0, 195)}-${index + 1}`, text,
+              readingIds: [reading.id], requirementIds: [requirementId],
+              privateNameSpans: repair.privateNameSpans.filter((span) => text.includes(span)),
+              legalTitleSpans: repair.legalTitleSpans?.filter((span) => text.includes(span)) };
+          });
+        if (plan.formulations.length + repairFormulations.length > TARGET_TOTAL_FORMULATION_LIMIT) return insufficient(plan);
+        repairQueriesUsed = repairFormulations.length;
         let repairPacket: CandidatePacket;
         try {
           repairPacket = await dependencies.candidateIndex.retrieve(
-            candidateInterpretation(plan, [decision.repairFormulation]),
+            candidateInterpretation(plan, repairFormulations),
             endpoint,
             release,
             { currentAt },
@@ -826,7 +839,7 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         }
         try {
           decision = selectionDecisionSchema.parse(await dependencies.provisionSelector.select({
-            plan,
+            plan: { ...plan, formulations: [...plan.formulations, ...repairFormulations] },
             candidates: await hydrateSelectionCandidates(),
             repairAttempted: true,
           }));
