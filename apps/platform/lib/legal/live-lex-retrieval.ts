@@ -34,6 +34,7 @@ export async function retrieveLiveLexSources(input: {
   signal?: AbortSignal;
   budgetMs?: number;
   searchQueries?: readonly string[] | Promise<readonly string[]>;
+  knownOfficialUrls?: readonly string[];
   discoverOfficialUrls?: (query: string, locale: "ru" | "uz", signal: AbortSignal) => Promise<string[]>;
 }): Promise<LiveLexRetrievalResult> {
   const result = await retrieveDirectLegalSources(input.query, input.locale, {
@@ -41,6 +42,7 @@ export async function retrieveLiveLexSources(input: {
     signal: input.signal,
     budgetMs: input.budgetMs,
     searchQueries: input.searchQueries,
+    knownOfficialUrls: input.knownOfficialUrls,
     discoverOfficialUrls: input.discoverOfficialUrls,
   });
   return {

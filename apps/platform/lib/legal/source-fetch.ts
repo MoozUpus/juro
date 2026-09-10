@@ -370,7 +370,7 @@ function responseContentType(response: Response): {
   return { mediaType: mediaTypePart.trim().toLowerCase(), charset, raw };
 }
 
-async function readBoundedBytes(
+export async function readBoundedLegalSourceBytes(
   response: Response,
   maxBytes: number,
   timeoutMs: number,
@@ -596,7 +596,7 @@ export async function fetchLegalSource(
     throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_UNAVAILABLE", false);
   }
   if (robotsMissing) await cancelBody(robotsResult.response);
-  const robotsBytes = robotsMissing ? new Uint8Array() : await readBoundedBytes(
+  const robotsBytes = robotsMissing ? new Uint8Array() : await readBoundedLegalSourceBytes(
     robotsResult.response,
     ROBOTS_MAX_BYTES,
     timeoutMs,
@@ -663,7 +663,7 @@ export async function fetchLegalSource(
     );
   }
 
-  const bytes = await readBoundedBytes(
+  const bytes = await readBoundedLegalSourceBytes(
     contentResult.response,
     maxBytes,
     timeoutMs,
@@ -747,7 +747,7 @@ export async function fetchLexPdfRepresentation(
     await cancelBody(robotsResult.response);
     throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_UNAVAILABLE", false);
   }
-  const robotsBytes = await readBoundedBytes(
+  const robotsBytes = await readBoundedLegalSourceBytes(
     robotsResult.response,
     ROBOTS_MAX_BYTES,
     timeoutMs,
@@ -791,7 +791,7 @@ export async function fetchLexPdfRepresentation(
     await cancelBody(contentResult.response);
     throw new LegalSourceFetchError("LEGAL_SOURCE_CONTENT_TYPE_REJECTED", false);
   }
-  const bytes = await readBoundedBytes(contentResult.response, maxBytes, timeoutMs);
+  const bytes = await readBoundedLegalSourceBytes(contentResult.response, maxBytes, timeoutMs);
   if (
     bytes.byteLength < 5
     || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-"
@@ -887,7 +887,7 @@ export async function fetchLexArchiveRepresentation(
     await cancelBody(robotsResult.response);
     throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_UNAVAILABLE", false);
   }
-  const robotsBytes = await readBoundedBytes(
+  const robotsBytes = await readBoundedLegalSourceBytes(
     robotsResult.response,
     ROBOTS_MAX_BYTES,
     timeoutMs,
@@ -933,7 +933,7 @@ export async function fetchLexArchiveRepresentation(
     await cancelBody(contentResult.response);
     throw new LegalSourceFetchError("LEGAL_SOURCE_CONTENT_TYPE_REJECTED", false);
   }
-  const bytes = await readBoundedBytes(contentResult.response, maxBytes, timeoutMs);
+  const bytes = await readBoundedLegalSourceBytes(contentResult.response, maxBytes, timeoutMs);
   const zipMagic = bytes.byteLength >= 4
     && bytes[0] === 0x50
     && bytes[1] === 0x4b

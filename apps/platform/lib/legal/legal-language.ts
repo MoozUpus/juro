@@ -42,7 +42,7 @@ const SUPERSCRIPT_DIGITS = new Map([
 ]);
 const ARTICLE_NUMBER = "\\d+(?:(?:[.-]\\d+)|(?:[⁰¹²³⁴⁵⁶⁷⁸⁹]+)|(?:\\s+prim(?:a|b|v)?))?";
 const ARTICLE_PREFIX = new RegExp(
-  "(?:стать(?:я|и|ю|е)|ст\\.?|модда(?:си|нинг)?|modda(?:si|ning)?|article)\\s*[№#]?\\s*(" + ARTICLE_NUMBER + ")",
+  "(?:стать(?:я|и|ю|ей|ёй|е)|ст\\.?|модда(?:си|нинг)?|modda(?:si|ning)?|article)\\s*[№#]?\\s*(" + ARTICLE_NUMBER + ")",
   "giu",
 );
 const ARTICLE_SUFFIX = new RegExp(

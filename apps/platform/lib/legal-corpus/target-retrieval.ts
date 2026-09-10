@@ -256,6 +256,7 @@ const insufficientSchema = z.object({
   sourceLadder: z.literal("indexed_official_corpus"),
   nextTier: z.literal("live_official_search"),
   uncoveredRequirementIds: z.array(legalIdentifierSchema),
+  discoveredOfficialUrls: z.array(z.string().url()).max(12).optional(),
 }).strict();
 const lineageSchema = z.object({
   id: legalIdentifierSchema,
@@ -855,7 +856,13 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
           return sourceUnavailable("INDEXED_REVALIDATION_FAILED");
         }
       }
-      if (decision.outcome !== "selected" && decision.outcome !== "partial") return insufficient(plan);
+      if (decision.outcome !== "selected" && decision.outcome !== "partial") return insufficientSchema.parse({
+        ...insufficient(plan),
+        // Hash-verified candidate locations are discovery leads, not evidence
+        // of coverage. The live tier must fetch and validate them afresh.
+        discoveredOfficialUrls: [...new Set([...evidenceByRendition.values()]
+          .map(evidence => evidence.controlling.officialCitation.url))].slice(0, 12),
+      });
 
       const candidateByKey = new Map(candidates.map((entry) => [entry.candidate.itemKey, entry]));
       const selected = decision.selections.flatMap((selection) => {

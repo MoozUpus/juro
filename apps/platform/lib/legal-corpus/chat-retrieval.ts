@@ -5,6 +5,9 @@ import {
   type LiveLexRetrievalResult,
 } from "../legal/live-lex-retrieval";
 import { detectArticleNumbers } from "../legal/legal-language";
+import { fetchDirectOfficialLexDocument } from "../legal/direct-retrieval";
+import { referencedArticleContextRequests, selectReferencedArticleContext } from "../legal/referenced-article-context";
+import { readBoundedLegalSourceBytes } from "../legal/source-fetch";
 import {
   legalDatabaseFreshnessFromAsOf,
   type LegalDatabaseFreshness,
@@ -18,7 +21,7 @@ import {
 /** The indexed target's accepted complete-answer contract includes the shared
  * semantic planning, two bounded search/support passes and the publisher's
  * current-status check. A repair must not consume the status-check budget. */
-export const LEGAL_RETRIEVAL_BUDGET_MS = 64_000;
+export const LEGAL_RETRIEVAL_BUDGET_MS = 80_000;
 /** Leave the caller a small margin to observe and record the target deadline. */
 export const LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = LEGAL_RETRIEVAL_BUDGET_MS + 500;
 
@@ -429,6 +432,56 @@ async function withTargetCoverage(
   };
 }
 
+async function completeArticleContexts(retrieval: LegalChatSourceRetrieval, options: {
+  locale: "ru" | "uz"; signal?: AbortSignal; budgetMs: number;
+  reader?: typeof fetchDirectOfficialLexDocument;
+  onStarted?: () => void | Promise<void>;
+}): Promise<LegalChatSourceRetrieval> {
+  const requests = referencedArticleContextRequests(retrieval.sources);
+  if (requests.length === 0) return retrieval;
+  await options.onStarted?.();
+  const reader = options.reader ?? fetchDirectOfficialLexDocument;
+  // Multiple references into one public document share the response bytes in
+  // this request only. Each resulting article retains its own validated spans.
+  const fetches = new Map<string, Promise<{ bytes: ArrayBuffer; status: number; headers: Headers }>>();
+  const sharedFetch: typeof fetch = async (input, init) => {
+    const key = `${init?.method ?? "GET"}:${typeof input === "object" && "url" in input ? input.url : String(input)}`;
+    let pending = fetches.get(key);
+    if (!pending) {
+      pending = fetch(input, init).then(async response => ({
+        bytes: new Uint8Array(await readBoundedLegalSourceBytes(response, 16 * 1024 * 1024,
+          Math.max(1, Math.floor(Math.min(6_000, options.budgetMs))))).buffer,
+        status: response.status, headers: response.headers,
+      }));
+      fetches.set(key, pending);
+    }
+    const response = await pending;
+    return new Response(response.bytes.slice(0), { status: response.status, headers: response.headers });
+  };
+  const contexts = await Promise.all(requests.map(async request => {
+    try {
+      const fetched = await reader(request.url, options.locale, {
+        query: `Article ${request.article}`, completeArticle: true, signal: options.signal, fetchImpl: sharedFetch,
+        budgetMs: Math.max(1, Math.floor(Math.min(6_000, options.budgetMs))),
+      });
+      const source = selectReferencedArticleContext(fetched.source, request.article);
+      return source ? { source, evidence: { ...fetched.evidence, sourceId: source.id } } : null;
+    } catch { return null; }
+  }));
+  const completed = contexts.filter(context => context !== null);
+  retrieval.sources.push(...completed.map(context => context.source));
+  retrieval.evidence.push(...completed.map(context => context.evidence));
+  retrieval.sourceAccessMode = "direct";
+  retrieval.retrievalTelemetry = { ...retrieval.retrievalTelemetry!,
+    liveHitCount: (retrieval.retrievalTelemetry?.liveHitCount ?? 0) + completed.length,
+    fusionOutcome: retrieval.retrievalTelemetry?.indexedHitCount ? "mixed" : "live" };
+  if (completed.length !== requests.length) {
+    retrieval.coverageStatus = "partial_coverage";
+    retrieval.errors.push({ code: "LEGAL_REFERENCED_ARTICLE_UNAVAILABLE" });
+  }
+  return retrieval;
+}
+
 /**
  * Retrieves hash-verified evidence through the R2-native sparse+dense target
  * service. Current requests continue to direct Lex when indexed evidence is
@@ -444,6 +497,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
   priorUserQuestions?: readonly string[];
   targetPlanningHints?: TargetQuestionPlanningHints | Promise<TargetQuestionPlanningHints | undefined>;
   verifyCurrentSource?: (url: string) => Promise<boolean>;
+  articleContextReader?: typeof fetchDirectOfficialLexDocument;
   contextualQuestion?: string | Promise<string>;
   applicableAt?: string;
   lexSearchQueries?: readonly string[] | Promise<readonly string[]>;
@@ -460,6 +514,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
   const retrievalStartedAt = performance.now();
   let targetTelemetry: TargetAttemptTelemetry | undefined;
   let partialIndexed: LegalChatSourceRetrieval | null = null;
+  let discoveredOfficialUrls: string[] = [];
   if (input.targetService && input.targetEnvironment && input.targetQuestionId) {
     const contextualPlanningStartedAt = performance.now();
     const planningPromise = Promise.all([
@@ -499,6 +554,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
           planningHints,
           applicableAt: input.applicableAt,
         }), targetController.signal);
+      if (target.kind === "insufficient_indexed_coverage") discoveredOfficialUrls = target.discoveredOfficialUrls ?? [];
       const indexed = await withTargetCoverage(target, input.locale, input.now ?? new Date(),
         input.verifyCurrentSource ?? ((url) => verifyCurrentLexDocument(url, targetController.signal)));
       if (indexed) {
@@ -510,7 +566,14 @@ export async function retrieveCorpusAwareLegalSources(input: {
           contextualPlanningLatencyMs,
           targetBudgetMs: targetTimeoutMs,
         };
-        if (indexed.coverageStatus === "good_coverage") return indexed;
+        if (indexed.coverageStatus === "good_coverage") {
+          if (!input.applicableAt) await completeArticleContexts(indexed, {
+            locale: input.locale, signal: targetController.signal,
+            budgetMs: targetTimeoutMs - (performance.now() - targetStartedAt),
+            reader: input.articleContextReader, onStarted: input.onLiveSearchStarted,
+          });
+          if (indexed.coverageStatus === "good_coverage") return indexed;
+        }
         if (indexed.coverageStatus === "partial_coverage") {
           partialIndexed = indexed;
           targetTelemetry = {
@@ -565,10 +628,15 @@ export async function retrieveCorpusAwareLegalSources(input: {
       ? undefined
       : Math.max(1, Math.floor(input.budgetMs - (performance.now() - retrievalStartedAt))),
     searchQueries: Promise.resolve(input.lexSearchQueries ?? []).catch(() => []),
+    knownOfficialUrls: discoveredOfficialUrls,
     discoverOfficialUrls: input.discoverOfficialUrls,
   });
   const live = withLiveCoverage(result, input.query, targetTelemetry);
-  if (!partialIndexed) return live;
+  const complete = (retrieval: LegalChatSourceRetrieval) => completeArticleContexts(retrieval, {
+    locale: input.locale, signal: input.signal, reader: input.articleContextReader,
+    budgetMs: (input.budgetMs ?? 12_000) - (performance.now() - retrievalStartedAt),
+  });
+  if (!partialIndexed) return complete(live);
   const sources = [...partialIndexed.sources];
   const known = new Set(sources.map((source) => source.officialUrl));
   for (const source of live.sources) {
@@ -580,7 +648,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
     const key = `${entry.canonicalUrl}:${entry.contentSha256}`;
     if (!evidenceKeys.has(key)) evidence.push(entry);
   }
-  return {
+  return complete({
     ...partialIndexed,
     sources,
     evidence,
@@ -592,5 +660,5 @@ export async function retrieveCorpusAwareLegalSources(input: {
       liveHitCount: live.sources.length,
       fusionOutcome: live.sources.length > 0 ? "mixed" : "indexed",
     },
-  };
+  });
 }

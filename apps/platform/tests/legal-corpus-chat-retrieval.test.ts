@@ -8,6 +8,7 @@ import {
 } from "../lib/legal-corpus/chat-retrieval";
 import type { LiveLexRetrievalResult } from "../lib/legal/live-lex-retrieval";
 import { legalDatabaseFreshnessFromAsOf } from "../lib/legal/verified-retrieval";
+import { referencedArticleContextRequests, selectReferencedArticleContext } from "../lib/legal/referenced-article-context";
 
 const now = new Date("2026-08-15T00:00:00.000Z");
 const checkedAt = "2026-08-14T23:00:00.000Z";
@@ -78,6 +79,18 @@ function liveResult(): LiveLexRetrievalResult {
     }],
   };
 }
+
+test("article context follows only unresolved same-instrument references and never historical evidence", () => {
+  const source = liveResult().sources[0]!;
+  const referring = { ...source, article: "17", spans: [{ ...source.spans![0]!,
+    text: "Статья 17. Исключения установлены статьей 27 настоящего Кодекса. Также применяются статья 33 другого Закона и статья 44 Налогового кодекса.",
+  }] };
+  assert.deepEqual(referencedArticleContextRequests([referring]), [{ url: source.officialUrl, article: "27" }]);
+  assert.deepEqual(referencedArticleContextRequests([referring, { ...source, article: "27" }]), []);
+  assert.deepEqual(referencedArticleContextRequests([{ ...referring, applicabilityStatus: "historical" }]), []);
+  assert.equal(selectReferencedArticleContext(source, "27"), null);
+  assert.equal(selectReferencedArticleContext({ ...source, verificationState: "verified" }, "9"), null);
+});
 
 test("chat retrieval uses the R2-native target service before live Lex", async () => {
   let calls = 0;
@@ -174,6 +187,50 @@ test("revoked indexed documents are excluded before live research and cannot cer
   assert.equal(liveCalls, 1);
   assert.equal(result.sourceAccessMode, "direct");
   assert.equal(result.sources.some((source) => source.id.startsWith("target:")), false);
+});
+
+test("an indexed list introduction is completed from separately validated official article evidence", async () => {
+  let reads = 0;
+  const targetService = { async fetch() {
+    return Response.json({ result: { kind: "legal_answer", sourceLadder: "indexed_official_corpus",
+      mainPoint: "Conditions apply", whatTheLawSays: [{ requirementId: "rule", provisionConceptId: "concept",
+        provisionRenditionId: "rendition", proposition: "Applicable grounds", controllingQuotation: "Статья 17. Основания. Применяются следующие основания:",
+        officialCitations: [{ label: "Code — Статья 17", url: "https://lex.uz/ru/docs/777" }], evidenceSha256: contentHash }],
+      whatToDoNext: [], focusedQuestions: [], formulationsUsed: 1, repairQueriesUsed: 0,
+      temporalEndpoint: { kind: "current" } } });
+  }, connect() { throw new Error("Unexpected socket connection"); } } satisfies Fetcher;
+  const result = await retrieveCorpusAwareLegalSources({ query: "Какие основания применяются?", locale: "ru", targetService,
+    targetEnvironment: "staging", targetQuestionId: "complete-list", budgetMs: 5000,
+    articleContextReader: async (url, _locale, options) => {
+      reads += 1;
+      assert.equal(url, "https://lex.uz/ru/docs/777");
+      assert.match(options!.query!, /17/u);
+      const live = liveResult();
+      return { source: { ...live.sources[0]!, article: "17", contentSha256: "b".repeat(64), spans: [{
+        ...live.sources[0]!.spans![0]!, article: "Статья 17", text: "Применяются следующие основания: 1) первое основание; 2) второе основание.",
+      }] }, evidence: { ...live.evidence[0]!, contentSha256: "b".repeat(64) } };
+    },
+    liveSearch: async () => { throw new Error("Known article must not require rediscovery"); },
+  });
+  assert.equal(reads, 1);
+  assert.ok(result.sources.some(source => source.verificationState === "direct_validated" && source.spans?.some(span => span.text.includes("второе основание"))));
+  assert.equal(result.sources.find(source => source.id.startsWith("target:"))?.contentSha256, contentHash,
+    "supplemental text must not overwrite immutable indexed evidence");
+  assert.equal(result.retrievalTelemetry?.fusionOutcome, "mixed");
+});
+
+test("insufficient indexed coverage carries only discovery locations into fresh live verification", async () => {
+  const urls = ["https://lex.uz/ru/docs/777"];
+  const targetService = { async fetch() { return Response.json({ result: {
+    kind: "insufficient_indexed_coverage", sourceLadder: "indexed_official_corpus", nextTier: "live_official_search",
+    uncoveredRequirementIds: ["missing-rule"], discoveredOfficialUrls: urls,
+  } }); }, connect() { throw new Error("Unexpected socket connection"); } } satisfies Fetcher;
+  const result = await retrieveCorpusAwareLegalSources({ query: "Applicable rule", locale: "ru", targetService,
+    targetEnvironment: "staging", targetQuestionId: "discovery-continuity",
+    liveSearch: async input => { assert.deepEqual(input.knownOfficialUrls, urls); return liveResult(); },
+  });
+  assert.equal(result.sources[0]?.verificationState, "direct_validated");
+  assert.equal(result.sources.some(source => source.id.startsWith("target:")), false);
 });
 
 test("contextual planning does not consume the Indexed Official Corpus deadline", async () => {
