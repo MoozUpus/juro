@@ -604,6 +604,9 @@ export async function queryCustomBm25RuntimeBatch(
   });
   located.push(...locatedGroups.flat());
   if (located.length === 0) return inputs.map(() => []);
+  // Posting ranges are independently hash-verified and capped at one MiB.
+  // Allow six to overlap without increasing the two-reader limit for the
+  // much larger lexicons or overlapping sparse traversals across requests.
   const blocks = await mapArtifactReads(located, async ({ termHash, locator }) => {
     const blockBytes = await readVerifiedCustomArtifactRange(bucket, locator);
     const block = postingBlockSchema.parse(JSON.parse(
@@ -614,7 +617,7 @@ export async function queryCustomBm25RuntimeBatch(
       throw new TypeError("CUSTOM_BM25_RUNTIME_POSTING_LOCATOR_MISMATCH");
     }
     return block;
-  });
+  }, 6);
   // Verify the immutable table as a stream and retain only records referenced by
   // bounded posting blocks; the full historical table is larger than the Worker heap budget.
   const requestedOrdinals = new Set(blocks.flatMap((block) =>
@@ -655,12 +658,12 @@ export async function queryCustomBm25RuntimeBatch(
 }
 
 // Bound simultaneous artifact buffers independently of formulation count. Wait
-// for both readers on failure so no request-scoped I/O escapes its lifetime.
-async function mapArtifactReads<T, R>(items: readonly T[], read: (item: T) => Promise<R>): Promise<R[]> {
+// for every reader on failure so no request-scoped I/O escapes its lifetime.
+async function mapArtifactReads<T, R>(items: readonly T[], read: (item: T) => Promise<R>, concurrency = 2): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let next = 0;
   let failed = false;
-  const workers = await Promise.allSettled(Array.from({ length: Math.min(2, items.length) }, async () => {
+  const workers = await Promise.allSettled(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (!failed && next < items.length) {
       const index = next++;
       try { results[index] = await read(items[index]!); }
