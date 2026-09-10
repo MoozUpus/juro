@@ -554,21 +554,26 @@ async function resolvePostingLocators(bucket: R2Bucket, reference: RuntimeDocume
   return result;
 }
 
-export async function queryCustomBm25Runtime(
+export async function queryCustomBm25RuntimeBatch(
   bucket: R2Bucket,
   rawDescriptor: CustomBm25RuntimeDescriptor,
-  input: { text: string; atEpoch: number; topK: number },
-): Promise<Array<{ ordinal: number; score: number; explicitArticleMatch?: true }>> {
+  inputs: Array<{ text: string; atEpoch: number; topK: number }>,
+): Promise<Array<Array<{ ordinal: number; score: number; explicitArticleMatch?: true }>>> {
   const descriptor = descriptorSchema.parse(rawDescriptor);
-  if (!Number.isSafeInteger(input.atEpoch) || !Number.isSafeInteger(input.topK)
-    || input.topK < 1 || input.topK > 50) throw new TypeError("CUSTOM_BM25_RUNTIME_QUERY_INVALID");
+  if (inputs.length < 1 || inputs.length > 6 || inputs.some(input =>
+    !Number.isSafeInteger(input.atEpoch) || !Number.isSafeInteger(input.topK)
+    || input.topK < 1 || input.topK > 50)) throw new TypeError("CUSTOM_BM25_RUNTIME_QUERY_INVALID");
   const groups = new Map<string, { reference: RuntimeDocumentReference; termHashes: string[] }>();
-  const termHashes = await Promise.all([...new Set(analyzeCustomWordTerms(input.text))]
-    .sort().map(customBm25TermHash));
-  // Restrict this priority to unambiguous whole-number references. Compound
-  // identifiers require positional evidence that a bag-of-words index lacks.
-  const articleHashes = new Set(await Promise.all(detectArticleNumbers(input.text)
-    .filter(number => /^\d+$/u.test(number)).map(customBm25TermHash)));
+  const formulations = await Promise.all(inputs.map(async input => ({
+    ...input,
+    termHashes: new Set(await Promise.all([...new Set(analyzeCustomWordTerms(input.text))]
+      .sort().map(customBm25TermHash))),
+    // Restrict this priority to unambiguous whole-number references. Compound
+    // identifiers require positional evidence that a bag-of-words index lacks.
+    articleHashes: new Set(await Promise.all(detectArticleNumbers(input.text)
+      .filter(number => /^\d+$/u.test(number)).map(customBm25TermHash))),
+  })));
+  const termHashes = new Set(formulations.flatMap(input => [...input.termHashes]));
   for (const termHash of termHashes) for (const segment of descriptor.segments) {
     const reference = segment.lexicons[termHash[0]!];
     if (!reference) continue;
@@ -578,7 +583,8 @@ export async function queryCustomBm25Runtime(
     groups.set(identity, group);
   }
   const located: Array<{ termHash: string; locator: z.infer<typeof postingLocatorSchema> }> = [];
-  for (const group of groups.values()) {
+  const locatedGroups = await mapArtifactReads([...groups.values()], async group => {
+    const entries: typeof located = [];
     const locators = await resolvePostingLocators(bucket, group.reference, group.termHashes);
     for (const termHash of group.termHashes) {
       const locator = locators.get(termHash);
@@ -588,12 +594,13 @@ export async function queryCustomBm25Runtime(
         // sparse stop words so rarer terms and the independent dense lane stay usable.
         continue;
       }
-      located.push({ termHash, locator });
+      entries.push({ termHash, locator });
     }
-  }
-  if (located.length === 0) return [];
-  const blocks: Array<z.infer<typeof postingBlockSchema>> = [];
-  for (const { termHash, locator } of located) {
+    return entries;
+  });
+  located.push(...locatedGroups.flat());
+  if (located.length === 0) return inputs.map(() => []);
+  const blocks = await mapArtifactReads(located, async ({ termHash, locator }) => {
     const blockBytes = await readVerifiedCustomArtifactRange(bucket, locator);
     const block = postingBlockSchema.parse(JSON.parse(
       new TextDecoder("utf-8", { fatal: true }).decode(blockBytes),
@@ -602,39 +609,68 @@ export async function queryCustomBm25Runtime(
       || block.blockMaximum !== locator.blockMaximum) {
       throw new TypeError("CUSTOM_BM25_RUNTIME_POSTING_LOCATOR_MISMATCH");
     }
-    blocks.push(block);
-  }
+    return block;
+  });
   // Verify the immutable table as a stream and retain only records referenced by
   // bounded posting blocks; the full historical table is larger than the Worker heap budget.
   const requestedOrdinals = new Set(blocks.flatMap((block) =>
     block.postings.map((posting) => posting.ordinal)));
   const documents = await readRuntimeDocuments(bucket, descriptor.documents, requestedOrdinals);
-  const scores = new Map<number, number>();
-  const explicitArticles = new Set<number>();
-  for (const block of blocks) {
-    for (const posting of block.postings) {
-        const document = documents.get(posting.ordinal);
-        if (!document) throw new TypeError("CUSTOM_BM25_RUNTIME_ORDINAL_MISSING");
-        if (document.validFromEpoch > input.atEpoch
-          || (document.validToEpoch !== null && input.atEpoch >= document.validToEpoch)) continue;
-        if (articleHashes.has(block.termHash) && posting.termFrequencies.article > 0) {
-          explicitArticles.add(posting.ordinal);
-        }
-        const fields = ["title", "hierarchy", "article", "text"] as const;
-        const score = fields.reduce((sum, field) => sum + scoreCustomBm25Term({
-          termFrequency: posting.termFrequencies[field],
-          documentFrequency: block.documentFrequency,
-          documentCount: descriptor.statistics.documentCount,
-          fieldLength: document.fieldLengths[field],
-          averageFieldLength: descriptor.statistics.averageFieldLengths[field],
-          field,
-        }), 0);
-        scores.set(posting.ordinal, (scores.get(posting.ordinal) ?? 0) + score);
+  return formulations.map(input => {
+    const scores = new Map<number, number>();
+    const explicitArticles = new Set<number>();
+    // A formulation's reduction order must not depend on other batch members.
+    for (const block of blocks.filter(block => input.termHashes.has(block.termHash))
+      .sort((left, right) => left.termHash.localeCompare(right.termHash))) {
+      for (const posting of block.postings) {
+          const document = documents.get(posting.ordinal);
+          if (!document) throw new TypeError("CUSTOM_BM25_RUNTIME_ORDINAL_MISSING");
+          if (document.validFromEpoch > input.atEpoch
+            || (document.validToEpoch !== null && input.atEpoch >= document.validToEpoch)) continue;
+          if (input.articleHashes.has(block.termHash) && posting.termFrequencies.article > 0) {
+            explicitArticles.add(posting.ordinal);
+          }
+          const fields = ["title", "hierarchy", "article", "text"] as const;
+          const score = fields.reduce((sum, field) => sum + scoreCustomBm25Term({
+            termFrequency: posting.termFrequencies[field],
+            documentFrequency: block.documentFrequency,
+            documentCount: descriptor.statistics.documentCount,
+            fieldLength: document.fieldLengths[field],
+            averageFieldLength: descriptor.statistics.averageFieldLengths[field],
+            field,
+          }), 0);
+          scores.set(posting.ordinal, (scores.get(posting.ordinal) ?? 0) + score);
+      }
     }
-  }
-  return [...scores].map(([ordinal, score]) => ({ ordinal, score,
-    ...(explicitArticles.has(ordinal) ? {explicitArticleMatch: true as const} : {}) }))
-    .sort((left, right) => Number(!!right.explicitArticleMatch) - Number(!!left.explicitArticleMatch)
-      || right.score - left.score || left.ordinal - right.ordinal)
-    .slice(0, input.topK);
+    return [...scores].map(([ordinal, score]) => ({ ordinal, score,
+      ...(explicitArticles.has(ordinal) ? {explicitArticleMatch: true as const} : {}) }))
+      .sort((left, right) => Number(!!right.explicitArticleMatch) - Number(!!left.explicitArticleMatch)
+        || right.score - left.score || left.ordinal - right.ordinal)
+      .slice(0, input.topK);
+  });
+}
+
+// Bound simultaneous artifact buffers independently of formulation count. Wait
+// for both readers on failure so no request-scoped I/O escapes its lifetime.
+async function mapArtifactReads<T, R>(items: readonly T[], read: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  let failed = false;
+  const workers = await Promise.allSettled(Array.from({ length: Math.min(2, items.length) }, async () => {
+    while (!failed && next < items.length) {
+      const index = next++;
+      try { results[index] = await read(items[index]!); }
+      catch (error) { failed = true; throw error; }
+    }
+  }));
+  for (const worker of workers) if (worker.status === "rejected") throw worker.reason;
+  return results;
+}
+
+export async function queryCustomBm25Runtime(
+  bucket: R2Bucket,
+  descriptor: CustomBm25RuntimeDescriptor,
+  input: { text: string; atEpoch: number; topK: number },
+): Promise<Array<{ ordinal: number; score: number; explicitArticleMatch?: true }>> {
+  return (await queryCustomBm25RuntimeBatch(bucket, descriptor, [input]))[0]!;
 }

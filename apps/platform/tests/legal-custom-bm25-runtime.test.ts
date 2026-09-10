@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import { buildCustomBm25Artifacts, customBm25TermHash } from "../lib/legal-corpus/custom-bm25";
-import { buildCustomBm25RuntimeArtifacts, queryCustomBm25Runtime,
+import { buildCustomBm25RuntimeArtifacts, queryCustomBm25Runtime, queryCustomBm25RuntimeBatch,
   resolveCustomBm25RuntimeItemKeys, resolveCustomBm25RuntimeMembership,
   resolveCustomBm25RuntimeMembershipEntries }
   from "../lib/legal-corpus/custom-bm25-runtime";
@@ -44,6 +44,27 @@ test("explicit article retrieval prefers the provision heading over body cross-r
   assert.equal(hits.filter(hit => hit.explicitArticleMatch).length, 1);
   const topical = await queryCustomBm25Runtime(bucket as unknown as R2Bucket, runtime.descriptor, {text: "employment termination grounds exceptions 72", atEpoch: 2, topK: 3});
   assert.ok(topical.every(hit => !hit.explicitArticleMatch));
+  const queries = [
+    {text: "employment termination grounds exceptions article 72", atEpoch: 2, topK: 3},
+    {text: "employment termination grounds exceptions 72", atEpoch: 2, topK: 3},
+    {text: "unmatchedtoken", atEpoch: 2, topK: 3},
+    {text: "employment", atEpoch: 0, topK: 3},
+  ];
+  const expected = await Promise.all(queries.map(query =>
+    queryCustomBm25Runtime(bucket as unknown as R2Bucket, runtime.descriptor, query)));
+  bucket.reads.clear();
+  assert.deepEqual(await queryCustomBm25RuntimeBatch(bucket as unknown as R2Bucket,
+    runtime.descriptor, queries), expected);
+  assert.equal(bucket.reads.get(runtime.documentsReference.key), 1,
+    "all formulations must share one fully verified document stream");
+  for (const segment of runtime.descriptor.segments) for (const reference of Object.values(segment.lexicons)) {
+    assert.ok((bucket.reads.get(reference.key) ?? 0) <= 1, "shared lexicons are read once");
+  }
+  const corrupt = runtime.documentsBytes.slice();
+  corrupt[corrupt.length - 1] ^= 1;
+  bucket.objects.set(runtime.documentsReference.key, corrupt);
+  await assert.rejects(queryCustomBm25RuntimeBatch(bucket as unknown as R2Bucket,
+    runtime.descriptor, queries), /DOCUMENTS_CORRUPT/u);
 });
 
 test("runtime BM25 projection preserves durable ordinals without loading the JSON document manifest", async () => {
