@@ -77,7 +77,7 @@ export function parseTargetRequirementSupport(output: unknown): TargetRequiremen
     additionalRequirements: z.array(supportAssessmentProviderSchema.shape.additionalRequirements.element).max(48),
   }).parse(output);
   return supportAssessmentProviderSchema.parse({
-    ...parsed, additionalRequirements: parsed.additionalRequirements.slice(0, 3),
+    ...parsed, additionalRequirements: prioritizeTargetRequirements(parsed.additionalRequirements),
   });
 }
 
