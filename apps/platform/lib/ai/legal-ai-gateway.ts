@@ -547,7 +547,7 @@ function canonicalLegacySource(
     article: boundedNullableMetadata(span.article ?? source.article, 240),
     excerpt: null,
     originalUrl: source.officialUrl,
-    status: source.applicabilityStatus ?? "current",
+    status: source.sourceClass === "SECONDARY_REFERENCE" ? "unconfirmed" : source.applicabilityStatus ?? "current",
     effectiveDate: boundedNullableMetadata(source.effectiveDate, 64),
     verifiedAt: boundedRequiredMetadata(source.verifiedAt, 64, new Date(0).toISOString()),
     documentType: boundedNullableMetadata(source.documentType, 160),

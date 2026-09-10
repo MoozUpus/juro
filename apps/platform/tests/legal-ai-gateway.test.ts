@@ -841,6 +841,7 @@ test("gateway publishes cited web material only as a reference note, never as co
   assert.deepEqual(validated.run.data.referenceNotes?.[0]?.sourceIds, [secondary.id]);
   assert.equal(validated.run.data.responseKind, "clarification_required");
   assert.equal(validated.run.data.evidenceMode, "secondary_only");
+  assert.ok(validated.run.data.sources.every((source) => source.status === "unconfirmed"));
   assert.match(validated.run.data.answer, /недостаточно для подтверждённого правового вывода/iu);
   assert.deepEqual(validated.run.data.actionPlan, []);
   assert.deepEqual(validated.run.data.deadlines, []);

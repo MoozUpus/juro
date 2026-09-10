@@ -1128,7 +1128,7 @@ async function executePostWithinBudget(
             ?? source.excerpt?.slice(0, 1_200)
             ?? null,
           originalUrl: source.officialUrl,
-          status: source.applicabilityStatus ?? "current" as const,
+          status: source.sourceClass === "SECONDARY_REFERENCE" ? "unconfirmed" as const : source.applicabilityStatus ?? "current" as const,
           effectiveDate: source.effectiveDate ?? null,
           verifiedAt: source.verifiedAt,
           documentType: source.documentType ?? null,
