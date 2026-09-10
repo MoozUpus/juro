@@ -266,7 +266,7 @@ class OpenAiLegalProvider implements LegalAiProvider {
       reasoningEffort: input.reasoningMode === "deep" ? "high" : "low",
       textVerbosity: input.answerMode === "short" ? "low" : "high",
       maxOutputTokens: interactive
-        ? (input.answerMode === "short" ? 1_000 : 2_200)
+        ? (input.answerMode === "short" ? 1_600 : 3_200)
         : (input.answerMode === "short" ? 2_400 : 4_200),
       instructions: [
         "Ты — AI-юрист JURO. Юрисдикция: только Республика Узбекистан.",
@@ -280,7 +280,7 @@ class OpenAiLegalProvider implements LegalAiProvider {
         "Копируй sourceId буквально и без сокращений. Делай каждое confirmedFinding, actionPlan и risk одним атомарным утверждением, используй основные юридические слова из одного конкретного sourceSpan и указывай ровно тот sourceId, которому принадлежит этот span.",
         "Не добавляй в actionPlan, risks или deadlines элементы без sourceIds. При наличии verifiedSources видимый подтверждённый ответ будет заново собран сервером только из claims, прошедших проверку exact source span.",
         "Всегда верни sources=[]: карточки Lex сервер восстановит сам из sourceIds подтверждённых claims. Не дублируй URL, title, article, excerpt и verifiedAt в provider payload.",
-        "В fast mode сокращай глубину рассуждения, а не полезность ответа. Если answerMode=short, summary и answer — не более 15 слов каждый и не более 2 confirmedFindings. Если answerMode=detailed, дай содержательный разбор подтверждённой части: до 4 confirmedFindings, 4 actionPlan и 3 risks.",
+        "В fast mode сокращай глубину рассуждения, а не полезность ответа. Если answerMode=short, summary и answer — не более 15 слов каждый и не более 2 confirmedFindings. Если answerMode=detailed, дай содержательный разбор подтверждённой части: до 6 confirmedFindings, 3 actionPlan и 3 risks; summary и answer — одно-два предложения, не повторяющие полный разбор.",
         LEGAL_ANSWER_MARKDOWN_RULE,
         LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
         LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,

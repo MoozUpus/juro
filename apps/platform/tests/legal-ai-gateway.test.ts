@@ -104,6 +104,19 @@ const run: LegalAiRunResult = {
   fallbackFromProvider: null,
 };
 
+test("numeric grounding accepts written quantities but not digits inside article numbers", () => {
+  const deadlineSource = { ...source, spans: [{ ...source.spans![0]!,
+    text: "Статья 560. Срок обращения в суд — три месяца. Для другого требования срок составляет один год. Для комиссии установлен шестимесячный срок.",
+  }] };
+  const finding = (quantity: string) => validateGroundedPreliminaryFinding({
+    finding: { title: "Срок обращения", explanation: `Срок обращения в суд — ${quantity} месяца.`, sourceIds: [source.id] },
+    sources: [deadlineSource], locale: "ru",
+  });
+  assert.ok(finding("3"));
+  assert.equal(finding("5"), null);
+  assert.equal(finding("пять"), null);
+});
+
 test("provider timeout retains found articles as an explicitly incomplete result", async () => {
   const provider: LegalAiProvider = {
     name: "openai",
@@ -207,6 +220,8 @@ test("gateway retains only conditional branches supported by their cited exact s
 
   assert.deepEqual(validated.run.data.conditionalBranches, [branchResult.conditionalBranches![0]]);
   assert.match(validated.run.data.summary, /государственной регистрации/iu);
+  assert.match(validated.run.data.summary, /^Если создаётся общество:/u);
+  assert.doesNotMatch(validated.run.data.summary, /неподтверждённый штраф/u);
 });
 
 test("gateway emits a repeated title and explanation only once", () => {

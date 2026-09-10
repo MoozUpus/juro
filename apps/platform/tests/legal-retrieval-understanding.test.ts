@@ -73,3 +73,18 @@ test("deadline queries retain the question and only their supplied legal concept
   assert.deepEqual(hints.requirements.map((item) => item.statement), concepts);
   assert.equal(targetQuestionPlanningHints(fallbackLegalRetrievalUnderstanding(question), "ru"), undefined);
 });
+
+test("the target receives the general rule query alongside separate status-specific requirements", () => {
+  const question = "Можно ли прекратить договор во время отпуска?";
+  const generalQuery = "прекращение трудового договора в период отпуска";
+  const concepts = ["гарантии в ежегодном отпуске", "гарантии в учебном отпуске"];
+  const plan = normalizeLegalRetrievalUnderstanding({
+    standaloneQuestion: question,
+    corpusQueries: [generalQuery, ...concepts],
+    requiredConcepts: concepts.map(statement => ({ statement, alternatives: [statement], priority: "core" })),
+    lexSearchQueries: [generalQuery, ...concepts], webSearchQuery: question,
+  }, question);
+  const hints = targetQuestionPlanningHints(plan, "ru")!;
+  assert.deepEqual(hints.formulations, [question, generalQuery, ...concepts]);
+  assert.deepEqual(hints.requirements.map(item => item.statement), concepts);
+});

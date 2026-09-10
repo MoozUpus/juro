@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   retrieveCorpusAwareLegalSources as retrieveWithOfficialStatus,
   shouldRetrieveSecondaryInternet,
+  targetCitationArticle,
 } from "../lib/legal-corpus/chat-retrieval";
 import type { LiveLexRetrievalResult } from "../lib/legal/live-lex-retrieval";
 import { legalDatabaseFreshnessFromAsOf } from "../lib/legal/verified-retrieval";
@@ -11,6 +12,13 @@ import { legalDatabaseFreshnessFromAsOf } from "../lib/legal/verified-retrieval"
 const now = new Date("2026-08-15T00:00:00.000Z");
 const checkedAt = "2026-08-14T23:00:00.000Z";
 const contentHash = "a".repeat(64);
+
+test("an indexed list-item number is not published as an article number", () => {
+  assert.equal(targetCitationArticle("Code — Статья 6", "6) отдельный пункт внутри статьи."), null);
+  assert.equal(targetCitationArticle("Code — Article 3", "3. A numbered paragraph."), null);
+  assert.equal(targetCitationArticle("Code — Статья 163", "6) отдельный пункт внутри статьи."), "163");
+  assert.equal(targetCitationArticle("Code — Статья 6", "Статья 6. Заголовок и текст статьи."), "6");
+});
 
 function retrieveCorpusAwareLegalSources(input: Parameters<typeof retrieveWithOfficialStatus>[0]) {
   return retrieveWithOfficialStatus({ verifyCurrentSource: async () => true, ...input });

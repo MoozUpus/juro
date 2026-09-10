@@ -313,6 +313,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
         "For each mapping, governingRequirementIds must be a subset of supportedRequirementIds. Include a requirement there only when this provision itself states the operative governing rule, prohibition, entitlement, exception, ground, or liability needed for that requirement. Exclude provisions that merely cross-reference another article, mention the topic, apply another provision procedurally, or provide interpretive guidance when the operative rule is elsewhere.",
         "A search match, shared topic, title, actor, or procedural deadline is not support by itself.",
         "Mark support only when the supplied provision text entails or directly establishes the material legal proposition.",
+        "Support means the WHOLE requirement, including every material status or alternative it names. A provision limited to one status does not support a requirement that also asks about another status. Mere overlap with part of a compound requirement is not coverage.",
         "When both a directly governing codified provision and interpretive, procedural, or cross-referencing guidance support a requirement, retain both mappings; downstream selection decides priority.",
         "Do not answer the user's question, invent rules, infer missing article text, or use outside knowledge.",
         "A provision may support requirements from any retrieval formulation, and may support none.",
