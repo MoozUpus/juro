@@ -455,6 +455,26 @@ function groundedVisibleAnswer(
   return aiText(locale, `Краткий вывод: ${statements.join(" ")}`, `Qisqa xulosa: ${statements.join(" ")}`, `Key finding: ${statements.join(" ")}`);
 }
 
+function groundedMainPoint(result: LegalChatResponse, claims: readonly LegalGatewayClaim[]): string {
+  const summary = plainGroundedText(result.summary);
+  const evidenceText = claims.map((claim) => claim.text).join(" ");
+  const terms = legalTerms(summary);
+  const evidenceTerms = legalTerms(evidenceText);
+  const covered = terms.filter((term) => evidenceTerms.some((candidate) =>
+    candidate === term || sharesStem(term, candidate))).length;
+  if (summary.length <= 650 && terms.length > 0 && covered / terms.length >= 0.8
+    && numericTokens(summary).every((token) => numericTokens(evidenceText).includes(token))
+    && !containsSensitiveAgentContent(summary)
+    && !containsUnvalidatedHttpLink(summary, new Set())
+    && !/^(?:Ст\.?|Статья|Article)\s*\d/iu.test(summary)
+  ) return summary;
+  // The finding explanation is already validated. Its title is presentation
+  // metadata and must not be pasted in front of the conclusion a second time.
+  const finding = result.confirmedFindings.find((item) => claims.some((claim) =>
+    claim.text === nonRepeatingLegalText(item.title, item.explanation)));
+  return plainGroundedText(finding?.explanation || claims[0]?.text || result.summary);
+}
+
 export function validateGroundedPreliminaryFinding(input: {
   finding: unknown;
   sources: readonly LegalSourceContext[];
@@ -527,7 +547,7 @@ function canonicalLegacySource(
     article: boundedNullableMetadata(span.article ?? source.article, 240),
     excerpt: null,
     originalUrl: source.officialUrl,
-    status: source.applicabilityStatus ?? "current",
+    status: source.sourceClass === "SECONDARY_REFERENCE" ? "unconfirmed" : source.applicabilityStatus ?? "current",
     effectiveDate: boundedNullableMetadata(source.effectiveDate, 64),
     verifiedAt: boundedRequiredMetadata(source.verifiedAt, 64, new Date(0).toISOString()),
     documentType: boundedNullableMetadata(source.documentType, 160),
@@ -657,7 +677,7 @@ export function buildVerifiedSourceOnlyFallback(input: {
       explanation: claim.text,
       sourceIds: [source.id],
     })),
-    responseKind: "answer",
+    responseKind: "clarification_required",
     summary: aiText(input.locale, "Показаны точные положения из проверенных источников.", "Tekshirilgan manbalardagi aniq qoidalar ko‘rsatildi.", "Exact provisions from verified sources are shown."),
     answer: exactText,
     language: input.locale,
@@ -737,32 +757,15 @@ export function validateLegalGatewayAnswer(input: {
   const alreadyGroundedSourceIds = new Set(providerOrFallback.flatMap((claim) =>
     claim.sourceId ? [claim.sourceId] : [],
   ));
-  // Retrieval has already reduced the official corpus to a bounded set of
-  // exact, verified passages. A synthesis model may choose a shorter answer
-  // and omit one of those provisions (or time out and take the source-only
-  // path), but that must not make source discovery appear different between
-  // otherwise identical requests. Preserve an omitted official provision only
-  // when its own exact span independently passes the question-relevance gate.
-  // The copied span remains the visible claim; no model-authored law is added.
-  const serverGroundedOfficial = input.sources.flatMap((source) => {
-    if (
-      sourceTier(source) !== "authoritative"
-      || source.retrievalSelection === "deterministic_fallback"
-      || (alreadyGroundedSourceIds.has(source.id)
-        && source.retrievalSelection !== "semantic_reranker")
-    ) return [];
-    // A semantic-reranker source has already passed hybrid retrieval,
-    // requirement-specific late ranking, graph completion and exact D1
-    // hydration. Reapplying a literal user-word overlap gate here erased
-    // complementary provisions whose statutory wording differs from the
-    // colloquial question whose wording differs from the formal legal concept.
-    // Copying its verified span adds no model-authored law.
-    const matched = sourceGroundedFallback(
-      [source],
-      source.retrievalSelection === "semantic_reranker" ? undefined : validationQuestion,
-    );
-    return matched ? [matched] : [];
-  }).slice(0, 12);
+  // Successful synthesis publishes only validated claims. A limited source
+  // reader may expose additional verified excerpts, clearly marked incomplete.
+  const serverGroundedOfficial = input.run.sourceFallback
+    ? input.sources.flatMap((source) => {
+      if (sourceTier(source) !== "authoritative" || alreadyGroundedSourceIds.has(source.id)) return [];
+      const matched = sourceGroundedFallback([source], validationQuestion);
+      return matched ? [matched] : [];
+    }).slice(0, 12)
+    : [];
   for (const { source } of serverGroundedOfficial) alreadyGroundedSourceIds.add(source.id);
   // Public-web material is already a server-refetched exact span. Preserve up
   // to three such references even when the answer model focused only on the
@@ -858,8 +861,9 @@ export function validateLegalGatewayAnswer(input: {
         : "private_only" as const;
   const groundedResult: LegalChatResponse = {
     ...grounded,
-    responseKind: "answer",
-    summary: groundedVisibleAnswer(publishable.slice(0, 1), input.locale, true),
+    responseKind: fallback || input.run.sourceFallback || input.result.responseKind === "clarification_required"
+      ? "clarification_required" : "answer",
+    summary: groundedMainPoint(grounded, publishable),
     answer: groundedVisibleAnswer(publishable, input.locale, false, input.answerMode === "detailed" ? 8 : 3),
     referenceNotes: [],
     clarificationQuestions: sanitizeClarificationQuestions(grounded.clarificationQuestions, input.locale),
@@ -870,6 +874,21 @@ export function validateLegalGatewayAnswer(input: {
     sources: authoritativeCanonicalSources,
     evidenceMode,
   };
+  if (groundedResult.responseKind === "clarification_required" && authoritativeCanonicalSources.length > 0) {
+    groundedResult.summary = aiText(input.locale,
+      "Найдены относящиеся к вопросу статьи, но достаточный ответ пока не подтверждён.",
+      "Savolga oid moddalar topildi, ammo yetarli javob hali tasdiqlanmadi.",
+      "Relevant provisions were found, but a sufficient answer has not yet been verified.");
+    groundedResult.answer = input.run.sourceFallback
+      ? aiText(input.locale,
+        "Статьи найдены, но подготовить и проверить вывод по вашему вопросу сейчас не удалось. Ниже можно открыть найденные положения. Попробуйте повторить запрос позже; лимит ответа не списывается.",
+        "Moddalar topildi, ammo hozir savolingiz bo‘yicha xulosani tayyorlash va tekshirish imkoni bo‘lmadi. Quyida ularni ochishingiz mumkin. Keyinroq qayta urinib ko‘ring; javob limiti sarflanmaydi.",
+        "Provisions were found, but the conclusion could not be prepared and verified. You can open them below. Please retry later; this does not use your answer allowance.")
+      : aiText(input.locale,
+        "Ниже приведена подтверждённая часть найденных положений. Её недостаточно для полного вывода по вашему вопросу. Уточнения помогут определить, какие нормы применимы и какие сведения ещё нужно проверить.",
+        "Quyida topilgan qoidalarning tasdiqlangan qismi keltirilgan. To‘liq xulosa uchun bu yetarli emas. Aniqliklar amaldagi qoidalar va yetishmayotgan ma’lumotni belgilashga yordam beradi.",
+        "The verified part of the available provisions is shown below. It is insufficient for a complete conclusion. Clarifications can help identify the applicable rules and remaining evidence.");
+  }
   const safeResult = validSourceIds.size === 0
     ? forceClarificationWithoutVerifiedSources(grounded, {
       locale: input.locale,

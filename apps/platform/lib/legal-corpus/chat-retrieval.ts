@@ -1,4 +1,5 @@
 import type { LegalSourceContext } from "../ai/provider";
+import { verifyCurrentLexDocument } from "../legal/lex-document-status";
 import {
   retrieveLiveLexSources,
   type LiveLexRetrievalResult,
@@ -16,9 +17,9 @@ import {
 
 /** The indexed target's accepted complete-answer contract includes the shared
  * semantic planning wait plus bounded search and support assessment. */
-export const LEGAL_RETRIEVAL_BUDGET_MS = 36_000;
+export const LEGAL_RETRIEVAL_BUDGET_MS = 48_000;
 /** Leave the caller a small margin to observe and record the target deadline. */
-export const LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = 36_500;
+export const LEGAL_RETRIEVAL_STAGE_TIMEOUT_MS = 48_500;
 
 export function legalRetrievalEnvironment(bindings: {
   APP_ENV?: "development" | "staging" | "production";
@@ -80,7 +81,8 @@ export type LegalChatSourceRetrieval = {
     indexVersion?: string | null;
     rerankerVersion?: string | null;
     targetOutcome?: "selected" | "unavailable" | "timed_out" | "failed";
-    targetFailureCode?: "TARGET_SOURCE_UNAVAILABLE" | "TARGET_RETRIEVAL_TIMEOUT" | "TARGET_RETRIEVAL_FAILED" | null;
+    targetFailureCode?: "TARGET_SOURCE_UNAVAILABLE" | "TARGET_RETRIEVAL_TIMEOUT" | "TARGET_RETRIEVAL_FAILED"
+      | Extract<TargetLegalAnswerResult, { safeErrorCode: string }>["safeErrorCode"] | null;
     targetLatencyMs?: number;
     contextualPlanningLatencyMs?: number;
     targetBudgetMs?: number;
@@ -94,10 +96,10 @@ type TargetAttemptTelemetry = Pick<
 >;
 
 export function shouldRetrieveSecondaryInternet(
-  retrieval: Pick<LegalChatSourceRetrieval, "coverageStatus">,
+  retrieval: Pick<LegalChatSourceRetrieval, "coverageStatus"> & Partial<Pick<LegalChatSourceRetrieval, "sourceAccessMode">>,
 ): boolean {
-  return retrieval.coverageStatus === "weak_coverage"
-    || retrieval.coverageStatus === "no_coverage";
+  return retrieval.coverageStatus !== "good_coverage"
+    || retrieval.sourceAccessMode === "direct" || retrieval.sourceAccessMode === "mixed";
 }
 
 type LiveSearchInput = Parameters<typeof retrieveLiveLexSources>[0];
@@ -288,11 +290,26 @@ async function withTargetCoverage(
   result: TargetLegalAnswerResult,
   locale: "ru" | "uz",
   now: Date,
+  verifyCurrentSource: (url: string) => Promise<boolean>,
 ): Promise<LegalChatSourceRetrieval | null> {
   const answer = targetAnswerDetails(result);
   if (!answer) return null;
   const checkedAt = now.toISOString();
-  const statements = uniqueTargetStatements(answer);
+  const candidates = uniqueTargetStatements(answer);
+  if (candidates.length > 12) return unavailableTargetCeilingCoverage(now);
+  const urls = [...new Set(candidates.filter((entry) => entry.temporalEndpoint.kind === "current")
+    .map((entry) => entry.statement.officialCitations[0]!.url))];
+  const statuses = new Map(await Promise.all(urls.map(async (url) => {
+    try { return [url, await verifyCurrentSource(url)] as const; }
+    catch { return [url, null] as const; }
+  })));
+  const statements = candidates.filter((entry) => entry.temporalEndpoint.kind !== "current"
+    || statuses.get(entry.statement.officialCitations[0]!.url) === true);
+  const droppedCurrent = statements.length !== candidates.length;
+  if (droppedCurrent) console.warn(JSON.stringify({ event: "legal.current_source_status_filtered",
+    candidateProvisionCount: candidates.length, retainedProvisionCount: statements.length,
+    unavailableDocuments: [...statuses.values()].filter((status) => status === null).length,
+    repealedDocuments: [...statuses.values()].filter((status) => status === false).length }));
   if (statements.length > 12) return unavailableTargetCeilingCoverage(now);
   const sources = await Promise.all(statements.map(async (
     { statement, temporalEndpoint },
@@ -347,7 +364,9 @@ async function withTargetCoverage(
   if (sources.length === 0) return null;
   const freshness = legalDatabaseFreshnessFromAsOf(checkedAt, now);
   const provisionsByRequirement = new Map<string, Set<string>>();
-  for (const { statement } of answer.statements) {
+  for (const { statement } of answer.statements.filter((entry) =>
+    entry.temporalEndpoint.kind !== "current"
+      || statuses.get(entry.statement.officialCitations[0]!.url) === true)) {
     const provisions = provisionsByRequirement.get(statement.requirementId) ?? new Set<string>();
     provisions.add(statement.provisionRenditionId);
     provisionsByRequirement.set(statement.requirementId, provisions);
@@ -359,7 +378,8 @@ async function withTargetCoverage(
     sourceAccessMode: "approved_package",
     sourcesRetrievedAt: checkedAt,
     sourceValidationStatus: "validated",
-    errors: [],
+    errors: droppedCurrent ? [{ code: [...statuses.values()].includes(null)
+      ? "LEGAL_SOURCE_CURRENT_STATUS_UNAVAILABLE" : "LEGAL_SOURCE_DOCUMENT_REPEALED" }] : [],
     evidence: sources.map((source) => ({
       sourceId: source.id,
       sourceKind: "lex",
@@ -369,7 +389,7 @@ async function withTargetCoverage(
       validatedAt: checkedAt,
       validationStatus: "validated",
     })),
-    coverageStatus: answer.partial ? "partial_coverage" : "good_coverage",
+    coverageStatus: answer.partial || droppedCurrent ? "partial_coverage" : "good_coverage",
     retrievalTelemetry: {
       indexedHitCount: sources.length,
       liveHitCount: 0,
@@ -416,7 +436,8 @@ export async function retrieveCorpusAwareLegalSources(input: {
   targetEnvironment?: "development" | "staging" | "production";
   targetQuestionId?: string;
   priorUserQuestions?: readonly string[];
-  targetPlanningHints?: TargetQuestionPlanningHints | Promise<TargetQuestionPlanningHints>;
+  targetPlanningHints?: TargetQuestionPlanningHints | Promise<TargetQuestionPlanningHints | undefined>;
+  verifyCurrentSource?: (url: string) => Promise<boolean>;
   contextualQuestion?: string | Promise<string>;
   applicableAt?: string;
   lexSearchQueries?: readonly string[] | Promise<readonly string[]>;
@@ -472,7 +493,8 @@ export async function retrieveCorpusAwareLegalSources(input: {
           planningHints,
           applicableAt: input.applicableAt,
         }), targetController.signal);
-      const indexed = await withTargetCoverage(target, input.locale, input.now ?? new Date());
+      const indexed = await withTargetCoverage(target, input.locale, input.now ?? new Date(),
+        input.verifyCurrentSource ?? ((url) => verifyCurrentLexDocument(url, targetController.signal)));
       if (indexed) {
         indexed.retrievalTelemetry = {
           ...indexed.retrievalTelemetry!,
@@ -498,7 +520,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
       }
       if (!indexed) targetTelemetry = {
         targetOutcome: "unavailable",
-        targetFailureCode: "TARGET_SOURCE_UNAVAILABLE",
+        targetFailureCode: "safeErrorCode" in target ? target.safeErrorCode : "TARGET_SOURCE_UNAVAILABLE",
         targetLatencyMs: Math.max(0, performance.now() - targetStartedAt),
         contextualPlanningLatencyMs,
         targetBudgetMs: targetTimeoutMs,

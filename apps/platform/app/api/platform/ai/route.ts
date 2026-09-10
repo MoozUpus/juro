@@ -770,7 +770,7 @@ async function executePostWithinBudget(
 
   const retrievalUnderstanding = await retrievalUnderstandingPromise;
   const retrievalQuestion = retrievalUnderstanding.standaloneQuestion;
-  // Secondary internet material is consulted only after the combined official result is weak or empty.
+  // When live research is needed, search the wider internet after official discovery.
   // It can explain practice, but can never establish
   // a legal rule, deadline, calculation, or mandatory action.
   const secondaryInternet: SecondaryInternetRetrieval = !applicableAt
@@ -780,7 +780,7 @@ async function executePostWithinBudget(
         return { sources: [], evidence: [], errors: [{ code: "SECONDARY_RESEARCH_BUDGET_SKIPPED" }] };
       }
       await emitProgress({ stage: "internet_search_started" });
-      const internetStage = budget.beginStage("secondary_web_retrieval", { timeoutMs: 6_200 });
+      const internetStage = budget.beginStage("secondary_web_retrieval", { timeoutMs: 25_000 });
       try {
         const usage = await usageSummary(db, workspace.id, user.id, answerCycleLimit);
         if (usage.limit !== null && usage.used >= usage.limit) throw new Error("PLAN_LIMIT_PRECHECK");
@@ -793,7 +793,7 @@ async function executePostWithinBudget(
           requestId: `${idempotencyKey}:secondary`,
           safetyIdentifier,
           signal: internetStage.signal,
-          timeoutMs: Math.min(6_000, budget.remainingMs),
+          timeoutMs: Math.min(20_000, budget.remainingMs),
           onTelemetry: async (event) => {
             try {
               const completedAt = isoNow();
@@ -1128,7 +1128,7 @@ async function executePostWithinBudget(
             ?? source.excerpt?.slice(0, 1_200)
             ?? null,
           originalUrl: source.officialUrl,
-          status: source.applicabilityStatus ?? "current" as const,
+          status: source.sourceClass === "SECONDARY_REFERENCE" ? "unconfirmed" as const : source.applicabilityStatus ?? "current" as const,
           effectiveDate: source.effectiveDate ?? null,
           verifiedAt: source.verifiedAt,
           documentType: source.documentType ?? null,

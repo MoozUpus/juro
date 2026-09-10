@@ -535,7 +535,7 @@ export async function POST(request: Request): Promise<Response> {
     const secondaryInternet: SecondaryInternetRetrieval = !applicableAt
       && shouldRetrieveSecondaryInternet(retrieval)
       ? await (async () => {
-        const secondaryStage = budget.beginStage("secondary_web_retrieval", { timeoutMs: 6_200 });
+        const secondaryStage = budget.beginStage("secondary_web_retrieval", { timeoutMs: 25_000 });
         try {
           const secondary = await retrieveSecondaryInternetSources({
             db,
@@ -544,7 +544,7 @@ export async function POST(request: Request): Promise<Response> {
             requestId: `${idempotencyKey}:secondary`,
             safetyIdentifier,
             signal: secondaryStage.signal,
-            timeoutMs: 6_000,
+            timeoutMs: 20_000,
           });
           secondaryStage.complete();
           return secondary;

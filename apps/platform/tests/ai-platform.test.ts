@@ -160,6 +160,7 @@ test("secondary-only context clears every field that could communicate legal aut
   });
 
   assert.equal(attached.evidenceMode, "secondary_only");
+  assert.equal(attached.responseKind, "clarification_required");
   assert.match(attached.summary, /официальная норма Lex\.uz не подтверждена/iu);
   assert.deepEqual(attached.confirmedFindings, []);
   assert.deepEqual(attached.conditionalBranches, []);

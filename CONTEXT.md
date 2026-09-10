@@ -31,7 +31,7 @@ A Legal Answer that presents separately supported outcomes for unresolved facts 
 _Avoid_: assumption, best guess, generic disclaimer
 
 **Insufficient-Evidence Result**:
-A dedicated non-answer stating what was checked, what evidence is missing, and which focused questions or next actions could make a supported Legal Answer possible.
+A dedicated non-answer identifying any relevant official provisions that were found, stating what was checked and what evidence is missing, and asking only the focused questions or next actions that could make a supported Legal Answer possible.
 _Avoid_: uncertain answer, likely answer, empty Legal Answer
 
 **Citation**:
@@ -147,11 +147,11 @@ Request-scoped retrieval from validated online Lex.uz pages when the Indexed Off
 _Avoid_: web search, internet search, Lex fallback
 
 **Secondary Web Research**:
-Cited research from the wider internet used only for supporting context when official sources remain insufficient; it cannot establish a legal rule, deadline, calculation, or mandatory action.
+Cited research from the wider internet included whenever live research is needed. It supplies supporting context, and answers using it visibly identify their internet provenance; it cannot establish a legal rule, deadline, calculation, or mandatory action.
 _Avoid_: official source, legal authority, general search
 
 **Source Ladder**:
-The strict escalation order from Indexed Official Corpus to Live Official Search and only then to Secondary Web Research.
+The escalation from Indexed Official Corpus to live research, with Live Official Search followed by Secondary Web Research whenever indexed coverage is insufficient.
 _Avoid_: parallel search, blended search
 
 **Official Coverage**:

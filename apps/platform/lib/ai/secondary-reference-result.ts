@@ -33,12 +33,11 @@ export function attachSecondaryReferenceContext(input: {
     };
   }
 
-  const context = (input.contextText ?? referenceNotes.map((note) => note.note).join(" ")).slice(0, 12_000);
   return {
     ...input.result,
-    responseKind: "answer",
+    responseKind: "clarification_required",
     summary: aiText(input.locale, "Справочный ответ: официальная норма Lex.uz не подтверждена.", "Ma’lumotnoma javobi: Lex.uz rasmiy normasi tasdiqlanmadi.", "Reference answer: an official legal provision from Lex.uz was not verified."),
-    answer: aiText(input.locale, `Официальная норма Lex.uz не подтверждена. Материал ниже даёт только справочный контекст и не устанавливает законодательство, сроки, расчёты или обязательные действия. ${context}`, `Lex.uz rasmiy normasi tasdiqlanmadi. Quyidagi material faqat ma’lumotnoma kontekstini beradi hamda qonunchilik, muddat, hisob-kitob yoki majburiy harakatni belgilamaydi. ${context}`, `No official legal provision from Lex.uz was verified. The material below provides reference context only; it does not establish law, deadlines, calculations or mandatory actions. ${context}`).slice(0, 20_000),
+    answer: aiText(input.locale, "Найдены справочные интернет-материалы, но их недостаточно для подтверждённого правового вывода. Ниже доступны источники и вопросы, которые помогут уточнить применимые нормы.", "Internetda ma’lumotnoma materiallari topildi, ammo tasdiqlangan huquqiy xulosa uchun ular yetarli emas. Quyida manbalar va amaldagi qoidalarni aniqlashtiruvchi savollar keltirilgan.", "Reference materials were found online, but they are insufficient for a verified legal conclusion. The sources and questions below can help identify the applicable rules."),
     confirmedFindings: [],
     conditionalBranches: [],
     assumptions: [],
