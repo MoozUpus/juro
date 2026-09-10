@@ -1,3 +1,4 @@
+import { pbkdf2 } from "node:crypto";
 import { randomToken, sha256 } from "./crypto";
 import type { SecurityEventGuard } from "./security-events";
 
@@ -22,8 +23,6 @@ export type PreparedPasswordCredential = Omit<
 export type PasswordValidation =
   | { ok: true }
   | { ok: false; code: "PASSWORD_TOO_SHORT" | "PASSWORD_TOO_LONG" };
-
-const encoder = new TextEncoder();
 
 function toArrayBuffer(value: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(value.byteLength);
@@ -66,24 +65,18 @@ async function derivePasswordHash(
   salt: Uint8Array,
   iterations: number,
 ): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      hash: "SHA-256",
-      salt: toArrayBuffer(salt),
-      iterations,
-    },
-    key,
-    256,
-  );
-  return new Uint8Array(bits);
+  // Workers Web Crypto rejects PBKDF2 iteration counts above 100,000. Use
+  // the fully supported node:crypto API so the stored 600,000-iteration
+  // credentials remain both deployable and verifiable in the Worker runtime.
+  return new Promise<Uint8Array>((resolve, reject) => {
+    pbkdf2(password, salt, iterations, 32, "sha256", (error, derivedKey) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(new Uint8Array(derivedKey));
+    });
+  });
 }
 
 async function constantTimeEqual(

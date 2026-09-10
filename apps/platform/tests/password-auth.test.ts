@@ -85,6 +85,20 @@ test("password credentials use a salted slow hash and never store plaintext", as
   assert.equal(await verifyPassword(password, null), false);
 });
 
+test("password KDF avoids the Workers Web Crypto PBKDF2 iteration cap", () => {
+  const passwordModule = readFileSync(
+    new URL("../lib/auth/password.ts", import.meta.url),
+    "utf8",
+  );
+  const derivePasswordHash = passwordModule.slice(
+    passwordModule.indexOf("async function derivePasswordHash"),
+    passwordModule.indexOf("async function constantTimeEqual"),
+  );
+  assert.match(passwordModule, /import \{ pbkdf2 \} from "node:crypto";/u);
+  assert.match(derivePasswordHash, /pbkdf2\(password, salt, iterations, 32, "sha256"/u);
+  assert.doesNotMatch(derivePasswordHash, /crypto\.subtle\.deriveBits/u);
+});
+
 test("password policy supports passphrases without silent truncation", () => {
   assert.deepEqual(validatePassword("a".repeat(PASSWORD_MIN_LENGTH - 1)), {
     ok: false,
