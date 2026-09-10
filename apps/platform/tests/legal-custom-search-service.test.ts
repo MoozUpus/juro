@@ -5,12 +5,20 @@ import test from "node:test";
 
 import { buildCustomBm25Artifacts, customBm25TermHash } from "../lib/legal-corpus/custom-bm25";
 import { buildCustomBm25RuntimeArtifacts } from "../lib/legal-corpus/custom-bm25-runtime";
-import { handleCustomSearchRequest, type CustomSearchEnv }
+import { handleCustomSearchRequest, fuseCustomProvisionMatches, type CustomSearchEnv }
   from "../lib/legal-corpus/custom-search-service";
 
 const RELEASE_ID = "release:staging:current:custom-v1";
 const DENSE_METADATA_RELEASE_ID = "release:staging:current:custom-v0";
 const INSTANCE_ID = "custom-current-staging-v1";
+
+test("fusion retains an explicitly requested provision ahead of shared cross-reference matches", () => {
+  const hits = fuseCustomProvisionMatches(["operative", "cross-reference"], ["cross-reference"], new Set(["operative"]), 1);
+  assert.equal(hits[0]?.itemKey, "operative");
+  assert.ok(hits[0]!.score > 1);
+  assert.equal(fuseCustomProvisionMatches(["operative", "cross-reference"], ["cross-reference"], new Set(), 1)[0]?.itemKey, "cross-reference");
+  assert.deepEqual(fuseCustomProvisionMatches([], [], new Set(), 5), []);
+});
 
 class MemoryR2 {
   readonly objects = new Map<string, Uint8Array>();

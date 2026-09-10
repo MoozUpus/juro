@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { detectArticleNumbers } from "../legal/legal-language";
 
 import {
   analyzeCustomWordTerms,
@@ -557,13 +558,17 @@ export async function queryCustomBm25Runtime(
   bucket: R2Bucket,
   rawDescriptor: CustomBm25RuntimeDescriptor,
   input: { text: string; atEpoch: number; topK: number },
-): Promise<Array<{ ordinal: number; score: number }>> {
+): Promise<Array<{ ordinal: number; score: number; explicitArticleMatch?: true }>> {
   const descriptor = descriptorSchema.parse(rawDescriptor);
   if (!Number.isSafeInteger(input.atEpoch) || !Number.isSafeInteger(input.topK)
     || input.topK < 1 || input.topK > 50) throw new TypeError("CUSTOM_BM25_RUNTIME_QUERY_INVALID");
   const groups = new Map<string, { reference: RuntimeDocumentReference; termHashes: string[] }>();
   const termHashes = await Promise.all([...new Set(analyzeCustomWordTerms(input.text))]
     .sort().map(customBm25TermHash));
+  // Restrict this priority to unambiguous whole-number references. Compound
+  // identifiers require positional evidence that a bag-of-words index lacks.
+  const articleHashes = new Set(await Promise.all(detectArticleNumbers(input.text)
+    .filter(number => /^\d+$/u.test(number)).map(customBm25TermHash)));
   for (const termHash of termHashes) for (const segment of descriptor.segments) {
     const reference = segment.lexicons[termHash[0]!];
     if (!reference) continue;
@@ -605,12 +610,16 @@ export async function queryCustomBm25Runtime(
     block.postings.map((posting) => posting.ordinal)));
   const documents = await readRuntimeDocuments(bucket, descriptor.documents, requestedOrdinals);
   const scores = new Map<number, number>();
+  const explicitArticles = new Set<number>();
   for (const block of blocks) {
     for (const posting of block.postings) {
         const document = documents.get(posting.ordinal);
         if (!document) throw new TypeError("CUSTOM_BM25_RUNTIME_ORDINAL_MISSING");
         if (document.validFromEpoch > input.atEpoch
           || (document.validToEpoch !== null && input.atEpoch >= document.validToEpoch)) continue;
+        if (articleHashes.has(block.termHash) && posting.termFrequencies.article > 0) {
+          explicitArticles.add(posting.ordinal);
+        }
         const fields = ["title", "hierarchy", "article", "text"] as const;
         const score = fields.reduce((sum, field) => sum + scoreCustomBm25Term({
           termFrequency: posting.termFrequencies[field],
@@ -623,7 +632,9 @@ export async function queryCustomBm25Runtime(
         scores.set(posting.ordinal, (scores.get(posting.ordinal) ?? 0) + score);
     }
   }
-  return [...scores].map(([ordinal, score]) => ({ ordinal, score }))
-    .sort((left, right) => right.score - left.score || left.ordinal - right.ordinal)
+  return [...scores].map(([ordinal, score]) => ({ ordinal, score,
+    ...(explicitArticles.has(ordinal) ? {explicitArticleMatch: true as const} : {}) }))
+    .sort((left, right) => Number(!!right.explicitArticleMatch) - Number(!!left.explicitArticleMatch)
+      || right.score - left.score || left.ordinal - right.ordinal)
     .slice(0, input.topK);
 }

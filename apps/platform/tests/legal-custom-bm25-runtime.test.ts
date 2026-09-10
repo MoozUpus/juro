@@ -26,6 +26,26 @@ class MemoryR2 {
   }
 }
 
+test("explicit article retrieval prefers the provision heading over body cross-references", async () => {
+  const built = await buildCustomBm25Artifacts([
+    {segmentId: "base", itemKey: "cross-reference", language: "en", documentType: "law", validFromEpoch: 1, validToEpoch: null,
+      fields: {title: "Employment termination", hierarchy: "Termination grounds", article: "Article 99", text: "Employment termination grounds exceptions under article 72 employment termination grounds"}},
+    {segmentId: "base", itemKey: "operative", language: "en", documentType: "law", validFromEpoch: 1, validToEpoch: null,
+      fields: {title: "Code", hierarchy: "", article: "Article 72", text: "The contract may end on the following grounds."}},
+    {segmentId: "base", itemKey: "different-number", language: "en", documentType: "law", validFromEpoch: 1, validToEpoch: null,
+      fields: {title: "Employment termination", hierarchy: "Termination grounds", article: "Article 172", text: "Employment termination grounds exceptions article 72"}},
+  ], {analyzer: "word-v1"});
+  const runtime = await buildCustomBm25RuntimeArtifacts({releaseId: "release:test:current:custom-v1", sparseManifestSha256: "a".repeat(64), manifest: built.manifest});
+  const bucket = new MemoryR2();
+  bucket.objects.set(runtime.documentsReference.key, runtime.documentsBytes);
+  for (const artifact of built.artifacts) bucket.objects.set(artifact.key, artifact.bytes);
+  const hits = await queryCustomBm25Runtime(bucket as unknown as R2Bucket, runtime.descriptor, {text: "employment termination grounds exceptions article 72", atEpoch: 2, topK: 3});
+  assert.equal(built.manifest.documents.find(doc => doc.ordinal === hits[0]?.ordinal)?.itemKey, "operative");
+  assert.equal(hits.filter(hit => hit.explicitArticleMatch).length, 1);
+  const topical = await queryCustomBm25Runtime(bucket as unknown as R2Bucket, runtime.descriptor, {text: "employment termination grounds exceptions 72", atEpoch: 2, topK: 3});
+  assert.ok(topical.every(hit => !hit.explicitArticleMatch));
+});
+
 test("runtime BM25 projection preserves durable ordinals without loading the JSON document manifest", async () => {
   const built = await buildCustomBm25Artifacts([{
     segmentId: "base", itemKey: "chunk-a", language: "en", documentType: "law",
