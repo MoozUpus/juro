@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { queryCustomBm25Runtime, parseCustomBm25RuntimeDescriptor,
+import { queryCustomBm25RuntimeBatch, parseCustomBm25RuntimeDescriptor,
   resolveCustomBm25RuntimeItemKeys }
   from "./custom-bm25-runtime";
 import { queryCustomDenseLane, buildCustomVectorizeFilter, type CustomVectorSearchIndex }
@@ -205,6 +205,13 @@ async function itemKeysForOrdinals(env: CustomSearchEnv, releaseId: string, ordi
 }
 
 export async function executeCustomSearch(env: CustomSearchEnv, raw: unknown) {
+  const startedAt = Date.now();
+  const timings: Record<string, number> = {};
+  const timed = async <T>(stage: string, operation: () => Promise<T>): Promise<T> => {
+    const started = Date.now();
+    try { return await operation(); }
+    finally { timings[stage] = Date.now() - started; }
+  };
   const input = requestSchema.parse(raw);
   if (env.APP_ENV !== "staging" && env.APP_ENV !== "production") {
     throw new TypeError("CUSTOM_SEARCH_ENVIRONMENT_REJECTED");
@@ -217,30 +224,42 @@ export async function executeCustomSearch(env: CustomSearchEnv, raw: unknown) {
     || (capability.data === "history" && input.endpoint.kind !== "timestamp")) {
     throw new TypeError("CUSTOM_SEARCH_RELEASE_REJECTED");
   }
-  const descriptor = await loadDescriptor(env, input.releaseId);
+  const descriptor = await timed("descriptorMs", () => loadDescriptor(env, input.releaseId));
   const denseMetadataReleaseId = descriptor.denseMetadataReleaseId ?? descriptor.releaseId;
   const queries = "query" in input ? [input.query] : input.queries;
   await reserveQueryBudget(env, input.releaseId, queries.length);
   const atEpoch = Math.floor(new Date(input.endpoint.kind === "timestamp"
     ? input.endpoint.instant : input.currentAt).getTime() / 1_000);
-  const embedding = await queryEmbeddings(env, queries);
-  const results = await Promise.all(queries.map(async (query, queryIndex) => {
-    const [sparse, dense] = await Promise.all([
-      queryCustomBm25Runtime(env.ARTIFACTS, descriptor,
-        { text: query, atEpoch, topK: input.maxResults }),
-      queryCustomDenseLane(env.DENSE, {
+  const lanes = await Promise.allSettled([
+    timed("sparseMs", () => queryCustomBm25RuntimeBatch(env.ARTIFACTS, descriptor,
+      queries.map(text => ({ text, atEpoch, topK: input.maxResults })))),
+    timed("embeddingMs", () => queryEmbeddings(env, queries)).then(async embedding => ({
+      tokenUsage: embedding.tokenUsage,
+      results: await timed("denseMs", () => Promise.all(embedding.vectors.map(vector => queryCustomDenseLane(env.DENSE, {
         releaseId: denseMetadataReleaseId,
-        vector: embedding.vectors[queryIndex]!,
+        vector,
         filter: buildCustomVectorizeFilter({ releaseId: denseMetadataReleaseId, atEpoch }),
         topK: input.maxResults,
-      }),
-    ]);
+      })))),
+    })),
+  ]);
+  const [sparseLane, denseLane] = lanes;
+  console.info(JSON.stringify({ event: "legal.custom_search_lanes", ...timings,
+    elapsedMs: Date.now() - startedAt, formulationCount: queries.length,
+    sparseAvailable: sparseLane.status === "fulfilled", denseAvailable: denseLane.status === "fulfilled" }));
+  if (sparseLane.status === "rejected") throw sparseLane.reason;
+  if (denseLane.status === "rejected") throw denseLane.reason;
+  const ordinals = [...new Set(sparseLane.value.flatMap(hits => hits.map(hit => hit.ordinal)))];
+  const runtimeKeys = await resolveCustomBm25RuntimeItemKeys(env.ARTIFACTS, descriptor, ordinals);
+  const keys = runtimeKeys
+    ? runtimeKeys.map(key => `search-releases/${input.releaseId}/${key}`)
+    : await itemKeysForOrdinals(env, input.releaseId, ordinals);
+  const sparseIdentity = new Map(ordinals.map((ordinal, index) => [ordinal, keys[index]!]));
+  const results = queries.map((_, queryIndex) => {
+    const sparse = sparseLane.value[queryIndex]!;
+    const dense = denseLane.value.results[queryIndex]!;
     const sparseOrdinals = sparse.map((entry) => entry.ordinal);
-    const runtimeKeys = await resolveCustomBm25RuntimeItemKeys(env.ARTIFACTS, descriptor,
-      sparseOrdinals);
-    const sparseKeys = runtimeKeys
-      ? runtimeKeys.map((key) => `search-releases/${input.releaseId}/${key}`)
-      : await itemKeysForOrdinals(env, input.releaseId, sparseOrdinals);
+    const sparseKeys = sparseOrdinals.map(ordinal => sparseIdentity.get(ordinal)!);
     const denseKeys = dense.map((entry) =>
       `search-releases/${input.releaseId}/${entry.itemKey}`);
     const explicitArticleKeys = new Set(sparseKeys.filter((_, index) => sparse[index]!.explicitArticleMatch));
@@ -264,12 +283,12 @@ export async function executeCustomSearch(env: CustomSearchEnv, raw: unknown) {
         fusionScore: entry.score,
       })),
     };
-  }));
+  });
   const batch = customSearchBatchResponseSchema.parse({
     results,
     errors: [],
     searchedInstanceIds: input.instanceIds,
-    tokenUsage: embedding.tokenUsage,
+    tokenUsage: denseLane.value.tokenUsage,
   });
   if (!("query" in input)) return batch;
   return customSearchResponseSchema.parse({

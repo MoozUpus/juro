@@ -22,7 +22,11 @@ test("fusion retains an explicitly requested provision ahead of shared cross-ref
 
 class MemoryR2 {
   readonly objects = new Map<string, Uint8Array>();
+  readonly reads = new Map<string, number>();
+  onRead?: (key: string) => void;
   async get(key: string, options?: { range?: { offset: number; length: number } }) {
+    this.reads.set(key, (this.reads.get(key) ?? 0) + 1);
+    this.onRead?.(key);
     const source = this.objects.get(key);
     if (!source) return null;
     const bytes = options?.range
@@ -71,6 +75,9 @@ test(physicalAlias
     ...(physicalAlias ? {} : { denseMetadataReleaseId: DENSE_METADATA_RELEASE_ID }),
     sparseManifestSha256: "a".repeat(64), manifest: built.manifest });
   const bucket = new MemoryR2();
+  let sparseStarted!: () => void;
+  const sparseReady = new Promise<void>(resolve => { sparseStarted = resolve; });
+  bucket.onRead = key => { if (key === runtime.documentsReference.key) sparseStarted(); };
   bucket.objects.set(runtime.descriptorReference.key, runtime.descriptorBytes);
   bucket.objects.set(runtime.documentsReference.key, runtime.documentsBytes);
   for (const page of runtime.ordinalMappingPages) bucket.objects.set(page.reference.key, page.bytes);
@@ -128,7 +135,14 @@ test(physicalAlias
       embeddingBatchSizes.push(inputs.length);
       activeEmbeddingRequests++;
       maximumEmbeddingConcurrency = Math.max(maximumEmbeddingConcurrency, activeEmbeddingRequests);
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      if (!oversizedPosting) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([sparseReady, new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("sparse retrieval waited for embeddings")), 1_000);
+          })]);
+        } finally { clearTimeout(timer); }
+      }
       activeEmbeddingRequests--;
       assert.deepEqual(calls.slice(0, 3), ["component", "reserve", "ledger"]);
       return Response.json({ model: "text-embedding-3-large", object: "list",
@@ -160,6 +174,7 @@ test(physicalAlias
     valid_to_epoch: { $gt: 1_788_566_400 },
   });
   if (!oversizedPosting) {
+    bucket.reads.clear();
     const batchBody = JSON.stringify({ releaseId: RELEASE_ID, instanceIds: [INSTANCE_ID],
       queries: ["work", "contract"], currentAt: "2026-09-05T00:00:00.000Z",
       endpoint: { kind: "current" }, maxResults: 50, vectorThreshold: 0 });
@@ -179,6 +194,8 @@ test(physicalAlias
     assert.deepEqual(batchResult.results.map((entry) => entry.hits[0]?.itemKey), [fullKey, fullKey]);
     assert.equal(batchResult.tokenUsage, 2);
     assert.equal(embeddingBatchSizes.at(-1), 2);
+    assert.equal(bucket.reads.get(runtime.documentsReference.key), 1,
+      "the service must share sparse evidence-table reads across formulations");
     activeEmbeddingRequests = 0;
     maximumEmbeddingConcurrency = 0;
     const concurrent = await Promise.all([1, 2].map(() => handleCustomSearchRequest(new Request(
