@@ -6,6 +6,8 @@ import {
   classifyTargetPrivateNames,
   handleTargetReasoningServiceRequest,
   parseTargetInterpretationProviderOutput,
+  parseTargetRequirementSupport,
+  prioritizeTargetRequirements,
   selectTargetProvisions,
   targetSupportAssessmentJsonSchema,
   targetRequirementSupportContext,
@@ -13,6 +15,26 @@ import {
   TARGET_PRIVATE_NAME_CLASSIFICATION_PATH,
   TARGET_PROVISION_SELECTION_PATH,
 } from "../lib/legal-corpus/target-reasoning-service";
+
+test("optional expansion overflow does not discard validated support mappings", () => {
+  const mappings = [{itemKey: "source", supportedRequirementIds: ["requirement"], governingRequirementIds: ["requirement"]}];
+  const additionalRequirements = Array.from({length: 4}, (_, index) => ({sourceItemKey: "source", readingId: "reading", statement: `Referenced operative condition ${index}`, priority: "core"}));
+  const parsed = parseTargetRequirementSupport({mappings, additionalRequirements});
+  assert.deepEqual(parsed.mappings, mappings);
+  assert.equal(parsed.additionalRequirements.length, 3);
+  assert.throws(() => parseTargetRequirementSupport({mappings: [{itemKey: "source"}], additionalRequirements}));
+});
+
+test("operative references from later assessment batches outrank optional details and duplicate renditions", () => {
+  const suggestion = (statement: string, sourceItemKey: string, priority: "core" | "supporting") => ({statement, sourceItemKey, priority, readingId: "reading"});
+  const result = prioritizeTargetRequirements([
+    suggestion("Optional procedure", "first", "supporting"),
+    suggestion("Optional procedure", "translation", "supporting"),
+    suggestion("Optional remedy", "second", "supporting"),
+    suggestion("Operative exception", "late", "core"),
+  ]);
+  assert.deepEqual(result.map(item => item.statement), ["Operative exception", "Optional procedure", "Optional remedy"]);
+});
 
 test("reasoning calls use strict provider schemas and interpretation normalizes nullable optionals", () => {
   const visit = (value: unknown): void => {

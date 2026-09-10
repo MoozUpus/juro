@@ -28,6 +28,7 @@ const retrievalPlannerSchema = z.object({
   generalQuery: z.string().trim().min(1).max(240),
   concepts: z.array(z.object({ statement: z.string().trim().min(1).max(240),
     query: z.string().trim().min(1).max(240), priority: z.enum(["core", "supporting"]) }).strict()).min(1).max(5),
+  consequences: z.object({statement: z.string().trim().min(1).max(240), query: z.string().trim().min(1).max(240)}).strict().nullable(),
 }).strict();
 
 const retrievalPlannerProviderSchema = z.object({
@@ -35,6 +36,7 @@ const retrievalPlannerProviderSchema = z.object({
   generalQuery: z.string(),
   concepts: z.array(z.object({ statement: z.string(), query: z.string(),
     priority: z.enum(["core", "supporting"]) }).strict()).min(1).max(5),
+  consequences: z.object({statement: z.string(), query: z.string()}).strict().nullable().optional(),
 }).strict();
 
 const retrievalUnderstandingJsonSchema = z.toJSONSchema(retrievalPlannerSchema, {
@@ -184,7 +186,7 @@ export async function understandLegalRetrievalQuery(input: {
       "For procedural deadlines, identify the available judicial and extrajudicial forums and materially different claim types before drafting concepts. Do not assume court is the only forum when the user has not specified one. Duration, commencement and restoration for the same scope belong together, not in duplicate concepts that displace another forum or claim type.",
       "Preserve the timed action and actor in every deadline requirement and query. A person's deadline to file a claim is distinct from an authority's time to process or decide it. For a limitation/filing question, search filing periods in each relevant forum, not processing durations or general procedure in their place.",
       "For whether an action is permitted, cover its general controlling rule at the user's stated stage, then the nonredundant special rules for distinct statuses. Do not replace a rule during a stage with a rule after that stage. Keep a status-specific rule and its exceptions together rather than duplicating the same search as separate concepts.",
-      "For questions about the lawfulness of an action affecting another person's rights, include a narrow supporting search for legal consequences of unlawfully performing that same action in those circumstances. Cover both protection/remedies and potential legal liability where material; a search limited to filing a complaint must not displace liability research. Preserve actor, action and status in the query; do not search generic penalties, assume wrongdoing or name a criminal offence without evidence. Do not displace the general rule or distinct core statuses with consequences.",
+      "consequences is a separate required field: for questions about the lawfulness of an action affecting another person's rights, supply a narrow statement and query for legal liability for unlawfully performing that same action in those circumstances. Otherwise return null. Do not duplicate this in concepts or combine liability with recovery, compensation or complaint procedure in one compound requirement; material remedies may be a separate supporting concept. Preserve actor, action and status; do not search generic penalties, assume wrongdoing or name a criminal offence without evidence. Keep this independent of core statuses so they do not displace consequences or vice versa. A search limited to filing a complaint does not cover liability.",
       "generalQuery is a separate concise statutory search for the general controlling rule. Retain the requested action and stage, but OMIT special-status modifiers already addressed by concepts, so the general rule is not hidden by narrower matches. This must be a meaningful legal search phrase, not a broad domain name.",
       "For Uzbek questions include Russian statutory equivalents where useful, but keep standaloneQuestion in the user's language.",
       "Do not invent an act, article, fact, quotation, or legal outcome.",
@@ -223,6 +225,11 @@ export async function understandLegalRetrievalQuery(input: {
     alternatives: [concept.query],
     priority: concept.priority,
   }));
+  if (result.data.consequences) normalizedConcepts.push({
+    statement: result.data.consequences.statement,
+    alternatives: [result.data.consequences.query],
+    priority: "supporting",
+  });
   const derivedQueries = [result.data.generalQuery, ...result.data.concepts.map((concept) => concept.query)].slice(0, 3);
   return normalizeLegalRetrievalUnderstanding({
     standaloneQuestion: result.data.standaloneQuestion,
