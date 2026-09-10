@@ -24,6 +24,7 @@ import { assertCompleteCorpusCurrentInterval, resolveCompleteCorpusEvidence, res
   type LegalEvidenceBucket } from "./target-evidence";
 import { resolveProvisionLineage } from "./target-lineage";
 import { createNormalizedArticleEvidenceReader } from "./normalized-article-evidence";
+import { createRuntimeReferenceDiscovery } from "./runtime-reference-discovery";
 import { createReleaseLifecycle, resolveStagingHistoryComparisonEvaluationSet } from "./target-release";
 import {
   createTargetLegalAnswerRetriever,
@@ -544,6 +545,7 @@ function createRuntimeRetriever(
   const currentArticleContext = createNormalizedArticleEvidenceReader(evidenceBucket);
   const historicalArticleContext = historyEvidenceBucket
     ? createNormalizedArticleEvidenceReader(historyEvidenceBucket) : currentArticleContext;
+  const candidateCatalog = createRuntimeCandidateCatalog(db, customArtifactBucket ?? evidenceBucket, r2IdentityByRendition);
   return createTargetLegalAnswerRetriever({
     environment,
     interpreter: {
@@ -560,11 +562,9 @@ function createRuntimeRetriever(
     },
     releaseResolver,
     candidateIndex,
-    candidateCatalog: createRuntimeCandidateCatalog(
-      db,
-      customArtifactBucket ?? evidenceBucket,
-      r2IdentityByRendition,
-    ),
+    candidateCatalog,
+    referenceDiscovery: customArtifactBucket ? createRuntimeReferenceDiscovery({db, bucket: customArtifactBucket,
+      identities: r2IdentityByRendition, revalidate: candidateCatalog.revalidate}) : undefined,
     evidenceResolver: {
       async resolveControlling(provisionRenditionId, endpoint, context) {
         if (context.release.instances.some((instance) =>

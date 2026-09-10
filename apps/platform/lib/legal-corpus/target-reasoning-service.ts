@@ -7,6 +7,7 @@ import {
   selectionCandidateSchema,
   selectionDecisionSchema,
   TARGET_TOTAL_FORMULATION_LIMIT,
+  TARGET_SUPPORT_CANDIDATE_LIMIT,
   type QuestionInterpretationPlan,
   type SelectionCandidate,
   type SelectionDecision,
@@ -47,7 +48,7 @@ const interpretationRequestSchema = z.object({
 }).strict();
 const selectionRequestSchema = z.object({
   plan: questionInterpretationPlanSchema,
-  candidates: z.array(selectionCandidateSchema).max(48),
+  candidates: z.array(selectionCandidateSchema).max(TARGET_SUPPORT_CANDIDATE_LIMIT),
   repairAttempted: z.boolean(),
 }).strict();
 
@@ -57,7 +58,7 @@ const supportMappingSchema = z.object({
   governingRequirementIds: z.array(z.string().min(1).max(200)).max(40).default([]),
 }).strict();
 const supportAssessmentProviderSchema = z.object({
-  mappings: z.array(supportMappingSchema).max(48),
+  mappings: z.array(supportMappingSchema).max(TARGET_SUPPORT_CANDIDATE_LIMIT),
   additionalRequirements: z.array(z.object({
     sourceItemKey: z.string().min(1).max(700),
     readingId: z.string().min(1).max(200),

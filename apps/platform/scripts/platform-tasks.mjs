@@ -157,6 +157,8 @@ const coreTestFiles = [
   "tests/legal-target-reasoning-service.test.ts",
   "tests/legal-target-retrieval.test.ts",
   "tests/legal-custom-bm25-runtime.test.ts",
+  "tests/legal-custom-membership-lookup.test.ts",
+  "tests/legal-custom-reference-lookup.test.ts",
   "tests/legal-custom-search-service.test.ts",
   "tests/legal-retrieval-understanding.test.ts",
   "tests/grounding-numbers.test.ts",

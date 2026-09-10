@@ -332,6 +332,8 @@ type Dependencies = {
       currentAt: string,
     ): Promise<RevalidatedCandidate[]>;
   };
+  referenceDiscovery?: (candidates: readonly SelectionCandidate[], endpoint: TemporalEndpoint,
+    release: PinnedCandidateRelease, currentAt: string) => Promise<RevalidatedCandidate[]>;
   evidenceResolver: {
     resolveControlling(
       provisionRenditionId: string,
@@ -479,6 +481,7 @@ function mergeCandidateCoverage(
 }
 
 const MAX_SELECTION_CANDIDATES = 48;
+export const TARGET_SUPPORT_CANDIDATE_LIMIT = MAX_SELECTION_CANDIDATES + 12;
 const MAX_SELECTION_CANDIDATES_PER_FORMULATION = 8;
 
 function candidateScore(entry: RevalidatedCandidate): number {
@@ -747,6 +750,8 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       if (candidates.length === 0) return insufficient(plan);
 
       const evidenceByRendition = new Map<string, ControllingEvidenceResolution>();
+      const referenceKeys = new Set<string>();
+      const referenceArticles = new Map<string, string>();
       let retainedItemKeys: string[] = [];
       const discoveredLocations = () => [...new Set([...evidenceByRendition.values()]
         .map(evidence => evidence.controlling.officialCitation.url))].slice(0, 12);
@@ -754,7 +759,10 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         sourceUnavailableSchema.parse({ ...sourceUnavailable(code), discoveredOfficialUrls: discoveredLocations(),
           coverageRequirements: plan.readings.flatMap(reading => reading.requirements) });
       const hydrateSelectionCandidates = async (): Promise<SelectionCandidate[]> => {
-        const pool = boundedSelectionPool(candidates!, retainedItemKeys);
+        const base = boundedSelectionPool(candidates!.filter(candidate => !candidate.candidate.referenceOrigin), retainedItemKeys);
+        const pool = [...base, ...candidates!.filter(candidate => referenceKeys.has(candidate.candidate.itemKey)
+          && !base.some(item => item.provisionRenditionId === candidate.provisionRenditionId))];
+        if (pool.length > TARGET_SUPPORT_CANDIDATE_LIMIT) throw new TypeError("REFERENCE_EVIDENCE_CEILING_EXCEEDED");
         const failureCodes = new Map<string, number>();
         const hydrated = await Promise.all(pool.map(async (candidate) => {
           try {
@@ -766,6 +774,12 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
                 { release, currentAt },
               );
               evidenceByRendition.set(candidate.provisionRenditionId, evidence);
+            }
+            const expectedArticle = referenceArticles.get(candidate.candidate.itemKey);
+            if (expectedArticle && /(?:Article|Статья|Ст\.)\s+(\d+(?:[.-]\d+)?)\s*$/iu.exec(
+              evidence.materialCitation.label)?.[1] !== expectedArticle) {
+              failureCodes.set("REFERENCE_ARTICLE_MISMATCH", (failureCodes.get("REFERENCE_ARTICLE_MISMATCH") ?? 0) + 1);
+              return null;
             }
             return selectionCandidateSchema.parse({
               candidate,
@@ -797,7 +811,30 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
 
       let decision: SelectionDecision;
       try {
-        const hydrated = await timed("initial_evidence", hydrateSelectionCandidates);
+        let hydrated = await timed("initial_evidence", hydrateSelectionCandidates);
+        if (dependencies.referenceDiscovery) {
+          let references: RevalidatedCandidate[] = [];
+          try {
+            references = await timed("reference_discovery", () => dependencies.referenceDiscovery!(hydrated, endpoint, release, currentAt));
+            if (references.length > 12) throw new TypeError("REFERENCE_EVIDENCE_CEILING_EXCEEDED");
+          } catch {
+            // Optional discovery never substitutes unvalidated reference text.
+            // Missing operative evidence can still trigger bounded repair.
+            console.warn(JSON.stringify({event: "legal.reference_discovery_unavailable"}));
+            references = [];
+          }
+          if (references.length) {
+            validatedPackets.push(references);
+            references.forEach(candidate => {
+              referenceKeys.add(candidate.candidate.itemKey);
+              if (candidate.candidate.referenceOrigin) referenceArticles.set(candidate.candidate.itemKey,
+                candidate.candidate.referenceOrigin.article);
+            });
+            candidates = mergeRevalidatedCandidates(validatedPackets);
+            if (!candidates) return unavailableWithDiscovery("INDEXED_REVALIDATION_FAILED");
+            hydrated = await timed("reference_evidence", hydrateSelectionCandidates);
+          }
+        }
         decision = selectionDecisionSchema.parse(await timed("initial_support", () => dependencies.provisionSelector.select({
           plan,
           candidates: hydrated,
