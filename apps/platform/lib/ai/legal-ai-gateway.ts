@@ -474,7 +474,7 @@ function groundedMainPoint(result: LegalChatResponse, claims: readonly LegalGate
   const branches = (result.conditionalBranches ?? []).filter((branch) => claims.some((claim) =>
     claim.text === nonRepeatingLegalText(branch.condition, branch.outcome))).slice(0, 3);
   if (branches.length > 0) return branches.map((branch) =>
-    `${plainGroundedText(branch.condition)}: ${plainGroundedText(branch.outcome)}`).join(" ");
+    `${branches.length > 1 ? "- " : ""}${plainGroundedText(branch.condition)}: ${plainGroundedText(branch.outcome)}`).join("\n\n");
   // The finding explanation is already validated. Its title is presentation
   // metadata and must not be pasted in front of the conclusion a second time.
   const finding = result.confirmedFindings.find((item) => claims.some((claim) =>

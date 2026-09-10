@@ -4,10 +4,50 @@ import test from "node:test";
 import {
   DIRECT_RETRIEVAL_BUDGET_MS,
   directSourceCards,
+  fetchDirectOfficialLexDocument,
   retrieveDirectLegalSources as retrieveDirectLegalSourcesActual,
 } from "../lib/legal/direct-retrieval";
 
 type Call = { url: string; init: RequestInit | undefined };
+
+test("known official candidates are fetched and validated without repeating title discovery", async () => {
+  const result = await retrieveDirectLegalSourcesActual("трудовой договор", "ru", {
+    knownOfficialUrls: ["https://lex.uz/ru/docs/777", "https://evil.example/docs/777"],
+    searchQueries: ["трудовой договор"],
+    fetchImpl: async input => {
+      const url = String(input);
+      assert.ok(url === "https://lex.uz/robots.txt" || url === "https://lex.uz/ru/docs/777");
+      return url.endsWith("/robots.txt") ? new Response("User-agent: *\nAllow: /", {headers:{"content-type":"text/plain"}})
+        : responseHtml(officialDocument("Трудовой договор", "Статья 17. Условия договора"));
+    },
+  });
+  assert.equal(result.sources.length, 1);
+  assert.equal(result.sources[0]?.verificationState, "direct_validated");
+});
+
+test("explicit complete-article evidence retains every list continuation and stops at the next article", async () => {
+  const items = Array.from({length: 12}, (_, index) => `<p>${index + 1}) Условие перечня ${index + 1}: ${"Подробное обязательное условие применения нормы. ".repeat(9)}</p>`).join("");
+  const html = `<!doctype html><main class="page-document-content"><h1>Закон о договорах</h1>
+    <h2>Статья 17. Основания применения</h2><p>Применяются следующие основания:</p>${items}
+    <h2>Статья 18. Другая норма</h2><p>Не относящееся к запрошенной статье положение.</p></main>`;
+  const {source} = await fetchDirectOfficialLexDocument("https://lex.uz/ru/docs/777", "ru", {
+    query: "Article 17", completeArticle: true,
+    fetchImpl: async input => String(input).endsWith("/robots.txt")
+      ? new Response("User-agent: *\nAllow: /", {headers: {"content-type":"text/plain"}})
+      : responseHtml(html),
+  });
+  const text = source.spans!.map(span => span.text).join(" ");
+  for (let index=1; index<=12; index++) assert.ok(text.includes(`Условие перечня ${index}:`));
+  assert.doesNotMatch(text, /Другая норма|Не относящееся/u);
+  assert.ok(source.spans!.every(span => span.article?.startsWith("Статья 17.")));
+  assert.ok(source.spans!.length > 1);
+  await assert.rejects(fetchDirectOfficialLexDocument("https://lex.uz/ru/docs/777", "ru", {
+    query: "Article 17", completeArticle: true,
+    fetchImpl: async input => String(input).endsWith("/robots.txt")
+      ? new Response("User-agent: *\nAllow: /", {headers: {"content-type":"text/plain"}})
+      : responseHtml(`<main class="page-document-content"><h1>Закон о договорах</h1><h2>Статья 17. Основания</h2><p>${"длинное условие ".repeat(250)}</p></main>`),
+  }), /LEGAL_SOURCE_PROVISION_CONTEXT_LIMIT/u, "complete-article evidence must never silently truncate a long sentence");
+});
 
 function responseHtml(body: string): Response {
   return new Response(body, { headers: { "content-type": "text/html; charset=utf-8" } });

@@ -600,7 +600,30 @@ async function requestScopedSourceSpans(input: {
   contentSha256: string;
   articleNumberRequested: string | null;
   terms: readonly RelevanceTerm[];
+  completeRequestedArticle?: boolean;
 }): Promise<LegalSourceSpan[]> {
+  if (input.completeRequestedArticle && input.articleNumberRequested) {
+    let active = false;
+    let heading: string | null = null;
+    const parts: string[] = [];
+    for (const block of input.snapshot.blocks) {
+      if (block.semanticRole === "article" || ARTICLE_HEADING_START.test(block.text)) {
+        active = articleNumberFromText(block.text) === input.articleNumberRequested;
+        if (active) heading = block.text.slice(0, 240);
+      } else if (block.semanticRole === "chapter" || block.semanticRole === "section") active = false;
+      if (active) parts.push(block.text);
+    }
+    if (!heading || parts.length < 2) throw new Error("LEGAL_SOURCE_PROVISION_INCOMPLETE");
+    const fullText = parts.join(" ").replace(/\s+/gu, " ").trim();
+    const chunks = splitLegalText(fullText);
+    if (chunks.length > MAX_SOURCE_SPANS || chunks.join(" ").replace(/\s+/gu, " ").trim() !== fullText) {
+      throw new Error("LEGAL_SOURCE_PROVISION_CONTEXT_LIMIT");
+    }
+    return Promise.all(chunks.map(async (text, index) => ({
+      id: `span:${input.contentSha256.slice(0, 12)}:article:${input.articleNumberRequested}:${index}`,
+      article: heading, paragraph: null, text, textSha256: await sha256Hex(text), quality: "high" as const,
+    })));
+  }
   let currentArticle: string | null = null;
   const articleHeadingsByNumber = new Map<string, string>();
   for (const block of input.snapshot.blocks) {
@@ -746,6 +769,8 @@ class OfficialDirectProvider implements LegalSourceProvider {
     private readonly signal: AbortSignal,
     private readonly articleNumberRequested: string | null,
     private readonly terms: readonly RelevanceTerm[],
+    private readonly completeArticle = false,
+    private readonly documentTimeoutMs = 1_800,
   ) {}
 
   async search(query: string, locale: "ru" | "uz"): Promise<string[]> {
@@ -759,7 +784,7 @@ class OfficialDirectProvider implements LegalSourceProvider {
       fetchImpl: this.fetchImpl,
       now: this.now,
       maxBytes: DOCUMENT_MAX_BYTES,
-      timeoutMs: 1_800,
+      timeoutMs: this.documentTimeoutMs,
       // The request is initiated by the person asking JURO, not by the
       // scheduled crawler. We still check robots disallow rules, canonical
       // HTTPS paths, redirects and response integrity; only the crawler delay
@@ -782,6 +807,7 @@ class OfficialDirectProvider implements LegalSourceProvider {
       contentSha256: fetched.contentSha256,
       articleNumberRequested: this.articleNumberRequested,
       terms: this.terms,
+      completeRequestedArticle: this.completeArticle,
     });
     // Direct-answer source cards predate the `uz-Cyrl` value. Preserve the
     // exact UZC page in the packet while using Uzbek query quality rules; the
@@ -862,6 +888,7 @@ export async function retrieveDirectLegalSources(
     ) => Promise<string[]>;
     /** Model-understood, request-scoped Lex searches. No topic dictionary is used. */
     searchQueries?: readonly string[] | Promise<readonly string[]>;
+    knownOfficialUrls?: readonly string[];
   } = {},
 ): Promise<DirectLegalRetrieval> {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -895,7 +922,8 @@ export async function retrieveDirectLegalSources(
     const initialProvider = new OfficialDirectProvider(
       "lex", locale, boundedFetch, now, wait, signal, articleNumberRequested, baseTerms,
     );
-    const originalCandidates = initialProvider.search(initialQuery, locale).then(
+    const knownUrls = validatedOfficialDocumentUrls(options.knownOfficialUrls ?? [], locale).slice(0, MAX_CANDIDATES_PER_PROVIDER);
+    const originalCandidates = (knownUrls.length ? Promise.resolve(knownUrls) : initialProvider.search(initialQuery, locale)).then(
       (candidates) => ({ candidates, error: null as unknown }),
       (error: unknown) => ({ candidates: [] as string[], error }),
     );
@@ -910,7 +938,8 @@ export async function retrieveDirectLegalSources(
     if (queries.length === 0) queries.push(question);
     const terms = relevanceTerms([question, ...queries].join(" "));
     const provider = new OfficialDirectProvider(
-      "lex", locale, boundedFetch, now, wait, signal, articleNumberRequested, terms,
+      "lex", locale, boundedFetch, now, wait, signal, articleNumberRequested, terms, false,
+      knownUrls.length ? Math.min(4_000, budgetMs) : 1_800,
     );
     const sourceLimit = Math.max(1, Math.min(options.limit ?? 4, 8));
     const seenUrls = new Set<string>();
@@ -1064,6 +1093,7 @@ export async function fetchDirectOfficialLexDocument(
     signal?: AbortSignal;
     budgetMs?: number;
     query?: string;
+    completeArticle?: boolean;
   } = {},
 ): Promise<{ source: LegalSourceContext; evidence: DirectLegalSourceEvidence }> {
   const reference = classifyLegalSourceUrl(url);
@@ -1089,6 +1119,8 @@ export async function fetchDirectOfficialLexDocument(
       signal,
       articleNumberRequested,
       terms,
+      options.completeArticle ?? false,
+      options.completeArticle ? Math.min(4_000, budgetMs) : 1_800,
     ).fetchDocument(reference.canonicalUrl);
   } finally {
     clearTimeout(timer);
