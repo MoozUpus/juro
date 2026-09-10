@@ -17,8 +17,8 @@ export function createRuntimeReferenceDiscovery(input: {
 }) {
   return async (candidates: readonly SelectionCandidate[], endpoint: TemporalEndpoint,
     release: PinnedCandidateRelease, currentAt: string): Promise<RevalidatedCandidate[]> => {
-    const requests = new Map<string, {query: LegalReferenceQuery; source: SelectionCandidate;
-      identity: CustomRuntimeLegalIdentity}>();
+    const unresolved = new Map<string, {query: LegalReferenceQuery; source: SelectionCandidate;
+      identity: CustomRuntimeLegalIdentity; referringConcepts: Set<string>}>();
     for (const source of candidates) {
       const identity = input.identities.get(source.candidate.provisionRenditionId);
       if (!identity) continue;
@@ -29,9 +29,16 @@ export function createRuntimeReferenceDiscovery(input: {
         if (present) continue;
         const query = {textRevisionId: identity.textRevisionId, languageTag: identity.languageTag, article};
         const key = legalReferenceKey(query);
-        if (!requests.has(key) && requests.size < 3) requests.set(key, {query, source, identity});
+        const request = unresolved.get(key) ?? {query, source, identity, referringConcepts: new Set<string>()};
+        request.referringConcepts.add(source.candidate.provisionConceptId);
+        unresolved.set(key, request);
       }
     }
+    // Shared operative dependencies should not lose the bounded lookup to
+    // whichever incidental citation appeared first in search order. Count
+    // distinct provisions, not duplicate chunks or translations of one rule.
+    const requests = new Map([...unresolved].sort(([, left], [, right]) =>
+      right.referringConcepts.size - left.referringConcepts.size).slice(0, 3));
     if (!requests.size) return [];
     const row = await input.db.prepare(`SELECT root.mapping_inventory_sha256 AS sourceInventorySha256,
       root.mapping_count AS memberCount,root.runtime_descriptor_r2_key AS descriptorKey,

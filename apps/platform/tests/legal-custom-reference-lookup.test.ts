@@ -122,6 +122,22 @@ test("reference discovery preserves all matching members and isolates revisions 
   const operative = {...referring, citationLabel: "Code — Article 732", provisionText: "Complete substantive grounds of this provision.", candidate: discovered[0]!};
   assert.deepEqual(await discover([referring, operative], {kind: "current"}, release, "2026-09-11T00:00:00.000Z"), []);
   assert.equal(validations, 1, "already supplied operative text needs no lookup or revalidation");
+  const otherReferring = (suffix: string, article: string) => {
+    const candidate = structuredClone(referring);
+    candidate.candidate.provisionRenditionId = `rendition:origin-${suffix}`;
+    candidate.candidate.provisionConceptId = `concept:origin-${suffix}`;
+    candidate.candidate.candidate.itemKey = `search-releases/${releaseId}/origin-${suffix}`;
+    candidate.provisionText = `The grounds are defined by Article ${article} of this Code.`;
+    identities.set(candidate.candidate.provisionRenditionId, {...identities.get("rendition:origin")!,
+      provisionRenditionId: candidate.candidate.provisionRenditionId,
+      provisionConceptId: candidate.candidate.provisionConceptId});
+    return candidate;
+  };
+  const repeatedReference = await discover([
+    ...["910", "911", "912"].map(article => otherReferring(article, article)),
+    referring, otherReferring("second-rule", "732"),
+  ], {kind: "current"}, release, "2026-09-11T00:00:00.000Z");
+  assert.equal(repeatedReference.length, 2, "a reference shared by distinct rules must not lose discovery to three earlier incidental references");
   rejectMembership = true;
   await assert.rejects(discover([referring], {kind: "current"}, release, "2026-09-11T00:00:00.000Z"), /Not an accepted member/u);
   rejectMembership = false;

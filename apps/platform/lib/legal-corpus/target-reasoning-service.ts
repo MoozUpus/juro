@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { selectionReferenceContext } from "./selection-reference-context";
+import { selectionAssessmentBatches, selectionReferenceContext } from "./selection-reference-context";
 
 import { callOpenAiStructured } from "../document-builder/ai/openai";
 import {
@@ -317,10 +317,7 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
   const value = selectionRequestSchema.parse(input);
   if (value.candidates.length === 0) return { mappings: [], additionalRequirements: [] };
   const requirements = targetRequirementSupportContext(value.plan);
-  const candidateBatches: SelectionCandidate[][] = [];
-  for (let offset = 0; offset < value.candidates.length; offset += SUPPORT_ASSESSMENT_BATCH_SIZE) {
-    candidateBatches.push(value.candidates.slice(offset, offset + SUPPORT_ASSESSMENT_BATCH_SIZE));
-  }
+  const candidateBatches = selectionAssessmentBatches(value.candidates, SUPPORT_ASSESSMENT_BATCH_SIZE);
   const results = await Promise.all(candidateBatches.map(async (candidates) => {
     const itemKeyByAlias = new Map(candidates.map((candidate, index) => [
       `candidate-${index + 1}`,
