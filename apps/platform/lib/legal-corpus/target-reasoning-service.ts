@@ -257,7 +257,7 @@ function candidatesForRequirement(
     (candidate.candidate.candidate.formulationMatches ?? [])
       .filter((match) => relevantFormulationIds.has(match.formulationId))
       .reduce((score, match) => score + 1 / (60 + match.rank), 0);
-  return ranked.filter((candidate) => supportedByKey.get(
+  const ordered = ranked.filter((candidate) => supportedByKey.get(
     candidate.candidate.candidate.itemKey)?.has(requirementId)).sort((left, right) =>
     Number(governingByKey.get(right.candidate.candidate.itemKey)?.has(requirementId) ?? false)
       - Number(governingByKey.get(left.candidate.candidate.itemKey)?.has(requirementId) ?? false)
@@ -266,19 +266,33 @@ function candidatesForRequirement(
     || requirementRetrievalScore(right) - requirementRetrievalScore(left)
     || candidateScore(right) - candidateScore(left)
     || left.candidate.candidate.itemKey.localeCompare(right.candidate.candidate.itemKey));
+  const operative = ordered.filter(candidate => governingByKey.get(
+    candidate.candidate.candidate.itemKey)?.has(requirementId));
+  const concepts = new Set<string>();
+  return (operative.length > 0 ? operative : ordered.slice(0, 1)).filter(candidate => {
+    const concept = candidate.candidate.provisionConceptId;
+    if (concepts.has(concept)) return false;
+    concepts.add(concept);
+    return true;
+  });
 }
 
 export type TargetRequirementSupport = z.input<typeof supportAssessmentProviderSchema>;
 
-export async function assessTargetRequirementSupport(input: z.input<typeof selectionRequestSchema>): Promise<TargetRequirementSupport> {
-  const value = selectionRequestSchema.parse(input);
-  if (value.candidates.length === 0) return { mappings: [], additionalRequirements: [] };
-  const requirements = value.plan.readings.flatMap((reading) => reading.requirements.map((requirement) => ({
+export function targetRequirementSupportContext(plan: QuestionInterpretationPlan) {
+  return plan.readings.flatMap((reading) => reading.requirements.map((requirement) => ({
     id: requirement.id,
     statement: requirement.statement,
     priority: requirement.priority ?? "core",
+    readingId: reading.id,
     reading: reading.statement,
   })));
+}
+
+export async function assessTargetRequirementSupport(input: z.input<typeof selectionRequestSchema>): Promise<TargetRequirementSupport> {
+  const value = selectionRequestSchema.parse(input);
+  if (value.candidates.length === 0) return { mappings: [], additionalRequirements: [] };
+  const requirements = targetRequirementSupportContext(value.plan);
   const candidateBatches: SelectionCandidate[][] = [];
   for (let offset = 0; offset < value.candidates.length; offset += SUPPORT_ASSESSMENT_BATCH_SIZE) {
     candidateBatches.push(value.candidates.slice(offset, offset + SUPPORT_ASSESSMENT_BATCH_SIZE));
@@ -303,8 +317,11 @@ export async function assessTargetRequirementSupport(input: z.input<typeof selec
         "When both a directly governing codified provision and interpretive, procedural, or cross-referencing guidance support a requirement, retain both mappings; downstream selection decides priority.",
         "Do not answer the user's question, invent rules, infer missing article text, or use outside knowledge.",
         "A provision may support requirements from any retrieval formulation, and may support none.",
-        "When a supporting provision explicitly cites another provision that is necessary to understand a supported requirement and no existing requirement covers it, add one concise additional requirement grounded only in that citation.",
-        "Do not add broad background, merely related provisions, or an additional requirement without an explicit reference in the supplied text.",
+        "Use the supplied readingId for additionalRequirements; never infer an identifier from a reading's text.",
+        "When a provision explicitly cites operative grounds, exceptions or conditions needed to understand the answer, propose a separate concise additional requirement for that reference unless already covered. A bare cross-reference is not the content of the referenced rule.",
+        "Prioritize unresolved operative cross-references, then distinct relevant provisions not supporting any existing requirement. Numbered grounds are unresolved unless their substantive text is supplied; a broadly worded requirement does not resolve them. Do not spend additionalRequirements on subclauses or details already present in a provision mapped to an existing requirement: the answer can use that supplied text without another search.",
+        "Also propose a supporting additional requirement when supplied provision text directly establishes a distinct, materially relevant consequence, remedy, sanction or qualification missing from the current plan, even without an explicit cross-reference. It must concern the same actor, action and circumstances, not merely the same legal field. A shared topic or duplicate formulation is not a distinct contribution. Keep each statement under 200 characters. These proposals trigger evidence checking, not automatic inclusion in the answer.",
+        "Do not add broad background, speculative liability, outside knowledge, or a requirement without grounding in the supplied provision text. Preserve every factual trigger and scope limitation; never assume a violation occurred.",
         "Return only item keys and requirement identifiers supplied in the input.",
       ].join(" "),
       input: {
@@ -433,6 +450,23 @@ export function selectTargetProvisions(
   const ranked = [...value.candidates].sort((left, right) =>
     candidateScore(right) - candidateScore(left)
     || left.candidate.candidate.itemKey.localeCompare(right.candidate.candidate.itemKey));
+  const readingIds = new Set(value.plan.readings.map((reading) => reading.id));
+  const existingStatements = new Set(requirements.map((requirement) => requirement.statement
+    .normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase()));
+  const additions = (!value.repairAttempted && value.plan.formulations.length < TARGET_TOTAL_FORMULATION_LIMIT
+    ? support.additionalRequirements : []).filter((addition) =>
+    readingIds.has(addition.readingId)
+    && candidateByKey.has(addition.sourceItemKey)
+    && !existingStatements.has(addition.statement.normalize("NFKC")
+      .replace(/\s+/gu, " ").trim().toLocaleLowerCase())).slice(0, 3)
+    .map((addition, index) => ({
+      readingId: addition.readingId,
+      requirement: {
+        id: `related-${addition.readingId}-${index + 1}`.slice(0, 200),
+        statement: addition.statement,
+        priority: addition.priority,
+      },
+    }));
   const missing = requirements.find((requirement) => !ranked.some((candidate) =>
     supportedByKey.get(candidate.candidate.candidate.itemKey)?.has(requirement.id)));
   if (missing) {
@@ -441,22 +475,23 @@ export function selectTargetProvisions(
       && formulation.requirementIds[0] === missing.id);
     if (value.repairAttempted
       || value.plan.formulations.length >= TARGET_TOTAL_FORMULATION_LIMIT
-      || (missing.priority === "supporting" && hasDedicatedFormulation)) {
+      || (missing.priority === "supporting" && hasDedicatedFormulation && additions.length === 0)) {
       const missingCore = requirements.filter((requirement) => requirement.priority !== "supporting"
         && !ranked.some((candidate) => supportedByKey.get(
           candidate.candidate.candidate.itemKey)?.has(requirement.id)));
       if (missingCore.length === 0) {
         const selected = new Map<string, Set<string>>();
         for (const requirement of requirements) {
-          const candidate = candidatesForRequirement(
+          for (const candidate of candidatesForRequirement(
             ranked, supportedByKey, governingByKey, requirement.id,
-            formulationIdsByRequirement)[0];
-          if (!candidate) continue;
-          const itemKey = candidate.candidate.candidate.itemKey;
-          const covered = selected.get(itemKey) ?? new Set<string>();
-          covered.add(requirement.id);
-          selected.set(itemKey, covered);
+            formulationIdsByRequirement)) {
+            const itemKey = candidate.candidate.candidate.itemKey;
+            const covered = selected.get(itemKey) ?? new Set<string>();
+            covered.add(requirement.id);
+            selected.set(itemKey, covered);
+          }
         }
+        if (selected.size > 12) return selectionDecisionSchema.parse({outcome: "rejected"});
         const missingSupporting = requirements.filter((requirement) => requirement.priority === "supporting"
           && !ranked.some((candidate) => supportedByKey.get(
             candidate.candidate.candidate.itemKey)?.has(requirement.id))).map(({ id }) => id);
@@ -480,61 +515,43 @@ export function selectTargetProvisions(
       outcome: "repair",
       repairFormulation: {
         id: `repair-${missing.id}`.slice(0, 200),
-        text: missing.statement.slice(0, 900),
+        text: [missing.statement, ...additions.map(({ requirement }) => requirement.statement)].join(" ").slice(0, 900),
         privateNameSpans: [],
-        readingIds: [missing.readingId],
-        requirementIds: [missing.id],
+        readingIds: [...new Set([missing.readingId, ...additions.map(({ readingId }) => readingId)])],
+        requirementIds: [missing.id, ...additions.map(({ requirement }) => requirement.id)],
         kind: "repair",
       },
-      additionalRequirements: [],
+      additionalRequirements: additions,
     });
   }
-  if (!value.repairAttempted
-    && value.plan.formulations.length < TARGET_TOTAL_FORMULATION_LIMIT) {
-    const readingIds = new Set(value.plan.readings.map((reading) => reading.id));
-    const candidateKeys = new Set(value.candidates.map((candidate) => candidate.candidate.candidate.itemKey));
-    const existingStatements = new Set(requirements.map((requirement) => requirement.statement
-      .normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase()));
-    const additions = support.additionalRequirements.filter((addition) =>
-      readingIds.has(addition.readingId)
-      && candidateKeys.has(addition.sourceItemKey)
-      && !existingStatements.has(addition.statement.normalize("NFKC")
-        .replace(/\s+/gu, " ").trim().toLocaleLowerCase())).slice(0, 3)
-      .map((addition, index) => ({
-        readingId: addition.readingId,
-        requirement: {
-          id: `related-${addition.readingId}-${index + 1}`.slice(0, 200),
-          statement: addition.statement,
-          priority: addition.priority,
-        },
-      }));
-    if (additions.length > 0) {
-      return selectionDecisionSchema.parse({
-        outcome: "repair",
-        repairFormulation: {
-          id: `repair-${additions[0]!.requirement.id}`.slice(0, 200),
-          text: additions.map(({ requirement }) => requirement.statement).join(" ").slice(0, 900),
-          privateNameSpans: [],
-          readingIds: [...new Set(additions.map(({ readingId }) => readingId))],
-          requirementIds: additions.map(({ requirement }) => requirement.id),
-          kind: "repair",
-        },
-        additionalRequirements: additions,
-      });
-    }
+  if (additions.length > 0) {
+    return selectionDecisionSchema.parse({
+      outcome: "repair",
+      repairFormulation: {
+        id: `repair-${additions[0]!.requirement.id}`.slice(0, 200),
+        text: additions.map(({ requirement }) => requirement.statement).join(" ").slice(0, 900),
+        privateNameSpans: [],
+        readingIds: [...new Set(additions.map(({ readingId }) => readingId))],
+        requirementIds: additions.map(({ requirement }) => requirement.id),
+        kind: "repair",
+      },
+      additionalRequirements: additions,
+    });
   }
   const selected = new Map<string, Set<string>>();
   const renditions = new Set<string>();
   for (const requirement of requirements) {
-    const candidate = candidatesForRequirement(
+    const candidates = candidatesForRequirement(
       ranked, supportedByKey, governingByKey, requirement.id,
-      formulationIdsByRequirement)[0];
-    if (!candidate) return selectionDecisionSchema.parse({ outcome: "rejected" });
-    renditions.add(candidate.candidate.provisionRenditionId);
-    const itemKey = candidate.candidate.candidate.itemKey;
-    const covered = selected.get(itemKey) ?? new Set<string>();
-    covered.add(requirement.id);
-    selected.set(itemKey, covered);
+      formulationIdsByRequirement);
+    if (candidates.length === 0) return selectionDecisionSchema.parse({ outcome: "rejected" });
+    for (const candidate of candidates) {
+      renditions.add(candidate.candidate.provisionRenditionId);
+      const itemKey = candidate.candidate.candidate.itemKey;
+      const covered = selected.get(itemKey) ?? new Set<string>();
+      covered.add(requirement.id);
+      selected.set(itemKey, covered);
+    }
   }
   if (renditions.size > 12) return selectionDecisionSchema.parse({ outcome: "rejected" });
   const isRussian = value.plan.answerLanguage.toLowerCase().startsWith("ru");
