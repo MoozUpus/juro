@@ -88,3 +88,15 @@ test("the target receives the general rule query alongside separate status-speci
   assert.deepEqual(hints.formulations, [question, generalQuery, ...concepts]);
   assert.deepEqual(hints.requirements.map(item => item.statement), concepts);
 });
+
+test("bounded planning retains a search for every core scope before broad formulations", () => {
+  const concepts = Array.from({ length: 5 }, (_, index) => `distinct scope ${index}`);
+  const plan = normalizeLegalRetrievalUnderstanding({
+    standaloneQuestion: "A general legal question", corpusQueries: ["general controlling rule"],
+    requiredConcepts: concepts.map(statement => ({ statement, alternatives: [statement], priority: "core" })),
+    lexSearchQueries: concepts, webSearchQuery: "A general legal question",
+  }, "A general legal question");
+  const hints = targetQuestionPlanningHints(plan, "en")!;
+  assert.ok(concepts.every(concept => hints.formulations.includes(concept)));
+  assert.equal(hints.formulations.length, 6);
+});
