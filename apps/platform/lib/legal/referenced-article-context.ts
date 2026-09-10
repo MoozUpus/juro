@@ -8,7 +8,7 @@ function articleNumber(value: string | null | undefined): string | undefined {
 /** Follow only explicit references to this same instrument, not citations to
  * other codes that happen to share an article number. These are discovery
  * candidates; separately fetched text still goes through answer grounding. */
-export function referencedArticleContextRequests(sources: readonly LegalSourceContext[]) {
+export function referencedArticleContextRequests(sources: readonly LegalSourceContext[], onlyIncompleteArticles = false) {
   const requests = new Map<string, { url: string; article: string }>();
   for (const source of sources) {
     if (source.sourceType !== "lex" || source.applicabilityStatus === "historical") continue;
@@ -18,7 +18,7 @@ export function referencedArticleContextRequests(sources: readonly LegalSourceCo
     const own = articleNumber(source.article);
     const references = new Set<string>();
     if (own && /:\s*$/u.test(text)) references.add(own);
-    for (const pattern of [
+    for (const pattern of onlyIncompleteArticles ? [] : [
       /(?:стать(?:[её]й|[яеию])|article)\s+\d+(?:[.-]\d+)?\s+(?:(?:настоящего|этого)\s+(?:Кодекса|Закона)|of\s+this\s+(?:Code|Act|Law))/giu,
       /(?:ushbu|мазкур)\s+(?:kodeks|qonun|Кодекс|Қонун)[^.;\n]{0,45}?\d+\s*[-–]?\s*(?:modda|модда)[^\s,;.]*/giu,
     ]) for (const match of text.matchAll(pattern)) {

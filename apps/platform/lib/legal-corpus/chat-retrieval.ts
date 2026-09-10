@@ -436,8 +436,9 @@ async function completeArticleContexts(retrieval: LegalChatSourceRetrieval, opti
   locale: "ru" | "uz"; signal?: AbortSignal; budgetMs: number;
   reader?: typeof fetchDirectOfficialLexDocument;
   onStarted?: () => void | Promise<void>;
+  onlyIncompleteArticles?: boolean;
 }): Promise<LegalChatSourceRetrieval> {
-  const requests = referencedArticleContextRequests(retrieval.sources);
+  const requests = referencedArticleContextRequests(retrieval.sources, options.onlyIncompleteArticles);
   if (requests.length === 0) return retrieval;
   await options.onStarted?.();
   const reader = options.reader ?? fetchDirectOfficialLexDocument;
@@ -576,6 +577,10 @@ export async function retrieveCorpusAwareLegalSources(input: {
             locale: input.locale, signal: targetController.signal,
             budgetMs: targetTimeoutMs - (performance.now() - targetStartedAt),
             reader: input.articleContextReader, onStarted: input.onLiveSearchStarted,
+            // The selector has already assessed material references and used
+            // its bounded repair. Do not discover unrelated references again
+            // after complete indexed coverage; recover only truncated text.
+            onlyIncompleteArticles: true,
           });
           if (indexed.coverageStatus === "good_coverage") return indexed;
         }
