@@ -1,6 +1,6 @@
 # Bound complete verified evidence context
 
-Status: proposed
+Status: accepted
 
 A Provision Set can contain many short operative provisions. Rejecting every set with more than twelve sources discards complete evidence independently of its size. Selecting only twelve can instead remove a material rule, exception or condition.
 

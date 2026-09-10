@@ -198,7 +198,7 @@ function unavailableTargetCeilingCoverage(now: Date,
     errors: [{ code: "TARGET_EVIDENCE_CEILING_EXCEEDED" }],
     evidence: [],
     coverageStatus: "no_coverage",
-    coverageRequirements: requirements.map(requirement => ({...requirement, sourceIds: []})),
+    coverageRequirements: requirements.map(requirement => ({...requirement, priority: requirement.priority ?? "core", sourceIds: []})),
     retrievalTelemetry: {
       indexedHitCount: 0,
       liveHitCount: 0,
