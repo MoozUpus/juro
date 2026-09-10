@@ -25,12 +25,14 @@ const retrievalUnderstandingSchema = z.object({
 // the same standalone question and statutory query hypotheses.
 const retrievalPlannerSchema = z.object({
   standaloneQuestion: z.string().trim().min(1).max(900),
+  generalQuery: z.string().trim().min(1).max(240),
   concepts: z.array(z.object({ statement: z.string().trim().min(1).max(240),
     query: z.string().trim().min(1).max(240), priority: z.enum(["core", "supporting"]) }).strict()).min(1).max(5),
 }).strict();
 
 const retrievalPlannerProviderSchema = z.object({
   standaloneQuestion: z.string(),
+  generalQuery: z.string(),
   concepts: z.array(z.object({ statement: z.string(), query: z.string(),
     priority: z.enum(["core", "supporting"]) }).strict()).min(1).max(5),
 }).strict();
@@ -76,6 +78,7 @@ export function targetQuestionPlanningHints(understanding: LegalRetrievalUnderst
       statement: concept.statement, priority: concept.priority ?? "core",
     })),
     formulations: [...new Set([understanding.standaloneQuestion.slice(0, 500),
+      ...understanding.corpusQueries.slice(1, 2),
       ...understanding.requiredConcepts.map((concept) => concept.alternatives[0] ?? concept.statement)])].slice(0, 6),
   };
 }
@@ -173,6 +176,10 @@ export async function understandLegalRetrievalQuery(input: {
       "For time limits, search for relevant forums, kinds of claim, commencement and exceptions. For an action, search its governing rule and material conditions or exceptions. Do not add protected statuses, prohibitions or liability when unrelated.",
       "Preserve all materially plausible meanings of ambiguous everyday wording instead of silently choosing one narrower meaning.",
       "When an everyday term can describe distinct legal statuses or stages, give each materially different interpretation its own core requirement and search phrase. Do not replace the original ambiguous term with a narrower status in standaloneQuestion. Procedure for one interpretation must not displace coverage of another interpretation.",
+      "Each requirement must cover ONE materially distinct legal status, stage, forum or kind of claim. It may include the rule, starting point, conditions and exceptions for that SAME scope. Never combine DIFFERENT statuses or forums into one requirement: a provision about one alternative cannot cover another. Cover distinct scopes before supporting procedure.",
+      "For procedural deadlines, identify the available judicial and extrajudicial forums and materially different claim types before drafting concepts. Do not assume court is the only forum when the user has not specified one. Duration, commencement and restoration for the same scope belong together, not in duplicate concepts that displace another forum or claim type.",
+      "For whether an action is permitted, cover its general controlling rule at the user's stated stage, then the nonredundant special rules for distinct statuses. Do not replace a rule during a stage with a rule after that stage. Keep a status-specific rule and its exceptions together rather than duplicating the same search as separate concepts.",
+      "generalQuery is a separate concise statutory search for the general controlling rule. Retain the requested action and stage, but OMIT special-status modifiers already addressed by concepts, so the general rule is not hidden by narrower matches. This must be a meaningful legal search phrase, not a broad domain name.",
       "For Uzbek questions include Russian statutory equivalents where useful, but keep standaloneQuestion in the user's language.",
       "Do not invent an act, article, fact, quotation, or legal outcome.",
       "Do not answer the question, invent facts, select an outcome, quote law, or assert an act or article unless the user explicitly named it.",
@@ -210,7 +217,7 @@ export async function understandLegalRetrievalQuery(input: {
     alternatives: [concept.query],
     priority: concept.priority,
   }));
-  const derivedQueries = result.data.concepts.map((concept) => concept.query).slice(0, 3);
+  const derivedQueries = [result.data.generalQuery, ...result.data.concepts.map((concept) => concept.query)].slice(0, 3);
   return normalizeLegalRetrievalUnderstanding({
     standaloneQuestion: result.data.standaloneQuestion,
     requiredConcepts: normalizedConcepts,

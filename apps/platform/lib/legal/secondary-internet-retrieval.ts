@@ -158,7 +158,10 @@ export function selectRelevantSecondaryPassage(input: {
   }
   if (!best) return null;
   const minimumQueryMatches = Math.min(2, Math.max(1, queryTokens.size));
-  if (best.proposedCoverage < 0.30 && best.queryMatches < minimumQueryMatches) return null;
+  // A matching headline or navigation label cannot verify the selected excerpt.
+  // When research proposed a passage, require substantial overlap with that
+  // passage itself; broad query words must not rescue unrelated page content.
+  if (proposedTokens.size > 0 ? best.proposedCoverage < 0.65 : best.queryMatches < minimumQueryMatches) return null;
   return best.passage.slice(0, 1_200);
 }
 

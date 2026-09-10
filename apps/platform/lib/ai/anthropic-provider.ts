@@ -139,7 +139,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
         : undefined,
       maxAttempts: 1,
       maxTokens: interactive
-        ? (input.answerMode === "short" ? 1_000 : 2_200)
+        ? (input.answerMode === "short" ? 1_600 : 3_200)
         : (input.answerMode === "short" ? 2_400 : 4_200),
       requestId: input.requestId,
       model,
@@ -157,7 +157,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
         "Копируй sourceId буквально. Каждый confirmedFinding, actionPlan и risk должен быть одним атомарным утверждением, повторять основные юридические термины одного sourceSpan и ссылаться ровно на принадлежащий ему sourceId.",
         "Не добавляй actionPlan, risks или deadlines без sourceIds. При наличии verifiedSources подтверждённый пользовательский текст будет собран сервером только из claims, прошедших exact-span проверку.",
         "Всегда верни sources=[]: сервер восстановит карточки Lex из sourceIds подтверждённых claims. Не дублируй URL и metadata источника.",
-        "В fast mode сокращай глубину рассуждения, а не полезность ответа. При answerMode=short summary и answer — не длиннее 15 слов и не более 2 confirmedFindings. При answerMode=detailed дай содержательный разбор подтверждённой части: до 4 confirmedFindings, 4 actionPlan и 3 risks.",
+        "В fast mode сокращай глубину рассуждения, а не полезность ответа. При answerMode=short summary и answer — не длиннее 15 слов и не более 2 confirmedFindings. При answerMode=detailed дай содержательный разбор подтверждённой части: до 6 confirmedFindings, 3 actionPlan и 3 risks; summary и answer — одно-два предложения, не повторяющие полный разбор.",
         LEGAL_ANSWER_MARKDOWN_RULE,
         LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
         LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,

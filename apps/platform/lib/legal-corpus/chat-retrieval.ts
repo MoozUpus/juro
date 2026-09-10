@@ -207,8 +207,13 @@ function unavailableTargetCeilingCoverage(now: Date): LegalChatSourceRetrieval {
   };
 }
 
-function citationArticle(label: string): string | null {
-  return label.match(/(?:article|статья|ст\.?|modda|модда)\s*(\d+(?:[.-]\d+)?)/iu)?.[1] ?? null;
+export function targetCitationArticle(label: string, quotation: string): string | null {
+  const article = label.match(/(?:article|статья|ст\.?|modda|модда)\s*(\d+(?:[.-]\d+)?)/iu)?.[1] ?? null;
+  // Some legacy chunks were indexed from numbered list items. Their leading
+  // item number is not evidence of an article number. Retain the document
+  // citation without inventing article precision when those numbers coincide.
+  const itemNumber = quotation.match(/^\s*(\d+(?:[.-]\d+)?)[).]\s/u)?.[1];
+  return itemNumber && itemNumber === article ? null : article;
 }
 
 function targetAnswerDetails(result: TargetLegalAnswerResult) {
@@ -325,7 +330,7 @@ async function withTargetCoverage(
     return {
         id,
         actTitle: citation.label.split(" — ")[0]?.trim() || citation.label,
-        actIdentifier: statement.provisionConceptId,
+        actIdentifier: null,
         officialUrl: citation.url,
         revisionDate: historicalInstant,
         lastCheckedAt: checkedAt,
@@ -336,7 +341,7 @@ async function withTargetCoverage(
         verificationState: "verified",
         verifiedAt: checkedAt,
         contentSha256: statement.evidenceSha256,
-        article: citationArticle(citation.label),
+        article: targetCitationArticle(citation.label, statement.controllingQuotation),
         excerpt: statement.controllingQuotation.slice(0, 1_200),
         effectiveDate: historicalInstant,
         applicabilityStatus: historicalInstant ? "historical" : "current",
@@ -344,7 +349,7 @@ async function withTargetCoverage(
         retrievalSelection: "semantic_reranker",
         spans: [{
           id,
-          article: citationArticle(citation.label),
+          article: targetCitationArticle(citation.label, statement.controllingQuotation),
           paragraph: null,
           text: statement.controllingQuotation,
           textSha256,

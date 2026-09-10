@@ -8,6 +8,7 @@ import { z } from "zod";
  */
 
 import { containsLegalSourceUiNoise } from "../legal/source-parser";
+import { groundingNumericTokens } from "../legal/grounding-numbers";
 import { canonicalSecondaryInternetUrl } from "../legal/secondary-internet-url";
 import { parsePrivateDocumentLocator } from "../document-analysis/private-document-locator";
 import { AiUnavailableError } from "../document-builder/ai/openai";
@@ -258,7 +259,7 @@ function sharesStem(left: string, right: string): boolean {
  * negatives, so length — not a list of words — decides what must be matched.
  */
 function numericTokens(value: string): string[] {
-  return [...new Set(value.match(/\b\d+(?:[.,-]\d+)*\b/gu) ?? [])];
+  return groundingNumericTokens(value);
 }
 
 function spanCoverage(text: string, span: LegalSourceSpan): number {
@@ -289,8 +290,8 @@ function validateSpanForClaim(
   if (containsUnvalidatedHttpLink(claim.rawText ?? claim.text, allowedUrls)) return false;
   if (span.quality !== "high" || containsLegalSourceUiNoise(span.text)) return false;
   if (!/^[a-f0-9]{64}$/u.test(span.textSha256)) return false;
-  const spanText = span.text.toLocaleLowerCase();
-  if (numericTokens(claim.text).some((token) => !spanText.includes(token.toLocaleLowerCase()))) return false;
+  const spanNumbers = new Set(numericTokens(span.text));
+  if (numericTokens(claim.text).some((token) => !spanNumbers.has(token))) return false;
   const coverage = spanCoverage(claim.text, span);
   const termCount = legalTerms(plainGroundedText(claim.text)).length;
   return coverage >= 0.35 && (termCount < 4 || coverage * termCount >= 2);
@@ -468,6 +469,12 @@ function groundedMainPoint(result: LegalChatResponse, claims: readonly LegalGate
     && !containsUnvalidatedHttpLink(summary, new Set())
     && !/^(?:Ст\.?|Статья|Article)\s*\d/iu.test(summary)
   ) return summary;
+  // Conditional outcomes cover material alternatives better than an arbitrary
+  // first finding, which may explain only a narrow exception or later stage.
+  const branches = (result.conditionalBranches ?? []).filter((branch) => claims.some((claim) =>
+    claim.text === nonRepeatingLegalText(branch.condition, branch.outcome))).slice(0, 3);
+  if (branches.length > 0) return branches.map((branch) =>
+    `${plainGroundedText(branch.condition)}: ${plainGroundedText(branch.outcome)}`).join(" ");
   // The finding explanation is already validated. Its title is presentation
   // metadata and must not be pasted in front of the conclusion a second time.
   const finding = result.confirmedFindings.find((item) => claims.some((claim) =>
