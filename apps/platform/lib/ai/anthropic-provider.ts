@@ -1,4 +1,5 @@
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider-models";
+import { referencedLegalSourceIds } from "../legal/referenced-article-context";
 import { callAnthropicStructured } from "../document-builder/ai/anthropic";
 import { AiUnavailableError } from "../document-builder/ai/openai";
 import { runtimeEnv } from "../document-builder/storage/runtime";
@@ -194,6 +195,8 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
         conversationHistory: input.conversationHistory ?? [],
         verifiedSources: input.sources.map((source, index) => ({
           sourceId: `s${index + 1}`,
+          referencedSourceIds: referencedLegalSourceIds(source, input.sources)
+            .map(id => `s${input.sources.findIndex(other => other.id === id) + 1}`),
           sourceType: source.sourceType,
           sourceClass: source.sourceClass ?? "OFFICIAL_LEGISLATION",
           actTitle: source.actTitle,

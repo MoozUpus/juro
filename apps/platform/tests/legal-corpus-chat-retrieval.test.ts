@@ -8,7 +8,7 @@ import {
 } from "../lib/legal-corpus/chat-retrieval";
 import type { LiveLexRetrievalResult } from "../lib/legal/live-lex-retrieval";
 import { legalDatabaseFreshnessFromAsOf } from "../lib/legal/verified-retrieval";
-import { referencedArticleContextRequests, selectReferencedArticleContext } from "../lib/legal/referenced-article-context";
+import { referencedArticleContextRequests, referencedLegalSourceIds, selectReferencedArticleContext } from "../lib/legal/referenced-article-context";
 
 const now = new Date("2026-08-15T00:00:00.000Z");
 const checkedAt = "2026-08-14T23:00:00.000Z";
@@ -93,6 +93,24 @@ test("article context follows only unresolved same-instrument references and nev
   assert.deepEqual(referencedArticleContextRequests([{ ...referring, applicabilityStatus: "historical" }]), []);
   assert.equal(selectReferencedArticleContext(source, "27"), null);
   assert.equal(selectReferencedArticleContext({ ...source, verificationState: "verified" }, "9"), null);
+});
+
+test("synthesis reference links preserve instrument, language, revision and complete text boundaries", () => {
+  const source = liveResult().sources[0]!;
+  const referring = {...source, article: "17", spans: [{...source.spans![0]!,
+    text: "Исключения установлены статьей 27 настоящего Кодекса. Статья 33 другого Закона."}]};
+  const target = {...source, id: "operative", article: "27", spans: [{...source.spans![0]!,
+    text: "Статья 27. Применяются основания прекращения полномочий, установленные настоящей статьей."}]};
+  const packet = [referring, target,
+    {...target, id: "foreign", officialUrl: "https://lex.uz/docs/888"},
+    {...target, id: "translation", locale: "uz"},
+    {...target, id: "old", revisionDate: "2025-01-01"},
+    {...target, id: "historical", applicabilityStatus: "historical" as const},
+    {...target, id: "guidance", sourceClass: "OFFICIAL_GOVERNMENT_GUIDANCE" as const},
+    {...target, id: "unfinished", spans: [{...target.spans[0]!, text: "Статья 27. Применяются следующие основания прекращения полномочий:"}]},
+    {...target, id: "other-reference", article: "33"}];
+  assert.deepEqual(referencedLegalSourceIds(referring, packet), ["operative"]);
+  assert.deepEqual(referencedLegalSourceIds(target, packet), []);
 });
 
 test("chat retrieval uses the R2-native target service before live Lex", async () => {

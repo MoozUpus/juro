@@ -483,8 +483,18 @@ function groundedVisibleAnswer(
   return aiText(locale, `Краткий вывод: ${statements.join(" ")}`, `Qisqa xulosa: ${statements.join(" ")}`, `Key finding: ${statements.join(" ")}`);
 }
 
-function groundedMainPoint(result: LegalChatResponse, claims: readonly LegalGatewayClaim[]): string {
+function groundedMainPoint(result: LegalChatResponse, claims: readonly LegalGatewayClaim[],
+  requirements: LegalChatRequest["coverageRequirements"] = []): string {
   const summary = plainGroundedText(result.summary);
+  const supportedFindings = result.confirmedFindings.filter((item) => claims.some((claim) =>
+    claim.text === nonRepeatingLegalText(item.title, item.explanation)));
+  const governingFindings = supportedFindings.filter(item => item.answerRole === "governing_rule");
+  const forumFindings = requirements.filter(requirement => requirement.priority === "core"
+    && requirement.scopeKind === "forum").flatMap(requirement => {
+      const finding = governingFindings.find(item => item.requirementIds?.includes(requirement.id)
+        && item.sourceIds.some(id => requirement.sourceIds.includes(id)));
+      return finding ? [finding] : [];
+    });
   const summarySourceIds = result.summarySourceIds;
   const summaryClaims = summarySourceIds
     ? claims.filter(claim => claim.sourceId !== null && summarySourceIds.includes(claim.sourceId)) : claims;
@@ -492,6 +502,7 @@ function groundedMainPoint(result: LegalChatResponse, claims: readonly LegalGate
   const terms = legalTerms(summary);
   const covered = terms.filter(evidenceTermMatcher(evidenceText)).length;
   const acceptedSummary = summary.length <= 650 && terms.length > 0 && covered / terms.length >= 0.8
+    && forumFindings.every(finding => finding.sourceIds.some(id => summarySourceIds?.includes(id)))
     && (!summarySourceIds || (summarySourceIds.length > 0
       && summarySourceIds.every(id => summaryClaims.some(claim => claim.sourceId === id))))
     && numericTokens(summary).every((token) => numericTokens(evidenceText).includes(token))
@@ -504,9 +515,13 @@ function groundedMainPoint(result: LegalChatResponse, claims: readonly LegalGate
   if (acceptedSummary) return summary;
   // Synthesis orders findings with the ordinary governing rule first. Keep
   // that validated conclusion ahead of branches that may contain only exceptions.
-  const supportedFindings = result.confirmedFindings.filter((item) => claims.some((claim) =>
-    claim.text === nonRepeatingLegalText(item.title, item.explanation)));
-  const finding = supportedFindings.find(item => item.answerRole === "governing_rule") ?? supportedFindings[0];
+  const finding = governingFindings[0] ?? supportedFindings[0];
+  // Keep independent forum rules together when their complete validated prose
+  // fits a concise summary. Never cut a sentence or its legal conditions.
+  const ordinaryRules = [...new Set([finding, ...forumFindings].filter(
+    (item): item is NonNullable<typeof item> => Boolean(item)))];
+  const ordinaryText = ordinaryRules.map(item => plainGroundedText(item.explanation)).join(" ");
+  if (ordinaryRules.length > 1 && ordinaryText.length <= 650) return ordinaryText;
   if (finding) return plainGroundedText(finding.explanation);
   const branches = (result.conditionalBranches ?? []).filter((branch) => claims.some((claim) =>
     claim.text === nonRepeatingLegalText(branch.condition, branch.outcome))).slice(0, 3);
@@ -937,7 +952,7 @@ export function validateLegalGatewayAnswer(input: {
     ...grounded,
     responseKind: fallback || input.run.sourceFallback || input.result.responseKind === "clarification_required"
       ? "clarification_required" : "answer",
-    summary: groundedMainPoint(grounded, publishable),
+    summary: groundedMainPoint(grounded, publishable, input.coverageRequirements),
     answer: groundedVisibleAnswer(publishable, input.locale, false, input.answerMode === "detailed" ? 8 : 3),
     referenceNotes: [],
     clarificationQuestions: sanitizeClarificationQuestions(grounded.clarificationQuestions, input.locale),
@@ -949,12 +964,14 @@ export function validateLegalGatewayAnswer(input: {
     evidenceMode,
     coverageGaps: [],
   };
-  const mainFinding = grounded.confirmedFindings.find(finding =>
+  const mainFindings = grounded.confirmedFindings.filter(finding =>
     groundedTextComparisonKey(finding.explanation) === groundedTextComparisonKey(groundedResult.summary)
     || groundedTextComparisonKey(nonRepeatingLegalText(finding.title, finding.explanation))
-      === groundedTextComparisonKey(groundedResult.summary));
+      === groundedTextComparisonKey(groundedResult.summary)
+    || groundedResult.summary.includes(plainGroundedText(finding.explanation)));
   const keptSummary = groundedTextComparisonKey(grounded.summary) === groundedTextComparisonKey(groundedResult.summary);
-  groundedResult.summarySourceIds = (keptSummary ? grounded.summarySourceIds : undefined) ?? mainFinding?.sourceIds
+  groundedResult.summarySourceIds = (keptSummary ? grounded.summarySourceIds : undefined)
+    ?? (mainFindings.length ? [...new Set(mainFindings.flatMap(finding => finding.sourceIds))] : undefined)
     ?? [...new Set(publishable.flatMap(claim => claim.sourceId ? [claim.sourceId] : []))];
   // Only findings that survived exact claim/span validation may account for a
   // requirement. Retrieval provenance or a dropped finding cannot cover it.

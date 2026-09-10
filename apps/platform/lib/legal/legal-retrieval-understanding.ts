@@ -28,7 +28,10 @@ const retrievalUnderstandingSchema = z.object({
 const retrievalPlannerSchema = z.object({
   standaloneQuestion: z.string().trim().min(1).max(900),
   generalQuery: z.string().trim().min(1).max(240),
-  personalStatuses: z.array(z.string().trim().min(1).max(240)).max(2),
+  personalStatuses: z.array(z.object({status: z.string().trim().min(1).max(100),
+    query: z.string().trim().min(1).max(240)}).strict()).max(2),
+  forums: z.array(z.object({forum: z.string().trim().min(1).max(100),
+    query: z.string().trim().min(1).max(240)}).strict()).max(2),
   concepts: z.array(z.object({ statement: z.string().trim().min(1).max(240),
     scopeKind: z.enum(["personal_status", "action_stage", "forum", "claim_kind"]),
     priority: z.enum(["core", "supporting"]) }).strict()).max(2),
@@ -38,7 +41,8 @@ const retrievalPlannerSchema = z.object({
 const retrievalPlannerProviderSchema = z.object({
   standaloneQuestion: z.string(),
   generalQuery: z.string(),
-  personalStatuses: z.array(z.string()).max(2),
+  personalStatuses: retrievalPlannerSchema.shape.personalStatuses,
+  forums: retrievalPlannerSchema.shape.forums,
   concepts: z.array(z.object({ statement: z.string(),
     scopeKind: z.enum(["personal_status", "action_stage", "forum", "claim_kind"]),
     priority: z.enum(["core", "supporting"]) }).strict()).max(2),
@@ -136,7 +140,7 @@ export function normalizeLegalRetrievalUnderstanding(
   const corpusQueries = generatedCorpusQueries.length > 0
     ? generatedCorpusQueries
     : query ? [query] : [];
-  const requiredConcepts = value.requiredConcepts.slice(0, 6).flatMap((concept) => {
+  const requiredConcepts = value.requiredConcepts.flatMap((concept) => {
     const alternatives = [...new Set(concept.alternatives
       .map((candidate) => normalize(candidate, 240))
       .filter(Boolean))].slice(0, 5);
@@ -190,7 +194,8 @@ export async function understandLegalRetrievalQuery(input: {
     instructions: [
       "Create a compact retrieval plan for an Uzbekistan legal question in the user's language.",
       "Resolve conversation references in standaloneQuestion while preserving actors, action, status, circumstances, date, and outcome.",
-      "generalQuery is the independently researchable ordinary governing rule at the user's stated action and stage. It becomes the first core coverage requirement. personalStatuses contains up to two independent search requirements for WHO the person is; concepts contains up to two other nonredundant scopes such as stages, forums or claim kinds. Select them from the question, never a fixed topic template.",
+      "generalQuery is the independently researchable ordinary governing rule at the user's stated action and stage. It becomes the first core coverage requirement. personalStatuses separately names WHO the person is and supplies a query for that status. forums separately names WHERE a claim is filed and supplies its filing query. concepts contains other nonredundant stages or claim kinds. Select these dimensions from the question, never a fixed topic template. Across all arrays plus generalQuery and non-null consequences, return at most six independent requirements. Remove duplicate scopes, never merge or displace a material scope with optional detail.",
+      "In personalStatuses, status must name an underlying personal category, not the current leave, action or event. Its query preserves that category and the requested action. In forums, forum must name a judicial or extrajudicial body materially relevant to a filing or limitation question. Its query asks the applicant's filing period in that forum, without assuming that every possible actor has standing there. Leave unspecified actors neutral until evidence establishes standing. Return empty forums when forums do not change the requested answer. Never place the same forum in concepts or replace a forum with processing time, commencement or restoration of the same filing period.",
       "Analyze personalStatuses separately from concepts. A personal status need not be asserted as a fact to be a materially plausible conditional reading of everyday umbrella wording. Do not equate someone's underlying status with their current leave, procedure or event. Research the independent status rules even if an event-specific rule may also apply. Return an empty personalStatuses array only when no materially plausible status changes the answer; never fill it with event stages or remedies.",
       "Each concept.statement is a concise statutory search phrase identifying ONE independently supportable legal question, without asserting its answer. It serves as both the coverage requirement and search formulation; do not repeat it in another field. Use core for distinct scopes necessary to answer the question and supporting for useful procedure not directly requested. Do not duplicate generalQuery.",
       "Classify each concept's scopeKind. A personal_status describes who the person is and can apply even outside an action_stage; a stage describes when the action happens. Inspect these dimensions independently before selecting concepts. A rule during an event cannot stand in for a person's independent status protection. A condition or exception within one scope is not a new scope: keep it in the same requirement instead of displacing another status, stage, forum or claim kind. Do not invent a specific termination ground, exception or liability category before evidence is retrieved.",
@@ -237,7 +242,8 @@ export async function understandLegalRetrievalQuery(input: {
   });
 
   const normalizedConcepts: LegalRetrievalUnderstandingProviderOutput["requiredConcepts"] = [{statement: result.data.generalQuery, alternatives: [result.data.generalQuery], priority: "core", scopeKind: "general"},
-    ...result.data.personalStatuses.map(statement => ({statement, alternatives: [statement], priority: "core" as const, scopeKind: "personal_status" as const})),
+    ...result.data.personalStatuses.map(({query: statement}) => ({statement, alternatives: [statement], priority: "core" as const, scopeKind: "personal_status" as const})),
+    ...result.data.forums.map(({query: statement}) => ({statement, alternatives: [statement], priority: "core" as const, scopeKind: "forum" as const})),
     ...result.data.concepts.map((concept) => ({
     statement: concept.statement,
     alternatives: [concept.statement],

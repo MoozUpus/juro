@@ -36,7 +36,7 @@ test("provider-sized retrieval plans are bounded without discarding semantic que
   const plan = normalizeLegalRetrievalUnderstanding({
     standaloneQuestion: "  прекращение трудового договора с работником в отпуске по уходу за ребёнком  ",
     corpusQueries: Array.from({ length: 8 }, (_, index) => `семантическая гипотеза ${index}`),
-    requiredConcepts: Array.from({ length: 7 }, (_, conceptIndex) => ({
+    requiredConcepts: Array.from({ length: 6 }, (_, conceptIndex) => ({
       statement: `требование ${conceptIndex}`,
       alternatives: Array.from({ length: 8 }, (_, alternativeIndex) =>
         `понятие ${conceptIndex} вариант ${alternativeIndex}`),
@@ -51,6 +51,14 @@ test("provider-sized retrieval plans are bounded without discarding semantic que
   assert.ok(plan.requiredConcepts.every((concept) => concept.alternatives.length === 5));
   assert.equal(plan.lexSearchQueries.length, 4);
   assert.match(plan.standaloneQuestion, /прекращение трудового договора/u);
+});
+
+test("an oversized requirement inventory is rejected instead of silently losing its last scope", () => {
+  assert.throws(() => normalizeLegalRetrievalUnderstanding({standaloneQuestion: "Independent scopes",
+    corpusQueries: [], lexSearchQueries: [], webSearchQuery: "Independent scopes",
+    requiredConcepts: Array.from({length: 7}, (_, index) => ({statement: `Scope ${index}`,
+      alternatives: [`Scope ${index}`], priority: "core"})),
+  }, "Independent scopes"));
 });
 
 test("empty optional planner values degrade to the original query, not an invalid-output failure", () => {

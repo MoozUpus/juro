@@ -151,6 +151,22 @@ test("a multi-scope Main Point must cite the validated evidence for both scopes"
   assert.deepEqual(rejected.summarySourceIds, [source.id]);
 });
 
+test("a narrow but grounded summary cannot displace another independently validated forum", () => {
+  const secondText = "Заявитель направляет письменное уведомление в комиссию в течение семи дней.";
+  const second = {...source, id: "second-forum", spans: [{...source.spans![0]!, text: secondText}]};
+  const first = {...result.confirmedFindings[0]!, answerRole: "governing_rule" as const, requirementIds: ["registration"]};
+  const answer: LegalChatResponse = {...result, summary: first.explanation, summarySourceIds: [source.id],
+    confirmedFindings: [first, {title: "Уведомление комиссии", explanation: secondText,
+      answerRole: "governing_rule", requirementIds: ["commission"], sourceIds: [second.id]}]};
+  const validated = validateLegalGatewayAnswer({result: answer, run: {...run, data: answer}, sources: [source, second],
+    locale: "ru", answerMode: "detailed", reasoningMode: "fast", legalDatabaseAsOf: source.verifiedAt,
+    coverageRequirements: [{id: "registration", statement: "Registration", priority: "core", scopeKind: "forum", sourceIds: [source.id]},
+      {id: "commission", statement: "Commission filing", priority: "core", scopeKind: "forum", sourceIds: [second.id]}],
+  }).run.data;
+  assert.equal(validated.summary, `${first.explanation} ${secondText}`);
+  assert.deepEqual(validated.summarySourceIds, [source.id, second.id]);
+});
+
 test("grounding checks operative clauses beyond the opening terms of a verified span", () => {
   const introduction = Array.from({length: 70}, (_, index) => `введение${index}`).join(" ");
   const evidence = {...source, spans: [{...source.spans![0]!, text:
