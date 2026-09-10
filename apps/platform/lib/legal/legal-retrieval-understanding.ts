@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { legalCoverageScopeSchema, type LegalCoverageScope } from "./legal-coverage";
 
 import { callOpenAiStructured } from "../document-builder/ai/openai";
 import { runtimeEnv } from "../document-builder/storage/runtime";
@@ -10,6 +11,7 @@ const retrievalConceptSchema = z.object({
   statement: z.string().trim().min(1).max(240),
   alternatives: z.array(z.string().trim().min(1).max(240)).min(1).max(5),
   priority: z.enum(["core", "supporting"]).optional(),
+  scopeKind: legalCoverageScopeSchema.optional(),
 }).strict();
 
 const retrievalUnderstandingSchema = z.object({
@@ -26,17 +28,25 @@ const retrievalUnderstandingSchema = z.object({
 const retrievalPlannerSchema = z.object({
   standaloneQuestion: z.string().trim().min(1).max(900),
   generalQuery: z.string().trim().min(1).max(240),
+  personalStatuses: z.array(z.object({status: z.string().trim().min(1).max(100),
+    query: z.string().trim().min(1).max(240)}).strict()).max(2),
+  forums: z.array(z.object({forum: z.string().trim().min(1).max(100),
+    query: z.string().trim().min(1).max(240)}).strict()).max(2),
   concepts: z.array(z.object({ statement: z.string().trim().min(1).max(240),
-    query: z.string().trim().min(1).max(240), priority: z.enum(["core", "supporting"]) }).strict()).min(1).max(5),
-  consequences: z.object({statement: z.string().trim().min(1).max(240), query: z.string().trim().min(1).max(240)}).strict().nullable(),
+    scopeKind: z.enum(["personal_status", "action_stage", "forum", "claim_kind"]),
+    priority: z.enum(["core", "supporting"]) }).strict()).max(2),
+  consequences: z.string().trim().min(1).max(240).nullable(),
 }).strict();
 
 const retrievalPlannerProviderSchema = z.object({
   standaloneQuestion: z.string(),
   generalQuery: z.string(),
-  concepts: z.array(z.object({ statement: z.string(), query: z.string(),
-    priority: z.enum(["core", "supporting"]) }).strict()).min(1).max(5),
-  consequences: z.object({statement: z.string(), query: z.string()}).strict().nullable().optional(),
+  personalStatuses: retrievalPlannerSchema.shape.personalStatuses,
+  forums: retrievalPlannerSchema.shape.forums,
+  concepts: z.array(z.object({ statement: z.string(),
+    scopeKind: z.enum(["personal_status", "action_stage", "forum", "claim_kind"]),
+    priority: z.enum(["core", "supporting"]) }).strict()).max(2),
+  consequences: z.string().nullable().optional(),
 }).strict();
 
 const retrievalUnderstandingJsonSchema = z.toJSONSchema(retrievalPlannerSchema, {
@@ -53,7 +63,7 @@ export type LegalRetrievalUnderstanding = z.infer<typeof retrievalUnderstandingS
 type LegalRetrievalUnderstandingProviderOutput = {
   standaloneQuestion: string;
   corpusQueries: string[];
-  requiredConcepts: Array<{ statement: string; alternatives: string[]; priority?: "core" | "supporting" }>;
+  requiredConcepts: Array<{ statement: string; alternatives: string[]; priority?: "core" | "supporting"; scopeKind?: LegalCoverageScope }>;
   lexSearchQueries: string[];
   webSearchQuery: string;
 };
@@ -84,6 +94,7 @@ export function targetQuestionPlanningHints(understanding: LegalRetrievalUnderst
     standaloneQuestion: understanding.standaloneQuestion,
     requirements: understanding.requiredConcepts.map((concept) => ({
       statement: concept.statement, priority: concept.priority ?? "core",
+      ...(concept.scopeKind ? {scopeKind: concept.scopeKind} : {}),
     })),
     // Broad searches must not displace the last material scope at the ceiling.
     formulations,
@@ -129,12 +140,13 @@ export function normalizeLegalRetrievalUnderstanding(
   const corpusQueries = generatedCorpusQueries.length > 0
     ? generatedCorpusQueries
     : query ? [query] : [];
-  const requiredConcepts = value.requiredConcepts.slice(0, 6).flatMap((concept) => {
+  const requiredConcepts = value.requiredConcepts.flatMap((concept) => {
     const alternatives = [...new Set(concept.alternatives
       .map((candidate) => normalize(candidate, 240))
       .filter(Boolean))].slice(0, 5);
     const statement = normalize(concept.statement, 240) || alternatives[0] || "";
     return alternatives.length > 0 && statement ? [{ statement, alternatives,
+      ...(concept.scopeKind ? {scopeKind: concept.scopeKind} : {}),
       ...(concept.priority ? { priority: concept.priority } : {}) }] : [];
   });
   const lexSearchQueries = [...new Set([
@@ -182,8 +194,11 @@ export async function understandLegalRetrievalQuery(input: {
     instructions: [
       "Create a compact retrieval plan for an Uzbekistan legal question in the user's language.",
       "Resolve conversation references in standaloneQuestion while preserving actors, action, status, circumstances, date, and outcome.",
-      "Return one to five complementary concepts in statutory vocabulary, each directly relevant to the question. Select concepts from the requested outcome, never a fixed topic template.",
-      "For each concept provide an independently supportable coverage requirement in statement, a concise statutory search phrase in query, and priority. Use core only for requirements necessary to answer the requested outcome, supporting for useful procedure or consequences not directly requested. At least one requirement must be core.",
+      "generalQuery is the independently researchable ordinary governing rule at the user's stated action and stage. It becomes the first core coverage requirement. personalStatuses separately names WHO the person is and supplies a query for that status. forums separately names WHERE a claim is filed and supplies its filing query. concepts contains other nonredundant stages or claim kinds. Select these dimensions from the question, never a fixed topic template. Across all arrays plus generalQuery and non-null consequences, return at most six independent requirements. Remove duplicate scopes, never merge or displace a material scope with optional detail.",
+      "In personalStatuses, status must name an underlying personal category, not the current leave, action or event. Its query preserves that category and the requested action. In forums, forum must name a judicial or extrajudicial body materially relevant to a filing or limitation question. Its query asks the applicant's filing period in that forum, without assuming that every possible actor has standing there. Leave unspecified actors neutral until evidence establishes standing. Return empty forums when forums do not change the requested answer. Never place the same forum in concepts or replace a forum with processing time, commencement or restoration of the same filing period.",
+      "Analyze personalStatuses separately from concepts. A personal status need not be asserted as a fact to be a materially plausible conditional reading of everyday umbrella wording. Do not equate someone's underlying status with their current leave, procedure or event. Research the independent status rules even if an event-specific rule may also apply. Return an empty personalStatuses array only when no materially plausible status changes the answer; never fill it with event stages or remedies.",
+      "Each concept.statement is a concise statutory search phrase identifying ONE independently supportable legal question, without asserting its answer. It serves as both the coverage requirement and search formulation; do not repeat it in another field. Use core for distinct scopes necessary to answer the question and supporting for useful procedure not directly requested. Do not duplicate generalQuery.",
+      "Classify each concept's scopeKind. A personal_status describes who the person is and can apply even outside an action_stage; a stage describes when the action happens. Inspect these dimensions independently before selecting concepts. A rule during an event cannot stand in for a person's independent status protection. A condition or exception within one scope is not a new scope: keep it in the same requirement instead of displacing another status, stage, forum or claim kind. Do not invent a specific termination ground, exception or liability category before evidence is retrieved.",
       "For time limits, search for relevant forums, kinds of claim, commencement and exceptions. For an action, search its governing rule and material conditions or exceptions. Do not add protected statuses, prohibitions or liability when unrelated.",
       "Preserve all materially plausible meanings of ambiguous everyday wording instead of silently choosing one narrower meaning.",
       "When an everyday term can describe distinct legal statuses or stages, give each materially different interpretation its own core requirement and search phrase. Do not replace the original ambiguous term with a narrower status in standaloneQuestion. Procedure for one interpretation must not displace coverage of another interpretation.",
@@ -191,7 +206,8 @@ export async function understandLegalRetrievalQuery(input: {
       "For procedural deadlines, identify the available judicial and extrajudicial forums and materially different claim types before drafting concepts. Do not assume court is the only forum when the user has not specified one. Duration, commencement and restoration for the same scope belong together, not in duplicate concepts that displace another forum or claim type.",
       "Preserve the timed action and actor in every deadline requirement and query. A person's deadline to file a claim is distinct from an authority's time to process or decide it. For a limitation/filing question, search filing periods in each relevant forum, not processing durations or general procedure in their place.",
       "For whether an action is permitted, cover its general controlling rule at the user's stated stage, then the nonredundant special rules for distinct statuses. Do not replace a rule during a stage with a rule after that stage. Keep a status-specific rule and its exceptions together rather than duplicating the same search as separate concepts.",
-      "consequences is a separate required field: for questions about the lawfulness of an action affecting another person's rights, supply a narrow statement and query for legal liability for unlawfully performing that same action in those circumstances. Otherwise return null. Do not duplicate this in concepts or combine liability with recovery, compensation or complaint procedure in one compound requirement; material remedies may be a separate supporting concept. Preserve actor, action and status; do not search generic penalties, assume wrongdoing or name a criminal offence without evidence. Keep this independent of core statuses so they do not displace consequences or vice versa. A search limited to filing a complaint does not cover liability.",
+      "consequences is a separate required field: for questions about the lawfulness of an action affecting another person's rights, supply ONE narrow statutory search phrase for legal liability for unlawfully performing that same action in those circumstances. Otherwise return null. Do not duplicate this in concepts or combine liability with recovery, compensation or complaint procedure. Preserve actor, action and status; do not search generic penalties, assume wrongdoing or name a criminal offence without evidence. This field is independent of core statuses. A search limited to filing a complaint does not cover liability.",
+      "When personal status is material, retain that status in the consequences query rather than replacing it with the person's current event or procedural stage. Include status-based motives as a conditional search hypothesis where relevant, without asserting that any motive or violation occurred. A generic unlawful-action query may find only general remedies and miss the status-specific liability being researched.",
       "generalQuery is a separate concise statutory search for the general controlling rule. Retain the requested action and stage, but OMIT special-status modifiers already addressed by concepts, so the general rule is not hidden by narrower matches. This must be a meaningful legal search phrase, not a broad domain name.",
       "For Uzbek questions include Russian statutory equivalents where useful, but keep standaloneQuestion in the user's language.",
       "Do not invent an act, article, fact, quotation, or legal outcome.",
@@ -225,17 +241,22 @@ export async function understandLegalRetrievalQuery(input: {
     outputTokens: result.usage.outputTokens,
   });
 
-  const normalizedConcepts = result.data.concepts.map((concept) => ({
+  const normalizedConcepts: LegalRetrievalUnderstandingProviderOutput["requiredConcepts"] = [{statement: result.data.generalQuery, alternatives: [result.data.generalQuery], priority: "core", scopeKind: "general"},
+    ...result.data.personalStatuses.map(({query: statement}) => ({statement, alternatives: [statement], priority: "core" as const, scopeKind: "personal_status" as const})),
+    ...result.data.forums.map(({query: statement}) => ({statement, alternatives: [statement], priority: "core" as const, scopeKind: "forum" as const})),
+    ...result.data.concepts.map((concept) => ({
     statement: concept.statement,
-    alternatives: [concept.query],
+    alternatives: [concept.statement],
     priority: concept.priority,
-  }));
+    scopeKind: concept.scopeKind,
+  }))];
   if (result.data.consequences) normalizedConcepts.push({
-    statement: result.data.consequences.statement,
-    alternatives: [result.data.consequences.query],
+    statement: result.data.consequences,
+    alternatives: [result.data.consequences],
     priority: "supporting",
+    scopeKind: "consequence",
   });
-  const derivedQueries = [result.data.generalQuery, ...result.data.concepts.map((concept) => concept.query)].slice(0, 3);
+  const derivedQueries = [result.data.generalQuery, ...result.data.concepts.map((concept) => concept.statement)].slice(0, 3);
   return normalizeLegalRetrievalUnderstanding({
     standaloneQuestion: result.data.standaloneQuestion,
     requiredConcepts: normalizedConcepts,

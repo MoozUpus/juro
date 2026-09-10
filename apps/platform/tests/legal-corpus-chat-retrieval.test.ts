@@ -8,7 +8,7 @@ import {
 } from "../lib/legal-corpus/chat-retrieval";
 import type { LiveLexRetrievalResult } from "../lib/legal/live-lex-retrieval";
 import { legalDatabaseFreshnessFromAsOf } from "../lib/legal/verified-retrieval";
-import { referencedArticleContextRequests, selectReferencedArticleContext } from "../lib/legal/referenced-article-context";
+import { referencedArticleContextRequests, referencedLegalSourceIds, selectReferencedArticleContext } from "../lib/legal/referenced-article-context";
 
 const now = new Date("2026-08-15T00:00:00.000Z");
 const checkedAt = "2026-08-14T23:00:00.000Z";
@@ -95,6 +95,24 @@ test("article context follows only unresolved same-instrument references and nev
   assert.equal(selectReferencedArticleContext({ ...source, verificationState: "verified" }, "9"), null);
 });
 
+test("synthesis reference links preserve instrument, language, revision and complete text boundaries", () => {
+  const source = liveResult().sources[0]!;
+  const referring = {...source, article: "17", spans: [{...source.spans![0]!,
+    text: "Исключения установлены статьей 27 настоящего Кодекса. Статья 33 другого Закона."}]};
+  const target = {...source, id: "operative", article: "27", spans: [{...source.spans![0]!,
+    text: "Статья 27. Применяются основания прекращения полномочий, установленные настоящей статьей."}]};
+  const packet = [referring, target,
+    {...target, id: "foreign", officialUrl: "https://lex.uz/docs/888"},
+    {...target, id: "translation", locale: "uz"},
+    {...target, id: "old", revisionDate: "2025-01-01"},
+    {...target, id: "historical", applicabilityStatus: "historical" as const},
+    {...target, id: "guidance", sourceClass: "OFFICIAL_GOVERNMENT_GUIDANCE" as const},
+    {...target, id: "unfinished", spans: [{...target.spans[0]!, text: "Статья 27. Применяются следующие основания прекращения полномочий:"}]},
+    {...target, id: "other-reference", article: "33"}];
+  assert.deepEqual(referencedLegalSourceIds(referring, packet), ["operative"]);
+  assert.deepEqual(referencedLegalSourceIds(target, packet), []);
+});
+
 test("chat retrieval uses the R2-native target service before live Lex", async () => {
   let calls = 0;
   let liveStarted = 0;
@@ -142,6 +160,10 @@ test("chat retrieval uses the R2-native target service before live Lex", async (
           formulationsUsed: 2,
           repairQueriesUsed: 0,
           temporalEndpoint: { kind: "current" },
+          coverageRequirements: [
+            {id: "requirement-1", statement: "Форма трудового договора", priority: "core"},
+            {id: "requirement-2", statement: "Заключение трудового договора", priority: "core"},
+          ],
         },
       });
     },
@@ -172,6 +194,10 @@ test("chat retrieval uses the R2-native target service before live Lex", async (
   assert.equal(result.retrievalTelemetry?.indexedHitCount, 1);
   assert.equal(result.retrievalTelemetry?.queriesRun, 2);
   assert.equal(result.retrievalTelemetry?.fusionOutcome, "indexed");
+  assert.deepEqual(result.coverageRequirements?.map(requirement => [requirement.id, requirement.statement, requirement.sourceIds]), [
+    ["requirement-1", "Форма трудового договора", [result.sources[0]!.id]],
+    ["requirement-2", "Заключение трудового договора", [result.sources[0]!.id]],
+  ]);
 });
 
 test("revoked indexed documents are excluded before live research and cannot certify coverage", async () => {
@@ -294,7 +320,7 @@ test("contextual planning does not consume the Indexed Official Corpus deadline"
 
 test("target comparison citations retain their endpoint applicability", async () => {
   const statement = (suffix: string) => ({
-    requirementId: `requirement-${suffix}`,
+    requirementId: "same-requirement",
     provisionConceptId: "concept-1",
     provisionRenditionId: `rendition-${suffix}`,
     proposition: `Rule ${suffix}`,
@@ -310,6 +336,7 @@ test("target comparison citations retain their endpoint applicability", async ()
     sourceLadder: "indexed_official_corpus",
     mainPoint: `Answer ${suffix}`,
     whatTheLawSays: [statement(suffix)],
+    coverageRequirements: [{ id: "same-requirement", statement: "The governing rule", priority: "core" }],
     whatToDoNext: [],
     focusedQuestions: [],
     formulationsUsed: 2,
@@ -353,6 +380,30 @@ test("target comparison citations retain their endpoint applicability", async ()
   assert.deepEqual(result.sources.map((source) => source.applicabilityStatus), ["historical", "current"]);
   assert.equal(result.sources[0]?.effectiveDate, historicalInstant);
   assert.equal(result.sources[1]?.effectiveDate, null);
+  assert.deepEqual(result.coverageRequirements?.map(requirement => [requirement.id, requirement.sourceIds]), [
+    ["left:same-requirement", [result.sources[0]!.id]],
+    ["right:same-requirement", [result.sources[1]!.id]],
+  ]);
+});
+
+test("live supplementation retains a different article from an already indexed instrument", async () => {
+  const result = await retrieveCorpusAwareLegalSources({
+    query: "Which filing rules apply?", locale: "ru", now,
+    targetEnvironment: "staging", targetQuestionId: "partial-scope",
+    targetService: { fetch: async () => Response.json({ result: {
+      kind: "partial_legal_answer", sourceLadder: "indexed_official_corpus", nextTier: "live_official_search",
+      mainPoint: "A verified rule", whatTheLawSays: [{
+        requirementId: "filing", provisionConceptId: "concept", provisionRenditionId: "rendition",
+        proposition: "A verified filing rule", controllingQuotation: "A verified filing rule applies to this application.",
+        officialCitations: [{label: "Law — Article 8", url: "https://lex.uz/ru/docs/777"}],
+        evidenceSha256: contentHash,
+      }], whatToDoNext: [], focusedQuestions: [], formulationsUsed: 2, repairQueriesUsed: 1,
+      temporalEndpoint: {kind: "current"}, uncoveredSupportingRequirementIds: ["remedy"],
+    } }) } as unknown as Fetcher,
+    liveSearch: async () => liveResult(),
+  });
+  assert.deepEqual(result.sources.map(source => source.article), ["8", "9"]);
+  assert.equal(result.coverageStatus, "partial_coverage");
 });
 
 test("an over-cap comparison fails closed instead of publishing one endpoint", async () => {

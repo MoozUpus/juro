@@ -1,4 +1,6 @@
 import { hasAnthropicConfiguration } from "../document-builder/ai/anthropic";
+import { referencedLegalSourceIds } from "../legal/referenced-article-context";
+import type { LegalCoverageScope } from "../legal/legal-coverage";
 import { AiUnavailableError, callOpenAiStructured, hasAiConfiguration, type AiStructuredResult } from "../document-builder/ai/openai";
 import { runtimeEnv } from "../document-builder/storage/runtime";
 import {
@@ -15,6 +17,8 @@ import {
   LEGAL_ANSWER_MARKDOWN_RULE,
   LEGAL_ANSWER_MATERIAL_SOURCE_COVERAGE_RULE,
   LEGAL_ANSWER_COMPLETENESS_RULE,
+  LEGAL_ANSWER_REQUIREMENT_COVERAGE_RULE,
+  LEGAL_ANSWER_OPERATIVE_CITATION_RULE,
 } from "./legal-answer-prompt-rules";
 import {
   aiResponseToneInstruction,
@@ -30,6 +34,7 @@ import {
   legalChatJsonSchema,
   legalFindingSchema,
   parseLegalChatResponse,
+  restoreLegalSourceIds,
   type LegalChatResponse,
 } from "./legal-chat-schema";
 import { completeStreamingJsonArrayObjects } from "./streaming-json";
@@ -87,6 +92,14 @@ export type LegalChatRequest = {
   question: string;
   /** Retrieval-only semantic expansion used by server-side relevance gates. */
   retrievalQuery?: string;
+  /** Request-local scope inventory; retrieval matches alone never establish support. */
+  coverageRequirements?: Array<{
+    id: string;
+    statement: string;
+    priority: "core" | "supporting";
+    scopeKind?: LegalCoverageScope;
+    sourceIds: string[];
+  }>;
   locale: AiOutputLocale;
   answerMode: "short" | "detailed";
   reasoningMode: "fast" | "deep";
@@ -228,7 +241,7 @@ class OpenAiLegalProvider implements LegalAiProvider {
     const result = await callOpenAiStructured<LegalChatResponse>({
       schemaName: "juro_legal_chat_response",
       schema: legalChatJsonSchema,
-      parse: parseLegalChatResponse,
+      parse: value => parseLegalChatResponse(value, input),
       // Chat is interactive: fail quickly if the provider never starts, but
       // allow a healthy structured stream enough time to finish completely.
       firstByteTimeoutMs: firstContentBudgetMs,
@@ -258,13 +271,15 @@ class OpenAiLegalProvider implements LegalAiProvider {
           emittedFindingsByAttempt.set(attempt, findings.length);
           for (const value of findings.slice(emitted)) {
             const finding = legalFindingSchema.safeParse(value);
-            if (finding.success) await options.onPartialLegalFinding?.(finding.data);
+            if (finding.success) await options.onPartialLegalFinding?.({...finding.data,
+              sourceIds: restoreLegalSourceIds(finding.data.sourceIds, input.sources),
+            });
           }
         }
         : undefined,
       safetyIdentifier: input.safetyIdentifier,
       reasoningEffort: input.reasoningMode === "deep" ? "high" : "low",
-      textVerbosity: input.answerMode === "short" ? "low" : "high",
+      textVerbosity: "low",
       maxOutputTokens: interactive
         ? (input.answerMode === "short" ? 1_600 : 3_200)
         : (input.answerMode === "short" ? 2_400 : 4_200),
@@ -280,12 +295,14 @@ class OpenAiLegalProvider implements LegalAiProvider {
         "Копируй sourceId буквально и без сокращений. Делай каждое confirmedFinding, actionPlan и risk одним атомарным утверждением, используй основные юридические слова из одного конкретного sourceSpan и указывай ровно тот sourceId, которому принадлежит этот span.",
         "Не добавляй в actionPlan, risks или deadlines элементы без sourceIds. При наличии verifiedSources видимый подтверждённый ответ будет заново собран сервером только из claims, прошедших проверку exact source span.",
         "Всегда верни sources=[]: карточки Lex сервер восстановит сам из sourceIds подтверждённых claims. Не дублируй URL, title, article, excerpt и verifiedAt в provider payload.",
-        "В fast mode сокращай глубину рассуждения, а не полезность ответа. Если answerMode=short, summary и answer — не более 15 слов каждый и не более 2 confirmedFindings. Если answerMode=detailed, дай содержательный разбор подтверждённой части: до 6 confirmedFindings, 3 actionPlan и 3 risks; summary и answer — одно-два предложения, не повторяющие полный разбор.",
+        "В fast mode пиши кратко, сохраняя каждую самостоятельную применимую норму и существенное условие. Объём confirmedFindings определяется покрытием вопроса, а не фиксированным числом статей: до 16 самостоятельных выводов. Каждый вывод — одно-два коротких предложения. summary — одно-два предложения без повторения полного разбора. Не генерируй карточки источников или метаданные запроса: их добавляет сервер после проверки цитат.",
         LEGAL_ANSWER_MARKDOWN_RULE,
         LEGAL_ANSWER_FOCUSED_FOLLOW_UP_RULE,
         LEGAL_ANSWER_CONDITIONAL_BRANCH_RULE,
         LEGAL_ANSWER_MATERIAL_SOURCE_COVERAGE_RULE,
         LEGAL_ANSWER_COMPLETENESS_RULE,
+        LEGAL_ANSWER_REQUIREMENT_COVERAGE_RULE,
+        LEGAL_ANSWER_OPERATIVE_CITATION_RULE,
         "В fast mode первым confirmedFinding дай самый полезный законченный вывод по вопросу; используй один sourceId и лексику соответствующего sourceSpan, чтобы сервер мог проверить этот вывод независимо до завершения остальных полей.",
         "Если applicableAt передан, анализируй право на эту дату и не называй историческую редакцию текущей.",
         "Не придумывай статью, цитату, дату, акт или URL и не пиши правовой вывод из общих юридических знаний. Если релевантных источников нет, верни clarification_required с пустыми confirmedFindings, actionPlan, risks и deadlines.",
@@ -308,12 +325,17 @@ class OpenAiLegalProvider implements LegalAiProvider {
         reasoningMode: input.reasoningMode,
         intent: input.intent ?? "legal_question",
         researchPlan: input.researchPlan ?? null,
+        coverageRequirements: (input.coverageRequirements ?? []).map(requirement => ({...requirement,
+          sourceIds: input.sources.flatMap((source, index) => requirement.sourceIds.includes(source.id) ? [`s${index + 1}`] : []),
+        })),
         availableDocumentTemplates: input.availableDocumentTemplates ?? [],
         legalDatabaseAsOf: input.legalDatabaseAsOf,
         applicableAt: input.applicableAt ?? null,
         conversationHistory: input.conversationHistory ?? [],
-        verifiedSources: input.sources.map((source) => ({
-          sourceId: source.id,
+        verifiedSources: input.sources.map((source, index) => ({
+          sourceId: `s${index + 1}`,
+          referencedSourceIds: referencedLegalSourceIds(source, input.sources)
+            .map(id => `s${input.sources.findIndex(other => other.id === id) + 1}`),
           sourceType: source.sourceType,
           sourceClass: source.sourceClass ?? "OFFICIAL_LEGISLATION",
           actTitle: source.actTitle,
@@ -324,8 +346,8 @@ class OpenAiLegalProvider implements LegalAiProvider {
           status: source.applicabilityStatus ?? "current",
           effectiveDate: source.effectiveDate ?? null,
           verifiedAt: source.verifiedAt,
-          sourceSpans: (source.spans ?? []).map((span) => ({
-            sourceSpanId: span.id,
+          sourceSpans: (source.spans ?? []).map((span, spanIndex) => ({
+            sourceSpanId: `s${index + 1}-${spanIndex + 1}`,
             article: span.article,
             paragraph: span.paragraph,
             text: span.text,

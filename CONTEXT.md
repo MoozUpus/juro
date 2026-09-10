@@ -11,7 +11,7 @@ A structured, source-grounded response to a legal question, led by the Main Poin
 _Avoid_: AI response, generated text, chat completion
 
 **Main Point**:
-The concise, plain-language conclusion that leads every substantive Legal Answer.
+The concise, plain-language conclusion that leads every substantive Legal Answer with the applicable ordinary governing rule, followed by any material supported qualification.
 _Avoid_: summary, short answer, abstract
 
 **What the Law Says**:
@@ -167,7 +167,7 @@ A materially distinct interpretation of a General Legal Question that could chan
 _Avoid_: assumption, query variant, Coverage Requirement
 
 **Coverage Requirement**:
-A distinct legal proposition required by a Plausible Reading that must be supported or explicitly left unresolved before JURO can claim good Official Coverage.
+A distinct legal proposition required by a Plausible Reading that must be supported or explicitly left unresolved before JURO can claim good Official Coverage. Its identity, priority and scope (general rule, personal status, action stage, forum, claim kind or consequence) survive planning, retrieval repair and answer validation. Evidence for one scope cannot silently stand in for another.
 _Avoid_: interpretation, facet, keyword, query concept
 
 **Requirement Support**:

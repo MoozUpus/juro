@@ -14,14 +14,14 @@ async function source(relativePath: string): Promise<string> {
   return readFile(new URL(relativePath, import.meta.url), "utf8");
 }
 
-test("chat completes the official authority ladder before conditionally using lower-authority web research", async () => {
+test("chat joins overlapping research after official retrieval before assembling evidence", async () => {
   const route = await source("../app/api/platform/ai/route.ts");
   const privateContext = route.indexOf("const privateDocumentRetrieval = (async");
   const lex = route.indexOf("const retrievalResult: LegalChatSourceRetrieval | Response = await");
-  const unavailableGuard = route.indexOf("if (retrievalResult instanceof Response) return retrievalResult", lex);
+  const unavailableGuard = route.indexOf("if (retrievalResult instanceof Response) {", lex);
   const acceptedOfficialResult = route.indexOf("const retrieval = retrievalResult", lex);
   const secondaryGate = route.indexOf("shouldRetrieveSecondaryInternet(retrieval)");
-  const web = route.indexOf("await retrieveSecondaryInternetSources", secondaryGate);
+  const web = route.indexOf("await startSecondaryResearch()", secondaryGate);
   const orderedSources = route.indexOf("const sources = [...retrieval.sources, ...privateDocuments.sources, ...secondaryInternet.sources]");
 
   assert.ok(privateContext >= 0);
@@ -31,8 +31,13 @@ test("chat completes the official authority ladder before conditionally using lo
   assert.ok(secondaryGate > acceptedOfficialResult);
   assert.ok(web > secondaryGate);
   assert.ok(orderedSources > web);
+  const liveStart = route.indexOf("onLiveSearchStarted:", lex);
+  const overlap = route.indexOf("void startSecondaryResearch().catch", liveStart);
+  assert.ok(liveStart > lex && overlap > liveStart && overlap < unavailableGuard);
+  assert.match(route.slice(unavailableGuard, acceptedOfficialResult), /await secondaryResearch\.catch/u);
+  assert.match(route.slice(unavailableGuard, acceptedOfficialResult), /return retrievalResult/u);
+  assert.match(route.slice(secondaryGate, orderedSources), /secondaryResearch \? await secondaryResearch/u);
   assert.match(route, /legal corpus -> live Lex\.uz/u);
-  assert.match(route, /search the wider internet after official discovery/u);
   assert.match(route, /assertProviderCallAllowed\(\{ db, environment: providerEnvironment, provider: "openai" \}\)/u);
   assert.match(route, /provider_usage_secondary_/u);
 });
@@ -62,7 +67,7 @@ test("chat uses bounded model-understood queries across the authority ladder wit
   assert.match(route, /lexSearchQueries: retrievalUnderstandingPromise\.then\(\(understanding\) => understanding\.lexSearchQueries\)/u);
   assert.doesNotMatch(route, /indexQueries:/u);
   assert.match(route, /const retrievalQuestion = retrievalUnderstanding\.standaloneQuestion/u);
-  assert.match(route, /query: retrievalUnderstanding\.webSearchQuery/u);
+  assert.match(route, /query: \(await retrievalUnderstandingPromise\)\.webSearchQuery/u);
   assert.match(route, /retrievalQuery: retrievalQuestion/u);
   assert.match(route, /chargeable: result\.responseKind === "answer"/u);
   assert.match(direct, /Model-understood, request-scoped Lex searches/u);

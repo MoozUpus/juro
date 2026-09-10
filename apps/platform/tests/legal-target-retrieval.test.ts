@@ -128,6 +128,20 @@ test("planning hints preserve one-to-one formulation requirement provenance", ()
   }
 });
 
+test("repair retains supported evidence even when new candidates push it below the pool ceiling", () => {
+  const entries = parseRevalidatedCandidates(Array.from({length: 60}, (_, index) => ({
+    ...stableIdentity(`rendition-${index}`),
+    candidate: {...candidate(`item-${index}`, "formulation-repair", ["reading"], ["requirement"],),
+      fusionScore: 1 - index / 100, vectorRank: index + 1},
+  })));
+  assert.equal(boundedSelectionPool(entries).some(item => item.candidate.itemKey === "item-59"), false);
+  const retained = boundedSelectionPool(entries, ["item-59"]);
+  assert.equal(retained.length, 48);
+  assert.ok(retained.some(item => item.candidate.itemKey === "item-59"));
+  assert.ok(retained.some(item => item.candidate.itemKey === "item-0"));
+  assert.throws(() => boundedSelectionPool(entries, Array.from({length: 13}, (_, index) => `item-${index}`)));
+});
+
 test("selection pool reserves independently ranked candidates for every formulation", () => {
   const make = (key: string, formulationIds: string[], matches: Array<{
     formulationId: string; rank: number; fusionScore: number;
@@ -427,7 +441,7 @@ for (const compoundRepair of [false, true]) test(`every Plausible Reading gets a
         materialCitation: { label: `Act — Article ${id}`, url: "https://lex.uz/docs/900" },
       });
         return {...resolved, articleContext: {...resolved.controlling,
-          provisionText: `complete verified ${id}`,
+          provisionText: `complete verified ${id} ${"Introductory material. ".repeat(60)} Operative exception in the middle. ${"Additional conditions. ".repeat(60)}`,
           evidence: {...resolved.controlling.evidence, r2Key: "corpus/normalized/revision.json", sha256: "b".repeat(64)},
         }};
       },
@@ -436,6 +450,7 @@ for (const compoundRepair of [false, true]) test(`every Plausible Reading gets a
       select: async ({ candidates }) => {
         selectionCalls += 1;
         assert.ok(candidates.every(candidate => candidate.provisionText.startsWith("complete verified")));
+        assert.ok(candidates.every(candidate => candidate.provisionText.includes("Operative exception in the middle.")));
         if (selectionCalls === 1) return {
           outcome: "repair",
           repairFormulation: {
