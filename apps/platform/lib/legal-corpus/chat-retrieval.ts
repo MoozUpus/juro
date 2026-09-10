@@ -445,7 +445,10 @@ async function completeArticleContexts(retrieval: LegalChatSourceRetrieval, opti
   // this request only. Each resulting article retains its own validated spans.
   const fetches = new Map<string, Promise<{ bytes: ArrayBuffer; status: number; headers: Headers }>>();
   const sharedFetch: typeof fetch = async (input, init) => {
-    const key = `${init?.method ?? "GET"}:${typeof input === "object" && "url" in input ? input.url : String(input)}`;
+    const url = typeof input === "object" && "url" in input ? input.url : String(input);
+    // Keep robots.txt on the fetcher's smaller original byte limit.
+    if (new URL(url).pathname === "/robots.txt") return fetch(input, init);
+    const key = `${init?.method ?? "GET"}:${url}`;
     let pending = fetches.get(key);
     if (!pending) {
       pending = fetch(input, init).then(async response => ({

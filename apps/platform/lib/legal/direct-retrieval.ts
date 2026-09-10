@@ -614,8 +614,11 @@ async function requestScopedSourceSpans(input: {
       if (active) parts.push(block.text);
     }
     if (!heading || parts.length < 2) throw new Error("LEGAL_SOURCE_PROVISION_INCOMPLETE");
-    const chunks = splitLegalText(parts.join(" "));
-    if (chunks.length > MAX_SOURCE_SPANS) throw new Error("LEGAL_SOURCE_PROVISION_CONTEXT_LIMIT");
+    const fullText = parts.join(" ").replace(/\s+/gu, " ").trim();
+    const chunks = splitLegalText(fullText);
+    if (chunks.length > MAX_SOURCE_SPANS || chunks.join(" ").replace(/\s+/gu, " ").trim() !== fullText) {
+      throw new Error("LEGAL_SOURCE_PROVISION_CONTEXT_LIMIT");
+    }
     return Promise.all(chunks.map(async (text, index) => ({
       id: `span:${input.contentSha256.slice(0, 12)}:article:${input.articleNumberRequested}:${index}`,
       article: heading, paragraph: null, text, textSha256: await sha256Hex(text), quality: "high" as const,

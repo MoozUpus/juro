@@ -257,6 +257,19 @@ test("gateway emits a repeated title and explanation only once", () => {
   assert.equal(validated.answer.claims[0]?.text, provision);
 });
 
+test("a conditional Main Point separates supported alternatives instead of joining a wall of text", () => {
+  const conditional: LegalChatResponse = { ...result, summary: "Нужно уточнение неизвестных обстоятельств.",
+    confirmedFindings: [], conditionalBranches: [
+      {condition: "Если создаётся общество", outcome: "Общество подлежит государственной регистрации в установленном порядке.", sourceIds: [source.id]},
+      {condition: "При государственной регистрации общества", outcome: "Общество подлежит государственной регистрации в установленном порядке.", sourceIds: [source.id]},
+    ], sources: [],
+  };
+  const validated = validateLegalGatewayAnswer({ result: conditional, run: {...run, data: conditional}, sources: [source],
+    question: "Нужно ли регистрировать общество?", locale: "ru", answerMode: "short", reasoningMode: "fast", legalDatabaseAsOf: source.verifiedAt });
+  assert.equal(validated.run.data.conditionalBranches?.length, 2);
+  assert.match(validated.run.data.summary, /^- .+\n\n- /u);
+});
+
 test("gateway bounds long server-owned corpus labels instead of rejecting a valid answer", () => {
   const longSource: LegalSourceContext = {
     ...source,

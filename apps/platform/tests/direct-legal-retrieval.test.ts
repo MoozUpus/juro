@@ -41,6 +41,12 @@ test("explicit complete-article evidence retains every list continuation and sto
   assert.doesNotMatch(text, /Другая норма|Не относящееся/u);
   assert.ok(source.spans!.every(span => span.article?.startsWith("Статья 17.")));
   assert.ok(source.spans!.length > 1);
+  await assert.rejects(fetchDirectOfficialLexDocument("https://lex.uz/ru/docs/777", "ru", {
+    query: "Article 17", completeArticle: true,
+    fetchImpl: async input => String(input).endsWith("/robots.txt")
+      ? new Response("User-agent: *\nAllow: /", {headers: {"content-type":"text/plain"}})
+      : responseHtml(`<main class="page-document-content"><h1>Закон о договорах</h1><h2>Статья 17. Основания</h2><p>${"длинное условие ".repeat(250)}</p></main>`),
+  }), /LEGAL_SOURCE_PROVISION_CONTEXT_LIMIT/u, "complete-article evidence must never silently truncate a long sentence");
 });
 
 function responseHtml(body: string): Response {
