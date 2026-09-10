@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fitsLegalEvidenceBudget, MAX_LEGAL_EVIDENCE_SOURCES } from "../legal/legal-evidence-budget";
 import { legalCoverageScopeSchema } from "../legal/legal-coverage";
 
 import {
@@ -170,7 +171,7 @@ export type SelectionCandidate = z.infer<typeof selectionCandidateSchema>;
 
 const repairDecisionSchema = z.object({
   outcome: z.literal("repair"),
-  retainedItemKeys: z.array(z.string().min(1).max(700)).max(12).optional(),
+  retainedItemKeys: z.array(z.string().min(1).max(700)).max(MAX_LEGAL_EVIDENCE_SOURCES).optional(),
   repairFormulation: formulationSchema,
   additionalRequirements: z.array(z.object({
     readingId: legalIdentifierSchema,
@@ -245,6 +246,7 @@ const clarificationSchema = z.object({
   sourceLadder: z.literal("indexed_official_corpus"),
   focusedQuestions: z.array(z.string().min(1).max(1_000)).min(1),
   safeErrorCode: z.enum(["FORMULATION_BUDGET_EXCEEDED", "EVIDENCE_CEILING_EXCEEDED"]),
+  coverageRequirements: z.array(requirementSchema).max(240).optional(),
 }).strict();
 const sourceUnavailableSchema = z.object({
   kind: z.literal("source_unavailability"),
@@ -493,7 +495,7 @@ function candidateScore(entry: RevalidatedCandidate): number {
 /** Bounds pre-selection evidence while retaining candidates from every
  * formulation. The associations here are retrieval provenance only. */
 export function boundedSelectionPool(candidates: readonly RevalidatedCandidate[], retainedItemKeys: readonly string[] = []): RevalidatedCandidate[] {
-  if (retainedItemKeys.length > 12) throw new RangeError("RETAINED_EVIDENCE_CEILING_EXCEEDED");
+  if (retainedItemKeys.length > MAX_LEGAL_EVIDENCE_SOURCES) throw new RangeError("RETAINED_EVIDENCE_CEILING_EXCEEDED");
   const ranked = [...candidates].sort((left, right) =>
     candidateScore(right) - candidateScore(left)
     || left.candidate.itemKey.localeCompare(right.candidate.itemKey));
@@ -949,12 +951,13 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
         entry.candidate.provisionRenditionId,
         entry.candidate.provisionRenditionId,
       ])).values()];
-      if (uniqueRenditions.length > 12) {
+      if (uniqueRenditions.length > MAX_LEGAL_EVIDENCE_SOURCES) {
         return clarificationSchema.parse({
           kind: "clarification_required",
           sourceLadder: "indexed_official_corpus",
-          focusedQuestions: ["Please narrow the question so the complete evidence can fit within twelve provisions."],
+          focusedQuestions: ["Please narrow the question so its complete evidence can fit within the answer context."],
           safeErrorCode: "EVIDENCE_CEILING_EXCEEDED",
+          coverageRequirements: plan.readings.flatMap(reading => reading.requirements),
         });
       }
       const requirementIds = planRequirementIds;
@@ -986,6 +989,18 @@ export function createTargetLegalAnswerRetriever(dependencies: Dependencies): Ta
       } catch {
         return sourceUnavailable("INDEXED_EVIDENCE_UNAVAILABLE");
       }
+      // Assessment sees bounded candidate excerpts. Recheck the complete,
+      // authenticated text before it can enter the answer context.
+      if (!fitsLegalEvidenceBudget(uniqueRenditions.map(id => {
+        const evidence = evidenceByRendition.get(id)!;
+        return (evidence.articleContext ?? evidence.controlling).provisionText;
+      }))) return clarificationSchema.parse({
+        kind: "clarification_required",
+        sourceLadder: "indexed_official_corpus",
+        focusedQuestions: ["Please narrow the question so its complete evidence can fit within the answer context."],
+        safeErrorCode: "EVIDENCE_CEILING_EXCEEDED",
+        coverageRequirements: plan.readings.flatMap(reading => reading.requirements),
+      });
       const propositions = new Map(decision.propositions.map((proposition) => [
         proposition.requirementId,
         proposition.statement,

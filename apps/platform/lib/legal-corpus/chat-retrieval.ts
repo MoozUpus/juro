@@ -1,5 +1,6 @@
 import type { LegalChatRequest, LegalSourceContext } from "../ai/provider";
 import { verifyCurrentLexDocument } from "../legal/lex-document-status";
+import { fitsLegalEvidenceBudget } from "../legal/legal-evidence-budget";
 import {
   retrieveLiveLexSources,
   type LiveLexRetrievalResult,
@@ -183,7 +184,9 @@ function unavailableHistoricalCoverage(
   };
 }
 
-function unavailableTargetCeilingCoverage(now: Date): LegalChatSourceRetrieval {
+function unavailableTargetCeilingCoverage(now: Date,
+  requirements: NonNullable<ReturnType<typeof targetAnswerDetails>>["coverageRequirements"] = [],
+): LegalChatSourceRetrieval {
   const checkedAt = now.toISOString();
   return {
     sources: [],
@@ -195,6 +198,7 @@ function unavailableTargetCeilingCoverage(now: Date): LegalChatSourceRetrieval {
     errors: [{ code: "TARGET_EVIDENCE_CEILING_EXCEEDED" }],
     evidence: [],
     coverageStatus: "no_coverage",
+    coverageRequirements: requirements.map(requirement => ({...requirement, priority: requirement.priority ?? "core", sourceIds: []})),
     retrievalTelemetry: {
       indexedHitCount: 0,
       liveHitCount: 0,
@@ -316,11 +320,16 @@ async function withTargetCoverage(
   now: Date,
   verifyCurrentSource: (url: string) => Promise<boolean>,
 ): Promise<LegalChatSourceRetrieval | null> {
+  if (result.kind === "clarification_required" && result.safeErrorCode === "EVIDENCE_CEILING_EXCEEDED") {
+    return unavailableTargetCeilingCoverage(now, result.coverageRequirements);
+  }
   const answer = targetAnswerDetails(result, locale);
   if (!answer) return null;
   const checkedAt = now.toISOString();
   const candidates = uniqueTargetStatements(answer);
-  if (candidates.length > 12) return unavailableTargetCeilingCoverage(now);
+  if (!fitsLegalEvidenceBudget(candidates.map(entry => entry.statement.controllingQuotation))) {
+    return unavailableTargetCeilingCoverage(now, answer.coverageRequirements);
+  }
   const urls = [...new Set(candidates.filter((entry) => entry.temporalEndpoint.kind === "current")
     .map((entry) => entry.statement.officialCitations[0]!.url))];
   const statuses = new Map(await Promise.all(urls.map(async (url) => {
@@ -334,7 +343,9 @@ async function withTargetCoverage(
     candidateProvisionCount: candidates.length, retainedProvisionCount: statements.length,
     unavailableDocuments: [...statuses.values()].filter((status) => status === null).length,
     repealedDocuments: [...statuses.values()].filter((status) => status === false).length }));
-  if (statements.length > 12) return unavailableTargetCeilingCoverage(now);
+  if (!fitsLegalEvidenceBudget(statements.map(entry => entry.statement.controllingQuotation))) {
+    return unavailableTargetCeilingCoverage(now, answer.coverageRequirements);
+  }
   const sources = await Promise.all(statements.map(async (
     { statement, temporalEndpoint },
   ): Promise<LegalSourceContext> => {

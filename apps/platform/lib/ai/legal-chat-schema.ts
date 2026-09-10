@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_LEGAL_EVIDENCE_SOURCES } from "../legal/legal-evidence-budget";
 import type { LegalDatabaseFreshness } from "../legal/verified-retrieval";
 import { aiText, type AiOutputLocale } from "./localization";
 import {
@@ -126,7 +127,7 @@ export const legalChatResponseSchema = z.object({
   clarificationQuestions: z.array(z.string().min(1).max(500)).max(8),
   assumptions: z.array(legalAssumptionSchema).max(16),
   risks: z.array(legalRiskSchema).max(16),
-  sources: z.array(legalSourceRefSchema).max(12),
+  sources: z.array(legalSourceRefSchema).max(MAX_LEGAL_EVIDENCE_SOURCES),
   requiredDocuments: z.array(requiredDocumentSchema).max(16),
   actionPlan: z.array(actionStepSchema).max(16),
   deadlines: z.array(legalDeadlineSchema).max(12),

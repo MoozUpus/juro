@@ -488,6 +488,36 @@ test("a coverage requirement retains distinct operative provisions, not only its
   if (result.outcome === "selected") assert.deepEqual(result.selections.map(item => item.itemKey), ["civil-remedy", "liability"]);
 });
 
+test("a compact set of thirteen operative provisions is retained without dropping a rule", () => {
+  const candidates = Array.from({length: 13}, (_, index) =>
+    selectionCandidate(`operative-${index}`, ["requirement-one"], 0.9 - index / 100));
+  const result = selectTargetProvisions({
+    plan: {...plan, readings: [plan.readings[0]!], formulations: [plan.formulations[0]!]},
+    candidates, repairAttempted: false,
+  }, {mappings: candidates.map(candidate => ({itemKey: candidate.candidate.candidate.itemKey,
+    supportedRequirementIds: ["requirement-one"], governingRequirementIds: ["requirement-one"]})),
+    additionalRequirements: []});
+  assert.equal(result.outcome, "selected");
+  if (result.outcome === "selected") assert.deepEqual(new Set(result.selections.map(item => item.itemKey)),
+    new Set(candidates.map(candidate => candidate.candidate.candidate.itemKey)));
+});
+
+test("complete operative evidence exceeding the context budget is rejected without selecting a subset", () => {
+  for (const [count, characters] of [[13, 3000], [25, 100]]) {
+    const candidates = Array.from({length: count!}, (_, index) => ({
+      ...selectionCandidate(`operative-${index}`, ["requirement-one"], 0.9 - index / 100),
+      provisionText: "x".repeat(characters!),
+    }));
+    const result = selectTargetProvisions({
+      plan: {...plan, readings: [plan.readings[0]!], formulations: [plan.formulations[0]!]},
+      candidates, repairAttempted: false,
+    }, {mappings: candidates.map(candidate => ({itemKey: candidate.candidate.candidate.itemKey,
+      supportedRequirementIds: ["requirement-one"], governingRequirementIds: ["requirement-one"]})),
+      additionalRequirements: []});
+    assert.equal(result.outcome, "rejected");
+  }
+});
+
 test("an explicit provision reference can trigger one bounded generic repair", () => {
   const candidate = selectionCandidate("item-one", ["requirement-one"], 0.9);
   const result = selectTargetProvisions({

@@ -139,6 +139,7 @@ test("reference evidence is assessed before repair without displacing the initia
       referenceOrigin: {itemKey: "item-0", article: String(700 + index)}, fusionScore: 0}})));
   let searches = 0;
   let wrongArticle = false;
+  let oversizedEvidence = false;
   const retriever = createTargetLegalAnswerRetriever({environment: "development", interpreter: {interpret: async () => plan},
     releaseResolver: {resolve: async () => release},
     candidateIndex: {retrieve: async () => {
@@ -160,7 +161,8 @@ test("reference evidence is assessed before repair without displacing the initia
       const citation = {label: `Example Act — Article ${wrongArticle ? "999" : article}`, url: "https://lex.uz/docs/900"};
       return parseControllingEvidenceResolution({controlling: {legalInstrumentId: "instrument", officialExpressionId: "expression",
         textRevisionId: "revision", provisionConceptId: `concept-${id}`, provisionRenditionId: id,
-        languageTag: "uz-Latn", script: "Latn", textualAuthority: "controlling", provisionText: `Complete verified rule for ${id}.`,
+        languageTag: "uz-Latn", script: "Latn", textualAuthority: "controlling",
+        provisionText: oversizedEvidence ? "Complete verified rule. ".repeat(2000) : `Complete verified rule for ${id}.`,
         officialCitation: citation, evidence: {provisionRenditionId: id, r2Key: `evidence/${id}`, byteCount: 100,
           sha256: "a".repeat(64), sourceNormalizedSha256: "b".repeat(64), schemaVersion: 1}}, materialCitation: citation});
     }},
@@ -180,6 +182,14 @@ test("reference evidence is assessed before repair without displacing the initia
   wrongArticle = true;
   const mismatched = await retriever.answer({id: "reference-mismatch", question: "Rule and its grounds"});
   assert.equal(mismatched.kind, "insufficient_indexed_coverage", "metadata alone cannot substitute a different article's authenticated text");
+  wrongArticle = false;
+  oversizedEvidence = true;
+  const oversized = await retriever.answer({id: "oversized-evidence", question: "Rule and its grounds"});
+  assert.equal(oversized.kind, "clarification_required", "complete authenticated text must fit even when selection accepts its bounded excerpt");
+  if (oversized.kind === "clarification_required") {
+    assert.equal(oversized.safeErrorCode, "EVIDENCE_CEILING_EXCEEDED");
+    assert.deepEqual(oversized.coverageRequirements?.map(requirement => requirement.id), ["requirement-1", "requirement-2"]);
+  }
 });
 
 test("repair retains supported evidence even when new candidates push it below the pool ceiling", () => {
@@ -193,7 +203,11 @@ test("repair retains supported evidence even when new candidates push it below t
   assert.equal(retained.length, 48);
   assert.ok(retained.some(item => item.candidate.itemKey === "item-59"));
   assert.ok(retained.some(item => item.candidate.itemKey === "item-0"));
-  assert.throws(() => boundedSelectionPool(entries, Array.from({length: 13}, (_, index) => `item-${index}`)));
+  const required = Array.from({length: 24}, (_, index) => `item-${36 + index}`);
+  const complete = boundedSelectionPool(entries, required);
+  assert.equal(complete.length, 48);
+  assert.equal(required.every(key => complete.some(item => item.candidate.itemKey === key)), true);
+  assert.throws(() => boundedSelectionPool(entries, Array.from({length: 25}, (_, index) => `item-${index}`)));
 });
 
 test("selection pool reserves independently ranked candidates for every formulation", () => {

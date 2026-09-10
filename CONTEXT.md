@@ -180,6 +180,7 @@ _Avoid_: query match, candidate membership, inherited requirement
 
 **Provision Set**:
 The complementary official provisions selected to satisfy the Coverage Requirements for one Legal Answer.
+Its complete authenticated text must fit the shared evidence context budget. A count of short provisions alone does not justify dropping an operative rule; oversized sets remain explicitly unresolved. See [the evidence context decision](docs/adr/0011-bound-complete-verified-evidence-context.md).
 _Avoid_: top results, hit list, citation count
 
 **Source Unavailability**:

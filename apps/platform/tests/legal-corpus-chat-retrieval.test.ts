@@ -200,6 +200,28 @@ test("chat retrieval uses the R2-native target service before live Lex", async (
   ]);
 });
 
+test("thirteen compact provisions preserve all independent coverage mappings in the writer context", async () => {
+  const requirements = Array.from({length: 13}, (_, index) => ({id: `rule-${index}`, statement: `Independent rule ${index}`, priority: "core"}));
+  const targetService = {async fetch(_input: RequestInfo | URL) {
+    return Response.json({result: {kind: "legal_answer", sourceLadder: "indexed_official_corpus",
+      mainPoint: "All independent rules apply.", whatTheLawSays: requirements.map((requirement, index) => ({
+        requirementId: requirement.id, provisionConceptId: `concept-${index}`, provisionRenditionId: `rendition-${index}`,
+        proposition: requirement.statement, controllingQuotation: `Complete operative rule ${index}.`,
+        officialCitations: [{label: `Example Act — Article ${700 + index}`, url: "https://lex.uz/ru/docs/777"}],
+        evidenceSha256: contentHash,
+      })), whatToDoNext: [], focusedQuestions: [], formulationsUsed: 1, repairQueriesUsed: 0,
+      temporalEndpoint: {kind: "current"}, coverageRequirements: requirements}});
+  }} as Fetcher;
+  const result = await retrieveCorpusAwareLegalSources({query: "Independent rules", locale: "ru",
+    targetService, targetEnvironment: "staging", targetQuestionId: "compact-evidence",
+    liveSearch: async () => { throw new Error("No fallback expected"); }});
+  assert.equal(result.sources.length, 13);
+  assert.equal(result.coverageStatus, "good_coverage");
+  assert.deepEqual(result.coverageRequirements?.map(requirement => requirement.id), requirements.map(requirement => requirement.id));
+  assert.equal(result.coverageRequirements?.every(requirement => requirement.sourceIds?.length === 1
+    && result.sources.some(source => source.id === requirement.sourceIds[0])), true);
+});
+
 test("revoked indexed documents are excluded before live research and cannot certify coverage", async () => {
   let liveCalls = 0;
   const targetService = { async fetch() {
@@ -414,7 +436,7 @@ test("an over-cap comparison fails closed instead of publishing one endpoint", a
     kind: "legal_answer",
     sourceLadder: "indexed_official_corpus",
     mainPoint: `Answer ${prefix}`,
-    whatTheLawSays: Array.from({ length: 12 }, (_, index) => ({
+    whatTheLawSays: Array.from({ length: 13 }, (_, index) => ({
       requirementId: `requirement-${prefix}-${index}`,
       provisionConceptId: `concept-${prefix}-${index}`,
       provisionRenditionId: `rendition-${prefix}-${index}`,
