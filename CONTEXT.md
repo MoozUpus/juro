@@ -171,7 +171,7 @@ A materially distinct interpretation of a General Legal Question that could chan
 _Avoid_: assumption, query variant, Coverage Requirement
 
 **Coverage Requirement**:
-A distinct legal proposition required by a Plausible Reading that must be supported or explicitly left unresolved before JURO can claim good Official Coverage. Its identity, priority and scope (general rule, personal status, action stage, forum, claim kind or consequence) survive planning, retrieval repair and answer validation. Evidence for one scope cannot silently stand in for another.
+A distinct legal proposition required by a Plausible Reading that must be supported or explicitly left unresolved before JURO can claim good Official Coverage. Its identity, priority and scope (general rule, personal status, action stage, forum, claim kind or consequence) survive planning, retrieval repair and answer validation. Each requirement has an explicit answer-coverage entry referring to findings that still undergo claim and citation validation. Equivalent requirements may share a finding; distinct scopes cannot silently stand in for one another. An explicit core rule scope requires an ordinary governing finding, rather than a qualification alone.
 _Avoid_: interpretation, facet, keyword, query concept
 
 **Requirement Support**:

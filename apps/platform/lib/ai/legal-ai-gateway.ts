@@ -12,6 +12,7 @@ import { groundingNumericTokens } from "../legal/grounding-numbers";
 import { canonicalSecondaryInternetUrl } from "../legal/secondary-internet-url";
 import { parsePrivateDocumentLocator } from "../document-analysis/private-document-locator";
 import { AiUnavailableError } from "../document-builder/ai/openai";
+import { requiredCoverageAnswerRole } from "../legal/legal-coverage";
 import {
   containsSensitiveAgentContent,
   containsUnvalidatedHttpLink,
@@ -977,6 +978,8 @@ export function validateLegalGatewayAnswer(input: {
   // requirement. Retrieval provenance or a dropped finding cannot cover it.
   const uncovered = (input.coverageRequirements ?? []).filter(requirement =>
     !filtered.confirmedFindings.some(finding => finding.requirementIds?.includes(requirement.id)
+      && (requiredCoverageAnswerRole(requirement) === null
+        || finding.answerRole === requiredCoverageAnswerRole(requirement))
       && (requirement.sourceIds.length === 0
         || finding.sourceIds.some(id => requirement.sourceIds.includes(id)))));
   if (uncovered.length > 0) {

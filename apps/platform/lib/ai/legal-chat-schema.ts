@@ -195,6 +195,23 @@ export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, 
   unrepresentable: "throw",
 }) as Record<string, unknown>;
 
+function answerCoverageSchema(requirements: readonly {id: string}[]) {
+  return z.object(Object.fromEntries(requirements.map((_, index) => [
+    `r${index + 1}`, z.array(z.number().int().min(0).max(15)).max(16),
+  ]))).strict();
+}
+
+/** Every planned scope gets an explicit slot; an empty slot remains a visible gap. */
+export function legalChatJsonSchemaForCoverage(requirements: readonly {id: string}[] = []) {
+  if (!requirements.length) return legalChatJsonSchema;
+  return z.toJSONSchema(legalChatModelResponseSchema.extend({
+    confirmedFindings: z.array(legalFindingSchema.omit({requirementIds: true}).extend({
+      answerRole: legalFindingSchema.shape.answerRole.unwrap(),
+    })).max(16),
+    coverage: answerCoverageSchema(requirements),
+  }), {target: "draft-7", unrepresentable: "throw"}) as Record<string, unknown>;
+}
+
 export function restoreLegalSourceIds(ids: readonly string[], sources: readonly { id: string }[]): string[] {
   const sourceByAlias = new Map(sources.map((source, index) => [`s${index + 1}`, source.id]));
   return ids.map(id => sourceByAlias.get(id) ?? id);
@@ -206,16 +223,26 @@ export function parseLegalChatResponse(value: unknown, context?: {
   reasoningMode: "fast" | "deep";
   legalDatabaseAsOf: string;
   sources?: readonly { id: string }[];
+  coverageRequirements?: readonly {id: string}[];
 }): LegalChatResponse {
   if (!context || !value || typeof value !== "object" || Array.isArray(value)) {
     return legalChatResponseSchema.parse(value);
   }
   const record = value as Record<string, unknown>;
+  const requirements = context.coverageRequirements ?? [];
+  const coverage = requirements.length ? answerCoverageSchema(requirements).parse(record.coverage) : null;
+  const findingCount = Array.isArray(record.confirmedFindings) ? record.confirmedFindings.length : 0;
+  if (coverage && Object.values(coverage).some(indices => indices.some(index => index >= findingCount))) {
+    throw new TypeError("ANSWER_COVERAGE_FINDING_UNAVAILABLE");
+  }
   const claims = Object.fromEntries(["confirmedFindings", "conditionalBranches", "risks", "actionPlan", "deadlines"]
-    .filter(key => Array.isArray(record[key])).map(key => [key, (record[key] as unknown[]).map(item => {
+    .filter(key => Array.isArray(record[key])).map(key => [key, (record[key] as unknown[]).map((item, findingIndex) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
       const claim = item as Record<string, unknown>;
-      return {...claim, sourceIds: Array.isArray(claim.sourceIds)
+      return {...claim, ...(key === "confirmedFindings" && coverage ? {
+        requirementIds: requirements.flatMap((requirement, index) =>
+          coverage[`r${index + 1}`]!.includes(findingIndex) ? [requirement.id] : []),
+      } : {}), sourceIds: Array.isArray(claim.sourceIds)
         ? claim.sourceIds.map(id => typeof id === "string" ? restoreLegalSourceIds([id], context.sources ?? [])[0] : id) : claim.sourceIds};
     })]));
   // Source cards and the legacy answer copy are rebuilt after validation.
@@ -225,7 +252,9 @@ export function parseLegalChatResponse(value: unknown, context?: {
   const summary = typeof record.summary === "string" ? record.summary
     : main && typeof main.explanation === "string"
       ? main.explanation.slice(0, 1_500) : " ";
-  return legalChatResponseSchema.parse({ ...record, ...claims,
+  const responseRecord = {...record};
+  delete responseRecord.coverage;
+  return legalChatResponseSchema.parse({ ...responseRecord, ...claims,
     ...(Array.isArray(record.summarySourceIds) ? {summarySourceIds: record.summarySourceIds.map(id =>
       typeof id === "string" ? restoreLegalSourceIds([id], context.sources ?? [])[0] : id)} : {}),
     summary, answer: summary, sources: [], language: context.locale, jurisdiction: "UZ",

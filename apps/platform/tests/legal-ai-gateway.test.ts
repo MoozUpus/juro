@@ -202,6 +202,32 @@ test("independent requirements remain visibly unresolved when findings disappear
   assert.equal(validated.run.data.confirmedFindings.length, 1);
 });
 
+test("a qualification cannot replace the governing rule of an independent core scope", () => {
+  const qualificationText = "При реорганизации общества регистрация проводится после передачи документов.";
+  const evidence = {...source, spans: [{...source.spans![0]!, text:
+    `${source.spans![0]!.text} ${qualificationText}`}]};
+  const qualification = {title: "Реорганизация", explanation: qualificationText,
+    answerRole: "qualification" as const, requirementIds: ["registration"], sourceIds: [source.id]};
+  for (const scopeKind of ["general", "personal_status", "action_stage", "forum", "claim_kind"] as const) {
+    const validate = (findings: LegalChatResponse["confirmedFindings"]) => {
+      const answer = {...result, confirmedFindings: findings};
+      return validateLegalGatewayAnswer({result: answer, run: {...run, data: answer}, sources: [evidence],
+        locale: "ru", answerMode: "detailed", reasoningMode: "fast", legalDatabaseAsOf: source.verifiedAt,
+        coverageRequirements: [{id: "registration", statement: "Государственная регистрация общества",
+          priority: "core", scopeKind, sourceIds: [source.id]}]}).run.data;
+    };
+    const incomplete = validate([qualification]);
+    assert.equal(incomplete.responseKind, "clarification_required", scopeKind);
+    assert.deepEqual(incomplete.coverageGaps, ["Государственная регистрация общества"]);
+    assert.equal(incomplete.confirmedFindings.length, 1, "keep the supported partial answer");
+    const complete = validate([{...result.confirmedFindings[0]!, answerRole: "governing_rule",
+      requirementIds: ["registration"]}, qualification]);
+    assert.equal(complete.responseKind, "answer", scopeKind);
+    assert.deepEqual(complete.coverageGaps, []);
+    assert.equal(complete.confirmedFindings.length, 2, "retain the qualification beside the ordinary rule");
+  }
+});
+
 test("a supported heading cannot authorize an unsupported explanation", () => {
   const answer = {...result, confirmedFindings: [{
     title: "Общество подлежит государственной регистрации в установленном порядке",
