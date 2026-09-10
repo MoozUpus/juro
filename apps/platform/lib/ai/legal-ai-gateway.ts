@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_LEGAL_EVIDENCE_SOURCES } from "../legal/legal-evidence-budget";
 
 /**
  * Claim/source filtering and coverage checks adapt the grounding concepts in
@@ -81,7 +82,7 @@ export const legalGatewayProviderMetadataSchema = z.object({
 export const legalGatewayAnswerSchema = z.object({
   answer: z.string().trim().min(1).max(20_000),
   claims: z.array(legalGatewayClaimSchema).max(64),
-  sources: z.array(legalGatewaySourceSchema).max(12),
+  sources: z.array(legalGatewaySourceSchema).max(MAX_LEGAL_EVIDENCE_SOURCES),
   nextSteps: z.array(z.string().trim().min(1).max(2_000)).max(16),
   uncertainty: z.array(z.string().trim().min(1).max(2_000)).max(24),
   providerMetadata: legalGatewayProviderMetadataSchema,

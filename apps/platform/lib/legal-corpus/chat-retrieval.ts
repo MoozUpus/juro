@@ -1,5 +1,6 @@
 import type { LegalChatRequest, LegalSourceContext } from "../ai/provider";
 import { verifyCurrentLexDocument } from "../legal/lex-document-status";
+import { fitsLegalEvidenceBudget } from "../legal/legal-evidence-budget";
 import {
   retrieveLiveLexSources,
   type LiveLexRetrievalResult,
@@ -320,7 +321,9 @@ async function withTargetCoverage(
   if (!answer) return null;
   const checkedAt = now.toISOString();
   const candidates = uniqueTargetStatements(answer);
-  if (candidates.length > 12) return unavailableTargetCeilingCoverage(now);
+  if (!fitsLegalEvidenceBudget(candidates.map(entry => entry.statement.controllingQuotation))) {
+    return unavailableTargetCeilingCoverage(now);
+  }
   const urls = [...new Set(candidates.filter((entry) => entry.temporalEndpoint.kind === "current")
     .map((entry) => entry.statement.officialCitations[0]!.url))];
   const statuses = new Map(await Promise.all(urls.map(async (url) => {
@@ -334,7 +337,9 @@ async function withTargetCoverage(
     candidateProvisionCount: candidates.length, retainedProvisionCount: statements.length,
     unavailableDocuments: [...statuses.values()].filter((status) => status === null).length,
     repealedDocuments: [...statuses.values()].filter((status) => status === false).length }));
-  if (statements.length > 12) return unavailableTargetCeilingCoverage(now);
+  if (!fitsLegalEvidenceBudget(statements.map(entry => entry.statement.controllingQuotation))) {
+    return unavailableTargetCeilingCoverage(now);
+  }
   const sources = await Promise.all(statements.map(async (
     { statement, temporalEndpoint },
   ): Promise<LegalSourceContext> => {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fitsLegalEvidenceBudget, MAX_LEGAL_EVIDENCE_SOURCES } from "../legal/legal-evidence-budget";
 import { selectionAssessmentBatches, selectionReferenceContext } from "./selection-reference-context";
 
 import { callOpenAiStructured } from "../document-builder/ai/openai";
@@ -458,6 +459,12 @@ export function selectTargetProvisions(
     candidate.candidate.candidate.itemKey,
     candidate,
   ]));
+  const selectionFitsBudget = (keys: readonly string[]) => keys.length <= MAX_LEGAL_EVIDENCE_SOURCES && fitsLegalEvidenceBudget(
+    [...new Map(keys.map(key => {
+      const candidate = candidateByKey.get(key)!;
+      return [candidate.candidate.provisionRenditionId, candidate.provisionText];
+    })).values()],
+  );
   const supportedByKey = new Map<string, Set<string>>();
   const governingByKey = new Map<string, Set<string>>();
   for (const mapping of support.mappings) {
@@ -502,7 +509,7 @@ export function selectTargetProvisions(
   const retainedItemKeys = [...new Set(requirements.flatMap(requirement => candidatesForRequirement(
     ranked, supportedByKey, governingByKey, requirement.id, formulationIdsByRequirement,
   ).map(candidate => candidate.candidate.candidate.itemKey)))];
-  if (retainedItemKeys.length > 12) return selectionDecisionSchema.parse({outcome: "rejected"});
+  if (!selectionFitsBudget(retainedItemKeys)) return selectionDecisionSchema.parse({outcome: "rejected"});
   if (missing) {
     const hasDedicatedFormulation = value.plan.formulations.some((formulation) =>
       formulation.requirementIds.length === 1
@@ -525,7 +532,7 @@ export function selectTargetProvisions(
             selected.set(itemKey, covered);
           }
         }
-        if (selected.size > 12) return selectionDecisionSchema.parse({outcome: "rejected"});
+        if (!selectionFitsBudget([...selected.keys()])) return selectionDecisionSchema.parse({outcome: "rejected"});
         const missingSupporting = requirements.filter((requirement) => requirement.priority === "supporting"
           && !ranked.some((candidate) => supportedByKey.get(
             candidate.candidate.candidate.itemKey)?.has(requirement.id))).map(({ id }) => id);
@@ -575,21 +582,19 @@ export function selectTargetProvisions(
     });
   }
   const selected = new Map<string, Set<string>>();
-  const renditions = new Set<string>();
   for (const requirement of requirements) {
     const candidates = candidatesForRequirement(
       ranked, supportedByKey, governingByKey, requirement.id,
       formulationIdsByRequirement);
     if (candidates.length === 0) return selectionDecisionSchema.parse({ outcome: "rejected" });
     for (const candidate of candidates) {
-      renditions.add(candidate.candidate.provisionRenditionId);
       const itemKey = candidate.candidate.candidate.itemKey;
       const covered = selected.get(itemKey) ?? new Set<string>();
       covered.add(requirement.id);
       selected.set(itemKey, covered);
     }
   }
-  if (renditions.size > 12) return selectionDecisionSchema.parse({ outcome: "rejected" });
+  if (!selectionFitsBudget([...selected.keys()])) return selectionDecisionSchema.parse({ outcome: "rejected" });
   const isRussian = value.plan.answerLanguage.toLowerCase().startsWith("ru");
   const isUzbek = value.plan.answerLanguage.toLowerCase().startsWith("uz");
   return selectionDecisionSchema.parse({
