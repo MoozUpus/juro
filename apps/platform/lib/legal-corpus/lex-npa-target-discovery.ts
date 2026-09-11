@@ -1,5 +1,6 @@
 import {
   enqueueOfficialLexCorpusDocument,
+  officialLexCorpusFetchJobId,
   type LegalCorpusQueueEnv,
 } from "./ingestion";
 import { fetchLexCatalogPage } from "./lex-catalog-discovery";
@@ -226,6 +227,39 @@ export async function npaPrioritySourceUrls(
     const parsed = parseLexDocumentUrl(row.candidateSourceUrl);
     return parsed ? [parsed.sourceUrl] : [];
   }))];
+}
+
+/**
+ * Resolves the primary keys of the current-card jobs selected by the P0 NPA
+ * lane. Unlike source-url filtering, these IDs can be claimed without
+ * scanning the generic ingestion backlog. The key derivation is shared with
+ * enqueueOfficialLexCorpusDocument, so a missing/not-yet-enqueued card simply
+ * yields no candidate rather than selecting another revision of that act.
+ */
+export async function npaPriorityCurrentCardJobIds(
+  db: D1Database,
+  now = new Date(),
+): Promise<string[]> {
+  const asOfDate = await npaCorpusAsOfDate(db, now);
+  const result = await db.prepare(`SELECT document_key AS documentKey,candidate_source_url AS candidateSourceUrl
+    FROM npa_discovery_state
+    WHERE status IN ('candidate','verified','future','repealed','manual_review') AND candidate_source_url IS NOT NULL
+    ORDER BY CASE status
+      WHEN 'manual_review' THEN 0
+      WHEN 'candidate' THEN 1
+      WHEN 'repealed' THEN 2
+      WHEN 'future' THEN 3
+      WHEN 'verified' THEN 4
+      ELSE 5
+    END,updated_at ASC,document_key ASC LIMIT 32`).all<{ documentKey: string; candidateSourceUrl: string }>();
+  const jobs = await Promise.all(result.results.flatMap((row) => {
+    const parsed = parseLexDocumentUrl(row.candidateSourceUrl);
+    return parsed ? [officialLexCorpusFetchJobId({
+      sourceUrl: parsed.sourceUrl,
+      idempotencyScope: `npa-current-card:v${NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION}:${row.documentKey}:${asOfDate}`,
+    })] : [];
+  }));
+  return [...new Set(jobs)];
 }
 
 /** Resolves one non-seeded target by an exact, allow-listed Lex title search. */

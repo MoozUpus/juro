@@ -16,8 +16,9 @@ import {
 } from "../lib/legal-corpus/npa-registry";
 import { recordNpaCorpusVersion } from "../lib/legal-corpus/npa-registry";
 import { retrieveLegalCorpus } from "../lib/legal-corpus/retrieval";
-import { enqueueOfficialLexCorpusDocument } from "../lib/legal-corpus/ingestion";
+import { enqueueOfficialLexCorpusDocument, officialLexCorpusFetchJobId } from "../lib/legal-corpus/ingestion";
 import {
+  npaPriorityCurrentCardJobIds,
   npaPrioritySourceUrls,
   refreshVerifiedNpaTargetJobs,
   seedNpaTargetJobs,
@@ -151,8 +152,15 @@ test("the 2010 realtor target is re-seeded from its own LexUZ card, never from i
 
 test("unresolved NPA identity reviews take priority over routine verified-card refreshes", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
+  const now = new Date("2026-09-11T00:00:00.000Z");
+  const env = {
+    APP_ENV: "staging",
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  } as const;
   try {
-    await seedNpaMasterTargets(d1, new Date("2026-09-11T00:00:00.000Z"));
+    await seedNpaMasterTargets(d1, now);
     sqlite.prepare(`UPDATE npa_discovery_state SET status='verified',candidate_source_url=?,
       updated_at='2026-09-11T00:00:00.000Z' WHERE document_key='telecommunications'`)
       .run("https://lex.uz/ru/docs/7283074");
@@ -163,6 +171,26 @@ test("unresolved NPA identity reviews take priority over routine verified-card r
     assert.deepEqual((await npaPrioritySourceUrls(d1)).slice(0, 2), [
       "https://lex.uz/ru/docs/2876352",
       "https://lex.uz/ru/docs/7283074",
+    ]);
+    await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/2876352", now,
+      idempotencyScope: "npa-current-card:v4:customs_code:2026-09-11",
+    });
+    await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/7283074", now,
+      idempotencyScope: "npa-current-card:v4:telecommunications:2026-09-11",
+    });
+    const expectedManualJobId = await officialLexCorpusFetchJobId({
+      sourceUrl: "https://lex.uz/ru/docs/2876352",
+      idempotencyScope: "npa-current-card:v4:customs_code:2026-09-11",
+    });
+    const expectedVerifiedJobId = await officialLexCorpusFetchJobId({
+      sourceUrl: "https://lex.uz/ru/docs/7283074",
+      idempotencyScope: "npa-current-card:v4:telecommunications:2026-09-11",
+    });
+    assert.deepEqual((await npaPriorityCurrentCardJobIds(d1, now)).slice(0, 2), [
+      expectedManualJobId,
+      expectedVerifiedJobId,
     ]);
   } finally {
     sqlite.close();

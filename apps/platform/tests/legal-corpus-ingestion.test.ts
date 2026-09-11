@@ -1542,7 +1542,7 @@ test("master NPA priority takes its current Lex card before generic retries", as
       SET status='retrying',next_attempt_at=? WHERE id=?`).run(now.toISOString(), backlog.jobId);
     const first = await runNextLegalCorpusIngestionJob(env, {
       now: new Date(now.getTime() + 3_000), fetchImpl: fetchFor(lexHtml()),
-      prioritySourceUrls: ["https://lex.uz/ru/docs/10006"],
+      priorityJobIds: [current.jobId],
     });
     assert.equal(first.jobId, current.jobId);
     assert.equal((sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")

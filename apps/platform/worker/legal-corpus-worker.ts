@@ -14,7 +14,7 @@ import {
   seedLexCoreCodeJobs,
 } from "../lib/legal-corpus/lex-core-code-discovery";
 import {
-  npaPrioritySourceUrls,
+  npaPriorityCurrentCardJobIds,
   refreshVerifiedNpaTargetJobs,
   runNextNpaTargetDiscovery,
   seedNpaTargetJobs,
@@ -386,7 +386,10 @@ export async function handleLegalCorpusScheduled(
       // amendment to enter the corpus. The broad catalogue is held until this
       // bounded set is settled, rather than defining completeness by crawl size.
       npaSeeds = await seedNpaTargetJobs(env, { now: new Date(controller.scheduledTime) });
-      const priorityNpaSources = await npaPrioritySourceUrls(env.DB);
+      const priorityNpaJobIds = await npaPriorityCurrentCardJobIds(
+        env.DB,
+        new Date(controller.scheduledTime),
+      );
       npaDiscovery = await runNextNpaTargetDiscovery(env, {
         now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
       });
@@ -407,7 +410,7 @@ export async function handleLegalCorpusScheduled(
         ...LEX_CORE_CODE_SEED_IDS,
         ...coreCode.priorityCanonicalDocumentIds,
       ])];
-      const ingestionBudget = priorityNpaSources.length > 0
+      const ingestionBudget = priorityNpaJobIds.length > 0
         ? 1
         : legalCorpusIngestionJobBudget(discoveries, {
           persistentRobotsPolicy: pacerStats.persistentRobotsCacheHits > 0,
@@ -436,8 +439,8 @@ export async function handleLegalCorpusScheduled(
           reservedQueuedJobType: reservedVersionSlot
             ? "version"
             : undefined,
-          prioritySourceUrls: priorityNpaSources,
-          sourceTimeoutMs: priorityNpaSources.length > 0 ? 30_000 : undefined,
+          priorityJobIds: priorityNpaJobIds,
+          sourceTimeoutMs: priorityNpaJobIds.length > 0 ? 30_000 : undefined,
           preferredCanonicalDocumentIds: preferredCoreCodeIds,
         });
         ingestions.push(result);
