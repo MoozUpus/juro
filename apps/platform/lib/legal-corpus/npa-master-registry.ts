@@ -113,7 +113,7 @@ const NPA_LAYER_1_RAW = [
   npa({ documentKey: "pledge", titleRu: "О залоге", shortTitle: "Залог", expectedActNumber: "614-I", expectedAdoptionDate: "1998-05-01" }),
   npa({ documentKey: "leasing", titleRu: "О лизинге", shortTitle: "Лизинг", expectedActNumber: "756-I", expectedAdoptionDate: "1999-04-14" }),
   npa({ documentKey: "valuation_activity", titleRu: "Об оценочной деятельности", shortTitle: "Оценочная деятельность", expectedActNumber: "811-I", expectedAdoptionDate: "1999-08-19" }),
-  npa({ documentKey: "realtor_activity_2010", titleRu: "О риэлторской деятельности", shortTitle: "Риэлторская деятельность", expectedActNumber: "ЗРУ-269", expectedAdoptionDate: "2010-12-22", successorDocumentKey: "realtor_activity_2026" }),
+  npa({ documentKey: "realtor_activity_2010", titleRu: "О риэлторской деятельности", shortTitle: "Риэлторская деятельность", expectedActNumber: "ЗРУ-269", expectedAdoptionDate: "2010-12-22", verifiedSourceSeed: "https://lex.uz/ru/docs/1714039", successorDocumentKey: "realtor_activity_2026" }),
   npa({ documentKey: "private_property_protection", titleRu: "О защите частной собственности и гарантиях прав собственников", shortTitle: "Защита частной собственности", expectedActNumber: "ЗРУ-336", expectedAdoptionDate: "2012-09-24" }),
 
   npa({ documentKey: "central_bank", titleRu: "О Центральном банке Республики Узбекистан", shortTitle: "Центральный банк", expectedActNumber: "ЗРУ-582", expectedAdoptionDate: "2019-11-11" }),

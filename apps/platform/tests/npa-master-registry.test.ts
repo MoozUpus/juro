@@ -31,6 +31,7 @@ test("NPA registry is exactly the mandatory 100 plus a separate future successor
   assert.deepEqual(NPA_FUTURE_TARGETS.map((target) => target.documentKey), ["realtor_activity_2026"]);
   const oldRealtor = NPA_MASTER_TARGETS.find((target) => target.documentKey === "realtor_activity_2010");
   assert.equal(oldRealtor?.successorDocumentKey, "realtor_activity_2026");
+  assert.equal(oldRealtor?.verifiedSourceSeed, "https://lex.uz/ru/docs/1714039");
   assert.equal(NPA_FUTURE_TARGETS[0]?.replacesDocumentKey, "realtor_activity_2010");
 });
 
@@ -114,6 +115,35 @@ test("a previously discovered NPA card receives its own current-card verificatio
     assert.equal(scoped?.correlationId, "npa:telecommunications:current-card:2026-09-11");
     assert.equal(Number((sqlite.prepare(`SELECT count(*) AS count FROM legal_corpus_ingestion_jobs
       WHERE source_url=?`).get(sourceUrl) as { count: number }).count), 2);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("the 2010 realtor target is re-seeded from its own LexUZ card, never from its future successor", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const now = new Date("2026-09-11T00:00:00.000Z");
+  const env = {
+    APP_ENV: "staging",
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  } as const;
+  try {
+    await seedNpaMasterTargets(d1, now);
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='candidate',candidate_source_url=?,
+      candidate_lexuz_doc_id='8385395' WHERE document_key='realtor_activity_2010'`)
+      .run("https://lex.uz/ru/docs/8385395");
+
+    await seedNpaTargetJobs(env, { now });
+    const state = sqlite.prepare(`SELECT candidate_source_url AS sourceUrl,candidate_lexuz_doc_id AS lexuzDocId
+      FROM npa_discovery_state WHERE document_key='realtor_activity_2010'`).get() as {
+        sourceUrl: string; lexuzDocId: string;
+      };
+    assert.deepEqual({ ...state }, {
+      sourceUrl: "https://lex.uz/ru/docs/1714039",
+      lexuzDocId: "1714039",
+    });
   } finally {
     sqlite.close();
   }
