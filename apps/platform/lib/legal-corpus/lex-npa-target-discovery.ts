@@ -11,10 +11,9 @@ import {
 import {
   NPA_FUTURE_TARGETS,
   NPA_MASTER_TARGETS,
-  npaAsOfDate,
   type NpaTarget,
 } from "./npa-master-registry";
-import { seedNpaMasterTargets } from "./npa-registry";
+import { npaCorpusAsOfDate, seedNpaMasterTargets } from "./npa-registry";
 import { featureEnabled, type LegalCorpusFeatureFlag } from "./trust";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -23,7 +22,7 @@ const MAX_NPA_TITLE_SEARCH_PAGES = 12;
 // Increment only for a deliberately reviewed NPA card recheck change. It
 // preserves immutable ingestion rows while allowing a bounded re-validation
 // of already discovered cards after the reporting/parser contract changes.
-const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "2";
+const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "3";
 
 type TargetRow = {
   documentKey: string;
@@ -120,7 +119,7 @@ async function queueCurrentNpaCard(input: {
   // picker, not every calendar date. Read the canonical current card first;
   // its selected official revision date is then compared to AS_OF_DATE and
   // its own history supplies an exact historical picker date when needed.
-  const asOfDate = npaAsOfDate(input.now);
+  const asOfDate = await npaCorpusAsOfDate(input.env.DB, input.now);
   const current = await enqueueOfficialLexCorpusDocument(input.env, {
     sourceUrl: input.parsed.sourceUrl, now: input.now,
     correlationId: `npa:${input.target.documentKey}:current-card:${asOfDate}`,
@@ -152,7 +151,8 @@ export async function seedNpaTargetJobs(
     const recheckable = row.status === "candidate"
       || row.status === "verified"
       || row.status === "future"
-      || row.status === "repealed";
+      || row.status === "repealed"
+      || row.status === "manual_review";
     if (!recheckable || !row.candidateSourceUrl) continue;
     const target = targetsByKey.get(row.documentKey);
     const parsed = parseLexDocumentUrl(row.candidateSourceUrl);
@@ -173,7 +173,7 @@ export async function refreshVerifiedNpaTargetJobs(
   input: { now?: Date } = {},
 ): Promise<{ considered: number; queued: number; date: string }> {
   const now = input.now ?? new Date();
-  const date = npaAsOfDate(now);
+  const date = await npaCorpusAsOfDate(env.DB, now);
   if (!enabled(env)) return { considered: 0, queued: 0, date };
   const result = await env.DB.prepare(`SELECT registry.document_key AS documentKey,
       registry.source_reference AS sourceReference
@@ -208,7 +208,7 @@ export async function npaPrioritySourceUrls(
 ): Promise<string[]> {
   const result = await db.prepare(`SELECT candidate_source_url AS candidateSourceUrl
     FROM npa_discovery_state
-    WHERE status IN ('candidate','verified','future','repealed') AND candidate_source_url IS NOT NULL
+    WHERE status IN ('candidate','verified','future','repealed','manual_review') AND candidate_source_url IS NOT NULL
     ORDER BY updated_at ASC,document_key ASC LIMIT 32`).all<{ candidateSourceUrl: string }>();
   return [...new Set(result.results.flatMap((row) => {
     const parsed = parseLexDocumentUrl(row.candidateSourceUrl);

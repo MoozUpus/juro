@@ -10,6 +10,7 @@ import {
   runNextLegalCorpusIngestionJob,
 } from "../lib/legal-corpus/ingestion";
 import { seedLexCatalogDiscoveryCheckpoints } from "../lib/legal-corpus/lex-catalog-discovery";
+import { seedNpaMasterTargets } from "../lib/legal-corpus/npa-registry";
 import { QdrantCorpusError } from "../lib/legal-corpus/qdrant";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -1639,6 +1640,60 @@ test("historical Lex revisions are queued newest-first and keep non-overlapping 
     const pointer = sqlite.prepare(`SELECT current_version_id AS currentVersionId
       FROM legal_corpus_variants`).get() as { currentVersionId: string };
     assert.equal(pointer.currentVersionId, current.versionId);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a master NPA attaches only the newest LexUZ revision effective on the frozen initial as-of date", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const sourceUrl = "https://lex.uz/ru/docs/6257291";
+  const npaHtml = (selected: string, body: string, includePriorRevision = false) => `<!doctype html><main id="divCont">
+    <div>Дата вступления в силу</div><div>30.04.2023</div>
+    <div class="dropdown-menu__item lx_date_selected stopProp">${selected}</div>
+    ${includePriorRevision ? `<div class="dropdown-menu__item lx_date_link" onclick="lxOpenUrl('/ru/docs/6257291?ONDATE=11.09.2026')">11.09.2026</div>` : ""}
+    <div class="COMMENT lx_no_select">Настоящий Кодекс утвержден Законом Республики Узбекистан от 28 октября 2022 года № ЗРУ-798.</div>
+    <div class="lx_elem ACT_TITLE">Трудовой кодекс Республики Узбекистан</div>
+    <div class="lx_elem ARTICLE">Статья 1. Предмет регулирования</div>
+    <div class="lx_elem">${body.repeat(12)}</div>
+  </main>`;
+  try {
+    await seedNpaMasterTargets(d1, new Date("2026-09-11T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='candidate',candidate_source_url=?,
+      candidate_lexuz_doc_id='6257291' WHERE document_key='labor_code'`).run(sourceUrl);
+    const env = { ...envFor(d1, bucket), LEGAL_CORPUS_HISTORICAL_ENABLED: "true" };
+    const fetchImpl = async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain" } });
+      }
+      const historical = url.includes("ONDATE=11.09.2026");
+      return new Response(
+        historical
+          ? npaHtml("11.09.2026", "Редакция на дату корпуса. ")
+          : npaHtml("12.09.2026", "Редакция после даты корпуса. ", true),
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      );
+    };
+
+    await ingestOfficialLexDocument(env, {
+      sourceUrl, now: new Date("2026-09-12T12:00:00.000Z"), fetchImpl,
+    });
+    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM npa_master_registry WHERE document_key='labor_code'")
+      .get() as { count: number }).count), 0);
+
+    assert.equal((await runNextLegalCorpusIngestionJob(env, {
+      now: new Date("2026-09-12T12:01:00.000Z"), fetchImpl,
+    })).status, "completed");
+    const registry = sqlite.prepare(`SELECT status,rag_enabled AS ragEnabled FROM npa_master_registry
+      WHERE document_key='labor_code'`).get() as { status: string; ragEnabled: number };
+    const version = sqlite.prepare(`SELECT version_effective_from AS effectiveFrom,version_as_of AS versionAsOf
+      FROM npa_document_versions WHERE document_key='labor_code'`).get() as {
+        effectiveFrom: string; versionAsOf: string;
+      };
+    assert.deepEqual({ ...registry }, { status: "active", ragEnabled: 1 });
+    assert.deepEqual({ ...version }, { effectiveFrom: "2026-09-11", versionAsOf: "2026-09-11" });
   } finally {
     sqlite.close();
   }

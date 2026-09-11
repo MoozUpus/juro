@@ -1,5 +1,6 @@
 import {
   NPA_FUTURE_TARGETS,
+  NPA_BASELINE_AS_OF_DATE,
   NPA_MASTER_TARGETS,
   npaAsOfDate,
   type NpaTarget,
@@ -136,6 +137,29 @@ export function npaTemporalState(input: {
   };
 }
 
+/**
+ * The very first bounded corpus is a legal snapshot, not a race with the
+ * wall clock. Keep its declared AS_OF date until every mandatory record has
+ * been verified. Subsequent daily checks automatically use the local current
+ * date, which preserves historical-answer support without freezing JURO.
+ */
+export async function npaCorpusAsOfDate(db: D1Database, now = new Date()): Promise<string> {
+  try {
+    const row = await db.prepare(`SELECT count(*) AS verified
+      FROM npa_master_registry AS registry
+      INNER JOIN npa_master_targets AS target ON target.document_key=registry.document_key
+      WHERE target.target_set='mandatory' AND registry.status<>'manual_review'`)
+      .first<{ verified: number | string | null }>();
+    const verified = Number(row?.verified ?? 0);
+    return verified < NPA_MASTER_TARGETS.length ? NPA_BASELINE_AS_OF_DATE : npaAsOfDate(now);
+  } catch {
+    // The corpus migration can be deployed after the Worker artifact. Until
+    // the registry exists, retain normal current-date behavior and let the
+    // feature flags keep the worker fail-closed.
+    return npaAsOfDate(now);
+  }
+}
+
 export async function seedNpaMasterTargets(
   db: D1Database,
   now = new Date(),
@@ -201,11 +225,20 @@ export async function recordNpaManualReview(input: {
   }
   const now = (input.now ?? new Date()).toISOString();
   await input.db.batch([
+    // A retry must never turn one unresolved identity question into an
+    // unbounded report. Preserve the original finding until a later verified
+    // LexUZ card explicitly resolves it.
     input.db.prepare(`INSERT INTO npa_manual_review_report
       (id,document_key,run_id,reason_code,details,source_reference,created_at,resolved_at)
-      VALUES (?,?,?,?,?,?,?,NULL)`).bind(
+      SELECT ?,?,?,?,?,?,?,NULL
+      WHERE NOT EXISTS (
+        SELECT 1 FROM npa_manual_review_report
+        WHERE document_key=? AND reason_code=?
+          AND coalesce(source_reference,'')=coalesce(?, '') AND resolved_at IS NULL
+      )`).bind(
       crypto.randomUUID(), input.documentKey, input.runId ?? null, input.reasonCode,
       details, sourceReference, now,
+      input.documentKey, input.reasonCode, sourceReference,
     ),
     input.db.prepare(`UPDATE npa_discovery_state SET status='manual_review',last_error_code=?,
       last_checked_at=?,updated_at=? WHERE document_key=?`).bind(input.reasonCode, now, now, input.documentKey),
@@ -413,6 +446,8 @@ export async function recordNpaCorpusVersion(input: {
       last_error_code=NULL,updated_at=? WHERE document_key=?`).bind(
       temporal.status === "active" ? "verified" : temporal.status, now, now, now, target.documentKey,
     ),
+    input.db.prepare(`UPDATE npa_manual_review_report SET resolved_at=?
+      WHERE document_key=? AND resolved_at IS NULL`).bind(now, target.documentKey),
   ]);
   const sourceProvisions = await input.db.prepare(`SELECT id,article_number AS articleNumber,text
     FROM legal_corpus_provisions WHERE version_id=? ORDER BY sequence`).bind(input.legalCorpusVersionId)

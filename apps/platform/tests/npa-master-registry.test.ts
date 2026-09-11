@@ -10,6 +10,7 @@ import { buildNpaIngestionReport } from "../lib/legal-corpus/npa-report";
 import {
   isConsolidatedNpaCandidate,
   npaTemporalState,
+  npaCorpusAsOfDate,
   seedNpaMasterTargets,
   targetAcceptsLexMetadata,
 } from "../lib/legal-corpus/npa-registry";
@@ -72,6 +73,7 @@ test("NPA target and report tables preserve an explicit 100-target zero-ingestio
     assert.deepEqual(result, { mandatory: 100, future: 1 });
     assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM npa_master_targets WHERE target_set='mandatory'").get() as { count: number }).count), 100);
     assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM npa_master_targets").get() as { count: number }).count), 101);
+    assert.equal(await npaCorpusAsOfDate(d1, new Date("2026-09-12T00:00:00.000Z")), "2026-09-11");
     const report = await buildNpaIngestionReport(d1, "2026-09-11");
     assert.deepEqual(report, {
       targetNpas: 100,

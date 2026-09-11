@@ -232,6 +232,46 @@ export function parseLexDocumentEffectivity(html: string): LexDocumentEffectivit
 
 const DOCUMENT_TYPE_PATTERN = /(?<!\p{L})(?:конституционный\s+закон|закон|кодекс|указ|постановление|распоряжение|приказ|решение|низом|қонун|кодекс|фармон|қарор|буйруқ|qonun|kodeks|farmon|qaror|buyruq|decision|decree|resolution|order|law|code)(?!\p{L})/iu;
 const AUTHORITY_PATTERN = /(?:президент|кабинет\s+министров|министерств|комитет|комисси|верховн\p{L}*\s+суд|сенат|законодательн\p{L}*\s+палат|prezident|vazirlar\s+mahkamasi|vazirlik|qo['‘’]?mita|komissiya|oliy\s+sud|senat|qonunchilik\s+palatasi|президент|вазирлар\s+маҳкамаси|вазирлик|қўмита|комиссия|олий\s+суд|сенат|қонунчилик\s+палатаси|president|cabinet|ministry|committee|commission|supreme\s+court|senate|legislative\s+chamber)/iu;
+const RUSSIAN_MONTHS = new Map<string, string>([
+  ["января", "01"], ["февраля", "02"], ["марта", "03"], ["апреля", "04"],
+  ["мая", "05"], ["июня", "06"], ["июля", "07"], ["августа", "08"],
+  ["сентября", "09"], ["октября", "10"], ["ноября", "11"], ["декабря", "12"],
+]);
+
+function russianLongDateToIso(value: string): string | null {
+  const match = /^(?<day>\d{1,2})\s+(?<month>\p{L}+)\s+(?<year>\d{4})(?:\s+г(?:ода|\.)?)?$/iu.exec(
+    value.trim().toLocaleLowerCase("ru"),
+  );
+  if (!match?.groups) return null;
+  const month = RUSSIAN_MONTHS.get(match.groups.month);
+  const day = Number(match.groups.day);
+  if (!month || !Number.isInteger(day) || day < 1 || day > 31) return null;
+  return `${match.groups.year}-${month}-${String(day).padStart(2, "0")}`;
+}
+
+/**
+ * Some LexUZ code cards deliberately identify the approving Law only in a
+ * LexUZ editorial reference, while the normative body is the Code itself.
+ * This parser treats that reference as source metadata only: it never enters
+ * normalized normative text or a chunk. It is accepted solely when the
+ * controlled LexUZ comment expressly says that the present Code was approved
+ * by a Law and supplies the date and number.
+ */
+function parseLexCodeApprovalMetadata(html: string): LexDocumentMetadata | null {
+  const comment = /<div\b[^>]*\bclass=["'][^"']*\bCOMMENT\b[^"']*["'][^>]*>[\s\S]{0,16000}/iu.exec(html);
+  if (!comment?.[0]) return null;
+  const text = visibleText(comment[0]).replace(/\s+/gu, " ").trim();
+  const approval = /Настоящий\s+Кодекс\s+утвержден\s+Законом\s+Республики\s+Узбекистан\s+от\s+(?<date>\d{1,2}\s+\p{L}+\s+\d{4}(?:\s+г(?:ода|\.)?)?)\s+№\s*(?<number>[\p{L}\d][\p{L}\d./\-–—]*)/iu.exec(text);
+  if (!approval?.groups) return null;
+  const adoptionDate = russianLongDateToIso(approval.groups.date);
+  if (!adoptionDate) return null;
+  return {
+    documentType: "Кодекс",
+    documentNumber: approval.groups.number,
+    adoptingAuthority: null,
+    adoptionDate,
+  };
+}
 
 /** Reads the official document-card label from Lex's own metadata header.
  * Missing or ambiguous fields stay null; neither fetch time nor body text is
@@ -240,7 +280,8 @@ export function parseLexDocumentMetadata(html: string): LexDocumentMetadata {
   const text = visibleText(effectivityMetadataHtml(html));
   const numbered = /^(?<descriptor>.{2,600}?)(?:,|\s)+(?:от|dated|санали|даги|dagi)?\s*(?<date>\d{2}\.\d{2}\.\d{4})(?:\s*(?:г\.|й\.|y\.)?)?\s*(?:№|N(?:o\.?|º)?)\s*(?<number>[\p{L}\d][\p{L}\d./\-–—]*)/iu.exec(text);
   if (!numbered?.groups) {
-    return { documentType: null, documentNumber: null, adoptingAuthority: null, adoptionDate: null };
+    return parseLexCodeApprovalMetadata(html)
+      ?? { documentType: null, documentNumber: null, adoptingAuthority: null, adoptionDate: null };
   }
   const descriptor = numbered.groups.descriptor.replace(/\s+/gu, " ").trim();
   const typeMatch = DOCUMENT_TYPE_PATTERN.exec(descriptor);

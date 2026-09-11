@@ -1,4 +1,5 @@
-import { NPA_MASTER_TARGETS, npaAsOfDate } from "./npa-master-registry";
+import { NPA_MASTER_TARGETS } from "./npa-master-registry";
+import { npaCorpusAsOfDate } from "./npa-registry";
 
 export type NpaIngestionReport = Readonly<{
   targetNpas: number;
@@ -24,8 +25,9 @@ function count(value: unknown): number {
 /** A read-only, auditable report; it never turns a partial corpus into success. */
 export async function buildNpaIngestionReport(
   db: D1Database,
-  asOfDate = npaAsOfDate(),
+  asOfDate?: string,
 ): Promise<NpaIngestionReport> {
+  const reportAsOfDate = asOfDate ?? await npaCorpusAsOfDate(db);
   const row = await db.prepare(`SELECT
       count(target.document_key) AS targetNpas,
       sum(CASE WHEN state.candidate_source_url IS NOT NULL THEN 1 ELSE 0 END) AS located,
@@ -58,7 +60,7 @@ export async function buildNpaIngestionReport(
     active: count(row.active), future: count(row.future), manualReview: count(row.manualReview),
     documentsIngested: count(row.documentsIngested), articlesIngested: count(row.articlesIngested),
     chunksGenerated: count(row.chunksGenerated), embeddingsCreated: count(row.embeddingsCreated),
-    errors: count(row.errors), warnings: count(row.warnings), asOfDate,
+    errors: count(row.errors), warnings: count(row.warnings), asOfDate: reportAsOfDate,
     lastVerification: typeof row.lastVerification === "string" ? row.lastVerification : null,
   };
 }

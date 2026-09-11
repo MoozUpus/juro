@@ -162,6 +162,21 @@ test("Lex metadata uses only the official document header and keeps ambiguous fi
   });
 });
 
+test("Lex code approval comment supplies metadata without entering normative text", () => {
+  assert.deepEqual(parseLexDocumentMetadata(`
+    <main><div class="docHeader"><div>Дата вступления в силу</div><div>22.04.2016</div></div>
+    <div class="COMMENT lx_no_select"><div class="COMMENTLEXUZ">Комментарий LexUz</div>
+      <div>Настоящий Кодекс утвержден <a href="/ru/docs/2876115">Законом</a>
+      Республики Узбекистан от 20 января 2016 года № ЗРУ-400 «Об утверждении Таможенного кодекса Республики Узбекистан».</div>
+    </div><div class="container docBody-container">Нормативный текст Кодекса.</div></main>
+  `), {
+    documentType: "Кодекс",
+    documentNumber: "ЗРУ-400",
+    adoptingAuthority: null,
+    adoptionDate: "2016-01-20",
+  });
+});
+
 test("provision parser keeps article structure and only splits genuinely large articles", () => {
   const provisions = parseLegalProvisions([
     "1-modda. Umumiy qoida",

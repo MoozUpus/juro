@@ -40,8 +40,7 @@ import {
 } from "./trust";
 import { diffCorpusProvisions, type CorpusProvisionSnapshot } from "./versioning";
 import { LegalCorpusEmbeddingError } from "./embeddings";
-import { npaAsOfDate } from "./npa-master-registry";
-import { recordNpaCorpusVersion } from "./npa-registry";
+import { npaCorpusAsOfDate, recordNpaCorpusVersion } from "./npa-registry";
 import { QdrantCorpusError } from "./qdrant";
 import {
   buildSparseTermEntries,
@@ -890,10 +889,22 @@ export async function ingestOfficialLexDocument(
   if (chunks.length === 0 || chunks.length > MAX_CHUNKS_PER_VERSION) {
     throw new TypeError("LEGAL_CORPUS_CHUNK_LIMIT_REJECTED");
   }
-  const npaQueryDate = npaAsOfDate(input.now ?? new Date());
+  const npaQueryDate = await npaCorpusAsOfDate(env.DB, input.now ?? new Date());
+  // LexUZ's ONDATE control accepts publication/revision picker dates, not an
+  // arbitrary calendar day. For a historical legal question, use the newest
+  // picker revision that was already in force on the requested date.
+  const npaAsOfRevisionDate = revisionHistory.currentRevisionDate
+    && revisionHistory.currentRevisionDate <= npaQueryDate
+    ? revisionHistory.currentRevisionDate
+    : revisionHistory.revisions.find((candidate) => candidate.revisionDate <= npaQueryDate)?.revisionDate
+      ?? null;
+  const isNpaAsOfRevision = npaAsOfRevisionDate !== null
+    && (revision
+      ? revision.revisionDate === npaAsOfRevisionDate
+      : revisionHistory.currentRevisionDate === npaAsOfRevisionDate);
   const npaVersionEffectiveFrom = effectivity.validFrom && effectivity.validFrom > npaQueryDate
     ? effectivity.validFrom
-    : revisionHistory.currentRevisionDate ?? revision?.revisionDate ?? effectivity.validFrom;
+    : revision?.revisionDate ?? revisionHistory.currentRevisionDate ?? effectivity.validFrom;
 
   const now = nowIso(input.now);
   const current = await existingVariant(env.DB, documentId, currentDocument.language);
@@ -953,7 +964,7 @@ export async function ingestOfficialLexDocument(
     await enqueueRevisionHistory({
       env, revisions: revisionHistory.revisions, now: input.now ?? new Date(), documentId,
     });
-    if (!revision) {
+    if (!revision && isNpaAsOfRevision) {
       await recordNpaCorpusVersion({
         db: env.DB, sourceUrl: currentDocument.sourceUrl,
         lexuzDocId: currentDocument.canonicalDocumentId.replace(/^lexuz:/u, ""),
@@ -967,8 +978,7 @@ export async function ingestOfficialLexDocument(
         effectiveFrom: effectivity.validFrom, effectiveTo: effectivity.validTo,
         sourceStatus: effectivity.status, versionEffectiveFrom: npaVersionEffectiveFrom,
         normativeChecksum, articleCount: countNpaArticles(provisions), chunkCount: chunks.length,
-        isAsOfRevision: revisionHistory.currentRevisionDate !== null
-          && revisionHistory.currentRevisionDate <= npaQueryDate,
+        isAsOfRevision: true,
         asOfDate: npaQueryDate,
         now: input.now,
       });
@@ -1199,7 +1209,7 @@ export async function ingestOfficialLexDocument(
   // The bounded master set attaches its frozen AS_OF revision and later
   // current-card checks. Arbitrary historical crawler jobs stay immutable in
   // the base corpus but cannot overwrite the NPA master summary out of order.
-  if (!revision || revision.revisionDate === npaQueryDate) {
+  if (isNpaAsOfRevision) {
     await recordNpaCorpusVersion({
       db: env.DB,
       sourceUrl: currentDocument.sourceUrl,
@@ -1223,9 +1233,7 @@ export async function ingestOfficialLexDocument(
       normativeChecksum,
       articleCount: countNpaArticles(provisions),
       chunkCount: chunks.length,
-      isAsOfRevision: revision === null
-        && revisionHistory.currentRevisionDate !== null
-        && revisionHistory.currentRevisionDate <= npaQueryDate,
+      isAsOfRevision: true,
       asOfDate: npaQueryDate,
       now: input.now,
     });
