@@ -18,6 +18,7 @@ import { recordNpaCorpusVersion } from "../lib/legal-corpus/npa-registry";
 import { retrieveLegalCorpus } from "../lib/legal-corpus/retrieval";
 import { enqueueOfficialLexCorpusDocument } from "../lib/legal-corpus/ingestion";
 import {
+  npaPrioritySourceUrls,
   refreshVerifiedNpaTargetJobs,
   seedNpaTargetJobs,
 } from "../lib/legal-corpus/lex-npa-target-discovery";
@@ -113,6 +114,26 @@ test("a previously discovered NPA card receives its own current-card verificatio
     assert.equal(scoped?.correlationId, "npa:telecommunications:current-card:2026-09-11");
     assert.equal(Number((sqlite.prepare(`SELECT count(*) AS count FROM legal_corpus_ingestion_jobs
       WHERE source_url=?`).get(sourceUrl) as { count: number }).count), 2);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("unresolved NPA identity reviews take priority over routine verified-card refreshes", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await seedNpaMasterTargets(d1, new Date("2026-09-11T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='verified',candidate_source_url=?,
+      updated_at='2026-09-11T00:00:00.000Z' WHERE document_key='telecommunications'`)
+      .run("https://lex.uz/ru/docs/7283074");
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='manual_review',candidate_source_url=?,
+      updated_at='2026-09-11T01:00:00.000Z' WHERE document_key='customs_code'`)
+      .run("https://lex.uz/ru/docs/2876352");
+
+    assert.deepEqual((await npaPrioritySourceUrls(d1)).slice(0, 2), [
+      "https://lex.uz/ru/docs/2876352",
+      "https://lex.uz/ru/docs/7283074",
+    ]);
   } finally {
     sqlite.close();
   }

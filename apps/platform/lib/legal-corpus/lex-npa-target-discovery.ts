@@ -209,7 +209,17 @@ export async function npaPrioritySourceUrls(
   const result = await db.prepare(`SELECT candidate_source_url AS candidateSourceUrl
     FROM npa_discovery_state
     WHERE status IN ('candidate','verified','future','repealed','manual_review') AND candidate_source_url IS NOT NULL
-    ORDER BY updated_at ASC,document_key ASC LIMIT 32`).all<{ candidateSourceUrl: string }>();
+    -- Resolve explicit fail-closed identities before routine refreshes. A
+    -- parser/schema repair must not sit behind dozens of otherwise valid
+    -- verified cards, because the 100-NPA production gate remains blocked.
+    ORDER BY CASE status
+      WHEN 'manual_review' THEN 0
+      WHEN 'candidate' THEN 1
+      WHEN 'repealed' THEN 2
+      WHEN 'future' THEN 3
+      WHEN 'verified' THEN 4
+      ELSE 5
+    END,updated_at ASC,document_key ASC LIMIT 32`).all<{ candidateSourceUrl: string }>();
   return [...new Set(result.results.flatMap((row) => {
     const parsed = parseLexDocumentUrl(row.candidateSourceUrl);
     return parsed ? [parsed.sourceUrl] : [];
