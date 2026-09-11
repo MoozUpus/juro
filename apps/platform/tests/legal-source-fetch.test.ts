@@ -5,6 +5,7 @@ import {
   LegalSourceFetchError,
   classifyLegalSourceUrl,
   fetchLexArchiveRepresentation,
+  fetchLexDocumentInfoCard,
   fetchLexPdfRepresentation,
   fetchLegalSource,
 } from "../lib/legal/source-fetch";
@@ -338,6 +339,33 @@ test("Lex PDF representation is fetched only from the canonical official endpoin
     synthetic.calls.map((call) => call.url),
     ["https://lex.uz/robots.txt", "https://lex.uz/pdffile/42"],
   );
+});
+
+test("Lex information-card metadata is bounded, robots-paced and tied to the same document", async () => {
+  const synthetic = sequenceFetch([
+    robots("User-agent: *\nAllow: /\nCrawl-delay: 20\n"),
+    html("<!doctype html><main>Official metadata only</main>"),
+  ]);
+  const waits: number[] = [];
+  const result = await fetchLexDocumentInfoCard("https://lex.uz/ru/docs/6257291", {
+    fetchImpl: synthetic.fetchImpl,
+    wait: async (delayMs) => { waits.push(delayMs); },
+    now: () => new Date("2026-09-11T12:00:00.000Z"),
+  });
+  assert.deepEqual({
+    canonicalId: result.canonicalId,
+    infoCardUrl: result.infoCardUrl,
+    fetchedAt: result.fetchedAt,
+  }, {
+    canonicalId: "6257291",
+    infoCardUrl: "https://lex.uz/ru/actinfo/card1/6257291",
+    fetchedAt: "2026-09-11T12:00:00.000Z",
+  });
+  assert.deepEqual(waits, [20_000]);
+  assert.deepEqual(synthetic.calls.map((call) => call.url), [
+    "https://lex.uz/robots.txt",
+    "https://lex.uz/ru/actinfo/card1/6257291",
+  ]);
 });
 
 test("Lex archive representation is same-origin, robots-paced and magic-validated", async () => {

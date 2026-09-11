@@ -10,6 +10,7 @@ import {
   languageVariantsFromLinks,
   parseLexDocumentEffectivity,
   parseLexDocumentMetadata,
+  parseLexOfficialInfoCardMetadata,
   parseLexDocumentUrl,
   LEX_CORE_CODE_TARGETS,
   lexCoreCodeSearchUrl,
@@ -174,6 +175,20 @@ test("Lex code approval comment supplies metadata without entering normative tex
     documentNumber: "ЗРУ-400",
     adoptingAuthority: null,
     adoptionDate: "2016-01-20",
+  });
+});
+
+test("Lex legal-analysis card supplies source metadata for a code with a header that omits approval details", () => {
+  assert.deepEqual(parseLexOfficialInfoCardMetadata(`
+    <table><tr><td class="lbl">Наименование акта</td><td>Трудовой кодекс Республики Узбекистан</td></tr>
+    <tr><td class="lbl">Вид акта</td><td>Законодательные акты</td><td class="lbl">Форма акта</td><td>Кодекс</td></tr></table>
+    <table><thead><tr><th>Наименование органа</th><th>Дата принятия</th><th>Номер акта</th><th>Место принятия</th></tr></thead>
+    <tbody><tr><td>Олий Мажлис Республики Узбекистан</td><td>28.10.2022</td><td></td><td>Узбекистан, г. Ташкент</td></tr></tbody></table>
+  `), {
+    documentType: "Кодекс",
+    documentNumber: null,
+    adoptingAuthority: null,
+    adoptionDate: "2022-10-28",
   });
 });
 

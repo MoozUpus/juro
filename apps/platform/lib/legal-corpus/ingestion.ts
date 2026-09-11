@@ -2,6 +2,7 @@ import {
   LegalSourceFetchError,
   classifyLegalSourceUrl,
   fetchLexArchiveRepresentation,
+  fetchLexDocumentInfoCard,
   fetchLexPdfRepresentation,
   fetchLegalSource,
 } from "../legal/source-fetch";
@@ -26,10 +27,12 @@ import {
   LEX_CORPUS_CATEGORIES,
   parseLexDocumentEffectivity,
   parseLexDocumentMetadata,
+  parseLexOfficialInfoCardMetadata,
   parseLexDocumentUrl,
   parseLexRevisionUrl,
   type LexDiscoveredDocument,
   type LexDiscoveredRevision,
+  type LexDocumentMetadata,
 } from "./lex-discovery";
 import {
   LEGAL_CORPUS_FEATURE_FLAGS,
@@ -56,6 +59,7 @@ const MAX_CHUNKS_PER_VERSION = 16_000;
 // bounded 12 MiB document while retaining the stricter interactive default.
 const MAX_LEX_SOURCE_BYTES = 12 * 1024 * 1024;
 const MAX_LEX_REPRESENTATION_BYTES = 20 * 1024 * 1024;
+const MAX_LEX_INFO_CARD_BYTES = 512 * 1024;
 const MAX_P0_LEX_SOURCE_TIMEOUT_MS = 30_000;
 const INITIAL_INGESTION_MAX_ATTEMPTS = 5;
 const WRITE_BATCH_SIZE = 90;
@@ -103,6 +107,63 @@ const CATALOG_CATEGORY_KEYS = new Set<string>(LEX_CORPUS_CATEGORIES.map((categor
 const CATALOG_LANGUAGE_KEYS = new Set<LegalCorpusLanguage>(["uz-Cyrl", "uz-Latn", "ru", "en"]);
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+function mergeLexDocumentMetadata(
+  primary: LexDocumentMetadata,
+  supplemental: LexDocumentMetadata,
+): LexDocumentMetadata {
+  return {
+    documentType: primary.documentType ?? supplemental.documentType,
+    documentNumber: primary.documentNumber ?? supplemental.documentNumber,
+    adoptingAuthority: primary.adoptingAuthority ?? supplemental.adoptingAuthority,
+    adoptionDate: primary.adoptionDate ?? supplemental.adoptionDate,
+  };
+}
+
+/**
+ * A master NPA candidate may use the official LexUZ legal-analysis card only
+ * to complete a missing type/adoption-date pair. The card is fetched through
+ * the same bounded source controls, and its bytes never enter raw snapshots,
+ * normalization, provisions, chunks or embeddings.
+ */
+async function npaSourceMetadata(
+  db: D1Database,
+  input: {
+    document: LexDiscoveredDocument;
+    rawHtml: string;
+    now: Date;
+    wait?: (delayMs: number) => Promise<void>;
+    fetchImpl?: FetchLike;
+    timeoutMs?: number;
+  },
+): Promise<LexDocumentMetadata> {
+  const primary = parseLexDocumentMetadata(input.rawHtml);
+  if (primary.documentType && primary.adoptionDate) return primary;
+  const candidate = await db.prepare(`SELECT 1 AS found FROM npa_discovery_state
+    WHERE candidate_source_url=? LIMIT 1`)
+    .bind(input.document.sourceUrl)
+    .first<{ found: number }>();
+  if (!candidate) return primary;
+  try {
+    const card = await fetchLexDocumentInfoCard(input.document.sourceUrl, {
+      now: () => input.now,
+      wait: input.wait,
+      fetchImpl: input.fetchImpl,
+      ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
+      maxBytes: MAX_LEX_INFO_CARD_BYTES,
+    });
+    const supplemental = parseLexOfficialInfoCardMetadata(
+      new TextDecoder("utf-8", { fatal: true }).decode(card.bytes),
+    );
+    return mergeLexDocumentMetadata(primary, supplemental);
+  } catch (error) {
+    // A source card is supporting metadata, not a replacement for the reader
+    // text. Preserve an explicit manual-review path for incomplete metadata
+    // while allowing transient official-card failures to retry normally.
+    if (error instanceof LegalSourceFetchError) return primary;
+    throw error;
+  }
+}
 
 /** Registry reporting is article-based even where a long article requires
  * several provisions/chunks. Preambles and unnumbered structural context do
@@ -839,7 +900,14 @@ export async function ingestOfficialLexDocument(
   const languageVariants = discoverLexLanguageVariants(rawHtml, currentDocument);
   const revisionHistory = discoverLexRevisionHistory(rawHtml, currentDocument);
   const effectivity = parseLexDocumentEffectivity(rawHtml);
-  const documentMetadata = parseLexDocumentMetadata(rawHtml);
+  const documentMetadata = await npaSourceMetadata(env.DB, {
+    document: currentDocument,
+    rawHtml,
+    now: input.now ?? new Date(),
+    wait: input.wait,
+    fetchImpl: input.fetchImpl,
+    timeoutMs: input.sourceTimeoutMs,
+  });
   const documentId = await linkedDocumentId(env.DB, languageVariants)
     ?? lexLanguageFamilyId(languageVariants);
   const normalizedSource = await normalizeOfficialLexSource({

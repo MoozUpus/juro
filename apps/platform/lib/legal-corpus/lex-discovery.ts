@@ -300,6 +300,28 @@ export function parseLexDocumentMetadata(html: string): LexDocumentMetadata {
   };
 }
 
+/**
+ * LexUZ exposes the legal-analysis card at the deterministic, same-document
+ * `/:locale/actinfo/card1/:id` endpoint. Code cards commonly leave their
+ * approval-law number out of the reader header, but this card still supplies
+ * the official form and adoption date. It is source metadata only and is
+ * never treated as normative text.
+ */
+export function parseLexOfficialInfoCardMetadata(html: string): LexDocumentMetadata {
+  const text = visibleText(html).replace(/\s+/gu, " ").trim();
+  const form = /Форма\s+акта\s+(?<form>[\p{L}\s-]{2,120}?)(?=\s+(?:Органы\s*,?\s+принявшие\s+акт|Наименование\s+органа))/iu.exec(text);
+  const adoption = /Дата\s+принятия\s+Номер\s+акта\s+Место\s+принятия[\s\S]{0,900}?(?<date>\d{2}\.\d{2}\.\d{4})/iu.exec(text);
+  return {
+    documentType: form?.groups?.form?.replace(/\s+/gu, " ").trim() || null,
+    // LexUZ's card intentionally leaves this field empty for codes approved
+    // by a separate law. Preserve that absence rather than copying a number
+    // from an unverified page element.
+    documentNumber: null,
+    adoptingAuthority: null,
+    adoptionDate: adoption?.groups?.date ? lexDateToIso(adoption.groups.date) : null,
+  };
+}
+
 /** Reads only Lex's own revision controls and rebuilds every URL through the
  * strict ONDATE parser. Compare links and arbitrary script URLs are ignored. */
 export function discoverLexRevisionHistory(

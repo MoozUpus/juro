@@ -22,7 +22,9 @@ const MAX_NPA_TITLE_SEARCH_PAGES = 12;
 // Increment only for a deliberately reviewed NPA card recheck change. It
 // preserves immutable ingestion rows while allowing a bounded re-validation
 // of already discovered cards after the reporting/parser contract changes.
-const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "3";
+// v4 adds the official same-document LexUZ information-card metadata fallback
+// for Code readers whose consolidated-text header has no adoption requisites.
+const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "4";
 
 type TargetRow = {
   documentKey: string;

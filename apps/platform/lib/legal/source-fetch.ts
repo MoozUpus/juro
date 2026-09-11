@@ -77,6 +77,21 @@ export type FetchedLexArchiveRepresentation = LegalSourceReference & {
   robotsUrl: string;
 };
 
+/**
+ * LexUZ exposes a compact, official legal-analysis card beside each document
+ * reader.  It is never a substitute for the consolidated normative text: the
+ * corpus uses it only to fill source metadata that some Code reader headers
+ * deliberately omit (for example, form and adoption date).
+ */
+export type FetchedLexDocumentInfoCard = LegalSourceReference & {
+  bytes: Uint8Array;
+  contentSha256: string;
+  contentType: string;
+  infoCardUrl: string;
+  fetchedAt: string;
+  robotsUrl: string;
+};
+
 type FetchLike = (
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -116,6 +131,7 @@ const SOURCE_USER_AGENT =
 const SOURCE_USER_AGENT_TOKEN = "juro-legalsourcesync";
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
+const DEFAULT_INFO_CARD_MAX_BYTES = 512 * 1024;
 const DEFAULT_ARCHIVE_MAX_BYTES = 20 * 1024 * 1024;
 const ROBOTS_MAX_BYTES = 128 * 1024;
 const DEFAULT_MAX_REDIRECTS = 2;
@@ -733,6 +749,101 @@ export async function fetchLegalSource(
     contentType: contentType.raw || "text/html; charset=utf-8",
     etag: contentResult.response.headers.get("etag"),
     lastModified: contentResult.response.headers.get("last-modified"),
+    fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
+    robotsUrl: robotsResult.robotsUrl,
+  };
+}
+
+function lexInfoCardUrl(reference: LegalSourceReference): URL {
+  if (reference.sourceKind !== "lex") {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
+  }
+  const prefix = reference.locale === "uzc" ? "" : `/${reference.locale}`;
+  return new URL(`https://lex.uz${prefix}/actinfo/card1/${reference.canonicalId.replace(/^-/, "")}`);
+}
+
+/**
+ * Fetch the deterministic, same-document LexUZ legal-analysis card through
+ * the same robots, redirect, MIME, byte-limit and timeout controls as a
+ * normative document fetch.  This representation is intentionally separate
+ * so callers cannot accidentally pass its editorial content to the legal
+ * parser or embedding pipeline.
+ */
+export async function fetchLexDocumentInfoCard(
+  canonicalUrl: string,
+  options: Pick<FetchOptions, "fetchImpl" | "now" | "timeoutMs" | "maxBytes" | "maxRedirects" | "wait">,
+): Promise<FetchedLexDocumentInfoCard> {
+  const reference = classifyLegalSourceUrl(canonicalUrl);
+  if (reference.sourceKind !== "lex") {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_POLICY_DISABLED", false);
+  }
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxBytes = options.maxBytes ?? DEFAULT_INFO_CARD_MAX_BYTES;
+  const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+  if (
+    timeoutMs < 1 || maxBytes < 1 || maxRedirects < 0
+    || !Number.isSafeInteger(timeoutMs)
+    || !Number.isSafeInteger(maxBytes)
+    || !Number.isSafeInteger(maxRedirects)
+  ) {
+    throw new TypeError("Invalid Lex info-card fetch limits.");
+  }
+  const infoCardUrl = lexInfoCardUrl(reference);
+  const robotsResult = await readRobotsPolicy({
+    initialUrl: new URL(`https://${reference.host}/robots.txt`),
+    targetUrl: infoCardUrl,
+    fetchImpl,
+    timeoutMs,
+    maxRedirects,
+    sourceKind: reference.sourceKind,
+  });
+  const robots = robotsResult.policy;
+  if (!robots.allowed) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_DISALLOWED", false);
+  }
+  if (robots.crawlDelay > MAX_ROBOTS_CRAWL_DELAY_SECONDS) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_RATE_POLICY", false);
+  }
+  if (robots.crawlDelay > 0) {
+    if (!options.wait) {
+      throw new LegalSourceFetchError("LEGAL_SOURCE_CRAWL_WINDOW_REQUIRED", true);
+    }
+    await options.wait(Math.ceil(robots.crawlDelay * 1_000));
+  }
+  const contentResult = await fetchFollowingRedirects(infoCardUrl, {
+    fetchImpl,
+    timeoutMs,
+    maxRedirects,
+    accept: "text/html;charset=UTF-8",
+    unavailableCode: "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
+    validateUrl(candidate) {
+      return candidate.href === infoCardUrl.href;
+    },
+  });
+  if (contentResult.finalUrl.href !== infoCardUrl.href) {
+    await cancelBody(contentResult.response);
+    throw new LegalSourceFetchError("LEGAL_SOURCE_REDIRECT_REJECTED", false);
+  }
+  const contentType = responseContentType(contentResult.response);
+  if (
+    contentType.mediaType !== "text/html"
+    || (contentType.charset && !["utf-8", "utf8"].includes(contentType.charset))
+  ) {
+    await cancelBody(contentResult.response);
+    throw new LegalSourceFetchError("LEGAL_SOURCE_CONTENT_TYPE_REJECTED", false);
+  }
+  const bytes = await readBoundedBytes(contentResult.response, maxBytes, timeoutMs);
+  if (bytes.byteLength === 0) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_EMPTY_CONTENT", false);
+  }
+  decodeUtf8(bytes);
+  return {
+    ...reference,
+    bytes,
+    contentSha256: await sha256(bytes),
+    contentType: contentType.raw || "text/html; charset=utf-8",
+    infoCardUrl: infoCardUrl.href,
     fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
     robotsUrl: robotsResult.robotsUrl,
   };

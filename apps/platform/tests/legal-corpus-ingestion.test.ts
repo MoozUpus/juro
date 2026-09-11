@@ -1699,6 +1699,58 @@ test("a master NPA attaches only the newest LexUZ revision effective on the froz
   }
 });
 
+test("a master Code uses its LexUZ information card only for missing source metadata", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const sourceUrl = "https://lex.uz/ru/docs/6257291";
+  const readerHtml = `<!doctype html><main id="divCont">
+    <div>Дата вступления в силу</div><div>30.04.2023</div>
+    <div class="dropdown-menu__item lx_date_selected stopProp">11.09.2026</div>
+    <div class="lx_elem ACT_TITLE">Трудовой кодекс Республики Узбекистан</div>
+    <div class="lx_elem ARTICLE">Статья 1. Предмет регулирования</div>
+    <div class="lx_elem">${"Норма регулирует трудовые отношения и гарантии работников. ".repeat(18)}</div>
+  </main>`;
+  const infoCardHtml = `<!doctype html><main>
+    <table><tr><td>Наименование акта</td><td>Трудовой кодекс Республики Узбекистан</td></tr>
+    <tr><td>Вид акта</td><td>Законодательные акты</td><td>Форма акта</td><td>Кодекс</td></tr></table>
+    <table><thead><tr><th>Наименование органа</th><th>Дата принятия</th><th>Номер акта</th><th>Место принятия</th></tr></thead>
+    <tbody><tr><td>Законодательная палата Олий Мажлиса Республики Узбекистан</td><td>28.10.2022</td><td></td><td>Ташкент</td></tr></tbody></table>
+  </main>`;
+  try {
+    await seedNpaMasterTargets(d1, new Date("2026-09-11T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='candidate',candidate_source_url=?,
+      candidate_lexuz_doc_id='6257291' WHERE document_key='labor_code'`).run(sourceUrl);
+    const fetchImpl = async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain" } });
+      }
+      if (url.includes("/actinfo/card1/6257291")) {
+        return new Response(infoCardHtml, { headers: { "content-type": "text/html; charset=utf-8" } });
+      }
+      return new Response(readerHtml, { headers: { "content-type": "text/html; charset=utf-8" } });
+    };
+    await ingestOfficialLexDocument(envFor(d1, bucket), {
+      sourceUrl,
+      now: new Date("2026-09-11T12:00:00.000Z"),
+      fetchImpl,
+    });
+    const registry = sqlite.prepare(`SELECT act_type AS actType,act_number AS actNumber,
+      adoption_date AS adoptionDate,status,rag_enabled AS ragEnabled
+      FROM npa_master_registry WHERE document_key='labor_code'`).get() as {
+        actType: string; actNumber: string | null; adoptionDate: string; status: string; ragEnabled: number;
+      };
+    assert.deepEqual({ ...registry }, {
+      actType: "Кодекс", actNumber: null, adoptionDate: "2022-10-28", status: "active", ragEnabled: 1,
+    });
+    const chunk = sqlite.prepare("SELECT content_text AS text FROM legal_corpus_chunks LIMIT 1").get() as { text: string };
+    assert.equal(chunk.text.includes("Наименование органа"), false);
+    assert.equal([...bucket.objects.values()].some((value) => String(value).includes("Наименование органа")), false);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("an exact core-code candidate is claimed before older ordinary FIFO work", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
