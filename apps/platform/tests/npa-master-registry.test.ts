@@ -18,7 +18,7 @@ import { recordNpaCorpusVersion } from "../lib/legal-corpus/npa-registry";
 import { retrieveLegalCorpus } from "../lib/legal-corpus/retrieval";
 import { enqueueOfficialLexCorpusDocument, officialLexCorpusFetchJobId } from "../lib/legal-corpus/ingestion";
 import {
-  npaPriorityCurrentCardJobIds,
+  npaPriorityJobIds,
   npaPrioritySourceUrls,
   refreshVerifiedNpaTargetJobs,
   seedNpaTargetJobs,
@@ -174,21 +174,21 @@ test("unresolved NPA identity reviews take priority over routine verified-card r
     ]);
     await enqueueOfficialLexCorpusDocument(env, {
       sourceUrl: "https://lex.uz/ru/docs/2876352", now,
-      idempotencyScope: "npa-current-card:v4:customs_code:2026-09-11",
+      idempotencyScope: "npa-current-card:v5:customs_code:2026-09-11",
     });
     await enqueueOfficialLexCorpusDocument(env, {
       sourceUrl: "https://lex.uz/ru/docs/7283074", now,
-      idempotencyScope: "npa-current-card:v4:telecommunications:2026-09-11",
+      idempotencyScope: "npa-current-card:v5:telecommunications:2026-09-11",
     });
     const expectedManualJobId = await officialLexCorpusFetchJobId({
       sourceUrl: "https://lex.uz/ru/docs/2876352",
-      idempotencyScope: "npa-current-card:v4:customs_code:2026-09-11",
+      idempotencyScope: "npa-current-card:v5:customs_code:2026-09-11",
     });
     const expectedVerifiedJobId = await officialLexCorpusFetchJobId({
       sourceUrl: "https://lex.uz/ru/docs/7283074",
-      idempotencyScope: "npa-current-card:v4:telecommunications:2026-09-11",
+      idempotencyScope: "npa-current-card:v5:telecommunications:2026-09-11",
     });
-    assert.deepEqual((await npaPriorityCurrentCardJobIds(d1, now)).slice(0, 2), [
+    assert.deepEqual((await npaPriorityJobIds(d1, now)).slice(0, 2), [
       expectedManualJobId,
       expectedVerifiedJobId,
     ]);

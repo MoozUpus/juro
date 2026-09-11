@@ -25,7 +25,9 @@ const MAX_NPA_TITLE_SEARCH_PAGES = 12;
 // of already discovered cards after the reporting/parser contract changes.
 // v4 adds the official same-document LexUZ information-card metadata fallback
 // for Code readers whose consolidated-text header has no adoption requisites.
-const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "4";
+// v5 replays those cards so an exact historical AS_OF revision can receive its
+// own P0 job instead of waiting behind generic version backlog.
+const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "5";
 
 type TargetRow = {
   documentKey: string;
@@ -230,13 +232,12 @@ export async function npaPrioritySourceUrls(
 }
 
 /**
- * Resolves the primary keys of the current-card jobs selected by the P0 NPA
- * lane. Unlike source-url filtering, these IDs can be claimed without
- * scanning the generic ingestion backlog. The key derivation is shared with
- * enqueueOfficialLexCorpusDocument, so a missing/not-yet-enqueued card simply
- * yields no candidate rather than selecting another revision of that act.
+ * Resolves the primary keys of the P0 NPA jobs. A scoped historical AS_OF
+ * revision takes precedence once the current card has discovered it; otherwise
+ * the deterministic current-card job is selected. Unlike source-url filtering,
+ * these IDs can be claimed without scanning the generic ingestion backlog.
  */
-export async function npaPriorityCurrentCardJobIds(
+export async function npaPriorityJobIds(
   db: D1Database,
   now = new Date(),
 ): Promise<string[]> {
@@ -252,14 +253,31 @@ export async function npaPriorityCurrentCardJobIds(
       WHEN 'verified' THEN 4
       ELSE 5
     END,updated_at ASC,document_key ASC LIMIT 32`).all<{ documentKey: string; candidateSourceUrl: string }>();
-  const jobs = await Promise.all(result.results.flatMap((row) => {
+  const jobs = await Promise.all(result.results.flatMap(async (row) => {
     const parsed = parseLexDocumentUrl(row.candidateSourceUrl);
-    return parsed ? [officialLexCorpusFetchJobId({
+    if (!parsed) return [];
+    const asOfRevision = await db.prepare(`SELECT id
+      FROM legal_corpus_ingestion_jobs INDEXED BY legal_corpus_ingestion_document_language_ready_idx
+      WHERE canonical_document_id=? AND language=? AND job_type='version'
+        AND correlation_id=? AND status IN ('queued','retrying')
+        AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+      ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
+        coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1`)
+      .bind(
+        parsed.canonicalDocumentId, parsed.language,
+        `npa:${row.documentKey}:as-of:${asOfDate}`,
+        now.toISOString(),
+      ).first<{ id: string }>();
+    const currentCardJobId = await officialLexCorpusFetchJobId({
       sourceUrl: parsed.sourceUrl,
       idempotencyScope: `npa-current-card:v${NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION}:${row.documentKey}:${asOfDate}`,
-    })] : [];
+    });
+    return [
+      ...(asOfRevision?.id ? [asOfRevision.id] : []),
+      currentCardJobId,
+    ];
   }));
-  return [...new Set(jobs)];
+  return [...new Set(jobs.flat())];
 }
 
 /** Resolves one non-seeded target by an exact, allow-listed Lex title search. */

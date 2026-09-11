@@ -14,7 +14,7 @@ import {
   seedLexCoreCodeJobs,
 } from "../lib/legal-corpus/lex-core-code-discovery";
 import {
-  npaPriorityCurrentCardJobIds,
+  npaPriorityJobIds,
   refreshVerifiedNpaTargetJobs,
   runNextNpaTargetDiscovery,
   seedNpaTargetJobs,
@@ -386,7 +386,7 @@ export async function handleLegalCorpusScheduled(
       // amendment to enter the corpus. The broad catalogue is held until this
       // bounded set is settled, rather than defining completeness by crawl size.
       npaSeeds = await seedNpaTargetJobs(env, { now: new Date(controller.scheduledTime) });
-      const priorityNpaJobIds = await npaPriorityCurrentCardJobIds(
+      const priorityNpaJobIds = await npaPriorityJobIds(
         env.DB,
         new Date(controller.scheduledTime),
       );

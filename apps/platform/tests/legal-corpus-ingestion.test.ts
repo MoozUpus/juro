@@ -11,6 +11,7 @@ import {
 } from "../lib/legal-corpus/ingestion";
 import { seedLexCatalogDiscoveryCheckpoints } from "../lib/legal-corpus/lex-catalog-discovery";
 import { seedNpaMasterTargets } from "../lib/legal-corpus/npa-registry";
+import { npaPriorityJobIds } from "../lib/legal-corpus/lex-npa-target-discovery";
 import { QdrantCorpusError } from "../lib/legal-corpus/qdrant";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -1683,8 +1684,20 @@ test("a master NPA attaches only the newest LexUZ revision effective on the froz
     assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM npa_master_registry WHERE document_key='labor_code'")
       .get() as { count: number }).count), 0);
 
+    const asOfJob = sqlite.prepare(`SELECT id,source_url AS sourceUrl,correlation_id AS correlationId
+      FROM legal_corpus_ingestion_jobs WHERE correlation_id='npa:labor_code:as-of:2026-09-11'`).get() as {
+        id: string; sourceUrl: string; correlationId: string;
+      };
+    assert.deepEqual({ ...asOfJob }, {
+      id: asOfJob.id,
+      sourceUrl: "https://lex.uz/ru/docs/6257291?ONDATE=11.09.2026",
+      correlationId: "npa:labor_code:as-of:2026-09-11",
+    });
+    assert.equal((await npaPriorityJobIds(d1, new Date("2026-09-12T12:01:00.000Z")))[0], asOfJob.id);
+
     assert.equal((await runNextLegalCorpusIngestionJob(env, {
       now: new Date("2026-09-12T12:01:00.000Z"), fetchImpl,
+      priorityJobIds: [asOfJob.id],
     })).status, "completed");
     const registry = sqlite.prepare(`SELECT status,rag_enabled AS ragEnabled FROM npa_master_registry
       WHERE document_key='labor_code'`).get() as { status: string; ragEnabled: number };

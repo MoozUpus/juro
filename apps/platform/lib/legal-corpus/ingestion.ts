@@ -165,6 +165,37 @@ async function npaSourceMetadata(
   }
 }
 
+/**
+ * When the current LexUZ reader is newer than the frozen NPA AS_OF_DATE, its
+ * exact historical picker revision must not wait behind generic version work.
+ * Queue one separately scoped immutable revision job; the scope is later used
+ * by the P0 scheduler, while the underlying source URL and corpus versioning
+ * remain unchanged.
+ */
+async function enqueueNpaAsOfRevision(input: {
+  env: LegalCorpusQueueEnv;
+  currentDocument: LexDiscoveredDocument;
+  revisionHistory: { currentRevisionDate: string | null; revisions: LexDiscoveredRevision[] };
+  asOfDate: string;
+  asOfRevisionDate: string | null;
+  now: Date;
+}): Promise<void> {
+  if (!input.asOfRevisionDate || input.asOfRevisionDate === input.revisionHistory.currentRevisionDate) return;
+  const candidate = await input.env.DB.prepare(`SELECT document_key AS documentKey
+    FROM npa_discovery_state WHERE candidate_source_url=? LIMIT 1`)
+    .bind(input.currentDocument.sourceUrl)
+    .first<{ documentKey: string }>();
+  const revision = input.revisionHistory.revisions
+    .find((entry) => entry.revisionDate === input.asOfRevisionDate);
+  if (!candidate || !revision) return;
+  await enqueueOfficialLexCorpusRevision(input.env, {
+    sourceUrl: revision.sourceUrl,
+    now: input.now,
+    correlationId: `npa:${candidate.documentKey}:as-of:${input.asOfDate}`,
+    idempotencyScope: `npa-as-of:v1:${candidate.documentKey}:${input.asOfDate}`,
+  });
+}
+
 /** Registry reporting is article-based even where a long article requires
  * several provisions/chunks. Preambles and unnumbered structural context do
  * not inflate the statutory article count. */
@@ -1027,6 +1058,10 @@ export async function ingestOfficialLexDocument(
     await enqueueRevisionHistory({
       env, revisions: revisionHistory.revisions, now: input.now ?? new Date(), documentId,
     });
+    await enqueueNpaAsOfRevision({
+      env, currentDocument, revisionHistory, asOfDate: npaQueryDate,
+      asOfRevisionDate: npaAsOfRevisionDate, now: input.now ?? new Date(),
+    });
     if (!revision && isNpaAsOfRevision) {
       await recordNpaCorpusVersion({
         db: env.DB, sourceUrl: currentDocument.sourceUrl,
@@ -1267,6 +1302,10 @@ export async function ingestOfficialLexDocument(
     await enqueueRevisionHistory({
       env, revisions: revisionHistory.revisions, now: input.now ?? new Date(), documentId,
     });
+    await enqueueNpaAsOfRevision({
+      env, currentDocument, revisionHistory, asOfDate: npaQueryDate,
+      asOfRevisionDate: npaAsOfRevisionDate, now: input.now ?? new Date(),
+    });
   }
 
   // The bounded master set attaches its frozen AS_OF revision and later
@@ -1359,12 +1398,14 @@ export async function enqueueOfficialLexCorpusDocument(
 
 export async function enqueueOfficialLexCorpusRevision(
   env: LegalCorpusQueueEnv,
-  input: { sourceUrl: string; now?: Date; correlationId?: string },
+  input: { sourceUrl: string; now?: Date; correlationId?: string; idempotencyScope?: string },
 ): Promise<{ created: boolean; jobId: string; canonicalDocumentId: string }> {
   const parsed = parseLexRevisionUrl(input.sourceUrl);
   if (!parsed) throw new TypeError("LEGAL_CORPUS_OFFICIAL_REVISION_URL_REJECTED");
   const now = nowIso(input.now);
-  const idempotencyKey = await sha256(`version\n${parsed.sourceUrl}`);
+  const idempotencyKey = await sha256(input.idempotencyScope
+    ? `version\n${parsed.sourceUrl}\n${input.idempotencyScope}`
+    : `version\n${parsed.sourceUrl}`);
   const jobId = `legal-version:${idempotencyKey.slice(0, 28)}`;
   const result = await env.DB.prepare(`INSERT INTO legal_corpus_ingestion_jobs
     (id,job_type,status,provider,canonical_document_id,variant_id,source_url,language,idempotency_key,attempt_count,max_attempts,next_attempt_at,last_error_code,correlation_id,created_at,updated_at)
