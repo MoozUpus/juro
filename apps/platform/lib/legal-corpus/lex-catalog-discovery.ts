@@ -5,6 +5,7 @@ import {
   LEX_CORPUS_CATEGORIES,
   LEX_CORPUS_LANGUAGES,
   isLexCoreCodeSearchUrl,
+  isLexNpaTargetSearchUrl,
   type LexCorpusCategoryKey,
   type LexDiscoveredDocument,
 } from "./lex-discovery";
@@ -21,6 +22,7 @@ const MAX_ROBOTS_BYTES = 128 * 1024;
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_VIEW_STATE = 256 * 1024;
 const MAX_CRAWL_DELAY_SECONDS = 60;
+const UNAVAILABLE_ROBOTS_CRAWL_DELAY_SECONDS = 20;
 // Lex publishes a 20-second crawl window. A shorter client deadline turns a
 // reachable, slow catalogue response into a needless retry; this remains a
 // response deadline, not an increase to request frequency or concurrency.
@@ -273,6 +275,75 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
   catch { throw new LexCatalogDiscoveryError("LEX_CATALOG_ENCODING_REJECTED", false); }
 }
 
+function normalizedPathname(value: string): string {
+  const normalized = value.replace(/\/+$/u, "");
+  return normalized || "/";
+}
+
+const LEX_SEARCH_ROUTE = /^\/(?:(?:ru|uz|uzc|en)\/)?search\/(?:all|nat|oliy|loc|int|tech|court)\/?$/u;
+
+/**
+ * Lex's public IIS edge occasionally normalizes GET search parameters and
+ * locale paths for a Cloudflare egress request. Follow exactly one redirect
+ * inside Lex's fixed search-route family, but never let a source response
+ * select another host, a document route, or another method. The resulting
+ * candidate remains subject to the independent exact title, number and date
+ * verification boundary before it can enter the registry.
+ */
+function safeLexCanonicalRedirect(from: string, location: string | null): string | null {
+  if (!location) return null;
+  let source: URL;
+  let target: URL;
+  try {
+    source = new URL(from);
+    target = new URL(location, source);
+  } catch {
+    return null;
+  }
+  const isRobotsCanonicalization = normalizedPathname(source.pathname) === "/robots.txt"
+    && normalizedPathname(target.pathname) === "/robots.txt" && target.search === "";
+  const isSearchCanonicalization = LEX_SEARCH_ROUTE.test(source.pathname)
+    && LEX_SEARCH_ROUTE.test(target.pathname);
+  if (target.protocol !== "https:" || target.username || target.password || target.port
+    || target.hash || target.hostname.toLocaleLowerCase() !== source.hostname.toLocaleLowerCase()
+    || (!isRobotsCanonicalization && !isSearchCanonicalization)) return null;
+  return target.href;
+}
+
+function isLexRobotsUnavailableRedirect(from: string, location: string | null): boolean {
+  if (!location) return false;
+  try {
+    const source = new URL(from);
+    const target = new URL(location, source);
+    return source.protocol === "https:" && source.hostname.toLocaleLowerCase() === "lex.uz"
+      && source.pathname === "/robots.txt" && source.search === "" && source.hash === ""
+      && target.protocol === "https:" && target.hostname.toLocaleLowerCase() === "lex.uz"
+      && !target.username && !target.password && !target.port && !target.search && !target.hash
+      && target.pathname.toLocaleLowerCase() === "/pages/404.aspx";
+  } catch {
+    return false;
+  }
+}
+
+function lexRedirectRejectionCode(from: string, location: string | null): string {
+  if (!location) return "LEX_CATALOG_REDIRECT_LOCATION_MISSING";
+  let source: URL;
+  let target: URL;
+  try {
+    source = new URL(from);
+    target = new URL(location, source);
+  } catch {
+    return "LEX_CATALOG_REDIRECT_LOCATION_INVALID";
+  }
+  if (target.protocol !== "https:" || target.username || target.password || target.port || target.hash) {
+    return "LEX_CATALOG_REDIRECT_ORIGIN_REJECTED";
+  }
+  if (target.hostname.toLocaleLowerCase() !== source.hostname.toLocaleLowerCase()) {
+    return "LEX_CATALOG_REDIRECT_HOST_REJECTED";
+  }
+  return "LEX_CATALOG_REDIRECT_ROUTE_REJECTED";
+}
+
 async function boundedFetch(
   fetchImpl: FetchLike,
   url: string,
@@ -282,28 +353,55 @@ async function boundedFetch(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(url, {
-      ...init,
-      redirect: "manual",
-      credentials: "omit",
-      cache: "no-store",
-      referrerPolicy: "no-referrer",
-      signal: controller.signal,
-      headers: { Accept: "text/html,text/plain;q=0.9", "User-Agent": USER_AGENT, ...init.headers },
-    });
-    if (response.status >= 300 && response.status < 400) {
-      await response.body?.cancel();
-      throw new LexCatalogDiscoveryError("LEX_CATALOG_REDIRECT_REJECTED", false);
+    let requestUrl = url;
+    for (let redirectCount = 0; redirectCount <= 1; redirectCount += 1) {
+      const response = await fetchImpl(requestUrl, {
+        ...init,
+        redirect: "manual",
+        credentials: "omit",
+        cache: "no-store",
+        referrerPolicy: "no-referrer",
+        signal: controller.signal,
+        headers: { Accept: "text/html,text/plain;q=0.9", "User-Agent": USER_AGENT, ...init.headers },
+      });
+      if (response.status >= 300 && response.status < 400) {
+        const robotsUnavailable = isLexRobotsUnavailableRedirect(
+          requestUrl,
+          response.headers.get("location"),
+        );
+        const redirect = requestMethodIsGet(init)
+          ? safeLexCanonicalRedirect(requestUrl, response.headers.get("location"))
+          : null;
+        await response.body?.cancel();
+        if (robotsUnavailable) {
+          throw new LexCatalogDiscoveryError("LEX_CATALOG_ROBOTS_UNAVAILABLE", false);
+        }
+        if (!redirect || redirectCount === 1) {
+          throw new LexCatalogDiscoveryError(
+            redirect && redirectCount === 1
+              ? "LEX_CATALOG_REDIRECT_LOOP_REJECTED"
+              : lexRedirectRejectionCode(requestUrl, response.headers.get("location")),
+            false,
+          );
+        }
+        requestUrl = redirect;
+        continue;
+      }
+      if (response.status === 404 && new URL(requestUrl).pathname === "/robots.txt") {
+        await response.body?.cancel();
+        throw new LexCatalogDiscoveryError("LEX_CATALOG_ROBOTS_UNAVAILABLE", false);
+      }
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new LexCatalogDiscoveryError(
+          "LEX_CATALOG_UPSTREAM_UNAVAILABLE",
+          response.status === 403 || response.status === 408 || response.status === 425
+            || response.status === 429 || response.status >= 500,
+        );
+      }
+      return response;
     }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new LexCatalogDiscoveryError(
-        "LEX_CATALOG_UPSTREAM_UNAVAILABLE",
-        response.status === 403 || response.status === 408 || response.status === 425
-          || response.status === 429 || response.status >= 500,
-      );
-    }
-    return response;
+    throw new LexCatalogDiscoveryError("LEX_CATALOG_REDIRECT_LOOP_REJECTED", false);
   } catch (error) {
     if (error instanceof LexCatalogDiscoveryError) throw error;
     throw new LexCatalogDiscoveryError(
@@ -313,6 +411,10 @@ async function boundedFetch(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function requestMethodIsGet(init: RequestInit): boolean {
+  return (init.method ?? "GET").toLocaleUpperCase() === "GET";
 }
 
 export async function fetchLexCatalogPage(input: {
@@ -329,7 +431,9 @@ export async function fetchLexCatalogPage(input: {
 }): Promise<ParsedLexCatalogPage> {
   const allowedUrls = new Set(LEX_CORPUS_CATEGORIES.flatMap((category) =>
     LEX_CORPUS_LANGUAGES.map((language) => lexCatalogSearchUrl(category.key, language.language))));
-  if (!allowedUrls.has(input.searchUrl) && !isLexCoreCodeSearchUrl(input.searchUrl)) {
+  if (!allowedUrls.has(input.searchUrl)
+    && !isLexCoreCodeSearchUrl(input.searchUrl)
+    && !isLexNpaTargetSearchUrl(input.searchUrl)) {
     throw new LexCatalogDiscoveryError("LEX_CATALOG_URL_REJECTED", false);
   }
   const fetchImpl = input.fetchImpl ?? fetch;
@@ -342,21 +446,31 @@ export async function fetchLexCatalogPage(input: {
   // header is supplied, while the same public resource is available with the
   // ordinary wildcard request header. Keep the transparent crawler user agent
   // and override only content negotiation for this text resource.
-  const robotsResponse = await boundedFetch(fetchImpl, ROBOTS_URL, {
-    method: "GET",
-    headers: { Accept: "*/*" },
-  }, timeoutMs);
-  const robotsType = (robotsResponse.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLocaleLowerCase();
-  if (robotsType !== "text/plain") {
-    await robotsResponse.body?.cancel();
-    throw new LexCatalogDiscoveryError("LEX_CATALOG_ROBOTS_REJECTED", false);
+  let robotsUnavailable = false;
+  let policy: { allowed: boolean; crawlDelaySeconds: number };
+  try {
+    const robotsResponse = await boundedFetch(fetchImpl, ROBOTS_URL, {
+      method: "GET",
+      headers: { Accept: "*/*" },
+    }, timeoutMs);
+    const robotsType = (robotsResponse.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLocaleLowerCase();
+    if (robotsType !== "text/plain") {
+      await robotsResponse.body?.cancel();
+      throw new LexCatalogDiscoveryError("LEX_CATALOG_ROBOTS_REJECTED", false);
+    }
+    policy = robotsPolicy(await readBoundedText(robotsResponse, MAX_ROBOTS_BYTES), new URL(input.searchUrl));
+  } catch (error) {
+    if (!(error instanceof LexCatalogDiscoveryError) || error.code !== "LEX_CATALOG_ROBOTS_UNAVAILABLE") {
+      throw error;
+    }
+    robotsUnavailable = true;
+    policy = { allowed: true, crawlDelaySeconds: UNAVAILABLE_ROBOTS_CRAWL_DELAY_SECONDS };
   }
-  const policy = robotsPolicy(await readBoundedText(robotsResponse, MAX_ROBOTS_BYTES), new URL(input.searchUrl));
   if (!policy.allowed) throw new LexCatalogDiscoveryError("LEX_CATALOG_ROBOTS_DISALLOWED", false);
   if (policy.crawlDelaySeconds > MAX_CRAWL_DELAY_SECONDS) {
     throw new LexCatalogDiscoveryError("LEX_CATALOG_RATE_POLICY", false);
   }
-  if (policy.crawlDelaySeconds > 0 && !input.pacingAlreadyApplied) {
+  if (policy.crawlDelaySeconds > 0 && (!input.pacingAlreadyApplied || robotsUnavailable)) {
     if (!input.wait) throw new LexCatalogDiscoveryError("LEX_CATALOG_CRAWL_WINDOW_REQUIRED", true);
     await input.wait(Math.ceil(policy.crawlDelaySeconds * 1_000));
   }

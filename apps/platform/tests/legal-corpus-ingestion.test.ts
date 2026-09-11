@@ -1524,6 +1524,33 @@ test("a reserved version slot advances history before older ordinary fetch work"
   }
 });
 
+test("master NPA priority takes its current Lex card before generic retries", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = { ...envFor(d1, bucket), LEGAL_CORPUS_HISTORICAL_ENABLED: "true" };
+    const backlog = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10005", now, correlationId: "ordinary-backlog",
+    });
+    const current = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10006",
+      now: new Date(now.getTime() + 2_000), correlationId: "npa-current",
+      idempotencyScope: "npa-current-card:test:2026-09-11",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='retrying',next_attempt_at=? WHERE id=?`).run(now.toISOString(), backlog.jobId);
+    const first = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 3_000), fetchImpl: fetchFor(lexHtml()),
+      prioritySourceUrls: ["https://lex.uz/ru/docs/10006"],
+    });
+    assert.equal(first.jobId, current.jobId);
+    assert.equal((sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(backlog.jobId) as { status: string }).status, "retrying");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("ingestion links official RU UZ Cyrillic UZ Latin and EN variants into one family", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

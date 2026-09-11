@@ -290,6 +290,29 @@ test("supported robots crawl-delay is awaited before source fetch", async () => 
   assert.equal(synthetic.calls.length, 2);
 });
 
+test("Lex robots redirect to its own 404 route is unavailable, not a policy", async () => {
+  const synthetic = sequenceFetch([
+    new Response(null, {
+      status: 302,
+      headers: { location: "https://lex.uz/Pages/404.aspx" },
+    }),
+    html(),
+  ]);
+  const waits: number[] = [];
+  const result = await fetchLegalSource("https://lex.uz/ru/docs/8282675", {
+    adviceEnabled: false,
+    fetchImpl: synthetic.fetchImpl,
+    wait: async (delayMs) => { waits.push(delayMs); },
+  });
+  assert.equal(result.canonicalId, "8282675");
+  assert.equal(result.robotsUrl, "https://lex.uz/Pages/404.aspx");
+  assert.deepEqual(waits, [20_000]);
+  assert.deepEqual(synthetic.calls.map((call) => call.url), [
+    "https://lex.uz/robots.txt",
+    "https://lex.uz/ru/docs/8282675",
+  ]);
+});
+
 test("Lex PDF representation is fetched only from the canonical official endpoint", async () => {
   const synthetic = sequenceFetch([
     robots("User-agent: *\nAllow: /\nCrawl-delay: 20\n"),

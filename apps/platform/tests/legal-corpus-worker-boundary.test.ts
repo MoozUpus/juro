@@ -261,7 +261,9 @@ test("process schedule self-seeds a fresh corpus and begins the code-first phase
     "SELECT count(*) AS count FROM legal_corpus_admin_events",
   ).get() as { count: number }).count);
   assert.equal(checkpointCount, 44);
-  assert.equal(codeSeedCount, 4);
+  // The same four P0 acts are also part of the exact 100-NPA master set;
+  // each receives a frozen AS_OF revision in addition to its current card.
+  assert.equal(codeSeedCount, 8);
   assert.equal(adminEventCount, 0);
   assert.equal(scheduled.noRetryCalls(), 1);
 });
@@ -360,7 +362,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
   }
   assert.equal(
     config.env.production.d1_databases[0]?.migrations_pattern,
-    "./drizzle/012[145-9]_*.sql",
+    "./drizzle/{012[145-9],013[0-9],014[0-5],0152}_*.sql",
   );
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");

@@ -14,6 +14,13 @@ import { sparseStorageMode } from "./sparse-index";
 const RRF_K = 60;
 const MAX_QUERY_LENGTH = 3_000;
 
+function currentTashkentDate(now = new Date()): string {
+  const values = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 export type LegalCorpusSearchScope = {
   tenantId?: string | null;
   userId?: string | null;
@@ -183,7 +190,7 @@ async function hydrateDenseCandidates(input: {
   if (chunkIds.length === 0) return [];
 
   const scope = input.scope;
-  const asOfDate = scope.asOfDate ?? null;
+  const asOfDate = scope.asOfDate ?? currentTashkentDate();
   const tenantId = scope.tenantId ?? null;
   const userId = scope.userId ?? null;
   const matterId = scope.matterId ?? null;
@@ -211,6 +218,19 @@ async function hydrateDenseCandidates(input: {
     WHERE chunk.id IN (${placeholders})
       AND document.availability_status='ready'
       AND (?=0 OR document.provider='lex_uz')
+      -- A statutory master row can only make a chunk visible after its
+      -- temporal NPA version is explicitly RAG-enabled. This prevents a
+      -- published-but-future act from leaking through the generic index.
+      AND NOT EXISTS (
+        SELECT 1 FROM npa_chunk_metadata AS npa_chunk
+        INNER JOIN npa_document_versions AS npa_version
+          ON npa_version.id=npa_chunk.npa_document_version_id
+        WHERE npa_chunk.chunk_id=chunk.id
+          AND (npa_version.rag_enabled=0
+            OR npa_version.version_effective_from>?
+            OR (npa_version.version_effective_to IS NOT NULL
+              AND npa_version.version_effective_to<?))
+      )
       AND (
         (? IS NULL AND variant.current_version_id=version.id
           AND (?=1 OR provision.status='active'))
@@ -240,6 +260,7 @@ async function hydrateDenseCandidates(input: {
   `).bind(
     ...chunkIds,
     input.officialOnly ? 1 : 0,
+    asOfDate, asOfDate,
     asOfDate, scope.includeHistorical ? 1 : 0,
     asOfDate, asOfDate, asOfDate,
     asOfDate, asOfDate, asOfDate,
@@ -290,9 +311,9 @@ export async function retrieveLegalCorpus(input: {
   denseSearch?: (query: string, limit: number) => Promise<DenseCorpusCandidate[]>;
   officialOnly?: boolean;
 }): Promise<LegalCorpusRetrievalItem[]> {
-  const scope = input.scope ?? {};
-  const asOfDate = scope.asOfDate ?? null;
-  if (asOfDate !== null && !/^\d{4}-\d{2}-\d{2}$/u.test(asOfDate)) {
+  const asOfDate = input.scope?.asOfDate ?? currentTashkentDate();
+  const scope: LegalCorpusSearchScope = { ...(input.scope ?? {}), asOfDate };
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(asOfDate)) {
     throw new TypeError("LEGAL_CORPUS_AS_OF_DATE_REJECTED");
   }
   const limit = Math.max(1, Math.min(input.limit ?? 8, 30));
@@ -346,6 +367,16 @@ export async function retrieveLegalCorpus(input: {
       INNER JOIN legal_corpus_documents AS candidate_document ON candidate_document.id=candidate_provision.document_id
       WHERE candidate_document.availability_status='ready'
         AND (?=0 OR candidate_document.provider='lex_uz')
+        AND NOT EXISTS (
+          SELECT 1 FROM npa_chunk_metadata AS npa_chunk
+          INNER JOIN npa_document_versions AS npa_version
+            ON npa_version.id=npa_chunk.npa_document_version_id
+          WHERE npa_chunk.chunk_id=candidate_chunk.id
+            AND (npa_version.rag_enabled=0
+              OR npa_version.version_effective_from>?
+              OR (npa_version.version_effective_to IS NOT NULL
+                AND npa_version.version_effective_to<?))
+        )
         AND (
           (? IS NULL AND candidate_variant.current_version_id=candidate_version.id
             AND (?=1 OR candidate_provision.status='active'))
@@ -405,6 +436,7 @@ export async function retrieveLegalCorpus(input: {
   `).bind(
     ...sparseTermBindings,
     input.officialOnly ? 1 : 0,
+    asOfDate, asOfDate,
     asOfDate, scope.includeHistorical ? 1 : 0,
     asOfDate, asOfDate, asOfDate,
     asOfDate, asOfDate, asOfDate,

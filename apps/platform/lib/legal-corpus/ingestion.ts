@@ -40,6 +40,8 @@ import {
 } from "./trust";
 import { diffCorpusProvisions, type CorpusProvisionSnapshot } from "./versioning";
 import { LegalCorpusEmbeddingError } from "./embeddings";
+import { npaAsOfDate } from "./npa-master-registry";
+import { recordNpaCorpusVersion } from "./npa-registry";
 import { QdrantCorpusError } from "./qdrant";
 import {
   buildSparseTermEntries,
@@ -55,6 +57,7 @@ const MAX_CHUNKS_PER_VERSION = 16_000;
 // bounded 12 MiB document while retaining the stricter interactive default.
 const MAX_LEX_SOURCE_BYTES = 12 * 1024 * 1024;
 const MAX_LEX_REPRESENTATION_BYTES = 20 * 1024 * 1024;
+const MAX_P0_LEX_SOURCE_TIMEOUT_MS = 30_000;
 const INITIAL_INGESTION_MAX_ATTEMPTS = 5;
 const WRITE_BATCH_SIZE = 90;
 const RETRYABLE_INTERNAL_ERROR_CODES = new Set([
@@ -101,6 +104,16 @@ const CATALOG_CATEGORY_KEYS = new Set<string>(LEX_CORPUS_CATEGORIES.map((categor
 const CATALOG_LANGUAGE_KEYS = new Set<LegalCorpusLanguage>(["uz-Cyrl", "uz-Latn", "ru", "en"]);
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+/** Registry reporting is article-based even where a long article requires
+ * several provisions/chunks. Preambles and unnumbered structural context do
+ * not inflate the statutory article count. */
+function countNpaArticles(provisions: ReturnType<typeof parseLegalProvisions>): number {
+  return new Set(provisions.flatMap((provision) => {
+    const article = provision.articleNumberNormalized?.trim();
+    return article ? [article] : [];
+  })).size;
+}
 
 export type LegalCorpusIngestionEnv = Pick<Env, "APP_ENV" | "BUCKET" | "DB">
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
@@ -199,6 +212,36 @@ async function findPreferredCanonicalDocumentJob(
       AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY ${priority},coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
   `).bind(...documentIds, now, ...documentIds).first<IngestionJob>();
+}
+
+function priorityLexSourceUrls(input: readonly string[] | undefined): string[] {
+  if (!input) return [];
+  const urls = input.flatMap((value) => {
+    const revision = parseLexRevisionUrl(value);
+    if (revision) return [revision.sourceUrl];
+    const document = parseLexDocumentUrl(value);
+    return document ? [document.sourceUrl] : [];
+  });
+  return [...new Set(urls)].slice(0, 64);
+}
+
+/** NPA processing is source-URL exact: its frozen AS_OF snapshot must not be
+ * displaced by unrelated historical revision jobs of the same document. */
+async function findPriorityNpaSourceJob(
+  db: D1Database,
+  now: string,
+  sourceUrls: readonly string[],
+): Promise<IngestionJob | null> {
+  if (sourceUrls.length === 0) return null;
+  const priority = `CASE source_url ${sourceUrls.map((_, index) => `WHEN ? THEN ${index}`).join(" ")} ELSE ${sourceUrls.length} END`;
+  return db.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
+      canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
+    FROM legal_corpus_ingestion_jobs
+    WHERE status IN ('queued','retrying') AND source_url IN (${sourceUrls.map(() => "?").join(",")})
+      AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+    ORDER BY ${priority},CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
+      coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
+  `).bind(...sourceUrls, now, ...sourceUrls).first<IngestionJob>();
 }
 
 async function findPreferredCatalogJob(
@@ -770,6 +813,7 @@ export async function ingestOfficialLexDocument(
     now?: Date;
     wait?: (delayMs: number) => Promise<void>;
     fetchImpl?: FetchLike;
+    sourceTimeoutMs?: number;
   },
 ): Promise<LegalCorpusIngestionResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED")) {
@@ -787,6 +831,7 @@ export async function ingestOfficialLexDocument(
     now: () => input.now ?? new Date(),
     wait: input.wait,
     fetchImpl: input.fetchImpl,
+    ...(input.sourceTimeoutMs ? { timeoutMs: input.sourceTimeoutMs } : {}),
     maxBytes: MAX_LEX_SOURCE_BYTES,
   });
   const sourceUrl = fetched.canonicalUrl;
@@ -830,11 +875,25 @@ export async function ingestOfficialLexDocument(
   if (provisions.length === 0 || provisions.length > MAX_PROVISIONS_PER_VERSION) {
     throw new TypeError("LEGAL_CORPUS_PROVISION_LIMIT_REJECTED");
   }
+  // The statutory checksum is based only on parsed normative structure/text,
+  // not on fetch metadata or the Lex reader's revision-control markup.
+  const normativeChecksum = await sha256(JSON.stringify(provisions.map((provision) => ({
+    articleNumber: provision.articleNumber,
+    title: provision.title,
+    part: provision.part,
+    chapter: provision.chapter,
+    section: provision.section,
+    text: provision.text,
+  }))));
   const chunks = provisions.flatMap((provision) => chunkLegalProvision(provision)
     .map((text, chunkIndex, all) => ({ provision, text, chunkIndex, totalChunks: all.length })));
   if (chunks.length === 0 || chunks.length > MAX_CHUNKS_PER_VERSION) {
     throw new TypeError("LEGAL_CORPUS_CHUNK_LIMIT_REJECTED");
   }
+  const npaQueryDate = npaAsOfDate(input.now ?? new Date());
+  const npaVersionEffectiveFrom = effectivity.validFrom && effectivity.validFrom > npaQueryDate
+    ? effectivity.validFrom
+    : revisionHistory.currentRevisionDate ?? revision?.revisionDate ?? effectivity.validFrom;
 
   const now = nowIso(input.now);
   const current = await existingVariant(env.DB, documentId, currentDocument.language);
@@ -894,6 +953,26 @@ export async function ingestOfficialLexDocument(
     await enqueueRevisionHistory({
       env, revisions: revisionHistory.revisions, now: input.now ?? new Date(), documentId,
     });
+    if (!revision) {
+      await recordNpaCorpusVersion({
+        db: env.DB, sourceUrl: currentDocument.sourceUrl,
+        lexuzDocId: currentDocument.canonicalDocumentId.replace(/^lexuz:/u, ""),
+        legalCorpusDocumentId: current.documentId, legalCorpusVariantId: current.variantId,
+        legalCorpusVersionId: alreadyStored.versionId, language: currentDocument.language,
+        title: normalized.documentTitle,
+        metadata: {
+          title: normalized.documentTitle, actType: documentMetadata.documentType,
+          actNumber: documentMetadata.documentNumber, adoptionDate: documentMetadata.adoptionDate,
+        },
+        effectiveFrom: effectivity.validFrom, effectiveTo: effectivity.validTo,
+        sourceStatus: effectivity.status, versionEffectiveFrom: npaVersionEffectiveFrom,
+        normativeChecksum, articleCount: countNpaArticles(provisions), chunkCount: chunks.length,
+        isAsOfRevision: revisionHistory.currentRevisionDate !== null
+          && revisionHistory.currentRevisionDate <= npaQueryDate,
+        asOfDate: npaQueryDate,
+        now: input.now,
+      });
+    }
     return {
       status: "unchanged", documentId: current.documentId, variantId: current.variantId,
       versionId: resumesPartialWrite ? alreadyStored.versionId : current.currentVersionId,
@@ -1054,11 +1133,12 @@ export async function ingestOfficialLexDocument(
     const provisionHash = await sha256(provision.text);
     provisionStatements.push(env.DB.prepare(`INSERT INTO legal_corpus_provisions
       (id,document_id,variant_id,version_id,article_number,article_number_normalized,article_title,part,chapter,section,sequence,text,exact_quote_source,language,status,valid_from,valid_to,source_url,content_sha256,created_at)
-      VALUES (?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,?,?, ?,?,?, ?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?,?,?, ?,?,?)
       ON CONFLICT(version_id,article_number_normalized,sequence) DO NOTHING
     `).bind(
       provisionId, documentId, variantId, versionId, provision.articleNumber,
-      provision.articleNumberNormalized, provision.title, provision.sequence,
+      provision.articleNumberNormalized, provision.title, provision.part, provision.chapter,
+      provision.section, provision.sequence,
       provision.text, provision.text, currentDocument.language, versionStatus,
       revisionDate, validTo, sourceUrl, provisionHash, now,
     ));
@@ -1116,6 +1196,41 @@ export async function ingestOfficialLexDocument(
     });
   }
 
+  // The bounded master set attaches its frozen AS_OF revision and later
+  // current-card checks. Arbitrary historical crawler jobs stay immutable in
+  // the base corpus but cannot overwrite the NPA master summary out of order.
+  if (!revision || revision.revisionDate === npaQueryDate) {
+    await recordNpaCorpusVersion({
+      db: env.DB,
+      sourceUrl: currentDocument.sourceUrl,
+      lexuzDocId: currentDocument.canonicalDocumentId.replace(/^lexuz:/u, ""),
+      legalCorpusDocumentId: documentId,
+      legalCorpusVariantId: variantId,
+      legalCorpusVersionId: versionId,
+      language: currentDocument.language,
+      title: normalized.documentTitle,
+        metadata: {
+          title: normalized.documentTitle,
+          actType: documentMetadata.documentType,
+          actNumber: documentMetadata.documentNumber,
+          adoptionDate: documentMetadata.adoptionDate,
+        },
+      effectiveFrom: effectivity.validFrom,
+      effectiveTo: effectivity.validTo,
+      sourceStatus: effectivity.status,
+      versionEffectiveFrom: npaVersionEffectiveFrom,
+      versionEffectiveTo: validTo,
+      normativeChecksum,
+      articleCount: countNpaArticles(provisions),
+      chunkCount: chunks.length,
+      isAsOfRevision: revision === null
+        && revisionHistory.currentRevisionDate !== null
+        && revisionHistory.currentRevisionDate <= npaQueryDate,
+      asOfDate: npaQueryDate,
+      now: input.now,
+    });
+  }
+
   return {
     status: "indexed", documentId, variantId, versionId,
     provisionCount: provisions.length, chunkCount: chunks.length, sourceUrl,
@@ -1124,12 +1239,17 @@ export async function ingestOfficialLexDocument(
 
 export async function enqueueOfficialLexCorpusDocument(
   env: LegalCorpusQueueEnv,
-  input: { sourceUrl: string; now?: Date; correlationId?: string },
+  input: { sourceUrl: string; now?: Date; correlationId?: string; idempotencyScope?: string },
 ): Promise<{ created: boolean; jobId: string; canonicalDocumentId: string }> {
   const parsed = parseLexDocumentUrl(input.sourceUrl);
   if (!parsed) throw new TypeError("LEGAL_CORPUS_OFFICIAL_URL_REJECTED");
   const now = nowIso(input.now);
-  const idempotencyKey = await sha256(`fetch\n${parsed.sourceUrl}`);
+  // An ordinary source is queued once. A bounded daily verifier supplies a
+  // date-scoped key so that it can recheck the same canonical LexUZ card
+  // without destroying the original ingestion audit row.
+  const idempotencyKey = await sha256(input.idempotencyScope
+    ? `fetch\n${parsed.sourceUrl}\n${input.idempotencyScope}`
+    : `fetch\n${parsed.sourceUrl}`);
   const jobId = `legal-corpus:${idempotencyKey.slice(0, 28)}`;
   const result = await env.DB.prepare(`INSERT INTO legal_corpus_ingestion_jobs
     (id,job_type,status,provider,canonical_document_id,variant_id,source_url,language,idempotency_key,attempt_count,max_attempts,next_attempt_at,last_error_code,correlation_id,created_at,updated_at)
@@ -1210,6 +1330,9 @@ export async function runNextLegalCorpusIngestionJob(
     wait?: (delayMs: number) => Promise<void>;
     fetchImpl?: FetchLike;
     afterIngest?: (result: LegalCorpusIngestionResult) => Promise<void>;
+    /** Wider but bounded network window reserved for the P0 date-scoped NPA
+     * lane. It is not available to unbounded catalogue work. */
+    sourceTimeoutMs?: number;
     /** Reserves one bounded slot for a durable queued job type. A due retry
      * still has global precedence, and an empty reservation falls back to
      * ordinary FIFO work rather than leaving a paced source slot idle. */
@@ -1225,6 +1348,8 @@ export async function runNextLegalCorpusIngestionJob(
      * are taken before ordinary catalogue jobs. Due retries and an explicitly
      * reserved version slot retain precedence. */
     preferredCanonicalDocumentIds?: readonly string[];
+    /** Exact current/as-of source URLs for master NPA candidates. */
+    prioritySourceUrls?: readonly string[];
   } = {},
 ): Promise<LegalCorpusJobRunResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
@@ -1234,12 +1359,16 @@ export async function runNextLegalCorpusIngestionJob(
   const now = nowIso(nowDate);
   await reconcileStaleRunningJob(env.DB, nowDate);
   await reconcileRecoverableDeadLetter(env.DB, now);
-  const retryCandidate = await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
+  const prioritySourceUrls = priorityLexSourceUrls(input.prioritySourceUrls);
+  const priorityCandidate = prioritySourceUrls.length === 0
+    ? null
+    : await findPriorityNpaSourceJob(env.DB, now, prioritySourceUrls);
+  const retryCandidate = priorityCandidate ? null : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
     WHERE status='retrying' AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
   `).bind(now).first<IngestionJob>();
-  const reservedCandidate = retryCandidate || !input.reservedQueuedJobType
+  const reservedCandidate = retryCandidate || priorityCandidate || !input.reservedQueuedJobType
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
         canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
@@ -1248,25 +1377,25 @@ export async function runNextLegalCorpusIngestionJob(
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
     `).bind(input.reservedQueuedJobType, now).first<IngestionJob>();
   const preferredDocumentIds = preferredCanonicalDocumentIds(input.preferredCanonicalDocumentIds);
-  const preferredCodeCandidate = retryCandidate || reservedCandidate || preferredDocumentIds.length === 0
+  const preferredCodeCandidate = retryCandidate || priorityCandidate || reservedCandidate || preferredDocumentIds.length === 0
     ? null
     : await findPreferredCanonicalDocumentJob(env.DB, now, preferredDocumentIds);
   const categories = preferredCatalogCategories(input.preferredCatalogCategories);
   const languages = preferredCatalogLanguages(input.preferredCatalogLanguages);
-  const preferredCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || categories.length === 0
+  const preferredCandidate = retryCandidate || priorityCandidate || reservedCandidate || preferredCodeCandidate || categories.length === 0
     ? null
     : await findPreferredCatalogJob(env.DB, now, categories, languages)
       ?? (languages.length > 0
         ? await findPreferredCatalogJob(env.DB, now, categories, [])
         : null);
-  const fifoCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate
+  const fifoCandidate = retryCandidate || priorityCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
       FROM legal_corpus_ingestion_jobs
       WHERE status='queued' AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
     `).bind(now).first<IngestionJob>();
-  const candidate = retryCandidate ?? reservedCandidate ?? preferredCodeCandidate ?? preferredCandidate ?? fifoCandidate;
+  const candidate = priorityCandidate ?? retryCandidate ?? reservedCandidate ?? preferredCodeCandidate ?? preferredCandidate ?? fifoCandidate;
   if (!candidate) return { claimed: false, status: "empty", jobId: null, safeErrorCode: null };
   const claimed = await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
     SET status='running',attempt_count=attempt_count+1,updated_at=?
@@ -1282,6 +1411,9 @@ export async function runNextLegalCorpusIngestionJob(
       now: nowDate,
       wait: input.wait,
       fetchImpl: input.fetchImpl,
+      ...(priorityCandidate && input.sourceTimeoutMs
+        ? { sourceTimeoutMs: Math.min(MAX_P0_LEX_SOURCE_TIMEOUT_MS, Math.max(1_000, input.sourceTimeoutMs)) }
+        : {}),
     });
     if (result.status !== "halted_suspicious_change" && result.versionId && input.afterIngest) {
       await input.afterIngest(result);

@@ -1,4 +1,5 @@
 import type { LegalCorpusLanguage } from "./trust";
+import { NPA_FUTURE_TARGETS, NPA_MASTER_TARGETS, type NpaTarget } from "./npa-master-registry";
 
 export type LexDiscoveredDocument = {
   canonicalDocumentId: string;
@@ -319,6 +320,27 @@ export function isLexCoreCodeSearchUrl(value: string): boolean {
   }
 }
 
+/** Builds a title lookup only for the auditable, fixed NPA master registry. */
+export function lexNpaTargetSearchUrl(target: NpaTarget): string {
+  const known = [...NPA_MASTER_TARGETS, ...NPA_FUTURE_TARGETS]
+    .find((candidate) => candidate.documentKey === target.documentKey);
+  if (!known || known.titleRu !== target.titleRu) throw new TypeError("LEX_NPA_TARGET_REJECTED");
+  const url = new URL("/ru/search/all", LEX_ORIGIN);
+  url.searchParams.set("searchtitle", known.titleRu);
+  url.searchParams.set("exact2", "1");
+  return url.href;
+}
+
+/** Prevents a caller from converting a user query into a Lex crawler URL. */
+export function isLexNpaTargetSearchUrl(value: string): boolean {
+  try {
+    return [...NPA_MASTER_TARGETS, ...NPA_FUTURE_TARGETS]
+      .some((target) => lexNpaTargetSearchUrl(target) === value);
+  } catch {
+    return false;
+  }
+}
+
 function plainSearchTitle(value: string): string {
   return value
     .replace(/<[^>]*>/gu, " ")
@@ -352,6 +374,30 @@ export function discoverExactLexCoreCodeDocument(
   const hrefPattern = /\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/iu;
   for (const match of html.matchAll(anchorPattern)) {
     if (normalizedSearchTitle(match[2] ?? "") !== expectedTitle) continue;
+    const href = match[1]?.match(hrefPattern);
+    const raw = href?.[1] ?? href?.[2] ?? href?.[3];
+    if (!raw || raw.length > 2_000) continue;
+    const discovered = parseLexDocumentUrl(raw.replaceAll("&amp;", "&"), baseUrl);
+    if (discovered?.language === "ru") return discovered;
+  }
+  return null;
+}
+
+/** Same strict title rule as core codes, with the reviewed aliases needed for
+ * historical/current naming changes. Amendment and project acts cannot pass. */
+export function discoverExactLexNpaTargetDocument(
+  html: string,
+  target: NpaTarget,
+  baseUrl = LEX_ORIGIN,
+): LexDiscoveredDocument | null {
+  const expected = new Set([target.titleRu, ...(target.titleAliases ?? [])]
+    .map(normalizedSearchTitle));
+  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/giu;
+  const hrefPattern = /\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/iu;
+  for (const match of html.matchAll(anchorPattern)) {
+    const title = plainSearchTitle(match[2] ?? "");
+    if (!expected.has(normalizedSearchTitle(title))
+      || /(?:^|\s)(?:о\s+внесении|проект(?:е)?\s+закона|законопроект)/iu.test(title)) continue;
     const href = match[1]?.match(hrefPattern);
     const raw = href?.[1] ?? href?.[2] ?? href?.[3];
     if (!raw || raw.length > 2_000) continue;

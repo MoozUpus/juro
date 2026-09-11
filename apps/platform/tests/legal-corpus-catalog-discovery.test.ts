@@ -106,6 +106,80 @@ test("catalog fetch delegates its crawl delay only to the D1-backed pacer", asyn
   assert.equal(result.currentPage, 1);
 });
 
+test("a Lex robots redirect to its own 404 route permits paced catalog access", async () => {
+  const waits: number[] = [];
+  const result = await fetchLexCatalogPage({
+    searchUrl: lexCatalogSearchUrl("laws", "ru"),
+    pacingAlreadyApplied: true,
+    wait: async (delay) => { waits.push(delay); },
+    fetchImpl: async (input) => String(input).endsWith("robots.txt")
+      ? new Response(null, {
+        status: 302,
+        headers: { location: "https://lex.uz/Pages/404.aspx" },
+      })
+      : new Response(catalogPage({ page: 1, links: [], viewState: "state" }), {
+        headers: { "content-type": "text/html" },
+      }),
+  });
+  assert.equal(result.currentPage, 1);
+  assert.deepEqual(waits, [20_000]);
+});
+
+test("catalog fetch follows one official Lex GET search-route canonicalization", async () => {
+  const searchUrl = lexCatalogSearchUrl("laws", "ru");
+  let pageRequests = 0;
+  const result = await fetchLexCatalogPage({
+    searchUrl,
+    pacingAlreadyApplied: true,
+    fetchImpl: async (input) => {
+      if (String(input).endsWith("robots.txt")) {
+        return new Response(robots, { headers: { "content-type": "text/plain" } });
+      }
+      pageRequests += 1;
+      if (pageRequests === 1) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://lex.uz/uz/search/all?keyword=normalized" },
+        });
+      }
+      return new Response(catalogPage({ page: 1, links: [], viewState: "state" }), {
+        headers: { "content-type": "text/html" },
+      });
+    },
+  });
+  assert.equal(pageRequests, 2);
+  assert.equal(result.currentPage, 1);
+});
+
+test("catalog fetch rejects redirects that can alter the official source route", async () => {
+  await assert.rejects(
+    fetchLexCatalogPage({
+      searchUrl: lexCatalogSearchUrl("laws", "ru"),
+      pacingAlreadyApplied: true,
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(null, {
+          status: 302,
+          headers: { location: "https://example.invalid/ru/search/nat?sort_id=3975&form_id=3968&lang=1" },
+        }),
+    }),
+    /LEX_CATALOG_REDIRECT_HOST_REJECTED/,
+  );
+  await assert.rejects(
+    fetchLexCatalogPage({
+      searchUrl: lexCatalogSearchUrl("laws", "ru"),
+      pacingAlreadyApplied: true,
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(null, {
+          status: 302,
+          headers: { location: "https://lex.uz/ru/docs/999999" },
+        }),
+    }),
+    /LEX_CATALOG_REDIRECT_ROUTE_REJECTED/,
+  );
+});
+
 test("catalog fetch keeps only the public Lex pager session from multiple Set-Cookie headers", async () => {
   const result = await fetchLexCatalogPage({
     searchUrl: lexCatalogSearchUrl("laws", "ru"),

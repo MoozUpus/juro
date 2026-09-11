@@ -13,6 +13,12 @@ import {
   runNextLexCoreCodeDiscovery,
   seedLexCoreCodeJobs,
 } from "../lib/legal-corpus/lex-core-code-discovery";
+import {
+  npaPrioritySourceUrls,
+  refreshVerifiedNpaTargetJobs,
+  runNextNpaTargetDiscovery,
+  seedNpaTargetJobs,
+} from "../lib/legal-corpus/lex-npa-target-discovery";
 import { featureEnabled } from "../lib/legal-corpus/trust";
 import { runNextLegalCorpusQdrantBackfillBatch } from "../lib/legal-corpus/qdrant-indexing";
 import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
@@ -120,10 +126,12 @@ type CorpusWorkResult = {
 
 export function legalCorpusActionableRunErrorCode(input: {
   coreCode: CorpusWorkResult;
+  npaDiscovery?: CorpusWorkResult;
   discoveries: readonly CorpusWorkResult[];
   ingestions: readonly CorpusWorkResult[];
 }): string | null {
-  return (input.coreCode.status === "failed" ? input.coreCode.safeErrorCode : null)
+  return (input.npaDiscovery?.status === "failed" ? input.npaDiscovery.safeErrorCode : null)
+    ?? (input.coreCode.status === "failed" ? input.coreCode.safeErrorCode : null)
     ?? input.discoveries.find((result) => result.status === "retrying" || result.status === "failed")?.safeErrorCode
     ?? input.ingestions.find((result) => result.status !== "completed" && result.safeErrorCode !== null)?.safeErrorCode
     ?? null;
@@ -136,6 +144,31 @@ function log(
   const entry = JSON.stringify({ service: "legal-corpus-worker", ...fields });
   if (level === "error") console.error(entry);
   else console.log(entry);
+}
+
+/** Operational diagnostics must never serialize source text or request data. */
+function safeWorkerFailureDetail(error: unknown): { errorName: string; errorMessage: string } {
+  if (!(error instanceof Error)) return { errorName: "NON_ERROR_THROWN", errorMessage: "non-error throw" };
+  const message = error.message.replace(/[\r\n\t]+/gu, " ").trim();
+  return {
+    errorName: error.name.slice(0, 80) || "Error",
+    errorMessage: message.slice(0, 240) || "empty error message",
+  };
+}
+
+function scheduledFailureCode(
+  environment: string,
+  error: unknown,
+  detail: { errorName: string; errorMessage: string },
+): string {
+  if (error instanceof LegalCorpusSparseIndexError) return error.code;
+  // Staging needs a durable diagnostic when tail does not expose cron logs.
+  // Production retains a non-descriptive code and never persists source text.
+  if (environment !== "staging") return "LEGAL_CORPUS_WORKER_FAILED";
+  const compactMessage = detail.errorMessage
+    .replace(/[^A-Za-z0-9_:.-]+/gu, "_")
+    .slice(0, 120);
+  return `LEGAL_CORPUS_WORKER_FAILED:${detail.errorName}:${compactMessage || "UNKNOWN"}`;
 }
 
 function ingestionEnabled(env: LegalCorpusWorkerEnv): boolean {
@@ -294,6 +327,8 @@ export async function handleLegalCorpusScheduled(
     if (controller.cron === LEGAL_CORPUS_SEED_CRON) {
       const scheduledAt = new Date(controller.scheduledTime);
       const metadata = await seedLexCorpusJobsFromMetadata(env, { now: scheduledAt });
+      const npa = await seedNpaTargetJobs(env, { now: scheduledAt });
+      const npaDaily = await refreshVerifiedNpaTargetJobs(env, { now: scheduledAt });
       const catalog = await seedLexCatalogDiscoveryCheckpoints(env, scheduledAt);
       const maintenance = await scheduleLegalCorpusMaintenance(env, { now: scheduledAt });
       await finishRun(env, run, "completed", null);
@@ -303,6 +338,11 @@ export async function handleLegalCorpusScheduled(
         cron: controller.cron,
         metadataConsidered: metadata.considered,
         metadataQueued: metadata.queued,
+        npaTargetsConsidered: npa.considered,
+        npaCandidateJobsQueued: npa.queued,
+        npaDailyChecksConsidered: npaDaily.considered,
+        npaDailyChecksQueued: npaDaily.queued,
+        npaDailyCheckDate: npaDaily.date,
         checkpointsConsidered: catalog.considered,
         checkpointsCreated: catalog.created,
         maintenanceLocalDate: maintenance.localDate,
@@ -324,6 +364,10 @@ export async function handleLegalCorpusScheduled(
     const discoveries: Awaited<ReturnType<typeof runNextLexCatalogDiscoveryPage>>[] = [];
     const ingestions: Awaited<ReturnType<typeof runNextLegalCorpusIngestionJob>>[] = [];
     let coreCodeSeeds = { considered: 0, queued: 0 };
+    let npaSeeds = { considered: 0, queued: 0 };
+    let npaDiscovery: Awaited<ReturnType<typeof runNextNpaTargetDiscovery>> = {
+      status: "disabled", documentKey: null, canonicalDocumentId: null, queued: false, safeErrorCode: null,
+    };
     let coreCode: Awaited<ReturnType<typeof runNextLexCoreCodeDiscovery>> = {
       status: "disabled", targetId: null, canonicalDocumentId: null, priorityCanonicalDocumentIds: [], queued: false, safeErrorCode: null,
     };
@@ -337,11 +381,22 @@ export async function handleLegalCorpusScheduled(
       const wait = (delayMs: number) => scheduler.wait(delayMs);
       const pacerStats = { robotsNetworkRequests: 0, persistentRobotsCacheHits: 0 };
       const fetchImpl = createPacedLexFetch({ db: env.DB, wait, stats: pacerStats });
-      coreCodeSeeds = await seedLexCoreCodeJobs(env, { now: new Date(controller.scheduledTime) });
-      coreCode = await runNextLexCoreCodeDiscovery(env, {
+      // The master 100 is the release-critical priority. It takes one
+      // robots-paced request per tick and does not permit a similarly named
+      // amendment to enter the corpus. The broad catalogue is held until this
+      // bounded set is settled, rather than defining completeness by crawl size.
+      npaSeeds = await seedNpaTargetJobs(env, { now: new Date(controller.scheduledTime) });
+      const priorityNpaSources = await npaPrioritySourceUrls(env.DB);
+      npaDiscovery = await runNextNpaTargetDiscovery(env, {
         now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
       });
-      if (coreCode.status === "all_settled") {
+      coreCodeSeeds = await seedLexCoreCodeJobs(env, { now: new Date(controller.scheduledTime) });
+      if (npaDiscovery.status === "all_settled") {
+        coreCode = await runNextLexCoreCodeDiscovery(env, {
+          now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
+        });
+      }
+      if (npaDiscovery.status === "all_settled" && coreCode.status === "all_settled") {
         for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
           const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl, pacingAlreadyApplied: true });
           discoveries.push(result);
@@ -352,9 +407,11 @@ export async function handleLegalCorpusScheduled(
         ...LEX_CORE_CODE_SEED_IDS,
         ...coreCode.priorityCanonicalDocumentIds,
       ])];
-      const ingestionBudget = legalCorpusIngestionJobBudget(discoveries, {
-        persistentRobotsPolicy: pacerStats.persistentRobotsCacheHits > 0,
-      });
+      const ingestionBudget = priorityNpaSources.length > 0
+        ? 1
+        : legalCorpusIngestionJobBudget(discoveries, {
+          persistentRobotsPolicy: pacerStats.persistentRobotsCacheHits > 0,
+        });
       for (let index = 0; index < ingestionBudget; index += 1) {
         if (!legalCorpusIngestionStartAllowed(controller.scheduledTime, Date.now())) {
           ingestionStartCutoffReached = true;
@@ -379,6 +436,8 @@ export async function handleLegalCorpusScheduled(
           reservedQueuedJobType: reservedVersionSlot
             ? "version"
             : undefined,
+          prioritySourceUrls: priorityNpaSources,
+          sourceTimeoutMs: priorityNpaSources.length > 0 ? 30_000 : undefined,
           preferredCanonicalDocumentIds: preferredCoreCodeIds,
         });
         ingestions.push(result);
@@ -420,8 +479,9 @@ export async function handleLegalCorpusScheduled(
     const resolvedSourceConditionCount = ingestions.filter((result) =>
       result.status === "completed" && result.safeErrorCode !== null,
     ).length;
-    const errorCode = legalCorpusActionableRunErrorCode({ coreCode, discoveries, ingestions });
-    const failed = coreCode.status === "failed"
+    const errorCode = legalCorpusActionableRunErrorCode({ coreCode, npaDiscovery, discoveries, ingestions });
+    const failed = npaDiscovery.status === "failed"
+      || coreCode.status === "failed"
       || discoveries.some((result) => result.status === "failed")
       || ingestions.some((result) => result.status === "failed"
         || result.status === "halted_suspicious_change");
@@ -436,6 +496,11 @@ export async function handleLegalCorpusScheduled(
       checkpointsCreated: catalog.created,
       coreCodeSeedsConsidered: coreCodeSeeds.considered,
       coreCodeSeedsQueued: coreCodeSeeds.queued,
+      npaTargetsConsidered: npaSeeds.considered,
+      npaCandidateJobsQueued: npaSeeds.queued,
+      npaDiscoveryStatus: npaDiscovery.status,
+      npaDiscoveryDocumentKey: npaDiscovery.documentKey,
+      npaDiscoveryCanonicalDocumentId: npaDiscovery.canonicalDocumentId,
       coreCodeDiscoveryStatus: coreCode.status,
       coreCodeTargetId: coreCode.targetId,
       coreCodeCanonicalDocumentId: coreCode.canonicalDocumentId,
@@ -453,9 +518,8 @@ export async function handleLegalCorpusScheduled(
       errorCode,
     });
   } catch (error) {
-    const errorCode = error instanceof LegalCorpusSparseIndexError
-      ? error.code
-      : "LEGAL_CORPUS_WORKER_FAILED";
+    const detail = safeWorkerFailureDetail(error);
+    const errorCode = scheduledFailureCode(env.APP_ENV, error, detail);
     try {
       await finishRun(env, run, "failed", errorCode);
     } catch {
@@ -470,6 +534,7 @@ export async function handleLegalCorpusScheduled(
       environment: env.APP_ENV,
       cron: controller.cron,
       errorCode,
+      ...detail,
     });
   }
   controller.noRetry();

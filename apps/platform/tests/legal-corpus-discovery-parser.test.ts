@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   discoverLexArchiveRepresentation,
   discoverExactLexCoreCodeDocument,
+  discoverExactLexNpaTargetDocument,
   discoverLexDocumentLinks,
   discoverLexRevisionHistory,
   languageVariantsFromLinks,
@@ -13,6 +14,7 @@ import {
   LEX_CORE_CODE_TARGETS,
   lexCoreCodeSearchUrl,
 } from "../lib/legal-corpus/lex-discovery";
+import { NPA_MASTER_TARGETS } from "../lib/legal-corpus/npa-master-registry";
 import {
   chunkLegalProvision,
   parseLegalProvisions,
@@ -45,6 +47,20 @@ test("core-code discovery accepts only an exact official code title, never an am
   });
   assert.equal(discoverExactLexCoreCodeDocument(
     '<a href="/ru/docs/222">Семейный кодекс Республики Узбекистан (проект)</a>', target,
+  ), null);
+});
+
+test("NPA discovery accepts the exact consolidated act and rejects amendment lookalikes", () => {
+  const target = NPA_MASTER_TARGETS.find((candidate) => candidate.documentKey === "consumer_protection")!;
+  const html = [
+    '<a href="/ru/docs/900">О внесении изменений в Закон о защите прав потребителей</a>',
+    '<a href="/ru/docs/901">О защите прав потребителей</a>',
+  ].join("\n");
+  assert.deepEqual(discoverExactLexNpaTargetDocument(html, target), {
+    canonicalDocumentId: "lexuz:901", language: "ru", sourceUrl: "https://lex.uz/ru/docs/901",
+  });
+  assert.equal(discoverExactLexNpaTargetDocument(
+    '<a href="/ru/docs/900">О внесении изменений в Закон о защите прав потребителей</a>', target,
   ), null);
 });
 
@@ -156,6 +172,21 @@ test("provision parser keeps article structure and only splits genuinely large a
   ].join("\n"), "uz-Latn");
   assert.deepEqual(provisions.map((item) => item.articleNumber), ["1", "289-1"]);
   assert.equal(provisions[1]?.title, "Maxsus qoida");
+
+  const structured = parseLegalProvisions([
+    "Раздел II. Трудовые отношения",
+    "Глава 3. Договор",
+    "§ 1. Общие положения",
+    "Статья 10. Основание",
+    "Норма сохраняет свой заголовок и путь.",
+  ].join("\n"), "ru");
+  assert.deepEqual(structured[0] && {
+    section: structured[0].section, chapter: structured[0].chapter, part: structured[0].part,
+    structuralPath: structured[0].structuralPath,
+  }, {
+    section: "Раздел II. Трудовые отношения", chapter: "Глава 3. Договор", part: "§ 1. Общие положения",
+    structuralPath: "Раздел II. Трудовые отношения > Глава 3. Договор > § 1. Общие положения > Статья 10",
+  });
 
   const large = { ...provisions[0]!, text: "A".repeat(5) + "\n\n" + "B".repeat(5) };
   assert.deepEqual(chunkLegalProvision(large, 8), ["AAAAA", "BBBBB"]);

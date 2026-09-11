@@ -5,12 +5,19 @@ export type ParsedLegalProvision = {
   articleNumber: string | null;
   articleNumberNormalized: string | null;
   title: string | null;
+  section: string | null;
+  chapter: string | null;
+  part: string | null;
+  structuralPath: string;
   text: string;
   sequence: number;
 };
 
 const ARTICLE_HEADING = /^(?:(?:статья|article)\s+|)(\d+(?:[-.]\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?(?:\s+prim(?:a|b|v)?)?)\s*(?:[-–—.]?\s*)(.*)$/iu;
 const UZBEK_ARTICLE_HEADING = /^(\d+(?:[-.]\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?(?:\s+prim(?:a|b|v)?)?)\s*-\s*modda\.?\s*(.*)$/iu;
+const SECTION_HEADING = /^(?:раздел|bo['‘’]?lim|бўлим)\s+[\p{L}\dIVXLC.\-]+(?:\s*[.:–—-]\s*.*)?$/iu;
+const CHAPTER_HEADING = /^(?:глава|bob)\s+[\p{L}\dIVXLC.\-]+(?:\s*[.:–—-]\s*.*)?$/iu;
+const PARAGRAPH_HEADING = /^(?:§\s*\d+[\p{L}\d.\-]*|paragraf\s+\d+[\p{L}\d.\-]*|параграф\s+\d+[\p{L}\d.\-]*)(?:\s*[.:–—-]\s*.*)?$/iu;
 
 function heading(line: string): { number: string; title: string | null } | null {
   const trimmed = line.trim();
@@ -35,10 +42,32 @@ export function parseLegalProvisions(
   // evolve; current patterns safely cover the four supported languages.
   void language;
   const lines = text.replace(/\r\n?/gu, "\n").split("\n");
-  const starts: Array<{ line: number; number: string; title: string | null }> = [];
+  const starts: Array<{
+    line: number; number: string; title: string | null;
+    section: string | null; chapter: string | null; part: string | null;
+  }> = [];
+  let section: string | null = null;
+  let chapter: string | null = null;
+  let part: string | null = null;
   for (const [line, value] of lines.entries()) {
+    const structural = value.trim().replace(/\s+/gu, " ");
+    if (SECTION_HEADING.test(structural)) {
+      section = structural;
+      chapter = null;
+      part = null;
+      continue;
+    }
+    if (CHAPTER_HEADING.test(structural)) {
+      chapter = structural;
+      part = null;
+      continue;
+    }
+    if (PARAGRAPH_HEADING.test(structural)) {
+      part = structural;
+      continue;
+    }
     const parsed = heading(value);
-    if (parsed) starts.push({ line, ...parsed });
+    if (parsed) starts.push({ line, ...parsed, section, chapter, part });
   }
   if (starts.length === 0) {
     const fallback = text.trim();
@@ -46,6 +75,10 @@ export function parseLegalProvisions(
       articleNumber: null,
       articleNumberNormalized: null,
       title: null,
+      section: null,
+      chapter: null,
+      part: null,
+      structuralPath: "НПА",
       text: fallback,
       sequence: 0,
     }] : [];
@@ -57,6 +90,11 @@ export function parseLegalProvisions(
       articleNumber: start.number,
       articleNumberNormalized: start.number,
       title: start.title,
+      section: start.section,
+      chapter: start.chapter,
+      part: start.part,
+      structuralPath: [start.section, start.chapter, start.part, `Статья ${start.number}`]
+        .filter((segment): segment is string => Boolean(segment)).join(" > "),
       text: body,
       sequence: index,
     };
