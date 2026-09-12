@@ -75,7 +75,7 @@ const NPA_LAYER_1_RAW = [
   npa({ documentKey: "criminal_procedure_code", titleRu: "Уголовно-процессуальный кодекс Республики Узбекистан", shortTitle: "УПК", actType: "code", expectedActNumber: "2013-XII", expectedAdoptionDate: "1994-09-22", verifiedSourceSeed: "https://lex.uz/ru/docs/111463" }),
   npa({ documentKey: "criminal_execution_code", titleRu: "Уголовно-исполнительный кодекс Республики Узбекистан", shortTitle: "УИК", actType: "code", expectedActNumber: "409-I", expectedAdoptionDate: "1997-04-25", verifiedSourceSeed: "https://lex.uz/ru/docs/163627" }),
 
-  npa({ documentKey: "limited_liability_companies", titleRu: "Об обществах с ограниченной и дополнительной ответственностью", shortTitle: "ООО и ОДО", expectedActNumber: "310-II", expectedAdoptionDate: "2001-12-06", titleAliases: ["Об обществах с ограниченной ответственностью"] }),
+  npa({ documentKey: "limited_liability_companies", titleRu: "Об обществах с ограниченной ответственностью", shortTitle: "ООО", expectedActNumber: "310-II", expectedAdoptionDate: "2001-12-06", verifiedSourceSeed: "https://lex.uz/ru/docs/18793", titleAliases: ["Об обществах с ограниченной и дополнительной ответственностью"] }),
   npa({ documentKey: "joint_stock_companies", titleRu: "Об акционерных обществах и защите прав акционеров", shortTitle: "Об АО", expectedActNumber: "ЗРУ-370", expectedAdoptionDate: "2014-05-06" }),
   npa({ documentKey: "business_partnerships", titleRu: "О хозяйственных товариществах", shortTitle: "О хозяйственных товариществах", expectedActNumber: "308-II", expectedAdoptionDate: "2001-12-06" }),
   npa({ documentKey: "private_enterprise", titleRu: "О частном предприятии", shortTitle: "О частном предприятии", expectedActNumber: "558-II", expectedAdoptionDate: "2003-12-11" }),
@@ -139,7 +139,7 @@ const NPA_LAYER_1_RAW = [
   npa({ documentKey: "cybersecurity", titleRu: "О кибербезопасности", shortTitle: "Кибербезопасность", expectedActNumber: "ЗРУ-764", expectedAdoptionDate: "2022-04-15" }),
   npa({ documentKey: "electronic_government", titleRu: "Об электронном правительстве", shortTitle: "Электронное правительство", expectedActNumber: "ЗРУ-395", expectedAdoptionDate: "2015-12-09" }),
   npa({ documentKey: "telecommunications", titleRu: "О телекоммуникациях", shortTitle: "Телекоммуникации", expectedActNumber: "822-I", expectedAdoptionDate: "1999-08-20" }),
-  npa({ documentKey: "freedom_of_access_to_information", titleRu: "О свободе доступа к информации", shortTitle: "Доступ к информации", expectedActNumber: "400-I", expectedAdoptionDate: "1997-04-24" }),
+  npa({ documentKey: "freedom_of_access_to_information", titleRu: "О гарантиях и свободе доступа к информации", shortTitle: "Доступ к информации", expectedActNumber: "400-I", expectedAdoptionDate: "1997-04-24", verifiedSourceSeed: "https://lex.uz/ru/docs/2118", titleAliases: ["О свободе доступа к информации"] }),
   npa({ documentKey: "copyright_and_related_rights", titleRu: "Об авторском праве и смежных правах", shortTitle: "Авторское право", expectedActNumber: "ЗРУ-42", expectedAdoptionDate: "2006-07-20" }),
   npa({ documentKey: "inventions_models_designs", titleRu: "Об изобретениях, полезных моделях и промышленных образцах", shortTitle: "Патенты", expectedActNumber: "397-II", expectedAdoptionDate: "2002-08-29" }),
   npa({ documentKey: "trademarks", titleRu: "О товарных знаках, знаках обслуживания и наименованиях мест происхождения товаров", shortTitle: "Товарные знаки", expectedActNumber: "267-II", expectedAdoptionDate: "2001-08-30" }),

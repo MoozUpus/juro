@@ -39,6 +39,10 @@ test("NPA registry is exactly the mandatory 100 plus a separate future successor
     "https://lex.uz/ru/docs/4674893");
   assert.equal(NPA_MASTER_TARGETS.find((target) => target.documentKey === "administrative_responsibility_code")?.verifiedSourceSeed,
     "https://lex.uz/ru/docs/97661");
+  assert.equal(NPA_MASTER_TARGETS.find((target) => target.documentKey === "limited_liability_companies")?.verifiedSourceSeed,
+    "https://lex.uz/ru/docs/18793");
+  assert.equal(NPA_MASTER_TARGETS.find((target) => target.documentKey === "freedom_of_access_to_information")?.verifiedSourceSeed,
+    "https://lex.uz/ru/docs/2118");
   assert.equal(NPA_FUTURE_TARGETS[0]?.replacesDocumentKey, "realtor_activity_2010");
 });
 
