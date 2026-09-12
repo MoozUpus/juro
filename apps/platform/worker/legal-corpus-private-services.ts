@@ -143,7 +143,9 @@ export async function handleLegalCorpusEmbeddingServiceRequest(
   try {
     const upstream = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
-      redirect: "error",
+      // Workers supports only follow or manual. The relay preserves a 3xx for
+      // the caller to reject instead of following a provider redirect.
+      redirect: "manual",
       signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
       headers: {
         authorization: `Bearer ${env.OPENAI_API_KEY}`,

@@ -100,6 +100,7 @@ test("Qdrant requests prefer the private service binding over public fetch", asy
   assert.equal(serviceRequests[0]?.url,
     "https://qdrant.internal/collections/juro_legal_staging/points/query");
   assert.equal(serviceRequests[0]?.headers.get("api-key"), "test-secret");
+  assert.equal(serviceRequests[0]?.redirect, "manual");
 });
 
 test("staging service-binding diagnostics redact URLs and secret-shaped values", async () => {

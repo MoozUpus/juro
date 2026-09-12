@@ -154,7 +154,8 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
         : "https://api.openai.com/v1/embeddings";
       const init: RequestInit = {
         method: "POST",
-        redirect: "error",
+        // Treat a returned 3xx as a failed provider response; never follow it.
+        redirect: "manual",
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: {
           ...(!this.env.LEGAL_CORPUS_EMBEDDING_SERVICE && this.env.OPENAI_API_KEY

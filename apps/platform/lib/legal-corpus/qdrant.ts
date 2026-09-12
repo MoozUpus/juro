@@ -249,7 +249,9 @@ async function requestResponse(
     }
     const requestInit: RequestInit = {
       ...init,
-      redirect: "error",
+      // Workers supports only follow or manual. A manual 3xx is rejected below,
+      // so an internal or upstream redirect is never followed.
+      redirect: "manual",
       signal: timeout,
       headers,
     };

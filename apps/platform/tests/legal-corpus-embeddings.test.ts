@@ -74,6 +74,7 @@ test("legal corpus embedding provider validates dimensions and records system us
     assert.equal(vectors.length, 1);
     assert.equal(vectors[0]?.length, 1536);
     assert.equal(requests[0]?.url, "https://api.openai.com/v1/embeddings");
+    assert.equal(requests[0]?.init.redirect, "manual");
     assert.equal(new Headers(requests[0]?.init.headers).get("authorization"), "Bearer server-secret");
     const body = JSON.parse(String(requests[0]?.init.body)) as {
       input: string[]; dimensions: number; encoding_format: string;
@@ -132,6 +133,7 @@ test("isolated corpus Worker can relay embeddings without receiving the OpenAI s
     assert.equal(vectors[0]?.length, 1536);
     assert.equal(directCalls, 0);
     assert.equal(requests[0]?.url, "https://embeddings.internal/v1/embeddings");
+    assert.equal(requests[0]?.redirect, "manual");
     assert.equal(requests[0]?.headers.get("authorization"), null);
     assert.doesNotMatch(await requests[0]!.clone().text(), /secret|api[_-]?key/iu);
     assert.equal(Number((sqlite.prepare(
