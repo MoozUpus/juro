@@ -160,6 +160,36 @@ export async function npaCorpusAsOfDate(db: D1Database, now = new Date()): Promi
   }
 }
 
+/** Only canonical NPA chunks enter RAG. A repeated paragraph under the same
+ * structural path is intentionally retained in the immutable source snapshot
+ * but not counted or exposed as a second retrieval/embedding record. */
+async function canonicalNpaChunkCount(db: D1Database, npaDocumentVersionId: string): Promise<number> {
+  const row = await db.prepare(`SELECT count(*) AS count FROM npa_chunk_metadata
+    WHERE npa_document_version_id=?`).bind(npaDocumentVersionId).first<{ count: number | string | null }>();
+  return Number(row?.count ?? 0);
+}
+
+/** Reconciles the materialized master count with canonical, citation-ready
+ * chunks. It is idempotent and changes no normative text, source, or version. */
+export async function reconcileNpaCanonicalChunkCounts(
+  db: D1Database,
+  now = new Date(),
+): Promise<number> {
+  const timestamp = now.toISOString();
+  const canonicalCountSql = `(SELECT count(*)
+    FROM npa_chunk_metadata AS metadata
+    INNER JOIN npa_document_versions AS version
+      ON version.id=metadata.npa_document_version_id
+    WHERE version.document_key=npa_master_registry.document_key
+      AND version.normative_checksum=npa_master_registry.content_checksum
+      AND version.status=npa_master_registry.status
+      AND version.rag_enabled=npa_master_registry.rag_enabled)`;
+  const result = await db.prepare(`UPDATE npa_master_registry
+    SET chunk_count=${canonicalCountSql},updated_at=?
+    WHERE chunk_count<>${canonicalCountSql}`).bind(timestamp).run();
+  return Number(result.meta.changes ?? 0);
+}
+
 export async function seedNpaMasterTargets(
   db: D1Database,
   now = new Date(),
@@ -423,7 +453,7 @@ export async function recordNpaCorpusVersion(input: {
       temporal.ragEnabled ? 1 : 0, now,
     ),
     // The base corpus keeps article/chapter/section columns. This NPA layer
-    // makes the complete, citation-ready path explicit on every chunk without
+    // records one citation-ready row for each canonical chunk identity without
     // duplicating normative text or embedding records.
     input.db.prepare(`INSERT INTO npa_chunk_metadata
       (chunk_id,npa_document_version_id,structural_path,parent_context,article,part,chapter,section,content_checksum,created_at)
@@ -455,6 +485,13 @@ export async function recordNpaCorpusVersion(input: {
     input.db.prepare(`UPDATE npa_manual_review_report SET resolved_at=?
       WHERE document_key=? AND resolved_at IS NULL`).bind(now, target.documentKey),
   ]);
+  const canonicalChunkCount = await canonicalNpaChunkCount(input.db, versionId);
+  if (canonicalChunkCount !== input.chunkCount) {
+    await input.db.prepare(`UPDATE npa_master_registry
+      SET chunk_count=?,updated_at=? WHERE document_key=? AND content_checksum=?`).bind(
+      canonicalChunkCount, now, target.documentKey, input.normativeChecksum,
+    ).run();
+  }
   const sourceProvisions = await input.db.prepare(`SELECT id,article_number AS articleNumber,text
     FROM legal_corpus_provisions WHERE version_id=? ORDER BY sequence`).bind(input.legalCorpusVersionId)
     .all<{ id: string; articleNumber: string | null; text: string }>();

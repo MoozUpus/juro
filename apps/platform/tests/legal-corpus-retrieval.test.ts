@@ -165,6 +165,82 @@ test("an unresolved master NPA cannot leak through generic sparse or dense retri
   }
 });
 
+test("a deduplicated NPA fragment without canonical metadata cannot leak through dense retrieval", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const now = "2026-09-11T12:00:00.000Z";
+  const versionHash = "d".repeat(64);
+  const chunkHash = "e".repeat(64);
+  const sourceUrl = "https://lex.uz/ru/docs/111181";
+  try {
+    await seedNpaMasterTargets(d1, new Date(now));
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='candidate',candidate_source_url=?,
+      candidate_lexuz_doc_id='111181' WHERE document_key='civil_code_part_1'`).run(sourceUrl);
+    sqlite.prepare(`INSERT INTO legal_corpus_documents
+      (id,provider,jurisdiction,source_class,scope,tenant_id,owner_user_id,matter_id,visibility,
+       canonical_url,title,document_type,document_number,adoption_date,availability_status,trusted,
+       verification_status,approval_required,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "lexuz:111181", "lex_uz", "UZ", "OFFICIAL_LEGISLATION", "global", null, null, null, "global",
+      sourceUrl, "Гражданский кодекс Республики Узбекистан", "Кодекс", "163-I", "1995-12-21", "ready", 1,
+      "official_source", 0, now, now,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_variants
+      (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,current_version_id,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+      "variant:111181:ru", "lexuz:111181", "ru", 1, null, sourceUrl, now, "version:111181", now, now,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_versions
+      (id,variant_id,previous_version_id,version_number,status,valid_from,valid_to,version_date,content_sha256,
+       raw_object_key,normalized_object_key,source_url,fetched_at,change_type,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "version:111181", "variant:111181:ru", null, 1, "active", "2020-01-01", null, "2020-01-01", versionHash,
+      "raw", "normalized", sourceUrl, now, "new", now,
+    );
+    for (const provisionId of ["provision:canonical", "provision:duplicate"]) {
+      sqlite.prepare(`INSERT INTO legal_corpus_provisions
+        (id,document_id,variant_id,version_id,article_number,article_number_normalized,article_title,part,chapter,section,
+         sequence,text,exact_quote_source,language,status,valid_from,valid_to,source_url,content_sha256,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        provisionId, "lexuz:111181", "variant:111181:ru", "version:111181", "1", "1", "Норма", null, null, null,
+        provisionId.endsWith("canonical") ? 0 : 1, "Повторяющаяся норма гражданского права", "Повторяющаяся норма гражданского права",
+        "ru", "active", "2020-01-01", null, sourceUrl, chunkHash, now,
+      );
+    }
+    sqlite.prepare(`INSERT INTO legal_corpus_chunks
+      (id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,sparse_terms_json,indexed_at,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+      "chunk:canonical", "provision:canonical", "version:111181", 0, 1,
+      "Повторяющаяся норма гражданского права", chunkHash, "[]", now, now,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_chunks
+      (id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,sparse_terms_json,indexed_at,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+      "chunk:duplicate", "provision:duplicate", "version:111181", 0, 1,
+      "Повторяющаяся норма гражданского права", chunkHash, "[]", now, now,
+    );
+    assert.deepEqual(await recordNpaCorpusVersion({
+      db: d1, sourceUrl, lexuzDocId: "111181", legalCorpusDocumentId: "lexuz:111181",
+      legalCorpusVariantId: "variant:111181:ru", legalCorpusVersionId: "version:111181", language: "ru",
+      title: "Гражданский кодекс Республики Узбекистан",
+      metadata: { title: "Гражданский кодекс Республики Узбекистан", actType: "code", actNumber: "163-I", adoptionDate: "1995-12-21" },
+      effectiveFrom: "1996-04-01", effectiveTo: null, sourceStatus: "active",
+      versionEffectiveFrom: "2020-01-01", normativeChecksum: versionHash,
+      articleCount: 1, chunkCount: 2, isAsOfRevision: true, asOfDate: "2026-09-11", now: new Date(now),
+    }), { attached: true, status: "active" });
+    assert.equal((sqlite.prepare("SELECT count(*) AS count FROM npa_chunk_metadata").get() as { count: number }).count, 1);
+    assert.equal((sqlite.prepare(`SELECT chunk_count AS count FROM npa_master_registry
+      WHERE document_key='civil_code_part_1'`).get() as { count: number }).count, 1);
+    const results = await retrieveLegalCorpus({
+      db: d1, query: "норма", denseSearch: async () => [
+        { chunkId: "chunk:duplicate", score: 1 }, { chunkId: "chunk:canonical", score: 0.9 },
+      ],
+    });
+    assert.deepEqual(results.map((result) => result.chunkId), ["chunk:canonical"]);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("an active LexUZ card with no revision picker is retained as one official edition", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const sourceUrl = "https://lex.uz/ru/docs/5960609";

@@ -218,18 +218,32 @@ async function hydrateDenseCandidates(input: {
     WHERE chunk.id IN (${placeholders})
       AND document.availability_status='ready'
       AND (?=0 OR document.provider='lex_uz')
-      -- A statutory master row can only make a chunk visible after its
+      -- A statutory master version can only make a chunk visible after its
       -- temporal NPA version is explicitly RAG-enabled. This prevents a
       -- published-but-future act from leaking through the generic index.
       AND NOT EXISTS (
-        SELECT 1 FROM npa_chunk_metadata AS npa_chunk
-        INNER JOIN npa_document_versions AS npa_version
-          ON npa_version.id=npa_chunk.npa_document_version_id
-        WHERE npa_chunk.chunk_id=chunk.id
+        SELECT 1 FROM npa_document_versions AS npa_version
+        WHERE npa_version.legal_corpus_version_id=version.id
           AND (npa_version.rag_enabled=0
             OR npa_version.version_effective_from>?
             OR (npa_version.version_effective_to IS NOT NULL
               AND npa_version.version_effective_to<?))
+      )
+      -- A duplicate physical source fragment has no separate canonical NPA
+      -- chunk identity. Keep it immutable for audit, but never let it bypass
+      -- citation provenance or create a duplicate retrieval result.
+      AND (
+        NOT EXISTS (
+          SELECT 1 FROM npa_document_versions AS npa_version
+          WHERE npa_version.legal_corpus_version_id=version.id
+        )
+        OR EXISTS (
+          SELECT 1 FROM npa_chunk_metadata AS npa_chunk
+          INNER JOIN npa_document_versions AS npa_version
+            ON npa_version.id=npa_chunk.npa_document_version_id
+          WHERE npa_chunk.chunk_id=chunk.id
+            AND npa_version.legal_corpus_version_id=version.id
+        )
       )
       -- A target still awaiting LexUZ identity/temporal verification must
       -- never leak through the generic corpus path. A rejected source route
@@ -385,14 +399,25 @@ export async function retrieveLegalCorpus(input: {
       WHERE candidate_document.availability_status='ready'
         AND (?=0 OR candidate_document.provider='lex_uz')
         AND NOT EXISTS (
-          SELECT 1 FROM npa_chunk_metadata AS npa_chunk
-          INNER JOIN npa_document_versions AS npa_version
-            ON npa_version.id=npa_chunk.npa_document_version_id
-          WHERE npa_chunk.chunk_id=candidate_chunk.id
+          SELECT 1 FROM npa_document_versions AS npa_version
+          WHERE npa_version.legal_corpus_version_id=candidate_version.id
             AND (npa_version.rag_enabled=0
               OR npa_version.version_effective_from>?
-                OR (npa_version.version_effective_to IS NOT NULL
-                  AND npa_version.version_effective_to<?))
+              OR (npa_version.version_effective_to IS NOT NULL
+                AND npa_version.version_effective_to<?))
+        )
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM npa_document_versions AS npa_version
+            WHERE npa_version.legal_corpus_version_id=candidate_version.id
+          )
+          OR EXISTS (
+            SELECT 1 FROM npa_chunk_metadata AS npa_chunk
+            INNER JOIN npa_document_versions AS npa_version
+              ON npa_version.id=npa_chunk.npa_document_version_id
+            WHERE npa_chunk.chunk_id=candidate_chunk.id
+              AND npa_version.legal_corpus_version_id=candidate_version.id
+          )
         )
         -- The sparse candidate path has the same fail-closed NPA gate as
         -- dense hydration. Never rank an unverified or rejected-route target

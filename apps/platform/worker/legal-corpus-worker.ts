@@ -19,6 +19,7 @@ import {
   runNextNpaTargetDiscovery,
   seedNpaTargetJobs,
 } from "../lib/legal-corpus/lex-npa-target-discovery";
+import { reconcileNpaCanonicalChunkCounts } from "../lib/legal-corpus/npa-registry";
 import { featureEnabled } from "../lib/legal-corpus/trust";
 import { runNextLegalCorpusQdrantBackfillBatch } from "../lib/legal-corpus/qdrant-indexing";
 import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
@@ -365,6 +366,7 @@ export async function handleLegalCorpusScheduled(
     const ingestions: Awaited<ReturnType<typeof runNextLegalCorpusIngestionJob>>[] = [];
     let coreCodeSeeds = { considered: 0, queued: 0 };
     let npaSeeds = { considered: 0, queued: 0 };
+    let npaCanonicalChunkCountsReconciled = 0;
     let npaDiscovery: Awaited<ReturnType<typeof runNextNpaTargetDiscovery>> = {
       status: "disabled", documentKey: null, canonicalDocumentId: null, queued: false, safeErrorCode: null,
     };
@@ -386,6 +388,10 @@ export async function handleLegalCorpusScheduled(
       // amendment to enter the corpus. The broad catalogue is held until this
       // bounded set is settled, rather than defining completeness by crawl size.
       npaSeeds = await seedNpaTargetJobs(env, { now: new Date(controller.scheduledTime) });
+      npaCanonicalChunkCountsReconciled = await reconcileNpaCanonicalChunkCounts(
+        env.DB,
+        new Date(controller.scheduledTime),
+      );
       const priorityNpaJobIds = await npaPriorityJobIds(
         env.DB,
         new Date(controller.scheduledTime),
@@ -501,6 +507,7 @@ export async function handleLegalCorpusScheduled(
       coreCodeSeedsQueued: coreCodeSeeds.queued,
       npaTargetsConsidered: npaSeeds.considered,
       npaCandidateJobsQueued: npaSeeds.queued,
+      npaCanonicalChunkCountsReconciled,
       npaDiscoveryStatus: npaDiscovery.status,
       npaDiscoveryDocumentKey: npaDiscovery.documentKey,
       npaDiscoveryCanonicalDocumentId: npaDiscovery.canonicalDocumentId,
