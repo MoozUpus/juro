@@ -25,6 +25,26 @@ const BATCH_SIZE = 32;
 const MAX_VERSION_SYNC_CHUNKS = 16_000;
 export const LEGAL_CORPUS_QDRANT_BACKFILL_CHUNKS_PER_BATCH = 64;
 
+// A legal-corpus version attached to the NPA registry may retain repeated
+// physical source fragments for audit. Only its `npa_chunk_metadata` rows are
+// canonical citation-bearing chunks, so vector indexing must apply the same
+// fail-closed rule as retrieval. Unattached generic corpus versions retain
+// their existing indexing behaviour.
+const CANONICAL_NPA_CHUNK_SQL = `
+  AND (
+    NOT EXISTS (
+      SELECT 1 FROM npa_document_versions AS npa_version
+      WHERE npa_version.legal_corpus_version_id=version.id
+    )
+    OR EXISTS (
+      SELECT 1 FROM npa_chunk_metadata AS npa_chunk
+      INNER JOIN npa_document_versions AS npa_version
+        ON npa_version.id=npa_chunk.npa_document_version_id
+      WHERE npa_chunk.chunk_id=chunk.id
+        AND npa_version.legal_corpus_version_id=version.id
+    )
+  )`;
+
 type IndexEnv = LegalCorpusEmbeddingEnv & QdrantCorpusEnv & LegalCorpusQdrantSnapshotEnv
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
@@ -131,6 +151,7 @@ export async function syncLegalCorpusVersionToQdrant(
     INNER JOIN legal_corpus_documents AS document ON document.id=provision.document_id
     WHERE chunk.version_id=? AND document.provider IN ('lex_uz','juro_owner')
       AND document.scope='global' AND document.availability_status='ready'
+      ${CANONICAL_NPA_CHUNK_SQL}
       ${onlyMissingClause}
     ORDER BY chunk.id ASC
     LIMIT ?
@@ -200,6 +221,7 @@ export async function runNextLegalCorpusQdrantBackfillBatch(
     WHERE chunk.dense_vector_id IS NULL
       AND document.provider IN ('lex_uz','juro_owner')
       AND document.scope='global' AND document.availability_status='ready'
+      ${CANONICAL_NPA_CHUNK_SQL}
     GROUP BY version.id
     ORDER BY min(chunk.created_at) ASC,version.id ASC
     LIMIT 1
@@ -220,11 +242,13 @@ export async function runNextLegalCorpusQdrantBackfillBatch(
   const remaining = await env.DB.prepare(`
     SELECT count(*) AS count
     FROM legal_corpus_chunks AS chunk
+    INNER JOIN legal_corpus_versions AS version ON version.id=chunk.version_id
     INNER JOIN legal_corpus_provisions AS provision ON provision.id=chunk.provision_id
     INNER JOIN legal_corpus_documents AS document ON document.id=provision.document_id
     WHERE chunk.version_id=? AND chunk.dense_vector_id IS NULL
       AND document.provider IN ('lex_uz','juro_owner')
       AND document.scope='global' AND document.availability_status='ready'
+      ${CANONICAL_NPA_CHUNK_SQL}
   `).bind(candidate.versionId).first<{ count: number }>();
   return {
     status: "indexed",

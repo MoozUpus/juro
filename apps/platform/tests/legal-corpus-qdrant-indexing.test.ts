@@ -82,6 +82,36 @@ function seedSecondChunk(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): 
   );
 }
 
+function markVersionAsNpaWithOneCanonicalChunk(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void {
+  const now = "2026-08-15T00:00:00.000Z";
+  const hash = "d".repeat(64);
+  // This fixture exercises the NPA-specific filter only; seedVersion supplies
+  // the legal-corpus foreign rows and no target declaration is needed here.
+  sqlite.prepare("PRAGMA foreign_keys=OFF").run();
+  sqlite.prepare(`INSERT INTO npa_master_registry
+    (document_key,lexuz_doc_id,legal_corpus_document_id,short_title,act_type,status,source,source_reference,
+     content_checksum,last_checked_at,article_count,chunk_count,rag_enabled,created_at,updated_at)
+    VALUES (?,?,?,?,?,'active','LexUZ',?,?,?,?,?,?,?,?)`).run(
+    "test_npa", "42", "lexuz:42", "Test NPA", "law", "https://lex.uz/ru/docs/42",
+    hash, now, 2, 1, 1, now, now,
+  );
+  sqlite.prepare(`INSERT INTO npa_document_versions
+    (id,document_key,language,legal_corpus_variant_id,legal_corpus_version_id,
+     version_effective_from,version_effective_to,version_as_of,status,normative_checksum,
+     editorial_metadata_object_key,amendment_history_object_key,source_metadata_object_key,
+     last_checked_at,rag_enabled,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,?)`).run(
+    "npa:test_npa:ru:v2", "test_npa", "ru", "lexuz:42:ru", "lexuz:42:ru:v2",
+    "2026-01-01", null, "2026-08-15", "active", hash, now, 1, now,
+  );
+  sqlite.prepare(`INSERT INTO npa_chunk_metadata
+    (chunk_id,npa_document_version_id,structural_path,parent_context,article,part,chapter,section,content_checksum,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+    "lexuz:42:ru:v2:p0:c0", "npa:test_npa:ru:v2", "Test NPA > Статья 12", "Test NPA > Статья 12",
+    "12", null, null, null, hash, now,
+  );
+}
+
 test("Qdrant sync is inert while the dense feature flag is false", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
@@ -128,6 +158,37 @@ test("Qdrant sync embeds only global official chunks, demotes the previous versi
     ).get() as { denseVectorId: string; indexedAt: string };
     assert.match(stored.denseVectorId, /^[0-9a-f-]{36}$/u);
     assert.equal(stored.indexedAt, "2026-08-15T01:00:00.000Z");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("Qdrant sync excludes noncanonical physical NPA fragments", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  seedVersion(sqlite);
+  seedSecondChunk(sqlite);
+  markVersionAsNpaWithOneCanonicalChunk(sqlite);
+  const points: QdrantCorpusPoint[] = [];
+  try {
+    const result = await syncLegalCorpusVersionToQdrant({
+      APP_ENV: "staging", DB: d1, LEGAL_CORPUS_DENSE_ENABLED: "true",
+      QDRANT_URL: "https://qdrant.internal.example", QDRANT_API_KEY: "secret", QDRANT_COLLECTION: "legal",
+    }, "lexuz:42:ru:v2", {
+      client: {
+        ensureCompatible: async () => "existing" as const,
+        setVersionCurrent: async () => undefined,
+        upsert: async (batch) => { points.push(...batch); },
+      },
+      embeddings: {
+        embed: async (inputs) => inputs.map(() => Array.from({ length: 1536 }, () => 0.01)),
+      },
+    });
+    assert.deepEqual(result, { status: "indexed", versionId: "lexuz:42:ru:v2", chunkCount: 1 });
+    assert.deepEqual(points.map((point) => point.chunkId), ["lexuz:42:ru:v2:p0:c0"]);
+    const chunks = sqlite.prepare(`SELECT id,dense_vector_id AS denseVectorId
+      FROM legal_corpus_chunks ORDER BY id`).all() as Array<{ id: string; denseVectorId: string | null }>;
+    assert.equal(chunks.find((chunk) => chunk.id === "lexuz:42:ru:v2:p0:c0")?.denseVectorId === null, false);
+    assert.equal(chunks.find((chunk) => chunk.id === "lexuz:42:ru:v2:p1:c0")?.denseVectorId, null);
   } finally {
     sqlite.close();
   }
