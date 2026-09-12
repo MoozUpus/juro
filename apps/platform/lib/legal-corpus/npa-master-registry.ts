@@ -151,7 +151,7 @@ const NPA_LAYER_1_RAW = [
   npa({ documentKey: "trade_unions", titleRu: "О профессиональных союзах", shortTitle: "Профсоюзы", expectedActNumber: "ЗРУ-588", expectedAdoptionDate: "2019-12-06" }),
   npa({ documentKey: "private_employment_agencies", titleRu: "О частных агентствах занятости", shortTitle: "Частные агентства занятости", expectedActNumber: "ЗРУ-501", expectedAdoptionDate: "2018-10-16" }),
   npa({ documentKey: "state_pension_provision", titleRu: "О государственном пенсионном обеспечении граждан", shortTitle: "Пенсионное обеспечение", expectedActNumber: "938-XII", expectedAdoptionDate: "1993-09-03" }),
-  npa({ documentKey: "rights_of_persons_with_disabilities", titleRu: "О правах лиц с инвалидностью", shortTitle: "Права лиц с инвалидностью", expectedActNumber: "ЗРУ-641", expectedAdoptionDate: "2020-10-15" }),
+  npa({ documentKey: "rights_of_persons_with_disabilities", titleRu: "О правах лиц с инвалидностью", shortTitle: "Права лиц с инвалидностью", expectedActNumber: "ЗРУ-641", expectedAdoptionDate: "2020-10-15", verifiedSourceSeed: "https://lex.uz/ru/docs/5049549" }),
   npa({ documentKey: "child_rights_guarantees", titleRu: "О гарантиях прав ребенка", shortTitle: "Права ребенка", expectedActNumber: "ЗРУ-139", expectedAdoptionDate: "2008-01-07" }),
   npa({ documentKey: "guardianship_and_trusteeship", titleRu: "Об опеке и попечительстве", shortTitle: "Опека и попечительство", expectedActNumber: "ЗРУ-364", expectedAdoptionDate: "2014-01-02" }),
   npa({ documentKey: "education", titleRu: "Об образовании", shortTitle: "Образование", expectedActNumber: "ЗРУ-637", expectedAdoptionDate: "2020-09-23" }),
