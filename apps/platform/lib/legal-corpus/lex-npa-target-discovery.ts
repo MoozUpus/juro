@@ -10,6 +10,7 @@ import {
   parseLexDocumentUrl,
 } from "./lex-discovery";
 import {
+  NPA_BASELINE_AS_OF_DATE,
   NPA_FUTURE_TARGETS,
   NPA_MASTER_TARGETS,
   type NpaTarget,
@@ -253,14 +254,26 @@ export async function npaPriorityJobIds(
     INNER JOIN npa_master_targets AS target ON target.document_key=state.document_key
     WHERE state.status IN ('candidate','verified','future','repealed','manual_review')
       AND coalesce(target.source_seed_url,state.candidate_source_url) IS NOT NULL
-    ORDER BY CASE state.status
+    -- If a deployment or a daily refresh tried to advance the wall-clock
+    -- snapshot before all 100 baseline selections were written, repair those
+    -- exact date-scoped cards first. This remains below no source/identity
+    -- check: the normal ingestion path still verifies LexUZ and chooses the
+    -- source's own revision-picker date.
+    ORDER BY CASE WHEN target.target_set='mandatory' AND NOT EXISTS (
+      SELECT 1 FROM npa_document_versions AS baseline
+      WHERE baseline.document_key=target.document_key
+        AND baseline.version_as_of=?
+    ) THEN 0 ELSE 1 END,
+    CASE state.status
       WHEN 'manual_review' THEN 0
       WHEN 'candidate' THEN 1
       WHEN 'repealed' THEN 2
       WHEN 'future' THEN 3
       WHEN 'verified' THEN 4
       ELSE 5
-    END,state.updated_at ASC,state.document_key ASC LIMIT 32`).all<{ documentKey: string; candidateSourceUrl: string }>();
+    END,state.updated_at ASC,state.document_key ASC LIMIT 32`)
+    .bind(NPA_BASELINE_AS_OF_DATE)
+    .all<{ documentKey: string; candidateSourceUrl: string }>();
   const jobs = await Promise.all(result.results.flatMap(async (row) => {
     const parsed = parseLexDocumentUrl(row.candidateSourceUrl);
     if (!parsed) return [];
