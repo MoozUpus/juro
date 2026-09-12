@@ -139,19 +139,25 @@ export function npaTemporalState(input: {
 
 /**
  * The very first bounded corpus is a legal snapshot, not a race with the
- * wall clock. Keep its declared AS_OF date until every mandatory record has
- * been verified. Subsequent daily checks automatically use the local current
- * date, which preserves historical-answer support without freezing JURO.
+ * wall clock. Keep its declared AS_OF date until every mandatory target has
+ * a persisted baseline version. Merely creating a master-registry row is not
+ * enough: it could advance the calendar while a late card is still selected
+ * from a newer revision. Subsequent daily checks automatically use the local
+ * current date, which preserves historical-answer support without freezing
+ * JURO.
  */
 export async function npaCorpusAsOfDate(db: D1Database, now = new Date()): Promise<string> {
   try {
-    const row = await db.prepare(`SELECT count(*) AS verified
-      FROM npa_master_registry AS registry
-      INNER JOIN npa_master_targets AS target ON target.document_key=registry.document_key
-      WHERE target.target_set='mandatory' AND registry.status<>'manual_review'`)
-      .first<{ verified: number | string | null }>();
-    const verified = Number(row?.verified ?? 0);
-    return verified < NPA_MASTER_TARGETS.length ? NPA_BASELINE_AS_OF_DATE : npaAsOfDate(now);
+    const row = await db.prepare(`SELECT count(DISTINCT target.document_key) AS baselineVersions
+      FROM npa_master_targets AS target
+      INNER JOIN npa_document_versions AS version
+        ON version.document_key=target.document_key
+       AND version.version_as_of=?
+      WHERE target.target_set='mandatory'`)
+      .bind(NPA_BASELINE_AS_OF_DATE)
+      .first<{ baselineVersions: number | string | null }>();
+    const baselineVersions = Number(row?.baselineVersions ?? 0);
+    return baselineVersions < NPA_MASTER_TARGETS.length ? NPA_BASELINE_AS_OF_DATE : npaAsOfDate(now);
   } catch {
     // The corpus migration can be deployed after the Worker artifact. Until
     // the registry exists, retain normal current-date behavior and let the
@@ -445,7 +451,14 @@ export async function recordNpaCorpusVersion(input: {
        last_checked_at,rag_enabled,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,?)
       ON CONFLICT(document_key,language,version_effective_from,normative_checksum) DO UPDATE SET
-        version_effective_to=excluded.version_effective_to,version_as_of=excluded.version_as_of,
+        version_effective_to=excluded.version_effective_to,
+        -- An unchanged legal edition can be rechecked every day. Its first
+        -- date-scoped selection is immutable evidence of the initial legal
+        -- snapshot; only the verification timestamp is refreshed here.
+        version_as_of=CASE
+          WHEN npa_document_versions.version_as_of<=excluded.version_as_of THEN npa_document_versions.version_as_of
+          ELSE excluded.version_as_of
+        END,
         status=excluded.status,last_checked_at=excluded.last_checked_at,rag_enabled=excluded.rag_enabled`).bind(
       versionId, target.documentKey, input.language, input.legalCorpusVariantId,
       input.legalCorpusVersionId, versionEffectiveFrom, versionEffectiveTo,

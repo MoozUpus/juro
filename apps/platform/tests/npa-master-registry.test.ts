@@ -101,6 +101,43 @@ test("NPA target and report tables preserve an explicit 100-target zero-ingestio
   }
 });
 
+test("the baseline AS_OF date cannot advance before all 100 baseline versions exist", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const now = new Date("2026-09-13T00:00:00.000Z");
+  try {
+    await seedNpaMasterTargets(d1, now);
+    // This unit test exercises the snapshot gate itself; the normal
+    // attachment path is covered separately and supplies the foreign rows.
+    sqlite.prepare("PRAGMA foreign_keys=OFF").run();
+    const insertVersion = sqlite.prepare(`INSERT INTO npa_document_versions
+      (id,document_key,language,legal_corpus_variant_id,legal_corpus_version_id,
+       version_effective_from,version_effective_to,version_as_of,status,normative_checksum,
+       editorial_metadata_object_key,amendment_history_object_key,source_metadata_object_key,
+       last_checked_at,rag_enabled,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,?)`);
+    for (const target of NPA_MASTER_TARGETS.slice(0, -1)) {
+      insertVersion.run(
+        `baseline:${target.documentKey}`, target.documentKey, "ru",
+        `variant:${target.documentKey}`, `version:${target.documentKey}`,
+        "2020-01-01", null, "2026-09-11", "active", "a".repeat(64),
+        now.toISOString(), 1, now.toISOString(),
+      );
+    }
+    assert.equal(await npaCorpusAsOfDate(d1, now), "2026-09-11");
+    const last = NPA_MASTER_TARGETS.at(-1);
+    assert.ok(last);
+    insertVersion.run(
+      `baseline:${last.documentKey}`, last.documentKey, "ru",
+      `variant:${last.documentKey}`, `version:${last.documentKey}`,
+      "2020-01-01", null, "2026-09-11", "active", "b".repeat(64),
+      now.toISOString(), 1, now.toISOString(),
+    );
+    assert.equal(await npaCorpusAsOfDate(d1, now), "2026-09-13");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a previously discovered NPA card receives its own current-card verification job", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const now = new Date("2026-09-11T00:00:00.000Z");
