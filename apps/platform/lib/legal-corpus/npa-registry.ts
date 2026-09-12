@@ -184,7 +184,11 @@ export async function seedNpaMasterTargets(
         expected_act_type=excluded.expected_act_type,
         expected_act_number=excluded.expected_act_number,
         expected_adoption_date=excluded.expected_adoption_date,
-        source_seed_url=coalesce(npa_master_targets.source_seed_url,excluded.source_seed_url),
+        -- A checked, non-null in-code LexUZ source seed supersedes an older
+        -- seed. Keep a legacy non-null value only when the current target has
+        -- no curated canonical seed at all.
+        source_seed_url=CASE WHEN excluded.source_seed_url IS NOT NULL
+          THEN excluded.source_seed_url ELSE npa_master_targets.source_seed_url END,
         successor_document_key=excluded.successor_document_key,
         replaces_document_key=excluded.replaces_document_key,
         updated_at=excluded.updated_at`).bind(
@@ -301,9 +305,12 @@ export async function recordNpaCorpusVersion(input: {
   asOfDate?: string;
   now?: Date;
 }): Promise<{ attached: boolean; status: NpaRegistryStatus | null }> {
-  const candidate = await input.db.prepare(`SELECT document_key AS documentKey
-    FROM npa_discovery_state WHERE candidate_source_url=? LIMIT 1`)
-    .bind(input.sourceUrl.split("?", 1)[0] ?? input.sourceUrl)
+  const sourceReference = input.sourceUrl.split("?", 1)[0] ?? input.sourceUrl;
+  const candidate = await input.db.prepare(`SELECT state.document_key AS documentKey
+    FROM npa_discovery_state AS state
+    INNER JOIN npa_master_targets AS target ON target.document_key=state.document_key
+    WHERE state.candidate_source_url=? OR target.source_seed_url=? LIMIT 1`)
+    .bind(sourceReference, sourceReference)
     .first<{ documentKey: string }>();
   if (!candidate) return { attached: false, status: null };
   const target = [...NPA_MASTER_TARGETS, ...NPA_FUTURE_TARGETS]
@@ -372,7 +379,6 @@ export async function recordNpaCorpusVersion(input: {
     sourceStatus: input.sourceStatus,
     replacementScheduled,
   });
-  const sourceReference = input.sourceUrl.split("?", 1)[0] ?? input.sourceUrl;
   const now = (input.now ?? new Date()).toISOString();
   const versionId = `npa:${target.documentKey}:${input.language}:${versionEffectiveFrom}:${input.normativeChecksum.slice(0, 16)}`;
   await input.db.batch([

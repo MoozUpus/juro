@@ -33,6 +33,12 @@ test("NPA registry is exactly the mandatory 100 plus a separate future successor
   const oldRealtor = NPA_MASTER_TARGETS.find((target) => target.documentKey === "realtor_activity_2010");
   assert.equal(oldRealtor?.successorDocumentKey, "realtor_activity_2026");
   assert.equal(oldRealtor?.verifiedSourceSeed, "https://lex.uz/ru/docs/1714039");
+  assert.equal(NPA_MASTER_TARGETS.find((target) => target.documentKey === "civil_code_part_1")?.verifiedSourceSeed,
+    "https://lex.uz/ru/docs/111181");
+  assert.equal(NPA_MASTER_TARGETS.find((target) => target.documentKey === "tax_code")?.verifiedSourceSeed,
+    "https://lex.uz/ru/docs/4674893");
+  assert.equal(NPA_MASTER_TARGETS.find((target) => target.documentKey === "administrative_responsibility_code")?.verifiedSourceSeed,
+    "https://lex.uz/ru/docs/97661");
   assert.equal(NPA_FUTURE_TARGETS[0]?.replacesDocumentKey, "realtor_activity_2010");
 });
 
@@ -121,6 +127,43 @@ test("a previously discovered NPA card receives its own current-card verificatio
   }
 });
 
+test("a corrected curated LexUZ source is prioritized without re-enabling a rejected route", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const now = new Date("2026-09-11T00:00:00.000Z");
+  const env = {
+    APP_ENV: "staging",
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  } as const;
+  try {
+    await seedNpaMasterTargets(d1, now);
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='manual_review',candidate_source_url=?,
+      candidate_lexuz_doc_id='111189',last_error_code='IDENTITY_MISMATCH'
+      WHERE document_key='civil_code_part_1'`).run("https://lex.uz/ru/docs/111189");
+
+    await seedNpaTargetJobs(env, { now });
+    const state = sqlite.prepare(`SELECT status,candidate_source_url AS sourceUrl,
+      candidate_lexuz_doc_id AS lexuzDocId,last_error_code AS errorCode
+      FROM npa_discovery_state WHERE document_key='civil_code_part_1'`).get() as {
+        status: string; sourceUrl: string; lexuzDocId: string; errorCode: string | null;
+      };
+    assert.deepEqual({ ...state }, {
+      status: "manual_review", sourceUrl: "https://lex.uz/ru/docs/111189",
+      lexuzDocId: "111189", errorCode: "IDENTITY_MISMATCH",
+    });
+    const expectedJobId = await officialLexCorpusFetchJobId({
+      sourceUrl: "https://lex.uz/ru/docs/111181",
+      idempotencyScope: "npa-current-card:v7:civil_code_part_1:2026-09-11",
+    });
+    const job = sqlite.prepare(`SELECT id,status FROM legal_corpus_ingestion_jobs WHERE id=?`)
+      .get(expectedJobId) as { id: string; status: string };
+    assert.deepEqual({ ...job }, { id: expectedJobId, status: "queued" });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("the 2010 realtor target is re-seeded from its own LexUZ card, never from its future successor", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const now = new Date("2026-09-11T00:00:00.000Z");
@@ -174,19 +217,19 @@ test("unresolved NPA identity reviews take priority over routine verified-card r
     ]);
     await enqueueOfficialLexCorpusDocument(env, {
       sourceUrl: "https://lex.uz/ru/docs/2876352", now,
-      idempotencyScope: "npa-current-card:v6:customs_code:2026-09-11",
+      idempotencyScope: "npa-current-card:v7:customs_code:2026-09-11",
     });
     await enqueueOfficialLexCorpusDocument(env, {
       sourceUrl: "https://lex.uz/ru/docs/7283074", now,
-      idempotencyScope: "npa-current-card:v6:telecommunications:2026-09-11",
+      idempotencyScope: "npa-current-card:v7:telecommunications:2026-09-11",
     });
     const expectedManualJobId = await officialLexCorpusFetchJobId({
       sourceUrl: "https://lex.uz/ru/docs/2876352",
-      idempotencyScope: "npa-current-card:v6:customs_code:2026-09-11",
+      idempotencyScope: "npa-current-card:v7:customs_code:2026-09-11",
     });
     const expectedVerifiedJobId = await officialLexCorpusFetchJobId({
       sourceUrl: "https://lex.uz/ru/docs/7283074",
-      idempotencyScope: "npa-current-card:v6:telecommunications:2026-09-11",
+      idempotencyScope: "npa-current-card:v7:telecommunications:2026-09-11",
     });
     assert.deepEqual((await npaPriorityJobIds(d1, now)).slice(0, 2), [
       expectedManualJobId,

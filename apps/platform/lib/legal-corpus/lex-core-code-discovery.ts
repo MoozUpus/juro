@@ -16,7 +16,7 @@ type CoreCodeEnv = LegalCorpusQueueEnv & Partial<Record<LegalCorpusFeatureFlag, 
  * provider. They contain no copied legal text and are still independently
  * fetched and validated before entering the corpus. */
 const LEX_CORE_CODE_SEEDS = [
-  { targetId: "administrative_responsibility", sourceUrl: "https://lex.uz/ru/docs/97664" },
+  { targetId: "administrative_responsibility", sourceUrl: "https://lex.uz/ru/docs/97661" },
   { targetId: "administrative_court_procedure", sourceUrl: "https://lex.uz/ru/docs/3527365" },
   { targetId: "budget", sourceUrl: "https://lex.uz/ru/docs/2304140" },
   { targetId: "civil_procedure", sourceUrl: "https://lex.uz/ru/docs/3517334" },
@@ -24,8 +24,8 @@ const LEX_CORE_CODE_SEEDS = [
   { targetId: "criminal_execution", sourceUrl: "https://lex.uz/ru/docs/163627" },
   { targetId: "criminal_procedure", sourceUrl: "https://lex.uz/ru/docs/111463" },
   { targetId: "family", sourceUrl: "https://lex.uz/ru/docs/104723" },
-  { targetId: "civil", sourceUrl: "https://lex.uz/ru/docs/111189" },
-  { targetId: "tax", sourceUrl: "https://lex.uz/ru/docs/4674902" },
+  { targetId: "civil", sourceUrl: "https://lex.uz/ru/docs/111181" },
+  { targetId: "tax", sourceUrl: "https://lex.uz/ru/docs/4674893" },
   { targetId: "labor", sourceUrl: "https://lex.uz/ru/docs/6257291" },
   { targetId: "land", sourceUrl: "https://lex.uz/ru/docs/149947" },
 ] as const;

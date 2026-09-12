@@ -255,7 +255,7 @@ test("process schedule self-seeds a fresh corpus and begins the code-first phase
     "SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints",
   ).get() as { count: number }).count);
   const codeSeedCount = Number((sqlite.prepare(
-    "SELECT count(*) AS count FROM legal_corpus_ingestion_jobs WHERE canonical_document_id IN ('lexuz:104723','lexuz:111189','lexuz:4674902','lexuz:6257291')",
+    "SELECT count(*) AS count FROM legal_corpus_ingestion_jobs WHERE canonical_document_id IN ('lexuz:104723','lexuz:111181','lexuz:4674893','lexuz:6257291')",
   ).get() as { count: number }).count);
   const adminEventCount = Number((sqlite.prepare(
     "SELECT count(*) AS count FROM legal_corpus_admin_events",

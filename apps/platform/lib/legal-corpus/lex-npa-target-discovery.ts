@@ -29,7 +29,9 @@ const MAX_NPA_TITLE_SEARCH_PAGES = 12;
 // own P0 job instead of waiting behind generic version backlog.
 // v6 replaces legacy arbitrary-ONDATE AS_OF jobs with an exact LexUZ-picker
 // revision lane and replays completed cards through that repaired contract.
-const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "6";
+// v7 rechecks cards whose own language selector resolved a different Russian
+// LexUZ document ID, so Uzbek text can never be labelled as a Russian record.
+const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "7";
 
 type TargetRow = {
   documentKey: string;
@@ -244,17 +246,20 @@ export async function npaPriorityJobIds(
   now = new Date(),
 ): Promise<string[]> {
   const asOfDate = await npaCorpusAsOfDate(db, now);
-  const result = await db.prepare(`SELECT document_key AS documentKey,candidate_source_url AS candidateSourceUrl
-    FROM npa_discovery_state
-    WHERE status IN ('candidate','verified','future','repealed','manual_review') AND candidate_source_url IS NOT NULL
-    ORDER BY CASE status
+  const result = await db.prepare(`SELECT state.document_key AS documentKey,
+      coalesce(target.source_seed_url,state.candidate_source_url) AS candidateSourceUrl
+    FROM npa_discovery_state AS state
+    INNER JOIN npa_master_targets AS target ON target.document_key=state.document_key
+    WHERE state.status IN ('candidate','verified','future','repealed','manual_review')
+      AND coalesce(target.source_seed_url,state.candidate_source_url) IS NOT NULL
+    ORDER BY CASE state.status
       WHEN 'manual_review' THEN 0
       WHEN 'candidate' THEN 1
       WHEN 'repealed' THEN 2
       WHEN 'future' THEN 3
       WHEN 'verified' THEN 4
       ELSE 5
-    END,updated_at ASC,document_key ASC LIMIT 32`).all<{ documentKey: string; candidateSourceUrl: string }>();
+    END,state.updated_at ASC,state.document_key ASC LIMIT 32`).all<{ documentKey: string; candidateSourceUrl: string }>();
   const jobs = await Promise.all(result.results.flatMap(async (row) => {
     const parsed = parseLexDocumentUrl(row.candidateSourceUrl);
     if (!parsed) return [];

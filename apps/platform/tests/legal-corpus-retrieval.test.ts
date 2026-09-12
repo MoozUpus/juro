@@ -7,6 +7,7 @@ import {
   retrieveLegalCorpus,
   type LegalCorpusRetrievalItem,
 } from "../lib/legal-corpus/retrieval";
+import { recordNpaCorpusVersion, seedNpaMasterTargets } from "../lib/legal-corpus/npa-registry";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 class MemoryBucket {
@@ -102,6 +103,63 @@ test("sparse retrieval returns only the current, scope-authorized version", asyn
       "SELECT sparse_terms_json AS sparseTermsJson FROM legal_corpus_chunks LIMIT 1",
     ).get() as { sparseTermsJson: string }).sparseTermsJson, "[]");
     assert.equal(assessLegalCorpusCoverage({ query: "статья 25", sources: results }), "good_coverage");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("an unresolved master NPA cannot leak through generic sparse or dense retrieval", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const rejectedSourceUrl = "https://lex.uz/ru/docs/111189";
+  const canonicalSourceUrl = "https://lex.uz/ru/docs/111181";
+  try {
+    await seedNpaMasterTargets(d1, new Date("2026-09-11T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='manual_review',candidate_source_url=?,
+      candidate_lexuz_doc_id='111189',last_error_code='IDENTITY_MISMATCH'
+      WHERE document_key='civil_code_part_1'`).run(rejectedSourceUrl);
+    const html = `<!doctype html><main id="divCont">
+      <div>Дата вступления в силу</div><div>01.01.2020</div>
+      <div class="lx_elem ACT_TITLE">Гражданский кодекс Республики Узбекистан</div>
+      <div class="lx_elem ARTICLE">Статья 1. Непроверенная норма</div>
+      <div class="lx_elem">${"Непроверенная норма не должна попасть в выдачу до завершения проверки LexUZ. ".repeat(6)}</div>
+    </main>`;
+    const result = await ingestOfficialLexDocument({
+      APP_ENV: "staging", DB: d1, BUCKET: new MemoryBucket() as unknown as R2Bucket,
+      LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+    }, {
+      sourceUrl: rejectedSourceUrl, now: new Date("2026-09-11T12:00:00.000Z"),
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain" } })
+        : new Response(html, { headers: { "content-type": "text/html" } }),
+    });
+    const chunk = sqlite.prepare(`SELECT id FROM legal_corpus_chunks WHERE version_id=? LIMIT 1`)
+      .get(result.versionId) as { id: string };
+    assert.deepEqual(await retrieveLegalCorpus({ db: d1, query: "непроверенная норма" }), []);
+    assert.deepEqual(await retrieveLegalCorpus({
+      db: d1, query: "непроверенная норма", denseSearch: async () => [{ chunkId: chunk.id, score: 1 }],
+    }), []);
+    const hash = sqlite.prepare(`SELECT content_sha256 AS hash FROM legal_corpus_versions WHERE id=?`)
+      .get(result.versionId) as { hash: string };
+    assert.deepEqual(await recordNpaCorpusVersion({
+      db: d1, sourceUrl: canonicalSourceUrl, lexuzDocId: "111181",
+      legalCorpusDocumentId: result.documentId, legalCorpusVariantId: result.variantId,
+      legalCorpusVersionId: result.versionId!, language: "ru",
+      title: "Гражданский кодекс Республики Узбекистан",
+      metadata: {
+        title: "Гражданский кодекс Республики Узбекистан", actType: "code",
+        actNumber: "163-I", adoptionDate: "1995-12-21",
+      },
+      effectiveFrom: "1996-04-01", effectiveTo: null, sourceStatus: "active",
+      versionEffectiveFrom: "2020-01-01", normativeChecksum: hash.hash,
+      articleCount: 1, chunkCount: 1, isAsOfRevision: true,
+      asOfDate: "2026-09-11", now: new Date("2026-09-11T12:00:01.000Z"),
+    }), { attached: true, status: "active" });
+    // The target is now verified through its canonical Russian LexUZ record,
+    // but the previously rejected Uzbek-route provision must remain invisible.
+    assert.deepEqual(await retrieveLegalCorpus({ db: d1, query: "непроверенная норма" }), []);
+    assert.deepEqual(await retrieveLegalCorpus({
+      db: d1, query: "непроверенная норма", denseSearch: async () => [{ chunkId: chunk.id, score: 1 }],
+    }), []);
   } finally {
     sqlite.close();
   }

@@ -139,9 +139,11 @@ async function npaSourceMetadata(
 ): Promise<LexDocumentMetadata> {
   const primary = parseLexDocumentMetadata(input.rawHtml);
   if (primary.documentType && primary.adoptionDate) return primary;
-  const candidate = await db.prepare(`SELECT 1 AS found FROM npa_discovery_state
-    WHERE candidate_source_url=? LIMIT 1`)
-    .bind(input.document.sourceUrl)
+  const candidate = await db.prepare(`SELECT 1 AS found
+    FROM npa_discovery_state AS state
+    INNER JOIN npa_master_targets AS target ON target.document_key=state.document_key
+    WHERE state.candidate_source_url=? OR target.source_seed_url=? LIMIT 1`)
+    .bind(input.document.sourceUrl, input.document.sourceUrl)
     .first<{ found: number }>();
   if (!candidate) return primary;
   try {
@@ -181,9 +183,11 @@ async function enqueueNpaAsOfRevision(input: {
   now: Date;
 }): Promise<void> {
   if (!input.asOfRevisionDate || input.asOfRevisionDate === input.revisionHistory.currentRevisionDate) return;
-  const candidate = await input.env.DB.prepare(`SELECT document_key AS documentKey
-    FROM npa_discovery_state WHERE candidate_source_url=? LIMIT 1`)
-    .bind(input.currentDocument.sourceUrl)
+  const candidate = await input.env.DB.prepare(`SELECT state.document_key AS documentKey
+    FROM npa_discovery_state AS state
+    INNER JOIN npa_master_targets AS target ON target.document_key=state.document_key
+    WHERE state.candidate_source_url=? OR target.source_seed_url=? LIMIT 1`)
+    .bind(input.currentDocument.sourceUrl, input.currentDocument.sourceUrl)
     .first<{ documentKey: string }>();
   const revision = input.revisionHistory.revisions
     .find((entry) => entry.revisionDate === input.asOfRevisionDate);

@@ -231,6 +231,23 @@ async function hydrateDenseCandidates(input: {
             OR (npa_version.version_effective_to IS NOT NULL
               AND npa_version.version_effective_to<?))
       )
+      -- A target still awaiting LexUZ identity/temporal verification must
+      -- never leak through the generic corpus path. A rejected source route
+      -- remains blocked even after the same target later verifies a distinct
+      -- canonical LexUZ language document.
+      AND NOT EXISTS (
+        SELECT 1 FROM npa_master_targets AS pending_target
+        INNER JOIN npa_discovery_state AS pending_npa
+          ON pending_npa.document_key=pending_target.document_key
+        LEFT JOIN npa_master_registry AS verified_npa
+          ON verified_npa.document_key=pending_target.document_key
+        WHERE (pending_npa.candidate_source_url=provision.source_url
+            OR pending_target.source_seed_url=provision.source_url)
+          AND (pending_npa.status IN ('candidate','manual_review','retrying','future','repealed')
+            OR (pending_npa.candidate_source_url=provision.source_url
+              AND verified_npa.lexuz_doc_id IS NOT NULL
+              AND pending_npa.candidate_lexuz_doc_id<>verified_npa.lexuz_doc_id))
+      )
       AND (
         (? IS NULL AND variant.current_version_id=version.id
           AND (?=1 OR provision.status='active'))
@@ -374,8 +391,24 @@ export async function retrieveLegalCorpus(input: {
           WHERE npa_chunk.chunk_id=candidate_chunk.id
             AND (npa_version.rag_enabled=0
               OR npa_version.version_effective_from>?
-              OR (npa_version.version_effective_to IS NOT NULL
-                AND npa_version.version_effective_to<?))
+                OR (npa_version.version_effective_to IS NOT NULL
+                  AND npa_version.version_effective_to<?))
+        )
+        -- The sparse candidate path has the same fail-closed NPA gate as
+        -- dense hydration. Never rank an unverified or rejected-route target
+        -- as generic law.
+        AND NOT EXISTS (
+          SELECT 1 FROM npa_master_targets AS pending_target
+          INNER JOIN npa_discovery_state AS pending_npa
+            ON pending_npa.document_key=pending_target.document_key
+          LEFT JOIN npa_master_registry AS verified_npa
+            ON verified_npa.document_key=pending_target.document_key
+          WHERE (pending_npa.candidate_source_url=candidate_provision.source_url
+              OR pending_target.source_seed_url=candidate_provision.source_url)
+            AND (pending_npa.status IN ('candidate','manual_review','retrying','future','repealed')
+              OR (pending_npa.candidate_source_url=candidate_provision.source_url
+                AND verified_npa.lexuz_doc_id IS NOT NULL
+                AND pending_npa.candidate_lexuz_doc_id<>verified_npa.lexuz_doc_id))
         )
         AND (
           (? IS NULL AND candidate_variant.current_version_id=candidate_version.id
