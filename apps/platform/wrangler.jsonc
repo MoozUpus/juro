@@ -232,6 +232,14 @@
         {
           "tag": "v2-staging-legal-corpus-qdrant",
           "new_sqlite_classes": ["LegalCorpusQdrantContainer"]
+        },
+        {
+          "tag": "v3-retire-staging-legal-corpus-qdrant",
+          "deleted_classes": ["LegalCorpusQdrantContainer"]
+        },
+        {
+          "tag": "v4-restore-staging-legal-corpus-qdrant",
+          "new_sqlite_classes": ["LegalCorpusQdrantContainer"]
         }
       ],
       "durable_objects": {
