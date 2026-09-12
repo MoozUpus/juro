@@ -339,7 +339,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     }>;
   };
   assert.equal(config.main, "./worker/legal-corpus-worker.ts");
-  for (const environment of [config, config.env.staging, config.env.production]) {
+  for (const environment of [config, config.env.production]) {
     assert.equal(environment.workers_dev, false);
     assert.equal(environment.preview_urls, false);
     assert.deepEqual(environment.routes ?? [], []);
@@ -365,10 +365,11 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     "./drizzle/{012[145-9],013[0-9],014[0-5],0152}_*.sql",
   );
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_ENABLED, "true");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_LIVE_LEXUZ_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_MULTILINGUAL_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_HISTORICAL_ENABLED, "true");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_DENSE_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_SHADOW_MODE, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST, "true");
