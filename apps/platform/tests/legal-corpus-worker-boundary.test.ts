@@ -343,10 +343,8 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     assert.equal(environment.workers_dev, false);
     assert.equal(environment.preview_urls, false);
     assert.deepEqual(environment.routes ?? [], []);
-    assert.equal(environment.r2_buckets.some(({ binding }) => binding === "BACKUP_BUCKET"), true);
-  }
-  for (const environment of [config, config.env.production]) {
     assert.equal(environment.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
+    assert.equal(environment.r2_buckets.some(({ binding }) => binding === "BACKUP_BUCKET"), true);
   }
   assert.deepEqual(config.triggers.crons, [LEGAL_CORPUS_PROCESS_CRON, LEGAL_CORPUS_SEED_CRON]);
   assert.deepEqual(config.env.production.triggers.crons, [
@@ -367,10 +365,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     "./drizzle/{012[145-9],013[0-9],014[0-5],0152}_*.sql",
   );
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_ENABLED, "true");
-  // Staging is deliberately frozen during the bounded dense-index backfill;
-  // this is the release-gate state, not a production activation.
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_DENSE_ENABLED, "true");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_LIVE_LEXUZ_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_MULTILINGUAL_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_HISTORICAL_ENABLED, "true");
