@@ -210,6 +210,15 @@ async function limitedJson(response: Response): Promise<unknown> {
   }
 }
 
+function stagingServiceFailureCause(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/https?:\/\/[^\s]+/gu, "[url]")
+    .replace(/[A-Za-z0-9_~+/=-]{16,}/gu, "[redacted]")
+    .replace(/[^A-Za-z0-9_:.\-\[\] ]+/gu, "_")
+    .slice(0, 120) || "unknown";
+}
+
 async function privateProxyError(response: Response): Promise<
   "QDRANT_PRIVATE_ROUTE_REJECTED" | "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" | null
 > {
@@ -258,7 +267,14 @@ async function requestResponse(
     } else {
       response = await fetchImpl(endpoint(env, suffix), requestInit);
     }
-  } catch {
+  } catch (error) {
+    if (env.APP_ENV === "staging" && env.QDRANT_SERVICE) {
+      console.error(JSON.stringify({
+        event: "legal_corpus.qdrant_service_binding_failed",
+        errorName: error instanceof Error ? error.name : typeof error,
+        cause: stagingServiceFailureCause(error),
+      }));
+    }
     throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", true);
   }
   if (!response.ok) {

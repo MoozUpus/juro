@@ -102,6 +102,29 @@ test("Qdrant requests prefer the private service binding over public fetch", asy
   assert.equal(serviceRequests[0]?.headers.get("api-key"), "test-secret");
 });
 
+test("staging service-binding diagnostics redact URLs and secret-shaped values", async () => {
+  const original = console.error;
+  const logs: string[] = [];
+  console.error = (value: unknown) => { logs.push(String(value)); };
+  try {
+    const client = new QdrantLegalCorpusClient({
+      ...configured,
+      QDRANT_SERVICE: {
+        async fetch() {
+          throw new Error("request https://token-abcdefghijklmnop@example.test/api failed");
+        },
+      } as unknown as Fetcher,
+    });
+    await assert.rejects(() => client.queryDense(denseVector()), (error: unknown) =>
+      error instanceof QdrantCorpusError && error.code === "QDRANT_REQUEST_FAILED");
+    assert.equal(logs.length, 1);
+    assert.doesNotMatch(logs[0] ?? "", /token-abcdefghijklmnop|example\.test/u);
+    assert.match(logs[0] ?? "", /legal_corpus\.qdrant_service_binding_failed/u);
+  } finally {
+    console.error = original;
+  }
+});
+
 test("private proxy failures do not masquerade as a missing collection", async () => {
   const client = new QdrantLegalCorpusClient({
     ...configured,
