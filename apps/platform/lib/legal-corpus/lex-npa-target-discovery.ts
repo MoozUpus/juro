@@ -27,7 +27,9 @@ const MAX_NPA_TITLE_SEARCH_PAGES = 12;
 // for Code readers whose consolidated-text header has no adoption requisites.
 // v5 replays those cards so an exact historical AS_OF revision can receive its
 // own P0 job instead of waiting behind generic version backlog.
-const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "5";
+// v6 replaces legacy arbitrary-ONDATE AS_OF jobs with an exact LexUZ-picker
+// revision lane and replays completed cards through that repaired contract.
+const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "6";
 
 type TargetRow = {
   documentKey: string;
@@ -265,7 +267,7 @@ export async function npaPriorityJobIds(
         coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1`)
       .bind(
         parsed.canonicalDocumentId, parsed.language,
-        `npa:${row.documentKey}:as-of:${asOfDate}`,
+        `npa:${row.documentKey}:as-of:v2:${asOfDate}`,
         now.toISOString(),
       ).first<{ id: string }>();
     const currentCardJobId = await officialLexCorpusFetchJobId({

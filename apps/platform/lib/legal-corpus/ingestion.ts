@@ -191,8 +191,8 @@ async function enqueueNpaAsOfRevision(input: {
   await enqueueOfficialLexCorpusRevision(input.env, {
     sourceUrl: revision.sourceUrl,
     now: input.now,
-    correlationId: `npa:${candidate.documentKey}:as-of:${input.asOfDate}`,
-    idempotencyScope: `npa-as-of:v1:${candidate.documentKey}:${input.asOfDate}`,
+    correlationId: `npa:${candidate.documentKey}:as-of:v2:${input.asOfDate}`,
+    idempotencyScope: `npa-as-of:v2:${candidate.documentKey}:${input.asOfDate}`,
   });
 }
 
@@ -242,6 +242,7 @@ type StoredVersion = {
   versionId: string;
   versionNumber: number;
   validFrom: string | null;
+  validTo: string | null;
 };
 
 type CorpusRepresentation = {
@@ -307,7 +308,12 @@ async function findPreferredCanonicalDocumentJob(
 
 function priorityLegalCorpusJobIds(input: readonly string[] | undefined): string[] {
   if (!input) return [];
-  return [...new Set(input)].filter((value) => /^legal-corpus:[0-9a-f]{28}$/u.test(value)).slice(0, 64);
+  // P0 current cards are fetch jobs; their exact historical counterparts are
+  // revision jobs. Both carry an immutable SHA-derived primary key and must
+  // be accepted by the priority lane.
+  return [...new Set(input)]
+    .filter((value) => /^legal-(?:corpus|version):[0-9a-f]{28}$/u.test(value))
+    .slice(0, 64);
 }
 
 /** NPA processing selects its deterministic current-card job ID, rather than
@@ -712,7 +718,8 @@ async function storedVersionByHash(
   variantId: string,
   hash: string,
 ): Promise<StoredVersion | null> {
-  return db.prepare(`SELECT id AS versionId,version_number AS versionNumber,valid_from AS validFrom
+  return db.prepare(`SELECT id AS versionId,version_number AS versionNumber,
+      valid_from AS validFrom,valid_to AS validTo
     FROM legal_corpus_versions WHERE variant_id=? AND content_sha256=? LIMIT 1
   `).bind(variantId, hash).first<StoredVersion>();
 }
@@ -1021,6 +1028,32 @@ export async function ingestOfficialLexDocument(
   const alreadyStored = await storedVersionByHash(env.DB, variantId, versionHash);
   if (alreadyStored) {
     if (revision) {
+      // Historical rows may have been populated by ordinary catalogue work
+      // before they receive an NPA-specific AS_OF job. Reusing immutable
+      // text must still attach that exact verified revision; otherwise the
+      // job completes successfully while the master record stays stuck in
+      // manual_review.
+      if (isNpaAsOfRevision) {
+        if (!current) throw new TypeError("LEGAL_CORPUS_VARIANT_INVARIANT_FAILED");
+        await recordNpaCorpusVersion({
+          db: env.DB, sourceUrl: currentDocument.sourceUrl,
+          lexuzDocId: currentDocument.canonicalDocumentId.replace(/^lexuz:/u, ""),
+          legalCorpusDocumentId: current.documentId, legalCorpusVariantId: current.variantId,
+          legalCorpusVersionId: alreadyStored.versionId, language: currentDocument.language,
+          title: normalized.documentTitle,
+          metadata: {
+            title: normalized.documentTitle, actType: documentMetadata.documentType,
+            actNumber: documentMetadata.documentNumber, adoptionDate: documentMetadata.adoptionDate,
+          },
+          effectiveFrom: effectivity.validFrom, effectiveTo: effectivity.validTo,
+          sourceStatus: effectivity.status, versionEffectiveFrom: npaVersionEffectiveFrom,
+          versionEffectiveTo: alreadyStored.validTo,
+          normativeChecksum, articleCount: countNpaArticles(provisions), chunkCount: chunks.length,
+          isAsOfRevision: true,
+          asOfDate: npaQueryDate,
+          now: input.now,
+        });
+      }
       return {
         status: "unchanged", documentId, variantId,
         versionId: alreadyStored.versionId, provisionCount: 0, chunkCount: 0, sourceUrl,

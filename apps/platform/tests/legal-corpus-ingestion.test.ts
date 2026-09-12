@@ -1646,14 +1646,14 @@ test("historical Lex revisions are queued newest-first and keep non-overlapping 
   }
 });
 
-test("a master NPA attaches only the newest LexUZ revision effective on the frozen initial as-of date", async () => {
+test("a master NPA attaches only the newest LexUZ picker revision effective on the frozen initial as-of date", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
   const sourceUrl = "https://lex.uz/ru/docs/6257291";
   const npaHtml = (selected: string, body: string, includePriorRevision = false) => `<!doctype html><main id="divCont">
     <div>Дата вступления в силу</div><div>30.04.2023</div>
     <div class="dropdown-menu__item lx_date_selected stopProp">${selected}</div>
-    ${includePriorRevision ? `<div class="dropdown-menu__item lx_date_link" onclick="lxOpenUrl('/ru/docs/6257291?ONDATE=11.09.2026')">11.09.2026</div>` : ""}
+    ${includePriorRevision ? `<div class="dropdown-menu__item lx_date_link" onclick="lxOpenUrl('/ru/docs/6257291?ONDATE=25.07.2026')">25.07.2026</div>` : ""}
     <div class="COMMENT lx_no_select">Настоящий Кодекс утвержден Законом Республики Узбекистан от 28 октября 2022 года № ЗРУ-798.</div>
     <div class="lx_elem ACT_TITLE">Трудовой кодекс Республики Узбекистан</div>
     <div class="lx_elem ARTICLE">Статья 1. Предмет регулирования</div>
@@ -1669,10 +1669,10 @@ test("a master NPA attaches only the newest LexUZ revision effective on the froz
       if (url.endsWith("/robots.txt")) {
         return new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain" } });
       }
-      const historical = url.includes("ONDATE=11.09.2026");
+      const historical = url.includes("ONDATE=25.07.2026");
       return new Response(
         historical
-          ? npaHtml("11.09.2026", "Редакция на дату корпуса. ")
+          ? npaHtml("25.07.2026", "Редакция на дату корпуса. ")
           : npaHtml("12.09.2026", "Редакция после даты корпуса. ", true),
         { headers: { "content-type": "text/html; charset=utf-8" } },
       );
@@ -1684,14 +1684,22 @@ test("a master NPA attaches only the newest LexUZ revision effective on the froz
     assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM npa_master_registry WHERE document_key='labor_code'")
       .get() as { count: number }).count), 0);
 
+    // A stale implementation could queue the calendar AS_OF date itself.
+    // It is not an authoritative LexUZ picker date and must be ignored.
+    await enqueueOfficialLexCorpusRevision(env, {
+      sourceUrl: "https://lex.uz/ru/docs/6257291?ONDATE=11.09.2026",
+      now: new Date("2026-09-12T12:00:30.000Z"),
+      correlationId: "npa:labor_code:as-of:2026-09-11",
+      idempotencyScope: "npa-as-of:v1:labor_code:2026-09-11",
+    });
     const asOfJob = sqlite.prepare(`SELECT id,source_url AS sourceUrl,correlation_id AS correlationId
-      FROM legal_corpus_ingestion_jobs WHERE correlation_id='npa:labor_code:as-of:2026-09-11'`).get() as {
+      FROM legal_corpus_ingestion_jobs WHERE correlation_id='npa:labor_code:as-of:v2:2026-09-11'`).get() as {
         id: string; sourceUrl: string; correlationId: string;
       };
     assert.deepEqual({ ...asOfJob }, {
       id: asOfJob.id,
-      sourceUrl: "https://lex.uz/ru/docs/6257291?ONDATE=11.09.2026",
-      correlationId: "npa:labor_code:as-of:2026-09-11",
+      sourceUrl: "https://lex.uz/ru/docs/6257291?ONDATE=25.07.2026",
+      correlationId: "npa:labor_code:as-of:v2:2026-09-11",
     });
     assert.equal((await npaPriorityJobIds(d1, new Date("2026-09-12T12:01:00.000Z")))[0], asOfJob.id);
 
@@ -1706,7 +1714,20 @@ test("a master NPA attaches only the newest LexUZ revision effective on the froz
         effectiveFrom: string; versionAsOf: string;
       };
     assert.deepEqual({ ...registry }, { status: "active", ragEnabled: 1 });
-    assert.deepEqual({ ...version }, { effectiveFrom: "2026-09-11", versionAsOf: "2026-09-11" });
+    assert.deepEqual({ ...version }, { effectiveFrom: "2026-07-25", versionAsOf: "2026-09-11" });
+
+    // The same immutable historical source can be rechecked after an earlier
+    // incomplete review; it must resolve the review rather than return early.
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='manual_review',resolved_at=NULL
+      WHERE document_key='labor_code'`).run();
+    await ingestOfficialLexDocument(env, {
+      sourceUrl: asOfJob.sourceUrl,
+      now: new Date("2026-09-12T12:02:00.000Z"),
+      fetchImpl,
+    });
+    const replayed = sqlite.prepare(`SELECT status FROM npa_discovery_state
+      WHERE document_key='labor_code'`).get() as { status: string };
+    assert.equal(replayed.status, "verified");
   } finally {
     sqlite.close();
   }
