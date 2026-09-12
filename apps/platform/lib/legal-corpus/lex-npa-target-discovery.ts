@@ -29,9 +29,9 @@ const MAX_NPA_TITLE_SEARCH_PAGES = 12;
 // own P0 job instead of waiting behind generic version backlog.
 // v6 replaces legacy arbitrary-ONDATE AS_OF jobs with an exact LexUZ-picker
 // revision lane and replays completed cards through that repaired contract.
-// v7 rechecks cards whose own language selector resolved a different Russian
-// LexUZ document ID, so Uzbek text can never be labelled as a Russian record.
-const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "7";
+// v8 makes a missing official selected revision an explicit temporal review;
+// a current LexUZ page may not stand in for the frozen AS_OF edition.
+const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "8";
 
 type TargetRow = {
   documentKey: string;

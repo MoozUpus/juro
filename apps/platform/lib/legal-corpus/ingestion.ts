@@ -43,7 +43,7 @@ import {
 } from "./trust";
 import { diffCorpusProvisions, type CorpusProvisionSnapshot } from "./versioning";
 import { LegalCorpusEmbeddingError } from "./embeddings";
-import { npaCorpusAsOfDate, recordNpaCorpusVersion } from "./npa-registry";
+import { npaCorpusAsOfDate, recordNpaCorpusVersion, recordNpaManualReview } from "./npa-registry";
 import { QdrantCorpusError } from "./qdrant";
 import {
   buildSparseTermEntries,
@@ -197,6 +197,40 @@ async function enqueueNpaAsOfRevision(input: {
     now: input.now,
     correlationId: `npa:${candidate.documentKey}:as-of:v2:${input.asOfDate}`,
     idempotencyScope: `npa-as-of:v2:${candidate.documentKey}:${input.asOfDate}`,
+  });
+}
+
+/**
+ * The initial corpus is frozen at a declared AS_OF date. A current LexUZ
+ * document without an official selected revision or picker history cannot
+ * prove that its text governed that earlier date. Keep its raw snapshot out
+ * of the NPA layer and make the missing temporal evidence actionable rather
+ * than silently leaving the target in the candidate queue forever.
+ */
+async function recordNpaAsOfGap(input: {
+  db: D1Database;
+  sourceUrl: string;
+  now: Date;
+  reasonCode: "VERSION_INTERVAL_AMBIGUOUS" | "FULL_TEXT_UNAVAILABLE";
+  details: string;
+}): Promise<void> {
+  const sourceReference = input.sourceUrl.split("?", 1)[0] ?? input.sourceUrl;
+  const target = await input.db.prepare(`SELECT target.document_key AS documentKey,target.target_set AS targetSet
+    FROM npa_master_targets AS target
+    INNER JOIN npa_discovery_state AS state ON state.document_key=target.document_key
+    WHERE state.candidate_source_url=? OR target.source_seed_url=? LIMIT 1`)
+    .bind(sourceReference, sourceReference)
+    .first<{ documentKey: string; targetSet: "mandatory" | "future" }>();
+  // A future successor remains separately stored as future; only a mandatory
+  // act is blocked by missing evidence for the frozen historical edition.
+  if (!target || target.targetSet !== "mandatory") return;
+  await recordNpaManualReview({
+    db: input.db,
+    documentKey: target.documentKey,
+    reasonCode: input.reasonCode,
+    details: input.details,
+    sourceReference,
+    now: input.now,
   });
 }
 
@@ -1003,6 +1037,15 @@ export async function ingestOfficialLexDocument(
     ? revisionHistory.currentRevisionDate
     : revisionHistory.revisions.find((candidate) => candidate.revisionDate <= npaQueryDate)?.revisionDate
       ?? null;
+  if (!npaAsOfRevisionDate) {
+    await recordNpaAsOfGap({
+      db: env.DB,
+      sourceUrl: currentDocument.sourceUrl,
+      now: input.now ?? new Date(),
+      reasonCode: "VERSION_INTERVAL_AMBIGUOUS",
+      details: `LexUZ did not expose a selected revision or an official revision-picker date at or before ${npaQueryDate}.`,
+    });
+  }
   const isNpaAsOfRevision = npaAsOfRevisionDate !== null
     && (revision
       ? revision.revisionDate === npaAsOfRevisionDate
@@ -1602,6 +1645,13 @@ export async function runNextLegalCorpusIngestionJob(
     const unavailable = technicallyUnavailable(error);
     const shouldRetry = !unavailable && retryable(error) && attempt < candidate.maxAttempts;
     if (unavailable) {
+      await recordNpaAsOfGap({
+        db: env.DB,
+        sourceUrl: candidate.sourceUrl,
+        now: nowDate,
+        reasonCode: "FULL_TEXT_UNAVAILABLE",
+        details: "LexUZ did not provide a parseable full text for the selected official language record.",
+      });
       // A prior parser version reported this explicit Lex language notice as a
       // terminal short-document failure. Preserve the records while correcting
       // their resolution state for the same job after the official page has

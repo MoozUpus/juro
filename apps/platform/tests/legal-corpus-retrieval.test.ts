@@ -165,6 +165,51 @@ test("an unresolved master NPA cannot leak through generic sparse or dense retri
   }
 });
 
+test("a LexUZ card without historical revision evidence becomes an explicit temporal review", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const sourceUrl = "https://lex.uz/ru/docs/5960609";
+  try {
+    await seedNpaMasterTargets(d1, new Date("2026-09-11T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='candidate',candidate_source_url=?,
+      candidate_lexuz_doc_id='5960609' WHERE document_key='cybersecurity'`).run(sourceUrl);
+    const html = `<!doctype html><div class="docHeader">
+      Закон Республики Узбекистан от 15.04.2022 г. № ЗРУ-764
+      Дата вступления в силу 17.07.2022
+    </div><main id="divCont">
+      <div class="lx_elem ACT_TITLE">О кибербезопасности</div>
+      <div class="lx_elem ARTICLE">Статья 1. Цель настоящего Закона</div>
+      <div class="lx_elem">Настоящий Закон регулирует отношения в сфере кибербезопасности. ${"Норма сохраняется только для аудита до завершения temporal review. ".repeat(6)}</div>
+    </main>`;
+    await ingestOfficialLexDocument({
+      APP_ENV: "staging", DB: d1, BUCKET: new MemoryBucket() as unknown as R2Bucket,
+      LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+    }, {
+      sourceUrl, now: new Date("2026-09-11T12:00:00.000Z"),
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain" } })
+        : new Response(html, { headers: { "content-type": "text/html" } }),
+    });
+    const state = sqlite.prepare(`SELECT status,last_error_code AS errorCode
+      FROM npa_discovery_state WHERE document_key='cybersecurity'`).get() as {
+        status: string; errorCode: string | null;
+      };
+    assert.deepEqual({ ...state }, {
+      status: "manual_review", errorCode: "VERSION_INTERVAL_AMBIGUOUS",
+    });
+    const review = sqlite.prepare(`SELECT reason_code AS reasonCode
+      FROM npa_manual_review_report WHERE document_key='cybersecurity' AND resolved_at IS NULL`).get() as {
+        reasonCode: string;
+      };
+    assert.equal(review.reasonCode, "VERSION_INTERVAL_AMBIGUOUS");
+    const registered = sqlite.prepare(`SELECT count(*) AS count FROM npa_master_registry
+      WHERE document_key='cybersecurity'`).get() as { count: number };
+    assert.equal(registered.count, 0);
+    assert.deepEqual(await retrieveLegalCorpus({ db: d1, query: "кибербезопасности" }), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("dense-only retrieval hydrates evidence from D1 and enforces user scope", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const now = "2026-08-14T00:00:00.000Z";
