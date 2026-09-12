@@ -102,6 +102,20 @@ test("Qdrant requests prefer the private service binding over public fetch", asy
   assert.equal(serviceRequests[0]?.headers.get("api-key"), "test-secret");
 });
 
+test("private proxy failures do not masquerade as a missing collection", async () => {
+  const client = new QdrantLegalCorpusClient({
+    ...configured,
+    QDRANT_URL: "https://qdrant.internal",
+    QDRANT_SERVICE: {
+      async fetch() {
+        return Response.json({ error: "QDRANT_PRIVATE_ROUTE_REJECTED" }, { status: 404 });
+      },
+    } as unknown as Fetcher,
+  });
+  await assert.rejects(() => client.ensureCompatible(), (error: unknown) =>
+    error instanceof QdrantCorpusError && error.code === "QDRANT_PRIVATE_ROUTE_REJECTED");
+});
+
 test("platform requests can address the singleton private Container without public DNS", async () => {
   const requests: Request[] = [];
   const names: string[] = [];

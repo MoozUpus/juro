@@ -104,6 +104,13 @@ const countResponseSchema = z.object({
   result: z.object({ count: z.number().int().nonnegative() }).passthrough(),
 }).passthrough();
 
+const privateProxyErrorSchema = z.object({
+  error: z.enum([
+    "QDRANT_PRIVATE_ROUTE_REJECTED",
+    "QDRANT_PRIVATE_SERVICE_UNAVAILABLE",
+  ]),
+}).strict();
+
 const snapshotResponseSchema = z.object({
   status: z.string(),
   result: z.object({
@@ -119,6 +126,8 @@ export class QdrantCorpusError extends Error {
     readonly code:
       | "QDRANT_CONFIGURATION_REJECTED"
       | "QDRANT_REQUEST_FAILED"
+      | "QDRANT_PRIVATE_ROUTE_REJECTED"
+      | "QDRANT_PRIVATE_SERVICE_UNAVAILABLE"
       | "QDRANT_RESPONSE_REJECTED"
       | "QDRANT_COLLECTION_INCOMPATIBLE"
       | "QDRANT_SNAPSHOT_REQUIRED"
@@ -201,6 +210,19 @@ async function limitedJson(response: Response): Promise<unknown> {
   }
 }
 
+async function privateProxyError(response: Response): Promise<
+  "QDRANT_PRIVATE_ROUTE_REJECTED" | "QDRANT_PRIVATE_SERVICE_UNAVAILABLE" | null
+> {
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  if (declared > 1_024) return null;
+  try {
+    const parsed = privateProxyErrorSchema.safeParse(await response.clone().json());
+    return parsed.success ? parsed.data.error : null;
+  } catch {
+    return null;
+  }
+}
+
 async function requestResponse(
   env: QdrantCorpusEnv,
   suffix: string,
@@ -239,11 +261,16 @@ async function requestResponse(
   } catch {
     throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", true);
   }
-  if (options.allowNotFound && response.status === 404) {
-    await response.body?.cancel().catch(() => undefined);
-    return undefined;
-  }
   if (!response.ok) {
+    const privateError = await privateProxyError(response);
+    if (privateError) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new QdrantCorpusError(privateError, privateError === "QDRANT_PRIVATE_SERVICE_UNAVAILABLE");
+    }
+    if (options.allowNotFound && response.status === 404) {
+      await response.body?.cancel().catch(() => undefined);
+      return undefined;
+    }
     const retryable = response.status === 408 || response.status === 409
       || response.status === 429 || response.status >= 500;
     await response.body?.cancel().catch(() => undefined);
