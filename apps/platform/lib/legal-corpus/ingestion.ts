@@ -207,6 +207,19 @@ async function enqueueNpaAsOfRevision(input: {
  * of the NPA layer and make the missing temporal evidence actionable rather
  * than silently leaving the target in the candidate queue forever.
  */
+async function npaTargetForSource(input: {
+  db: D1Database;
+  sourceUrl: string;
+}): Promise<{ documentKey: string; targetSet: "mandatory" | "future" } | null> {
+  const sourceReference = input.sourceUrl.split("?", 1)[0] ?? input.sourceUrl;
+  return input.db.prepare(`SELECT target.document_key AS documentKey,target.target_set AS targetSet
+    FROM npa_master_targets AS target
+    INNER JOIN npa_discovery_state AS state ON state.document_key=target.document_key
+    WHERE state.candidate_source_url=? OR target.source_seed_url=? LIMIT 1`)
+    .bind(sourceReference, sourceReference)
+    .first<{ documentKey: string; targetSet: "mandatory" | "future" }>();
+}
+
 async function recordNpaAsOfGap(input: {
   db: D1Database;
   sourceUrl: string;
@@ -215,12 +228,7 @@ async function recordNpaAsOfGap(input: {
   details: string;
 }): Promise<void> {
   const sourceReference = input.sourceUrl.split("?", 1)[0] ?? input.sourceUrl;
-  const target = await input.db.prepare(`SELECT target.document_key AS documentKey,target.target_set AS targetSet
-    FROM npa_master_targets AS target
-    INNER JOIN npa_discovery_state AS state ON state.document_key=target.document_key
-    WHERE state.candidate_source_url=? OR target.source_seed_url=? LIMIT 1`)
-    .bind(sourceReference, sourceReference)
-    .first<{ documentKey: string; targetSet: "mandatory" | "future" }>();
+  const target = await npaTargetForSource(input);
   // A future successor remains separately stored as future; only a mandatory
   // act is blocked by missing evidence for the frozen historical edition.
   if (!target || target.targetSet !== "mandatory") return;
@@ -1032,11 +1040,27 @@ export async function ingestOfficialLexDocument(
   // LexUZ's ONDATE control accepts publication/revision picker dates, not an
   // arbitrary calendar day. For a historical legal question, use the newest
   // picker revision that was already in force on the requested date.
-  const npaAsOfRevisionDate = revisionHistory.currentRevisionDate
+  const pickerRevisionDate = revisionHistory.currentRevisionDate
     && revisionHistory.currentRevisionDate <= npaQueryDate
     ? revisionHistory.currentRevisionDate
     : revisionHistory.revisions.find((candidate) => candidate.revisionDate <= npaQueryDate)?.revisionDate
       ?? null;
+  // LexUZ omits the date picker on a card with one official edition. This is
+  // not an invented ONDATE route: an active master target with no selected or
+  // linked revision has one LexUZ-provided interval beginning on its visible
+  // effective date. If the picker appears after a later amendment, this lane
+  // immediately returns to exact-picker selection above.
+  const singletonTarget = pickerRevisionDate === null
+    && revision === null
+    && revisionHistory.currentRevisionDate === null
+    && revisionHistory.revisions.length === 0
+    ? await npaTargetForSource({ db: env.DB, sourceUrl: currentDocument.sourceUrl })
+    : null;
+  const singletonEdition = singletonTarget?.targetSet === "mandatory"
+    && effectivity.status === "active"
+    && effectivity.validFrom !== null
+    && effectivity.validFrom <= npaQueryDate;
+  const npaAsOfRevisionDate = pickerRevisionDate ?? (singletonEdition ? effectivity.validFrom : null);
   if (!npaAsOfRevisionDate) {
     await recordNpaAsOfGap({
       db: env.DB,
@@ -1049,7 +1073,7 @@ export async function ingestOfficialLexDocument(
   const isNpaAsOfRevision = npaAsOfRevisionDate !== null
     && (revision
       ? revision.revisionDate === npaAsOfRevisionDate
-      : revisionHistory.currentRevisionDate === npaAsOfRevisionDate);
+      : revisionHistory.currentRevisionDate === npaAsOfRevisionDate || singletonEdition);
   const npaVersionEffectiveFrom = effectivity.validFrom && effectivity.validFrom > npaQueryDate
     ? effectivity.validFrom
     : revision?.revisionDate ?? revisionHistory.currentRevisionDate ?? effectivity.validFrom;

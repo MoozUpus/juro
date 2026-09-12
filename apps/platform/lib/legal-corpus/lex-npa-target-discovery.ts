@@ -29,9 +29,10 @@ const MAX_NPA_TITLE_SEARCH_PAGES = 12;
 // own P0 job instead of waiting behind generic version backlog.
 // v6 replaces legacy arbitrary-ONDATE AS_OF jobs with an exact LexUZ-picker
 // revision lane and replays completed cards through that repaired contract.
-// v8 makes a missing official selected revision an explicit temporal review;
-// a current LexUZ page may not stand in for the frozen AS_OF edition.
-const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "8";
+// v9 treats a card without revision controls as one official edition only after
+// its visible active effective interval covers AS_OF. Any revision picker keeps
+// the exact-picker path; missing effective evidence remains manual review.
+const NPA_CURRENT_CARD_QUEUE_SCHEMA_VERSION = "9";
 
 type TargetRow = {
   documentKey: string;

@@ -165,7 +165,7 @@ test("an unresolved master NPA cannot leak through generic sparse or dense retri
   }
 });
 
-test("a LexUZ card without historical revision evidence becomes an explicit temporal review", async () => {
+test("an active LexUZ card with no revision picker is retained as one official edition", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const sourceUrl = "https://lex.uz/ru/docs/5960609";
   try {
@@ -194,17 +194,52 @@ test("a LexUZ card without historical revision evidence becomes an explicit temp
         status: string; errorCode: string | null;
       };
     assert.deepEqual({ ...state }, {
-      status: "manual_review", errorCode: "VERSION_INTERVAL_AMBIGUOUS",
+      status: "verified", errorCode: null,
     });
-    const review = sqlite.prepare(`SELECT reason_code AS reasonCode
-      FROM npa_manual_review_report WHERE document_key='cybersecurity' AND resolved_at IS NULL`).get() as {
-        reasonCode: string;
-      };
-    assert.equal(review.reasonCode, "VERSION_INTERVAL_AMBIGUOUS");
     const registered = sqlite.prepare(`SELECT count(*) AS count FROM npa_master_registry
       WHERE document_key='cybersecurity'`).get() as { count: number };
-    assert.equal(registered.count, 0);
-    assert.deepEqual(await retrieveLegalCorpus({ db: d1, query: "кибербезопасности" }), []);
+    assert.equal(registered.count, 1);
+    const version = sqlite.prepare(`SELECT version_as_of AS versionAsOf,version_effective_from AS effectiveFrom,
+      rag_enabled AS ragEnabled FROM npa_document_versions WHERE document_key='cybersecurity'`).get() as {
+        versionAsOf: string; effectiveFrom: string; ragEnabled: number;
+      };
+    assert.deepEqual({ ...version }, {
+      versionAsOf: "2026-09-11", effectiveFrom: "2022-07-17", ragEnabled: 1,
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a LexUZ card without either a revision picker or an effective date remains manual review", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const sourceUrl = "https://lex.uz/ru/docs/5960609";
+  try {
+    await seedNpaMasterTargets(d1, new Date("2026-09-11T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE npa_discovery_state SET status='candidate',candidate_source_url=?,
+      candidate_lexuz_doc_id='5960609' WHERE document_key='cybersecurity'`).run(sourceUrl);
+    const html = `<!doctype html><div class="docHeader">
+      Закон Республики Узбекистан от 15.04.2022 г. № ЗРУ-764
+    </div><main id="divCont">
+      <div class="lx_elem ACT_TITLE">О кибербезопасности</div>
+      <div class="lx_elem ARTICLE">Статья 1. Цель настоящего Закона</div>
+      <div class="lx_elem">Текст без подтверждённого начала действия. ${"Временная проверка. ".repeat(10)}</div>
+    </main>`;
+    await ingestOfficialLexDocument({
+      APP_ENV: "staging", DB: d1, BUCKET: new MemoryBucket() as unknown as R2Bucket,
+      LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+    }, {
+      sourceUrl, now: new Date("2026-09-11T12:00:00.000Z"),
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain" } })
+        : new Response(html, { headers: { "content-type": "text/html" } }),
+    });
+    assert.deepEqual({ ...sqlite.prepare(`SELECT status,last_error_code AS errorCode
+      FROM npa_discovery_state WHERE document_key='cybersecurity'`).get() }, {
+      status: "manual_review", errorCode: "VERSION_INTERVAL_AMBIGUOUS",
+    });
+    assert.equal((sqlite.prepare(`SELECT count(*) AS count FROM npa_master_registry
+      WHERE document_key='cybersecurity'`).get() as { count: number }).count, 0);
   } finally {
     sqlite.close();
   }
