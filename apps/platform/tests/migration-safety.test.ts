@@ -70,6 +70,7 @@ const verifiedCorpusFreshnessEntry = journal.entries.find(({ idx }) => idx === 9
 const documentEvaluationReviewsEntry = journal.entries.find(({ idx }) => idx === 92);
 const caseLifecycleEvidenceEntry = journal.entries.find(({ idx }) => idx === 93);
 const caseLifecycleHashGuardEntry = journal.entries.find(({ idx }) => idx === 104);
+const legalCorpusQdrantBackfillIndexesEntry = journal.entries.find(({ idx }) => idx === 144);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -188,6 +189,10 @@ assert.ok(
 assert.ok(
   caseLifecycleHashGuardEntry,
   "Drizzle journal must contain migration 0104",
+);
+assert.ok(
+  legalCorpusQdrantBackfillIndexesEntry,
+  "Drizzle journal must contain migration 0153",
 );
 
 
@@ -339,6 +344,21 @@ test("all migrations apply cleanly with foreign-key integrity", () => {
     }
   } finally {
     db.close();
+  }
+});
+
+test("0153 adds only the dense-backfill lookup indexes", () => {
+  const sql = migrationSql(legalCorpusQdrantBackfillIndexesEntry);
+  assert.match(
+    sql,
+    /CREATE INDEX `legal_corpus_chunks_dense_backfill_idx`[\s\S]*?\(`version_id`,`created_at`,`id`\)[\s\S]*?WHERE `dense_vector_id` IS NULL/,
+  );
+  assert.match(
+    sql,
+    /CREATE INDEX `npa_document_versions_corpus_version_idx`[\s\S]*?\(`legal_corpus_version_id`\)/,
+  );
+  for (const statement of statements(sql)) {
+    assert.match(statement.replace(/^--.*$/gmu, "").trim(), /^CREATE INDEX\b/i);
   }
 });
 

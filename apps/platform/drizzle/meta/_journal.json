@@ -1009,6 +1009,13 @@
       "when": 1789171201000,
       "tag": "0152_restore_legal_corpus_chunk_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1789326914538,
+      "tag": "0153_legal_corpus_qdrant_backfill_indexes",
+      "breakpoints": true
     }
   ]
 }
