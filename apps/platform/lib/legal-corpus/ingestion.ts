@@ -360,8 +360,8 @@ function priorityLegalCorpusJobIds(input: readonly string[] | undefined): string
   return [...new Set(input)]
     .filter((value) => /^legal-(?:corpus|version):[0-9a-f]{28}$/u.test(value))
     // At most 101 target cards can have a current fetch plus one historical
-    // revision. The query binds each id twice (priority CASE + IN list), so
-    // this remains comfortably below D1/SQLite's parameter limit.
+    // revision. `findPriorityNpaJob` processes this bounded list in
+    // D1-safe parameter batches while preserving its deterministic order.
     .slice(0, 256);
 }
 
@@ -374,15 +374,25 @@ async function findPriorityNpaJob(
   jobIds: readonly string[],
 ): Promise<IngestionJob | null> {
   if (jobIds.length === 0) return null;
-  const priority = `CASE id ${jobIds.map((_, index) => `WHEN ? THEN ${index}`).join(" ")} ELSE ${jobIds.length} END`;
-  return db.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
+  // D1's SQL-variable limit is lower than local SQLite's. Each id occurs in
+  // both CASE and IN, plus `now`, so 48 ids uses 97 bindings. Walk batches in
+  // priority order to retain the same result as one large query without ever
+  // allowing a generic backlog job into the statutory lane.
+  const MAX_PRIORITY_IDS_PER_QUERY = 48;
+  for (let offset = 0; offset < jobIds.length; offset += MAX_PRIORITY_IDS_PER_QUERY) {
+    const batch = jobIds.slice(offset, offset + MAX_PRIORITY_IDS_PER_QUERY);
+    const priority = `CASE id ${batch.map((_, index) => `WHEN ? THEN ${index}`).join(" ")} ELSE ${batch.length} END`;
+    const candidate = await db.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
       canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
-    WHERE status IN ('queued','retrying') AND id IN (${jobIds.map(() => "?").join(",")})
+    WHERE status IN ('queued','retrying') AND id IN (${batch.map(() => "?").join(",")})
       AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY ${priority},CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
       coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
-  `).bind(...jobIds, now, ...jobIds).first<IngestionJob>();
+    `).bind(...batch, now, ...batch).first<IngestionJob>();
+    if (candidate) return candidate;
+  }
+  return null;
 }
 
 async function findPreferredCatalogJob(

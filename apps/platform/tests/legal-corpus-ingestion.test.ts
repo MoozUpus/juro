@@ -1578,6 +1578,30 @@ test("strict master-NPA processing leaves a generic Lex retry untouched", async 
   }
 });
 
+test("master-NPA priority crosses D1-safe batches without losing a later P0 job", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const current = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10006",
+      now, correlationId: "npa-second-priority-batch",
+      idempotencyScope: "npa-current-card:batch-test:2026-09-11",
+    });
+    const earlierMissingIds = Array.from({ length: 48 }, (_, index) =>
+      `legal-corpus:${index.toString(16).padStart(28, "a")}`,
+    );
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 1_000), fetchImpl: fetchFor(lexHtml()),
+      priorityJobIds: [...earlierMissingIds, current.jobId], strictPriorityOnly: true,
+    });
+    assert.equal(run.jobId, current.jobId);
+    assert.equal(run.status, "completed");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("ingestion links official RU UZ Cyrillic UZ Latin and EN variants into one family", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
