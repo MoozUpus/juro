@@ -365,7 +365,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     "./drizzle/{012[145-9],013[0-9],014[0-5],015[2-3]}_*.sql",
   );
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_ENABLED, "true");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_LIVE_LEXUZ_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_MULTILINGUAL_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_HISTORICAL_ENABLED, "true");
