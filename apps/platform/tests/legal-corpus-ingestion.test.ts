@@ -1553,6 +1553,31 @@ test("master NPA priority takes its current Lex card before generic retries", as
   }
 });
 
+test("strict master-NPA processing leaves a generic Lex retry untouched", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const generic = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10005", now, correlationId: "generic-retry",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='retrying',next_attempt_at=? WHERE id=?`).run(now.toISOString(), generic.jobId);
+
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 1_000),
+      priorityJobIds: ["legal-corpus:aaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      strictPriorityOnly: true,
+    });
+    assert.equal(run.status, "empty");
+    assert.equal(run.claimed, false);
+    assert.equal((sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(generic.jobId) as { status: string }).status, "retrying");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("ingestion links official RU UZ Cyrillic UZ Latin and EN variants into one family", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

@@ -1,21 +1,10 @@
 import {
   reconcileLegalCorpusTitleUiNoise,
   runNextLegalCorpusIngestionJob,
-  seedLexCorpusJobsFromMetadata,
   type LegalCorpusIngestionEnv,
 } from "../lib/legal-corpus/ingestion";
 import {
-  runNextLexCatalogDiscoveryPage,
-  seedLexCatalogDiscoveryCheckpoints,
-} from "../lib/legal-corpus/lex-catalog-discovery";
-import {
-  LEX_CORE_CODE_SEED_IDS,
-  runNextLexCoreCodeDiscovery,
-  seedLexCoreCodeJobs,
-} from "../lib/legal-corpus/lex-core-code-discovery";
-import {
   npaPriorityJobIds,
-  refreshVerifiedNpaTargetJobs,
   runNextNpaTargetDiscovery,
   seedNpaTargetJobs,
 } from "../lib/legal-corpus/lex-npa-target-discovery";
@@ -25,7 +14,6 @@ import { runNextLegalCorpusQdrantBackfillBatch } from "../lib/legal-corpus/qdran
 import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
 import { createLegalCorpusQdrantSnapshot } from "../lib/legal-corpus/qdrant-snapshots";
 import { createPacedLexFetch } from "../lib/legal-corpus/lex-request-pacer";
-import { scheduleLegalCorpusMaintenance } from "../lib/legal-corpus/maintenance";
 import {
   backfillCompressedSparseIndexBatch,
   compactLegacySparseJsonBatch,
@@ -39,36 +27,6 @@ export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
 const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
-// Once all core codes are settled, four catalogue pages advance the durable
-// discovery checkpoints per staging tick. The shared 20-second host pacer
-// permits ten sequential Lex.uz request windows per four-minute invocation
-// without increasing concurrency. Until all core codes have an
-// exact official title match, the catalogue phase remains paused in favour of
-// the bounded code-title lookup.
-const DISCOVERY_PAGES_PER_RUN = 4;
-// Five sequential document jobs plus the four catalogue pages above use ten
-// bounded source windows when a network robots policy is required. `createPacedLexFetch` fetches
-// robots.txt once per bounded Worker invocation, and its D1-backed host
-// limiter remains authoritative for every real Lex.uz request. The 195-second start fence remains
-// authoritative: a document requiring a second official representation simply
-// leaves a later durable job queued rather than overlapping the next tick.
-const INGESTION_JOBS_PER_RUN = 5;
-// Four of the five ingestion slots may prefer already-discovered, article-rich
-// official catalogues. Place the explicitly reserved historical version slot
-// after three fetch slots, so secondary PDF/ZIP representations
-// cannot consistently consume the start window before versioning progresses.
-// Due retries remain globally first. This remains a sequential, bounded
-// prioritisation rather than a new crawl stream.
-const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
-const VERSION_INGESTION_SLOT_INDEX = 3;
-const PREFERRED_INGESTION_CATALOGUES = [
-  "court_acts",
-  "laws",
-  "court_practice",
-  "oliy_majlis",
-  "president",
-] as const;
-const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
 // A short canonical page may require one additional robots-checked, paced PDF
 // or ZIP representation fetch. Stop claiming new jobs after 3m15s from the
 // scheduled tick so one worst-case HTML + representation job can still finish
@@ -82,23 +40,6 @@ const INGESTION_START_CUTOFF_MS = 195_000;
 // 64-chunk batches cap one invocation at eight embedding calls while allowing
 // the complete current corpus to resume from D1 after a Worker restart.
 const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;
-
-export function legalCorpusIngestionJobBudget(
-  discoveries: readonly { claimed: boolean; status: string }[],
-  input: { persistentRobotsPolicy?: boolean } = {},
-): number {
-  // Reuse only catalogue slots that were proved empty. A failed/disabled
-  // discovery does not grant extra nominal source jobs. The nominal maximum
-  // remains ten real Lex.uz requests (a network robots policy + 4 discovery
-  // + 5 ingestion, or a fresh five-minute robots policy + 4 discovery + 6
-  // ingestion). An earlier empty discovery page reclaims its capacity; the elapsed-time
-  // start fence below is authoritative when a job discovers a secondary PDF
-  // or ZIP representation and therefore consumes an additional paced fetch.
-  const nominalIngestionJobs = INGESTION_JOBS_PER_RUN + (input.persistentRobotsPolicy ? 1 : 0);
-  if (!discoveries.some((result) => result.status === "empty")) return nominalIngestionJobs;
-  const claimed = discoveries.filter((result) => result.claimed).length;
-  return nominalIngestionJobs + Math.max(0, DISCOVERY_PAGES_PER_RUN - claimed);
-}
 
 export function legalCorpusIngestionStartAllowed(
   scheduledTime: number,
@@ -327,50 +268,30 @@ export async function handleLegalCorpusScheduled(
   try {
     if (controller.cron === LEGAL_CORPUS_SEED_CRON) {
       const scheduledAt = new Date(controller.scheduledTime);
-      const metadata = await seedLexCorpusJobsFromMetadata(env, { now: scheduledAt });
       const npa = await seedNpaTargetJobs(env, { now: scheduledAt });
-      const npaDaily = await refreshVerifiedNpaTargetJobs(env, { now: scheduledAt });
-      const catalog = await seedLexCatalogDiscoveryCheckpoints(env, scheduledAt);
-      const maintenance = await scheduleLegalCorpusMaintenance(env, { now: scheduledAt });
       await finishRun(env, run, "completed", null);
       log("info", {
         event: "legal_corpus.seed_completed",
         environment: env.APP_ENV,
         cron: controller.cron,
-        metadataConsidered: metadata.considered,
-        metadataQueued: metadata.queued,
         npaTargetsConsidered: npa.considered,
         npaCandidateJobsQueued: npa.queued,
-        npaDailyChecksConsidered: npaDaily.considered,
-        npaDailyChecksQueued: npaDaily.queued,
-        npaDailyCheckDate: npaDaily.date,
-        checkpointsConsidered: catalog.considered,
-        checkpointsCreated: catalog.created,
-        maintenanceLocalDate: maintenance.localDate,
-        dailyRefreshQueued: maintenance.dailyQueued,
-        weeklyRefreshQueued: maintenance.weeklyQueued,
-        monthlyRefreshQueued: maintenance.monthlyQueued,
-        catalogCheckpointsReset: maintenance.catalogCheckpointsReset,
       });
       controller.noRetry();
       return;
     }
 
-    // The process schedule must be self-starting. Requiring a staff member to
-    // press the admin seed button would turn a resumable automatic corpus into
-    // a manual approval gate. The seed operation is idempotent, so a fresh or
-    // partially restored environment can safely recreate only the missing
-    // category/language checkpoints before claiming the next page.
-    let catalog = { considered: 0, created: 0 };
-    const discoveries: Awaited<ReturnType<typeof runNextLexCatalogDiscoveryPage>>[] = [];
+    // This Worker is the bounded statutory 100-NPA corpus lane. It must not
+    // bootstrap or drain the general Lex catalogue: that would turn a P0
+    // refresh into an unbounded crawl and let unrelated failures block QA.
+    const discoveries: Array<CorpusWorkResult & { claimed: boolean }> = [];
     const ingestions: Awaited<ReturnType<typeof runNextLegalCorpusIngestionJob>>[] = [];
-    let coreCodeSeeds = { considered: 0, queued: 0 };
     let npaSeeds = { considered: 0, queued: 0 };
     let npaCanonicalChunkCountsReconciled = 0;
     let npaDiscovery: Awaited<ReturnType<typeof runNextNpaTargetDiscovery>> = {
       status: "disabled", documentKey: null, canonicalDocumentId: null, queued: false, safeErrorCode: null,
     };
-    let coreCode: Awaited<ReturnType<typeof runNextLexCoreCodeDiscovery>> = {
+    const coreCode = {
       status: "disabled", targetId: null, canonicalDocumentId: null, priorityCanonicalDocumentIds: [], queued: false, safeErrorCode: null,
     };
     let ingestionStartCutoffReached = false;
@@ -379,14 +300,10 @@ export async function handleLegalCorpusScheduled(
     // stored inside a title, keeping source cards and sparse title boosts clean.
     const titleRepairs = await reconcileLegalCorpusTitleUiNoise(env.DB);
     if (ingestionEnabled(env)) {
-      catalog = await seedLexCatalogDiscoveryCheckpoints(env);
       const wait = (delayMs: number) => scheduler.wait(delayMs);
-      const pacerStats = { robotsNetworkRequests: 0, persistentRobotsCacheHits: 0 };
-      const fetchImpl = createPacedLexFetch({ db: env.DB, wait, stats: pacerStats });
-      // The master 100 is the release-critical priority. It takes one
-      // robots-paced request per tick and does not permit a similarly named
-      // amendment to enter the corpus. The broad catalogue is held until this
-      // bounded set is settled, rather than defining completeness by crawl size.
+      const fetchImpl = createPacedLexFetch({ db: env.DB, wait });
+      // One robots-paced P0 card per tick preserves LexUZ source discipline
+      // and completes the 101 current/future cards within the daily window.
       npaSeeds = await seedNpaTargetJobs(env, { now: new Date(controller.scheduledTime) });
       npaCanonicalChunkCountsReconciled = await reconcileNpaCanonicalChunkCounts(
         env.DB,
@@ -399,55 +316,18 @@ export async function handleLegalCorpusScheduled(
       npaDiscovery = await runNextNpaTargetDiscovery(env, {
         now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
       });
-      coreCodeSeeds = await seedLexCoreCodeJobs(env, { now: new Date(controller.scheduledTime) });
-      if (npaDiscovery.status === "all_settled") {
-        coreCode = await runNextLexCoreCodeDiscovery(env, {
-          now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
-        });
-      }
-      if (npaDiscovery.status === "all_settled" && coreCode.status === "all_settled") {
-        for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
-          const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl, pacingAlreadyApplied: true });
-          discoveries.push(result);
-          if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
-        }
-      }
-      const preferredCoreCodeIds = [...new Set([
-        ...LEX_CORE_CODE_SEED_IDS,
-        ...coreCode.priorityCanonicalDocumentIds,
-      ])];
-      const ingestionBudget = priorityNpaJobIds.length > 0
-        ? 1
-        : legalCorpusIngestionJobBudget(discoveries, {
-          persistentRobotsPolicy: pacerStats.persistentRobotsCacheHits > 0,
-        });
+      const ingestionBudget = priorityNpaJobIds.length > 0 ? 1 : 0;
       for (let index = 0; index < ingestionBudget; index += 1) {
         if (!legalCorpusIngestionStartAllowed(controller.scheduledTime, Date.now())) {
           ingestionStartCutoffReached = true;
           break;
         }
-        const reservedVersionSlot = index === VERSION_INGESTION_SLOT_INDEX;
-        const preferredCatalogSlot = index < INGESTION_JOBS_PER_RUN && !reservedVersionSlot;
-        const preferredSlotIndex = index < VERSION_INGESTION_SLOT_INDEX ? index : index - 1;
         const result = await runNextLegalCorpusIngestionJob(env, {
           wait,
           fetchImpl,
-          preferredCatalogCategories: preferredCatalogSlot
-            ? PREFERRED_INGESTION_CATALOGUES
-            : undefined,
-          preferredCatalogLanguages: preferredCatalogSlot
-            ? [PREFERRED_INGESTION_LANGUAGE_ROTATION[
-              (Math.floor(controller.scheduledTime / (4 * 60_000))
-                * PREFERRED_INGESTION_SLOTS_PER_RUN + preferredSlotIndex)
-              % PREFERRED_INGESTION_LANGUAGE_ROTATION.length
-            ]]
-            : undefined,
-          reservedQueuedJobType: reservedVersionSlot
-            ? "version"
-            : undefined,
           priorityJobIds: priorityNpaJobIds,
-          sourceTimeoutMs: priorityNpaJobIds.length > 0 ? 30_000 : undefined,
-          preferredCanonicalDocumentIds: preferredCoreCodeIds,
+          strictPriorityOnly: true,
+          sourceTimeoutMs: 30_000,
         });
         ingestions.push(result);
         if (result.status === "empty" || result.status === "disabled") break;
@@ -501,10 +381,6 @@ export async function handleLegalCorpusScheduled(
       cron: controller.cron,
       discoveryPages: discoveries.length,
       discoveryClaimed: discoveries.filter((result) => result.claimed).length,
-      checkpointsConsidered: catalog.considered,
-      checkpointsCreated: catalog.created,
-      coreCodeSeedsConsidered: coreCodeSeeds.considered,
-      coreCodeSeedsQueued: coreCodeSeeds.queued,
       npaTargetsConsidered: npaSeeds.considered,
       npaCandidateJobsQueued: npaSeeds.queued,
       npaCanonicalChunkCountsReconciled,

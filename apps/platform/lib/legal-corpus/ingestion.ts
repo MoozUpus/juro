@@ -359,7 +359,10 @@ function priorityLegalCorpusJobIds(input: readonly string[] | undefined): string
   // be accepted by the priority lane.
   return [...new Set(input)]
     .filter((value) => /^legal-(?:corpus|version):[0-9a-f]{28}$/u.test(value))
-    .slice(0, 64);
+    // At most 101 target cards can have a current fetch plus one historical
+    // revision. The query binds each id twice (priority CASE + IN list), so
+    // this remains comfortably below D1/SQLite's parameter limit.
+    .slice(0, 256);
 }
 
 /** NPA processing selects its deterministic current-card job ID, rather than
@@ -1586,6 +1589,9 @@ export async function runNextLegalCorpusIngestionJob(
     preferredCanonicalDocumentIds?: readonly string[];
     /** Exact queued current/as-of job IDs for master NPA candidates. */
     priorityJobIds?: readonly string[];
+    /** The dedicated statutory-corpus worker must never drain generic LexUZ
+     * backlog merely because no P0 card is ready in this invocation. */
+    strictPriorityOnly?: boolean;
   } = {},
 ): Promise<LegalCorpusJobRunResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
@@ -1599,6 +1605,9 @@ export async function runNextLegalCorpusIngestionJob(
   const priorityCandidate = priorityJobIds.length === 0
     ? null
     : await findPriorityNpaJob(env.DB, now, priorityJobIds);
+  if (input.strictPriorityOnly && !priorityCandidate) {
+    return { claimed: false, status: "empty", jobId: null, safeErrorCode: null };
+  }
   const retryCandidate = priorityCandidate ? null : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
     WHERE status='retrying' AND (next_attempt_at IS NULL OR next_attempt_at<=?)

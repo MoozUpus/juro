@@ -271,7 +271,7 @@ export async function npaPriorityJobIds(
       WHEN 'future' THEN 3
       WHEN 'verified' THEN 4
       ELSE 5
-    END,state.updated_at ASC,state.document_key ASC LIMIT 32`)
+    END,state.updated_at ASC,state.document_key ASC LIMIT 128`)
     .bind(NPA_BASELINE_AS_OF_DATE)
     .all<{ documentKey: string; candidateSourceUrl: string }>();
   const jobs = await Promise.all(result.results.flatMap(async (row) => {

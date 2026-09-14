@@ -5,7 +5,6 @@ import test from "node:test";
 import {
   handleLegalCorpusScheduled,
   legalCorpusActionableRunErrorCode,
-  legalCorpusIngestionJobBudget,
   legalCorpusIngestionStartAllowed,
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SEED_CRON,
@@ -111,7 +110,7 @@ test("seed schedule is locked, idempotent, bounded and leaves a completed run", 
   ).get() as { count: number }).count);
   assert.equal(run.status, "completed");
   assert.equal(run.errorCode, null);
-  assert.ok(checkpointCount > 0);
+  assert.equal(checkpointCount, 0);
   assert.equal(lockCount, 0);
   assert.equal(scheduled.noRetryCalls(), 2);
 });
@@ -145,36 +144,6 @@ test("expired lease rows are recorded as failed before a later corpus schedule c
   } finally {
     sqlite.close();
   }
-});
-
-test("the bounded acquisition phase prioritizes discovery and reuses only empty page capacity", () => {
-  assert.equal(legalCorpusIngestionJobBudget([]), 5);
-  assert.equal(legalCorpusIngestionJobBudget([], { persistentRobotsPolicy: true }), 6);
-  assert.equal(legalCorpusIngestionJobBudget([
-    { claimed: true, status: "completed" },
-  ]), 5);
-  assert.equal(legalCorpusIngestionJobBudget([
-    { claimed: false, status: "empty" },
-  ]), 9);
-  assert.equal(legalCorpusIngestionJobBudget([
-    { claimed: false, status: "empty" },
-  ], { persistentRobotsPolicy: true }), 10);
-  assert.equal(legalCorpusIngestionJobBudget([
-    { claimed: true, status: "completed" },
-    { claimed: false, status: "empty" },
-  ]), 8);
-  assert.equal(legalCorpusIngestionJobBudget([
-    { claimed: true, status: "completed" },
-    { claimed: true, status: "completed" },
-    { claimed: false, status: "empty" },
-  ]), 7);
-  assert.equal(legalCorpusIngestionJobBudget([
-    { claimed: true, status: "completed" },
-    { claimed: true, status: "completed" },
-    { claimed: true, status: "completed" },
-  ]), 5);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 5);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 5);
 });
 
 test("ingestion start fence leaves a bounded representation-fetch window", () => {
@@ -224,7 +193,7 @@ test("private dense services stay behind service bindings and staging-only flags
   assert.match(production, /"LEGAL_CORPUS_DENSE_ENABLED": "false"/u);
 });
 
-test("process schedule self-seeds a fresh corpus and begins the code-first phase without an admin action", async () => {
+test("process schedule seeds only the bounded NPA lane without an admin action", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON, Date.now());
   const originalFetch = globalThis.fetch;
@@ -254,16 +223,14 @@ test("process schedule self-seeds a fresh corpus and begins the code-first phase
   const checkpointCount = Number((sqlite.prepare(
     "SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints",
   ).get() as { count: number }).count);
-  const codeSeedCount = Number((sqlite.prepare(
-    "SELECT count(*) AS count FROM legal_corpus_ingestion_jobs WHERE canonical_document_id IN ('lexuz:104723','lexuz:111181','lexuz:4674893','lexuz:6257291')",
+  const targetCount = Number((sqlite.prepare(
+    "SELECT count(*) AS count FROM npa_master_targets",
   ).get() as { count: number }).count);
   const adminEventCount = Number((sqlite.prepare(
     "SELECT count(*) AS count FROM legal_corpus_admin_events",
   ).get() as { count: number }).count);
-  assert.equal(checkpointCount, 44);
-  // The same four P0 acts are also part of the exact 100-NPA master set;
-  // each receives a frozen AS_OF revision in addition to its current card.
-  assert.equal(codeSeedCount, 8);
+  assert.equal(checkpointCount, 0);
+  assert.equal(targetCount, 101);
   assert.equal(adminEventCount, 0);
   assert.equal(scheduled.noRetryCalls(), 1);
 });
@@ -302,17 +269,13 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   const corpusWorker = readFileSync(new URL("../worker/legal-corpus-worker.ts", import.meta.url), "utf8");
   assert.doesNotMatch(mainScheduler, /runNextLegalCorpusIngestionJob|runNextLexCatalogDiscoveryPage|seedLexCatalogDiscoveryCheckpoints/u);
   assert.match(corpusWorker, /runNextLegalCorpusIngestionJob/u);
-  assert.match(corpusWorker, /runNextLexCatalogDiscoveryPage/u);
+  assert.doesNotMatch(corpusWorker, /runNextLexCatalogDiscoveryPage|seedLexCatalogDiscoveryCheckpoints|seedLexCorpusJobsFromMetadata/u);
   assert.match(corpusWorker, /runNextLegalCorpusQdrantBackfillBatch/u);
   assert.match(corpusWorker, /backfillCompressedSparseIndexBatch/u);
   assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /pacingAlreadyApplied: true/u);
-  assert.match(corpusWorker, /persistentRobotsPolicy: pacerStats\.persistentRobotsCacheHits > 0/u);
+  assert.match(corpusWorker, /strictPriorityOnly: true/u);
   assert.match(corpusWorker, /scheduled_locks/u);
-  assert.match(corpusWorker, /const DISCOVERY_PAGES_PER_RUN = 4;/u);
-  assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 5;/u);
-  assert.match(corpusWorker, /const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;/u);
-  assert.match(corpusWorker, /const VERSION_INGESTION_SLOT_INDEX = 3;/u);
   assert.match(corpusWorker, /const INGESTION_START_CUTOFF_MS = 195_000;/u);
   assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
   assert.doesNotMatch(corpusWorker, /afterIngest:/u);
@@ -365,7 +328,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     "./drizzle/{012[145-9],013[0-9],014[0-5],015[2-3]}_*.sql",
   );
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_ENABLED, "true");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_LIVE_LEXUZ_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_MULTILINGUAL_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_HISTORICAL_ENABLED, "true");
